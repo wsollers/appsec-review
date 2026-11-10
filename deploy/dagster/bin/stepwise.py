@@ -4,6 +4,7 @@
   next [--app-run ID] [--relaunch]    launch the next job that is not accepted, wait, then check it
   check --job JOB [--app-run ID]      Dagster status, job status and gaps, permission/filesystem audit
   accept --job JOB --tag TAG          write the normalized output to test/acceptance/<TAG>/<job>.json
+  rewind --app-run ID --plan FILE     reopen affected decisions from an already admitted repair; no launch
   compare --app-run ID --tag TAG      diff a full wave1_review run against the accepted outputs
   seed --tag TAG --after JOB          restore the known-good run tree taken when JOB was accepted
   verify-job --tag TAG --job JOB      seed JOB's predecessor, run JOB, check it, diff its accepted output
@@ -54,6 +55,9 @@ from appsec_review.acceptance.normalize import (  # noqa: E402
 from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
 from appsec_review.acceptance.state import StateError, StepwiseState, valid_corpus_tag  # noqa: E402
 from appsec_review.acceptance.system import final_artifact_problems, run_problems  # noqa: E402
+from appsec_review.storage import FileLock, canonical_json  # noqa: E402
+from appsec_review.storage.shared import immutable_bytes, verify_reference  # noqa: E402
+import stepwise_rewind  # noqa: E402
 
 DEPLOYMENT = ROOT / "deploy" / "dagster"
 COMPOSE = ["docker", "compose", "--env-file", str(DEPLOYMENT / ".env"), "-f", str(DEPLOYMENT / "compose.yaml")]
@@ -230,19 +234,32 @@ def check(args, state: StepwiseState, path: Path, job_key: str) -> bool:
         if shown[finding.kind] < args.show:
             shown[finding.kind] += 1
             print(f"   {finding.kind}: {relative(finding.path)} {finding.detail}")
-    passed = run["status"] == "SUCCESS" and not findings
+    comparison = (stepwise_rewind.replay_comparison(
+        run_root, path.parent, state, item, attempt, document, masks_for(state.app_run_id, state.target))
+        if run["status"] == "SUCCESS" and not findings else None)
+    if comparison is not None:
+        differences = [entry for entry in comparison["differences"] if entry["class"] != "volatile"]
+        print(f"   preserved-key comparison {'PASSED' if comparison['passed'] else 'FAILED'} "
+              f"differences={len(differences)}")
+        for change in comparison["admitted_control_changes"]:
+            print(f"   verified admitted claim change: {change['field']}")
+        for entry in differences[:args.show]:
+            print(f"   {entry['class']} {entry['path']}: {entry['expected'][:160]} -> {entry['actual'][:160]}")
+    passed = (run["status"] == "SUCCESS" and not findings
+              and (comparison is None or comparison["passed"]))
     report = {"job_id": item["job_id"], "dagster_run_id": dagster_run_id, "dagster_status": run["status"],
               "dagster_failures": failures, "job_status": document["status"],
               "attempt": attempt.name if attempt else None, "gaps": [{"gap": gap, "count": count} for gap, count in gaps],
               "partial_units": partial, "failed_units": document["failed_units"],
               "skipped_units": document["skipped_units"], "audit": [finding.as_dict() for finding in findings],
-              "passed": passed}
+              "replay_comparison": comparison, "passed": passed}
     report_path = path.parent / "checks" / f"{item['job_id']}-{dagster_run_id}.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     state.record_check(item["job_id"], passed=passed, summary={
         "dagster_run_id": dagster_run_id, "dagster_status": run["status"], "job_status": document["status"],
-        "audit": summarize(findings), "report": str(report_path.relative_to(ROOT))})
+        "audit": summarize(findings), "report": str(report_path.relative_to(ROOT)),
+        "replay_comparison": comparison})
     state.save(path)
     print(f"   check {'PASSED' if passed else 'FAILED'}; report {report_path.relative_to(ROOT)}")
     return passed
@@ -309,6 +326,25 @@ def command_check(args) -> int:
     return 0 if check(args, StepwiseState.load(path), path, args.job) else 1
 
 
+def command_rewind(args) -> int:
+    path = state_path(args.app_run)
+    state = StepwiseState.load(path)
+    run_root = ROOT / "runs" / state.app_run_id
+    # The same gates used by admission and worker registration exclude concurrent attempt changes.
+    with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"):
+        plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
+        dispatches = sorted({dispatch for item in state.jobs for dispatch in item["dagster_run_ids"]})
+        runtime = json.loads(compose("exec", "-T", "code-location", "python", "-c",
+                                     stepwise_rewind.RUNTIME_PROBE, state.app_run_id, json.dumps(dispatches)))
+        changed = stepwise_rewind.apply_rewind(
+            ROOT, path, ACCEPTANCE_ROOT, state, plan, runtime, masks_for(state.app_run_id, state.target))
+    print(f"rewind {'APPLIED' if changed else 'ALREADY APPLIED'} app_run={state.app_run_id} "
+          f"plan={plan['plan_sha256']}; no jobs launched")
+    if state.next_job():
+        print(f"   next={state.next_job()['job_id']}; use next, inspect check, then accept individually")
+    return 0
+
+
 def command_accept(args) -> int:
     tag = valid_corpus_tag(args.tag)
     path = state_path(args.app_run)
@@ -328,10 +364,11 @@ def command_accept(args) -> int:
     attempt = locate_attempt(run_root, item["job_id"], item["dagster_run_ids"][-1])
     document = normalize_job_output(run_root, item["job_id"], masks_for(state.app_run_id, state.target),
                                     attempt_root=attempt)
+    comparison = stepwise_rewind.replay_comparison(
+        run_root, path.parent, state, item, attempt, document, masks_for(state.app_run_id, state.target))
+    if comparison is not None and not comparison["passed"]:
+        raise StateError("rerun differs from the preserved accepted key; acceptance refused")
     destination = ACCEPTANCE_ROOT / tag
-    destination.mkdir(parents=True, exist_ok=True)
-    (destination / f"{item['job_id']}.json").write_text(
-        json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     provenance = {
         "schema": "appsec-review/acceptance-provenance/1", "job_id": item["job_id"], "corpus_tag": tag,
         "target": state.target, "target_commit": target_commit,
@@ -341,6 +378,27 @@ def command_accept(args) -> int:
         "attempt": attempt.name if attempt else None, "handoff_sha256": handoff_sha256,
         "accepted_at": datetime.now(timezone.utc).isoformat(),
     }
+    if comparison is not None:
+        replay = item["replays"][-1]
+        for suffix, key in ((".json", "key"), (".provenance.json", "provenance")):
+            preserved = verify_reference(path.parent, comparison["baseline"][key])
+            if (destination / f"{item['job_id']}{suffix}").read_bytes() != preserved.read_bytes():
+                raise StateError("the corpus key/provenance changed after rewind; preserve and inspect the drift")
+        receipt_path = f"rewinds/{replay['plan_sha256']}/accepted/{item['job_id']}-{attempt.name}.json"
+        if (path.parent / receipt_path).exists():
+            saved = json.loads((path.parent / receipt_path).read_text(encoding="utf-8"))
+            provenance["accepted_at"] = saved["provenance"]["accepted_at"]
+        replay["acceptance"] = immutable_bytes(
+            path.parent, receipt_path,
+            canonical_json({"provenance": provenance, "output": document, "comparison": comparison}))
+        state.record_accept(item["job_id"], corpus_tag=tag, handoff_sha256=handoff_sha256)
+        state.save(path)
+        print(f"reaccepted {item['job_id']}; original key, provenance and seed retained; "
+              f"receipt={replay['acceptance']['path']}")
+        return 0
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / f"{item['job_id']}.json").write_text(
+        json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     (destination / f"{item['job_id']}.provenance.json").write_text(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     ids = [job["job_id"] for job in state.jobs]
@@ -967,6 +1025,9 @@ def main(argv: list[str] | None = None) -> int:
     nxt = commands.add_parser("next")
     nxt.add_argument("--app-run")
     nxt.add_argument("--relaunch", action="store_true", help="relaunch a job whose check passed")
+    rewind = commands.add_parser("rewind", help="apply an already admitted repair to this operator walk")
+    rewind.add_argument("--app-run", required=True)
+    rewind.add_argument("--plan", type=Path, required=True, help="exact plan previously admitted by admit-repair")
     for name in ("check", "accept"):
         sub = commands.add_parser(name)
         sub.add_argument("--job", required=True)
@@ -1012,12 +1073,18 @@ def main(argv: list[str] | None = None) -> int:
     args.url = url_or_default(parser, args.url, "/graphql")
     if args.interval_seconds < 1:
         parser.error("--interval-seconds must be positive")
-    handlers = {"init": command_init, "next": command_next, "check": command_check,
+    handlers = {"init": command_init, "next": command_next, "check": command_check, "rewind": command_rewind,
                 "accept": command_accept, "compare": command_compare, "seed": command_seed,
                 "verify-job": command_verify_job, "parity": command_parity, "system": command_system, "model-contract": command_model_contract}
     try:
+        if args.command in {"next", "check", "accept", "rewind"}:
+            path = state_path(args.app_run)
+            if not path.is_file():
+                raise StateError(f"no stepwise walk at {path}")
+            with FileLock(path.parent / "operator.lock"):
+                return handlers[args.command](args)
         return handlers[args.command](args)
-    except (StateError, SeedError, RuntimeError) as exc:
+    except (ValueError, KeyError, TypeError, OSError, SeedError, RuntimeError) as exc:
         print(f"stepwise: {exc}", file=sys.stderr)
         return 2
 

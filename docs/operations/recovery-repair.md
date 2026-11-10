@@ -106,6 +106,50 @@ decisions and refusal reasons. Review it before admission. `admit-repair` rederi
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command
 only records admission. It does not execute the restart.
 
+### Rewind an existing stepwise walk after admission
+
+For an existing operator walk, apply the **exact already admitted plan** before resuming:
+
+```sh
+.venv/bin/python deploy/dagster/bin/stepwise.py rewind --app-run RUN --plan repair-plan.json
+.venv/bin/python deploy/dagster/bin/stepwise.py next --app-run RUN
+# Inspect the check and its comparison, then accept this job individually as usual.
+.venv/bin/python deploy/dagster/bin/stepwise.py accept --app-run RUN --job JOB --tag CORPUS_TAG
+```
+
+`rewind` neither admits a plan nor launches jobs. Under the existing run/admission locks, it
+verifies the plan digest, immutable admission and current binding, deployed release and
+configuration, unchanged topology, planned attempt snapshots and current operator decisions.
+A read-only code-location probe checks registered workers, cleanup receipts and leases, plus
+Dagster dispatches and worker health, including queued dispatches not yet recorded in the walk.
+Foreign, unadmitted, stale, live or uncertain work is refused; there is no force option.
+Keep operator actions serialized; `next`, `check`, `accept` and `rewind` share a walk lock.
+
+Only previously touched `RUN`/`INVALIDATE` decisions return to `pending` (meaning **to rerun**,
+with explicit `replays` metadata). Independent `REUSE` acceptances and untouched pending jobs
+stay unchanged. Before resetting, immutable hash-checked evidence under
+`runs/metadata/stepwise/RUN/rewinds/PLAN_SHA/` retains the entire prior state, plan, admission
+binding, check reports, accepted normalized keys, provenance and original claims.
+Repeating the same rewind verifies that evidence without resetting completed replay work.
+
+Each replay of an accepted job must have a fresh dispatch and a committed publication under
+that admission. `check` and `accept` compare against the **preserved key**, not a replacement
+corpus file. Existing normalization and diff rules apply, without broad environmental
+reclassification: semantic output, coverage, findings, gaps and artifact-content differences
+fail acceptance. The report separately names two narrowly verified claim bookkeeping changes:
+the admitted repair reference and checkpoint decisions matching that plan (or the runner's
+conservative no-reuse fallback). Only when the rest of the normalized claim is identical may
+its content signature account for those changes; unrelated claim changes still fail.
+Successful reacceptance writes an immutable receipt with the new provenance and comparison,
+while retaining the original key, provenance, seed and rewind evidence. A changed corpus
+key/provenance is refused rather than silently overwritten.
+
+This is host-side operator tooling; it does not change measured runtime sources, release
+scoping, job policies, frozen configuration or admission/signing enforcement. The three early
+gates still declare `always_execute=True` and `propagate_handoff=False`; the release still
+includes each job package's static cross-job import closure and shared common/validator/script
+dependencies. Unit regressions for the rewind are in `tests/test_stepwise_rewind.py`.
+
 The original configuration, target fingerprint, review policy and evidence are retained.
 Configuration changes and schema/dataset-contract changes are not compatible source repairs.
 Host image bindings are a hashed configuration layer, not a source repair: changing
