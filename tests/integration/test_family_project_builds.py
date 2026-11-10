@@ -10,9 +10,8 @@ README, standing in for the planning model. Deterministic recipes (CMake, phpize
 pipeline itself and are not listed.
 
 Gating mirrors ``tests/test_live_build_image_hello.py``: a missing Docker daemon or build image
-skips. A build image whose local id differs from its pinned ``image_id`` fails, because the pin is
-the identity a run accepts; set ``APPSEC_REVIEW_BUILDENV_PINS=local`` to run against locally built
-images, which rewrites only this test's temporary configuration.
+skips. Build IDs come from this host's ignored bindings, not a different host's committed pins.
+A moved tag still fails; update host bindings explicitly before starting a new test run.
 
 Run explicitly, one family at a time on a host with little disk:
 
@@ -144,20 +143,19 @@ def _docker_image_id(tag: str) -> str | None:
 
 def _config(tmp_path: Path, families: set[str]):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    profiles = profiles_from_settings(tomllib.loads(text)["jobs"]["job_project_build"]["settings"]["profiles"])
+    host_config = load_config(ROOT / "appsec-review.toml")
+    profiles = profiles_from_settings(host_config.job("job_project_build").settings["profiles"])
     for family in sorted(families):
         profile = profiles[family]
         local = _docker_image_id(profile.tag)
         if local is None:
             pytest.skip(f"live build image is unavailable: {profile.tag}")
         if local != profile.image_id:
-            if os.environ.get("APPSEC_REVIEW_BUILDENV_PINS") != "local":
-                pytest.fail(f"{profile.tag} is {local}, not the pinned {profile.image_id}; rebuild it "
-                            "from containers/buildenv or update the pin (see containers/buildenv/README.md)")
-            text = text.replace(f'image_id = "{profile.image_id}"', f'image_id = "{local}"')
+            pytest.fail(f"{profile.tag} moved from this host's binding {profile.image_id} to {local}; "
+                        "run update-image-pins --write before starting a new test run")
     path = tmp_path / "appsec-review.toml"
     path.write_text(text, encoding="utf-8")
-    return load_config(path)
+    return load_config(path, host_pins=host_config.host_pins)
 
 
 def _target(tmp_path: Path, project: str) -> Path:

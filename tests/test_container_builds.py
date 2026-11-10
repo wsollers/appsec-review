@@ -76,12 +76,12 @@ def test_dependency_order_puts_base_before_tool() -> None:
     assert order == ["base-ubuntu", "tool-gitleaks"]
 
 
-def test_android_buildenv_is_hash_locked_and_registered_by_image_id() -> None:
+def test_android_buildenv_recipe_is_hash_locked_and_its_identity_is_host_owned() -> None:
     catalog = container_build.load_catalog()
     image = catalog["by_id"]["audit-buildenv-android"]
     assert image["kind"] == "buildenv"
     assert image["build_network"] == "default"
-    assert image["image_id"].startswith("sha256:") and len(image["image_id"]) == 71
+    assert "image_id" not in image
     lock_path = ROOT / image["assets_lock"]
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     assert {item["version"] for item in lock["artifacts"]} == {
@@ -93,8 +93,11 @@ def test_android_buildenv_is_hash_locked_and_registered_by_image_id() -> None:
     with (ROOT / "appsec-review.toml").open("rb") as stream:
         config = tomllib.load(stream)
     profile = config["jobs"]["job_project_build"]["settings"]["profiles"]["android"]
-    assert profile == {"tag": image["tag"], "image_id": image["image_id"],
-                       "user": "10001:10001"}
+    assert profile == {"tag": image["tag"], "user": "10001:10001"}
+    from appsec_review.config import load_config
+    effective = load_config(ROOT / "appsec-review.toml")
+    host_id = json.loads(effective.resolved_json)["configuration_host_pins"]["document"]["images"][image["tag"]]
+    assert effective.job("job_project_build").settings["profiles"]["android"]["image_id"] == host_id
 
 
 def test_continue_on_error_still_returns_failure(monkeypatch, tmp_path: Path) -> None:

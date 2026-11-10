@@ -1383,20 +1383,10 @@ GOOD_HOST = {"docker context show": "default", "docker info": "27.3.1 overlay2",
              "git rev-parse --short HEAD": "abc1234", "openssl version": "OpenSSL 3.0.13"}
 
 
-def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_commits(tmp_path: Path) -> None:
+def test_run_readiness_runs_six_steps_and_commits_only_the_public_anchor(tmp_path: Path) -> None:
     answers = {**GOOD_HOST, "git status --porcelain -- deploy/dagster/trusted-keys": "?? deploy/dagster/trusted-keys/ab.pem"}
-    # After the re-pin, the tree is dirty once (the pin files), so the pin step commits.
-    calls = {"n": 0}
-
-    class Host(FakeHost):
-        def run(self, argv, step, **kwargs):
-            if argv[:3] == ["git", "status", "--porcelain"] and step == "pin":
-                self.commands.append([str(a) for a in argv])
-                return subprocess.CompletedProcess(argv, 0, stdout=" M appsec-review.toml\n", stderr="")
-            return super().run(argv, step, **kwargs)
-
     args = ops.build_parser().parse_args(["run-readiness", "--host-label", "HAL5000 WSL", "--jobs", "3"])
-    host = Host(tmp_path, tmp_path / "logs", dry_run=False, answers=answers)
+    host = FakeHost(tmp_path, tmp_path / "logs", dry_run=False, answers=answers)
     import io, contextlib
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
@@ -1405,13 +1395,15 @@ def test_run_readiness_runs_the_six_steps_in_order_and_makes_the_two_operator_co
     order = [next(i for i, c in enumerate(joined) if marker in c) for marker in (
         "docker context show", "signing keygen", "export-trust-anchor", "git commit -q -m Trust anchor: HAL5000 WSL operator public key",
         "install-trust-anchors", "build.py validate", "build --all --jobs 3 --continue-on-error", "smoke --all", "build.py report",
-        "update-image-pins --write", "git add -u", "Host re-pin: HAL5000 WSL, default context",
+        "update-image-pins --write",
         "sudo install -d -m 0755", "sign-image --all-pinned", "compile-codeql-queries.sh")]
     assert order == sorted(order), joined
     # The envelope directory is made once for the operator (HAL5000: /var/lib "Permission denied"), never with -R.
     mkdir = next(c for c in host.commands if c[:3] == ["sudo", "install", "-d"])
     assert mkdir[-1] == "/var/lib/appsec-review/signing/images" and "-R" not in mkdir
-    assert not any(c == "git add -A" for c in joined), "untracked operator material must never be swept into the re-pin"
+    assert len([c for c in joined if c.startswith("git commit ")]) == 1
+    assert not any(c in {"git add -A", "git add -u"} for c in joined)
+    assert "no tracked pin edits or commit" in out.getvalue()
     assert not any("git push" in c for c in joined)
     assert "finished steps 1-5" in out.getvalue()
 

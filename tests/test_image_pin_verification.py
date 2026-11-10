@@ -14,6 +14,7 @@ import pytest
 
 from appsec_review.cli import GRAPH_JOB_IDS
 from appsec_review.config import load_config, parse_image_pin_verification_settings
+from appsec_review.config.host_pins import HOST_PINS_PATH, bound_catalog_images
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_image_pin_verification import build_job
 from appsec_review.jobs.job_image_pin_verification.pins import configured_pins
@@ -21,6 +22,7 @@ from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.runtime import GraphRunner, active_job_ids
 from appsec_review.runtime.registry import builtin_registry
 from tests.telemetry_support import assert_job_lifecycle, job_events
+from tests.host_pins_support import fixture_bindings, write_host_pins
 
 
 ROOT = Path(__file__).parents[1]
@@ -40,7 +42,6 @@ id = "tool-x"
 state = "enabled"
 kind = "tool"
 tag = "fixture/tool-x:1"
-image_id = "{PIN_X}"
 dependencies = ["base-a"]
 
 [[images]]
@@ -75,13 +76,16 @@ def _fixture(tmp_path: Path, **overrides: str):
     target = tmp_path / "target"
     target.mkdir()
     (target / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
-    return load_config(config_path), target
+    images = {**fixture_bindings(), "fixture/tool-x:1": PIN_X, "fixture/base-a:1": _id("base")}
+    host = write_host_pins(tmp_path / HOST_PINS_PATH, images=images)
+    return load_config(config_path, host_pins=host), target
 
 
 def _expected_pins(tmp_path: Path) -> list[dict]:
-    document = tomllib.loads((tmp_path / "appsec-review.toml").read_text(encoding="utf-8"))
+    document = json.loads(load_config(tmp_path / "appsec-review.toml",
+                                     host_pins=tmp_path / HOST_PINS_PATH).resolved_json)
     catalog = tomllib.loads(CATALOG)["images"]
-    return configured_pins(catalog, document)
+    return configured_pins(bound_catalog_images(catalog, document), document)
 
 
 class FakeDocker:
@@ -138,7 +142,7 @@ def _failure_message(config) -> str:
 # ---------------------------------------------------------------- pin selection
 
 def test_repository_pins_cover_catalog_images_build_profiles_and_codeql_source() -> None:
-    document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+    document = json.loads(load_config(ROOT / "appsec-review.toml").resolved_json)
     catalog = tomllib.loads((ROOT / "containers" / "catalog.toml").read_text(encoding="utf-8"))["images"]
     sources = {pin["source"] for pin in configured_pins(catalog, document)}
     enabled = {item["id"] for item in catalog if item.get("state") == "enabled" and not item.get("manual")}
@@ -188,7 +192,7 @@ def test_all_pins_matching_succeeds_and_records_every_pin(tmp_path: Path) -> Non
     assert [pin["source"] for pin in record["pins"]] == [pin["source"] for pin in expected]
     statuses = {pin["source"]: pin["status"] for pin in record["pins"]}
     assert statuses["containers/catalog.toml images.tool-x.image_id"] == "matched"
-    assert statuses["containers/catalog.toml images.base-a.image_id"] == "present"
+    assert statuses["containers/catalog.toml images.base-a.image_id"] == "matched"
     assert statuses["jobs.job_codeql_analysis.settings.source_image_id"] == "matched"
     assert "containers/catalog.toml images.retired-z.image_id" not in statuses
 
@@ -244,7 +248,7 @@ def test_missing_image_moved_tag_and_codeql_source_mismatch_fail_naming_every_mi
     message = _failure_message(config)
     assert "image pin verification failed: 3 of" in message
     for expected in (
-            "containers/catalog.toml images.base-a.image_id: tag fixture/base-a:1 pinned <unpinned> resolved missing",
+            f"containers/catalog.toml images.base-a.image_id: tag fixture/base-a:1 pinned {_id('base')} resolved missing",
             f"containers/catalog.toml images.tool-x.image_id: tag fixture/tool-x:1 pinned {PIN_X} resolved {moved}",
             f"jobs.job_codeql_analysis.settings.source_image_id: tag {codeql['tag']} pinned {codeql['image_id']} "
             f"resolved {_id('codeql-rebuilt')}",
@@ -359,7 +363,7 @@ def test_the_gate_passes_on_resume_after_the_operator_re_pins_the_moved_tag(tmp_
     with pytest.raises(RuntimeError, match="1 of"):
         GraphRunner(config, [build_job(runner=docker)]).run(target_root=target, source_fingerprint=fingerprint)
     run_id = _only_run_id(config)
-    # The operator rebuilt the image so the tag resolves to the pin again (or re-pinned; same effect here).
+    # Restoring the original binding permits retry; changing the frozen binding requires a new run.
     docker.images["fixture/tool-x:1"] = PIN_X
     second = GraphRunner(config, [build_job(runner=docker)]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)

@@ -88,6 +88,7 @@ images/audit-buildenv-java/jdtls.tar.gz
 
 # Dagster's generated local secret; the tracked example documents its shape.
 /deploy/dagster/.env
+/deploy/dagster/host-pins.toml
 # Module envelope signed on the host by lifecycle.py start/reload over the mounted checkout; per launch.
 /deploy/dagster/signing/
 # Stepwise acceptance seed bytes (content-addressed blobs); the manifests are committed under

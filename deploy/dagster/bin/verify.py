@@ -813,7 +813,8 @@ def main() -> int:
     args.url = url_or_default(parser, args.url)
     repository = Path(__file__).resolve().parents[3]
     config_path = repository / "appsec-review.toml"
-    document = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    from review_run import effective_configuration
+    document = effective_configuration(config_path)
     report = {"deployment": _workspace(args.url, document)}
     if args.run_id:
         report["acceptance_run"] = _run(

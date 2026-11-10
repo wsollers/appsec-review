@@ -52,7 +52,8 @@ def _review(config):
 def test_dev_is_the_default_and_keeps_todays_values(monkeypatch) -> None:
     monkeypatch.delenv(PROFILE_ENVIRONMENT, raising=False)
     config = load_config(ROOT / "appsec-review.toml")
-    assert config.profile == "dev" and config.profile_path is None and len(config.layers) == 1
+    assert config.profile == "dev" and config.profile_path is None
+    assert [layer.get("layer") for layer in config.layers] == [None, "host-pins"]
     assert json.loads(config.resolved_json)["configuration_profile"] == {
         "name": "dev", "path": None, "sha256": None, "keys": []}
     for job_id in MODEL_JOBS:
@@ -162,7 +163,8 @@ def test_profile_and_capacity_overlay_produce_both_layers_in_order(tmp_path: Pat
     overlay = tmp_path / "overlay.toml"
     overlay.write_text(OVERLAY, encoding="utf-8")
     config = load_config(path, profile="prod", overlay=overlay)
-    assert [layer.get("layer") for layer in config.layers] == [None, "runtime_profile", "capacity_overlay"]
+    assert [layer.get("layer") for layer in config.layers] == [
+        None, "runtime_profile", "capacity_overlay", "host-pins"]
     assert config.dagster.pool_limits["inference_teams"] == 1 and _review(config).models["strong"].model == "claude-opus-5-5"
     resolved = json.loads(config.resolved_json)
     assert resolved["configuration_profile"]["name"] == "prod" and resolved["configuration_overlay"]["keys"]
@@ -352,7 +354,8 @@ def test_review_intake_freezes_the_profile_layer(tmp_path: Path) -> None:
     manifest = json.loads((run_root / "data/configuration/manifest.json").read_text(encoding="utf-8"))
     assert manifest["sources"] == [dict(layer) for layer in config.layers]
     intake = json.loads(next(run_root.rglob("review-intake.json")).read_text(encoding="utf-8"))["configuration"]
-    assert intake["profile"] == "prod" and [layer.get("layer") for layer in intake["layers"]] == [None, "runtime_profile"]
+    assert intake["profile"] == "prod"
+    assert [layer.get("layer") for layer in intake["layers"]] == [None, "runtime_profile", "host-pins"]
     assert intake["layers"][1]["sha256"] == config.profile_sha256
 
 
@@ -365,12 +368,14 @@ def test_review_intake_with_profile_and_overlay_and_with_dev(tmp_path: Path) -> 
     outcome = GraphRunner(config, [build_intake()]).run(target_root=target, source_fingerprint=source_fingerprint(target))
     intake = json.loads(next((config.runtime.runs_dir / outcome["run_id"]).rglob("review-intake.json")).read_text(
         encoding="utf-8"))["configuration"]
-    assert [layer.get("layer") for layer in intake["layers"]] == [None, "runtime_profile", "capacity_overlay"]
+    assert [layer.get("layer") for layer in intake["layers"]] == [
+        None, "runtime_profile", "capacity_overlay", "host-pins"]
     dev = load_config(path, profile="dev")
     outcome = GraphRunner(dev, [build_intake()]).run(target_root=target, source_fingerprint=source_fingerprint(target))
     intake = json.loads(next((dev.runtime.runs_dir / outcome["run_id"]).rglob("review-intake.json")).read_text(
         encoding="utf-8"))["configuration"]
-    assert intake["profile"] == "dev" and len(intake["layers"]) == 1
+    assert intake["profile"] == "dev"
+    assert [layer.get("layer") for layer in intake["layers"]] == [None, "host-pins"]
 
 
 # ---------------------------------------------------------------- the model contract

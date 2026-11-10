@@ -87,12 +87,17 @@ class JobRunner:
                 raise ValueError("run-owned configuration hash mismatch")
             if file_sha256(destination / "resolved.json") != self.config.resolved_sha256:
                 raise ValueError("run-owned resolved configuration hash mismatch")
+            if (self.config.host_pins is not None and
+                    file_sha256(destination / "host-pins.toml") != self.config.host_pins.sha256):
+                raise ValueError("run-owned host-pins hash mismatch")
             from appsec_review.runtime.repair import bind_release
             bind_release(self.config, run_root)
             return
         destination.mkdir(parents=True, exist_ok=True)
         atomic_bytes(destination / "appsec-review.toml", self.config.source_path.read_bytes())
         atomic_bytes(destination / "resolved.json", self.config.resolved_json)
+        if self.config.host_pins is not None:
+            atomic_bytes(destination / "host-pins.toml", self.config.host_pins.content)
         atomic_json(manifest_path, {
             "schema": "appsec-review/run-configuration/2",
             "failure_finalization": "appsec-review/split-failure-finalization/1",

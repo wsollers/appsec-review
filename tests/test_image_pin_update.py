@@ -1,208 +1,124 @@
-"""Regression tests for the host-side ``appsec-review update-image-pins`` (no Docker; the runner is faked)."""
-
-from __future__ import annotations
+"""Host pin updates use real recipes and typed loading, with only Docker inspection faked."""
 
 import json
 from pathlib import Path
+import shutil
 import tomllib
 
 import pytest
 
-from appsec_review.jobs.job_image_pin_verification.pins import (
-    PinUpdateError, configured_pins, plan_updates, update_pins, verify_pins)
+from appsec_review.config import load_config
+from appsec_review.config.host_pins import HOST_PINS_ENV, HOST_PINS_PATH
+from appsec_review.jobs.job_image_pin_verification.pins import PinUpdateError, update_pins
+from tests.host_pins_support import ROOT, fixture_bindings, write_host_pins
 
 
-OLD_A, NEW_A = "sha256:" + "a" * 64, "sha256:" + "b" * 64
-OLD_P, NEW_P = "sha256:" + "c" * 64, "sha256:" + "d" * 64
-OLD_S, NEW_S = "sha256:" + "e" * 64, "sha256:" + "f" * 64
-OLD_D, NEW_D = "sha256:" + "1" * 64, "sha256:" + "2" * 64
-OTHER = "sha256:" + "9" * 64
-
-CATALOG = f'''schema = "fixture"
-
-[[images]]
-id = "tool-a"
-state = "enabled"
-tag = "fixture/tool-a:1"
-image_id = "{OLD_A}"  # pinned after review
-
-[[images]]
-id = "tool-b"
-state = "enabled"
-tag = "fixture/tool-b:1"
-image_id = "{OLD_A}"
-
-[[images]]
-id = "tool-c"
-state = "enabled"
-tag = "fixture/tool-c:1"
-'''
-
-CONFIG = f'''# central configuration
-[jobs.job_project_build.settings.profiles.node]
-tag = "fixture/node:local"
-image_id = "{OLD_P}"
-user = "10001:10001"
-
-[jobs.job_project_build.settings.profiles.wasm]
-tag = "fixture/wasm:local"
-image_id = "{OLD_P}"
-
-[jobs.job_codeql_analysis.settings]
-source_image_tag = "fixture/cpp:local"
-source_image_id = "{OLD_S}"
-
-[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
-source_image_id = "{OLD_S}"
-build_image_id = "{OLD_S}"
-runtime_image_id = "{OTHER}"
-
-[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
-source_image_id = "{OLD_S}"
-build_image_id = "{OLD_P}"
-runtime_image_id = "{OTHER}"
-
-[jobs.job_dossier_publication.settings]
-image_tag = "fixture/latex:1"
-image_id = "{OLD_D}"
-'''
-
-# tool-b and the wasm profile still resolve to their pins; the others moved.
-LOCAL = {"fixture/tool-a:1": NEW_A, "fixture/tool-b:1": OLD_A, "fixture/tool-c:1": OTHER,
-         "fixture/node:local": NEW_P, "fixture/wasm:local": OLD_P, "fixture/cpp:local": NEW_S,
-         "fixture/latex:1": NEW_D}
+def files(tmp_path, monkeypatch):
+    config = tmp_path / "appsec-review.toml"
+    shutil.copyfile(ROOT / "appsec-review.toml", config)
+    catalog = tmp_path / "containers/catalog.toml"
+    catalog.parent.mkdir()
+    shutil.copyfile(ROOT / "containers/catalog.toml", catalog)
+    host = tmp_path / HOST_PINS_PATH
+    monkeypatch.setenv(HOST_PINS_ENV, str(host))
+    return config, catalog, host
 
 
-def _runner(images: dict[str, str | None]):
+def runner(images):
     calls = []
 
     def run(argv, timeout):
         calls.append(tuple(argv))
-        assert tuple(argv[:3]) == ("docker", "image", "inspect")
+        assert tuple(argv[:3]) == ("docker", "image", "inspect") and timeout == 60
         image = images.get(argv[3])
         if image is None:
-            return 1, b"", f"Error: No such image: {argv[3]}".encode(), False
+            return 1, b"", f"No such image: {argv[3]}".encode(), False
         return 0, image.encode() + b"\n", b"", False
 
     run.calls = calls
     return run
 
 
-def _files(tmp_path: Path, *, crlf: bool = False) -> tuple[Path, Path]:
-    config, catalog = tmp_path / "appsec-review.toml", tmp_path / "catalog.toml"
-    newline = "\r\n" if crlf else "\n"
-    config.write_bytes(CONFIG.replace("\n", newline).encode())
-    catalog.write_bytes(CATALOG.replace("\n", newline).encode())
-    return config, catalog
+def test_dry_run_bootstraps_without_loading_missing_pins_or_writing_files(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    before = config.read_bytes(), catalog.read_bytes()
+    docker = runner(fixture_bindings())
+    report = update_pins(config_path=config, catalog_path=catalog, write=False, runner=docker)
+    assert not report["written"] and not report["failures"] and report["edits"]
+    assert report["checked"] == len(fixture_bindings()) == len(docker.calls)
+    assert not host.exists()
+    assert before == (config.read_bytes(), catalog.read_bytes())
 
 
-def test_dry_run_plans_only_moved_pins_and_writes_nothing(tmp_path: Path) -> None:
-    config, catalog = _files(tmp_path)
-    report = update_pins(config_path=config, catalog_path=catalog, write=False, runner=_runner(LOCAL))
-    assert [(edit["source"], edit["status"], edit["new"]) for edit in report["edits"]] == [
-        ("containers/catalog.toml images.tool-a.image_id", "planned", NEW_A),
-        ("jobs.job_codeql_analysis.settings.source_image_id", "planned", NEW_S),
-        ("jobs.job_codeql_analysis.settings.preinstalled_runtimes[0].source_image_id", "planned", NEW_S),
-        ("jobs.job_codeql_analysis.settings.preinstalled_runtimes[1].source_image_id", "planned", NEW_S),
-        ("jobs.job_dossier_publication.settings.image_id", "planned", NEW_D),
-        ("jobs.job_project_build.settings.profiles.node.image_id", "planned", NEW_P)]
-    assert report["checked"] == 7 and report["unpinned_missing"] == []
-    assert config.read_text(encoding="utf-8") == CONFIG and catalog.read_text(encoding="utf-8") == CATALOG
+def test_write_changes_only_ignored_host_bindings_and_loads_every_consumer(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    before = config.read_bytes(), catalog.read_bytes()
+    local = fixture_bindings()
+    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(local))
+    assert report["written"] and not report["failures"]
+    assert before == (config.read_bytes(), catalog.read_bytes())
+    document = tomllib.loads(host.read_text())
+    assert document["images"] == local and document["preinstalled_runtimes"] == []
+    loaded = load_config(config)
+    profiles = loaded.job("job_project_build").settings["profiles"]
+    assert all(value["image_id"] == local[value["tag"]] for value in profiles.values())
+    assert loaded.job("job_codeql_analysis").typed_settings.source_image_id == local["audit-codeql:custom-2.27.0"]
+    assert loaded.telemetry_report.image_id == local["appsec-review/tool-report-latex:1.0.0"]
+    again = update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(local))
+    assert again["edits"] == [] and again["sha256"] == report["sha256"]
 
 
-@pytest.mark.parametrize("crlf", [False, True], ids=["lf", "crlf"])
-def test_write_changes_exactly_the_owning_lines_and_keeps_line_endings(tmp_path: Path, crlf: bool) -> None:
-    config, catalog = _files(tmp_path, crlf=crlf)
-    newline = "\r\n" if crlf else "\n"
-    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=_runner(LOCAL),
-                         loader=lambda _path: None)
-    assert {edit["status"] for edit in report["edits"]} == {"applied"}
-    # The same old ID pinned for another tag (tool-b, the wasm profile) is left alone, and comments stay.
-    assert catalog.read_bytes().decode() == CATALOG.replace(
-        f'image_id = "{OLD_A}"  # pinned', f'image_id = "{NEW_A}"  # pinned').replace("\n", newline)
-    parsed = tomllib.loads(config.read_bytes().decode())
-    profiles = parsed["jobs"]["job_project_build"]["settings"]["profiles"]
-    assert profiles["node"]["image_id"] == NEW_P and profiles["wasm"]["image_id"] == OLD_P
-    codeql = parsed["jobs"]["job_codeql_analysis"]["settings"]
-    assert codeql["source_image_id"] == NEW_S
-    # The preinstalled runtimes repeat the source image and the loader requires them to agree (found on
-    # HAL5000: a written source_image_id with the declarations left behind made every command fail).
-    # Their build/runtime image IDs are host-derived images, not pins, and stay as declared.
-    assert [item["source_image_id"] for item in codeql["preinstalled_runtimes"]] == [NEW_S, NEW_S]
-    assert [item["build_image_id"] for item in codeql["preinstalled_runtimes"]] == [OLD_S, OLD_P]
-    # The dossier renderer's image_tag/image_id pair (found on WSOLLERS1: signed but never re-pinned).
-    assert parsed["jobs"]["job_dossier_publication"]["settings"]["image_id"] == NEW_D
-    assert config.read_bytes().decode().startswith("# central configuration" + newline)
+def test_missing_image_refuses_entire_update_and_preserves_existing_bytes(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    write_host_pins(host)
+    before = host.read_bytes()
+    local = fixture_bindings()
+    missing, moved = sorted(local)[:2]
+    del local[missing]
+    local[moved] = "sha256:" + "f" * 64
+    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(local))
+    assert not report["written"] and len(report["failures"]) == 1
+    assert missing in report["failures"][0] and "resolved missing" in report["failures"][0]
+    assert host.read_bytes() == before
 
 
-def test_a_missing_pinned_image_is_unresolved_and_an_unpinned_one_is_reported(tmp_path: Path) -> None:
-    config, catalog = _files(tmp_path)
-    report = update_pins(config_path=config, catalog_path=catalog, write=True, loader=lambda _path: None,
-                         runner=_runner({**LOCAL, "fixture/node:local": None, "fixture/tool-c:1": None}))
-    by_source = {edit["source"]: edit for edit in report["edits"]}
-    node = by_source["jobs.job_project_build.settings.profiles.node.image_id"]
-    assert node["status"] == "unresolved" and "resolved missing" in node["detail"]
-    assert report["unpinned_missing"] == [
-        "containers/catalog.toml images.tool-c.image_id: tag fixture/tool-c:1 pinned <unpinned> resolved missing"]
-    assert tomllib.loads(config.read_text())["jobs"]["job_project_build"]["settings"]["profiles"]["node"][
-        "image_id"] == OLD_P
+def test_typed_configuration_refusal_never_publishes_candidate(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    config.write_text(config.read_text().replace('execution_mode = "auto"', 'execution_mode = "invalid"', 1))
+    with pytest.raises(PinUpdateError, match="typed configuration.*no files changed"):
+        update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(fixture_bindings()))
+    assert not host.exists()
 
 
-def test_unlocatable_pin_is_manual_and_never_guessed(tmp_path: Path) -> None:
-    config, catalog = _files(tmp_path)
-    results = [{"source": "jobs.job_missing.settings.image_id", "tag": "fixture/x:1", "image_id": OLD_P,
-                "resolved_image_id": NEW_P, "status": "mismatched", "detail": ""}]
-    [edit] = plan_updates(results, config_path=config, catalog_path=catalog)
-    assert edit.status == "manual" and edit.line is None
+def test_moved_source_never_relabels_a_preinstalled_runtime(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    local = fixture_bindings()
+    source = local["audit-codeql:custom-2.27.0"]
+    declaration = {"source_image_id": source, "build_image_id": source,
+                   "runtime_image_id": "sha256:" + "a" * 64, "runtime_user": "1000:1000",
+                   "codeql_release_id": "codeql-2.27.0-cert-v2.62.0",
+                   "runner_release_id": "appsec-codeql-runner-89568569", "runner_source": "application"}
+    write_host_pins(host, images=local, runtimes=[declaration])
+    before = host.read_bytes()
+    local["audit-codeql:custom-2.27.0"] = "sha256:" + "f" * 64
+    with pytest.raises(PinUpdateError, match="source.*no files changed"):
+        update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(local))
+    assert host.read_bytes() == before
 
 
-def test_each_tag_is_inspected_once(tmp_path: Path) -> None:
-    runner = _runner(LOCAL)
-    pins = configured_pins([{"id": "a", "state": "enabled", "tag": "t:1", "image_id": OLD_A}],
-                           {"jobs": {"job_x": {"settings": {"tag": "t:1", "image_id": OLD_A}}}})
-    assert [item["status"] for item in verify_pins(pins, runner)] == ["missing", "missing"]
-    assert len(runner.calls) == 1
-
-
-def test_a_write_the_typed_loader_refuses_is_undone_and_reported(tmp_path: Path) -> None:
-    config, catalog = _files(tmp_path)
-
-    def loader(path: Path) -> None:
-        assert tomllib.loads(path.read_text())["jobs"]["job_codeql_analysis"]["settings"][
-            "source_image_id"] == NEW_S  # the loader sees the written file
-        raise ValueError("CodeQL preinstalled runtime source differs from configured source image")
-
-    with pytest.raises(PinUpdateError, match="does not load .*differs from configured source image.*restored"):
-        update_pins(config_path=config, catalog_path=catalog, write=True, runner=_runner(LOCAL), loader=loader)
-    assert config.read_text(encoding="utf-8") == CONFIG and catalog.read_text(encoding="utf-8") == CATALOG
-
-
-def test_unreadable_configuration_is_an_error(tmp_path: Path) -> None:
+def test_unreadable_configuration_is_an_error(tmp_path):
     with pytest.raises(PinUpdateError, match="cannot read the pins"):
         update_pins(config_path=tmp_path / "absent.toml", catalog_path=tmp_path / "catalog.toml",
-                    write=False, runner=_runner({}))
+                    write=False, runner=runner({}))
 
 
-def test_cli_command_reports_and_exits_nonzero_when_a_pin_cannot_be_updated(
-        tmp_path: Path, monkeypatch, capsys) -> None:
+def test_cli_bootstrap_and_missing_image_exit_status(tmp_path, monkeypatch, capsys):
     from appsec_review import cli
     from appsec_review.container_runtime import build_executor
-
-    config, catalog = _files(tmp_path)
-    (tmp_path / "containers").mkdir()
-    catalog.rename(tmp_path / "containers" / "catalog.toml")
-
-    class Runtime:
-        runs_dir, repository_root = tmp_path / "runs", tmp_path
-
-    class Config:
-        runtime = Runtime()
-
-    monkeypatch.setattr(cli, "load_config", lambda _path, **_kwargs: Config())
-    monkeypatch.setattr(build_executor, "_run", _runner({**LOCAL, "fixture/node:local": None}))
-    assert cli.main(["--config", str(config), "update-image-pins"]) == 1
-    report = json.loads(capsys.readouterr().out)
-    assert report["written"] is False and report["checked"] == 7
-    monkeypatch.setattr(build_executor, "_run", _runner(LOCAL))
+    config, _, host = files(tmp_path, monkeypatch)
+    monkeypatch.setattr(build_executor, "_run", runner({}))
+    assert cli.main(["--config", str(config), "update-image-pins", "--write"]) == 1
+    assert json.loads(capsys.readouterr().out)["failures"] and not host.exists()
+    monkeypatch.setattr(build_executor, "_run", runner(fixture_bindings()))
     assert cli.main(["--config", str(config), "update-image-pins", "--write"]) == 0
-    assert tomllib.loads(config.read_text())["jobs"]["job_codeql_analysis"]["settings"]["source_image_id"] == NEW_S
+    assert json.loads(capsys.readouterr().out)["written"] and host.is_file()

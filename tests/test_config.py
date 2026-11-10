@@ -271,7 +271,7 @@ def test_mode_override_targets_and_duplicate_definitions_are_rejected(tmp_path: 
 
 
 def test_codeql_legacy_modes_normalize_one_way_and_reject_ambiguous_enablement() -> None:
-    raw = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+    raw = json.loads(load_config(ROOT / "appsec-review.toml").resolved_json)
     value = raw["jobs"]["job_codeql_analysis"]["settings"]
     legacy = copy.deepcopy(value)
     legacy["languages"]["cpp"]["mode"] = "manual"

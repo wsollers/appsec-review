@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import hashlib
+import json
 import logging
 from pathlib import Path
 import tomllib
@@ -20,6 +21,7 @@ from typing import Any
 from appsec_review.config.image_pin_verification import (
     ImagePinVerificationSettings, parse_image_pin_verification_settings,
 )
+from appsec_review.config.host_pins import bound_catalog_images, parse_host_pins
 from appsec_review.container_runtime.build_executor import Runner
 from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.cataloging import write_json
@@ -32,7 +34,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 
 LOGGER = logging.getLogger(__name__)
 JOB_ID = "job_image_pin_verification"
-PLAN_SCHEMA = "appsec-review/image-pin-plan/1"
+PLAN_SCHEMA = "appsec-review/image-pin-plan/2"
 VERIFICATION_SCHEMA = "appsec-review/image-pin-verification/1"
 RECORD_NAME = "image-pin-verification.json"
 HANDOFF_NAME = "image-pin-verification-handoff.json"
@@ -76,9 +78,16 @@ def build_job(*, runner: Runner | None = None) -> Job:
             raise FileNotFoundError(f"image pin verification requires {CATALOG.as_posix()}")
         catalog_bytes = catalog_path.read_bytes()
         images = tomllib.loads(catalog_bytes.decode("utf-8")).get("images", [])
-        frozen = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
+        frozen = unit.job.run_root / "data" / "configuration" / "resolved.json"
         frozen_bytes = frozen.read_bytes()
-        pins = configured_pins(images, tomllib.loads(frozen_bytes.decode("utf-8")))
+        resolved = json.loads(frozen_bytes)
+        host_path = frozen.parent / "host-pins.toml"
+        host_bytes = host_path.read_bytes()
+        host_record = resolved.get("configuration_host_pins", {})
+        if (host_record.get("sha256") != hashlib.sha256(host_bytes).hexdigest()
+                or host_record.get("document") != parse_host_pins(host_bytes)):
+            raise ValueError("image pin verification host-pins identity mismatch")
+        pins = configured_pins(bound_catalog_images(images, resolved), resolved)
         if not pins:
             raise ValueError("image pin verification found no enabled catalog image or configured pin")
         document = {
@@ -87,6 +96,8 @@ def build_job(*, runner: Runner | None = None) -> Job:
                         "release_id": unit.job.review_policy.releases.values.get("platform")},
             "configuration": {"path": frozen.relative_to(unit.job.run_root).as_posix(),
                               "sha256": hashlib.sha256(frozen_bytes).hexdigest()},
+            "host_pins": {"path": host_path.relative_to(unit.job.run_root).as_posix(),
+                          "sha256": hashlib.sha256(host_bytes).hexdigest()},
             "pins": pins,
         }
         identity = _identity(unit, unit.unit_root / "image-pin-plan.json", document)
@@ -139,7 +150,7 @@ def build_job(*, runner: Runner | None = None) -> Job:
     implementation = None
     return Job(
         JOB_ID, "image_pin_verification", UnitExecutor(units).execute,
-        input_validators=(validate,), schema_identity="appsec-review/image-pin-verification-job/2",
+        input_validators=(validate,), schema_identity="appsec-review/image-pin-verification-job/3",
         implementation_identity=implementation, validation_identity=implementation,
         units=units, datasets=DATASETS, contract=CONTRACT,
         always_execute=True, propagate_handoff=False, strict_gaps=True,

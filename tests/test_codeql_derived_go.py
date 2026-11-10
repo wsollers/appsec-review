@@ -308,7 +308,7 @@ def test_codeql_pins_ship_a_go_extractor_for_the_configured_version():
     lock = json.loads((CODEQL_TOOL / "assets.lock.json").read_text(encoding="utf-8"))
     settings = _codeql_settings("derive")
     assert lock["codeql"]["version"] == "2.27.0"
-    assert lock["source_image"]["image_id"] == settings.source_image_id
+    assert "image_id" not in lock["source_image"]
     assert lock["source_image"]["tag"] == settings.source_image_tag
     assert re.fullmatch(r"[0-9a-f]{64}", lock["extractors"]["go"]["tree_sha256"])
     assert lock["extractors"]["go"]["file_count"] > 0

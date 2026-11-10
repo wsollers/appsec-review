@@ -24,6 +24,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from tests.capture_fakes import build_capture_toml
 from tests.test_codeql_analysis import _settings_value
 from tests.test_codeql_predecessor import _table
+from tests.host_pins_support import write_host_pins
 
 
 SOURCE = "sha256:" + "1" * 64
@@ -507,10 +508,10 @@ def test_jobrunner_inventory_database_and_query_use_real_executor_with_fake_engi
         + '\n[jobs.job_codeql_analysis]\nname = "fixture"\nworkers = 1\n'
         # The fixture runs a subset of units; DATASETS also declares the acceptance step.
         + '\n[jobs.job_codeql_analysis.steps.acceptance]\n'
-        + _table("jobs.job_codeql_analysis.settings", settings)
-        + "".join(_table("[jobs.job_codeql_analysis.settings.preinstalled_runtimes]", entry)
-                  for entry in entries))
-    config = load_config(config_path)
+        + _table("jobs.job_codeql_analysis.settings", settings))
+    host = write_host_pins(tmp_path / "host-pins.toml",
+                           images={"source:fixture": SOURCE}, runtimes=entries)
+    config = load_config(config_path, host_pins=host)
 
     def produce(unit):
         image = codeql._resolve_image(unit, build_image_tag="source:fixture",

@@ -123,23 +123,19 @@ def test_github_token_reaches_only_the_code_location_from_the_operator_shell():
     assert not any(line.lstrip("# ").startswith(f"{token_env}=") for line in example.splitlines())
 
 
-def test_review_host_preinstalled_runtime_bindings_use_declared_application_runner():
+def test_review_host_pins_are_not_committed_and_compose_mounts_them_read_only():
     root = Path(__file__).resolve().parents[1]
     config = tomllib.loads((root / "appsec-review.toml").read_text())
     settings = config["jobs"]["job_codeql_analysis"]["settings"]
-    mappings = settings["preinstalled_runtimes"]
-    releases = config["review_policy"]["releases"]
     cpp = config["jobs"]["job_project_build"]["settings"]["profiles"]["native"]
     assert settings["preinstalled_undeclared"] == "derive"
-    build_images = {entry["build_image_id"] for entry in mappings}
-    assert {settings["source_image_id"], cpp["image_id"]} <= build_images
-    assert len(build_images) == len(mappings)
-    for entry in mappings:
-        assert entry["source_image_id"] == settings["source_image_id"]
-        assert entry["runtime_user"] == "1000:1000"
-        assert entry["runner_source"] == "application"
-        assert entry["codeql_release_id"] == releases["codeql"]
-        assert entry["runner_release_id"] == releases["codeql_runner"]
+    assert "preinstalled_runtimes" not in settings and "source_image_id" not in settings
+    assert "image_id" not in cpp
+    compose = yaml.safe_load((root / "deploy/dagster/compose.yaml").read_text())
+    for service in ("code-location", "webserver", "daemon"):
+        [mount] = [entry for entry in compose["services"][service]["volumes"]
+                   if isinstance(entry, dict) and entry["target"] == "/opt/app/deploy/dagster/host-pins.toml"]
+        assert mount["read_only"] is True and mount["bind"]["create_host_path"] is False
 
 
 @pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod"])

@@ -124,6 +124,7 @@ def submission_identity(root: Path, *, target: str, profile: str, overlay: str,
         "application_run_id": application_run_id,
         "configuration": {
             "base_sha256": digest(root / "appsec-review.toml"), "profile": profile,
+            "host_pins_sha256": host_pins_identity(root),
             "profile_sha256": digest(profile_path) if profile != "dev" else None,
             "overlay_sha256": digest(overlay_path) if overlay_path else None,
             "overlay": overlay, "recording": recording, "compiler_target": compiler_target,
@@ -176,6 +177,19 @@ def reconcile_submission(run_id: str, url: str) -> None:
                       reconciled_at=datetime.now(timezone.utc).isoformat())
         write_submission(ROOT, record)
         print(f"reconciled_dagster_run_id={run_id}; no review submitted", flush=True)
+
+
+def host_pins_identity(root: Path) -> str:
+    from appsec_review.config.host_pins import load_host_pins
+    return load_host_pins(root).sha256
+
+
+def effective_configuration(path: Path) -> dict:
+    from appsec_review.config.host_pins import apply_host_pins, load_host_pins
+    import tomllib
+    document = tomllib.loads(path.read_text(encoding="utf-8"))
+    apply_host_pins(document, load_host_pins(path.parent))
+    return document
 
 
 def verify_build_profile_images(document: dict, *, runner=subprocess.run) -> None:

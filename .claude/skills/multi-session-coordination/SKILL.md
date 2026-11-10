@@ -44,7 +44,8 @@ Some values describe one host's state. Only the session that produced them chang
 
 | File or value | Owner |
 | --- | --- |
-| `image_id` pins in `containers/catalog.toml`; `jobs.job_project_build.settings.profiles.*` `tag`/`image_id`, CodeQL `source_image_*` and `asset_lock_sha256` in `appsec-review.toml`; `containers/tools/codeql/assets.lock.json` `source_image` | The session on the review host that built and smoked those images. |
+| Ignored `deploy/dagster/host-pins.toml`: observed image IDs and CodeQL preinstalled runtime declarations | The session on that review host that built and smoked those images. Never commit or copy another host's observations. |
+| Recipe tags and asset-lock hashes in configuration/catalog/tool locks | The implementation owner of the actual recipe or payload change; re-pinning does not edit these. |
 | `assets.lock.json` hashes and `packages.manifest` files | The session that ran the acquisition and built the image with them. |
 | Target checkouts under `targets/` | The user. Agents never pull or edit a target. |
 

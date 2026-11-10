@@ -2,7 +2,7 @@
 
 Runs the steps of ``docs/operations/run-readiness.md`` in order — ``host`` (preconditions), ``key``
 (operator key, committed anchor, host trust directory), ``images`` (validate, build, smoke, report),
-``pin`` (host re-pin as its own commit), ``sign`` (every pinned image), ``codeql`` (query packs) — each
+``pin`` (ignored host image bindings), ``sign`` (every pinned image), ``codeql`` (query packs) — each
 idempotent, each logged under ``runs/run-readiness/<timestamp>/<step>.log``, and stops at the first step
 that fails so the operator reads the log before anything downstream runs. Steps 6-8 (target, stack, gate
 run) stay with the runbook: they need the stack scripts and a human reading the gate.
@@ -134,8 +134,8 @@ def step_host(host: Host, args: argparse.Namespace) -> None:
         say(f"{REPORT_PREFIX} filesystem: {fstype or 'unknown'}")
     dirty = host.output(["git", "status", "--porcelain", "--untracked-files=no"], "host")
     if dirty and not host.dry_run:
-        raise ReadinessError("the checkout has uncommitted changes to tracked files; readiness makes its own commits "
-                             "(anchor, re-pin) and needs them separable:\n" + dirty, REFUSED)
+        raise ReadinessError("the checkout has uncommitted changes to tracked files; readiness may commit the "
+                             "public anchor and needs it separable:\n" + dirty, REFUSED)
     untracked = host.output(["git", "status", "--porcelain", "--untracked-files=normal"], "host")
     untracked = "\n".join(line for line in untracked.splitlines() if line.startswith("??"))
     if untracked:
@@ -193,16 +193,7 @@ def step_pin(host: Host, args: argparse.Namespace) -> None:
     cli = appsec_review_cli(host.root)
     host.run([*cli, "update-image-pins"], "pin")
     host.run([*cli, "update-image-pins", "--write"], "pin")
-    changed = host.output(["git", "status", "--porcelain", "--untracked-files=no"], "pin")
-    if not changed:
-        say(f"{REPORT_PREFIX} pins already match this host; nothing to commit")
-        return
-    say(f"{REPORT_PREFIX} re-pinned files:\n{changed}")
-    host.run(["git", "add", "-u"], "pin")  # tracked files only: untracked operator material stays out
-    date = datetime.now(UTC).strftime("%Y-%m-%d")
-    host.run(["git", "commit", "-q", "-m", f"Host re-pin: {args.host_label}, {args.docker_context} context, {date}\n\n"
-              "Image IDs observed on this host after a full build; no code change."], "pin")
-    say(f"{REPORT_PREFIX} committed the re-pin as its own commit (push it yourself)")
+    say(f"{REPORT_PREFIX} host bindings updated in deploy/dagster/host-pins.toml; no tracked pin edits or commit")
 
 
 DEFAULT_SIGNATURES_DIR = "/var/lib/appsec-review/signing/images"

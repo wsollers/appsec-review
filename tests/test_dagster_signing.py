@@ -273,6 +273,10 @@ def test_compose_launches_only_the_verified_image_with_read_only_signing_mounts(
         assert service["image"] == anchor["image"] and service["pull_policy"] == "never"
         assert "build" not in service
         mounts = {item["target"]: item for item in service["volumes"] if isinstance(item, dict)}
+        pins = mounts.pop("/opt/app/deploy/dagster/host-pins.toml")
+        assert pins == {"type": "bind", "source": "${APPSEC_REVIEW_HOST_PINS:-./host-pins.toml}",
+                        "target": "/opt/app/deploy/dagster/host-pins.toml", "read_only": True,
+                        "bind": {"create_host_path": False}}
         assert set(mounts) == SIGNING_TARGETS
         for target, mount in mounts.items():
             assert mount["type"] == "bind" and mount["read_only"] is True

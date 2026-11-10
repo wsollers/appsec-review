@@ -10,12 +10,14 @@ from __future__ import annotations
 from dataclasses import replace
 import os
 from pathlib import Path
+import tomllib
 
 import pytest
 
 from appsec_review.codeql import CodeQLImageResolver
 from appsec_review.config import load_config
 from appsec_review.container_runtime import profiles_from_settings
+from tests.host_pins_support import fixture_bindings, write_host_pins
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,8 +32,19 @@ def _refuse_docker(command, timeout):  # pragma: no cover - reaching it is the f
 
 
 @pytest.fixture(scope="module")
-def shipped():
-    config = load_config(ROOT / "appsec-review.toml", profile=HOST_PROFILE, overlay="")
+def shipped(tmp_path_factory):
+    images = fixture_bindings()
+    releases = tomllib.loads((ROOT / "appsec-review.toml").read_text())["review_policy"]["releases"]
+    source = images["audit-codeql:custom-2.27.0"]
+    declarations = [
+        {"source_image_id": source, "build_image_id": build_image,
+         "runtime_image_id": "sha256:" + digit * 64, "runtime_user": "1000:1000",
+         "codeql_release_id": releases["codeql"], "runner_release_id": releases["codeql_runner"],
+         "runner_source": "application"}
+        for build_image, digit in ((source, "a"), (images["audit-buildenv-cpp:local"], "b"))]
+    host = write_host_pins(tmp_path_factory.mktemp("host") / "pins.toml",
+                           images=images, runtimes=declarations)
+    config = load_config(ROOT / "appsec-review.toml", profile=HOST_PROFILE, overlay="", host_pins=host)
     settings = config.job(JOB).typed_settings
     profiles = profiles_from_settings(config.job("job_project_build").settings["profiles"])
     return config, settings, profiles

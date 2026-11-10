@@ -132,7 +132,7 @@ def packaged_topology() -> dict:
 
 
 def launch(job_name: str, dagster_run_id: str, tags: dict[str, str]) -> None:
-    document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+    document = review_run.effective_configuration(ROOT / "appsec-review.toml")
     review_run.verify_build_profile_images(document)
     compose("exec", "-T", "webserver", "dagster", "job", "launch", "-w", "/opt/dagster/home/workspace.yaml",
             "-l", "appsec_review", "-j", job_name, "--run-id", dagster_run_id, "--tags", json.dumps(tags),

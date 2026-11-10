@@ -43,6 +43,12 @@ x-dagster-service: &dagster-service
     - ../../src:/opt/app/src:ro
     - ../../pyproject.toml:/opt/app/pyproject.toml:ro
     - ../../appsec-review.toml:/opt/app/appsec-review.toml:ro
+    - type: bind
+      source: ${APPSEC_REVIEW_HOST_PINS:-./host-pins.toml}
+      target: /opt/app/deploy/dagster/host-pins.toml
+      read_only: true
+      bind:
+        create_host_path: false
     - ../../release-dependencies.json:/opt/app/release-dependencies.json:ro
     - ../../profiles:/opt/app/profiles:ro
     - ../../docs/schemas:/opt/app/docs/schemas:ro
@@ -210,6 +216,12 @@ services:
       - ../../src:/opt/app/src:ro
       - ../../pyproject.toml:/opt/app/pyproject.toml:ro
       - ../../appsec-review.toml:/opt/app/appsec-review.toml:ro
+      - type: bind
+        source: ${APPSEC_REVIEW_HOST_PINS:-./host-pins.toml}
+        target: /opt/app/deploy/dagster/host-pins.toml
+        read_only: true
+        bind:
+          create_host_path: false
       - ../../release-dependencies.json:/opt/app/release-dependencies.json:ro
       - ../../profiles:/opt/app/profiles:ro
       - ../../docs/schemas:/opt/app/docs/schemas:ro

@@ -69,8 +69,9 @@ def config(tmp_path, key, monkeypatch) -> SimpleNamespace:
         runtime=SimpleNamespace(repository_root=root),
         signing=SigningConfig(openssl=Path(OPENSSL_BINARY), trusted_keys_dir=key.trusted,
                               image_signatures_dir=tmp_path / "signatures"),
-        resolved_json=b"{}")
+        resolved_json=json.dumps({"configuration_host_pins": HOST_BINDING}).encode())
     monkeypatch.setattr(cli, "load_config", lambda *_args, **_kwargs: loaded)
+    monkeypatch.setattr(cli, "load_signing_config", lambda *_args, **_kwargs: loaded)
     return loaded
 
 
@@ -182,7 +183,12 @@ tag = "fixture/disabled:1"
 image_id = "{IMAGE_D}"
 '''
 
-DOCUMENT = {"jobs": {
+HOST_BINDING = {"document": {"images": {
+    "fixture/matched:1": IMAGE_A, "fixture/moved:1": IMAGE_B,
+    "fixture/unpinned:1": IMAGE_B, "fixture/shared:1": IMAGE_A,
+}}}
+
+DOCUMENT = {"configuration_host_pins": HOST_BINDING, "jobs": {
     "job_project_build": {"settings": {"profiles": {"native": {"tag": "fixture/matched:1", "image_id": IMAGE_A}}}},
     "job_codeql_analysis": {"settings": {
         "source_image_tag": "fixture/matched:1", "source_image_id": IMAGE_A,
@@ -222,12 +228,12 @@ def test_sign_all_pinned_signs_matching_pins_and_never_a_mismatched_image(
     assert code == 1
     status = {row["source"]: row["status"] for row in report["images"]}
     assert status["containers/catalog.toml images.moved.image_id"] == "mismatched"
-    assert status["containers/catalog.toml images.unpinned.image_id"] == "skipped_unpinned"
+    assert status["containers/catalog.toml images.unpinned.image_id"] == "signed"
     assert {value for source, value in status.items() if "moved" not in source and "unpinned" not in source} \
         == {"signed"}
     signatures = tmp_path / "signatures"
     assert sorted(path.name for path in signatures.iterdir()) == sorted(
-        f"{image.removeprefix('sha256:')}.json" for image in (IMAGE_A, IMAGE_C))
+        f"{image.removeprefix('sha256:')}.json" for image in (IMAGE_A, IMAGE_B, IMAGE_C))
 
     local_images["fixture/moved:1"] = IMAGE_B
     code, report = _main(capsys, "sign-image", "--all-pinned", "--private-key", str(key.private))
@@ -272,7 +278,8 @@ CVE_SOURCE = "jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.setting
 
 def _cve_document(**settings: object) -> dict:
     step = {"settings": {"image": "fixture/cve-bin-tool:3.4", "tool_version": "3.4", **settings}}
-    return {"jobs": {"job_third_party_data_sync": {"settings": {}, "steps": {"cve_bin_tool_db_build": step}}}}
+    return {"configuration_host_pins": HOST_BINDING,
+            "jobs": {"job_third_party_data_sync": {"settings": {}, "steps": {"cve_bin_tool_db_build": step}}}}
 
 
 def test_pinned_images_include_the_cve_bin_tool_step_only_when_pinned() -> None:

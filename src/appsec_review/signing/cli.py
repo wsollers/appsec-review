@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping, Sequence
 import contextlib
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -24,6 +25,7 @@ from .core import OpenSSL, SignatureVerificationError, _write_new_file, key_id
 from .images import EnvelopeImageVerifier, inspect_image_id, sign_image
 from .modules import sign_modules, verify_modules
 from .release_lib import sign_release_lib, verify_release_lib
+from appsec_review.config.signing import SigningConfig, parse_signing
 
 
 DEFAULT_PRIVATE_KEY = Path("~/.config/appsec-review/signing/private/operator.pem")
@@ -42,6 +44,27 @@ _ABSENT_IMAGE = re.compile(r"no such (image|object)", re.IGNORECASE)
 _inspect_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
 
 _FAILURES = (SignatureVerificationError, OSError, ValueError)
+
+
+@dataclass(frozen=True)
+class SigningPaths:
+    repository_root: Path
+
+
+@dataclass(frozen=True)
+class SigningCommandConfig:
+    runtime: SigningPaths
+    signing: SigningConfig
+
+
+def load_signing_config(path: str | Path) -> SigningCommandConfig:
+    """Key provisioning and explicit verification do not require image inventory first."""
+    import tomllib
+    from appsec_review.config.loader import _config_source
+    source = _config_source(path)
+    document = tomllib.loads(source.read_text(encoding="utf-8"))
+    return SigningCommandConfig(
+        SigningPaths(source.parent), parse_signing(document.get("signing", {}), source.parent))
 
 
 def add_parser(commands: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -337,10 +360,12 @@ def configured_image_pins(config: Any) -> list[dict[str, Any]]:
     """Read ``containers/catalog.toml`` and the resolved configuration of ``config`` into pins."""
     import tomllib
     from appsec_review.jobs.job_image_pin_verification.pins import CATALOG
+    from appsec_review.config.host_pins import bound_catalog_images
 
     catalog_path = Path(config.runtime.repository_root) / CATALOG
     images = tomllib.loads(catalog_path.read_text(encoding="utf-8")).get("images", [])
-    return pinned_images(images, json.loads(config.resolved_json))
+    document = json.loads(config.resolved_json)
+    return pinned_images(bound_catalog_images(images, document), document)
 
 
 def builder_service_image_pins(path: Path) -> list[dict[str, Any]]:

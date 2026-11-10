@@ -15,7 +15,7 @@ in it is executed by jobs or agents. Each step names the document that owns its 
   refuses to run against any other. Build, pin, sign and run against that
   one daemon, and check `docker context show` after every reboot: the active context has changed
   silently before. Each machine builds and keeps its own full image set (no image transfer between
-  hosts); T-051 makes the pins host-local so every such machine can run reviews. Windows is the
+  hosts); T-051 stores its bindings in ignored `deploy/dagster/host-pins.toml`. Windows is the
   editor; the Windows stack (`appsec-review-dagster-windows`, `docs/operations/signing.md`,
   "Windows hosts") is not used for review runs.
 - **The checkout the stack mounts lives on WSL ext4**, never under `/mnt/c` or `/mnt/f`
@@ -50,7 +50,8 @@ protocol not available` inside WSL:
 
 | Change | Action | Rebuild? |
 | --- | --- | --- |
-| Any file in the release closure: `src`, `appsec-review.toml`, `profiles`, `rules`, `pipeline`, `docs/schemas`, `scripts`, `containers/*.toml` | `lifecycle.py reload` (seconds), then `plan-repair` / `admit-repair` / `resume` | no |
+| Compatible source-only change in the release closure | `lifecycle.py reload`, then `plan-repair` / `admit-repair` / `resume` | no |
+| Configuration, host pins, or schema/contract change | reload and start a fresh authorized run; preserve the old run | no |
 | `deploy/dagster/requirements*.txt`, a provider CLI pin, `src/appsec_review/signing/*` (the verifier) | `scripts/stack-rebuild` | application image only |
 | A tool image recipe: its `Dockerfile`, `tool.toml`, `assets.lock.json`, catalog tag | `containers/build-all.sh build <id>`, `smoke <id>`, re-pin, re-sign | that tool image only |
 | A CodeQL image or any graph-export QL | the above, then `scripts/compile-codeql-queries.sh` | that image; recompile the cache |
@@ -100,16 +101,20 @@ why; steps 6–8 are run by hand.
    An image that fails for a reason unrelated to the run (a moved asset URL, say) is **disabled in
    configuration for the first run and recorded in the task doc**, not fixed now; T-050 is where
    catalog work lives. Readiness means a host that can start a run, not a complete catalog.
-4. **Re-pin and sign** (`docs/operations/image-pin-verification.md`, "Host procedure"). Pins are
-   host-local (T-051): the committed IDs name whichever host last pinned.
+4. **Bind local images and sign** (`docs/operations/image-pin-verification.md`, "Host procedure").
+   T-051 keeps recipe tags and asset hashes committed; observed IDs and CodeQL preinstalled runtime
+   declarations are host-owned. A missing host file is bootstrapped by the updater, not by copying
+   another machine's pins.
 
    ```bash
    appsec-review update-image-pins            # plan
-   appsec-review update-image-pins --write    # apply; commit as its own "host re-pin" commit
+   appsec-review update-image-pins --write    # atomically write ignored host-pins.toml; no commit
    appsec-review signing sign-image --all-pinned --private-key ~/.config/appsec-review/signing/private/operator.pem
    ```
 
-   The re-pin commit carries no code change, so the loop can tell a pin move from a fix.
+   The updater validates the full effective configuration before publication. It never rewrites
+   recipe files or an existing run. A changed binding requires a fresh run; source-only repair
+   admission does not waive frozen-configuration identity. `run-readiness pin` makes no Git commit.
 5. **Compile the CodeQL query packs** into the shared cache the runs mount
    (`docs/operations/codeql-analysis.md`, "Compiling CodeQL queries"); a first run without it stalls
    cold in `job_codeql_analysis` with no error to read.

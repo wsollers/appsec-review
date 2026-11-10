@@ -31,7 +31,8 @@ def _android_profile():
     )
     if inspected.returncode != 0:
         pytest.skip(f"live Android build image is unavailable: {profile.tag}")
-    assert inspected.stdout.strip() == profile.image_id
+    assert inspected.stdout.strip() == profile.image_id, (
+        "Android tag moved from this host's binding; run update-image-pins --write before a new run")
     return config, profile
 
 

@@ -13,7 +13,9 @@ from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import GraphRunner, active_job_ids, job_is_enabled
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.signing.cli import add_parser as add_signing_parser, run as run_signing
+from appsec_review.signing.cli import (
+    add_parser as add_signing_parser, load_signing_config, run as run_signing,
+)
 
 INDEX_TERMINAL_JOB_ID = "job_review_data_indexing"
 
@@ -180,7 +182,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.job_id != "job_final_publication_gate" or not args.upstream_from_run or not args.run_id):
         parser().error("--admit-manual-poc requires run job_final_publication_gate --run-id --upstream-from-run")
     if args.command == "signing":
-        return run_signing(args, lambda: load_config(args.config, profile=args.profile))
+        return run_signing(args, lambda: (
+            load_config(args.config, profile=args.profile)
+            if getattr(args, "all_pinned", False) else load_signing_config(args.config)))
+    if args.command == "update-image-pins":
+        from appsec_review.config.loader import _config_source
+        from appsec_review.container_runtime.build_executor import _run
+        from appsec_review.jobs.job_image_pin_verification.pins import PinUpdateError, update_pins
+        try:
+            config_path = _config_source(args.config)
+            report = update_pins(
+                config_path=config_path, catalog_path=config_path.parent / "containers/catalog.toml",
+                write=args.write, runner=_run, profile=args.profile)
+        except (PinUpdateError, OSError, ValueError) as exc:
+            print(json.dumps({"error": str(exc)}, sort_keys=True))
+            return 1
+        print(json.dumps(report, sort_keys=True, indent=2))
+        return 1 if report["failures"] else 0
     compiler = getattr(args, "compiler_target", None)
     if args.command in {"run", "plan-resume", "resume", "plan-repair", "admit-repair", "verify-repair-stop",
                         "failure-replay", "build-failure-context",
@@ -285,25 +303,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(schedules, sort_keys=True))
         return 0
-
-    if args.command == "update-image-pins":
-        from appsec_review.container_runtime.build_executor import _run
-        from appsec_review.jobs.job_image_pin_verification import pins as image_pins
-        config_path = Path(args.config)
-        if not config_path.is_file():
-            config_path = config.runtime.repository_root / "appsec-review.toml"
-        try:
-            report = image_pins.update_pins(
-                config_path=config_path,
-                catalog_path=config.runtime.repository_root / "containers" / "catalog.toml",
-                write=args.write, runner=_run,
-                loader=lambda path: load_config(path, profile=args.profile))
-        except image_pins.PinUpdateError as exc:
-            print(json.dumps({"error": str(exc)}, sort_keys=True))
-            return 1
-        print(json.dumps(report, sort_keys=True, indent=2))
-        return 0 if not report["unpinned_missing"] and all(
-            edit["status"] in {"planned", "applied"} for edit in report["edits"]) else 1
 
     if args.command == "binary-decompile":
         from appsec_review.binary_decompilation import (

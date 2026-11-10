@@ -108,6 +108,10 @@ only records admission. It does not execute the restart.
 
 The original configuration, target fingerprint, review policy and evidence are retained.
 Configuration changes and schema/dataset-contract changes are not compatible source repairs.
+Host image bindings are a hashed configuration layer, not a source repair: changing
+`deploy/dagster/host-pins.toml` requires a fresh authorized run. Its old run-owned copy remains
+immutable. The T-051 cutover preserves `2026-11-10-0002` and starts a fresh c094 run by explicit
+operator decision; it does not promise uninterrupted reuse across that cutover.
 An unchanged job may reuse an accepted predecessor only after full artifact verification.
 Actual DAG ancestors determine input handoffs in both drivers; independent branches survive,
 live gates always run, and `COMPLETED_WITH_GAPS` survives warm reuse. Dagster also accepts the

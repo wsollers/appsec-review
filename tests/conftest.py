@@ -14,6 +14,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 _TIER_BUDGETS = pytest.StashKey[dict]()
 _PHASE_CLOCK = pytest.StashKey[time_budgets.PhaseClock]()
 _PYTEST_SCRATCH_ROOT = (_REPOSITORY_ROOT / "test" / "tmp").resolve()
+_HOST_PINS_PREVIOUS = pytest.StashKey[str | None]()
 
 
 def _resolved_from_invocation(value: str | Path, invocation_dir: Path) -> Path:
@@ -64,6 +65,26 @@ def pytest_configure(config: pytest.Config) -> None:
             value=config.getini("cache_dir"),
             invocation_dir=_REPOSITORY_ROOT,
         )
+    if not any(_uses_real_image_policy(Path(arg.split("::", 1)[0])) for arg in config.args):
+        from appsec_review.config.host_pins import HOST_PINS_ENV
+        from tests.host_pins_support import fixture_preinstalled, write_host_pins
+        previous = os.environ.get(HOST_PINS_ENV)
+        if previous is not None and not Path(previous).resolve().is_relative_to(_PYTEST_SCRATCH_ROOT):
+            raise pytest.UsageError(f"unit tests must not inherit production {HOST_PINS_ENV}")
+        config.stash[_HOST_PINS_PREVIOUS] = previous
+        base = _resolved_from_invocation(basetemp, invocation_dir)
+        pins = write_host_pins(base.parent / f"{base.name}.host-pins.toml", runtimes=fixture_preinstalled())
+        os.environ[HOST_PINS_ENV] = str(pins)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    if _HOST_PINS_PREVIOUS in config.stash:
+        from appsec_review.config.host_pins import HOST_PINS_ENV
+        previous = config.stash[_HOST_PINS_PREVIOUS]
+        if previous is None:
+            os.environ.pop(HOST_PINS_ENV, None)
+        else:
+            os.environ[HOST_PINS_ENV] = previous
 
 
 SLOW_TEST_SECONDS = 10.0
@@ -333,7 +354,7 @@ def _uses_real_image_policy(path: Path) -> bool:
         relative = path.resolve().relative_to(_REPOSITORY_ROOT / "tests")
     except ValueError:
         return False
-    return (relative.parts[0] in _REAL_IMAGE_POLICY_DIRECTORIES
+    return (bool(relative.parts) and relative.parts[0] in _REAL_IMAGE_POLICY_DIRECTORIES
             or relative.name.startswith("test_live_") or "_live" in relative.stem)
 
 

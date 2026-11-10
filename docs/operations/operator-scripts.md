@@ -478,7 +478,7 @@ order, each idempotent and each logged to `runs/run-readiness/<timestamp>/<step>
 | `host` | `docker context show` against `--docker-context` (this machine's one daemon: `default` for an in-WSL engine, `desktop-linux` for Docker Desktop), `docker info`, `findmnt` on the checkout, `git status` (tracked changes refuse; untracked paths are listed and left alone), Python ≥ 3.11, `openssl version`, `.venv/bin/appsec-review` | context differs from the declared daemon; daemon not answering; checkout not on ext4; tracked files modified; no venv |
 | `key` | `signing keygen` only if the key is absent (never overwritten); `signing export-trust-anchor --into deploy/dagster/trusted-keys`; commits a new anchor (`Trust anchor: <host> operator public key`); `sudo … signing install-trust-anchors` | — |
 | `images` | `containers/build.py validate`, `build --all --jobs N --continue-on-error`, `smoke --all`, `report` | any image failed to build: prints the report and stops before smoke, pin and sign (disable the image in the catalog, record it, `--from images`) |
-| `pin` | `update-image-pins` (plan), `--write`, commits the result alone (`Host re-pin: <host>, default context, <date>`) | — |
+| `pin` | `update-image-pins` (plan), `--write` to ignored `deploy/dagster/host-pins.toml`; no tracked edit or commit | missing/uninspectable image or invalid effective configuration; old bindings remain unchanged |
 | `sign` | `signing sign-image --all-pinned --private-key …` | — |
 | `codeql` | `scripts/compile-codeql-queries.sh` | — |
 

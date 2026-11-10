@@ -1,132 +1,91 @@
-# Image-pin verification and the host image procedure
+# Image-pin verification and host bindings
 
-The review pipeline never builds a container image. The operator builds images on the review host
-and pins them; every review then verifies, before any target work starts, that the local Docker
-daemon still holds exactly the pinned images. This document is the one place that describes both.
+The operator builds and smokes images on each review host's declared Docker daemon. Committed
+configuration describes recipes: tags, versions and asset payload hashes. Observed Docker IDs and
+CodeQL preinstalled runtime declarations live only in ignored `deploy/dagster/host-pins.toml`.
+They are not portable between daemons or hosts, and pinning never edits tracked recipes.
 
-## The gate: `job_image_pin_verification`
+## Host procedure
 
-`job_image_pin_verification` (Dagster name `image_pin_verification`) runs directly after
-`job_model_connectivity` and before `job_target_acquisition` and `job_review_intake` in the direct CLI graph and in every
-composite Dagster graph (`wave1_review`, `ci_configuration_review`, `project_build_review`).
+Do not rebuild or move tags while a review uses them. After an explicitly authorized image build
+and smoke, inspect and publish the local bindings:
 
-```text
-model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> ...
+```bash
+.venv/bin/appsec-review update-image-pins
+.venv/bin/appsec-review update-image-pins --write
+.venv/bin/appsec-review signing sign-image --all-pinned --private-key ~/.config/appsec-review/signing/private/operator.pem
 ```
 
-Like the model gate, the job executes on every graph dispatch, including a resume, and its handoff
-orders downstream jobs without entering their semantic identity.
+The updater inspects each distinct recipe tag once. It includes enabled catalog images and
+configured job/reporting image references. Missing or uninspectable images refuse the entire
+update. The complete candidate configuration must pass the real typed loader before the host file
+is atomically replaced; configuration/catalog bytes never change. An unchanged update is idempotent.
+`run-readiness pin` runs these commands without a Git add or commit.
 
-### What it checks
+The host file has a closed schema:
 
-The job reads `containers/catalog.toml` and the run's frozen configuration
-(`runs/<run-id>/data/configuration/appsec-review.toml`), both present in the packaged Dagster image.
-It needs no builder, Dockerfile or build context, and it runs only
-`docker image inspect <tag> --format {{.Id}}`, once per distinct tag, through the injectable command
-runner. The checked pins are:
+```toml
+schema = "appsec-review/host-pins/1"
+preinstalled_runtimes = []
 
-- every `enabled` image in `containers/catalog.toml`: its tag must resolve to its `image_id` when the
-  entry has one, and must at least be present when it has none. An entry marked `manual = true` is built
-  and run by hand (today `tool-report-latex`), no pipeline job depends on it, and the check skips it;
-- every enabled job's `tag`/`image_id` pair, which today means each
-  `[jobs.job_project_build.settings.profiles.<family>]` build profile;
-- every enabled job's `source_image_tag`/`source_image_id` pair, which today means CodeQL's
-  `[jobs.job_codeql_analysis.settings]` source image.
-
-A disabled job's pins are not checked, because the job will not run.
-
-| Unit | Responsibility |
-| --- | --- |
-| `selection.resolve_pins` | Collect the pins and record `image-pin-plan.json` with the catalog and frozen-configuration hashes. |
-| `verification.inspect_images` | Inspect every tag, classify every pin, and record `image-pin-verification.json`. |
-| `publication.publish_handoff` | Publish `image-pin-verification-handoff.json` with every pin, its pinned ID, its resolved ID and status. |
-
-Each pin is recorded as `matched`, `present` (an unpinned catalog image exists), `mismatched` (the tag
-moved to another image), `missing` (Docker reports no such image) or `inspect_failed` (Docker could not
-be asked, or timed out after 60 seconds).
-
-### Any mismatch fails the run
-
-A missing or moved tool image is never a recorded gap. When any pin is `mismatched`, `missing` or
-`inspect_failed`, the unit raises, the job fails, and no later job can start. The error message, the
-run log event `IMAGE_PIN_VERIFICATION_FAILED` (level `ERROR`) and the verification record name every
-failing pin on its own line:
-
-```text
-containers/catalog.toml images.tool-semgrep.image_id: tag appsec-review/tool-semgrep:1.178.0 pinned <unpinned> resolved missing
-jobs.job_project_build.settings.profiles.native.image_id: tag audit-buildenv-cpp:local pinned sha256:f685... resolved sha256:0b1c...
-jobs.job_codeql_analysis.settings.source_image_id: tag audit-codeql:custom-2.27.0 pinned sha256:3344... resolved missing
+[images]
+"audit-buildenv-cpp:local" = "sha256:<64 lowercase hex digits>"
+"audit-codeql:custom-2.27.0" = "sha256:<64 lowercase hex digits>"
 ```
 
-To recover, follow the host procedure below, then resume the run. Resume reruns the gate and reuses
-accepted downstream work.
+The example is illustrative, not a complete or loadable inventory. Use the updater for the complete
+set. `APPSEC_REVIEW_HOST_PINS` may select another explicit file; the default is relative to the
+configuration's directory. The loader's `host_pins=` argument takes precedence over that variable.
+No missing binding falls back to another host's committed ID.
 
-### Configuration
+Declare a preinstalled CodeQL runtime only after verifying its actual source/build/runtime IDs,
+effective numeric user, CodeQL/runner releases and runner source. Entries use the existing typed
+CodeQL declaration fields under `[[preinstalled_runtimes]]`. A moved source does not relabel an
+old runtime: conflicting declarations refuse the update. Missing declared build/runtime images
+also refuse it. Remove or correct the declaration explicitly. An empty set retains the configured
+`preinstalled_undeclared = "derive"` policy; it is not evidence that a runtime is installed.
 
-`[jobs.job_image_pin_verification.settings]` has one typed key, `enabled`. `false` makes the job
-transparent: intake then depends directly on `model_connectivity`. Any other key fails configuration
-loading. Unit tests inject a fake runner and never call Docker.
+Signing policy is unchanged. Image launch enforcement remains configured by
+`[signing].image_enforcement`; signing images does not enable enforcement. Key provisioning and
+explicit signature verification read signing policy without requiring image inventory first.
+The host bindings are identity inputs, not signatures or authorization to trust an image.
 
-## Host procedure: rebuild, re-pin, reload
+## Frozen configuration
 
-Run these steps on the review host, from the repository checkout, never during a running review: a
-rebuild moves tags on the shared daemon that a live run may be using.
+The loader applies host bindings after the runtime profile and capacity overlay, before typed
+validation. Build profiles, CodeQL, dossier rendering and telemetry rendering all receive the
+same tag-to-ID binding. The resolved JSON includes the host document and its hash. The runner
+copies its exact bytes to `runs/<run-id>/data/configuration/host-pins.toml` and records the layer
+in the configuration manifest. Intake verifies that copy against the resolved record.
 
-1. **Rebuild the images** with the deterministic builder. It validates the catalog, builds base
-   images before the images that use them, and writes per-image logs and `summary.json` under
-   `runs/container-builds/<builder-run-id>/`:
+Changing bindings changes the resolved configuration identity. Existing run files are never
+rewritten to follow the host. A source-only repair cannot admit a configuration change; start a
+fresh authorized run. This applies to the T-051 cutover itself. Preserve old run evidence rather
+than importing acceptance into a differently configured run.
 
-   ```bash
-   python3 containers/build.py build <image-id> [<image-id> ...] [--jobs N] [--continue-on-error]
-   python3 containers/build.py build --all     # every enabled catalog image
-   ```
+## The gate
 
-   Smoke the rebuilt images (`python3 containers/build.py smoke <image-id>`) before pinning them.
+`job_image_pin_verification` follows `job_model_connectivity`, before target acquisition/intake.
+It always executes and does not propagate its handoff into downstream semantic identity.
+Its `enabled` setting remains the existing typed Boolean.
 
-   After rebuilding a CodeQL image, fully compile its query packs to prove they plan in the new
-   image. This fills the shared compile cache review runs mount (keyed by the declared CodeQL
-   release and runtime user), so no review run compiles cold afterwards:
+The job reads the catalog and **frozen resolved configuration**, verifies the frozen host-pins
+hash, and checks every enabled non-manual catalog image, enabled job image reference and enabled
+telemetry PDF image against its bound ID. A manual catalog image is still checked when an enabled
+job/report references it. It runs only `docker image inspect`, through the injectable runner.
 
-   ```bash
-   scripts/compile-codeql-queries.sh   # wraps containers/build.py query-packs --warm
-   ```
+`image-pin-plan/2` records catalog, resolved-configuration and host-pins hashes plus the selected
+pins. `image-pin-verification.json` and the handoff record every expected/observed ID and status.
+Success requires every selected binding to match. Missing, moved or uninspectable images fail
+with `ImagePinVerificationFailed`, retained diagnostic artifacts and one retryable
+`producer-gap/1` record per failing reference. Failed attempts publish no accepted handoff.
+Started/completed/failed events retain pin counts or detailed failures.
 
-   It compiles only the packs that are not precompiled (the graph-export packs), one at a time; see
-   [Compiling CodeQL queries](codeql-analysis.md#compiling-codeql-queries).
+## Deploying changed application code
 
-2. **Re-pin** every configured pin to the image its tag now resolves to on the local daemon:
-
-   ```bash
-   appsec-review update-image-pins          # print the planned edits only
-   appsec-review update-image-pins --write  # apply them
-   ```
-
-   The command collects the same pins as the gate, inspects each tag, and for each pinned tag that
-   moved replaces the one quoted image ID on the line that owns the pin in `containers/catalog.toml`
-   or `appsec-review.toml`. Formatting, comments and line endings are untouched, and the edited file is
-   re-parsed to prove that only the planned values changed. When CodeQL's `source_image_id` moves, the
-   `preinstalled_runtimes[].source_image_id` declarations that must equal it move with it (their
-   `build_image_id`/`runtime_image_id` are host-derived images, not pins, and stay as declared); a write
-   is kept only if the re-pinned configuration still loads through the typed loader, otherwise both
-   files are restored and the loader's refusal is the error. A pinned tag that is missing or cannot be
-   inspected is `unresolved`, a pin whose line cannot be located unambiguously is `manual`, and an
-   enabled unpinned catalog image that is missing is listed under `unpinned_missing`. The command
-   exits non-zero in any of those cases. It never adds a pin to an unpinned catalog entry; that is a
-   reviewed edit. Review the diff and commit it. Only the session on the review host that built the
-   images changes these pins (see `.claude/skills/multi-session-coordination/SKILL.md`). Then sign the
-   re-pinned images with `appsec-review signing sign-image --all-pinned --private-key <key>`: with the
-   opt-in `[signing] image_enforcement = "required"` an unsigned pinned image is refused at launch (see
-   [Container image and Python module signing](signing.md)).
-
-3. **Rebuild and reload the Dagster image services** (code location, webserver and daemon), so the
-   packaged image carries the new pins and the gate checks against them, then prove the workspace
-   reconnected:
-
-   ```bash
-   python deploy/dagster/bin/lifecycle.py build
-   python deploy/dagster/bin/lifecycle.py reload
-   python deploy/dagster/bin/verify.py
-   ```
-
-Images move forward rather than reproduce bit for bit, so a rebuild normally yields new image IDs and
-therefore a re-pin (see [`containers/README.md`](../../containers/README.md#moving-forward-not-reproducing)).
+Compose mounts the existing host-pins file read-only into each application service and refuses
+to create a directory when that file is missing. Generate bindings before starting the stack.
+For source/configuration changes, use `scripts/stack-restart.sh --code-location-only` (the source
+reload/signing path), not an application-image rebuild. Build images only for actual tooling or
+dependency changes. A CodeQL image/release or query-source change still requires the bounded
+query-pack compilation documented in [CodeQL operations](codeql-analysis.md).

@@ -83,7 +83,6 @@ os.execv({python!r}, [{python!r}] + args)
 
 TOML = """[jobs.job_project_build.settings.profiles.p1]
 tag = "img:p1"
-image_id = "sha256:aaa"
 """
 
 
@@ -184,6 +183,8 @@ class Sandbox:
         (self.deploy / "bin" / "lifecycle.py").write_text(FAKE_LIFECYCLE, encoding="utf-8")
         (self.deploy / ".env").write_text(f"APPSEC_COMPOSE_PROJECT={PROJECT}\n", encoding="utf-8")
         (self.repo / "appsec-review.toml").write_text(TOML, encoding="utf-8")
+        from tests.host_pins_support import write_host_pins
+        write_host_pins(self.deploy / "host-pins.toml", images={"img:p1": "sha256:" + "a" * 64})
         for name in ("runs", "data", "targets/demo", "test/acceptance", "test/tmp"):
             (self.repo / name).mkdir(parents=True)
         self.bin.mkdir()
@@ -206,7 +207,7 @@ class Sandbox:
                                      files=files, settings=settings if name == "code-location" else None)
                            for name in ops.SERVICES],
             "images": {ops.image_tag(): {"id": "sha256:img", "created": "2026-10-20T00:00:00.000000000Z"},
-                       "img:p1": {"id": "sha256:aaa", "created": "x"}},
+                       "img:p1": {"id": "sha256:" + "a" * 64, "created": "x"}},
             "volumes": volumes if volumes is not None else [f"{PROJECT}_postgres-data", f"{PROJECT}_dagster-storage"],
             "exec": [probe or {"match": "claude -p", "stdout": "ok\n"}, {"match": "dagster job launch", "stdout": "launched"}],
         }
@@ -216,7 +217,8 @@ class Sandbox:
         self.state_file.write_text(json.dumps(self.state), encoding="utf-8")
 
     def environment(self, extra: dict[str, str] | None = None) -> dict[str, str]:
-        return {**os.environ, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "APPSEC_PYTHON": sys.executable,
+        return {**{key: value for key, value in os.environ.items() if key != "APPSEC_REVIEW_HOST_PINS"},
+                "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "APPSEC_PYTHON": sys.executable,
                 "FAKE_DOCKER_STATE": str(self.state_file), "FAKE_DOCKER_LOG": str(self.docker_log),
                 "LIFECYCLE_LOG": str(self.lifecycle_log), "APPSEC_DAGSTER_URL": self.dagster.url,
                 "FAKE_PYTEST_LOG": str(self.pytest_log), "FAKE_PYTEST_OUTPUT": str(self.pytest_output),

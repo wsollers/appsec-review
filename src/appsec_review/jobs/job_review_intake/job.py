@@ -8,6 +8,7 @@ from typing import Any
 
 from appsec_review.config.loader import (
     OVERLAY_LAYER, PENDING_JOBS, PROFILE_LAYER, overlay_capacity_keys, profile_override_keys)
+from appsec_review.config.host_pins import HOST_PINS_LAYER, parse_host_pins
 from appsec_review.interchange import path_gap_records
 from appsec_review.storage import file_sha256
 from appsec_review.jobs.cataloging import Bounds, inventory, source_fingerprint, write_json
@@ -327,6 +328,16 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         manifest = json.loads((unit.job.run_root / "data" / "configuration" / "manifest.json").read_text(
             encoding="utf-8"))
         extra = list(manifest["sources"][1:])
+        if not extra or extra[-1].get("layer") != HOST_PINS_LAYER:
+            raise ValueError("configuration has no host-pins layer")
+        host_layer = extra.pop()
+        host_bytes = (unit.job.run_root / "data/configuration/host-pins.toml").read_bytes()
+        host_record = resolved.get("configuration_host_pins")
+        if (not isinstance(host_record, Mapping)
+                or host_layer.get("sha256") != hashlib.sha256(host_bytes).hexdigest()
+                or host_record.get("sha256") != host_layer["sha256"]
+                or host_record.get("document") != parse_host_pins(host_bytes)):
+            raise ValueError("configuration host-pins layer does not match the frozen configuration")
         profile = resolved.get("configuration_profile")
         if not isinstance(profile, Mapping) or "name" not in profile:
             raise ValueError("resolved configuration does not record its runtime profile")
@@ -362,8 +373,8 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         strategy = ("explicit-or-repository-default" + ("-with-profile" if profiled else "") +
                     ("-and-" if profiled and overlaid else "-with-" if overlaid else "") +
                     ("capacity-overlay" if overlaid else ""))
-        return {"strategy": "single-explicit-or-repository-default" if len(layers) == 1 else strategy,
-                "layers": layers, **result}
+        return {"strategy": strategy + "-with-host-pins",
+                "layers": [*layers, host_layer], **result}
 
     def freeze_config(unit: UnitContext) -> Mapping[str, Any]:
         path = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
@@ -462,7 +473,7 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
     implementation = None
     validation = None
     return Job("job_review_intake", "review_intake", UnitExecutor(units).execute,
-               input_validators=(validate,), schema_identity="appsec-review/review-intake-job/2",
+               input_validators=(validate,), schema_identity="appsec-review/review-intake-job/3",
                implementation_identity=implementation, validation_identity=validation, units=units,
                datasets=DATASETS, contract=CONTRACT, external_input_identity=external_input_identity,
                strict_gaps=True)

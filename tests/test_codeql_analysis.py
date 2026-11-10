@@ -1072,7 +1072,7 @@ def _settings_value() -> dict[str, object]:
             "additional_queries": pack.get("additional_suites", []),
             "custom_queries": lock.get("custom_query_packs", {}).get(name, [])}
     return {"enabled": True, "source_image_tag": lock["source_image"]["tag"],
-        "source_image_id": lock["source_image"]["image_id"],
+        "source_image_id": IMAGE,
         "version": "2.27.0", "commit": "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9",
         "cli_sha256": lock["codeql"]["cli_sha256"], "license_sha256": lock["codeql"]["license_sha256"],
         "asset_lock_sha256": "0" * 64, "runtime_user": "10001:10001",

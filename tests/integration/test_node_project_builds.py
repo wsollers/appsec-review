@@ -25,6 +25,7 @@ import subprocess
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.config.host_pins import load_host_pins
 from appsec_review.container_runtime import profiles_from_settings
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.cataloging import source_fingerprint
@@ -155,8 +156,8 @@ def node_image() -> dict[str, str]:
     if inspected.returncode != 0:
         pytest.skip(f"live Node build image is unavailable: {profile.tag}")
     assert inspected.stdout.strip() == profile.image_id, (
-        f"{profile.tag} resolves to {inspected.stdout.strip()}, but the node profile pins "
-        f"{profile.image_id}; rebuild and re-pin per containers/buildenv/typescript/README.md")
+        f"{profile.tag} moved to {inspected.stdout.strip()} from this host's binding "
+        f"{profile.image_id}; update-image-pins --write before starting a new run")
     ping = _docker("run", "--rm", "--network", "bridge", "--read-only", "--tmpfs", "/tmp",
                    "--entrypoint", "npm", profile.image_id, "ping", timeout=180)
     registry_error = None if ping.returncode == 0 else (ping.stdout + ping.stderr)[-600:]
@@ -273,7 +274,7 @@ def test_node_project_builds_through_the_pipeline(tmp_path: Path, case: NodeCase
     shutil.copyfile(ROOT / "appsec-review.toml", config_path)
     target = tmp_path / "target" / Path(*PurePosixPath(case.project).parts)
     shutil.copytree(source, target, ignore=shutil.ignore_patterns("node_modules", ".git"))
-    config = load_config(config_path)
+    config = load_config(config_path, host_pins=load_host_pins(ROOT))
     fingerprint = source_fingerprint(target)
 
     upstream = GraphRunner(config, [build_intake(), build_catalog(),

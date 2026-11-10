@@ -25,6 +25,7 @@ from .build_workspaces import BuildWorkspacePolicy, parse_build_workspaces
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 from .signing import SigningConfig, parse_signing
+from .host_pins import HostPins, HOST_PINS_LAYER, apply_host_pins, load_host_pins
 
 
 class ProcessingMode(str, Enum):
@@ -627,6 +628,7 @@ class AppConfig:
     telemetry_report: TelemetryReportSettings = TelemetryReportSettings()
     signing: SigningConfig = SigningConfig()
     build_workspaces: BuildWorkspacePolicy = BuildWorkspacePolicy()
+    host_pins: HostPins | None = None
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -642,6 +644,9 @@ class AppConfig:
             layers.append({"path": str(self.profile_path), "sha256": self.profile_sha256, "layer": PROFILE_LAYER})
         if self.overlay_path is not None and self.overlay_sha256 is not None:
             layers.append({"path": str(self.overlay_path), "sha256": self.overlay_sha256, "layer": OVERLAY_LAYER})
+        if self.host_pins is not None:
+            layers.append({"path": str(self.host_pins.path), "sha256": self.host_pins.sha256,
+                           "layer": HOST_PINS_LAYER})
         return tuple(layers)
 
 
@@ -887,13 +892,14 @@ def _config_source(path: str | Path) -> Path:
 
 
 def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None,
-                profile: str | None = None, compiler_target: str | None = None) -> AppConfig:
+                profile: str | None = None, compiler_target: str | None = None,
+                host_pins: str | Path | HostPins | None = None) -> AppConfig:
     """Load the explicit (or repository default) configuration, a runtime profile and an optional capacity overlay.
 
     The profile is ``profile`` when given, otherwise ``APPSEC_REVIEW_PROFILE``, otherwise ``dev``. ``dev``
-    is the file as it is; other profiles merge ``profiles/<profile>.toml`` (beside the file) over it, before
+    uses the recipe as it is; other profiles merge ``profiles/<profile>.toml`` (beside the file) over it, before
     validation, and freezes it as its own hashed layer. Every resolved configuration records
-    ``configuration_profile``. Layer order: base, profile, capacity overlay.
+    ``configuration_profile``. Layer order: base, profile, capacity overlay, host image bindings.
 
     The overlay is ``overlay`` when given, otherwise the local path or file URI named by
     ``APPSEC_REVIEW_CONFIG_OVERLAY`` when that variable is set and non-empty; ``overlay=""``
@@ -931,6 +937,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         overlay_sha256 = hashlib.sha256(overlay_bytes).hexdigest()
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
                           "keys": list(overlay_keys), "document": overlay_document}
+    pins = host_pins if isinstance(host_pins, HostPins) else load_host_pins(repository_root, host_pins)
+    apply_host_pins(document, pins)
     resolved_document = copy.deepcopy(document)
     selected_compiler = parse_compiler_target("clang" if compiler_target is None else compiler_target)
     resolved_document["compiler_target"] = selected_compiler.value
@@ -1369,4 +1377,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         compiler_target=selected_compiler,
         telemetry_report=telemetry_report,
         signing=signing,
+        host_pins=pins,
     )
