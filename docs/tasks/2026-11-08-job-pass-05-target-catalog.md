@@ -129,3 +129,45 @@ against named target evidence and declared policy before acceptance. The source,
 components, documents and build shards must all publish with resolving manifest hashes; catalog
 source/project/build receipts and `BUILD_SYSTEMS_DISCOVERED` counts must agree with the actual
 artifacts and lifecycle. The catalog must not manufacture security findings.
+
+## Found on the WSOLLERS1 run
+
+Attempt 1 (`bfbe9e5a-fe31-42fb-b8e6-6c9d787247b1`) completed in 93,490 ms with a passing envelope
+and filesystem audit, but **is not accepted**: content verification found document-ingestion
+defects. The valid `northwind.postman_environment.json` (`_postman_variable_scope: environment`)
+is misclassified as an invalid collection; collection operations also disappear with
+`unresolved_span` gaps. These are job-content defects, not image/signing/host faults. A bounded
+job-specific repair context owns the document reader and focused offline regressions. Observation
+time is `2026-11-10T13:24:33-05:00`; replay and measurement records are
+`runs/failure-job_target_catalog.json` and `runs/c094-catalog-content-fault.json`.
+
+Independent checks already confirm all 344 retained file hashes/sizes, five published shard hashes
+and the c094 unit: exactly one CMake/native unit, executable `case094`, all eight named C++ sources
+and the intact descriptor routed to the native profile. The run discovers 51 build units and
+reports 13 orphan sources. Five are native sources beneath non-native units (Node/PHP/Python/Wasm);
+their membership claims require checking before acceptance, rather than silently treating that
+diagnostic as proof they cannot build. No c094 source is orphaned. Missing compile databases are
+the expected pre-build gap. Deferred non-npm dependency parsers and unknown dependency delivery
+status are named capability/knowledge gaps, not newly inferred failures.
+
+The bounded repair context returned `f0d2930f2b061e2422120b5ab72691f2bd29a199` (exclude standard
+Postman environment exports from collection discovery, retaining source inventory) and
+`e60f1041aab94d588192c782582ef694b352b868` (structural JSON member spans instead of whitespace-sensitive
+global matches). Inline URLs previously failed to resolve, and repeated URL text could incorrectly
+cite a body/saved response. The fix binds actual request members, preserves distinct same-line
+requests, and refuses duplicate JSON keys or exceeded structural bounds explicitly. Parser identity
+advances to `target-documents/3`; output schemas and job contracts are unchanged.
+
+The child's own Linux environment verified **59 passed in 10.84 s**, slowest 8.409 s, no skips,
+using `scripts/run-tests.sh --parallel --test-workers 4 --shuffle-seed 11014 --
+tests/test_target_documents.py
+tests/test_target_catalog_job.py::test_catalog_publishes_postman_requests_not_environments_and_keeps_real_parse_gaps`.
+The regressions failed before the repair (one classification failure and ten span failures).
+An intermediate four-launch publication fixture exceeded ten seconds under contention; the same
+positive/negative assertions were consolidated into one real graph launch, not dropped. Read-only
+parsing of the two observed files now resolves all 17 requests without gaps. Full commands, elapsed
+times and intermediate results are retained in the repair handoff.
+
+Before integration, `verify-repair-stop` confirmed the original dispatch terminal with worker
+`NOT_FOUND`. This is a content-repair cycle despite the framework's original `SUCCEEDED` status;
+the catalog remains unaccepted until its real rerun is checked.
