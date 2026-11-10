@@ -154,6 +154,13 @@ until each is rewritten into the entry format when it is next touched.
   first runs are Linux-only and the Windows family follows a working Linux loop; catalog work
   (T-050); unit-suite speed (T-048, measured in job pass 07: `storage.shared.safe_path` dominates
   runner-driven tests) and the baseline triage (T-047) stay the differential baseline, not blockers.
+  First measured cycle (WSOLLERS1, 2026-11-10, `job_target_catalog`, run `2026-11-10-0003`):
+  **248.25 minutes** from observed content defect to rerun, **253.84 minutes** to verified acceptance.
+  Shared-source changes correctly replayed the four predecessors under an admitted plan; guarded
+  rewind preserved and re-compared their original keys. The measurement includes a **132.52-minute
+  unintended broad test execution**, disclosed and not counted as authorized validation. This is
+  one compound cycle toward the required three. See `docs/tasks/2026-11-08-job-pass-05-target-catalog.md`
+  and `runs/c094-catalog-cycle-metrics.json` for the exact plan, outcomes and process failure.
 - **Done when:** (a) Phase 0's gate run accepts on HAL5000; (b) `stepwise.py system --tag
   appsec-multi-vuln-c094-v1` produces a score; (c) the edit → resumed-run turnaround of the loop is measured
   on at least three real breaks and recorded here with the REUSE/RUN decision each produced; (d)

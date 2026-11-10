@@ -1,0 +1,2056 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/result.json",
+   "sha256": "2ab915fec43200d9cba8216982239a14a49349f8ee05a1ec0eba7d697a60d6e9"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "10312f8f4c48a7145ddd5f89d06bb5e2d0ae934d3c2d5adac4fa693b2ad56386"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "11ff401a767028292b21048f6bdc4dbc6faa5c1b2dd1f0da2a25ee217f176bbb"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1c31d1274c9995e0fd82db64326210658d40e148c8442718b8faad5362bdd72a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "257742fc883bc1a11f0f60ce3364a68f08ffa230ba3d16d1a876819730361523"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9c96336219ee6230de6096c5eb2a5975e195884c275611720e42c4ebdf0189b1"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/status.json",
+   "sha256": "5727a24b5ae424d456ac0bc0240c0618b6c85ae7ef4752943381e66574190dde"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/status.json",
+   "sha256": "b9db994733650511a3813870ba33f04edcabfce52f6c8344ad806680409eeece"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/status.json",
+   "sha256": "864b6720caffd0a9f45976a47752852972352f8bb72c28cb37caf85796ef5720"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/status.json",
+   "sha256": "42995a6a0f7d015dca3772c3656247b3d498b2b96db169f01ce458319f718603"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/status.json",
+   "sha256": "4023a9fe252b2bb0ba7e334425f800d5a8bf299611fac1eb1d40d9fdad0d8d8b"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/status.json",
+   "sha256": "7ee6c139b6183a06ccc3bf19e85dee9b15ddb5b0dc786e561ce33421a8a8d875"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/status.json",
+   "sha256": "dcba47096a776a2d479ab88ccdeaa19e445275d1eeaa87b1bff8d162d258e245"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/status.json",
+   "sha256": "d23a0e3cbc78d84f073f99a76997fa14555580e1dfb60b5784a3aa89f43711a9"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/status.json",
+   "sha256": "a08ee0d5757580416ea72182903fc2c982123715aa4796323b43806b477bdcb6"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/status.json",
+   "sha256": "15dd064479fb8e8ab1b1341f9976529b0e1ee6d0b461535d07012bc778712531"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/status.json",
+   "sha256": "6963ebef13b74446834cd83ce0d622af016a43fef71d7f53799833d6f6847b52"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/status.json",
+   "sha256": "20d748391d4751eb95a3216e3da9ea4531d410ca8646683536cfd8b64d03221b"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/status.json",
+   "sha256": "935661c195ac2200d2236b2b96f26b6f646e2f04b1ad72b25ee7fcb9ec922f84"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/status.json",
+   "sha256": "cbd79603d95b9f6b4cc3ed3eb0f61470e25f131b92233b3b7054285ab0a92da5"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+   "sha256": "cad08e3ad6014fa67e8feaf316bdaae4618e17835fc64db1af88a60d0f442f63"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+   "sha256": "7cde6feb899bac858374f4da93814034a54f73bc18d733e6ea85f26c668dfee1"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+   "sha256": "d341fcd24a379b30de9842286931678404b18d1a9244eaf0c8598b371092cc09"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+   "sha256": "7e679ada3f9ffc1989011ae7987be14988355b3106511695aec7fa83eb2b37b4"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+   "sha256": "ff52d3c663b3830ee28687c192432a1207b27d1fa30bfc1c219f9d1d4a1500e2"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+   "sha256": "b316585070e45d7a35c5e7002214735862144805f6d71e52430e673a2ec10842"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/result.json",
+   "sha256": "8128badee4df7f5b66a5b9c5c8a313f6453c578c13aa5eab67493f0ca8ee0b33"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/result.json",
+   "sha256": "85b91e3b29f07da4411b37ed36271db20457263901a1c48a89c39891f5b19bb1"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "0c7a81bf1405a05fc96076e97f2a1e49a30424f0eeb04091eb1dcddc18d60a78"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "22c1107c00cec99be7b81c33746663a5d61370ed480f0d754a6cc322670d7182"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "4d39743869e1190d49839800a774d5ec37608c74a870ae59eb05c409b119619e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "7155d9f5fa4892f94cdb9741803f3c731d127b504c6d2d019d570c4b47b1366a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "cbfa347e12b2e2da677845955f37ea14663a5f0457317609956aa0adfb04b4f8"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+   "sha256": "7d958bf791ee558cecb7c90a6dd1dc0828b10bafdffd2ba1319c5120549de589"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+   "sha256": "3e3519b195be2d5bdafdb4f601cd08776134c6180b55f3f04733c7c7b84cd89f"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/result.json",
+   "sha256": "c1a2d166659131c17d109ab47969e7b31492b71e334b6bc04412ca12699b9755"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/result.json",
+   "sha256": "a7fef7c4d2b17f54168a5dfeed9dac2bab6b07c196ff8e24202b869a1f24c696"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/result.json",
+   "sha256": "7e2370dc02498196514a9a23218eedd93182a4a968171b2e7a397d29901ca336"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/result.json",
+   "sha256": "a861c700ea66cb98b4ec670a56292b8f1f192863a4da2f98f28084421b515251"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/result.json",
+   "sha256": "cc21e0b313fa9ef7a0685af83a664e63f9d0207d0db74594020568838f1057fc"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/result.json",
+   "sha256": "921a348f10dcad8871fe223d9db862daa43dc39b2bada12b52cff879b9e7f1c9"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/result.json",
+   "sha256": "388fec32acf5491ff26f5d944d7e23d62046d79c18670325e2d6367833bf60cc"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+   "sha256": "c385af211b3ec99fecefe9b6d44bffb32f2d6f3c311292cc60817fa021cc6199"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/result.json",
+   "sha256": "e2af7fd2a8f18f49c13f25594015293f9ed0c71bcd4ab90048bc487da0d7f2bf"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/result.json",
+   "sha256": "04c90b164da6d7c60f21dc6d1e0481a2dce06ba692ac873695224e6ebd05827f"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/result.json",
+   "sha256": "3b9683a044c6e92e03de8dc0560673228082f012fc0e2bb00c31b14d1d99a9cb"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/result.json",
+   "sha256": "dcb3fc413315fcfb192fd73bb917b3946e8d0d4edb6565ca5a7894dfed404c00"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/catalog-<attempt>.json",
+   "sha256": "ee8d6032c9664527da0766b6368da2dc71f775440e18e5e69a5cc0e4a53fd3c7"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/outcomes.json",
+   "sha256": "675a429b6f579e80eb2706e01b88797beb2ed267aa2dae68f76cf24584e80008"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+   "sha256": "8941e9195d45c56d478291dd11f9ac583de34274b76d9d098b4289edb4bc7e78"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "unavailable": 1
+   },
+   "entity_kinds": {
+    "build_action": 51
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 51,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "component": 51
+   },
+   "kind": "sqlite",
+   "path": "data/indices/components/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 51,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "symbol": 53
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 53,
+    "locations": 53,
+    "metadata": 8,
+    "relations": 53
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "source_file": 344
+   },
+   "kind": "sqlite",
+   "path": "data/indices/source/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 344,
+    "locations": 344,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 6,
+    "unavailable": 1
+   },
+   "entity_kinds": {
+    "document_record": 436
+   },
+   "kind": "sqlite",
+   "path": "data/indices/documents/<sha256>.sqlite",
+   "rows": {
+    "coverage": 7,
+    "entities": 436,
+    "locations": 436,
+    "metadata": 8,
+    "relations": 57
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "compile-units",
+    "gap": "compile_commands.json not present",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/build/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document); source inventory .git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:design",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:dfd",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:openapi",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:postman",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:threat_model",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:unit_test",
+    "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-files",
+    "gap": ".git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/source/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": "orphaned sources: 4 c, 1 c++, 7 java, 1 kotlin",
+   "unit": "build_discovery.catalog_build_targets"
+  },
+  {
+   "count": 1,
+   "gap": "orphaned sources: 4 c, 1 c++, 7 java, 1 kotlin",
+   "unit": "build_discovery.discover_build_systems"
+  },
+  {
+   "count": 1,
+   "gap": "compile_commands.json not present",
+   "unit": "build_discovery.discover_compile_commands"
+  },
+  {
+   "count": 1,
+   "gap": "projects/android/case-092/app/build.gradle.kts: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/android/case-092/build.gradle.kts: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-014/case-014.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-015/case-015.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-035/case-035.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-043/case-043.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-044/case-044.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-050/case-050.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-059/case-059.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-069/case-069.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/dotnet/case-071/case-071.csproj: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-007/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-008/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-009/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-039/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-046/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-055/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/go/case-064/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/java/case-034/pom.xml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/javascript/case-031/package.json#dependencies.lodash: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/node-addon/case-087/package.json#dependencies.node-addon-api: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.@apollo/server: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.better-sqlite3: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.cookie-parser: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.cors: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.express-rate-limit: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.express: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.graphql: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.helmet: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.jsonwebtoken: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.pino-http: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.pino: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.swagger-ui-express: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/package.json#dependencies.zod: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/frontend/package.json#dependencies.react-dom: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/frontend/package.json#dependencies.react-router-dom: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/frontend/package.json#dependencies.react: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/php-composer/case-089/composer.json: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/go/gateway/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/go/recordc/go.mod: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/jvm/binding/pom.xml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/jvm/pom.xml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/jvm/service/pom.xml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/py/ext/pyproject.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/polyglot/case-093/apps/py/pyproject.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/python-package/case-085/pyproject.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-004/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-005/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-006/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-033/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-040/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-051/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/rust/case-065/Cargo.toml: dependency parser deferred for this manifest type",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": "projects/typescript/case-032/package.json#dependencies.minimist: dependency delivery status is unknown",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "orphaned sources: 4 c, 1 c++, 7 java, 1 kotlin",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "repository_discovery.partition_repository"
+  },
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "retrieval_indexes.build_path_index"
+  },
+  {
+   "count": 2,
+   "gap": "projects/northwinds-v1/backend/src/openapi/openapi.ts: unsupported_format (OpenAPI source must be a materialized JSON document)",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "retrieval_indexes.build_target_documents"
+  }
+ ],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/target-catalog-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_review_intake"
+  ]
+ },
+ "job_id": "job_target_catalog",
+ "outputs": {
+  "build_discovery.catalog_build_targets": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "engine_discovery": {
+    "counts": {
+     "bytes_read": 0,
+     "catalog_files": 344,
+     "eligible_descriptors": 0,
+     "projects": 0,
+     "read_descriptors": 0,
+     "roots_inspected": 0,
+     "roots_observed": 0,
+     "uninspected_descriptors": 0,
+     "uninspected_roots": 0
+    },
+    "observations": []
+   },
+   "schema": "appsec-review/build-targets/2",
+   "targets": {
+    "<summary>": {
+     "count": 51,
+     "sha256": "49918c92fdcecc2cb3ffa90ea15c30fb0f07f8fe6fcae427cc1dac99534a7f4f"
+    }
+   }
+  },
+  "build_discovery.discover_build_systems": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "build_units": {
+    "<summary>": {
+     "count": 51,
+     "sha256": "010d6e7e4ae93a568363203df4a30ac8503721e445d992eef67934df384aeac1"
+    }
+   },
+   "demoted_markers": [],
+   "engine_discovery": {
+    "counts": {
+     "bytes_read": 0,
+     "catalog_files": 344,
+     "eligible_descriptors": 0,
+     "projects": 0,
+     "read_descriptors": 0,
+     "roots_inspected": 0,
+     "roots_observed": 0,
+     "uninspected_descriptors": 0,
+     "uninspected_roots": 0
+    },
+    "observations": [],
+    "projects": []
+   },
+   "folded_roots": [
+    {
+     "build_system": "node",
+     "build_unit_id": "build-unit-ab652ec43799b464aae3",
+     "evidence": "projects/northwinds-v1/package.json:8",
+     "folded_into": "projects/northwinds-v1|node",
+     "markers": [
+      "projects/northwinds-v1/backend/package.json"
+     ],
+     "root": "projects/northwinds-v1/backend",
+     "via": "workspace_member"
+    },
+    {
+     "build_system": "node",
+     "build_unit_id": "build-unit-ce1989ec7aa32177edaa",
+     "evidence": "projects/northwinds-v1/package.json:8",
+     "folded_into": "projects/northwinds-v1|node",
+     "markers": [
+      "projects/northwinds-v1/frontend/package.json"
+     ],
+     "root": "projects/northwinds-v1/frontend",
+     "via": "workspace_member"
+    },
+    {
+     "build_system": "gradle",
+     "build_unit_id": "build-unit-10eb2ca0e7835d6a0e79",
+     "evidence": "projects/android/case-092/settings.gradle.kts:18",
+     "folded_into": "projects/android/case-092|gradle",
+     "markers": [
+      "projects/android/case-092/app/build.gradle.kts"
+     ],
+     "root": "projects/android/case-092/app",
+     "via": "settings_include"
+    },
+    {
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-6545ec5dc6d517ff16ef",
+     "evidence": "projects/polyglot/case-093/CMakeLists.txt:6",
+     "folded_into": "projects/polyglot/case-093|cmake",
+     "markers": [
+      "projects/polyglot/case-093/native/core/CMakeLists.txt"
+     ],
+     "root": "projects/polyglot/case-093/native/core",
+     "via": "add_subdirectory"
+    },
+    {
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-9d81653d3a1076ac4e40",
+     "evidence": "projects/polyglot/case-093/CMakeLists.txt:7",
+     "folded_into": "projects/polyglot/case-093|cmake",
+     "markers": [
+      "projects/polyglot/case-093/apps/cli/CMakeLists.txt"
+     ],
+     "root": "projects/polyglot/case-093/apps/cli",
+     "via": "add_subdirectory"
+    },
+    {
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-5d4c50502d47bd5fcc5e",
+     "evidence": "projects/polyglot/case-093/CMakeLists.txt:11",
+     "folded_into": "projects/polyglot/case-093|cmake",
+     "markers": [
+      "projects/polyglot/case-093/native/bridge-jni/CMakeLists.txt"
+     ],
+     "root": "projects/polyglot/case-093/native/bridge-jni",
+     "via": "add_subdirectory"
+    },
+    {
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-87937ebed8a667304492",
+     "evidence": "projects/polyglot/case-093/native/core/CMakeLists.txt:7",
+     "folded_into": "projects/polyglot/case-093|cmake",
+     "markers": [
+      "projects/polyglot/case-093/native/core/codec/CMakeLists.txt"
+     ],
+     "root": "projects/polyglot/case-093/native/core/codec",
+     "via": "add_subdirectory"
+    },
+    {
+     "build_system": "go",
+     "build_unit_id": "build-unit-65e5557a8bd2ef52eeea",
+     "evidence": "projects/polyglot/case-093/apps/go/go.work:3",
+     "folded_into": "projects/polyglot/case-093/apps/go|go",
+     "markers": [
+      "projects/polyglot/case-093/apps/go/gateway/go.mod"
+     ],
+     "root": "projects/polyglot/case-093/apps/go/gateway",
+     "via": "go_work_use"
+    },
+    {
+     "build_system": "go",
+     "build_unit_id": "build-unit-54d047b743cbfd030eda",
+     "evidence": "projects/polyglot/case-093/apps/go/go.work:3",
+     "folded_into": "projects/polyglot/case-093/apps/go|go",
+     "markers": [
+      "projects/polyglot/case-093/apps/go/recordc/go.mod"
+     ],
+     "root": "projects/polyglot/case-093/apps/go/recordc",
+     "via": "go_work_use"
+    },
+    {
+     "build_system": "maven",
+     "build_unit_id": "build-unit-c6ea6271c6ea7f1a5ce2",
+     "evidence": "projects/polyglot/case-093/apps/jvm/pom.xml:11",
+     "folded_into": "projects/polyglot/case-093/apps/jvm|maven",
+     "markers": [
+      "projects/polyglot/case-093/apps/jvm/binding/pom.xml"
+     ],
+     "root": "projects/polyglot/case-093/apps/jvm/binding",
+     "via": "pom_module"
+    },
+    {
+     "build_system": "maven",
+     "build_unit_id": "build-unit-462fd3748af5825f56c6",
+     "evidence": "projects/polyglot/case-093/apps/jvm/pom.xml:12",
+     "folded_into": "projects/polyglot/case-093/apps/jvm|maven",
+     "markers": [
+      "projects/polyglot/case-093/apps/jvm/service/pom.xml"
+     ],
+     "root": "projects/polyglot/case-093/apps/jvm/service",
+     "via": "pom_module"
+    }
+   ],
+   "orphaned_sources": [
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-016/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-017/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-041/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-042/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-049/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-058/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "java",
+     "nearest_unit": null,
+     "path": "projects/java/case-068/src/Main.java",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "java",
+     "language": "kotlin",
+     "nearest_unit": null,
+     "path": "projects/kotlin/case-084/src/main/kotlin/Case084.kt",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "native",
+     "language": "c++",
+     "nearest_unit": {
+      "build_system": "node",
+      "family": "node",
+      "root": "projects/node-addon/case-087",
+      "why_not": "different family"
+     },
+     "path": "projects/node-addon/case-087/src/addon.cc",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "native",
+     "language": "c",
+     "nearest_unit": {
+      "build_system": "phpize",
+      "family": "php",
+      "root": "projects/php-extension/case-090",
+      "why_not": "different family"
+     },
+     "path": "projects/php-extension/case-090/case090.c",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "native",
+     "language": "c",
+     "nearest_unit": {
+      "build_system": "python",
+      "family": "python",
+      "root": "projects/polyglot/case-093/apps/py/ext",
+      "why_not": "different family"
+     },
+     "path": "projects/polyglot/case-093/apps/py/ext/src/c093ext.c",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "native",
+     "language": "c",
+     "nearest_unit": {
+      "build_system": "python",
+      "family": "python",
+      "root": "projects/python-package/case-085",
+      "why_not": "different family"
+     },
+     "path": "projects/python-package/case-085/src/case085.c",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "family": "native",
+     "language": "c",
+     "nearest_unit": {
+      "build_system": "clang",
+      "family": "wasm",
+      "root": "projects/wasm/case-091",
+      "why_not": "different family"
+     },
+     "path": "projects/wasm/case-091/src/case091.c",
+     "reason": "no_build_point",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    }
+   ],
+   "schema": "appsec-review/build-systems/4",
+   "source_only_scopes": [
+    {
+     "family": "php",
+     "language": "php",
+     "root": "projects/php/case-018",
+     "scope_id": "source-scope-16456bd705cd1442f102",
+     "source_count": 2,
+     "sources": [
+      {
+       "path": "projects/php/case-018/index.php",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "projects/php/case-018/pages/home.php",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "php",
+     "language": "php",
+     "root": "projects/php/case-052",
+     "scope_id": "source-scope-6f77e5bbfcacab644a80",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/php/case-052/index.php",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "php",
+     "language": "php",
+     "root": "projects/php/case-060",
+     "scope_id": "source-scope-8778acf6c613284b5756",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/php/case-060/index.php",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "php",
+     "language": "php",
+     "root": "projects/php/case-070",
+     "scope_id": "source-scope-29c3007c333978f87ab0",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/php/case-070/index.php",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-073",
+     "scope_id": "source-scope-57073aea5f7d2439c7fb",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-073/main.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-074",
+     "scope_id": "source-scope-6b537daaa0b88cbe70f4",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-074/main.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-075",
+     "scope_id": "source-scope-b4a65c1169da02240af0",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-075/main.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-076",
+     "scope_id": "source-scope-85f8a58348a7ec0b629a",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-076/main.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-077",
+     "scope_id": "source-scope-d263096fe3927a6c473c",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-077/main.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-078",
+     "scope_id": "source-scope-8a6a367d0084686b0649",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-078/main.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-079",
+     "scope_id": "source-scope-772d3662c4a564d2e2e3",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-079/app.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "projects/python/case-080",
+     "scope_id": "source-scope-ee61f710829e48220542",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "projects/python/case-080/app.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    },
+    {
+     "family": "python",
+     "language": "python",
+     "root": "scripts",
+     "scope_id": "source-scope-73f61c36f4243decab00",
+     "source_count": 1,
+     "sources": [
+      {
+       "path": "scripts/validate-matrix.py",
+       "sha256": "<sha256>"
+      }
+     ],
+     "sources_truncated": false
+    }
+   ],
+   "systems": {
+    "<summary>": {
+     "count": 67,
+     "sha256": "e44150f3fff99c1432330d9995492cf9af83dc5504e4d1b861b1641d5c324732"
+    }
+   }
+  },
+  "build_discovery.discover_compile_commands": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "files": [],
+   "schema": "appsec-review/compile-commands/1"
+  },
+  "component_discovery.catalog_components": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "components": {
+    "<summary>": {
+     "count": 51,
+     "sha256": "90b9c105fb36133d0667a521aa021c48e1cda260f9a8374e96367d18c025f7e3"
+    }
+   },
+   "schema": "appsec-review/component-catalog/1"
+  },
+  "component_discovery.catalog_dependencies": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dependencies": {
+    "<summary>": {
+     "count": 63,
+     "sha256": "d7c01a18369cb65a437e773b4c6cea9707988c9654e55e3c70b318af963e47f0"
+    }
+   },
+   "schema": "appsec-review/dependency-catalog/1"
+  },
+  "publish_catalog.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/target-catalog/1"
+  },
+  "publish_catalog.validate_catalog": {
+   "status": "VALID",
+   "validated": [
+    "retrieval_indexes.build_path_index",
+    "retrieval_indexes.build_symbol_index",
+    "retrieval_indexes.build_component_index",
+    "retrieval_indexes.build_target_documents"
+   ]
+  },
+  "repository_discovery.census_languages": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "languages": [
+    {
+     "file_count": 10,
+     "language": "C"
+    },
+    {
+     "file_count": 9,
+     "language": "C#"
+    },
+    {
+     "file_count": 19,
+     "language": "C++"
+    },
+    {
+     "file_count": 4,
+     "language": "C/C++"
+    },
+    {
+     "file_count": 9,
+     "language": "Go"
+    },
+    {
+     "file_count": 11,
+     "language": "Java"
+    },
+    {
+     "file_count": 12,
+     "language": "JavaScript"
+    },
+    {
+     "file_count": 1,
+     "language": "Kotlin"
+    },
+    {
+     "file_count": 156,
+     "language": "Other"
+    },
+    {
+     "file_count": 7,
+     "language": "PHP"
+    },
+    {
+     "file_count": 5,
+     "language": "PowerShell"
+    },
+    {
+     "file_count": 15,
+     "language": "Python"
+    },
+    {
+     "file_count": 7,
+     "language": "Rust"
+    },
+    {
+     "file_count": 11,
+     "language": "Shell"
+    },
+    {
+     "file_count": 68,
+     "language": "TypeScript"
+    }
+   ],
+   "schema": "appsec-review/language-census/1"
+  },
+  "repository_discovery.discover_projects": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "engine_observations": [],
+   "projects": {
+    "<summary>": {
+     "count": 51,
+     "sha256": "b92b779c3cfde827dcfd906ca205cf4fe8ce7174b0d88a1ace3660c14f963b61"
+    }
+   },
+   "schema": "appsec-review/project-catalog/1"
+  },
+  "repository_discovery.partition_repository": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "configured_exclusions": [
+    {
+     "path": ".gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    },
+    {
+     "path": "projects/northwinds-v1/.gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    },
+    {
+     "path": "projects/php-extension/case-090/.gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    },
+    {
+     "path": "projects/polyglot/case-093/.gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    }
+   ],
+   "file_discovery": {
+    "content_bytes_retained": 369190,
+    "content_files_omitted": 0,
+    "content_files_retained": 231,
+    "descriptor_coverage": "complete",
+    "descriptors_matched": 113,
+    "descriptors_retained": 113,
+    "descriptors_unavailable": 0,
+    "file_paths_examined": 348,
+    "semantics": "appsec-review/file-discovery/1"
+   },
+   "files": {
+    "<summary>": {
+     "count": 344,
+     "sha256": "429524edc8d2552b88646b6b53e53cd35016ed67b47159a5fef4d5856ed04dd0"
+    }
+   },
+   "target_artifacts": []
+  },
+  "retrieval_indexes.build_component_index": {
+   "artifact": {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "components",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_component_index"
+    },
+    "relative_path": "data/indices/components/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>"
+   },
+   "item_count": 51
+  },
+  "retrieval_indexes.build_path_index": {
+   "artifact": {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "source",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_path_index"
+    },
+    "relative_path": "data/indices/source/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "default"
+   },
+   "item_count": 344
+  },
+  "retrieval_indexes.build_symbol_index": {
+   "artifact": {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "analysis",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_symbol_index"
+    },
+    "relative_path": "data/indices/analysis/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>"
+   },
+   "item_count": 53
+  },
+  "retrieval_indexes.build_target_documents": {
+   "artifact": {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "documents",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_target_documents"
+    },
+    "relative_path": "data/indices/documents/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "default"
+   },
+   "item_count": 436,
+   "link_count": 57
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "build_discovery": "SUCCEEDED",
+  "component_discovery": "SUCCEEDED",
+  "publish_catalog": "SUCCEEDED",
+  "repository_discovery": "SUCCEEDED",
+  "retrieval_indexes": "SUCCEEDED"
+ },
+ "units": {
+  "build_discovery.catalog_build_targets": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_discovery.discover_build_systems": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_discovery.discover_compile_commands": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "component_discovery.catalog_components": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "component_discovery.catalog_dependencies": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_catalog.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_catalog.validate_catalog": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.census_languages": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.discover_projects": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.partition_repository": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_component_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_path_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_symbol_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_target_documents": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "7472266de3909e0e85d5c21c80236a06df11d339a64ace96d4a84320021b483c",
+    "size_bytes": 176128
+   },
+   {
+    "path": "data/indices/build/<sha256>.sqlite",
+    "sha256": "d27c42b8c58dc60e2da05c38d0c322af4acb1ebc82ca136b4788fc528f31c269",
+    "size_bytes": 843776
+   },
+   {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "ec9d7227fffb313be586766eccb775fe32bed9525bc92845c01e2936b9692456",
+    "size_bytes": 110592
+   },
+   {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "5ca6ef1f7af1a698750a3cbbea2f4c30520a0921d7b419ecf6395697f776e854",
+    "size_bytes": 1069056
+   },
+   {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "f51aeb579b20a295063ddb1d01d2309a6993deb9519a6e3b9d8e013812fdcdb8",
+    "size_bytes": 2820
+   },
+   {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "81a9e9ba843cb54e2c37e1dce9bd2a214d41c8f7fd464466a6618c2ac9a2c695",
+    "size_bytes": 1421312
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+    "sha256": "1432cfa171b1d4ee3045836880ce4b516cc9f9d7b7ac73cc1c67b0a63624d814",
+    "size_bytes": 66750
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+    "sha256": "f8a4f197cc73d04d6a585d4119b8b2d6352b153488c3dccbd7bb3b7785abe7e4",
+    "size_bytes": 222506
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+    "sha256": "bab0acaa828bf81d08a1166dfe10b966d94f9f06a9151a11464c45ab681a3cef",
+    "size_bytes": 102
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+    "sha256": "fb13e845960d326f273538bf6e5d141663db34fd6467b7767c99453b8f077f09",
+    "size_bytes": 10750
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+    "sha256": "fd39d2b2e783945d69860b4ad8d39c6c1519e7035a2b0209fb81edbbec5d3f46",
+    "size_bytes": 43589
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+    "sha256": "0b6427b8520ac06394008d81279ffc37ded2937c086c37e40c1f969f28cb37a9",
+    "size_bytes": 609
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+    "sha256": "c0b7bfdd2eefb4833d7c2b987b976b3b7e909639e2b315c99e41df2614354ddf",
+    "size_bytes": 8680
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+    "sha256": "ec5f8db7dbcd70f03a3534d6e317b72376f4152b3d8f1757d512b2ea8a9e706d",
+    "size_bytes": 180429
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+    "sha256": "38d40b7c534b3fbe9ae1dc1384f10e3e32ff28f6ba6993654839559bf3f53df8",
+    "size_bytes": 3440
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+    "sha256": "b53dc5005b3323e3f12c949d287f80c7a329704e0218c86507e31740feedadc5",
+    "size_bytes": 12339
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/outcomes.json",
+    "sha256": "b35a9abb7d80b7b23ba45b7897d786bd003a41ee7848188b658e141ffb8e6b40",
+    "size_bytes": 67473
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "6e8ff00be327b090a3aa87a1779e0d6b7b1b8336b178e345b81be14d2df0a98a",
+    "size_bytes": 1338
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "8313fc88c76b9999f781080a5ddb787a56776c64897cc5f4d2ceb68a5ef0d10a",
+    "size_bytes": 1348
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "bb5f49431297dcc8f91b34b31fa0ad6334d4f37b8b0ddaa8ebc9f5b105db5cf3",
+    "size_bytes": 1342
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "d2b99e46a9ba0f94e194b706d704d1c64838b8c130a9d719a5e177e8abb62520",
+    "size_bytes": 1348
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "e7bacdfdd514e877b0eeaa2cceb85907f44f2505bbc33ef048e661e968a086f7",
+    "size_bytes": 1344
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/result.json",
+    "sha256": "aa5f148d7199fd672814601e51e7b47c64ceb8a1e4db01419bb4ab229844e7ba",
+    "size_bytes": 222712
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/status.json",
+    "sha256": "f5af710fa5cfa18405b96655cb6e9bf6e7880cbbe185b03d8b607816ffaa2cd8",
+    "size_bytes": 809
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/result.json",
+    "sha256": "9d77ae3f57f73aace154d99bb1d91cecc940d1bb129c38d0f745c7bbb733991e",
+    "size_bytes": 66955
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/status.json",
+    "sha256": "2377b2cf881b0ab9eeaf67bfb7776365ba50515f79ccfe544736f2ea64bee542",
+    "size_bytes": 727
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/result.json",
+    "sha256": "74fc15a31ba04e0325894a63d6775312fa26c9047fe13f38993a9fd4fd548095",
+    "size_bytes": 308
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/status.json",
+    "sha256": "14419b6ced805f46369618ad71c3fb94732d37fb64cf6fb1c2c8df662196b353",
+    "size_bytes": 736
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/result.json",
+    "sha256": "97d3c9159cd54991f82c5650491f8d52c1a9e86d27c3548cc44e267e694e5a2a",
+    "size_bytes": 10952
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/status.json",
+    "sha256": "ba7b2be8c04306e4da301062b0884b1f98d6a5a0acd6c2f4cfa8f09b73d7cf36",
+    "size_bytes": 724
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/result.json",
+    "sha256": "0938970b0eb8e488fc83fafcc1b4a69cef04c2c4f0cd9280e3b03c436dee912d",
+    "size_bytes": 43793
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/status.json",
+    "sha256": "370d463164fd4c91f1ce29904c4ebacc8db449d26a187c9f34a8fd631130b089",
+    "size_bytes": 730
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/result.json",
+    "sha256": "ce30ed8dbe8f48c6f9860331bb007523e0fec6e50e8271ae7714a106a68e56b1",
+    "size_bytes": 679
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/status.json",
+    "sha256": "e675e4c9059436fbe5e116ec413dcc52e12fde0375f09b380849d55efa6d4708",
+    "size_bytes": 820
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/result.json",
+    "sha256": "b7fef89c712fc39cb588be0998b8461d254f958c01dcfe77524201df6a0e4911",
+    "size_bytes": 404
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/status.json",
+    "sha256": "5c24056562429649e0df9f5fb78ccb690d62be3e5a21e01aea98c6a975e8e3f0",
+    "size_bytes": 826
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/result.json",
+    "sha256": "23e4609b2a81a0307e57150371dfdb2f7760a33594a6eecbf5c84066cf0d1439",
+    "size_bytes": 814
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/status.json",
+    "sha256": "85ad43dd2d84caa56ae17f5d0b91fabc90f3c867d867ab6c809ea9baf2f52e58",
+    "size_bytes": 724
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/result.json",
+    "sha256": "1514ee5e3061ca7d80c1ce91dd361b48222a726853cc46e900bfa54420b2d153",
+    "size_bytes": 8879
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/status.json",
+    "sha256": "f2b90df41245c8167cca8e91aa9c7a7b5496ca9b414c60cc5a37f462ab11095f",
+    "size_bytes": 768
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/result.json",
+    "sha256": "7f453af6f94c6dcc71060bc689f0632f01f5802d6aabae4627fed02bddfebd4c",
+    "size_bytes": 136551
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/status.json",
+    "sha256": "b75ce2f2c76243d97f1c16b3e78c870ce42f7d08fb008c8d9f8169f1ebf4b633",
+    "size_bytes": 693
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/result.json",
+    "sha256": "fd29bbb51dc4602b8f5eddcaba8cd0e93ee4d57fa0d2ebaf07af0568a5158970",
+    "size_bytes": 694
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/status.json",
+    "sha256": "b014443538bfb3e12b2fc847af9c63b352bb72ef5c9db128496483be6c1c8a93",
+    "size_bytes": 1157
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/result.json",
+    "sha256": "0a7efed5a2fc1a28f1ed33f24a655802453eb8d4c5f4082016d22167ca2c3c20",
+    "size_bytes": 752
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/status.json",
+    "sha256": "5feb95107c002073e5796c32ccaddc9338cfbcc4f1a433851ab51b6818610901",
+    "size_bytes": 1179
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/result.json",
+    "sha256": "2f1317117defdca258738338652e72afb7fdc8232bb1b226c9155677d602a1b7",
+    "size_bytes": 685
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/status.json",
+    "sha256": "4724090c60ff08bd25e95b514abc0ffeb0650fd090ac92bc97a33eb60b4d68c0",
+    "size_bytes": 1144
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/result.json",
+    "sha256": "1a6dbf3d845d98d5eb4097c9bc81066a9a23a58284fed747a2b9a169a9a9636f",
+    "size_bytes": 1077
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/status.json",
+    "sha256": "60ed4ec2cb949c7363686a20a84bb927107d8248c1cadeb302d99a9e25578aa1",
+    "size_bytes": 1356
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "6e4e930f23ccfc1c421846cc75590442bbd092a9d8474b47dc6ac082098c5a60",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "8e625379d3fa7aa17e418b3a0d4147ddc46b8a1ef20127cdc9466d5b39c4fae3",
+    "size_bytes": 280
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "9b0f8529970adcb84500220773c6cfa7764186b619098fe31e778251d2eac858",
+    "size_bytes": 275
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "a829bad0f37a6e1741a60ae37ed3f70e28b25de808211f9d527e18bf253aeab4",
+    "size_bytes": 277
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "fcf680b2c56f6e9c1b76f12442484071ece6e6314e18191fa67b88e7a7a980a9",
+    "size_bytes": 280
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "5ca6ef1f7af1a698750a3cbbea2f4c30520a0921d7b419ecf6395697f776e854",
+    "size_bytes": 1069056
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "7472266de3909e0e85d5c21c80236a06df11d339a64ace96d4a84320021b483c",
+    "size_bytes": 176128
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "81a9e9ba843cb54e2c37e1dce9bd2a214d41c8f7fd464466a6618c2ac9a2c695",
+    "size_bytes": 1421312
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "d27c42b8c58dc60e2da05c38d0c322af4acb1ebc82ca136b4788fc528f31c269",
+    "size_bytes": 843776
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "ec9d7227fffb313be586766eccb775fe32bed9525bc92845c01e2936b9692456",
+    "size_bytes": 110592
+   }
+  ]
+ }
+}

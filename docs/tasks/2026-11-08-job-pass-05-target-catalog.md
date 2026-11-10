@@ -247,3 +247,38 @@ comparison-policy refinement, not a producer failure or permission to mask arbit
 The operator-only follow-up covers both connectivity and intake's identical preflight contract.
 The existing successful attempt can then be rechecked; another model dispatch is not required
 merely to repeat the comparison.
+
+### Verified completion of the first repair cycle
+
+The inventory-drift correction (`13a20cfe`, integrated unchanged as `46708d681`) passed 35
+explicitly selected tests in 26.85 s, slowest 5.003 s; no nested test delegation or broad selector
+was used. Connectivity's completed attempt was rechecked, not redispatched. The three remaining
+predecessors then replayed and matched their preserved keys. A pin-gate begin refusal exposed
+one operational requirement: each newly completed replay dispatch also needs its stopped-worker
+receipt before the next replacement attempt. Verifying those workers through the existing command
+resolved it without changing code or relaxing admission.
+
+Catalog attempt 2 (`7ad4db0c-eb42-419a-87f6-55c610997d0f`) started at
+`2026-11-10T17:32:48.202827-05:00`, completed in **87,877 ms**, and was accepted at
+`2026-11-10T17:38:23.206258-05:00`. All **17 distinct Postman requests** now have source-hash-bound
+locations; every byte span resolves to its actual request URL member and agrees with independent
+collection order/methods. The environment export remains in the source inventory but has no
+document/request records. No Postman parse/span gap remains.
+
+The original catalog criterion holds: all 344 file hashes/sizes and five shard hashes resolve,
+all eleven c094 files remain queryable, and its one native CMake build action retains all eight
+sources. Total build actions remain 51. The remaining **69 unique named gaps** (80 occurrences,
+down from 85/152) are explicit policy exclusions, pre-build missing compile databases, deferred
+dependency parsers/delivery knowledge, unsupported materialized-OpenAPI extraction from TypeScript,
+and conservative same-family source-ownership gaps. The five native sources under Node/PHP/Python/
+Wasm units are retained alongside those build units; the discovery's same-family rule does not
+establish that they cannot build. Their actual capture remains a later build-job obligation.
+These gaps are not hidden or evidence that the target is clean. Audit findings remain zero.
+
+**T-057 measurement 1:** first observed defect to catalog rerun = **248.25 minutes**; to verified
+acceptance = **253.84 minutes**. This is one compound repair cycle, not several successes counted
+from its internal tooling failures. It includes the **132.52-minute unauthorized broad test run**.
+Exact timestamps, admission/plan references and outcomes are in
+`runs/c094-catalog-cycle-metrics.json`; replay and acceptance logs use `runs/c094-replay-*.log`
+and `runs/c094-target-catalog-{rerun,accept}.log`. Prior keys/provenance/seeds remain unchanged,
+with immutable reacceptance receipts in the walk's `rewinds/` directory.
