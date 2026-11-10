@@ -98,3 +98,23 @@ Not run: parallel (`-n`) — pytest-xdist is not installed here; integration/liv
   one more live provider round-trip per run). Decide at the intake audit.
 - The three `test_image_pin_verification.py` failures seen while running neighbours are the next
   job's; they fail on `fe328d76` too.
+
+## WSOLLERS1 c094 run, 2026-11-10
+
+The T-051 cutover (`e99bde016`, receipt `2026-11-10-t051-host-local-pins.md`) starts fresh application
+run `2026-11-10-0003`, preserving `2026-11-10-0002`. The pre-dispatch criterion was the two distinct
+required pairs `copilot-sdk/claude-opus-5.5` and `copilot-sdk/claude-sonnet-5.5` available, no
+unavailable required model/gap/failed unit, and consistent lifecycle and completion telemetry.
+Disabled Sonnet references remain recorded without suppressing required Sonnet uses.
+
+Dispatch `786afa1f-290f-4a4b-ab85-7f2d087d1b57`, attempt 1: Dagster `SUCCESS`, job `SUCCEEDED`,
+40,211 ms, no gaps and no audit findings. The real artifact and handoff contain exactly those
+two verified pairs; `MODEL_CONNECTIVITY_COMPLETED` reports one provider, two models and zero
+unavailable required or optional models. The lifecycle/status/metrics assertions hold against
+the actual run, and the frozen host-pins bytes match the deployed file.
+
+Accepted with `stepwise.py accept --job job_model_connectivity --tag appsec-multi-vuln-c094-v1
+--app-run 2026-11-10-0003`. The old answer key/provenance/seed are preserved under
+`runs/t051-precutover-acceptance/`; old run data was not rewritten. No run fault or repair
+turnaround occurred. Logs: `runs/t051-connectivity-{run,accept}.log`.
+Next: `job_image_pin_verification`, against the T-051 receipt's 58-reference/47-tag criterion.

@@ -1,0 +1,315 @@
+{
+ "artifacts": [
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/resolve_models/status.json",
+   "sha256": "fd5f3975a669d84ce837f14ce03b69961049a75c4a005cef5f47ab2eb5ea4ccf"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/status.json",
+   "sha256": "54b36f6423b1cd67b7a307859ca69433bc46873f049208fe6af633574f30965f"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/status.json",
+   "sha256": "8c83fe7b9d220c636e595d4aaa49991448c543284faa20a7aa0345bc3f15e36d"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/claim.json",
+   "sha256": "b98b876258b3f6d6aa9634ac367c422228e4e34ee0bdc29c3472e753925761f5"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/resolve_models/result.json",
+   "sha256": "41f807d3ced13c4b284d6427e853fda5178480a657e72567fcbac32d65f6423f"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/model-connectivity-handoff.json",
+   "sha256": "41015dbff078e548eb36be84ce74761071f6f229f2ac28a23db10b7d2db19477"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/model-connectivity.json",
+   "sha256": "b1b05528d2d7f2c44aa935149e755b3940c6b393f5a0870efe4bfa3be6ccce16"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/result.json",
+   "sha256": "944f6e2b9045787e6a6cabf1cd04841edb2f34b9eb78b3472a2adfb23257935a"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/outcomes.json",
+   "sha256": "2a7331d3a2d6b67e9ff6f9a289df9e9e1b4df08b3508fcf9417480beb0377c92"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/result.json",
+   "sha256": "ed2d75c4eb33ecb6138d79a6b35d38ca12cba5ee8da90da1bced363d9766df25"
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/model-connectivity-job/2",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_model_connectivity",
+ "outputs": {
+  "connectivity.resolve_models": {
+   "model_count": 2,
+   "not_required": [
+    {
+     "enabled": false,
+     "job_id": "job_post_build_security_assessment",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "reason": "model setting disabled",
+     "setting": "settings.model"
+    }
+   ],
+   "not_required_count": 0,
+   "required": [
+    {
+     "enabled": true,
+     "job_id": "job_dependency_intelligence",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.default"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-opus-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.strong"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.triage"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_owasp_control_assessment",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_owasp_control_assessment",
+     "model": "claude-opus-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.reviewer"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_poc_generation",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.default"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_project_build",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_remediation_planning",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.writer"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_remediation_validation",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.reviewer"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_target_analysis_plan",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    }
+   ]
+  },
+  "connectivity.verify_models": {
+   "artifact": {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/model-connectivity.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_required": [
+    "copilot-sdk/claude-sonnet-5.5"
+   ],
+   "providers": [
+    "copilot-sdk"
+   ],
+   "schema": "appsec-review/model-preflight/1",
+   "terminal_status": "SUCCEEDED",
+   "unavailable_not_required": [],
+   "verified": [
+    "copilot-sdk/claude-opus-5.5",
+    "copilot-sdk/claude-sonnet-5.5"
+   ]
+  },
+  "publication.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/model-connectivity-handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_required": [
+    "copilot-sdk/claude-sonnet-5.5"
+   ],
+   "schema": "appsec-review/model-preflight/1",
+   "terminal_status": "SUCCEEDED",
+   "unavailable_not_required": [],
+   "verified": [
+    "copilot-sdk/claude-opus-5.5",
+    "copilot-sdk/claude-sonnet-5.5"
+   ]
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "connectivity": "SUCCEEDED",
+  "publication": "SUCCEEDED"
+ },
+ "units": {
+  "connectivity.resolve_models": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "connectivity.verify_models": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/claim.json",
+    "sha256": "4c3a998876cb6c9f9d4e83098789720ab667dde88d2491f8288cabf616b672e9",
+    "size_bytes": 4233
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/outcomes.json",
+    "sha256": "e772644d5a5bb4b17a1d4e153aaa7a1f065eb49f2225e651469b098a67bff514",
+    "size_bytes": 2072
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/resolve_models/result.json",
+    "sha256": "6f1be373629fec97d3920783fb1b2c322b24829666ce5e9de1cc4188d3f78940",
+    "size_bytes": 1771
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/resolve_models/status.json",
+    "sha256": "685be845e90628e48932e4b96b1ac85e6fb63885c87d01b9763b8ea24b7b0d88",
+    "size_bytes": 655
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/model-connectivity.json",
+    "sha256": "4f914bf500b5b3ef4c16428c146be07ff3f394add426d0a4e0e3355402882a10",
+    "size_bytes": 2487
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/result.json",
+    "sha256": "d784c2e28435f33254d5017e9bc801687a7f433857b0a84312c237f48b145cbe",
+    "size_bytes": 501
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/status.json",
+    "sha256": "4a3c57cecd3d30ddac290bb9204fee2c36a61f6a2b76c8fd44c81e2d1e294e3d",
+    "size_bytes": 688
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/model-connectivity-handoff.json",
+    "sha256": "23a988bb68a5dc0950130703e5cb0026da88e53ecedb80093e67e25d32737fc8",
+    "size_bytes": 461
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/result.json",
+    "sha256": "175ae1d7c28770ee9f86299f17ed54b35eca5d779947de429e03d4396fcc9f4a",
+    "size_bytes": 481
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/status.json",
+    "sha256": "49673e317faffb31071e8d89325b3161d0a7c36886085be60870973c3cb8efd5",
+    "size_bytes": 690
+   }
+  ]
+ }
+}
