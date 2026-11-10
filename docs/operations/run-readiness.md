@@ -120,23 +120,51 @@ why; steps 6–8 are run by hand.
 
 6. **Target.** `targets/appsec-multi-vuln-c094`, a clone of <https://github.com/wsollers/appsec-multi-vuln>
    checked out **at the tag `appsec-multi-vuln-c094-v1`** (`bd69bfe83fec…`;
-   `docs/operations/test-targets.md`), and `APPSEC_REVIEW_TARGET=/opt/app/targets/appsec-multi-vuln-c094`
-   in `deploy/dagster/.env`. Its key is `test/acceptance/appsec-multi-vuln-c094-v1/expectations.toml`
+   `docs/operations/test-targets.md`). Its key is `test/acceptance/appsec-multi-vuln-c094-v1/expectations.toml`
    (seven defects, seven paired negative controls), verified on 2026-11-08 at the tag and at `main`'s tip
    (`42284599…`), whose `projects/native/case-094` tree is byte-identical to the tag's; the checkout is
    still the tag, because `stepwise.py accept` requires the target's `HEAD` to equal the tag's commit.
    The first runs use this target only. CASTLE waits for a working loop.
 
+   ```bash
+   git clone https://github.com/wsollers/appsec-multi-vuln targets/appsec-multi-vuln-c094
+   git -C targets/appsec-multi-vuln-c094 checkout appsec-multi-vuln-c094-v1
+   ```
+
    `cpp-multivuln-v1` is not an option: its corpus was a separate local repository that never reached
-   GitHub (`test-targets.md`); its tag exists nowhere `appsec-multi-vuln` can see.
-7. **Stack** (`docs/operations/operator-scripts.md`). `scripts/stack-rebuild.sh` once (builds the
-   tooling-only application image), then `scripts/stack-start.sh`, which checks health, the overlay
-   and model connectivity. From here on, `scripts/stack-restart.sh --code-location-only` is the
-   reload.
-8. **Gate run.** `python deploy/dagster/bin/stepwise.py init --target /opt/app/targets/appsec-multi-vuln`
-   and `stepwise.py next` through `job_model_connectivity` and `job_image_pin_verification`. These two
-   jobs have been through the job pass (`docs/tasks/2026-11-08-job-pass-01-…`, `…-02-…`) and are the
-   two whose verdict on the host can be trusted. **Readiness is done when both accept.**
+   GitHub (`test-targets.md`); its tag exists nowhere `appsec-multi-vuln` can see. A host that ran it
+   in the past still has a stopped `code-location` container whose settings name it (next step).
+7. **Stack** (`docs/operations/operator-scripts.md`). Bootstrap first on a host whose `deploy/dagster/.env`
+   is missing or predates a variable the Compose files now require (HAL5000, 2026-11-10: `lifecycle start`
+   refused with `APPSEC_RESULT_CACHE_PASSWORD is missing a value: Run deploy/dagster/bin/bootstrap.py
+   first`); it is idempotent and keeps every existing value. On Linux/WSL, `claude` must be installed and
+   signed in before it (README, "Linux or WSL 2"). Then `stack-rebuild` once (builds the tooling-only
+   application image) and `stack-start` **with the target named on the command line**: the stack
+   scripts carry the previous `code-location` container's `APPSEC_REVIEW_TARGET`, overlay and recording
+   settings forward (even from a stopped container, so a `--target` choice is never silently reverted),
+   and those override `.env`. Name the target, drop the overlay, choose the recording mode once; later
+   restarts carry them.
+
+   ```bash
+   .venv/bin/python deploy/dagster/bin/bootstrap.py
+   scripts/stack-rebuild.sh
+   scripts/stack-start.sh --target appsec-multi-vuln-c094 --overlay none --recording record
+   ```
+
+   `stack-start` checks health, the overlay and model connectivity. From here on,
+   `scripts/stack-restart.sh --code-location-only` is the reload. `--recording record` keeps the model
+   exchanges of the first runs for replay; `off` is the default when nothing is carried. Ubuntu has no
+   `python` command: use `.venv/bin/python` (or `python3`) for every script here.
+8. **Gate run.**
+
+   ```bash
+   .venv/bin/python deploy/dagster/bin/stepwise.py init --target /opt/app/targets/appsec-multi-vuln-c094
+   .venv/bin/python deploy/dagster/bin/stepwise.py next     # job_model_connectivity
+   .venv/bin/python deploy/dagster/bin/stepwise.py next     # job_image_pin_verification
+   ```
+
+   These two jobs have been through the job pass (`docs/tasks/2026-11-08-job-pass-01-…`, `…-02-…`) and
+   are the two whose verdict on the host can be trusted. **Readiness is done when both accept.**
 
 ## Out of scope
 

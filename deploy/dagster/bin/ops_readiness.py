@@ -264,8 +264,10 @@ def run(args: argparse.Namespace, root: Path, host_factory: Callable[..., Host] 
             say(f"{REPORT_PREFIX} == {step}: FAILED; fix it and resume with --from {step}")
             return error.code
         say(f"{REPORT_PREFIX} == {step}: done")
-    say(f"{REPORT_PREFIX} finished steps 1-5 of docs/operations/run-readiness.md; next: step 6 (target), "
-        "7 (scripts/stack-rebuild then stack-start) and 8 (the gate run) by hand")
+    say(f"{REPORT_PREFIX} finished steps 1-5 of docs/operations/run-readiness.md; next, by hand: step 6 (clone the "
+        "target at its tag), 7 (.venv/bin/python deploy/dagster/bin/bootstrap.py; scripts/stack-rebuild.sh; "
+        "scripts/stack-start.sh --target <name> --overlay none --recording record) and 8 (the gate run with "
+        ".venv/bin/python deploy/dagster/bin/stepwise.py)")
     return 0
 
 
