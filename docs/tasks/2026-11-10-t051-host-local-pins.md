@@ -1,8 +1,8 @@
 # T-051 - Host-local image pins on WSOLLERS1
 
 T-051 moves host image observations out of tracked recipes before continuing T-057's c094
-job-by-job acceptance loop. The implementation and focused units are ready; live gate acceptance
-is pending.
+job-by-job acceptance loop. T-051 is complete: the implementation is committed and both fresh-run
+gates are accepted against their content-level criteria.
 
 ## Cutover decision
 
@@ -184,3 +184,17 @@ no unavailable required pair, no gap, no failed/skipped unit, and retained lifec
 model-connectivity start/completion events. Disabled references to Sonnet remain classified
 as not required without hiding the same model's required use. This gate establishes availability,
 not the correctness of later model inference.
+
+Fresh application run **`2026-11-10-0003`**:
+
+| Job | Dispatch | Result and verified criterion |
+| --- | --- | --- |
+| `job_model_connectivity` | `786afa1f-290f-4a4b-ab85-7f2d087d1b57` | Accepted, attempt 1, 40,211 ms; exactly the two required Copilot models available, one provider, no gaps/audit findings; lifecycle and model-completion metrics agree. |
+| `job_image_pin_verification` | `08169779-713f-468b-8ff9-74b3ed8ee1e2` | Accepted, attempt 1, 42,589 ms; exact 58-reference/47-tag set, every expected ID equals the observed ID, all `matched`, no gaps/audit findings; plan/handoff/frozen bytes and telemetry agree. |
+
+Connectivity acceptance is commit `41def63a1`. Image-pin acceptance and this completion receipt
+are committed together. Logs are `runs/t051-connectivity-{run,accept}.log` and
+`runs/t051-image-pin-{run,accept}.log`. The prior answer key, provenance and seed are preserved
+under `runs/t051-precutover-acceptance/`; the old run tree was not edited.
+No live fault or repair turnaround occurred, so this does not count toward T-057's three measured
+break/fix cycles. Next job: `job_target_acquisition`.

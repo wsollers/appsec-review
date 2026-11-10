@@ -46,7 +46,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-048 | [Rethink unit-test speed](#t-048-rethink-unit-test-speed) | testing | open |
 | T-049 | [Supersede the Windows native-analysis VM design for builds](#t-049-supersede-the-windows-native-analysis-vm-design-for-builds) | windows | open |
 | T-050 | [Container catalog: deferred acceptance work](#t-050-container-catalog-deferred-acceptance-work) | images | open |
-| T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | in-progress |
+| T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | done (2026-11-10, docs/tasks/2026-11-10-t051-host-local-pins.md) |
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | open |
@@ -567,7 +567,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-051 — Host-local image pins: bind the observed image ID into the run
 
-- **State:** in-progress
+- **State:** done (2026-11-10, docs/tasks/2026-11-10-t051-host-local-pins.md)
 - **Area:** images
 - **Why:** Docker IDs and installed CodeQL runtimes describe one host's daemon, not a portable
   recipe. Committing these observations makes hosts overwrite each other's identity bindings.

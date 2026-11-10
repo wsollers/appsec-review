@@ -82,3 +82,21 @@ Not run: parallel (`-n`, xdist absent); Dagster composite-graph tests; integrati
 
 - Empty-catalog / no-pins refusal tests (small; needs a fixture knob).
 - Windows profile kind and daemon selection for this gate: T-041.
+
+## WSOLLERS1 c094 run, 2026-11-10
+
+T-051 (`e99bde016`; `2026-11-10-t051-host-local-pins.md`) replaces committed image observations
+with a frozen host-pins layer. The plan is now `/2`, and job identity `/3`; image verification and
+handoff remain `/1`. The pre-dispatch criterion was the exact configured set of 58 references
+across 47 tags, every expected ID equal to the local observation, zero gaps/audit findings and
+matching frozen hashes plus start/completion telemetry counts.
+
+Application run `2026-11-10-0003`, dispatch `08169779-713f-468b-8ff9-74b3ed8ee1e2`, attempt 1:
+Dagster `SUCCESS`, job `SUCCEEDED`, 42,589 ms. The real plan, verification record and handoff match
+all 58 references, all `matched`; both pin-count events report 58. Frozen host bytes and resolved
+configuration hashes match the deployed binding. The criterion held and the job was accepted
+with `stepwise.py accept --job job_image_pin_verification --tag appsec-multi-vuln-c094-v1
+--app-run 2026-11-10-0003`.
+
+No live fault, image build or signing-policy change occurred. No turnaround is counted for T-057.
+Next: `job_target_acquisition`; T-051 no longer blocks the run-first loop.
