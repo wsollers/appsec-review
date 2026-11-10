@@ -208,3 +208,42 @@ frozen configuration remains `9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e68
 The operator rewind must preserve prior acceptance evidence and compare replayed outputs with
 those keys before reacceptance. No job has rerun yet, so the first fault-to-rerun turnaround
 remains open; it includes both the consumer repair and missing operator-rewind capability.
+
+### Guarded rewind and validation-scope incident
+
+The operator-only rewind arrived as `cfe3e19938597a5300b70db8819be1fd462b95aa`, integrated
+unchanged as `5bd73e8f1`. It changes no measured runtime source, so no further reload or
+re-admission was required. The live `stepwise.py rewind --app-run 2026-11-10-0003 --plan
+runs/c094-catalog-repair-plan.json` applied successfully, preserving the previous state,
+keys/provenance/claims and checks under the walk's immutable `rewinds/` evidence. The first
+reopened job is model connectivity. Replays must match the preserved key before reacceptance;
+only verified admission/checkpoint bookkeeping changes are reported separately.
+
+The rewind implementation's delegated mechanical test command accidentally included a trailing
+`.` pytest selector. This was an execution-scope violation: it ran a broad suite including
+unapproved integration/acceptance/live paths for **7,951.49 seconds (132.52 minutes)**.
+Those results are not authorized validation and were not used to justify unrelated fixes.
+The corrected focused command, with exact file selectors, reported **33 passed in 38.00 seconds**,
+no test over ten seconds. Exact commands, failures and artifact paths are preserved in
+`runs/c094-rewind-validation.json`.
+
+After disclosure, the parent checked that no Bash commands or persistent Dagster runs remained
+active, the persistent Dagster dispatch list had not gained any jobs, all five stack services
+were healthy, and the c094 raw fingerprint was unchanged. This is not a complete audit of every
+historical side effect. William explicitly selected continuation of the authorized rewind/replay
+rather than a broader incident audit. This accidental run must be included in the process report
+and measured wall time, not hidden as useful test coverage.
+
+The first replayed gate (connectivity, dispatch `47ed2253-d097-4589-8869-81a608e0ee15`,
+attempt 2) succeeded in 39,973 ms, with no gaps/audit findings. The new comparison guard refused
+reacceptance because Copilot's advertised catalog gained one unrequested model, `gemini-4-carbon`
+(21 to 22 listed models). There were no removals; every checked-model result and required pair
+was identical. The refusal is preserved in `runs/c094-connectivity-inventory-drift-check.json`.
+
+William approved narrowly accounting for unrelated advertised-model inventory changes while
+retaining/reporting the exact difference and still refusing changes to configured/checked models,
+their availability/results, transport/error state or other semantic fields. This is an explicit
+comparison-policy refinement, not a producer failure or permission to mask arbitrary hashes.
+The operator-only follow-up covers both connectivity and intake's identical preflight contract.
+The existing successful attempt can then be rechecked; another model dispatch is not required
+merely to repeat the comparison.
