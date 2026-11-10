@@ -129,3 +129,24 @@ linters need their pinned images).
 - `job_artifact_indexing` (T-054): pass `intake_target_root=False` to `load_target_catalog` or
   declare the intake inputs; today every run under the typed input contract fails as this job's did.
 - T-048: `safe_path` dominates runner-driven unit tests.
+
+## WSOLLERS1 c094 criterion, 2026-11-10
+
+Before dispatch on `2026-11-10-0003`, the accepted catalog contains ten CI definitions:
+four `.github/workflows/{ci,codeql,northwinds-v1,verify}.yml` files and one each for Azure
+(`azure-pipelines.yml`), GitLab (`.gitlab-ci.yml`), CircleCI (`.circleci/config.yml`), Bitbucket
+(`bitbucket-pipelines.yml`), Jenkins (`Jenkinsfile`) and TeamCity (`.teamcity/settings.kts`).
+Their paths and hashes must be retained exactly; `.github/dependabot.yml` is not a workflow.
+
+All fifteen configured branches must have explicit dispositions. The three GitHub linters must
+cover all four workflows; Checkov must cover the four other supported YAML providers; schema and
+structural branches must cover their declared providers. The empty `other` branch is not applicable,
+not a fabricated coverage failure. Ten files are below the configured 128-file bound, and no input
+reaches the 1 MiB byte bound.
+
+Every observation/finding must resolve to a cataloged definition and real source span. Empty
+successful linter output must not manufacture observations. Tool startup, missing-image and parser
+failures are not accepted merely because the job publishes with gaps; any remaining gap must be
+checked against declared static-analysis limits. Provider counts, per-branch execution/status/gap
+metrics, hierarchy, published shards and lifecycle must agree. Workflow commands are analyzed as
+data, never executed. The target must remain unchanged.
