@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 import hashlib
 import json
@@ -27,7 +27,8 @@ FAILURE_LINE = re.compile(r"^(FAILED|ERROR) (\S+)")
 
 # Suites are lists of pytest arguments, relative to the repository root. A glob that matches nothing
 # is dropped, so a suite never names a file this checkout lacks.
-OFFLINE_IGNORES = ("--ignore=tests/live", "--ignore-glob=tests/test_live_*.py")
+OFFLINE_IGNORES = ("--ignore=tests/live", "--ignore-glob=tests/test_live_*.py",
+                   "--ignore=tests/acceptance")
 SUITES: dict[str, tuple[str, ...]] = {
     "fast": ("tests", *OFFLINE_IGNORES, "--ignore=tests/integration"),
     "all-offline": ("tests", *OFFLINE_IGNORES),
@@ -78,7 +79,7 @@ def suite_arguments(root: Path, suite: str) -> list[str]:
 
 
 def find_python(root: Path) -> tuple[str, dict[str, str]]:
-    """The interpreter and extra environment: the checkout's venv, else the main checkout's with PYTHONPATH=src."""
+    """Use an explicit interpreter or this checkout's own environment; never borrow another checkout."""
     override = os.environ.get("APPSEC_PYTHON")
     if override:
         return override, {"PYTHONPATH": str(root / "src")}
@@ -86,13 +87,6 @@ def find_python(root: Path) -> tuple[str, dict[str, str]]:
     for candidate in candidates:
         if candidate.is_file():
             return str(candidate), {}
-    common = subprocess.run(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                            capture_output=True, text=True, check=False).stdout.strip()
-    if common:
-        main = Path(common).parent
-        for candidate in (main / ".venv" / "bin" / "python", main / ".venv" / "Scripts" / "python.exe"):
-            if candidate.is_file():
-                return str(candidate), {"PYTHONPATH": str(root / "src")}
     return sys.executable, {"PYTHONPATH": str(root / "src")}
 
 
@@ -101,12 +95,6 @@ def _positive_int(text: str) -> int:
     if value < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
     return value
-
-
-def has_xdist(python: str, environment: dict[str, str]) -> bool:
-    probe = subprocess.run([python, "-c", "import xdist"], capture_output=True, check=False,
-                           env={**os.environ, **environment})
-    return probe.returncode == 0
 
 
 def session_name(args: argparse.Namespace, stamp: str) -> str:
@@ -118,7 +106,15 @@ def session_name(args: argparse.Namespace, stamp: str) -> str:
 def reserved_extra_arguments(extra: list[str]) -> list[str]:
     """The pass-through arguments run-tests refuses: its own base temp and report, and an unbounded worker count."""
     refused = []
+    from ops_test_guard import VALUE_OPTIONS
+    operand = False
     for index, item in enumerate(extra):
+        if operand:
+            operand = False
+            continue
+        if item in VALUE_OPTIONS:
+            operand = True
+            continue
         if item in {"-n", "--numprocesses"} and index + 1 < len(extra) and extra[index + 1] == "auto":
             refused.append(f"{item} auto")
         elif item in {"-nauto", "-n=auto", "--numprocesses=auto"}:
@@ -274,8 +270,15 @@ def parse_output(text: str, known: dict[str, str]) -> Result:
 
 
 def run(args: argparse.Namespace, root: Path) -> int:
+    started = time.monotonic()
     root = root.resolve()
     if getattr(args, "acceptance", None):
+        if (any(getattr(args, name, None) is not None for name in
+                ("max_tests", "expect_tests", "collection_seconds", "timeout_seconds"))
+                or getattr(args, "allow_heavy", False)):
+            print("error: focused pytest bounds/--allow-heavy cannot combine with --acceptance; "
+                  "use its --deadline/--case-deadline", file=sys.stderr, flush=True)
+            return 2
         return run_acceptance(args, root)
     if any(getattr(args, name, None) is not None for name in ("workers", "deadline", "case_deadline")):
         print("error: --workers/--deadline/--case-deadline require --acceptance", file=sys.stderr)
@@ -290,49 +293,110 @@ def run(args: argparse.Namespace, root: Path) -> int:
     if getattr(args, "baseline", None) is not None and not Path(args.baseline).is_file():
         print(f"error: baseline file not found: {args.baseline}", file=sys.stderr, flush=True)
         return 2
-    args.suite = args.suite or "fast"
+    from ops_test_guard import CONTROL_ENV, Limits, focused_arguments, supervise
+
+    try:
+        defaults = Limits()
+        limits = Limits(
+            defaults.max_tests if args.max_tests is None else args.max_tests, args.expect_tests,
+            defaults.collection_seconds if args.collection_seconds is None else args.collection_seconds,
+            defaults.timeout_seconds if args.timeout_seconds is None else args.timeout_seconds)
+        if args.background:
+            raise ValueError("--background is not supervised; background the entire run-tests command with your host instead")
+        if not args.extra and not args.suite:
+            raise ValueError("name an explicit suite or pass exact test file/node selectors after --; no default broad run")
+        if args.extra:
+            args.extra, selectors = focused_arguments(root, list(args.extra), allow_heavy=args.allow_heavy)
+        else:
+            selectors = []
+        if os.environ.get("PYTEST_ADDOPTS"):
+            raise ValueError("PYTEST_ADDOPTS can change collection; unset it and pass supported options explicitly")
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr, flush=True)
+        return 2
     if not args.extra and args.suite not in SUITES:
         print(f"error: unknown suite {args.suite!r}; choose from {', '.join(SUITES)} or pass arguments after --", file=sys.stderr, flush=True)
         return 2
+    if not args.extra and not any(not item.startswith("-") for item in suite_arguments(root, args.suite)):
+        print(f"error: suite {args.suite!r} has no existing selectors", file=sys.stderr, flush=True)
+        return 2
     python, environment = find_python(root)
-    parallel = False
-    if args.parallel:
-        parallel = has_xdist(python, environment)
-        if not parallel:
-            print("warning: pytest-xdist is not installed in that environment; running serially", flush=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    parallel = args.parallel
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f") + f"-{os.getpid()}"
     name = "custom" if args.extra else args.suite
     session = session_name(args, stamp)
     command = build_command(root, args, python, stamp, parallel)
+    # Pin config/root and clear its addopts; only the wrapper may select scope and scratch paths.
+    command[3:3] = ["-p", "ops_test_guard", "-c", str(root / "pyproject.toml"),
+                    f"--rootdir={root}", "-o", "addopts="]
     log = root / "test" / "tmp" / "logs" / f"{session}.log"
     if args.suite == "live" and not args.extra:
         print(LIVE_WARNING, flush=True)
     print(f"run-tests: suite {name}; python {python}" + (f"; PYTHONPATH={environment['PYTHONPATH']}" if environment else ""), flush=True)
     print("+ " + shlex.join(command), flush=True)
     print(f"log: {log}", flush=True)
+    print(f"selectors: {json.dumps(selectors) if selectors else 'explicit suite ' + args.suite}; "
+          f"max-tests={limits.max_tests}; expect-tests={limits.expect_tests}; "
+          f"collection={limits.collection_seconds:g}s; total={limits.timeout_seconds:g}s", flush=True)
     if args.dry_run:
         print("dry run: not executed", flush=True)
         return 0
     log.parent.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, **environment}
-    if args.background:
-        stream = log.open("wb")
-        process = subprocess.Popen(command, cwd=root, env=env, stdout=stream, stderr=subprocess.STDOUT,
-                                   stdin=subprocess.DEVNULL, start_new_session=(os.name != "nt"))
-        print(f"started in the background (pid {process.pid}); follow with: tail -f {shlex.quote(str(log))}", flush=True)
-        print(f"when it ends, the log's last lines hold pytest's summary; known failures are listed in {KNOWN_FAILURES.as_posix()}",
-              flush=True)
-        return 0
-    with log.open("w", encoding="utf-8", errors="replace") as stream:
-        process = subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   stdin=subprocess.DEVNULL, text=True, errors="replace")
-        assert process.stdout is not None
-        for line in process.stdout:
-            stream.write(line)
-            sys.stdout.write(line)
-            sys.stdout.flush()
-        code = process.wait()
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(Path(__file__).parent), env.get("PYTHONPATH"))))
+    process_root = root / "test/tmp" / f"{session}.processes"
+    manifest = root / "test/tmp" / f"{session}.collection.json"
+    proofs = process_root / "collection-proofs"
+    proofs.mkdir(parents=True)
+    control = {"root": str(root), "selectors": selectors, "limits": asdict(limits),
+               "allow_heavy": args.allow_heavy or args.suite in {"live", "all-offline"},
+               "manifest": str(manifest), "proof_directory": str(proofs), "stage": "collect"}
+    env[CONTROL_ENV] = json.dumps(control)
+    collection_log = log.with_suffix(".collection.log")
+    collection_command = command.copy()
+    if parallel:
+        index = collection_command.index("-n")
+        del collection_command[index:index + 2]
+    collection_command.append("--collect-only")
+    deadline = started + limits.timeout_seconds
+    collection_deadline = min(deadline, time.monotonic() + limits.collection_seconds)
+    collected = supervise(
+        collection_command, root, env, process_root / "collect", collection_log,
+        deadline=collection_deadline, cleanup_seconds=min(3.0, limits.collection_seconds / 4, limits.timeout_seconds / 4))
+    stages = {"collection": collected}
+    code = 124 if collected["outcome"] == "timeout" else 2
+    if collected["outcome"] == "completed" and collected["exit_code"] == 0 and manifest.is_file():
+        collection = json.loads(manifest.read_text(encoding="utf-8"))
+        print(f"collected: {collection['count']}; manifest: {manifest}", flush=True)
+        for node in collection["nodes"]:
+            print(f"  {node}", flush=True)
+        control["stage"] = "execute"
+        env[CONTROL_ENV] = json.dumps(control)
+        executed = supervise(command, root, env, process_root / "execute", log, deadline=deadline,
+                             cleanup_seconds=min(3.0, limits.timeout_seconds / 4))
+        stages["execution"] = executed
+        code = (executed["exit_code"] if executed["outcome"] == "completed"
+                else 124 if executed["outcome"] == "timeout" else 2)
+        collection_proofs = [json.loads(path.read_bytes()) for path in sorted(proofs.glob("*.json"))]
+        if code in (0, 1) and (len(collection_proofs) != (args.test_workers if parallel else 1)
+                              or any(proof.get("verified") is not True for proof in collection_proofs)):
+            code = 2
+            executed.update(outcome="error", reason="execution collection proof missing or refused")
+        if any(proof.get("verified") is not True for proof in collection_proofs):
+            code = 2
+            executed.update(outcome="error", reason="execution collection differs from inspected preflight")
+            with log.open("a", encoding="utf-8") as stream:
+                for proof in collection_proofs:
+                    if proof.get("verified") is not True:
+                        stream.write(f"\ncollection refused: {proof.get('reason', 'missing verification')}\n")
+    else:
+        log.write_text("collection refused; no tests executed\n" + collection_log.read_text(
+            encoding="utf-8", errors="replace"), encoding="utf-8")
+    for phase, result in stages.items():
+        print(f"{phase}: {result['outcome']}; cleanup={json.dumps(result['cleanup'])}"
+              + (f"; {result['reason']}" if result.get("reason") else ""), flush=True)
     text = log.read_text(encoding="utf-8", errors="replace")
+    print(text, end="", flush=True)
     fixed = junit_report(root / "test" / "tmp" / f"{session}.junit.xml", text)
     baseline_path = Path(args.baseline).resolve() if getattr(args, "baseline", None) else None
     diff = differential(fixed, load_baseline(baseline_path)) if baseline_path else None
@@ -342,14 +406,19 @@ def run(args: argparse.Namespace, root: Path) -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps({"command": command, "exit_code": code, "log": str(log), "timings": str(timings),
                                        "report": fixed, "baseline": str(baseline_path) if baseline_path else None,
-                                       "differential": diff}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                                       "differential": diff, "selectors": selectors, "limits": asdict(limits),
+                                       "collection_log": str(collection_log), "collection_manifest": str(manifest),
+                                       "stages": stages, "total_elapsed_s": time.monotonic() - started},
+                                      indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("\n" + rendered, flush=True)
     print(f"report: {report_path}", flush=True)
-    if getattr(args, "write_baseline", None):
+    if getattr(args, "write_baseline", None) and code in (0, 1):
         target = Path(args.write_baseline)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("".join(f"{item['status']} {item['node']}\n" for item in fixed["failures"]), encoding="utf-8")
         print(f"baseline written: {target} ({len(fixed['failures'])} ids)", flush=True)
+    if code not in (0, 1):
+        return code
     if diff is not None:
         # With a baseline the verdict is the differential, not pytest's exit code: new failures fail.
         return 1 if diff["new"] else (0 if code in (0, 1) else code)
@@ -376,10 +445,15 @@ def report(text: str, known: dict[str, str], code: int, strict: bool) -> int:
 def register(commands, add, root: Path) -> None:
     sub = add("run-tests", lambda args: run(args, root), "Run a named pytest suite with a unique base temp and a log.",
               dry_run=True, url=False)
-    sub.add_argument("suite", nargs="?", metavar="SUITE", help=f"one of {', '.join(SUITES)} (default fast)")
-    sub.add_argument("--background", action="store_true", help="start detached; print the log path and how to follow it")
+    sub.add_argument("suite", nargs="?", metavar="SUITE", help=f"explicit suite: {', '.join(SUITES)}")
+    sub.add_argument("--background", action="store_true", help="refused: background the supervised wrapper via your host")
+    sub.add_argument("--max-tests", type=_positive_int, help="maximum collected tests (default 200)")
+    sub.add_argument("--expect-tests", type=_positive_int, help="require exactly this reviewed collection count")
+    sub.add_argument("--collection-seconds", type=float, help="collection cap inside total deadline (default 30)")
+    sub.add_argument("--timeout-seconds", type=float, help="total collection/execution/cleanup cap (default 120)")
+    sub.add_argument("--allow-heavy", action="store_true", help="explicit manual integration/live file selection; not acceptance")
     sub.add_argument("--parallel", action="store_true",
-                     help="use pytest-xdist with --test-workers workers when it is installed")
+                     help="require pytest-xdist with --test-workers workers; no serial fallback")
     sub.add_argument("--test-workers", type=_positive_int, default=8, metavar="N",
                      help="xdist workers for --parallel (default 8; bounded for shared hosts, never auto)")
     sub.add_argument("--shuffle-seed", type=int, metavar="N",

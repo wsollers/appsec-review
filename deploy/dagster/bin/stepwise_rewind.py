@@ -23,18 +23,30 @@ MODEL_PREFLIGHT_ARTIFACTS = {
 }
 
 
-def inspect_runtime(config, run_root, topology, dispatch_ids, instance):
-    """Read in the code-location namespace; a receipt alone cannot establish current liveness."""
-    from appsec_review.runtime.release import load_release
+def inspect_runtime(config, run_root, topology, dispatch_ids, instance, *, verify_stops=False):
+    """Inspect current liveness in the code location, optionally recording verified stops."""
+    from appsec_review.runtime.release import load_release, read_document
     from appsec_review.runtime.repair import (
-        code_server_worker_status, current_binding, deployment_identity, stopped_reasons,
+        code_server_worker_status, current_binding, deployment_identity, stopped_reasons, verify_dispatch_stop,
     )
     from dagster import RunsFilter
+    import re
 
-    reasons = list(stopped_reasons(config, run_root))
+    reasons = []
+    dispatch_ids = set(dispatch_ids)
+    for path in sorted((run_root / "data/jobs").glob("*/attempts/*/claim.json")):
+        claim = read_document(path)
+        if claim.get("run_id") != run_root.name:
+            raise ValueError("attempt claim belongs to another application run")
+        orchestration = claim.get("orchestration", {})
+        if orchestration.get("system") == "dagster":
+            dispatch_ids.add(orchestration.get("run_id", ""))
     runs = {run.run_id: run for run in instance.get_runs(
         filters=RunsFilter(tags={"appsec/application_run_id": run_root.name}))}
-    for dispatch_id in sorted(set(dispatch_ids) | set(runs)):
+    verified = []
+    for dispatch_id in sorted(dispatch_ids | set(runs)):
+        if not isinstance(dispatch_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", dispatch_id):
+            raise ValueError("invalid Dagster dispatch identity")
         run = runs.get(dispatch_id) or instance.get_run_by_id(dispatch_id)
         if (run is None or run.tags.get("appsec/application_run_id") != run_root.name
                 or not run.is_finished):
@@ -49,16 +61,24 @@ def inspect_runtime(config, run_root, topology, dispatch_ids, instance):
             status = "UNKNOWN"
         if status not in {"SUCCESS", "NOT_FOUND"}:
             reasons.append(f"dispatch {dispatch_id} worker stop is uncertain: {status}")
+            continue
+        if verify_stops:
+            # Existing immutable receipts remain evidence; live health was checked again above.
+            if not (run_root / f"data/recovery/dispatches/{dispatch_id}.json").exists():
+                verify_dispatch_stop(config, run_root, dispatch_id, instance=instance)
+            verified.append(dispatch_id)
+    reasons.extend(stopped_reasons(config, run_root))
     release = load_release(config.runtime.repository_root)
     return {
         "run_id": run_root.name, "binding": current_binding(run_root), "topology": topology,
         "resolved_config_sha256": config.resolved_sha256,
         "release_sha256": release["sha256"] if release else None,
         "deployment": deployment_identity(config.runtime.repository_root), "refusals": reasons,
+        "verified_dispatches": verified,
     }
 
 
-# Send only this read-only probe to the existing code location, not the host module or new runtime code.
+# Send only this operator probe; admission and worker-stop primitives remain the deployed runtime's.
 RUNTIME_PROBE = inspect.getsource(inspect_runtime) + """
 import json, os, sys
 from pathlib import Path
@@ -71,9 +91,21 @@ config = load_config(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml"
 root = RunStore(config.runtime.runs_dir).resolve(sys.argv[1])
 with DagsterInstance.get() as instance:
     value = inspect_runtime(config, root, describe_wave1(config, builtin_registry()),
-                            json.loads(sys.argv[2]), instance)
+                            json.loads(sys.argv[2]), instance, verify_stops=len(sys.argv) > 3 and sys.argv[3] == "verify-stops")
 print(json.dumps(value))
 """
+
+
+def recorded_dispatches(walk, state):
+    """Include archived dispatches even after rewind cleared the current launch list."""
+    dispatches = {dispatch for item in state.jobs for dispatch in item["dagster_run_ids"]}
+    for ref in sorted({json.dumps(replay["evidence"], sort_keys=True)
+                       for item in state.jobs for replay in item.get("replays", [])}):
+        evidence = read_evidence(walk, json.loads(ref))
+        if evidence["state"]["app_run_id"] != state.app_run_id:
+            raise StateError("rewind evidence belongs to another application run")
+        dispatches.update(dispatch for item in evidence["state"]["jobs"] for dispatch in item["dagster_run_ids"])
+    return sorted(dispatches)
 
 
 def verify_plan(run_root, state, plan, runtime):
@@ -383,5 +415,7 @@ def replay_comparison(run_root, walk, state, item, attempt, document, masks):
                     "admitted_control_changes": control_changes,
                     "advertised_inventory_changes": inventory_changes,
                     "passed": not failing(differences),
-                    "differences": [difference.as_dict() for difference in differences]}
+                    "differences": [difference.as_dict() for difference in differences],
+                    "unadjusted_differences": [
+                        difference.as_dict() for difference in diff_job_outputs(expected, document, item["job_id"])]}
     return None

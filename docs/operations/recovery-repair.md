@@ -68,7 +68,10 @@ native lifecycle), and verify cleanup with the existing resource-admission facil
 manually delete leases to make repair pass. First-error stopping remains opt-in. Native
 first-error cancellation is **not commissioned** and is not enabled by these commands.
 
-For Dagster, a failed step alone is not proof that the run worker stopped:
+For Dagster, a failed step alone is not proof that the run worker stopped. In a stepwise walk,
+prefer `stepwise.py recover --app-run RUN` below: **every** recorded dispatch needs current
+worker-stop verification, including successful replays, not only the failed dispatch.
+The single-dispatch primitive remains available:
 
 ```sh
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.claude.yaml \
@@ -106,24 +109,42 @@ decisions and refusal reasons. Review it before admission. `admit-repair` rederi
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command
 only records admission. It does not execute the restart.
 
-### Rewind an existing stepwise walk after admission
+### Serial recovery of an existing stepwise walk
 
-For an existing operator walk, apply the **exact already admitted plan** before resuming:
+Keep the job-driven loop serial. These are manual operator actions, not automatic repair gates:
 
 ```sh
-.venv/bin/python deploy/dagster/bin/stepwise.py rewind --app-run RUN --plan repair-plan.json
+.venv/bin/python deploy/dagster/bin/stepwise.py recover --app-run RUN
+# After stopped-source integration/reload, inspect plan-repair and explicitly admit the exact plan.
+# Neither recover invocation admits it or launches any jobs.
+.venv/bin/python deploy/dagster/bin/stepwise.py recover --app-run RUN --plan repair-plan.json
 .venv/bin/python deploy/dagster/bin/stepwise.py next --app-run RUN
 # Inspect the check and its comparison, then accept this job individually as usual.
 .venv/bin/python deploy/dagster/bin/stepwise.py accept --app-run RUN --job JOB --tag CORPUS_TAG
 ```
 
-`rewind` neither admits a plan nor launches jobs. Under the existing run/admission locks, it
+Without `--plan`, `recover` verifies stops only. It gathers current and archived walk dispatches,
+all attempt claims, and all Dagster runs tagged with this application run (including queued or
+untracked runs). Inside the code-location namespace it rechecks each worker's current health and
+uses `verify_dispatch_stop` to create any missing immutable stop receipt. Existing receipts are
+not overwritten or treated as live health proof. Active, absent, foreign or uncertain dispatches,
+registered workers and retained leases refuse recovery. If a later dispatch refuses, any already
+verified stop receipts remain useful evidence; no operator acceptance is reset.
+
+With `--plan`, `recover` performs that same verification and then applies the **exact already
+admitted plan** using `rewind`. This deliberately leaves an inspection/admission break between
+the two commands. It never implicitly admits, cancels, launches, accepts, or runs a graph.
+`check`/`accept` on a replay repeat full stop verification before comparing the preserved key, so
+a newly completed successful replay cannot leave its missing receipt to block the next repair.
+
+The lower-level `rewind` still requires preexisting stop receipts and never writes them.
+Under the existing run/admission locks, it
 verifies the plan digest, immutable admission and current binding, deployed release and
 configuration, unchanged topology, planned attempt snapshots and current operator decisions.
 A read-only code-location probe checks registered workers, cleanup receipts and leases, plus
 Dagster dispatches and worker health, including queued dispatches not yet recorded in the walk.
 Foreign, unadmitted, stale, live or uncertain work is refused; there is no force option.
-Keep operator actions serialized; `next`, `check`, `accept` and `rewind` share a walk lock.
+Keep operator actions serialized; `next`, `check`, `accept`, `recover` and `rewind` share a walk lock.
 
 Only previously touched `RUN`/`INVALIDATE` decisions return to `pending` (meaning **to rerun**,
 with explicit `replays` metadata). Independent `REUSE` acceptances and untouched pending jobs
@@ -152,6 +173,19 @@ or removing a checked/configured model from the advertised list still fails. The
 receipt and CLI report exact inventory additions/removals and old/new counts, with references
 to the unchanged raw evidence. Only these two named report artifacts receive this accounting;
 there is no general hash, environment or volatile reclassification, and old keys stay intact.
+
+The equivalence policy is closed, not a producer-wide exemption:
+
+| Producer/artifact | Accounted-for difference | Everything else |
+| --- | --- | --- |
+| Any replay's `claim.json` | Verified current admission reference and admitted checkpoint decisions/conservative runner fallback, only if the rest of the normalized claim matches | Strict existing normalized diff |
+| `job_model_connectivity`, `steps/connectivity/tasks/verify_models/model-connectivity.json` | Only unrelated names added/removed from `providers.<provider>.listed`, after raw-reference and normalized-signature proof | Strict; configured/checked models, results, provider set, transport, errors and gaps cannot change |
+| `job_review_intake`, `steps/model_preflight/tasks/verify_models/model-preflight.json` | The identical inventory-only rule for this named artifact | Strict, as above |
+| Every other artifact/producer | No additional equivalence rule | Strict existing normalized diff |
+
+Comparison receipts retain both `unadjusted_differences` and the final `differences`, alongside
+the exact admitted control and inventory changes and their resolving evidence. Accounting for a
+verified difference never deletes its raw artifact, prior key or provenance.
 
 This is host-side operator tooling; it does not change measured runtime sources, release
 scoping, job policies, frozen configuration or admission/signing enforcement. The three early

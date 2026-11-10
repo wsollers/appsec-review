@@ -110,7 +110,8 @@ def walk(tmp_path, monkeypatch):
         assert args[:5] == ("exec", "-T", "code-location", "python", "-c")
         assert args[5] == rewind.RUNTIME_PROBE
         return json.dumps(rewind.inspect_runtime(config, context.run_root, TOPOLOGY,
-                                                json.loads(args[7]), instance))
+                                                json.loads(args[7]), instance,
+                                                verify_stops=args[8:] == ("verify-stops",)))
     monkeypatch.setattr(stepwise, "compose", compose)
     return context
 
@@ -127,7 +128,6 @@ def replay(walk, *, value=7, semantic_path="safe/original"):
                              orchestration={"system": "dagster", "run_id": dispatch})
     walk.instance.runs[dispatch] = SimpleNamespace(
         run_id=dispatch, is_finished=True, tags={"appsec/application_run_id": state.app_run_id})
-    verify_dispatch_stop(walk.config, walk.run_root, dispatch, instance=walk.instance)
     return result
 
 
@@ -166,6 +166,7 @@ def test_matching_replay_reaccepts_without_replacing_key_provenance_or_seed(walk
     assert stepwise.command_rewind(walk.args) == 0
     result = replay(walk)
     assert stepwise.command_check(walk.args) == 0
+    assert (walk.run_root / f"data/recovery/dispatches/{UUID(int=100)}.json").is_file()
     checked = StepwiseState.load(walk.path).job("job_b")
     assert checked["check"]["replay_comparison"]["passed"]
     assert {change["field"] for change in checked["check"]["replay_comparison"]["admitted_control_changes"]} == {
@@ -186,6 +187,49 @@ def test_matching_replay_reaccepts_without_replacing_key_provenance_or_seed(walk
     assert stepwise.command_rewind(walk.args) == 0
     assert walk.path.read_bytes() == state_bytes
     assert len(state.job("job_b")["replays"]) == 1
+
+
+def test_recover_verifies_all_claimed_archived_and_untracked_dispatches_without_launch(walk):
+    original = StepwiseState.load(walk.path).as_dict()
+    for index in (1, 2, 3, 4):
+        (walk.run_root / f"data/recovery/dispatches/{UUID(int=index)}.json").unlink()
+    untracked = str(UUID(int=222))
+    walk.instance.runs[untracked] = SimpleNamespace(
+        run_id=untracked, is_finished=True, tags={"appsec/application_run_id": walk.args.app_run})
+    walk.args.plan = None
+    assert stepwise.command_recover(walk.args) == 0
+    assert StepwiseState.load(walk.path).as_dict() == original
+    assert (walk.run_root / f"data/recovery/dispatches/{untracked}.json").is_file()
+    walk.args.plan = walk.plan_path
+    assert stepwise.command_recover(walk.args) == 0
+    state = StepwiseState.load(walk.path)
+    assert rewind.recorded_dispatches(walk.path.parent, state) == [str(UUID(int=i)) for i in (1, 2, 3, 4)]
+    assert state.job("job_c") == original["jobs"][2]
+    replay(walk)
+    assert not (walk.run_root / f"data/recovery/dispatches/{UUID(int=100)}.json").exists()
+    assert stepwise.command_check(walk.args) == 0
+    assert (walk.run_root / f"data/recovery/dispatches/{UUID(int=100)}.json").is_file()
+    assert len(walk.instance.runs) == 6
+
+
+@pytest.mark.parametrize("condition", ["active", "unknown", "foreign", "missing", "untracked-active"])
+def test_recover_refuses_uncertain_dispatches_without_rewinding(walk, condition):
+    dispatch = str(UUID(int=1))
+    if condition == "active":
+        walk.instance.runs[dispatch].is_finished = False
+    elif condition == "unknown":
+        walk.instance.health = "UNKNOWN"
+    elif condition == "foreign":
+        walk.instance.runs[dispatch].tags["appsec/application_run_id"] = "foreign"
+    elif condition == "missing":
+        del walk.instance.runs[dispatch]
+    else:
+        walk.instance.runs["queued"] = SimpleNamespace(
+            run_id="queued", is_finished=False, tags={"appsec/application_run_id": walk.args.app_run})
+    before = walk.path.read_bytes()
+    with pytest.raises(StateError, match="verified stopped execution"):
+        stepwise.command_recover(walk.args)
+    assert walk.path.read_bytes() == before
 
 
 @pytest.mark.parametrize("change", [{"value": 8}, {"semantic_path": "different/path"}], ids=["numeric", "semantic-path"])
@@ -249,7 +293,7 @@ def test_foreign_unadmitted_stale_or_corrupt_repair_cannot_rewind(walk, damage):
         write_release(walk.root, IDS)
     before = walk.path.read_bytes()
     with pytest.raises((StateError, ValueError), match="different|admitted|intact|mismatch|stale|changed|differs|integrity"):
-        stepwise.command_rewind(walk.args)
+        stepwise.command_recover(walk.args)
     assert walk.path.read_bytes() == before
     assert not (walk.path.parent / "rewinds").exists()
 
@@ -424,11 +468,22 @@ def inventory_walk(tmp_path, monkeypatch, request):
     runtime = rewind.inspect_runtime(config, run_root, topology, [str(UUID(int=1))], instance)
     assert rewind.apply_rewind(tmp_path, path, stepwise.ACCEPTANCE_ROOT, state, plan, runtime, masks)
 
+    def compose(*args):
+        assert args[:5] == ("exec", "-T", "code-location", "python", "-c")
+        assert args[5] == rewind.RUNTIME_PROBE
+        return json.dumps(rewind.inspect_runtime(
+            config, run_root, topology, json.loads(args[7]), instance,
+            verify_stops=args[8:] == ("verify-stops",)))
+    monkeypatch.setattr(stepwise, "compose", compose)
+
     def rerun():
         state = StepwiseState.load(path)
         state.record_launch(job_id, str(UUID(int=2)))
         state.save(path)
-        return runner.run(job, run_id=run_id, orchestration={"system": "dagster", "run_id": str(UUID(int=2))})
+        result = runner.run(job, run_id=run_id, orchestration={"system": "dagster", "run_id": str(UUID(int=2))})
+        instance.runs[str(UUID(int=2))] = SimpleNamespace(
+            run_id=str(UUID(int=2)), is_finished=True, tags={"appsec/application_run_id": run_id})
+        return result
 
     return SimpleNamespace(report=report, rerun=rerun, args=args, path=path, run_root=run_root,
                            job_id=job_id, masks=masks, original=original)
@@ -449,6 +504,7 @@ def test_inventory_only_drift_is_reported_and_reaccepted(inventory_walk, mode, c
     assert stepwise.command_check(walk.args) == 0
     comparison = StepwiseState.load(walk.path).job(walk.job_id)["check"]["replay_comparison"]
     assert comparison["passed"]
+    assert any("/verify_models/" in entry["path"] for entry in comparison["unadjusted_differences"])
     change, = comparison["advertised_inventory_changes"]
     assert change["added"] == added and change["removed"] == removed
     assert change["previous_count"] == 4 and change["current_count"] == len(listed)

@@ -5,6 +5,7 @@
   check --job JOB [--app-run ID]      Dagster status, job status and gaps, permission/filesystem audit
   accept --job JOB --tag TAG          write the normalized output to test/acceptance/<TAG>/<job>.json
   rewind --app-run ID --plan FILE     reopen affected decisions from an already admitted repair; no launch
+  recover --app-run ID [--plan FILE] verify every stopped worker, then optionally apply an admitted rewind
   compare --app-run ID --tag TAG      diff a full wave1_review run against the accepted outputs
   seed --tag TAG --after JOB          restore the known-good run tree taken when JOB was accepted
   verify-job --tag TAG --job JOB      seed JOB's predecessor, run JOB, check it, diff its accepted output
@@ -196,6 +197,8 @@ def check(args, state: StepwiseState, path: Path, job_key: str) -> bool:
     item = state.job(job_key)
     if not item["dagster_run_ids"]:
         raise StateError(f"{item['job_id']} has not been launched")
+    if item.get("replays"):
+        verify_walk_stops(state, path)
     dagster_run_id = item["dagster_run_ids"][-1]
     run = get_run(args.url, dagster_run_id)
     run_root = ROOT / "runs" / state.app_run_id
@@ -337,7 +340,7 @@ def command_rewind(args) -> int:
     # The same gates used by admission and worker registration exclude concurrent attempt changes.
     with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"):
         plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
-        dispatches = sorted({dispatch for item in state.jobs for dispatch in item["dagster_run_ids"]})
+        dispatches = stepwise_rewind.recorded_dispatches(path.parent, state)
         runtime = json.loads(compose("exec", "-T", "code-location", "python", "-c",
                                      stepwise_rewind.RUNTIME_PROBE, state.app_run_id, json.dumps(dispatches)))
         changed = stepwise_rewind.apply_rewind(
@@ -346,6 +349,31 @@ def command_rewind(args) -> int:
           f"plan={plan['plan_sha256']}; no jobs launched")
     if state.next_job():
         print(f"   next={state.next_job()['job_id']}; use next, inspect check, then accept individually")
+    return 0
+
+
+def verify_walk_stops(state: StepwiseState, path: Path) -> dict:
+    run_root = ROOT / "runs" / state.app_run_id
+    with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"):
+        dispatches = stepwise_rewind.recorded_dispatches(path.parent, state)
+        runtime = json.loads(compose("exec", "-T", "code-location", "python", "-c",
+                                     stepwise_rewind.RUNTIME_PROBE, state.app_run_id,
+                                     json.dumps(dispatches), "verify-stops"))
+        if runtime["run_id"] != state.app_run_id:
+            raise StateError("stop verification belongs to another application run")
+        if runtime["refusals"]:
+            raise StateError("recovery requires verified stopped execution: " + "; ".join(runtime["refusals"]))
+    print(f"verified stopped dispatches: {json.dumps(runtime['verified_dispatches'])}")
+    return runtime
+
+
+def command_recover(args) -> int:
+    path = state_path(args.app_run)
+    verify_walk_stops(StepwiseState.load(path), path)
+    if args.plan is not None:
+        return command_rewind(args)
+    print("no admission or launch performed; inspect plan-repair, explicitly admit it, "
+          "then recover --app-run RUN --plan FILE; next/check/accept remain one job at a time")
     return 0
 
 
@@ -1032,6 +1060,9 @@ def main(argv: list[str] | None = None) -> int:
     rewind = commands.add_parser("rewind", help="apply an already admitted repair to this operator walk")
     rewind.add_argument("--app-run", required=True)
     rewind.add_argument("--plan", type=Path, required=True, help="exact plan previously admitted by admit-repair")
+    recover = commands.add_parser("recover", help="verify all dispatch stops, optionally rewind an already admitted plan")
+    recover.add_argument("--app-run", required=True)
+    recover.add_argument("--plan", type=Path, help="exact inspected, already admitted plan; never admits or launches")
     for name in ("check", "accept"):
         sub = commands.add_parser(name)
         sub.add_argument("--job", required=True)
@@ -1078,10 +1109,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.interval_seconds < 1:
         parser.error("--interval-seconds must be positive")
     handlers = {"init": command_init, "next": command_next, "check": command_check, "rewind": command_rewind,
+                "recover": command_recover,
                 "accept": command_accept, "compare": command_compare, "seed": command_seed,
                 "verify-job": command_verify_job, "parity": command_parity, "system": command_system, "model-contract": command_model_contract}
     try:
-        if args.command in {"next", "check", "accept", "rewind"}:
+        if args.command in {"next", "check", "accept", "rewind", "recover"}:
             path = state_path(args.app_run)
             if not path.is_file():
                 raise StateError(f"no stepwise walk at {path}")

@@ -945,16 +945,21 @@ def test_run_tests_builds_the_pytest_command_for_a_suite(box: Sandbox) -> None:
     result = box.run("run-tests", "review", "--dry-run")
     assert result.returncode == 0
     command = next(line for line in result.stdout.splitlines() if line.startswith("+ "))
-    assert " -m pytest -q -rfE --basetemp=test/tmp/tests-review-" in command and command.endswith(" tests/review")
+    assert " -m pytest -p ops_test_guard " in command and " -q -rfE --basetemp=test/tmp/tests-review-" in command
+    assert command.endswith(" tests/review")
     assert "test/tmp/logs/tests-review-" in result.stdout
     default = box.run("run-tests", "--dry-run")
-    assert "--basetemp=test/tmp/tests-fast-" in default.stdout and "--ignore=tests/live" in default.stdout
-    assert "--ignore=tests/integration" in default.stdout and "WARNING" not in default.stdout
+    assert default.returncode == 2 and "no default broad run" in default.stderr
+    explicit = box.run("run-tests", "fast", "--dry-run")
+    assert "--basetemp=test/tmp/tests-fast-" in explicit.stdout and "--ignore=tests/live" in explicit.stdout
+    assert "--ignore=tests/integration" in explicit.stdout and "--ignore=tests/acceptance" in explicit.stdout
     docs = box.run("run-tests", "docs", "--dry-run")
     assert "tests/test_documentation.py" in docs.stdout
 
 
 def test_run_tests_free_expression_after_double_dash(box: Sandbox) -> None:
+    (box.repo / "tests").mkdir()
+    (box.repo / "tests/test_config.py").write_text("")
     result = box.run("run-tests", "--dry-run", "--", "tests/test_config.py", "-k", "overlay and not slow")
     assert result.returncode == 0
     assert "--basetemp=test/tmp/tests-custom-" in result.stdout
@@ -963,6 +968,7 @@ def test_run_tests_free_expression_after_double_dash(box: Sandbox) -> None:
 
 
 def test_run_tests_live_prints_a_warning(box: Sandbox) -> None:
+    (box.repo / "tests/live").mkdir(parents=True)
     result = box.run("run-tests", "live", "--dry-run")
     assert "WARNING: the live suite needs Docker" in result.stdout
 
@@ -979,7 +985,7 @@ def test_run_tests_recognizes_known_failures_and_reports_counts(box: Sandbox) ->
     assert "known   tests/a.py::test_known  (seeded for the test)" in result.stdout
     assert "2 failed, 5 passed" in result.stdout
     logs = list((box.repo / "test" / "tmp" / "logs").glob("tests-custom-*.log"))
-    assert len(logs) == 1 and "test_new" in logs[0].read_text(encoding="utf-8")
+    assert len(logs) == 2 and any("test_new" in log.read_text(encoding="utf-8") for log in logs)
     assert "--basetemp=test/tmp/tests-custom-" in box.pytest_log.read_text(encoding="utf-8")
 
 
@@ -987,18 +993,17 @@ def test_run_tests_succeeds_when_only_known_failures_remain_unless_strict(box: S
     box.pytest_output.write_text("FAILED tests/test_documentation.py::test_current_documentation_local_links_resolve - x\n"
                                  "1 failed, 9 passed in 1s\n", encoding="utf-8")
     environment = {"APPSEC_PYTHON": box.install_fake_python(), "FAKE_PYTEST_RC": "1"}
-    ok = box.run("run-tests", "--", "tests", extra=environment)
+    ok = box.run("run-tests", "--", "tests/test_documentation.py", extra=environment)
     assert ok.returncode == 0 and "1 failures, 1 known" in ok.stdout and "only known failures remain" in ok.stdout
-    assert box.run("run-tests", "--strict", "--", "tests", extra=environment).returncode == 1
+    assert box.run("run-tests", "--strict", "--", "tests/test_documentation.py", extra=environment).returncode == 1
 
 
-def test_run_tests_parallel_falls_back_without_xdist(box: Sandbox) -> None:
+def test_run_tests_parallel_never_silently_falls_back_without_xdist(box: Sandbox) -> None:
     box.pytest_output.write_text("3 passed in 1s\n", encoding="utf-8")
-    environment = {"APPSEC_PYTHON": box.install_fake_python()}
-    result = box.run("run-tests", "--parallel", "--", "tests", extra=environment)
-    assert result.returncode == 0 and "pytest-xdist is not installed" in result.stdout
-    assert "-n auto" not in box.pytest_log.read_text(encoding="utf-8")
-    assert "0 failures, 0 known" in result.stdout and "3 passed" in result.stdout
+    environment = {"APPSEC_PYTHON": box.install_fake_python(), "FAKE_NO_XDIST": "1"}
+    result = box.run("run-tests", "--parallel", "--", "tests/a.py", extra=environment)
+    assert result.returncode == 4 and "unrecognized arguments: -n" in result.stdout
+    assert "3 passed" not in result.stdout
 
 
 def _run_tests_args(*argv: str):
@@ -1035,21 +1040,18 @@ def test_run_tests_shuffles_named_suites_except_live(tmp_path: Path) -> None:
 
 
 def test_run_tests_prints_the_shuffle_seed_for_reproduction(box: Sandbox) -> None:
+    (box.repo / "tests").mkdir()
     result = box.run("run-tests", "fast", "--dry-run")
     command = next(line for line in result.stdout.splitlines() if line.startswith("+ "))
     assert result.returncode == 0 and " --shuffle-seed=" in command
 
 
-def test_run_tests_background_returns_the_log_path_at_once(box: Sandbox) -> None:
+def test_run_tests_refuses_unsupervised_detached_background(box: Sandbox) -> None:
     box.pytest_output.write_text("3 passed in 1s\n", encoding="utf-8")
     environment = {"APPSEC_PYTHON": box.install_fake_python()}
-    result = box.run("run-tests", "--background", "--", "tests", extra=environment)
-    assert result.returncode == 0 and "started in the background" in result.stdout and "tail -f" in result.stdout
-    log = Path(next(line for line in result.stdout.splitlines() if line.startswith("log: ")).removeprefix("log: "))
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline and "3 passed" not in (log.read_text(encoding="utf-8") if log.exists() else ""):
-        time.sleep(0.1)
-    assert "3 passed" in log.read_text(encoding="utf-8")
+    result = box.run("run-tests", "--background", "--", "tests/a.py", extra=environment)
+    assert result.returncode == 2 and "background the entire run-tests command" in result.stderr
+    assert not box.pytest_log.exists()
 
 
 def test_run_tests_refuses_the_arguments_it_owns(box: Sandbox) -> None:
@@ -1109,7 +1111,7 @@ def test_run_tests_baseline_differential_is_the_verdict_and_writes_a_report(box:
     baseline.write_text("tests/a.py::test_old\n", encoding="utf-8")
     environment = {"APPSEC_PYTHON": box.install_fake_python(), "FAKE_PYTEST_RC": "1"}
     result = box.run("run-tests", "--baseline", str(baseline), "--write-baseline", str(box.base / "next.txt"),
-                     "--", "tests", extra=environment)
+                     "--", "tests/a.py", extra=environment)
     assert result.returncode == 1, result.stdout
     assert "1 new, 0 fixed, 1 unchanged, 0 not run" in result.stdout and "  NEW     tests/b.py::test_new" in result.stdout
     assert "junit: " in result.stdout and "(missing)" in result.stdout, "the fake pytest writes no junit file; the report says so"
@@ -1120,8 +1122,8 @@ def test_run_tests_baseline_differential_is_the_verdict_and_writes_a_report(box:
     assert (box.base / "next.txt").read_text(encoding="utf-8") == "FAILED tests/a.py::test_old\nFAILED tests/b.py::test_new\n"
     # Only baseline failures left: the differential verdict is success even though pytest exited 1.
     box.pytest_output.write_text("FAILED tests/a.py::test_old - assert 0\n1 failed, 6 passed in 1.00s\n", encoding="utf-8")
-    assert box.run("run-tests", "--baseline", str(baseline), "--", "tests", extra=environment).returncode == 0
-    assert box.run("run-tests", "--baseline", str(box.base / "missing.txt"), "--dry-run", "--", "tests").returncode == 2
+    assert box.run("run-tests", "--baseline", str(baseline), "--", "tests/a.py", extra=environment).returncode == 0
+    assert box.run("run-tests", "--baseline", str(box.base / "missing.txt"), "--dry-run", "--", "tests/a.py").returncode == 2
 
 
 # -- python helpers -------------------------------------------------------------------------------

@@ -397,34 +397,68 @@ See [bounded integration acceptance](bounded-acceptance.md) for profile selectio
 strict collection and cleanup, output schemas, budgets, unimplemented optional profiles and the
 shared-host caveat. The driver does not use a production Dagster endpoint or restart the stack.
 
-### Legacy pytest suites
+### Focused pytest and explicit suites
 
 `run-tests` wraps pytest. It uses the checkout's `.venv` (`.venv/bin/python` or
-`.venv\Scripts\python.exe`); in a worktree without one it falls back to the main checkout's venv and
-sets `PYTHONPATH=src` so the worktree's code is the code under test. Each run gets
-`--basetemp=test/tmp/tests-<suite>-<timestamp>` and a log at
-`test/tmp/logs/tests-<suite>-<timestamp>.log`.
+`.venv\Scripts\python.exe`) or explicit `APPSEC_PYTHON`; the Python runner never borrows the
+main checkout's environment. Prepare this checkout's own environment and verify its editable
+import provenance before testing. Each run gets a unique timestamp/PID base under `test/tmp/`
+and collection/execution logs under `test/tmp/logs/`.
+
+Focused arguments after `--` must include exact existing `.py` files under `tests/` or node IDs
+in those files. Root/dot/directory selectors, file glob tokens, symlink/parent traversal, duplicates,
+missing files and accidental prose punctuation are refused **before starting pytest**. Options
+with operands (`-k`, `-m`, `--maxfail`, `--tb`, `--durations`, `--durations-min`, `--capture`,
+`--color`, `--shuffle-seed`) consume that operand, not another selector. Ordinary verbosity,
+capture and strict-marker flags are supported. Unsupported/scope-changing options, ambient
+`PYTEST_ADDOPTS`, and overrides of the wrapper's config, root, workers or report are refused.
+There is no default broad run: name a suite explicitly or select exact files/nodes.
+Shell-expanded filenames are indistinguishable from an explicit file list once received;
+do not use shell globs. Review the printed selectors and pin their expected collection count.
+
+All pytest invocations have visible, validated bounds: **200 tests**, **30 seconds collection**,
+and **120 seconds total**, including collection, execution and owned cleanup. `--max-tests`,
+`--collection-seconds`, and `--timeout-seconds` explicitly override those limits; finite positive
+values are required. `--expect-tests N` additionally requires exactly the inspected count
+(`1 <= N <= max-tests`). A bounded collection preflight records and prints the actual count and
+every node before execution. Empty, partly empty, duplicate, out-of-scope and over-limit
+collections fail. Every execution worker must prove the same final node collection before its
+first test; collection drift is a refusal, never a baseline success.
+
+The supervisor reuses the acceptance runner's owned Linux subreaper/Windows Job Object cleanup,
+including Linux descendants that create another session. It never kills by process name or
+touches unrelated workers. Cleanup time is reserved inside each deadline. Timeout exits 124;
+unconfirmed cleanup, missing collection proof and collection errors remain nonzero even when
+pytest printed passing assertions or a baseline lists all failures. Collection logs, execution
+logs, node manifests, per-phase supervision/cleanup receipts and any junit/timings survive under
+`test/tmp/`. The final JSON report adds selectors, bounds, phase results and total elapsed time.
 
 | Suite | Runs |
 | --- | --- |
-| `fast` (default) | all of `tests/` except `tests/live`, `tests/test_live_*.py` and `tests/integration`: offline, no Docker |
-| `all-offline` | everything except the live tests (includes `tests/integration`) |
+| `fast` | all of `tests/` except `tests/live`, `tests/test_live_*.py`, `tests/acceptance` and `tests/integration`; any other heavy-tier collected path is refused |
+| `all-offline` | everything except live and bounded acceptance tests (includes `tests/integration`; manual only) |
 | `review` | `tests/review` |
 | `orchestration` | `tests/orchestration`, the Dagster host/smoke/verify tests, the job runtime, launch and resume tests, and the operator-script tests |
 | `docs` | documentation, repository hygiene, docs-sync and skill-separation tests |
 | `graph` | `tests/graph` and the code-graph index job test |
 | `live` | opt-in: `tests/live`, `tests/test_live_*.py`, `tests/integration`; needs Docker, the tool images, target checkouts and model access, and prints a warning |
 
-Options: `--dry-run` prints the command and log path, `--background` starts detached and prints the
-log path and how to follow it (`tail -f`), `--parallel` runs `--test-workers N` xdist workers
+Options: `--dry-run` prints the command, scope, bounds and log path without collection or execution.
+`--background` is refused because the old detached worker had no supervisor; use your host to
+background the **entire wrapper** instead. `--parallel` runs `--test-workers N` xdist workers
 (default 8; never `-n auto`, which starts one worker per core and overloads a host that also runs
-the review stack) only when `pytest-xdist` is installed (otherwise it warns and runs serially), and
+the review stack), requiring `pytest-xdist` rather than silently falling back to serial execution, and
 `--strict` also fails on known failures. Named suites other than `live` run in a shuffled order so
 order-coupled tests surface; the printed command shows `--shuffle-seed=<n>`, `--shuffle-seed <n>`
-reproduces an order and `--no-shuffle` keeps collection order. For an arbitrary selection pass
-pytest arguments after `--` instead of a suite name; that selection is shuffled only when
+reproduces an order and `--no-shuffle` keeps collection order. For a focused selection pass
+exact files/nodes and supported pytest options after `--`; that selection is shuffled only when
 `--shuffle-seed` is given. Test standards and the working loop are in
 [`../architecture/testing.md`](../architecture/testing.md).
+
+Named broad suites still require explicit selection and adequate explicit budgets; defaults
+are not expanded to make them pass. Integration/live files additionally require `--allow-heavy`
+in focused mode. `live` and `all-offline` are explicitly manual suites, not permission to run
+them. Bounded acceptance always uses `--acceptance PROFILE` and its existing separate budgets.
 
 `scripts/known-failures.txt` lists node ids that fail without any change of yours, one
 `<node id> | <reason>` per line. The final summary reads `N failures, M known`, marks each known
@@ -445,8 +479,9 @@ Every run also writes pytest's junit file (`test/tmp/tests-<suite>-<timestamp>.j
 - with `--baseline FILE`: the differential against the node ids in `FILE` (one per line; a `FAILED`/
   `ERROR` prefix, a ` - message` tail and a `| reason` are ignored) — `new` (failing, not in the
   baseline), `fixed` (in the baseline, ran, passed), `unchanged` and `not run`. The verdict is then
-  the differential: the run exits 1 only when there are new failures. `--write-baseline FILE` saves
-  this run's failing ids as the next baseline.
+  the differential for completed test runs: new failures exit 1. Collection/supervision failures
+  cannot become success through a baseline. `--write-baseline FILE` saves failing ids only after
+  a completed test run, never after collection refusal, timeout or uncertain cleanup.
 
 The report classifies nothing: it never says why a test failed or whether a failure matters. That
 attribution — stale fixture, runtime regression, environment — stays with whoever owns the change,
@@ -454,18 +489,21 @@ and the report gives them the ids and lines to do it from. The wrapper owns `--b
 `--junitxml` and the worker count: passing those (or `-n auto`) after `--` is refused with exit 2.
 
 ```bash
-scripts/run-tests.sh                        # fast suite
-scripts/run-tests.sh docs --background
 scripts/run-tests.sh -- tests/test_config.py -k overlay
-scripts/run-tests.sh --parallel --test-workers 2 --write-baseline test/tmp/sweep-base.txt   # record the baseline
-scripts/run-tests.sh --parallel --test-workers 2 --baseline test/tmp/sweep-base.txt         # differential against it
+# N is the reviewed collection count; both comparisons use exactly the same selectors.
+scripts/run-tests.sh --expect-tests N --parallel --test-workers 2 --write-baseline test/tmp/focused-base.txt -- tests/test_config.py
+scripts/run-tests.sh --expect-tests N --parallel --test-workers 2 --baseline test/tmp/focused-base.txt -- tests/test_config.py
 ```
 
 ```powershell
 .\scripts\run-tests.ps1 -Suite docs
 .\scripts\run-tests.ps1 -Extra tests/test_config.py,-k,overlay
-.\scripts\run-tests.ps1 -Parallel -TestWorkers 2 -Baseline test\tmp\sweep-base.txt
+.\scripts\run-tests.ps1 -Parallel -TestWorkers 2 -Baseline test\tmp\focused-base.txt -Extra tests/test_config.py
 ```
+
+The existing PowerShell parameter surface retains the focused defaults. To pass the new
+count/time or manual-heavy controls, invoke the Python entry point directly:
+`.venv\Scripts\python.exe deploy/dagster/bin/ops.py run-tests --expect-tests N -- tests/test_config.py`.
 
 ## run-readiness
 

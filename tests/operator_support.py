@@ -69,9 +69,19 @@ sys.exit(int(os.environ.get("FAKE_LIFECYCLE_RC", "0")))
 '''
 
 FAKE_PYTHON = '''#!{python}
-import os, sys
-args = sys.argv[1:]
+import json, os, pathlib, sys
+args = [arg for arg in sys.argv[1:] if arg != "-B"]
 if args[:2] == ["-m", "pytest"]:
+    control = json.loads(os.environ["APPSEC_FOCUSED_TEST_CONTROL"])
+    if "--collect-only" in args:
+        nodes = [selector + "::test_fake" for selector in control["selectors"]]
+        pathlib.Path(control["manifest"]).write_text(json.dumps({"nodes": nodes, "count": len(nodes)}))
+        sys.exit(0)
+    if "-n" in args and os.environ.get("FAKE_NO_XDIST"):
+        print("error: unrecognized arguments: -n")
+        sys.exit(4)
+    pathlib.Path(control["proof_directory"], str(os.getpid()) + ".json").write_text(
+        json.dumps({"verified": True, "count": len(control["selectors"])}))
     with open(os.environ["FAKE_PYTEST_LOG"], "a") as log:
         log.write(" ".join(args) + "\\n")
     sys.stdout.write(open(os.environ["FAKE_PYTEST_OUTPUT"]).read())
@@ -231,6 +241,9 @@ class Sandbox:
                               check=False)
 
     def install_fake_python(self) -> str:
+        (self.repo / "tests").mkdir(exist_ok=True)
+        for name in ("a.py", "b.py", "test_documentation.py"):
+            (self.repo / "tests" / name).write_text("def test_fake(): pass\n", encoding="utf-8")
         fake = self.bin / "fakepython"
         fake.write_text(FAKE_PYTHON.replace("{python!r}", repr(sys.executable)).replace("{python}", sys.executable),
                         encoding="utf-8")

@@ -113,8 +113,10 @@ These tiers are slower and depend on the host, but the same principles apply:
 
 ## Working loop
 
-1. Run the smallest selection that covers the change, with explicit file selectors and a unique
-   base directory: `python -m pytest -q tests/test_x.py --basetemp=test/tmp/<name>`.
+1. Run the smallest selection that covers the change, with exact existing test files or node IDs.
+   `scripts/run-tests.sh -- tests/test_x.py` validates selectors, performs bounded collection,
+   prints the actual count and pins execution to those nodes. Use `--expect-tests N` for a
+   previously inspected count; never append a dot, directory, file glob or prose punctuation.
 2. Before integrating, run the affected files shuffled and in parallel with a bounded worker count:
    `python -m pytest -q -n 8 --shuffle-seed=<seed> tests/test_x.py tests/test_y.py --basetemp=test/tmp/<name>`.
    Do not use `-n auto` on a shared host; it starts one worker per core.
@@ -126,8 +128,9 @@ These tiers are slower and depend on the host, but the same principles apply:
    `tests/test_live_*.py` ids).
 5. Group failures by their exception and message, not by file, and check each group against a
    baseline commit in a separate worktree to separate pre-existing failures from regressions. The
-   mechanical part is the wrapper's: `scripts/run-tests.sh --write-baseline FILE` on the baseline
-   checkout, then `--baseline FILE` on yours, prints the new/fixed/unchanged differential and every
+   mechanical part is the wrapper's: `scripts/run-tests.sh --write-baseline FILE -- tests/test_x.py`
+   on the baseline checkout, then `--baseline FILE` with the same exact selectors on yours,
+   prints the new/fixed/unchanged differential and every
    failing id with its `E` lines; the attribution is yours.
 6. Record each command, elapsed time and result, and name any integration, acceptance or live
    validation that is still needed.
@@ -149,3 +152,14 @@ the baseline differential when asked); see
 `--parallel` runs `--test-workers` xdist workers (default 8, never `auto`), and named suites other
 than `live` run shuffled with a printed `--shuffle-seed` (reproduce with `--shuffle-seed <n>`, opt
 out with `--no-shuffle`).
+
+Focused defaults are 200 collected tests, 30 seconds for collection and 120 seconds total for
+collection, execution and owned process-tree cleanup. Overrides are explicit, positive and
+visible (`--max-tests`, `--expect-tests`, `--collection-seconds`, `--timeout-seconds`), not
+permission to enlarge a test's per-case budget. Empty/unexpected collections, mismatched
+execution collections, timeout and uncertain cleanup refuse execution/success and retain
+diagnostics. The guard uses the existing gated subreaper/Job Object cleanup, never shared
+process names. There is no implicit `fast` suite or unsupervised `--background` path. Named
+broad suites remain explicit and bounded; manual integration/live selection stays opt-in and
+bounded acceptance retains its own supervisor. These host-side controls do not change release
+scoping or run-worker authority.
