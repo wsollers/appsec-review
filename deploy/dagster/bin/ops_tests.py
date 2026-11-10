@@ -450,7 +450,7 @@ def register(commands, add, root: Path) -> None:
     sub.add_argument("--max-tests", type=_positive_int, help="maximum collected tests (default 200)")
     sub.add_argument("--expect-tests", type=_positive_int, help="require exactly this reviewed collection count")
     sub.add_argument("--collection-seconds", type=float, help="collection cap inside total deadline (default 30)")
-    sub.add_argument("--timeout-seconds", type=float, help="total collection/execution/cleanup cap (default 120)")
+    sub.add_argument("--timeout-seconds", type=float, help="total collection/execution/cleanup cap (default 300)")
     sub.add_argument("--allow-heavy", action="store_true", help="explicit manual integration/live file selection; not acceptance")
     sub.add_argument("--parallel", action="store_true",
                      help="require pytest-xdist with --test-workers workers; no serial fallback")

@@ -141,3 +141,22 @@ All four configuration-layer hashes resolve to deployed bytes; both required mod
 binary publication counts are configured/resolved/unavailable = 0/0/0. Lifecycle, model-preflight
 and binary events agree, and the stepwise audit has zero findings. No fault, code change or repair
 turnaround occurred. Logs: `runs/c094-review-intake-{run,accept}.log`. Next: `job_target_catalog`.
+
+## Normalization defect recorded under T-057, 2026-11-10
+
+The intake preflight's accepted comparison key includes the volatile advertised-model
+inventory from `steps/model_preflight/tasks/verify_models/model-preflight.json`, including
+its content signature. Like pass 01, unrelated catalog drift can change compared content
+without changing configured/checked model results. The current proof-checked exemption is
+an approved **temporary stopgap**, not a permanent intake comparison rule.
+
+The T-057 correction belongs at this producer's publication/key-normalization boundary:
+retain raw inventory as resolving diagnostics outside compared accepted content (or in an
+explicitly non-compared handoff section), and prevent its hash from reintroducing catalog
+drift into the key. Configured/checked identities, availability and check results, provider
+transport/errors and gaps remain compared, as do intake's target, configuration and binary
+evidence. Corrected new keys must not require a catalog-specific comparison exemption.
+
+This records the defect without changing publication behavior, the historical acceptance
+results above, or existing immutable keys/evidence. See the
+[recovery design](../operations/recovery-repair.md).

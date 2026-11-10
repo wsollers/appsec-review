@@ -118,3 +118,21 @@ Accepted with `stepwise.py accept --job job_model_connectivity --tag appsec-mult
 `runs/t051-precutover-acceptance/`; old run data was not rewritten. No run fault or repair
 turnaround occurred. Logs: `runs/t051-connectivity-{run,accept}.log`.
 Next: `job_image_pin_verification`, against the T-051 receipt's 58-reference/47-tag criterion.
+
+## Normalization defect recorded under T-057, 2026-11-10
+
+The accepted comparison key includes the volatile advertised-model inventory from
+`steps/connectivity/tasks/verify_models/model-connectivity.json`, including its content
+signature. Unrelated catalog additions/removals can therefore change compared content even
+when configured/checked models and their results are unchanged. This is a defect of this
+producer's publication/key-normalization boundary, not a permanent comparison equivalence.
+
+The current proof-checked inventory comparison exemption is an approved **temporary stopgap**.
+The T-057 correction should keep raw advertised inventory as resolving diagnostic evidence
+outside compared accepted content (or in an explicitly non-compared handoff section), without
+indirectly comparing it through an artifact hash. Required/checked model identities,
+availability and check results, provider transport/errors and gaps remain strict. New keys
+must no longer need the catalog exemption once normalization is corrected.
+
+This note does not implement that publication change, rewrite old keys/evidence, or alter the
+historical acceptance results above. See the [recovery design](../operations/recovery-repair.md).

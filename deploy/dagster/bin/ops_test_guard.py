@@ -24,7 +24,7 @@ class Limits:
     max_tests: int = 200
     expect_tests: int | None = None
     collection_seconds: float = 30.0
-    timeout_seconds: float = 120.0
+    timeout_seconds: float = 300.0
 
     def __post_init__(self) -> None:
         import math

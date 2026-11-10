@@ -100,6 +100,18 @@ def test_invalid_budgets_are_refused(changes):
         guard.Limits(**changes)
 
 
+@pytest.mark.parametrize("override", [None, 120, 450], ids=["default", "lower", "higher"])
+def test_total_default_has_runner_headroom_without_relaxing_scope(checkout, capsys, override):
+    assert asdict(guard.Limits()) == {
+        "max_tests": 200, "expect_tests": None, "collection_seconds": 30.0, "timeout_seconds": 300.0}
+    options = [] if override is None else ["--timeout-seconds", str(override)]
+    assert invoke(checkout, "--dry-run", *options, "--", "tests/test_inert.py") == 0
+    output = capsys.readouterr().out
+    assert "max-tests=200" in output and "collection=30s" in output
+    assert f"total={300 if override is None else override}s" in output
+    assert not (checkout / "test").exists()
+
+
 @pytest.mark.parametrize("parallel", [False, True])
 def test_real_preflight_and_execution_match_count_and_scope(checkout, monkeypatch, parallel):
     monkeypatch.setenv("APPSEC_PYTHON", sys.executable)
@@ -109,6 +121,7 @@ def test_real_preflight_and_execution_match_count_and_scope(checkout, monkeypatc
     assert report["report"]["counts"] == {"passed": 2}
     assert report["selectors"] == ["tests/test_inert.py"]
     assert report["limits"] == asdict(guard.Limits(expect_tests=2))
+    assert report["limits"]["timeout_seconds"] == 300.0
     manifest = json.loads(Path(report["collection_manifest"]).read_bytes())
     assert manifest == {"nodes": ["tests/test_inert.py::test_one", "tests/test_inert.py::test_two"], "count": 2}
     assert all(stage["cleanup"]["confirmed"] for stage in report["stages"].values())
@@ -199,7 +212,7 @@ def test_empty_collection_and_collection_import_error_never_execute(checkout, mo
 
 
 @pytest.mark.parametrize("option,value", [("--max-tests", "200"), ("--expect-tests", "1"),
-                                         ("--collection-seconds", "30"), ("--timeout-seconds", "120")])
+                                         ("--collection-seconds", "30"), ("--timeout-seconds", "300")])
 def test_focused_controls_cannot_silently_override_acceptance_budget(checkout, monkeypatch, option, value):
     def unexpected(*args, **kwargs):
         pytest.fail("must refuse before entering acceptance supervisor")

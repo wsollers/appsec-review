@@ -165,7 +165,8 @@ Successful reacceptance writes an immutable receipt with the new provenance and 
 while retaining the original key, provenance, seed and rewind evidence. A changed corpus
 key/provenance is refused rather than silently overwritten.
 
-The model-preflight reports from `model_connectivity` and `review_intake` additionally allow
+As a **temporary workaround for a producer/key-normalization defect**, the model-preflight
+reports from `model_connectivity` and `review_intake` additionally allow
 unrelated advertised-model inventory drift in `providers.<provider>.listed`. Both raw artifact
 references and normalized content signatures must resolve and verify first. Configured and
 checked model sets, their results, and every other report field must remain unchanged; adding
@@ -174,13 +175,25 @@ receipt and CLI report exact inventory additions/removals and old/new counts, wi
 to the unchanged raw evidence. Only these two named report artifacts receive this accounting;
 there is no general hash, environment or volatile reclassification, and old keys stay intact.
 
-The equivalence policy is closed, not a producer-wide exemption:
+The T-057 inventory workaround is not a permanent comparison policy. Advertised inventory is
+volatile diagnostic evidence and should not enter these jobs' compared accepted content.
+The intended fix belongs at the publication/key-normalization boundary of
+[pass 01](../tasks/2026-11-08-job-pass-01-model-connectivity.md) and
+[pass 04](../tasks/2026-11-08-job-pass-04-review-intake.md): preserve the raw inventory in an
+explicitly non-compared diagnostic section or artifact, while comparing configured/checked
+model identities and results, provider errors, transport and gaps strictly. Merely moving
+the list is insufficient if its content hash still participates in the compared key.
+Once corrected, new keys must not need the inventory comparison exemption; existing immutable
+keys/evidence must not be rewritten or silently reaccepted. The publication fix is not
+implemented by this operator-only change.
+
+Current comparison accounting is closed, not a producer-wide exemption:
 
 | Producer/artifact | Accounted-for difference | Everything else |
 | --- | --- | --- |
 | Any replay's `claim.json` | Verified current admission reference and admitted checkpoint decisions/conservative runner fallback, only if the rest of the normalized claim matches | Strict existing normalized diff |
-| `job_model_connectivity`, `steps/connectivity/tasks/verify_models/model-connectivity.json` | Only unrelated names added/removed from `providers.<provider>.listed`, after raw-reference and normalized-signature proof | Strict; configured/checked models, results, provider set, transport, errors and gaps cannot change |
-| `job_review_intake`, `steps/model_preflight/tasks/verify_models/model-preflight.json` | The identical inventory-only rule for this named artifact | Strict, as above |
+| `job_model_connectivity`, `steps/connectivity/tasks/verify_models/model-connectivity.json` | Temporary pass-01 workaround: only unrelated names added/removed from `providers.<provider>.listed`, after raw-reference and normalized-signature proof | Strict; configured/checked models, results, provider set, transport, errors and gaps cannot change |
+| `job_review_intake`, `steps/model_preflight/tasks/verify_models/model-preflight.json` | Temporary pass-04 workaround: the identical inventory-only rule for this named artifact | Strict, as above |
 | Every other artifact/producer | No additional equivalence rule | Strict existing normalized diff |
 
 Comparison receipts retain both `unadjusted_differences` and the final `differences`, alongside

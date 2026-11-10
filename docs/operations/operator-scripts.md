@@ -417,7 +417,8 @@ Shell-expanded filenames are indistinguishable from an explicit file list once r
 do not use shell globs. Review the printed selectors and pin their expected collection count.
 
 All pytest invocations have visible, validated bounds: **200 tests**, **30 seconds collection**,
-and **120 seconds total**, including collection, execution and owned cleanup. `--max-tests`,
+and **300 seconds total**, including collection, execution and owned cleanup. This total gives
+runner-driven unit files headroom without weakening exact scope or per-test limits. `--max-tests`,
 `--collection-seconds`, and `--timeout-seconds` explicitly override those limits; finite positive
 values are required. `--expect-tests N` additionally requires exactly the inspected count
 (`1 <= N <= max-tests`). A bounded collection preflight records and prints the actual count and

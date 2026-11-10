@@ -153,10 +153,12 @@ the baseline differential when asked); see
 than `live` run shuffled with a printed `--shuffle-seed` (reproduce with `--shuffle-seed <n>`, opt
 out with `--no-shuffle`).
 
-Focused defaults are 200 collected tests, 30 seconds for collection and 120 seconds total for
+Focused defaults are 200 collected tests, 30 seconds for collection and 300 seconds total for
 collection, execution and owned process-tree cleanup. Overrides are explicit, positive and
 visible (`--max-tests`, `--expect-tests`, `--collection-seconds`, `--timeout-seconds`), not
-permission to enlarge a test's per-case budget. Empty/unexpected collections, mismatched
+permission to enlarge a test's per-case budget. The total leaves headroom for a correctly
+scoped file of runner-driven tests and shared-host overhead; it is independent of the
+200-test collection ceiling and does not permit unbounded scope. Empty/unexpected collections, mismatched
 execution collections, timeout and uncertain cleanup refuse execution/success and retain
 diagnostics. The guard uses the existing gated subreaper/Job Object cleanup, never shared
 process names. There is no implicit `fast` suite or unsupervised `--background` path. Named

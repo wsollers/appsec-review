@@ -13,7 +13,7 @@ local-main integration and all live operations.
    scope, option-aware parsing, no root/dot/directory/file-glob tokens, duplicate or missing
    selectors, scope/report overrides or ambient `PYTEST_ADDOPTS`. A shell-expanded file list
    cannot be distinguished from an explicit list; use exact argv and an inspected expected count.
-2. Preflight collection under 30 seconds, at most 200 tests, inside a 120-second total command
+2. Preflight collection under 30 seconds, at most 200 tests, inside a 300-second total command
    budget. Explicit positive finite overrides and `--expect-tests` are visible in the command
    report. Every execution worker verifies the same final collection **before xdist scheduling**.
    On refusal, rejected nodes are withheld from the scheduler and the explicit failure/proof
@@ -32,16 +32,26 @@ local-main integration and all live operations.
    remain intact.
 
 Only the existing proof-checked claim bookkeeping and the two named model-preflight inventory
-equivalences are allowed. The [recovery guide](../operations/recovery-repair.md) defines their
-producer/artifact boundaries. Comparisons now retain `unadjusted_differences` as well as final
+workarounds are allowed. The inventory exemptions are temporary normalization defects of
+passes 01 and 04, not permanent comparison rules: volatile advertised inventory belongs
+outside compared accepted content, with raw evidence retained. The
+[recovery guide](../operations/recovery-repair.md) defines the current strict boundaries and
+the intended producer/key fix. Comparisons retain `unadjusted_differences` as well as final
 differences and the exact allowed changes; meaningful differences still fail.
+
+The user-directed revision raises the original 120-second total default to 300 seconds:
+a correctly focused file of runner-driven tests can take 90-130 seconds before cleanup.
+The earlier timeout demonstrated working enforcement of an undersized default, not a useful
+failure of the tests. Collection remains capped at 30 seconds, scope at 200 tests, and
+per-test limits remain unchanged. Historical results below retain their actual 120-second
+configuration and failure status; they are not relabelled as 300-second runs.
 
 Implementation ownership is `deploy/dagster/bin/{ops_tests,ops_test_guard,stepwise,stepwise_rewind}.py`,
 their focused unit tests/`tests/operator_support.py`, and the directly related operator/testing
 documentation. None of these paths matches the current release manifest's common, job,
 validator or script input closure. The active deployment was not accessed to remeasure it.
 
-## Focused verification
+## Initial focused verification (120-second default)
 
 The first exact collection attempt failed because this checkout lacked `.venv/bin/python`.
 The system Python 3.10 venv attempt lacked `ensurepip`; that incomplete, session-owned venv was
@@ -101,6 +111,36 @@ checked all **four changed documents** directly: no missing links. Python compil
 `git diff --check` also passed.
 
 ## Integration boundary
+
+### User-directed revision verification (300-second default)
+
+The additive revision is based on `b9134b6861b9aff3aeab51e527dd13f13f531c71`; the parent
+reports that initial change integrated as `91f828945`. The parent owns the T-057 registry
+update and authorized appending the normalization-defect notes to passes 01 and 04 without
+altering their historical results. No new TODO ID or runtime publication change is introduced.
+
+```sh
+.venv/bin/python -m pytest --collect-only -q --basetemp=test/tmp/repair-300-collect tests/test_ops_test_guard.py
+.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 54 --parallel --test-workers 2 --shuffle-seed 11016 -- tests/test_ops_test_guard.py
+```
+
+Collection found 54 tests in 0.29 s; all 54 passed in 10.18 s (15.095 s total), with no skips or
+tests over 10 seconds. New assertions pin the effective 300/30/200 defaults and explicit lower/
+higher total overrides; existing scope refusal, collection mismatch, two-second timeout,
+owned cleanup and baseline refusal cases still pass. Report:
+`test/tmp/reports/tests-custom-20261110-183702-302620-83748.json`.
+The earlier 120-second receipts remain unchanged. No 90-130-second or live test was run
+merely to demonstrate the new numerical default.
+
+The registry gate was collected explicitly with
+`.venv/bin/python -m pytest --collect-only -q --basetemp=test/tmp/repair-300-todo-collect tests/test_todo_registry.py`
+(5 tests, 0.23 s), then verified with
+`.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 5 --parallel --test-workers 2 --shuffle-seed 11016 -- tests/test_todo_registry.py`
+(5 passed, 1.98 s; report `tests-custom-20261110-183901-138594-92971.json`).
+All six changed documents pass the existing local-link parser; `git diff --check` passes.
+The previously recorded whole-tree missing-target documentation gap is unchanged.
+
+### Unchanged operational limits
 
 `scripts/run-tests.ps1` remains unchanged by parent decision because it is in the measured
 script closure. Its existing surface uses the safe defaults; new count/time and explicitly
