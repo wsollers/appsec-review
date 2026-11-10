@@ -7,6 +7,8 @@ import sys
 
 import pytest
 
+from appsec_review.config import load_config
+from appsec_review.config.host_pins import HOST_PINS_ENV
 from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.container_runtime.executor import CommandOutcome, ContainerExecutor
 from appsec_review.debug_symbols import _container_export as driver
@@ -59,20 +61,24 @@ class Engine:
 
 
 @pytest.fixture
-def catalog(monkeypatch):
-    original = load_catalog(ROOT)
-    tool = original.tool("tool-native-cpp")
-    tool = replace(tool, additional_executables=(*tool.additional_executables, "/usr/bin/python3"))
-    value = replace(original, tools={**original.tools, tool.tool_id: tool})
-    monkeypatch.setattr(execution, "load_catalog", lambda _: value)
-    return value
+def catalog():
+    config = load_config(ROOT / "appsec-review.toml")
+    return load_catalog(ROOT, resolved_config=json.loads(config.resolved_json))
+
+
+def _production_seed(tmp_path, target="clang", **kwargs):
+    config = load_config(ROOT / "appsec-review.toml", compiler_target=target)
+    config = replace(config, runtime=replace(
+        config.runtime, runs_dir=tmp_path, metadata_dir=tmp_path / "metadata"))
+    context, artifacts, indexes = _seed(tmp_path, target, configuration=config, **kwargs)
+    return replace(context, repository_root=ROOT, review_policy=config.review_policy), artifacts, indexes
 
 
 def _run(tmp_path, monkeypatch, catalog, target="clang", *, produced=True, fixture=None,
          **engine_options):
     binary = "tiny.elf" if target == "clang" else (fixture or "tiny") + ".exe"
     output = "tiny.dwarf.txt" if target == "clang" else (fixture or "tiny") + ".pdb.yaml"
-    context, _, _ = _seed(
+    context, _, _ = _production_seed(
         tmp_path, target, produced=produced, debug=target == "msvc",
         binary_bytes=(FIXTURES / binary).read_bytes(),
         debug_bytes=(FIXTURES / ((fixture or "tiny") + ".pdb")).read_bytes()
@@ -190,25 +196,6 @@ def test_execution_receipts_are_hash_bound_to_accepted_symbols(tmp_path, monkeyp
         load_accepted_debug_symbols(context.run_root)
 
 
-def test_managed_image_and_declared_release_are_resume_inputs(monkeypatch, catalog):
-    from appsec_review.config.assurance import ComponentReleases
-    first = execution.execution_plan(ROOT)
-    tool = catalog.tool("tool-native-cpp")
-    changed = replace(catalog, tools={**catalog.tools, tool.tool_id:
-                                    replace(tool, expected_image_id="sha256:" + "f" * 64)})
-    monkeypatch.setattr(execution, "load_catalog", lambda _: changed)
-    second = execution.execution_plan(ROOT)
-    assert first != second
-    assert first["reuse_unavailable_reason"] == "missing_release_identity"
-    declared = execution.execution_plan(
-        ROOT, ComponentReleases({"job_debug_symbol_indexing": "readers-3"}))
-    changed_release = execution.execution_plan(
-        ROOT, ComponentReleases({"job_debug_symbol_indexing": "readers-4"}))
-    assert declared["reuse_allowed"]
-    assert declared != changed_release
-    assert not any(key.endswith("sha256") for key in declared)
-
-
 @pytest.mark.parametrize("target", ["clang", "msvc"])
 def test_production_reader_runs_inside_strict_job_scope(tmp_path, monkeypatch, catalog, target):
     from appsec_review.config import load_config
@@ -244,17 +231,49 @@ def test_production_reader_runs_inside_strict_job_scope(tmp_path, monkeypatch, c
 
 
 def test_launcher_staging_substitution_is_rejected(tmp_path, monkeypatch, catalog):
-    context, _, _ = _seed(tmp_path)
+    context, _, _ = _production_seed(tmp_path)
     context = replace(context, repository_root=ROOT)
     from appsec_review.runtime import UnitContext
     unit = UnitContext(context, "extract.clang_dwarf", "extract", "clang_dwarf",
                        context.attempt_root / "steps/extract/tasks/clang_dwarf", {})
-    exporter = execution.ContainerExporter(unit, execution.execution_plan(ROOT), None, "fixture")
+    exporter = execution.ContainerExporter(
+        unit, execution.execution_plan(ROOT, context.run_root), None, "fixture")
     exporter.launcher.chmod(0o644)
     exporter.launcher.write_bytes(b"substituted")
     with pytest.raises(execution.SymbolIntegrityError, match="launcher identity changed"):
         exporter("llvm_dwarfdump", execution.ARGUMENTS["llvm_dwarfdump"],
                  FIXTURES / "tiny.elf", timeout_seconds=1, max_output_bytes=1024)
+
+
+def test_exporter_rejects_an_image_different_from_the_frozen_plan(tmp_path):
+    from appsec_review.runtime import UnitContext
+
+    context, _, _ = _production_seed(tmp_path)
+    unit = UnitContext(context, "extract.clang_dwarf", "extract", "clang_dwarf",
+                       context.attempt_root / "steps/extract/tasks/clang_dwarf", {})
+    plan = execution.execution_plan(ROOT, context.run_root)
+    plan["fallback"]["image_id"] = "sha256:" + "f" * 64
+    with pytest.raises(execution.SymbolIntegrityError, match="execution plan changed"):
+        execution.ContainerExporter(unit, plan, None, "fixture")
+
+
+def test_decision_and_export_keep_frozen_binding_when_host_pins_disappear(tmp_path, monkeypatch):
+    from appsec_review.runtime.scope import review_scope
+
+    context, _, _ = _production_seed(
+        tmp_path, binary_bytes=(FIXTURES / "tiny.elf").read_bytes())
+    plan = execution.execution_plan(ROOT, context.run_root)
+    engine = Engine((FIXTURES / "tiny.dwarf.txt").read_bytes())
+    factory = lambda image_catalog, run_root: ContainerExecutor(image_catalog, run_root, runner=engine)
+    monkeypatch.setenv(HOST_PINS_ENV, str(tmp_path / "missing-host-pins.toml"))
+    with review_scope(ROOT, context.run_root, None):
+        result = build_job(executor_factory=factory).execute(context)
+    assert result["failed_units"] == []
+    assert result["outputs"]["acceptance.publish_handoff"]["item_count"] > 0
+    assert len(engine.runs) == 1
+    assert engine.runs[0][engine.runs[0].index("--entrypoint") + 2] == plan["fallback"]["image_id"]
+    decision = json.loads((context.attempt_root / "artifacts/debug-symbols/decision.json").read_bytes())
+    assert decision["execution"] == plan
 
 
 @pytest.mark.parametrize("fixture", ["msvc-tiny", "msvc-inline"])
@@ -281,16 +300,6 @@ def test_host_path_settings_are_rejected_instead_of_ignored():
             "llvm_dwarfdump": {"path": "C:\\approved\\llvm-dwarfdump.exe", "sha256": "a" * 64}}}})
 
 
-def test_resume_identity_changes_when_managed_reader_image_changes(monkeypatch, catalog):
-    job = build_job()
-    before = job.probe_input_identity(None)
-    tool = catalog.tool("tool-native-cpp")
-    changed = replace(catalog, tools={**catalog.tools, tool.tool_id:
-                                    replace(tool, expected_image_id="sha256:" + "f" * 64)})
-    monkeypatch.setattr(execution, "load_catalog", lambda _: changed)
-    assert job.probe_input_identity(None) != before
-
-
 def test_fresh_execution_attempts_cannot_alias_previous_receipt_shards(
         tmp_path, monkeypatch, catalog):
     context, first, engine = _run(tmp_path, monkeypatch, catalog)
@@ -307,7 +316,8 @@ def test_fresh_execution_attempts_cannot_alias_previous_receipt_shards(
 
 
 def test_runtime_failures_are_not_misclassified_as_missing_images(tmp_path, monkeypatch, catalog):
-    context, _, _ = _seed(tmp_path, binary_bytes=(FIXTURES / "tiny.elf").read_bytes(), produced=True)
+    context, _, _ = _production_seed(
+        tmp_path, binary_bytes=(FIXTURES / "tiny.elf").read_bytes(), produced=True)
     context = replace(context, repository_root=ROOT)
 
     class BrokenExecutor(ContainerExecutor):

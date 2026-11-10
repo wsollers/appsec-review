@@ -190,7 +190,7 @@ def _decision(unit: UnitContext, reader_identity: str, *, production: bool) -> M
     document = {"schema": DECISION_SCHEMA, "compiler_target": target.value,
                 "selected_lane": selected_path(target), "source_fingerprint": unit.job.source_fingerprint,
                 "reader_identity": reader_identity, "settings": settings,
-                "execution": execution_plan(unit.job.repository_root, unit.job.review_policy.releases)
+                "execution": execution_plan(unit.job.repository_root, unit.job.run_root)
                 if production else None, **inputs}
     document["input_fingerprint"] = _digest(document)
     identity = _artifact(unit, "decision.json", document)
@@ -215,7 +215,7 @@ def _read_decision(unit: UnitContext, reader_identity: str) -> dict[str, Any]:
         raise ValueError("debug-symbol decision does not match immutable inputs")
     if (decision.get("execution") is not None
             and decision["execution"] != execution_plan(
-                unit.job.repository_root, unit.job.review_policy.releases)):
+                unit.job.repository_root, unit.job.run_root)):
         raise FrameworkIntegrityError("debug-symbol execution plan differs from frozen decision")
     return decision
 
@@ -748,8 +748,8 @@ def build_job(*, extractor=None, executor_factory=None) -> Job:
     )
     return Job(JOB_ID, "debug_symbol_indexing", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, units=units,
-               input_identity=(lambda _: _digest({
+               run_input_identity=(lambda _, run_root: _digest({
                    "reader": reader_identity,
-                   "execution": execution_plan(application_root("containers/catalog.toml")),
+                   "execution": execution_plan(application_root("containers/catalog.toml"), run_root),
                })) if extractor is None else None,
                datasets=DATASETS, contract=CONTRACT)

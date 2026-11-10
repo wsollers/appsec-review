@@ -80,7 +80,9 @@ def _additional_executables(manifest: Mapping[str, Any], tool_id: str) -> tuple[
     return tuple(value)
 
 
-def load_catalog(repository_root: Path, path: Path | None = None) -> ContainerCatalog:
+def load_catalog(repository_root: Path, path: Path | None = None, *,
+                 resolved_config: Mapping[str, Any] | None = None) -> ContainerCatalog:
+    """Load recipe policy, binding observed IDs only from explicit resolved configuration."""
     root = repository_root.resolve()
     source = (path or root / "containers" / "catalog.toml").resolve(strict=True)
     document = tomllib.loads(source.read_text(encoding="utf-8"))
@@ -97,8 +99,12 @@ def load_catalog(repository_root: Path, path: Path | None = None) -> ContainerCa
     }
     if any(policy_value.get(key) != value for key, value in required_policy.items()):
         raise ValueError("container runtime policy weakens the static-scan baseline")
+    images = document.get("images", [])
+    if resolved_config is not None:
+        from appsec_review.config.host_pins import bound_catalog_images
+        images = bound_catalog_images(images, resolved_config)
     tools: dict[str, ToolImage] = {}
-    for image in document.get("images", []):
+    for image in images:
         if image.get("state") != "enabled" or image.get("kind") != "tool":
             continue
         tool_id = str(image["id"])

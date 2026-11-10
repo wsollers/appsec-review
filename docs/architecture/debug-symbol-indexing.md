@@ -104,8 +104,14 @@ artifact hashes, parser/tool identity and parser bounds still match. A changed
 compiler target needs a new application run. Rebuilding with debug flags creates
 a different artifact and is not a substitute for matching the reviewed artifact.
 The execution-plan `/2` and decision `/2` contracts bind the declared reader
-release, managed image pin, parsed runtime policy and reader limits. The reader
-identity contract is `/3`. Supplied reader sources, launcher and manifest are
+release, managed image pin, parsed runtime policy and reader limits. The image
+pin and release are read from the run's manifest-verified resolved
+configuration; the retained host-pins bytes must match its frozen host record.
+The recipe catalog supplies approval and runtime policy, not host-observed
+image IDs. Run-aware identity probing uses the same execution plan as decision
+and export validation, including for a job not yet attempted during repair.
+Neither current host pins nor Docker tag resolution can replace frozen inputs.
+The reader identity contract is `/3`. Supplied reader sources, launcher and manifest are
 not hashed as customer evidence. Operators bump `job_debug_symbol_indexing`
 (or its `platform` fallback) when changing those supplied components; an
 undeclared release explicitly disables reuse. Private launcher staging checks

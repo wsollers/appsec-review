@@ -38,8 +38,14 @@ Only the selected accepted input file and this driver are mounted read-only;
 run-owned scratch is the only writable bind. Network, root filesystem writes,
 capabilities and privilege escalation remain disabled.
 
-Prebuilt artifacts use the already provisioned, catalog-pinned `tool-native-cpp`
-image. The same approved image is an explicit compatibility fallback when a
+Prebuilt artifacts use the already provisioned `tool-native-cpp` image: the
+catalog declares the approved recipe, and the run's frozen host bindings supply
+its immutable image ID. Planning (including repair before this job has run),
+decision validation and export all use that same frozen binding, verified against
+the run's resolved configuration and retained `host-pins.toml`. Missing or
+mismatched bindings fail explicitly; changing the host's current pins cannot
+change an existing run's reader image or reuse identity.
+The same approved image is an explicit compatibility fallback when a
 recorded compiler image is unavailable, cannot run on the execution platform,
 or predates the readers. The attempted image, outcome and fallback reason are
 retained and measured; this never changes the selected DWARF/PDB lane. Parser

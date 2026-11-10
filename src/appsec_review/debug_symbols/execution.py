@@ -11,6 +11,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from appsec_review.config.assurance import ComponentReleases
+from appsec_review.config.host_pins import load_host_pins
 from appsec_review.container_runtime.catalog import ContainerCatalog, load_catalog
 from appsec_review.container_runtime.executor import (
     ContainerExecutor, ExecutionRequest, ImageUnavailableError, Mount,
@@ -18,6 +19,7 @@ from appsec_review.container_runtime.executor import (
 from appsec_review.debug_symbols._reader_binary import ReaderFailure
 from appsec_review.debug_symbols._container_export import ARGUMENTS
 from appsec_review.debug_symbols.contract import SymbolIntegrityError
+from appsec_review.jobs.job_review_intake.job import resolved_configuration
 from appsec_review.storage import atomic_bytes, file_sha256
 from appsec_review.storage.shared import safe_path
 
@@ -44,12 +46,17 @@ def build_image_identity(image: object) -> dict[str, str]:
     return {"image_id": image["image_id"], "user": image["user"]}
 
 
-def execution_plan(repository_root: Path, releases: ComponentReleases = ComponentReleases()) -> dict[str, Any]:
-    catalog = load_catalog(repository_root)
+def execution_plan(repository_root: Path, run_root: Path) -> dict[str, Any]:
+    resolved = resolved_configuration(run_root)
+    pins = load_host_pins(run_root, "data/configuration/host-pins.toml")
+    if pins.record() != resolved.get("configuration_host_pins"):
+        raise SymbolIntegrityError("debug-symbol host-pins identity mismatch")
+    catalog = load_catalog(repository_root, resolved_config=resolved)
     tool = catalog.tool(_TOOL_ID)
     if tool.expected_image_id is None or "/usr/bin/python3" not in (
             tool.executable, *tool.additional_executables):
         raise SymbolIntegrityError("managed debug-symbol reader image is not pinned or approved")
+    releases = ComponentReleases(resolved.get("review_policy", {}).get("releases", {}))
     release = releases.values.get("job_debug_symbol_indexing", releases.values.get("platform"))
     return {"schema": "appsec-review/debug-symbol-execution-plan/2",
             "release_id": release,
@@ -71,7 +78,7 @@ class ContainerExporter:
         self.unit = unit
         self.plan = plan
         self.catalog = load_catalog(unit.job.repository_root)
-        if execution_plan(unit.job.repository_root, unit.job.review_policy.releases) != plan:
+        if execution_plan(unit.job.repository_root, unit.job.run_root) != plan:
             raise SymbolIntegrityError("debug-symbol execution plan changed")
         self.build_image = build_image_identity(build_image) if build_image is not None else None
         # Provision a private bind source, not a customer evidence object. The deployed
