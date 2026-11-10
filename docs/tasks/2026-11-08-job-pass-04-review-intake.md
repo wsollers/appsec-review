@@ -129,3 +129,15 @@ layers with matching hashes; verify both required Copilot models; and report zer
 resolved or unavailable binary publications. No system acquisition record is expected.
 The handoff, model/binary events and lifecycle metrics must agree. These are intake criteria,
 not a claim that the fixture's seven defects have been found.
+
+The criterion held. Dispatch `f192d692-dc67-4bad-81d0-76f29f7a0fac`, attempt 1, succeeded in
+49,881 ms and was accepted. Actual intake retained 344 files / 777,877 bytes, with all four
+configured `.gitignore` exclusions, 113/113 descriptors retained, zero omitted content files and
+zero producer gaps. Its raw inventory lists `.git` as `excluded_directory`, an explicit policy
+exclusion rather than lost review coverage. The raw fingerprint is
+`d3719c4b6b2d3768e1524ff3b7aa7f6439d2e7c5165af1bf9c0c152a05ae1933` and matches the unchanged target.
+
+All four configuration-layer hashes resolve to deployed bytes; both required models are verified;
+binary publication counts are configured/resolved/unavailable = 0/0/0. Lifecycle, model-preflight
+and binary events agree, and the stepwise audit has zero findings. No fault, code change or repair
+turnaround occurred. Logs: `runs/c094-review-intake-{run,accept}.log`. Next: `job_target_catalog`.

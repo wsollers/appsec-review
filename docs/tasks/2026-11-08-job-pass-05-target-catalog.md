@@ -112,3 +112,20 @@ Not run: parallel (`-n`), integration/live.
   job can be `strict_gaps`; typed failure classes.
 - T-035 consumes the new facts: fold `workspace.role == member` and Gradle members as `contained`,
   then remove the Gradle root-with-build-file absorption so both Gradle shapes are treated alike.
+
+## WSOLLERS1 c094 criterion, 2026-11-10
+
+Before dispatch on `2026-11-10-0003`, the catalog must preserve intake's 344 retained files,
+four configured `.gitignore` exclusions and raw source fingerprint. Every source inventory entry
+must resolve to the tagged file's bytes. All eleven `projects/native/case-094` files must remain
+queryable; that directory has exactly one build descriptor, `CMakeLists.txt`, declaring C++17
+executable `case094` from `access`, `blocks`, `console`, `directory`, `echo`, `main`, `notes` and
+`title` `.cpp` files. It must appear as exactly one CMake/native build unit and target, routed to
+the native profile, with its descriptor package intact and none of those sources orphaned.
+
+The target contains no `compile_commands.json`: unavailable compile-unit coverage is expected
+before building, never fabricated as complete. Every other discovery/index gap must be checked
+against named target evidence and declared policy before acceptance. The source, analysis,
+components, documents and build shards must all publish with resolving manifest hashes; catalog
+source/project/build receipts and `BUILD_SYSTEMS_DISCOVERED` counts must agree with the actual
+artifacts and lifecycle. The catalog must not manufacture security findings.
