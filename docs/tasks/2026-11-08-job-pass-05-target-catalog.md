@@ -171,3 +171,40 @@ times and intermediate results are retained in the repair handoff.
 Before integration, `verify-repair-stop` confirmed the original dispatch terminal with worker
 `NOT_FOUND`. This is a content-repair cycle despite the framework's original `SUCCEEDED` status;
 the catalog remains unaccepted until its real rerun is checked.
+
+### Recovery prerequisites and admitted replay
+
+The document fixes were integrated unchanged as `ddcac4170` and `5a6e919cb`. Reload succeeded,
+but planning exposed a T-051 consumer regression: the debug-symbol job's input-identity probe
+still required an image ID in the raw recipe catalog. A separate bounded repair context returned
+`dbeca3e3f876bf8f7f1a02e49f9f6d20eafe47ec`, integrated unchanged as `0a4652b1c`. All execution-plan
+callers now use verified run-owned configuration/host bindings and the frozen declared release.
+No schema, image, target or signing policy changed.
+
+That repair's 14 new host-binding regressions pass. Its shuffled four-worker affected set reported
+108 passed / 3 failed in 19.00 s, no test over ten seconds. The remaining two strict-runner cases
+use unsupported synthetic upstream handoff locations; a documentation-link check needs an absent
+target checkout. Those paths were not repaired or represented as passing. Exact commands/results:
+`runs/c094-debug-binding-repair-handoff.json`. The original identity-probe reproduction failed before
+the fix; the live repair planner now completes.
+
+The first complete plan refused missing stopped-worker receipts for the four earlier successful
+dispatches: stepwise recovery checks every recorded dispatch, not only the failed/content-rejected
+one. Each was verified terminal/`NOT_FOUND` through the existing command; no receipt or lease was
+fabricated or deleted. The resulting plan is admissible with zero refusals.
+
+The inspected plan says `RUN` for connectivity, image verification and acquisition because all three
+explicitly declare `always_execute`. It says `RUN` for intake because these fixes changed shared
+implementation/validator files, and `INVALIDATE` for the catalog. This is not a demonstrated
+release-scoping defect: `runtime/release.py` hashes each job's package and imported job packages,
+plus shared common/validator/script inputs. A future job-local edit that invalidates unrelated
+builds/CodeQL would be the relevant counterexample.
+
+William explicitly authorized admitting this replay and adding guarded stepwise rewind, while
+leaving release scoping and gate policies unchanged. Admission is recorded in
+`runs/c094-catalog-repair-admission.json`; the exact plan is `runs/c094-catalog-repair-plan.json`.
+Its admitted release is `9966930659bf5359aa3f1503192d4793de96a3dae5f00120c249d2700cc2fa3a`;
+frozen configuration remains `9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8`.
+The operator rewind must preserve prior acceptance evidence and compare replayed outputs with
+those keys before reacceptance. No job has rerun yet, so the first fault-to-rerun turnaround
+remains open; it includes both the consumer repair and missing operator-rewind capability.
