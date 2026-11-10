@@ -1114,46 +1114,46 @@ timeout_seconds = 180
 
 [jobs.job_project_build.settings.profiles.native]
 tag = "audit-buildenv-cpp:local"
-image_id = "sha256:132466e35d67e2ce9f885c50349925ade0f663dfd637efd133423511f6e82684"
+image_id = "sha256:fead8bd920407a830b4872eb390eba8aa0973104023e678f0d316f5f481852cf"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:ba9f5182ae3c9eb8764d38e206da36025c24714dad63726317ca7120dfc6ac0b"
+image_id = "sha256:cd5276861b37407ef9a38821260cf02e9ff402808a4b631e9eccd1cfbef42140"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.go]
 tag = "audit-buildenv-go:local"
-image_id = "sha256:690b69588f980bd7eab1289c0e091822c049742f68aa9543fba4a2949f1159fd"
+image_id = "sha256:621105b491a83ed63a440aa595b2fb9dd7c1a0772720a66722d718ad77e6cffb"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.java]
 tag = "audit-buildenv-java:local"
-image_id = "sha256:e8b55145d832860219a736275c48219df0cab549eea1389fc03c351650b15c52"
+image_id = "sha256:239d9b94c0cdcdf5e89609fe0f53a7bc19704cbd43bbbceee7f3ed6b614db9ea"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.android]
 tag = "audit-buildenv-android:local"
-image_id = "sha256:39db13f278bb3d4431414f17a0d8dc1cc7cc8d9b54c8486c8bde6c1a5f3c92d4"
+image_id = "sha256:bffa3cae8b0c66c4ed045038fa6d2ac041c27063b67a83b2f4a408bf2c0c8bfd"
 user = "10001:10001"
 # Built from containers/buildenv/typescript/ (see its README). Image IDs are host-specific; after
 # rebuilding with `python3 containers/build.py build audit-buildenv-typescript`, replace image_id
 # with `docker image inspect audit-buildenv-typescript:local --format '{{.Id}}'`.
 [jobs.job_project_build.settings.profiles.node]
 tag = "audit-buildenv-typescript:local"
-image_id = "sha256:f8ba31b92beff9d35c560316bd389c1bbd81bd4235fa56281605177403114f75"
+image_id = "sha256:f9c0c31522a40a3c95bda0c93e235ee38fd0d3f53027c2dca39106bbd7ee6769"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.dotnet]
 tag = "audit-buildenv-dotnet:local"
-image_id = "sha256:b42b8004cadef2c9aff723651eb2c54d2d0c737de5ab1def4aaff2e53647146a"
+image_id = "sha256:0382548624dca57cc5298e974006a886e92cb031482aca5384234d943cc28015"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.python]
 tag = "audit-buildenv-python:local"
-image_id = "sha256:811b9ccd480e48918e6844eabb48301b0b5a846714cf5dee941ded911d34eed5"
+image_id = "sha256:82fa5cae025bd9387180de0ff98069ffdee752a887a8689bd5c0f7bce94c433c"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.php]
 tag = "audit-buildenv-php:local"
-image_id = "sha256:136f7024983055bf7d43a139bb7a160c8cf5d74476b97eb547452abf07fbc6f8"
+image_id = "sha256:d6cce1db134f33d8da84ba4c0ebfc8a4648be8caa71bd90322669e27adc18b2a"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:ba9f5182ae3c9eb8764d38e206da36025c24714dad63726317ca7120dfc6ac0b"
+image_id = "sha256:cd5276861b37407ef9a38821260cf02e9ff402808a4b631e9eccd1cfbef42140"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
@@ -1713,7 +1713,7 @@ workers = 2
 enabled = true
 execution_mode = "auto"
 source_image_tag = "audit-codeql:custom-2.27.0"
-source_image_id = "sha256:3344f8d8dacbd290a0e8cb51f3d648b7b6de56a6b5b086a240801c0d892efca2"
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
 version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
@@ -1749,7 +1749,7 @@ max_paths = 4
 preinstalled_undeclared = "derive"
 
 [[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
-source_image_id = "sha256:3344f8d8dacbd290a0e8cb51f3d648b7b6de56a6b5b086a240801c0d892efca2"
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
 build_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
 runtime_image_id = "sha256:6d42fb11646bc42e1f15e72bc916da7516c64fb957fca8fdb70dbc329b7235d1"
 runtime_user = "1000:1000"
@@ -1758,7 +1758,7 @@ runner_release_id = "appsec-codeql-runner-89568569"
 runner_source = "application"
 
 [[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
-source_image_id = "sha256:3344f8d8dacbd290a0e8cb51f3d648b7b6de56a6b5b086a240801c0d892efca2"
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
 build_image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101aaa"
 runtime_image_id = "sha256:c1dd8158da4044b7a88cef57c2962faf68849298e7fda2e7f116aa5d24107632"
 runtime_user = "1000:1000"
@@ -3442,7 +3442,7 @@ max_text_chars = 1800
 max_code_lines = 40
 max_code_chars = 4000
 image_tag = "appsec-review/tool-report-latex:1.0.0"
-image_id = "sha256:e14692dfc5fdf25c495022f48111034ead57d4fcf49d911373b245161a43387c"
+image_id = "sha256:3aff3add14b0f98c4fcd462c3c2026bef82ecb2e5d8e6678d0f371f7829ed90f"
 render_timeout_seconds = 600
 
 [jobs.job_dossier_publication.steps.load]
