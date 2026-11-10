@@ -164,3 +164,23 @@ it does not copy the other host's declarations.
 
 Target `HEAD` and `refs/tags/appsec-multi-vuln-c094-v1` both resolve to
 `bd69bfe83fec49155366303604475512c98c4ce6`. No target files were changed.
+
+## Live cutover
+
+Implementation commit: `e99bde0160aff45c0c559f98a104f2c82ce79dd6`.
+`scripts/stack-restart.sh --code-location-only` succeeded, retaining tooling image
+`sha256:29682648dd80ac803efe7cde0ce362098782312b7f44a1a658873823ac522d2b`.
+Mounted sources were signed and all services became healthy; no image build was needed.
+The existing `copilot-prod` profile, `prod-capacity-overlay.toml`, c094 target and recording
+mode were carried forward rather than silently changed. Log: `runs/t051-reload.log`.
+
+The deployed loader reports resolved configuration
+`9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8`
+and the expected host-pins hash above.
+
+Before the new connectivity dispatch, its criterion is: both distinct required pairs
+`copilot-sdk/claude-opus-5.5` and `copilot-sdk/claude-sonnet-5.5` must be checked and available;
+no unavailable required pair, no gap, no failed/skipped unit, and retained lifecycle plus
+model-connectivity start/completion events. Disabled references to Sonnet remain classified
+as not required without hiding the same model's required use. This gate establishes availability,
+not the correctness of later model inference.
