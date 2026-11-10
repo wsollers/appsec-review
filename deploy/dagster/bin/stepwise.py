@@ -243,6 +243,10 @@ def check(args, state: StepwiseState, path: Path, job_key: str) -> bool:
               f"differences={len(differences)}")
         for change in comparison["admitted_control_changes"]:
             print(f"   verified admitted claim change: {change['field']}")
+        for change in comparison["advertised_inventory_changes"]:
+            print(f"   advertised inventory {change['provider']} "
+                  f"{change['previous_count']}->{change['current_count']}: "
+                  f"added={json.dumps(change['added'])} removed={json.dumps(change['removed'])}")
         for entry in differences[:args.show]:
             print(f"   {entry['class']} {entry['path']}: {entry['expected'][:160]} -> {entry['actual'][:160]}")
     passed = (run["status"] == "SUCCESS" and not findings

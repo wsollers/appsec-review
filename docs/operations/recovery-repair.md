@@ -144,6 +144,15 @@ Successful reacceptance writes an immutable receipt with the new provenance and 
 while retaining the original key, provenance, seed and rewind evidence. A changed corpus
 key/provenance is refused rather than silently overwritten.
 
+The model-preflight reports from `model_connectivity` and `review_intake` additionally allow
+unrelated advertised-model inventory drift in `providers.<provider>.listed`. Both raw artifact
+references and normalized content signatures must resolve and verify first. Configured and
+checked model sets, their results, and every other report field must remain unchanged; adding
+or removing a checked/configured model from the advertised list still fails. The comparison
+receipt and CLI report exact inventory additions/removals and old/new counts, with references
+to the unchanged raw evidence. Only these two named report artifacts receive this accounting;
+there is no general hash, environment or volatile reclassification, and old keys stay intact.
+
 This is host-side operator tooling; it does not change measured runtime sources, release
 scoping, job policies, frozen configuration or admission/signing enforcement. The three early
 gates still declare `always_execute=True` and `propagate_handoff=False`; the release still

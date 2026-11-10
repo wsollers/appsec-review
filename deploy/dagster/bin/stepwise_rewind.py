@@ -17,6 +17,11 @@ from appsec_review.runtime.repair import (
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import immutable_bytes, reference, safe_path, verify_reference
 
+MODEL_PREFLIGHT_ARTIFACTS = {
+    "job_model_connectivity": "steps/connectivity/tasks/verify_models/model-connectivity.json",
+    "job_review_intake": "steps/model_preflight/tasks/verify_models/model-preflight.json",
+}
+
 
 def inspect_runtime(config, run_root, topology, dispatch_ids, instance):
     """Read in the code-location namespace; a receipt alone cannot establish current liveness."""
@@ -216,6 +221,8 @@ def apply_rewind(root, path, acceptance_root, state, plan, runtime, masks):
                 raise StateError(f"{job_id}: reacceptance does not match this walk")
             admitted_claim_changes(walk, prior, baseline, job_id, read_document(claim_path),
                                    read_document(key), document, masks)
+            advertised_inventory_changes(run_root, walk, baseline, job_id, read_document(claim_path),
+                                         read_document(key), document, masks)
             original_claim = verify_reference(walk, baseline["claim"]).read_bytes()
         if failing(diff_job_outputs(read_document(key), document, job_id)):
             raise StateError(f"{job_id}: existing accepted key differs from the accepted attempt")
@@ -264,6 +271,78 @@ def admitted_claim_changes(walk, evidence, baseline, job_id, claim, expected, ac
     return changes
 
 
+def advertised_inventory_changes(run_root, walk, baseline, job_id, claim, expected, actual, masks):
+    """Allow only unrelated advertised model names in the two model-preflight artifacts."""
+    suffix = MODEL_PREFLIGHT_ARTIFACTS.get(job_id)
+    if suffix is None:
+        return []
+    original_claim = read_document(verify_reference(walk, baseline["claim"]))
+    documents, signatures, references = [], [], []
+    for source_claim, output in ((original_claim, expected), (claim, actual)):
+        if source_claim["run_id"] != run_root.name or source_claim["job_id"] != job_id:
+            raise StateError("model inventory claim belongs to another run/job")
+        path = f"data/jobs/{job_id}/attempts/{source_claim['attempt_id']}/{suffix}"
+        masked = masks.text(path)
+        found = [entry for entry in output["artifacts"] if entry["path"] == masked]
+        if not found:
+            return []  # Missing artifacts remain ordinary failing differences.
+        raw = [entry for entry in output["volatile"]["artifacts"] if entry["path"] == masked]
+        if len(found) != 1 or len(raw) != 1:
+            raise StateError("model inventory artifact signatures are ambiguous")
+        ref = {**raw[0], "path": path}
+        document = read_document(verify_reference(run_root, ref))
+        signature = {"path": masked, "kind": "json", "count": len(document),
+                     "sha256": normalized_digest(normalize_value(document, masks))}
+        if found[0] != signature:
+            raise StateError("model inventory artifact signature differs from its resolving bytes")
+        documents.append(document)
+        signatures.append(found[0])
+        references.append(ref)
+    old, new = documents
+    if old.get("schema") != "appsec-review/model-preflight/1" or new.get("schema") != old["schema"]:
+        return []
+    projected = deepcopy(new)
+    providers = old.get("providers")
+    if not isinstance(providers, dict) or set(providers) != set(new.get("providers", {})):
+        return []
+    configured = {}
+    for field in ("required", "not_required"):
+        if not isinstance(old.get(field), list) or old[field] != new.get(field):
+            return []
+        for setting in old[field]:
+            if (not isinstance(setting, dict) or not isinstance(setting.get("provider"), str)
+                    or not isinstance(setting.get("model"), str)):
+                return []
+            configured.setdefault(setting["provider"], set()).add(setting["model"])
+    changes = []
+    for provider, before in providers.items():
+        after = new["providers"][provider]
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            return []
+        if before.get("listed") == after.get("listed"):
+            continue
+        left, right = before.get("listed"), after.get("listed")
+        if (not isinstance(left, list) or not isinstance(right, list)
+                or any(not isinstance(name, str) or not name for name in [*left, *right])
+                or len(set(left)) != len(left) or len(set(right)) != len(right)):
+            return []
+        checked = before.get("models")
+        if (not isinstance(checked, dict) or checked != after.get("models")
+                or not configured.get(provider, set()) <= checked.keys()):
+            return []
+        added, removed = sorted(set(right) - set(left)), sorted(set(left) - set(right))
+        if not added and not removed or (set(added) | set(removed)) & (checked.keys() | configured.get(provider, set())):
+            return []
+        projected["providers"][provider]["listed"] = left
+        changes.append({"artifact": signatures[0]["path"], "provider": provider,
+                        "added": added, "removed": removed, "previous_count": len(left), "current_count": len(right),
+                        "expected_reference": references[0], "actual_reference": references[1]})
+    if not changes or projected != old:
+        return []  # No other report fields/results may be explained away by inventory drift.
+    signatures[1].update(signatures[0])
+    return changes
+
+
 def replay_comparison(run_root, walk, state, item, attempt, document, masks):
     """Use the archived key, not a mutable corpus file; never reclass semantic differences."""
     replays = item.get("replays", [])
@@ -297,9 +376,12 @@ def replay_comparison(run_root, walk, state, item, attempt, document, masks):
             actual = deepcopy(document)
             control_changes = admitted_claim_changes(
                 walk, evidence, baseline, item["job_id"], claim, expected, actual, masks)
+            inventory_changes = advertised_inventory_changes(
+                run_root, walk, baseline, item["job_id"], claim, expected, actual, masks)
             differences = diff_job_outputs(expected, actual, item["job_id"])
             return {"baseline": baseline, "evidence": entry["evidence"],
                     "admitted_control_changes": control_changes,
+                    "advertised_inventory_changes": inventory_changes,
                     "passed": not failing(differences),
                     "differences": [difference.as_dict() for difference in differences]}
     return None

@@ -16,7 +16,7 @@ from appsec_review.acceptance.state import StateError, StepwiseState
 from appsec_review.runtime import JobRunner, Unit
 from appsec_review.runtime.repair import admit_repair, plan_repair, verify_dispatch_stop
 from appsec_review.storage import atomic_json
-from appsec_review.storage.shared import verify_reference
+from appsec_review.storage.shared import reference, verify_reference
 from tests.release_support import write_release
 from tests.test_repair_admission import fixture
 
@@ -357,3 +357,175 @@ def test_second_admitted_repair_keeps_the_original_key_and_prior_acceptance(walk
     original = rewind.read_evidence(walk.path.parent, prior[0]["evidence"])
     assert evidence["baselines"]["job_b"]["key"]["sha256"] == original["baselines"]["job_b"]["key"]["sha256"]
     assert evidence["baselines"]["job_b"]["claim"]["sha256"] == original["baselines"]["job_b"]["claim"]["sha256"]
+
+
+@pytest.fixture(params=["job_model_connectivity", "job_review_intake"])
+def inventory_walk(tmp_path, monkeypatch, request):
+    job_id = request.param
+    config, (job,), _ = fixture(tmp_path, (job_id,))
+    suffix = rewind.MODEL_PREFLIGHT_ARTIFACTS[job_id]
+    step, task, filename = suffix.split("/")[1], suffix.split("/")[3], suffix.split("/")[-1]
+    report = {
+        "schema": "appsec-review/model-preflight/1",
+        "required": [{"provider": "copilot-sdk", "model": name, "enabled": True,
+                      "job_id": job_id, "setting": "settings.model"}
+                     for name in ("claude-opus-5.5", "claude-sonnet-5.5")],
+        "not_required": [{"provider": "copilot-sdk", "model": "optional-checked", "enabled": False,
+                          "job_id": job_id, "setting": "settings.optional", "reason": "model setting disabled"}],
+        "providers": {"copilot-sdk": {
+            "provider": "copilot-sdk", "method": "catalog", "error": None, "transport": True,
+            "listed": ["claude-opus-5.5", "claude-sonnet-5.5", "optional-checked", "unrelated-old"],
+            "models": {name: {"available": True, "detail": "listed and enabled for the Copilot worker account"}
+                       for name in ("claude-opus-5.5", "claude-sonnet-5.5", "optional-checked")},
+        }},
+        "unavailable": [], "unavailable_not_required": [], "gaps": [],
+    }
+
+    def produce(unit):
+        path = unit.unit_root / filename
+        atomic_json(path, report)
+        return {"artifact": reference(unit.job.run_root, path), "verified": ["copilot-sdk/claude-opus-5.5",
+                                                                          "copilot-sdk/claude-sonnet-5.5"]}
+
+    job = replace(job, units=(Unit(f"{step}.{task}", produce),))
+    deployment = tmp_path / "deploy/dagster"
+    deployment.mkdir(parents=True)
+    (deployment / ".env").write_text(f"APPSEC_UID={os.getuid()}\nAPPSEC_GID={os.getgid()}\n")
+    for key, value in {
+        "ROOT": tmp_path, "STATE_ROOT": tmp_path / "runs/metadata/stepwise", "DEPLOYMENT": deployment,
+        "ACCEPTANCE_ROOT": tmp_path / "test/acceptance", "SEED_STORE": tmp_path / "data/acceptance-seeds",
+    }.items():
+        monkeypatch.setattr(stepwise, key, value)
+    monkeypatch.setattr(stepwise, "git", lambda *args, **kwargs: "" if args[0] == "status" else "testcommit")
+    monkeypatch.setattr(stepwise, "get_run", lambda *args: {"status": "SUCCESS"})
+    runner = JobRunner(config)
+    original = runner.run(job, orchestration={"system": "dagster", "run_id": str(UUID(int=1))})
+    run_id = original["status"]["run_id"]
+    run_root = config.runtime.runs_dir / run_id
+    instance = Instance()
+    instance.runs[str(UUID(int=1))] = SimpleNamespace(
+        run_id=str(UUID(int=1)), is_finished=True, tags={"appsec/application_run_id": run_id})
+    verify_dispatch_stop(config, run_root, str(UUID(int=1)), instance=instance)
+    topology = {"graph": "wave1_review", "jobs": [{"job_id": job_id, "name": job_id,
+                 "dependencies": [], "upstream_handoffs": [], "propagate_handoff": True}]}
+    state = StepwiseState.create(run_id, target="/opt/app/targets/fixture", topology=topology)
+    state.record_launch(job_id, str(UUID(int=1)))
+    path = stepwise.STATE_ROOT / run_id / "state.json"
+    state.save(path)
+    args = SimpleNamespace(app_run=run_id, job=job_id, tag="inventory-v1", url="offline", show=3)
+    assert stepwise.command_accept(args) == 0
+    (tmp_path / f"release-src/{job_id}/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job_id,))
+    plan = plan_repair(config, run_root, (job,), "none", dependencies={job_id: []})
+    assert plan["admissible"]
+    admit_repair(config, run_root, (job,), plan, dependencies={job_id: []})
+    state = StepwiseState.load(path)
+    masks = stepwise.masks_for(run_id, state.target)
+    runtime = rewind.inspect_runtime(config, run_root, topology, [str(UUID(int=1))], instance)
+    assert rewind.apply_rewind(tmp_path, path, stepwise.ACCEPTANCE_ROOT, state, plan, runtime, masks)
+
+    def rerun():
+        state = StepwiseState.load(path)
+        state.record_launch(job_id, str(UUID(int=2)))
+        state.save(path)
+        return runner.run(job, run_id=run_id, orchestration={"system": "dagster", "run_id": str(UUID(int=2))})
+
+    return SimpleNamespace(report=report, rerun=rerun, args=args, path=path, run_root=run_root,
+                           job_id=job_id, masks=masks, original=original)
+
+
+@pytest.mark.parametrize("mode", ["add", "remove", "replace"])
+def test_inventory_only_drift_is_reported_and_reaccepted(inventory_walk, mode, capsys):
+    walk = inventory_walk
+    original_key = stepwise.ACCEPTANCE_ROOT / f"inventory-v1/{walk.job_id}.json"
+    old_key = original_key.read_bytes()
+    old_artifact = walk.run_root / walk.original["handoff"]["resolving_paths"]["attempt"] / rewind.MODEL_PREFLIGHT_ARTIFACTS[walk.job_id]
+    old_bytes = old_artifact.read_bytes()
+    listed = walk.report["providers"]["copilot-sdk"]["listed"]
+    added = ["gemini-4-carbon"] if mode in {"add", "replace"} else []
+    removed = ["unrelated-old"] if mode in {"remove", "replace"} else []
+    listed[:] = sorted((set(listed) | set(added)) - set(removed))
+    result = walk.rerun()
+    assert stepwise.command_check(walk.args) == 0
+    comparison = StepwiseState.load(walk.path).job(walk.job_id)["check"]["replay_comparison"]
+    assert comparison["passed"]
+    change, = comparison["advertised_inventory_changes"]
+    assert change["added"] == added and change["removed"] == removed
+    assert change["previous_count"] == 4 and change["current_count"] == len(listed)
+    assert verify_reference(walk.run_root, change["expected_reference"]).read_bytes() == old_bytes
+    assert json.loads(verify_reference(walk.run_root, change["actual_reference"]).read_bytes()) == walk.report
+    assert stepwise.command_accept(walk.args) == 0
+    item = StepwiseState.load(walk.path).job(walk.job_id)
+    assert item["handoff_sha256"] == result["handoff_sha256"]
+    receipt = json.loads(verify_reference(walk.path.parent, item["replays"][-1]["acceptance"]).read_bytes())
+    assert receipt["comparison"]["advertised_inventory_changes"] == [change]
+    assert original_key.read_bytes() == old_key and old_artifact.read_bytes() == old_bytes
+    output = capsys.readouterr().out
+    assert f"added={json.dumps(added)} removed={json.dumps(removed)}" in output
+
+
+@pytest.mark.parametrize("damage", ["required-listed", "optional-checked-listed", "required-setting",
+                                  "availability", "detail", "error", "transport", "method", "gap",
+                                  "checked-set"])
+def test_inventory_drift_does_not_hide_semantic_changes(inventory_walk, damage):
+    walk = inventory_walk
+    provider = walk.report["providers"]["copilot-sdk"]
+    provider["listed"].append("gemini-4-carbon")
+    if damage == "required-listed":
+        provider["listed"].remove("claude-opus-5.5")
+    elif damage == "optional-checked-listed":
+        provider["listed"].remove("optional-checked")
+    elif damage == "required-setting":
+        walk.report["required"][0]["model"] = "different-required"
+    elif damage == "availability":
+        provider["models"]["claude-opus-5.5"]["available"] = False
+    elif damage == "detail":
+        provider["models"]["claude-opus-5.5"]["detail"] = "different/semantic/result"
+    elif damage == "error":
+        provider["error"] = "provider failed"
+    elif damage == "transport":
+        provider["transport"] = False
+    elif damage == "method":
+        provider["method"] = "changed-method"
+    elif damage == "gap":
+        walk.report["gaps"] = ["unavailable"]
+    else:
+        del provider["models"]["optional-checked"]
+    walk.rerun()
+    assert stepwise.command_check(walk.args) == 1
+    comparison = StepwiseState.load(walk.path).job(walk.job_id)["check"]["replay_comparison"]
+    assert not comparison["passed"] and comparison["advertised_inventory_changes"] == []
+    assert any(entry["class"] == "coverage" and "/verify_models/" in entry["path"]
+               for entry in comparison["differences"])
+    with pytest.raises(StateError, match="fails its check"):
+        stepwise.command_accept(walk.args)
+    assert StepwiseState.load(walk.path).job(walk.job_id)["status"] == "failed"
+
+
+@pytest.mark.parametrize("side", ["old-signature", "new-signature", "old-bytes", "new-bytes"])
+def test_inventory_accounting_requires_resolving_artifact_signatures(inventory_walk, side):
+    walk = inventory_walk
+    walk.report["providers"]["copilot-sdk"]["listed"].append("gemini-4-carbon")
+    result = walk.rerun()
+    state = StepwiseState.load(walk.path)
+    evidence = rewind.read_evidence(walk.path.parent, state.job(walk.job_id)["replays"][0]["evidence"])
+    baseline = evidence["baselines"][walk.job_id]
+    expected = json.loads(verify_reference(walk.path.parent, baseline["key"]).read_bytes())
+    attempt = Path(result["attempt_root"])
+    actual = stepwise.normalize_job_output(walk.run_root, walk.job_id, walk.masks, attempt_root=attempt)
+    candidate = expected if side.startswith("old") else actual
+    signature = next(entry for entry in candidate["artifacts"] if "/verify_models/" in entry["path"]
+                     and entry["path"].endswith(("/model-connectivity.json", "/model-preflight.json")))
+    if side.endswith("signature"):
+        signature["sha256"] = "0" * 64
+    else:
+        selected = Path(walk.original["attempt_root"]) if side.startswith("old") else attempt
+        path = selected / rewind.MODEL_PREFLIGHT_ARTIFACTS[walk.job_id]
+        data = path.read_bytes()
+        changed = data.replace(b"unrelated-old", b"unrelated-new")
+        assert len(changed) == len(data) and changed != data
+        path.write_bytes(changed)
+    with pytest.raises(ValueError, match="signature|digest|integrity"):
+        rewind.advertised_inventory_changes(walk.run_root, walk.path.parent, baseline, walk.job_id,
+                                           json.loads((attempt / "claim.json").read_bytes()),
+                                           expected, actual, walk.masks)
