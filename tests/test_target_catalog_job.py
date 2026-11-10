@@ -164,3 +164,33 @@ def test_configured_topology_matches_the_job() -> None:
     # Units are ordered by dependency (discover_projects follows discover_build_systems); the set matches.
     assert {unit.unit_id for unit in built.units} == {f"{step}.{task}" for step, tasks in TOPOLOGY.items() for task in tasks}
     assert not built.strict_gaps, "the catalog still publishes free-text index gaps (legacy list; T-055)"
+
+
+def test_catalog_keeps_postman_environment_as_source_not_collection(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    target = tmp_path / "target"
+    postman = target / "tests/postman"
+    postman.mkdir(parents=True)
+    environment = postman / "northwind.postman_environment.json"
+    environment.write_text(json.dumps({
+        "id": "inert-environment", "name": "Inert local variables",
+        "values": [{"key": "baseUrl", "value": "http://fixture.invalid", "enabled": True}],
+        "_postman_variable_scope": "environment",
+    }), encoding="utf-8")
+    collection = postman / "northwind.postman_collection.json"
+    collection.write_text(json.dumps({"item": [
+        {"request": {"method": "GET", "url": "{{baseUrl}}/api/v1/products"}},
+    ]}, indent=2), encoding="utf-8")
+    outcome, run_root = _run(config, target, build_catalog())
+    assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome
+    partition = _artifact(run_root, "repository-partition.json")
+    assert environment.relative_to(target).as_posix() in {entry["path"] for entry in partition["files"]}
+    attempt = Path(outcome["jobs"][JOB_ID]["attempt_root"])
+    result = json.loads((attempt / "steps/retrieval_indexes/tasks/build_target_documents/result.json").read_text())
+    assert result["item_count"] == 1
+    assert result["gaps"] == [
+        f"{kind}: no accepted target document"
+        for kind in ("design", "dfd", "openapi", "threat_model", "unit_test")
+    ]
+    pointer = json.loads((run_root / "data/jobs" / JOB_ID / "latest.json").read_text())
+    assert (run_root / pointer["handoff_path"]).is_file()

@@ -70,7 +70,8 @@ def select_document_inventory(files: Iterable[Mapping[str, Any]]) -> tuple[dict[
                 kind = "design"
         elif suffix in {".json", ".yaml", ".yml", ".ts"} and ("openapi" in name or "swagger" in name):
             kind = "openapi"
-        elif suffix == ".json" and ("postman" in parts or "postman" in name):
+        elif (suffix == ".json" and ("postman" in parts or "postman" in name)
+              and not name.endswith(".postman_environment.json")):
             kind = "postman"
         elif (name.startswith("test_") and suffix in {".py", ".rs", ".c", ".cpp"}) or re.search(
             r"\.(?:test|spec)\.(?:[cm]?js|[cm]?ts|tsx|jsx|py)$|_test\.go$|_spec\.rb$", name

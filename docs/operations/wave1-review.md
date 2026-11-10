@@ -96,6 +96,9 @@ On both surfaces, `target_catalog.retrieval_indexes.build_target_documents` star
 documents, materialized OpenAPI JSON, Postman collections, and unit-test source from that accepted
 hash-pinned inventory. The resulting `documents` shard is published with the catalog handoff and
 carried into review-data indexing. The bounds live in `[jobs.job_target_catalog.settings]`.
+Postman `*.postman_environment.json` exports remain in the source inventory but are not selected
+as collections: environment variables declare no requests. Malformed selected collections still
+produce explicit parse gaps.
 
 In both surfaces, the application handoff is the checkpoint of record; Dagster metadata links to
 it but does not replace it. Target content, target guidance, configuration values, and generated

@@ -129,6 +129,42 @@ def test_parse_and_record_limits_are_named_gaps(tmp_path: Path) -> None:
     assert any(gap["reason"] == "file_limit" for gap in result.gaps)
 
 
+def test_postman_environment_export_is_not_a_collection(tmp_path: Path) -> None:
+    environment = "tests/postman/northwind.postman_environment.json"
+    collection = "tests/postman/northwind.postman_collection.json"
+    (tmp_path / environment).parent.mkdir(parents=True)
+    (tmp_path / environment).write_text(json.dumps({
+        "id": "inert-environment", "name": "Inert local variables",
+        "values": [{"key": "baseUrl", "value": "http://fixture.invalid", "enabled": True}],
+        "_postman_variable_scope": "environment",
+    }), encoding="utf-8")
+    (tmp_path / collection).write_text(json.dumps({"item": [
+        {"request": {"method": "GET", "url": "{{baseUrl}}/api/v1/products"}},
+    ]}, indent=2), encoding="utf-8")
+    inventory = select_document_inventory(_inventory(tmp_path, {
+        environment: "postman", collection: "postman",
+    }))
+    assert [entry["path"] for entry in inventory] == [collection]
+    result = collect_target_documents(tmp_path, SNAPSHOT, inventory)
+    assert not result.gaps
+    assert len(result.records) == 1
+    assert result.records[0]["fields"]["route"] == "/api/v1/products"
+
+
+@pytest.mark.parametrize("text", [
+    "{bad", '{"item": {}}', '{"info": {"name": "broken collection"}}',
+], ids=["invalid-json", "invalid-items", "missing-items"])
+def test_malformed_postman_collection_remains_a_parse_gap(tmp_path: Path, text: str) -> None:
+    path = "northwind.postman_collection.json"
+    (tmp_path / path).write_text(text, encoding="utf-8")
+    inventory = select_document_inventory(_inventory(tmp_path, {path: "postman"}))
+    assert len(inventory) == 1
+    result = collect_target_documents(tmp_path, SNAPSHOT, inventory)
+    assert not result.records
+    assert result.gaps[0]["path"] == path
+    assert result.gaps[0]["reason"] == "parse_error"
+
+
 def test_typescript_openapi_source_is_not_executed_or_misreported_as_parsed() -> None:
     result = collect_target_documents(FIXTURES, SNAPSHOT,
                                       _inventory(FIXTURES, {"openapi.ts": "openapi"}))
