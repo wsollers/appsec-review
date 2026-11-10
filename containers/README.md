@@ -91,7 +91,9 @@ exactly its pinned image; see
 Some locked assets are **host-local**: the launcher cannot download them, a helper produces them, and
 the lock pins the result. The catalog names the helper as `acquire = "<script>"` and `build.py` runs it
 when any locked local file under the image's `downloads/` is missing or does not match the lock —
-once per host, the first time the image is built there — then verifies the result; bytes that no
+once per host, the first time the image is built there, and again after a re-lock — removing the
+files that no longer match first (the helpers produce what is missing and keep what exists), then
+verifies the result; bytes that no
 longer match mean the upstream moved, and re-locking is a reviewed edit, not something the launcher
 does. Four images have one: `tool-native-cpp`, `tool-report-latex` and `tool-svf` (`.deb` closures
 resolved against the Ubuntu **snapshot** service inside a pinned image by their `acquire_assets.sh`,

@@ -288,6 +288,14 @@ def acquire_assets(item: Mapping[str, Any], context: Path, stale: Sequence[str],
     """
     runner = runner or subprocess.run  # resolved at call time so tests can substitute subprocess.run
     script = safe_path(str(item["acquire"]))
+    for relative in stale:
+        # The helpers produce what is missing and leave what exists; a file the lock no longer matches (a
+        # re-lock pulled onto a host that acquired under the old one: WSOLLERS1, tool-svf) must go first,
+        # or the helper keeps it and the verification below deletes it only after failing the build.
+        target = context / relative
+        if target.is_file():
+            target.unlink()
+            log.write(f"REMOVE {relative} (does not match the lock)\n")
     log.write(f"ACQUIRE {item['id']} {item['acquire']} (stale: {', '.join(stale)})\n")
     log.flush()
     try:

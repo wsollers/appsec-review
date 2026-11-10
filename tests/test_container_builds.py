@@ -478,6 +478,30 @@ def test_host_local_assets_are_acquired_by_the_catalog_helper_then_verified(tmp_
     assert counts["current"] == 1 and counts["acquired"] == 0 and calls == []
 
 
+def test_a_local_file_the_lock_no_longer_matches_is_removed_before_the_helper_runs(tmp_path: Path, monkeypatch) -> None:
+    """WSOLLERS1 after the tool-svf re-lock: the helper only produces missing files, so the stale tar stayed."""
+    context = tmp_path / "ctx"
+    (context / "downloads").mkdir(parents=True)
+    payload = b"closure under the new lock"
+    (context / "downloads" / "debs.tar").write_bytes(b"closure under the old lock")
+    (tmp_path / "assets.lock.json").write_text(json.dumps(_lock_with_local_tar(context, payload)), encoding="utf-8")
+    (tmp_path / "acquire.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(container_build, "safe_path", lambda rel: tmp_path / rel if not str(rel).startswith("/") else Path(rel))
+    seen = {}
+
+    def fake_runner(argv, **kwargs):
+        seen["present_when_run"] = (context / "downloads" / "debs.tar").exists()
+        (context / "downloads" / "debs.tar").write_bytes(payload)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(container_build.subprocess, "run", fake_runner)
+    item = {"id": "tool-x", "context": "ctx", "assets_lock": "assets.lock.json", "acquire": "acquire.sh"}
+    log = io.StringIO()
+    assert container_build.fetch_one(item, log)["acquired"] == 1
+    assert seen["present_when_run"] is False
+    assert "REMOVE downloads/debs.tar (does not match the lock)" in log.getvalue()
+
+
 def test_an_acquisition_helper_that_produces_other_bytes_is_a_relock_not_a_pass(tmp_path: Path, monkeypatch) -> None:
     context = tmp_path / "ctx"
     context.mkdir()
