@@ -80,6 +80,10 @@ until each is rewritten into the entry format when it is next touched.
 | T-085 | [Probe the model login before recovery admits a repair](#t-085-probe-the-model-login-before-recovery-admits-a-repair) | pipeline | open |
 | T-086 | [Record source ids on un-hunted units and produce entry-point tags](#t-086-record-source-ids-on-un-hunted-units-and-produce-entry-point-tags) | review | open |
 | T-087 | [Normalize crash symbols for corroboration](#t-087-normalize-crash-symbols-for-corroboration) | evidence | open |
+| T-088 | [Keep a target registry and a read-only verify command](#t-088-keep-a-target-registry-and-a-read-only-verify-command) | testing | open |
+| T-089 | [Fetch answer keys from the private answers repository in memory](#t-089-fetch-answer-keys-from-the-private-answers-repository-in-memory) | testing | open |
+| T-090 | [Identify known targets and self-grade a completed run](#t-090-identify-known-targets-and-self-grade-a-completed-run) | testing | blocked |
+| T-091 | [Resolve conditional automake SUBDIRS in build discovery](#t-091-resolve-conditional-automake-subdirs-in-build-discovery) | topology | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1248,6 +1252,94 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** unit tests show each case matching and an unrelated symbol with a shared prefix
   not matching.
 - **Refs:** `src/appsec_review/observability/findings/`, T-072, T-075.
+
+### T-088 — Keep a target registry and a read-only verify command
+
+- **State:** open
+- **Area:** testing
+- **Blocks:** T-090
+- **Why:** on 2026-11-11 two machines reviewed "c094" and compared results, but one reviewed a
+  sparse checkout of `projects/native/case-094` and the other the whole repository.
+  `docs/operations/test-targets.md` records remotes and commands but not sparse scope, the
+  expected target fingerprint or full commit hashes, and nothing checks a checkout against it.
+- **Scope:** one machine-readable registry (name, normalized remote URL without credentials, full
+  commit, tag, sparse paths, expected fingerprint where it is host-independent, licence, purpose,
+  answers reference as commit and SHA-256 only). A read-only command that compares
+  `targets/<name>` with its entry and reports a wrong commit, dirty tree, different sparse scope or
+  different fingerprint; it never clones, fetches or edits a target. Different scopes of one
+  repository are separate named entries. The table in `test-targets.md` is tested against the
+  registry. First establish whether the target fingerprint depends on host paths or line endings.
+- **Done when:** unit tests cover a matching checkout and each mismatch on temporary git
+  repositories, the registry holds every target in `test-targets.md` plus Freeciv, and the document
+  test fails when the two disagree.
+- **Refs:** `docs/operations/test-targets.md`, `data/reference/castle/castle-c250.lock.json`
+  (precedent), `src/appsec_review/target_acquisition/`, T-057.
+
+### T-089 — Fetch answer keys from the private answers repository in memory
+
+- **State:** open
+- **Area:** testing
+- **Blocks:** T-090
+- **Why:** answer keys are committed inside this repository (`test/acceptance/*/expectations.toml`)
+  and sit on every review host, where a model or an agent can read them. The private repository
+  `appsec-review-answers` was created on 2026-11-11 to hold them as schema-validated JSON
+  (`appsec-review-answers/answer-key/1`); it holds no keys yet.
+- **Scope:** a grader-side reader that fetches one key by full commit over the GitHub REST API,
+  verifies its SHA-256 against the target registry, validates it against the schema and returns
+  it in memory as a `ScoringKey`, writing nothing to disk and logging no key content. The token is
+  read from the grading step's environment only. A converter from `expectations.toml` to the JSON
+  format, run outside review hosts. Grade output limited to case ids and outcomes. Then the
+  existing keys move to the answers repository and are removed here, with the blind-target
+  isolation test extended to refuse a committed key. Network access is confined to this reader.
+- **Done when:** unit tests drive the reader through a fake HTTP boundary (success, wrong hash,
+  schema violation, HTTP failure, no token) and assert that nothing is written and no path or line
+  from a key appears in the grade document or logs; `expectations.toml` files are gone from this
+  repository.
+- **Refs:** `src/appsec_review/acceptance/scoring.py` (`load_scoring_key`),
+  `tests/test_blind_target_isolation.py`, `docs/operations/test-targets.md`, T-067, T-088.
+
+### T-090 — Identify known targets and self-grade a completed run
+
+- **State:** blocked
+- **Area:** testing
+- **Blocked by:** T-088, T-089
+- **Why:** grading a corpus run is a manual sequence (answer-key evaluation, funnel, detector
+  scoring, finding scorecard), so most runs are never graded and gaps are never compared with
+  what is expected. A checkout records its commit and origin, so a run can recognise a known
+  target itself.
+- **Scope:** an opt-in final step, after the final report is published, that identifies the
+  target by commit, sparse scope and clean tree (the normalized origin URL is a secondary check,
+  never recorded with credentials), and for a known target fetches its key (T-089) and publishes
+  one grade document: found, missed and wrongly reported cases by id; for each miss the funnel
+  stage where it stopped; the delta against the last accepted baseline; and gaps outside the
+  target's expected-gaps list. For an unknown or dirty target it reports "not a known target" and
+  does nothing. It is reported, never a verdict, feeds nothing back into prompts or guidance, and
+  records each holdout use.
+- **Done when:** unit tests cover a known target, an unknown commit, a dirty tree, a scope
+  mismatch and an unavailable key, each with its stated outcome; a fixture run produces a grade
+  document that names every delta; the blind-isolation tests still pass.
+- **Refs:** `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/scorecard.py`,
+  `docs/architecture/finding-metrics.md`, T-062, T-088, T-089.
+
+### T-091 — Resolve conditional automake SUBDIRS in build discovery
+
+- **State:** open
+- **Area:** topology
+- **Why:** a read-only discovery preview of Freeciv at `b1b0768b` (2026-11-11) found 31 build
+  units for what is one project with two parallel build systems. The root autotools and meson
+  units are recognised as parallel, and 77 directories listed literally in `SUBDIRS` fold into the
+  root, but directories reached through a variable or an `if` block stay separate units:
+  `$(SSUBDIRS)` (`ai`, `server`), `$(DSUBDIRS)` (`data` and its themes) and `GUI_SUBDIRS +=`
+  (the five clients). Nine of those units have no build point at all.
+- **Scope:** follow automake variables assigned in the same file, including `+=` and both branches
+  of `if`/`else`, when resolving `SUBDIRS`, recording the condition as a fact on the driven member;
+  a directory with no build point that is only driven stays a member, not a unit. Cases added to
+  the discovery matrix under conditional systems.
+- **Done when:** discovery cases for variable, appended and conditional `SUBDIRS` have no
+  `pending` entry, and the Freeciv tree yields the two parallel root units with the conditional
+  directories folded as members.
+- **Refs:** T-056, `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/build_points.py`,
+  `docs/plans/build-discovery-test-program-2026-11-08.md`.
 
 ## Legacy backlog
 

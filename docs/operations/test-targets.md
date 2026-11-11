@@ -10,6 +10,7 @@ repository. `targets/` is ignored by Git, so a target never enters this reposito
 | **First-run acceptance target (T-057):** `appsec-multi-vuln` at tag `appsec-multi-vuln-c094-v1` = `bd69bfe83fec…` (`projects/native/case-094`) | the same remote; the tag is on `main`'s ancestry, and `main`'s tip (`42284599…` on 2026-11-08) carries a byte-identical `projects/native/case-094` | `targets/appsec-multi-vuln-c094`, checked out **at the tag** (`stepwise.py accept` requires `HEAD` = tag commit), so the pinned default target does not move | T-057 first run, `stepwise.py system --tag appsec-multi-vuln-c094-v1`, detector scoring with negative controls |
 | Public C corpus CASTLE-C250, blind tag `castle-c250-v1` | prepared from <https://github.com/CASTLE-Benchmark/CASTLE-Benchmark> at the commit in [`../../data/reference/castle/castle-c250.lock.json`](../../data/reference/castle/castle-c250.lock.json) by `python -m appsec_review.acceptance.castle prepare` | `targets/castle-c250` | Detector-scoring regression against the paper's numbers |
 | Build-topology fixture monorepo | committed at [`../../test/topology/monorepo/`](../../test/topology/monorepo/README.md) (46 small text files, byte-pinned by `MANIFEST.json`); copied out by `python -m appsec_review.acceptance.topology prepare --into targets/topology-monorepo` | `targets/topology-monorepo` | `tests/test_topology_fixture.py` (fast, no Docker) and live `appsec-review start --target targets/topology-monorepo`, scored with `... topology score --run <run>` against `test/topology/monorepo.expectations.json` ([task](../tasks/2026-11-07-topology-fixture-monorepo.md)) |
+| Freeciv at `b1b0768bfaca9b2fae68f9466defe1e80636e9fa` (whole repository; the parent of the fix for CVE-2026-90556, so that defect and CVE-2026-90557 are both present) | <https://github.com/freeciv/freeciv> | `targets/freeciv` | Job-by-job walk on a real game codebase; answers belong in the private `appsec-review-answers` repository, not here |
 | Any other target | its own remote | `targets/<name>`, passed with `--target` or `APPSEC_REVIEW_TARGET` | Ad hoc reviews |
 
 ```bash
@@ -18,6 +19,13 @@ git -C targets/appsec-multi-vuln checkout 29943842cc0c6a8ed5171417b0bccf5c6769f4
 # First-run acceptance target: the case-094 tag, in its own checkout.
 git clone https://github.com/wsollers/appsec-multi-vuln.git targets/appsec-multi-vuln-c094
 git -C targets/appsec-multi-vuln-c094 checkout appsec-multi-vuln-c094-v1              # bd69bfe83fec…
+```
+
+```bash
+# Freeciv, pinned to the pre-fix commit (detached).
+git clone https://github.com/freeciv/freeciv.git targets/freeciv
+git -C targets/freeciv checkout --detach b1b0768bfaca9b2fae68f9466defe1e80636e9fa
+git -C targets/freeciv rev-parse 75ecde3e86ddf2fe775768450e9a290a4f4d4387^   # prints the pinned commit
 ```
 
 ```powershell
