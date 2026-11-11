@@ -5,6 +5,10 @@ rebuilds `runs/<run-id>/data/telemetry/summary.json` and prints the same documen
 the target repository. All review-scope values resolve through receipt paths and SHA-256 identities
 recorded in the run telemetry stream.
 
+This document covers run execution, scope, timing and provenance metrics. Whether the published
+findings are correct, useful, repeatable and acted on is the subject of the
+[finding metrics design](../architecture/finding-metrics.md).
+
 The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
 adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`), introduced
 in `appsec-review/run-metrics/5` and retained in the current `/7`. It separates handoff admission, execution, coverage, native retention,

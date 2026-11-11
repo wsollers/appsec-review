@@ -113,6 +113,7 @@ Operations, one page per job or service:
 - [`operations/swift-execution-policy.md`](operations/swift-execution-policy.md) — the global
   `tools.enable_swift` gate (`src/appsec_review/swift_policy.py`) and its durable coverage gap.
 - [`operations/metrics.md`](operations/metrics.md) — derived run metrics.
+- [`architecture/finding-metrics.md`](architecture/finding-metrics.md) — finding-quality metrics design (not implemented).
 - [`operations/telemetry-report.md`](operations/telemetry-report.md) — the end-of-review telemetry LaTeX/PDF report: structure, receipt, gaps, configuration and re-rendering.
 
 Records, task prompts, and schemas:
