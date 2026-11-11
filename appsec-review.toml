@@ -49,15 +49,18 @@ approved_first_party_projects = []
 [review_policy.releases]
 # Deployment operators declare opaque release IDs here and bump them when supplied software
 # changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
+# A capacity overlay may set any id here for its host; a declared value always wins.
 codeql = "codeql-2.27.0-cert-v2.62.0"
 codeql_runner = "appsec-codeql-runner-89568569"
 job_openvex_export = "openvex-export-2"
 job_debug_symbol_indexing = "debug-symbol-readers-3"
-# Build iterations dispatch and reuse nothing unless these three are declared
-# (jobs/build_iterations.py). Declared by the deployment owner on 2026-11-11; bump when the
-# application implementation, the native build image or the validation contracts change.
+# Build iterations dispatch and reuse nothing unless platform, build_toolchain and validation
+# resolve (jobs/build_iterations.py). platform and validation are declared only (deployment
+# owner, 2026-11-11): bump them when the application implementation or the validation contracts
+# change. build_toolchain is not declared here: it defaults to the image id the host pins bind to
+# [jobs.job_project_build.settings.profiles.native], so it follows a rebuilt and re-pinned build
+# image. Declare build_toolchain here or in an overlay to fix it by hand instead.
 platform = "appsec-review-2026-11-11"
-build_toolchain = "noble-gcc13.3-clang18.1"
 validation = "validation-2026-11-11"
 
 [review_policy.resources]

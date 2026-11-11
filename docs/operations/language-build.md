@@ -634,10 +634,17 @@ compatibility blocks consumers; any unknown variant field forbids checkpoint reu
 
 Reuse additionally binds source, structural graph, frozen configuration, recipe revision,
 image/toolchain, exact upstream products, execution/capture and `[build_outputs]` identities,
-and operator-declared `platform`, `build_toolchain`, `validation` releases. Every retained receipt
-and artifact must verify. Missing declarations/products or changed bindings are explicit misses;
-unrelated query-pack declarations are not substitutes for release proof. The mutable ledger is
-an index, not success authority.
+and the `platform`, `build_toolchain`, `validation` releases. `platform` and `validation` are
+operator-declared; `build_toolchain` is the declared value or, when no layer declares it, the
+host-pinned native build image ID
+([release IDs](performance-assurance.md#operator-declared-releases)). Every retained receipt
+and artifact must verify. Missing products or changed bindings are explicit misses. A missing
+release is more than a reuse miss here: when any of the three is absent (or is the literal
+`undeclared`), the iteration controller dispatches no build for the unit and publishes a `BLOCKED`
+receipt naming `missing release evidence: <ids>`; dependents are blocked with it. A variant that
+names a `toolchain` must name the resolved `build_toolchain` ID, or the unit is refused the same
+way. Unrelated query-pack declarations are not substitutes for release proof. The mutable ledger
+is an index, not success authority.
 
 Successful A commits a content-addressed workspace generation and product record. Failed B may
 overwrite/delete A's target or install files: recovery restores committed bytes, modes/mtime and

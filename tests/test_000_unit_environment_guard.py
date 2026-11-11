@@ -20,6 +20,7 @@ from appsec_review.config.loader import (
     PROFILE_DIRECTORY,
     PROFILE_ENVIRONMENT,
     PROFILES,
+    RELEASE_SOURCES_KEY,
     load_config,
     profile_override_keys,
     resolve_profile_name,
@@ -146,6 +147,13 @@ def test_unit_session_does_not_inherit_production_sizing() -> None:
         offences.append(f"orchestration.dagster.max_concurrent resolves to {ambient.dagster.max_concurrent}; "
                         f"appsec-review.toml has {base_dagster['max_concurrent']}")
     base_policy = parse_review_policy(base.get("review_policy", {})).view()
+    # A release id that no layer declares takes the loader's host-pins default. That is the dev
+    # resolution of the base file, so it is expected here exactly when the resolved configuration
+    # records it as derived; an id an overlay set, or a changed declared id, is still an offence.
+    derived = {name: value for name, value in ambient.review_policy.releases.view().items()
+               if name not in base_policy["releases"]
+               and resolved.get(RELEASE_SOURCES_KEY, {}).get(name, {}).get("source") == "derived"}
+    base_policy = {**base_policy, "releases": dict(sorted({**base_policy["releases"], **derived}.items()))}
     if ambient.review_policy.view() != base_policy:
         offences.append(f"review_policy resolves to {ambient.review_policy.view()}; "
                         f"appsec-review.toml has {base_policy}")

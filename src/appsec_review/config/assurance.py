@@ -34,7 +34,11 @@ class ScopeRole(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class ComponentReleases:
-    """Opaque declarations, never computed from installed payloads."""
+    """Opaque release ids, never computed from installed payloads.
+
+    The loader may default ``build_toolchain`` to the host-pinned native build image id when no
+    layer declares it (``config.loader._resolve_release_defaults``); every other id is declared.
+    """
 
     values: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
