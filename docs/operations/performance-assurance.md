@@ -227,11 +227,30 @@ AST waits for their accepted outputs; source-only graphs do not acquire a build 
 This does not infer shipping from a file's directory or generated origin, and unknown delivery
 remains a named gap. Fixture and real-parser acceptance of this added lane remain separate gates.
 
-Leave `[review_policy.releases]` empty until the deployment owner assigns real opaque release
-IDs. Do not derive IDs from installed files, source trees, Dockerfiles, images or tool manifests.
-Missing required IDs disable the affected reuse with `missing_release_identity`; they do not
-enable fallback hashing. Changing supplied software without changing its declaration is a
-platform release-management risk, not a customer review check.
+The deployment owner assigns real opaque release IDs in `[review_policy.releases]`. A capacity
+overlay may set any ID in that table for its host (`review_policy.releases.*`; every other
+`review_policy` key is still refused), and the overlay's layer hash covers it. Do not derive IDs
+from installed files, source trees, Dockerfiles or tool manifests. The loader applies one default,
+and only when no layer declares the ID: `build_toolchain` becomes the image ID that the host pins
+bind to `[jobs.job_project_build.settings.profiles.native]`, so it changes when that image is
+rebuilt and re-pinned. That is the host's pinned observation, already frozen in the resolved
+configuration, not a fingerprint of an installed payload. `platform` and `validation` have no
+derived default and are declared; with no native build profile configured, `build_toolchain` stays
+missing. A declared value in the base file or the overlay always wins. The resolved configuration
+records each ID under `configuration_release_sources` as `declared` (with its layer), `derived`
+(from the host-pins layer, with the setting and image tag) or `undeclared` (with the reason).
+Changing supplied software without changing its declaration is a platform release-management
+risk, not a customer review check.
+
+A missing required ID never enables fallback hashing. What it does depends on the consumer:
+
+| Consumer | Required IDs | Effect of a missing ID |
+|---|---|---|
+| Build iterations (`jobs/build_iterations.py`, every language-build unit) | `platform`, `build_toolchain`, `validation` | No build is dispatched: the unit gets a `BLOCKED` receipt naming `missing release evidence: <ids>`, and its dependents are blocked. The literal value `undeclared` counts as missing. |
+| Recipe replay (`jobs/build_recipe_replay.py`) | `job_project_build` when declared, otherwise `platform`; and `validation` | The replay is refused with `missing_release_identity`. |
+| Derived dependency images (`container_runtime/project_images.py`) | `platform`, `build_toolchain` | No image reuse: the image is built again and the manifest records `missing_release_identity`. |
+| Project probes, accepted image repairs, isolated language-build checkpoints | `platform`, `build_toolchain`, `validation` | No reuse: `CHECKPOINT_MISSED` with `missing_release_identity`, then the ordinary bounded path. |
+| CodeQL database checkpoints | `platform`, `build_toolchain`, `codeql`, `codeql_runner`, `extractor_<language>` | No CodeQL reuse: the lookup is a miss with `missing_release_identity` and the database is created again; a selected predecessor database is refused. |
 
 | Component key | Responsibility |
 |---|---|
@@ -259,7 +278,9 @@ Project probes, accepted image repairs and language-build checkpoints require `p
 do not authorize reuse across runs or targets. Probe keys also bind capture mode, limits and
 applicability, and target intake integrity is checked before an early probe hit. Missing declarations
 emit `CHECKPOINT_MISSED` with `missing_release_identity` and execute the ordinary bounded path,
-subject to the separate builder prerequisite below. Language-build keys bind relevant releases;
+subject to the separate builder prerequisite below. That holds for these checkpoints only: the
+build-iteration controller that dispatches language-build units refuses to dispatch when one of
+the three is missing (see the table above). Language-build keys bind relevant releases;
 unrelated query-pack declarations do not invalidate these build checkpoints.
 CodeQL also supports explicit [preinstalled runtime declarations](codeql-analysis.md#explicit-preinstalled-runtimes)
 binding source image, accepted build image, effective user, CodeQL/runner releases and inspected

@@ -151,7 +151,9 @@ review_teams = 1
 Set `APPSEC_REVIEW_CONFIG_OVERLAY=local-capacity.toml`, pass `overlay=` to `load_config`, or choose an
 overlay under `test/acceptance` for one Dagster run with `scripts/review-start --overlay`. The
 overlay may set only `review_teams`, `[...settings.result_cache]` (see [Blue result memo](#blue-result-memo)),
-`orchestration.dagster.pools.*` and `review_policy.resources.*` (the host resource budget); any other key is rejected.
+`orchestration.dagster.pools.*`, `review_policy.resources.*` (the host resource budget) and
+`review_policy.releases.*` (the host's [component release IDs](performance-assurance.md#operator-declared-releases),
+which are not capacity and do change release-bound identities); any other key is rejected.
 It is recorded as its own hashed layer in the run's configuration manifest. Capacity is excluded
 from cell fingerprints, so runs with different team counts reuse each other's cells and produce
 identical canonical outputs.
