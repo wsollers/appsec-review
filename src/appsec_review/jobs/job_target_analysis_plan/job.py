@@ -39,6 +39,7 @@ from .planning import (
     BUILD_SYSTEMS, PLAN_SCHEMA, PROPOSAL_SCHEMA, SCANNERS,
     ambiguity_reasons, deterministic_plan, merge_proposal, summarize_catalog,
     validate_plan, validate_proposal, bounded_feedback, evidence_catalog, _publish_build_graph, model_safe,
+    feedback_request, prepare_feedback_request,
 )
 from appsec_review.jobs.job_target_analysis_plan.datasets import CONTRACT, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
@@ -376,16 +377,8 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             return {"plan": plan, "gaps": environment_gaps, "model_calls": 0, "validation_rejections": 0,
                     "terminal_status": "COMPLETED_WITH_GAPS" if environment_gaps else "SUCCEEDED"}
 
-        partitions = []
-        for key, values in sorted(grouped.items()):
-            ordered = sorted(values, key=lambda value: value["build_unit_id"])
-            partitions.extend((key, ordered[offset:offset + limits.units_per_scope])
-                              for offset in range(0, len(ordered), limits.units_per_scope))
-        omitted = max(0, len(partitions) - limits.max_scopes)
-        partitions = partitions[:limits.max_scopes]
-
-        def infer_group(item: tuple[tuple[str, str, str], list[Mapping[str, Any]]]) -> dict[str, Any]:
-            (family, build_system, image_profile), build_units = item
+        @lru_cache(maxsize=None)
+        def group_guidance(family: str, build_system: str):
             role_path = prompt_root / "roles" / f"build-engineer-{family}.md"
             role = role_path.read_text(encoding="utf-8")
             from appsec_review.guidance.workers import publish_worker_guidance
@@ -393,7 +386,11 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 unit.job.repository_root, unit.job.run_root, "build_planning", family=family, model=model,
                 build_system=build_system,
                 texts={"persona": persona, "role": role, "procedure": guidance})
-            guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + governed.encode()
+            return role, governed, guidance_sha
+
+        def prepare_group(key, build_units):
+            family, build_system, image_profile = key
+            role, governed, guidance_sha = group_guidance(family, build_system)
             paths = sorted({str(value["path"]) for build_unit in build_units
                             for value in (*build_unit.get("markers", ()),
                                           *build_unit.get("descriptor_package", {}).get("documents", ()))})
@@ -432,8 +429,34 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             }
             accepted_units = [catalog_units[str(value["build_unit_id"])] for value in build_units]
             group_catalog = {**catalog, "build_units": accepted_units}
-            from .planning import feedback_request
             request = feedback_request(request, group_catalog, limits)
+            return request, group_catalog, request_identity, guidance_sha
+
+        def partition_group(key, build_units):
+            prepared = prepare_group(key, build_units)
+            request = prepared[0]
+            _, request_bytes = prepare_feedback_request(request)
+            if (len(build_units) > 1 and
+                    len(request_bytes) > min(limits.max_request_bytes, request.max_input_tokens * 4)):
+                midpoint = len(build_units) // 2
+                yield from partition_group(key, build_units[:midpoint])
+                yield from partition_group(key, build_units[midpoint:])
+            else:
+                # An oversized singleton still reaches feedback's explicit bounded gap.
+                yield prepared
+
+        partitions, omitted = [], 0
+        for key, values in sorted(grouped.items()):
+            ordered = sorted(values, key=lambda value: value["build_unit_id"])
+            for offset in range(0, len(ordered), limits.units_per_scope):
+                for prepared in partition_group(key, ordered[offset:offset + limits.units_per_scope]):
+                    if len(partitions) < limits.max_scopes:
+                        partitions.append(prepared)
+                    else:
+                        omitted += 1
+
+        def infer_group(prepared) -> dict[str, Any]:
+            request, group_catalog, request_identity, guidance_sha = prepared
             from appsec_review.storage.shared import safe_path
 
             def read_document(item, bound):

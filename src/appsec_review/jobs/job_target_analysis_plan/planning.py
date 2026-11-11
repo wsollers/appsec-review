@@ -542,6 +542,15 @@ def model_safe(value):
     return redact(value) if isinstance(value, str) else value
 
 
+def prepare_feedback_request(request):
+    """Return the sanitized request and the exact bytes used for feedback admission."""
+    from dataclasses import asdict, replace
+    current = replace(request, summary=model_safe(request.summary),
+                      prior_response=model_safe(request.prior_response),
+                      repair_errors=tuple(model_safe(request.repair_errors)))
+    return current, canonical_json(asdict(current))
+
+
 def feedback_request(request, catalog, limits):
     """Offer exact additional inventory identities within the existing request-byte budget."""
     from dataclasses import asdict, replace
@@ -646,10 +655,7 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
         except ExecutionLimit:
             errors.append("internal_feedback_deadline")
             break
-        current = replace(current, summary=model_safe(current.summary),
-                          prior_response=model_safe(current.prior_response),
-                          repair_errors=tuple(model_safe(current.repair_errors)))
-        request_bytes = canonical_json(asdict(current))
+        current, request_bytes = prepare_feedback_request(current)
         if len(request_bytes) > min(limits.max_request_bytes, current.max_input_tokens * 4):
             errors.append("feedback_request_byte_bound")
             break
