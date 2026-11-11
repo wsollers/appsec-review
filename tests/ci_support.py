@@ -11,6 +11,18 @@ from appsec_review.container_runtime.executor import ExecutionResult
 DIGEST = "sha256:" + "c" * 64
 
 
+def checkov_workflow_permissions(path: str = ".github/workflows/ci.yml", *,
+                                name: str = "ci", span: tuple[int, int] = (0, 1)) -> dict:
+    """Native workflow-level permissions metadata, including the missing-location sentinel."""
+    return {
+        "check_id": "CKV2_GHA_1", "check_name": "Ensure top-level permissions are not set to write-all",
+        "file_abs_path": f"/target/{path}", "file_path": f"/{path}", "file_line_range": list(span),
+        "resource": f"on({name})", "code_block": None,
+        "check_result": {"result": "FAILED", "evaluated_keys": ["permissions"]},
+        "workflow_name": name, "triggers": [["push", "pull_request"]], "job": [""],
+    }
+
+
 def zizmor_finding(*, path: str = ".github/workflows/build.yml", row: int = 14,
                    column: int = 8, offset: int = 198,
                    feature: str = "uses: actions/checkout@v4") -> dict:

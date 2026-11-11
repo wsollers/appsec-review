@@ -219,7 +219,7 @@ def _zizmor_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str,
 
 
 def _checkov_source_records(records: list[dict[str, Any]], path: str, data: bytes) -> list[dict[str, Any]]:
-    """Bind Checkov's line ranges to this file; retain overshooting ranges as coarse provenance."""
+    """Bind native line ranges, or the known permissions sentinel, without inventing exact spans."""
     lines = data.splitlines(keepends=True)
     offsets = [0]
     for line in lines:
@@ -233,20 +233,30 @@ def _checkov_source_records(records: list[dict[str, Any]], path: str, data: byte
             if key in native and native[key] not in allowed:
                 raise _CiOutputParseError(f"Checkov {key} does not identify the scanned definition")
         span = native.get("file_line_range")
+        workflow_scope = (
+            record["provider"] == "github" and record["native_rule_id"] == "CKV2_GHA_1"
+            and span == [0, 1] and native.get("code_block", "missing") is None
+            and native.get("evaluated_keys") == ["permissions"] and native.get("job") == [""]
+            and isinstance(native.get("workflow_name"), str) and bool(native["workflow_name"])
+            and native.get("resource") == f"on({native['workflow_name']})"
+        )
         if (not isinstance(span, list) or len(span) != 2
-                or any(type(value) is not int or value < 1 for value in span) or span[1] < span[0]):
+                or any(type(value) is not int or value < (0 if workflow_scope else 1) for value in span)
+                or span[1] < span[0]):
             raise _CiOutputParseError("Checkov requires a positive ordered file_line_range")
-        start, end = span
+        start, end = (1, len(lines)) if workflow_scope else span
         if start > len(lines):
             raise _CiOutputParseError("Checkov file_line_range does not overlap the source")
-        if end > len(lines):
+        if workflow_scope or end > len(lines):
             last_content = lines[-1].rstrip(b"\r\n")
             record.update(
                 start_line=start, end_line=len(lines), start_column=1, end_column=len(last_content) + 1,
                 start_byte=offsets[start - 1], end_byte=offsets[-2] + len(last_content),
                 producer_location={"tool_id": record["tool_id"], **native, "source_line_count": len(lines),
-                                   "reason": "native_end_line_exceeds_source"},
-                mapping_method="checkov-line-range-clipped", confidence=0.5, ambiguous=True,
+                                   "reason": ("workflow_permission_without_native_span" if workflow_scope
+                                              else "native_end_line_exceeds_source")},
+                mapping_method="checkov-workflow-scope" if workflow_scope else "checkov-line-range-clipped",
+                confidence=0.5, ambiguous=True,
             )
         bound.append(record)
     return bound
@@ -305,6 +315,12 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
             if spec.tool_id == "tool-checkov":
                 record["producer_location"] = {key: item[key] for key in
                                                ("file_abs_path", "file_path", "file_line_range") if key in item}
+                if record["native_rule_id"] == "CKV2_GHA_1" and lines == [0, 1]:
+                    record["producer_location"].update({key: item[key] for key in
+                                                        ("code_block", "resource", "workflow_name", "job") if key in item})
+                    result = item.get("check_result")
+                    if isinstance(result, Mapping) and "evaluated_keys" in result:
+                        record["producer_location"]["evaluated_keys"] = result["evaluated_keys"]
             records.append(record)
     return records
 

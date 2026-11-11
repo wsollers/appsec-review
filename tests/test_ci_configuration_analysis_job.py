@@ -30,7 +30,7 @@ from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.consume import upstream_scope
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage.shared import publication_scope
-from tests.ci_support import DIGEST, FakeExecutor, zizmor_finding
+from tests.ci_support import DIGEST, FakeExecutor, checkov_workflow_permissions, zizmor_finding
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -525,3 +525,46 @@ def test_checkov_out_of_source_range_publishes_an_explicit_coarse_span(tmp_path:
         assert location[:9] == (path, 1, 9, 0, end_byte, end_column, "checkov-line-range-clipped", 0.5, 1)
         assert json.loads(location[9])["file_line_range"] == [1, 11]
     assert outputs["ci_coverage.publish_handoff"]["finding_count"] == len(correlation["findings"])
+
+
+def test_checkov_permission_zero_sentinel_publishes_workflow_scope_not_line_one(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    path = ".github/workflows/ci.yml"
+    workflow = "name: ci\n\non:\n  push:\n  pull_request:\n\njobs:\n  build:\n    strategy:\n"
+    native = checkov_workflow_permissions(path)
+    payload = json.dumps({"results": {"failed_checks": [native]}}).encode()
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, [],
+                                        stdout={"tool-checkov": payload})
+    outcome, run_root = _run_ci_publication(
+        config, _target(tmp_path, {path: workflow}), build_job(executor_factory=factory))
+    assert outcome["status"] == "SUCCEEDED", outcome
+    outputs = outcome["outputs"]
+    scan = outputs["ci_analysis.github_checkov_scan"]
+    assert scan["record_count"] == 1 and scan["gaps"] == []
+    assert (run_root / scan["executions"][0]["stdout_path"]).read_bytes() == payload
+    indexed = outputs["ci_observation_publication.github_checkov_index"]
+    [record] = indexed["records"]
+    assert (record["native_rule_id"], record["message"], record["severity"]) == (
+        native["check_id"], native["check_name"], "medium")
+    assert (record["start_line"], record["end_line"]) == (1, 9)
+    assert record["mapping_method"] == "checkov-workflow-scope"
+    assert record["ambiguous"] is True and record["confidence"] == 0.5
+    assert record["producer_location"]["file_line_range"] == [0, 1]
+    assert record["producer_location"]["resource"] == "on(ci)"
+    assert record["producer_location"]["evaluated_keys"] == ["permissions"]
+    normalized = json.loads((run_root / indexed["normalized_artifact"]["path"]).read_bytes())
+    assert normalized["records"][0]["mapping_method"] == "checkov-workflow-scope"
+    correlation = outputs["ci_correlation.correlate_findings"]
+    [finding] = [value for value in correlation["findings"] if value["tools"] == ["tool-checkov"]]
+    assert finding["end_line"] == 9 and finding["ambiguous"] is True
+    for artifact in (indexed["artifact"], correlation["index_artifact"]):
+        with sqlite3.connect(run_root / artifact["path"]) as connection:
+            [location] = connection.execute(
+                "SELECT path, start_line, end_line, start_byte, end_byte, mapping_method, confidence, "
+                "ambiguous, producer_location_json FROM locations WHERE mapping_method = 'checkov-workflow-scope'"
+            ).fetchall()
+        assert location[:8] == (path, 1, 9, 0, len(workflow.rstrip("\n").encode()),
+                               "checkov-workflow-scope", 0.5, 1)
+        assert json.loads(location[8])["file_line_range"] == [0, 1]
+    assert outputs["ci_observation_publication.github_zizmor_index"]["records"] == []
+    assert outputs["ci_observation_publication.github_actionlint_index"]["records"] == []
