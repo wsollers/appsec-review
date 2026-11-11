@@ -58,3 +58,28 @@ The 21 unique gap summaries (39 occurrences) are preserved, not represented as c
 or vulnerability evidence. No code repair or unit-test change was needed for this documented
 partial result. Logs: `runs/c094-source-history-{run,accept}.log`.
 Next: `job_ci_configuration_analysis`.
+
+## Planner-repair replay, 2026-11-11
+
+The later planner request-size repair (`3edf424853a2f05ba047f59260cc32dd9d2fb88f`,
+integrated as `f36939229`) also invalidates this job through the existing static cross-job import
+closure. No release-scoping change was made. The parent inspected/admitted repair
+`fca5656c7067c87c36c83cb9fa609742f2daf08433ffdac8410048c798f222ed` against release
+`f7285bd1b10ad9fc62847e4d144b3b187acd730b03efbd90119d96d2d5ff91a0`, preserving the same
+configuration, target and tooling image, then replayed the three early gates individually.
+
+History replay dispatch `77b87591-cd6f-4261-bf78-ac228c16b344`, `attempt_0002`, completed
+with the same declared partial dispositions and 21 gap summaries/39 occurrences, zero audit
+findings. **It is not reaccepted.** The preserved-key comparison reports thirteen coverage
+differences: nine execution-mount `runtime_source` values changed from Docker Desktop's
+`/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/...` aliases to native checkout paths,
+plus four normalized artifact-content signatures. Logical mount `source`, `target` and
+`read_only` fields remain the same after ordinary run/attempt masking.
+
+Report:
+`runs/metadata/stepwise/2026-11-10-0003/checks/job_source_history_analysis-77b87591-cd6f-4261-bf78-ac228c16b344.json`.
+No general environment exemption, mount-path equivalence, key rewrite or manual acceptance
+was applied. The parent reverified all 27 recorded dispatches stopped and paused before CI,
+environment and planner replays. Original acceptance keys and raw evidence remain intact.
+Any new comparison rule requires a narrowly justified evidence check, not treating changed
+content hashes as automatically volatile.
