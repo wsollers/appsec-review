@@ -613,16 +613,13 @@ def test_node_restore_recipes_are_prepared_without_running_dependency_fetches(tm
         }), encoding="utf-8")
     config = load_config(config_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(infer=NodeRestoreRecipeModel().complete)]).run(
-            target_root=target, source_fingerprint=fingerprint)
     calls: list[tuple[str, ...]] = []
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(NodeRestoreRecipeModel().complete), build_projects(
         executor_factory=lambda unit, profile: NodeRestoreExecutor(calls),
         image_resolver_factory=lambda unit: FakeImageResolver())]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+            target_root=target, source_fingerprint=fingerprint)
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     dispatches = {item["root"]: item for item in accepted["build_dispatches"]}
     assert set(dispatches) == {"case-086", "case-087"}
     assert all(item["recipe"]["configure_commands"] == [["npm", "ci"]] for item in dispatches.values())
@@ -792,6 +789,11 @@ def test_image_repair_vocabulary_names_no_case_identifiers() -> None:
     assert not re.search(r"case-?\d{3}", source) and "multivuln" not in source.lower()
 
 
+def _producers(infer=None):
+    """The producers job_project_build consumes; a graph supplies only producers that are in it."""
+    return [build_intake(), build_catalog(), build_plan(infer=infer) if infer is not None else build_plan()]
+
+
 def _fixture(tmp_path: Path, *, declared_releases: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
@@ -864,22 +866,19 @@ def test_native_windows_placeholder_is_blocked_without_hiding_alternate_cmake_au
             }]})
 
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [
-        build_intake(), build_catalog(), build_plan(infer=Model().complete),
-    ]).run(target_root=target, source_fingerprint=fingerprint)
     calls = []
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(Model().complete), build_projects(
         executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
         image_resolver_factory=lambda unit: FakeImageResolver(),
-    )]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    )]).run(target_root=target, source_fingerprint=fingerprint)
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     windows = next(x for x in accepted["images"]["native"]["entries"]
                    if x["action"]["build_system"] == "msbuild")
     assert windows["terminal_status"] == "BLOCKED"
     assert any("unavailable_native_windows_toolchain" in gap for gap in windows["gaps"])
     assert any(x["build_system"] == "cmake" for x in accepted["build_dispatches"])
     assert not any(argv[0] == "make" for argv in calls)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "COMPLETED_WITH_GAPS"
 
 
 def test_disabled_build_capture_records_policy_skips_without_execution(tmp_path: Path) -> None:
@@ -889,16 +888,13 @@ def test_disabled_build_capture_records_policy_skips_without_execution(tmp_path:
         source.replace('mode = "required"', 'mode = "disabled"', 1), encoding="utf-8")
     config = load_config(config.source_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-    ).run(target_root=target, source_fingerprint=fingerprint)
     calls: list[tuple[str, ...]] = []
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(RecipeModel().complete), build_projects(
         executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
         image_resolver_factory=lambda unit: FakeImageResolver())]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
+            target_root=target, source_fingerprint=fingerprint)
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
     assert calls == [] and accepted["probe_receipts"] == [] and accepted["build_dispatches"] == []
     assert {item["disposition"] for item in accepted["processing_decisions"]} == {"SKIPPED_POLICY"}
     assert all(item["configuration_sha256"] == config.resolved_sha256
@@ -923,15 +919,14 @@ def test_project_build_has_independent_language_branches(tmp_path: Path) -> None
 def test_project_build_resolves_missing_cmake_recipe_deterministically(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
-        target_root=target, source_fingerprint=fingerprint)
     calls = []
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(), build_projects(
         executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
         image_resolver_factory=lambda unit: FakeImageResolver())]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # Rust still requires an accepted recipe.
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+            target_root=target, source_fingerprint=fingerprint)
+    # Rust still requires an accepted recipe.
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     native = next(item for item in accepted["build_dispatches"] if item["family"] == "native")
     assert native["recipe_provenance"] == "deterministic-cmake-marker"
     assert native["recipe"]["configure_commands"][0][-2:] == [
@@ -942,8 +937,6 @@ def test_project_build_resolves_missing_cmake_recipe_deterministically(tmp_path:
 def test_preparation_does_not_run_either_family_even_with_a_failing_executor(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
-        target_root=target, source_fingerprint=fingerprint)
 
     class Selective(FakeBuildExecutor):
         def execute(self, argv, *, workspace, working_directory, environment):
@@ -956,10 +949,10 @@ def test_preparation_does_not_run_either_family_even_with_a_failing_executor(tmp
 
     job = build_projects(executor_factory=lambda unit, profile: Selective([]),
                          image_resolver_factory=lambda unit: FakeImageResolver())
-    outcome = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
-                                             run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    outcome = GraphRunner(config, [*_producers(RecipeModel().complete), job]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     assert accepted["probe_receipts"] == []
     assert {item["family"] for item in accepted["static_dispatches"]
             if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
@@ -969,17 +962,14 @@ def test_preparation_does_not_run_either_family_even_with_a_failing_executor(tmp
 def test_preparation_does_not_fabricate_capture_or_infer_image_repairs(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-    ).run(target_root=target, source_fingerprint=fingerprint)
     model = RepairModel((["should-not-be-installed"],))
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(RecipeModel().complete), build_projects(
         executor_factory=lambda unit, profile: CaptureGapExecutor([]),
         image_resolver_factory=lambda unit: RepairImageResolver(tmp_path / "image-metadata"),
         infer=model.complete,
-    )]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    )]).run(target_root=target, source_fingerprint=fingerprint)
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     assert {item["family"] for item in accepted["build_dispatches"]} == {"native", "rust"}
     assert model.calls == 0
     assert accepted["probe_receipts"] == []
@@ -995,15 +985,13 @@ def test_preparation_never_rebuilds_to_probe_reuse(
     job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
                          image_resolver_factory=lambda unit: FakeImageResolver())
     run_ids = []
+    graph = GraphRunner(config, [*_producers(RecipeModel().complete), job])
     for ordinal in range(2):
-        if ordinal == 0 or not same_run:
-            upstream = GraphRunner(
-                config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-            ).run(target_root=target, source_fingerprint=fingerprint)
-        run_ids.append(upstream["run_id"])
-        GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
-                                      run_id=upstream["run_id"],
-                                      force_from="job_project_build" if ordinal and same_run else None)
+        rerun = bool(ordinal and same_run)
+        outcome = graph.run(target_root=target, source_fingerprint=fingerprint,
+                            run_id=run_ids[0] if rerun else None,
+                            force_from="job_project_build" if rerun else None)
+        run_ids.append(outcome["run_id"])
     assert calls == []
     second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
     assert second["probe_receipts"] == []
@@ -1055,17 +1043,15 @@ def test_repeated_preparation_preserves_recipe_without_speculative_image_repair(
             calls, profile, success_package="libtwo-dev"),
         image_resolver_factory=lambda unit: resolver, infer=model.complete)
     run_ids = []
-    upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-    ).run(target_root=target, source_fingerprint=fingerprint)
+    graph = GraphRunner(config, [*_producers(RecipeModel().complete), job])
     for ordinal in range(2):
-        run_ids.append(upstream["run_id"])
-        outcome = GraphRunner(config, [job]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"],
+        outcome = graph.run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_ids[0] if ordinal else None,
             force_from="job_project_build" if ordinal else None)
-        assert outcome["status"] == "SUCCEEDED"
+        run_ids.append(outcome["run_id"])
+        assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
         if ordinal == 0:
-            first = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+            first = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
 
     native_dispatch = next(value for value in first["build_dispatches"] if value["family"] == "native")
     assert first["probe_receipts"] == []
@@ -1089,9 +1075,6 @@ def test_repeated_preparation_preserves_recipe_without_speculative_image_repair(
 def test_environment_repair_is_not_requested_without_an_observed_production_failure(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-    ).run(target_root=target, source_fingerprint=fingerprint)
     requests = []
 
     def model(request, *, timeout_seconds):
@@ -1109,13 +1092,13 @@ def test_environment_repair_is_not_requested_without_an_observed_production_fail
                                    environment=environment)
 
     resolver = RepairImageResolver(tmp_path / "image-metadata")
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(RecipeModel().complete), build_projects(
         executor_factory=lambda unit, profile: GitFetchExecutor([]),
         image_resolver_factory=lambda unit: resolver, infer=model)]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
+            target_root=target, source_fingerprint=fingerprint)
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
     assert requests == []
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     dispatch = next(value for value in accepted["build_dispatches"] if value["family"] == "rust")
     assert dispatch["recipe"]["environment"] == {}
     assert "image_repairs" not in dispatch["recipe"]
@@ -1125,17 +1108,14 @@ def test_environment_repair_is_not_requested_without_an_observed_production_fail
 def test_preparation_does_not_exhaust_image_attempts_before_production(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-    ).run(target_root=target, source_fingerprint=fingerprint)
     model = RepairModel((["libone-dev"], ["libtwo-dev"], ["libthree-dev"]))
     resolver = RepairImageResolver(tmp_path / "image-metadata")
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(RecipeModel().complete), build_projects(
         executor_factory=lambda unit, profile: RepairingExecutor([], profile, success_package=None),
         image_resolver_factory=lambda unit: resolver, infer=model.complete)]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+            target_root=target, source_fingerprint=fingerprint)
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     assert accepted["probe_receipts"] == []
     assert model.calls == 0
     assert len(accepted["build_dispatches"]) == 2
@@ -1144,9 +1124,6 @@ def test_preparation_does_not_exhaust_image_attempts_before_production(tmp_path:
 def test_preparation_never_manufactures_failure_evidence_to_request_repairs(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(
-        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-    ).run(target_root=target, source_fingerprint=fingerprint)
     repair = RepairModel(([], ["libtwo-dev"]))
     requests = []
 
@@ -1154,12 +1131,12 @@ def test_preparation_never_manufactures_failure_evidence_to_request_repairs(tmp_
         requests.append(request)
         return repair.complete(request, timeout_seconds=timeout_seconds)
 
-    outcome = GraphRunner(config, [build_projects(
+    outcome = GraphRunner(config, [*_producers(RecipeModel().complete), build_projects(
         executor_factory=lambda unit, profile: RepairingExecutor([], profile, success_package="libtwo-dev"),
         image_resolver_factory=lambda unit: RepairImageResolver(tmp_path / "image-metadata"),
-        infer=model)]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
+        infer=model)]).run(target_root=target, source_fingerprint=fingerprint)
+    assert outcome["jobs"]["job_project_build"]["status"]["status"] == "SUCCEEDED"
     assert requests == []
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    accepted = load_accepted_builds(config.runtime.runs_dir / outcome["run_id"])
     assert accepted["probe_receipts"] == []
     assert len(accepted["build_dispatches"]) == 2

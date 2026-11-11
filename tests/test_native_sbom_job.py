@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from importlib import import_module
 import json
 from pathlib import Path
 import sqlite3
@@ -18,6 +19,7 @@ from appsec_review.jobs.job_evidence_collection.evidence import build_envelope
 from appsec_review.observability import aggregate_run_metrics
 from appsec_review.retrieval import EntityKind, IndexBuilder, IndexIdentity, RetrievalCore, write_manifest
 from appsec_review.runtime import UnitContext
+from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import reference
@@ -37,12 +39,18 @@ def _write(root: Path, name: str, document: dict) -> dict:
 
 
 def _framework(root: Path, job: str, outputs: dict, artifacts: list[dict], *,
-               snapshot: str = SNAPSHOT, canonical: bool = False) -> dict:
-    path = (root / "data/jobs" / job / "attempts/attempt_0001/handoff.json" if canonical else
-            root / "data" / "native-sbom-fixtures" / (job + ".json"))
+               snapshot: str = SNAPSHOT, attempt: str = "attempt_0001") -> dict:
+    # The runner resolves a pinned producer only at its attempt path, never at a free-standing file.
+    # A republication is a newer attempt: an accepted attempt is immutable.
+    path = root / "data/jobs" / job / "attempts" / attempt / "handoff.json"
+    # Typed input admission compares each requirement with the producer's own declared datasets,
+    # so the synthetic producer claims the contract the registered producer claims.
+    declared = import_module(f"appsec_review.jobs.{job}.datasets").DATASETS
+    atomic_json(path.parent / "claim.json", {"dataset_contract": dataset_contract(job, sorted(
+        {item.step for item in declared} | {unit_id.split(".")[0] for unit_id in outputs}), declared)})
     write_fixture_handoff(root, path, {
         "status": "ACCEPTED", "job_id": job,
-        "run_id": root.name, "attempt_id": "attempt_0001", "source_fingerprint": snapshot,
+        "run_id": root.name, "attempt_id": attempt, "source_fingerprint": snapshot,
         "started_at": CREATED, "outputs": outputs, "artifacts": artifacts,
     })
     identity = reference(root, path)
@@ -68,6 +76,28 @@ def _manifest(root: Path, target: Path, name: str, *, observation: dict | None =
     write_manifest(manifest_path, run_id=root.name, target_snapshot=snapshot, target_root=target,
                    indexes=(index,))
     return reference(root, manifest_path), [reference(root, path), reference(root, manifest_path)]
+
+
+def _catalog_indexes(root: Path, target: Path) -> tuple[dict, list[dict]]:
+    """The retrieval shards the catalog's dataset contract requires, owned by their declaring steps."""
+    from dataclasses import asdict
+    from appsec_review.jobs.job_target_catalog.datasets import DATASETS
+    shards = []
+    for declaration in (item for item in DATASETS if item.required):
+        (name,) = declaration.indexes
+        path = root / "data" / "indices" / "catalog" / f"{name}.sqlite"
+        builder = IndexBuilder(path, name=name, fingerprint="a" * 64, target_snapshot=SNAPSHOT)
+        shards.append((declaration, IndexIdentity(
+            name, "appsec-review/retrieval-index/2", builder.build(), "a" * 64,
+            path.relative_to(root).as_posix(),
+            {"job": "job_target_catalog", "unit": f"{declaration.step}.fixture"}, ())))
+    manifest_path = root / "data" / "indices" / "catalog" / "manifest.json"
+    write_manifest(manifest_path, run_id=root.name, target_snapshot=SNAPSHOT, target_root=target,
+                   indexes=tuple(identity for _, identity in shards))
+    manifest = reference(root, manifest_path)
+    outputs = {f"{declaration.step}.fixture_{identity.name}": {
+        "index_manifest": manifest, "index_identity": asdict(identity)} for declaration, identity in shards}
+    return outputs, [manifest, *(reference(root, root / identity.relative_path) for _, identity in shards)]
 
 
 def seed(tmp_path: Path, *, files: dict[str, bytes] | None = None, source_syft: bool = True,
@@ -102,9 +132,10 @@ def seed(tmp_path: Path, *, files: dict[str, bytes] | None = None, source_syft: 
         "artifacts": {"repository_discovery.partition_repository": partition,
                       "component_discovery.catalog_dependencies": dependencies},
     })
+    index_outputs, index_members = _catalog_indexes(root, target)
     _framework(root, "job_target_catalog",
-               {"publish_catalog.publish_handoff": {"artifact": catalog}},
-               [partition, dependencies, catalog])
+               {"publish_catalog.publish_handoff": {"artifact": catalog}, **index_outputs},
+               [partition, dependencies, catalog, *index_members])
     language = _write(root, "language.json", {
         "schema": "appsec-review/language-build-handoff/2", "source_fingerprint": SNAPSHOT,
         "receipts": [], "gaps": [],
@@ -189,16 +220,15 @@ def _real_syft_publication(tmp_path):
     language = _write(root, "language.json", {
         "schema": "appsec-review/language-build-handoff/2", "source_fingerprint": snapshot,
         "receipts": [], "gaps": []})
-    language_handoff = _framework(root, "job_language_build",
-        {"acceptance.publish_handoff": {"artifact": language}}, [language], snapshot=snapshot,
-        canonical=True)
+    _framework(root, "job_language_build",
+        {"acceptance.publish_handoff": {"artifact": language}}, [language], snapshot=snapshot)
     manifest, members = _manifest(root, target, "artifact", snapshot=snapshot)
     artifact = _write(root, "artifact-index.json", {
         "schema": "appsec-review/artifact-indexing/1", "source_fingerprint": snapshot,
         "target_artifacts": [], "gaps": [], "index_manifest": manifest})
-    artifact_handoff = _framework(root, "job_artifact_indexing",
+    _framework(root, "job_artifact_indexing",
         {"acceptance.publish_handoff": {"artifact": artifact, "index_manifest": manifest}},
-        [artifact, *members], snapshot=snapshot, canonical=True)
+        [artifact, *members], snapshot=snapshot)
     calls = []
     class SyftExecutor(FakeExecutor):
         def execute(self, request):
@@ -216,10 +246,12 @@ def _real_syft_publication(tmp_path):
                     lambda unit: _assemble_manifest(unit, ("software_inventory.syft_index",)),
                     ("software_inventory.syft_index",))
     publish = next(unit for unit in job.units if unit.unit_id == "evidence_publication.publish_handoff")
-    job = replace(job, units=(*units, assembly, publish), datasets=())
-    upstream = {job_id: outcome["handoff_sha256"] for job_id, outcome in base["jobs"].items()}
-    upstream.update(job_language_build=language_handoff["sha256"],
-                    job_artifact_indexing=artifact_handoff["sha256"])
+    # The reduced producer keeps its declared datasets: the consumer admits them by contract.
+    job = replace(job, units=(*units, assembly, publish))
+    # The evidence producer is supplied only what its contract declares; the native consumer below
+    # selects the synthetic language-build and artifact-index publications by their accepted pointers.
+    upstream = {job_id: outcome["handoff_sha256"] for job_id, outcome in base["jobs"].items()
+                if job_id in job.consumes}
     result = JobRunner(config).run(job, run_id=root.name, target_root=target,
                                    source_fingerprint=snapshot, upstream_handoffs=upstream)
     assert calls == ["tool-syft"]
@@ -258,15 +290,19 @@ def test_real_syft_producer_common_publication_and_native_consumer(tmp_path, dam
         atomic_json(root / "data/jobs/job_evidence_collection/latest.json", {
             "handoff_path": path.relative_to(root).as_posix(), "handoff_sha256": file_sha256(path)})
     runner, job = JobRunner(config), build_job()
-    claim = runner.begin_attempt(job, run_id=root.name, target_root=target, source_fingerprint=snapshot)
     if damage is None:
+        claim = runner.begin_attempt(job, run_id=root.name, target_root=target, source_fingerprint=snapshot)
         loaded = runner.execute_or_reuse_unit(job, claim, "inputs.load_accepted")
         assert loaded["source_syft"] == source
         assert loaded["native_files"]
     else:
+        # A damaged publication is refused at input admission or, failing that, by the loading unit.
         with pytest.raises((NativeInputIntegrityError, ValueError)):
+            claim = runner.begin_attempt(job, run_id=root.name, target_root=target,
+                                         source_fingerprint=snapshot)
             runner.execute_or_reuse_unit(job, claim, "inputs.load_accepted")
-        assert json.loads((root / claim["attempt_path"] / "status.json").read_bytes())["status"] == "FAILED"
+        (status,) = (root / "data/jobs/job_dependency_intelligence/attempts").glob("*/status.json")
+        assert json.loads(status.read_bytes())["status"] == "FAILED"
         assert not (root / "data/jobs/job_dependency_intelligence/latest.json").exists()
 
 
@@ -274,7 +310,8 @@ def test_catalog_membership_is_required_for_native_inputs(tmp_path: Path) -> Non
     config, root, target = seed(tmp_path)
     framework, _ = accepted_framework(root, "job_target_catalog", 1_000_000)
     framework["artifacts"] = [ref for ref in framework["artifacts"] if not ref["path"].endswith("partition.json")]
-    _framework(root, "job_target_catalog", framework["outputs"], framework["artifacts"])
+    _framework(root, "job_target_catalog", framework["outputs"], framework["artifacts"],
+               attempt="attempt_0002")
     runner, job = JobRunner(config), build_job()
     claim = runner.begin_attempt(job, run_id=RUN_ID, target_root=target, source_fingerprint=SNAPSHOT)
     with pytest.raises(NativeInputIntegrityError, match="not bound"):
@@ -393,7 +430,8 @@ def test_source_size_change_aborts_native_discovery(tmp_path: Path) -> None:
 def test_source_syft_tampering_is_admission_failure_not_native_only_success(tmp_path: Path) -> None:
     config, root, target = seed(tmp_path)
     (root / "data" / "native-sbom-fixtures" / "syft.json").write_bytes(b"{}")
-    with pytest.raises(RuntimeError, match="integrity mismatch"):
+    # Input admission verifies the producer publication before any unit runs, so it raises directly.
+    with pytest.raises(ValueError, match="integrity mismatch"):
         execute(config, root, target)
     assert not (root / "data" / "jobs" / "job_dependency_intelligence" / "latest.json").is_file()
 
@@ -457,7 +495,8 @@ def test_workspace_and_embedded_native_evidence_resolves_normalized_selectors(
         }], "gaps": [],
     })
     _framework(root, "job_language_build",
-               {"acceptance.publish_handoff": {"artifact": language}}, [language, protected, manifest])
+               {"acceptance.publish_handoff": {"artifact": language}}, [language, protected, manifest],
+               attempt="attempt_0002")
     execute(config, root, target)
     accepted = load_accepted_dependency_intelligence(root)
     discovery = json.loads((root / accepted["native_discovery"]["path"]).read_bytes())

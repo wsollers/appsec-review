@@ -33,8 +33,13 @@ from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
+from appsec_review.runtime.registry import builtin_registry
 from appsec_review.storage import canonical_json, file_sha256
-from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, simulated_executor
+from tests.capture_fakes import (
+    SYNTHETIC_SECRET, capturing_fake, fixture_compiler_profiles, minimal_elf, simulated_executor,
+)
+from tests.test_native_target_enforcement import _elf_header
+from tests.release_support import write_release
 
 
 ROOT = Path(__file__).parents[1]
@@ -251,6 +256,17 @@ class NativeExecutor:
                 output.parent.mkdir(parents=True, exist_ok=True)
                 output.write_bytes(b"partial")
             return BuildCommandResult(tuple(argv), 2, b"", b"bounded failure", False)
+        if "--build" not in argv:
+            logical = f"/workspace/{working_directory}"
+            reply = workspace / working_directory / "build" / ".cmake" / "api" / "v1" / "reply"
+            reply.mkdir(parents=True, exist_ok=True)
+            (reply / "index-fixture.json").write_text(json.dumps({
+                "objects": [{"kind": "codemodel", "jsonFile": "codemodel.json"}]}), encoding="utf-8")
+            (reply / "codemodel.json").write_text(json.dumps({
+                "paths": {"source": logical, "build": f"{logical}/build"},
+                "configurations": [{"directories": [{"source": ".", "build": "."}],
+                                    "projects": [{"name": "sample", "directoryIndexes": [0]}]}],
+            }), encoding="utf-8")
         if "--build" in argv:
             root = workspace / working_directory
             build = root / "build"
@@ -259,10 +275,11 @@ class NativeExecutor:
             obj = build / "main.o"
             target = re.search(r"add_executable\(\s*([^\s)]+)", (root / "CMakeLists.txt").read_text())[1]
             binary = build / target
-            obj.write_bytes(b"object")
-            binary.write_bytes(b"\x7fELFfixture")
+            obj.write_bytes(_elf_header("x86_64"))
+            binary.write_bytes(minimal_elf(interpreter="/lib64/ld-linux-x86-64.so.2"))
             (build / "compile_commands.json").write_text(json.dumps([{
-                "directory": f"/workspace/{working_directory}/build", "file": f"/workspace/{working_directory}/main.cpp",
+                # The simulated compiler runs in the recipe's working directory, as its capture records.
+                "directory": f"/workspace/{working_directory}", "file": f"/workspace/{working_directory}/main.cpp",
                 "arguments": ["clang++", "-g", "-c", f"/workspace/{working_directory}/main.cpp", "-o",
                               f"/workspace/{working_directory}/build/main.o"],
                 "output": f"/workspace/{working_directory}/build/main.o",
@@ -274,9 +291,10 @@ class NativeExecutor:
         return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
 
 
-def native_language_executor(profile, calls: list[tuple[str, ...]], *, fail: bool = False,
-                             fail_workdirs: set[str] | None = None,
-                             phantom_compiler: bool = False, partial_output: bool = False):
+def native_build_executor(profile, calls: list[tuple[str, ...]], *, fail: bool = False,
+                          fail_workdirs: set[str] | None = None,
+                          phantom_compiler: bool = False, partial_output: bool = False):
+    """The simulated native build container, for whichever job owns the build of a native unit."""
     fake = NativeExecutor(calls, fail=fail, fail_workdirs=fail_workdirs,
                           partial_output=partial_output)
 
@@ -305,7 +323,13 @@ def native_language_executor(profile, calls: list[tuple[str, ...]], *, fail: boo
                 simulation.tool_call("clang++", linker[1:], executable="/usr/bin/clang++")
         return (None if result.timed_out else result.exit_code), result.stdout, result.stderr
 
-    return simulated_executor(profile, behavior)
+    executor = simulated_executor(profile, behavior)
+    executor.compiler_profiles = lambda **_: fixture_compiler_profiles(profile)
+    return executor
+
+
+def _never_rebuilt(unit, profile):
+    pytest.fail("job_language_build repeated a native build that job_project_build owns")
 
 
 class DotnetExecutor:
@@ -431,6 +455,12 @@ class AnalysisExecutor:
             False, False, relative(stdout), relative(stderr), relative(receipt))
 
 
+def _declare_release(repository_root: Path) -> None:
+    # Without a measured source release every job identity is undeclared and nothing accepted is
+    # reusable, so a later stage would rebuild its producers instead of consuming them.
+    write_release(repository_root, builtin_registry().job_ids())
+
+
 def _fixture(tmp_path: Path, *, declared_releases: bool = True):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
@@ -454,29 +484,59 @@ abi = "native-fixture/1"
         "cmake_minimum_required(VERSION 3.20)\nproject(sample)\nadd_executable(sample main.cpp)\n",
         encoding="utf-8")
     (target / "native" / "main.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
+    _declare_release(tmp_path)
     return load_config(config_path), target
 
 
-def _accepted_project(config, target, calls):
+def _accept(config, target, producers):
+    """Accept ``producers`` in one graph and return them with the run.
+
+    A graph supplies a job only the handoffs of producers that are in that graph, so every later
+    stage names these same producers ahead of its own job; the runner reuses their accepted
+    handoffs when their identities still match and reruns them (with these fakes) when not.
+    """
     fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(infer=NativeRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor(calls)),
-                             image_resolver_factory=lambda unit: ImageResolver(
-                                 target, releases=unit.job.review_policy.releases))
-    GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
-                                       run_id=upstream["run_id"])
-    return upstream["run_id"], fingerprint
+    outcome = GraphRunner(config, producers).run(target_root=target, source_fingerprint=fingerprint)
+    return outcome["run_id"], fingerprint, producers
+
+
+def _native_producers(target, calls, **build):
+    """Intake through project build; job_project_build runs each independent native unit's build once."""
+    return [
+        build_intake(), build_catalog(), build_plan(infer=NativeRecipeModel().complete),
+        build_projects(executor_factory=lambda unit, profile: native_build_executor(profile, calls, **build),
+                       image_resolver_factory=lambda unit: ImageResolver(
+                           target, releases=unit.job.review_policy.releases))]
+
+
+def _accepted_project(config, target, calls, **build):
+    return _accept(config, target, _native_producers(target, calls, **build))
+
+
+def _run_native(config, target, calls, *consumers, **build):
+    """Run the native producers and the consumers under test as one graph."""
+    fingerprint = source_fingerprint(target)
+    outcome = GraphRunner(config, [*_native_producers(target, calls, **build), *consumers]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    return outcome, fingerprint
+
+
+def _job_status(outcome, job_id: str) -> str:
+    return outcome["jobs"][job_id]["status"]["status"]
+
+
+def _reasons(receipt) -> list[str]:
+    """Gap reasons of a receipt, whose gaps are producer-gap records or (older lanes) plain text."""
+    return [gap["reason"] if isinstance(gap, dict) else gap for gap in receipt["gaps"]]
 
 
 def test_native_dispatch_executes_real_build_and_publishes_provenance(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
     calls: list[tuple[str, ...]] = []
-    run_id, fingerprint = _accepted_project(config, target, calls)
-    outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(profile, calls))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"  # loader dependencies are deliberately unobserved.
+    outcome, _ = _run_native(config, target, calls, build_language(executor_factory=_never_rebuilt))
+    run_id = outcome["run_id"]
+    # The delivery status of the built executable is deliberately unobserved.
+    assert _job_status(outcome, "job_language_build") == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_language_build(config.runtime.runs_dir / run_id)
     receipt = accepted["receipts"][0]
     assert receipt["terminal_status"] == "SUCCEEDED"
@@ -503,28 +563,23 @@ def test_iterative_receipts_reach_accepted_artifact_index(
 
     config, target = _fixture(tmp_path, declared_releases=scenario != "blocked")
     calls = []
-    run_id, fingerprint = _accepted_project(config, target, calls)
-    calls.clear()
-    GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(
-            profile, calls, fail=scenario == "failed", partial_output=True))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    run = config.runtime.runs_dir / run_id
+    outcome, _ = _run_native(
+        config, target, calls, build_language(executor_factory=_never_rebuilt), build_artifact_index(),
+        fail=scenario == "failed", partial_output=True)
+    run = config.runtime.runs_dir / outcome["run_id"]
     receipts = load_accepted_language_build(run)["receipts"]
     assert len(receipts) == 1
     receipt = receipts[0]
     assert receipt["terminal_status"] == scenario.upper()
     if scenario == "blocked":
         assert not calls and not receipt["artifacts"] and not receipt["commands"]
-        assert any("missing release evidence" in gap for gap in receipt["gaps"])
+        assert any("missing release evidence" in gap for gap in _reasons(receipt))
 
-    result = GraphRunner(config, [build_artifact_index()]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert result["status"] == "COMPLETED_WITH_GAPS"
+    assert _job_status(outcome, "job_artifact_indexing") == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_index(run)
     assert accepted["artifact_count"] == len(receipt["artifacts"])
     assert all(f"{receipt['build_unit_id']}: {gap}" in accepted["gaps"]
-               for gap in receipt["gaps"])
+               for gap in _reasons(receipt))
 
 
 def test_unsupported_and_unresolved_iteration_receipts_survive_publication(tmp_path: Path) -> None:
@@ -566,7 +621,7 @@ def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_prom
         "cmake_minimum_required(VERSION 3.20)\nproject(sibling)\n"
         "add_executable(sibling main.cpp)\n")
     (sibling / "main.cpp").write_text("int main() { return 1; }\n")
-    run_id, fingerprint = _accepted_project(config, target, [])
+    run_id, fingerprint, producers = _accepted_project(config, target, [])
     run = config.runtime.runs_dir / run_id
     dispatch = load_accepted_builds(run)["build_dispatches"][0]
     profile = BuildProfile("native", dispatch["image"]["image_tag"],
@@ -574,7 +629,7 @@ def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_prom
     calls = []
     launched = []
     failed = {"sibling"}
-    docker = native_language_executor(profile, calls, fail_workdirs=failed).runner
+    docker = native_build_executor(profile, calls, fail_workdirs=failed).runner
 
     def boundary(argv, timeout):
         assert tuple(argv[:2]) in {
@@ -590,7 +645,7 @@ def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_prom
 
     monkeypatch.setattr(build_executor, "_run", boundary)
     monkeypatch.setattr(build_executor, "_run_to_files", files)
-    first = GraphRunner(config, [build_language()]).run(
+    first = GraphRunner(config, [*producers, build_language()]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert first["status"] == "COMPLETED_WITH_GAPS"
     receipts = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
@@ -631,7 +686,7 @@ def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_prom
     assert read_reference(run, trial)["status"] == "SUCCEEDED"
     assert not (workspace.paths.target / "sibling/build/sibling").exists()
     select_promotion(run, context.view(), trial)
-    resumed = GraphRunner(config, [build_language()]).run(
+    resumed = GraphRunner(config, [*producers, build_language()]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id, force_from="job_language_build")
     assert resumed["status"] == "COMPLETED_WITH_GAPS"
     final = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
@@ -666,17 +721,15 @@ def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_prom
 
 def test_native_compile_database_and_wrapper_without_exec_are_not_provenance(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
-    run_id, fingerprint = _accepted_project(config, target, [])
-    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        native_language_executor(profile, [], phantom_compiler=True))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
-    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    outcome, _ = _run_native(config, target, [], build_language(executor_factory=_never_rebuilt),
+                             phantom_compiler=True)
+    assert _job_status(outcome, "job_language_build") == "COMPLETED_WITH_GAPS"
+    receipt = load_accepted_language_build(config.runtime.runs_dir / outcome["run_id"])["receipts"][0]
     assert "compiler" not in {item["tool_kind"] for item in receipt["tool_invocations"]}
     assert receipt["capture_provenance"]["unreconciled_tool_calls"] == 1
     assert receipt["capture_provenance"]["complete"] is False
-    assert any("no matching successful process-exec" in gap for gap in receipt["gaps"])
-    assert any("compiler execution was not observed" in gap for gap in receipt["gaps"])
+    assert any("no matching successful process-exec" in gap for gap in _reasons(receipt))
+    assert any("compiler execution was not observed" in gap for gap in _reasons(receipt))
     assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
 
 
@@ -707,13 +760,10 @@ def test_native_link_metadata_malformed_output_is_an_explicit_gap(
 
 def test_native_build_failure_is_a_gap_and_topology_is_generic(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
-    run_id, fingerprint = _accepted_project(config, target, [])
-    outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(
-            profile, [], fail=True, partial_output=True))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
-    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
+    outcome, _ = _run_native(config, target, [], build_language(executor_factory=_never_rebuilt),
+                             fail=True, partial_output=True)
+    assert _job_status(outcome, "job_language_build") == "COMPLETED_WITH_GAPS"
+    receipt = load_accepted_language_build(config.runtime.runs_dir / outcome["run_id"])["receipts"][0]
     assert receipt["terminal_status"] == "FAILED" and receipt["gaps"]
     assert receipt["artifacts"] == []
     graph = plan_jobs((build_language(executor_factory=lambda unit, profile: NativeExecutor([])),), config)
@@ -726,7 +776,7 @@ def test_native_build_failure_is_a_gap_and_topology_is_generic(tmp_path: Path) -
 def test_dispatch_validation_is_scoped_to_the_consuming_family(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config, target = _fixture(tmp_path)
-    run_id, fingerprint = _accepted_project(config, target, [])
+    run_id, fingerprint, producers = _accepted_project(config, target, [])
     run_root = config.runtime.runs_dir / run_id
     accepted = dict(load_accepted_builds(run_root))
     native_dispatch = deepcopy(accepted["build_dispatches"][0])
@@ -734,6 +784,10 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
     bad_id = "build-unit-" + "f" * 20
     bad_dispatch = deepcopy(native_dispatch)
     bad_dispatch.update(build_unit_id=bad_id, family="java")
+    # Only a native dispatch is bound to a project-build receipt; a Java unit is the language build's.
+    bad_dispatch.update(execution_owner="job_language_build")
+    for native_binding in ("build_receipt_sha256", "enforcement"):
+        bad_dispatch.pop(native_binding, None)
     bad_dispatch["recipe"].update(build_unit_id=bad_id, image_profile="node")
     dependencies = bad_dispatch["image"]["dependency_hashes"]
     profile = BuildProfile("java", bad_dispatch["image"]["image_tag"],
@@ -747,7 +801,8 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
     bad_dispatch["preparation_identity"] = hashlib.sha256(canonical_json(preparation)).hexdigest()
     accepted["build_dispatches"] = [native_dispatch, bad_dispatch]
     accepted["images"]["java"] = {"entries": [preparation]}
-    monkeypatch.setattr(language_build_job, "load_accepted_builds", lambda _run_root: accepted)
+    monkeypatch.setattr(language_build_job, "load_accepted_builds",
+                        lambda _run_root, **_options: accepted)
     unit = SimpleNamespace(job=SimpleNamespace(
         run_root=run_root, target_root=target, source_fingerprint=fingerprint,
         review_policy=config.review_policy))
@@ -770,15 +825,18 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
         "cmake_minimum_required(VERSION 3.20)\nproject(sibling)\nadd_executable(sibling main.cpp)\n",
         encoding="utf-8")
     (target / "sibling" / "main.cpp").write_text("int main() { return 1; }\n", encoding="utf-8")
-    run_id, fingerprint = _accepted_project(config, target, [])
-    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        native_language_executor(profile, [], fail_workdirs={"sibling"}))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    failed = {"sibling"}
+    calls: list[tuple[str, ...]] = []
+    graph = GraphRunner(config, [*_native_producers(target, calls, fail_workdirs=failed),
+                                 build_language(executor_factory=_never_rebuilt)])
+    fingerprint = source_fingerprint(target)
+    outcome = graph.run(target_root=target, source_fingerprint=fingerprint)
+    run_id = outcome["run_id"]
+    assert _job_status(outcome, "job_language_build") == "COMPLETED_WITH_GAPS"
     receipts = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     if not declared_releases:
         assert {item["terminal_status"] for item in receipts} == {"BLOCKED"}
-        assert all(any("missing release evidence" in gap for gap in item["gaps"]) for item in receipts)
+        assert all(any("missing release evidence" in gap for gap in _reasons(item)) for item in receipts)
         return
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "native": "SUCCEEDED", "sibling": "FAILED"}
@@ -788,14 +846,15 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
     first_handoff = json.loads((run_root / latest["handoff_path"]).read_text())
     first_by_root = {item["root"]: item for item in receipts}
 
-    calls: list[tuple[str, ...]] = []
-    resumed = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        native_language_executor(profile, calls))]).run(target_root=target, source_fingerprint=fingerprint,
-                                     run_id=run_id, force_from="job_language_build")
+    # job_project_build owns these builds, so the rerun is forced from it with the sibling repaired.
+    failed.clear()
+    calls.clear()
+    resumed = graph.run(target_root=target, source_fingerprint=fingerprint, run_id=run_id,
+                        force_from="job_project_build")
     second = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     by_root = {item["root"]: item for item in second}
     verify_handoff_integrity(run_root, first_handoff)
-    assert resumed["status"] == "COMPLETED_WITH_GAPS"
+    assert _job_status(resumed, "job_language_build") == "COMPLETED_WITH_GAPS"
     assert by_root["native"]["checkpoint_reused"] is declared_releases
     assert by_root["sibling"]["checkpoint_reused"] is False
     assert (by_root["native"]["workspace"] == first_by_root["native"]["workspace"]) is declared_releases
@@ -813,15 +872,12 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
 
 def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path: Path) -> None:
     config, target = _fixture(tmp_path)
-    run_id, fingerprint = _accepted_project(config, target, [])
-    GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(profile, []))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    outcome = GraphRunner(config, [build_cpp(
-        executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root))]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    outcome, _ = _run_native(
+        config, target, [], build_language(executor_factory=_never_rebuilt),
+        build_cpp(executor_factory=lambda unit: AnalysisExecutor(unit.job.run_root)), build_post_build())
+    run_id = outcome["run_id"]
     # Joern runs in the independent job_cpg_analysis, so the compiled analysis itself is complete.
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    assert _job_status(outcome, "job_cpp_compiled_analysis") == "COMPLETED_WITH_GAPS"
     result_path = Path(outcome["jobs"]["job_cpp_compiled_analysis"]["attempt_root"]) / "result.json"
     outputs = json.loads(result_path.read_text(encoding="utf-8"))["outputs"]
     assert outputs["catalog.projects"]["project_count"] == 1
@@ -839,10 +895,8 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
         path = run_root / identity["path"]
         assert path.is_file() and path.stat().st_size == identity["size_bytes"]
         assert file_sha256(path) == identity["sha256"]
-    post = GraphRunner(config, [build_post_build()]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert post["status"] == "COMPLETED_WITH_GAPS"
-    post_result = Path(post["jobs"]["job_post_build_security_assessment"]["attempt_root"]) / "result.json"
+    assert _job_status(outcome, "job_post_build_security_assessment") == "COMPLETED_WITH_GAPS"
+    post_result = Path(outcome["jobs"]["job_post_build_security_assessment"]["attempt_root"]) / "result.json"
     post_outputs = json.loads(post_result.read_text(encoding="utf-8"))["outputs"]
     assert post_outputs["load.accepted_cpp_build"]["cases"].keys() == outputs["catalog.projects"]["projects"].keys()
     assert post_outputs["index.native_units"]["project_count"] == 1
@@ -864,27 +918,24 @@ def _dotnet_fixture(tmp_path: Path, *, framework: str = "net8.0"):
     (project / "packages.lock.json").write_text('{"version":1,"dependencies":{}}', encoding="utf-8")
     (project / "Program.cs").write_text("public static class Program { public static void Main() {} }\n",
                                          encoding="utf-8")
+    _declare_release(tmp_path)
     return load_config(config_path), target
 
 
 def _accepted_dotnet(config, target, calls):
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(infer=DotnetRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls),
-                             image_resolver_factory=lambda unit: ImageResolver(
-                                 target, releases=unit.job.review_policy.releases))
-    GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
-                                       run_id=upstream["run_id"])
-    return upstream["run_id"], fingerprint
+    return _accept(config, target, [
+        build_intake(), build_catalog(), build_plan(infer=DotnetRecipeModel().complete),
+        build_projects(executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls),
+                       image_resolver_factory=lambda unit: ImageResolver(
+                           target, releases=unit.job.review_policy.releases))])
 
 
 def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path)
     assert config.job("job_language_build").typed_settings.dotnet.require_locked_restore is False
     calls: list[tuple[str, ...]] = []
-    run_id, fingerprint = _accepted_dotnet(config, target, calls)
-    outcome = GraphRunner(config, [build_language(
+    run_id, fingerprint, producers = _accepted_dotnet(config, target, calls)
+    outcome = GraphRunner(config, [*producers, build_language(
         executor_factory=lambda unit, profile: dotnet_language_executor(profile, calls))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
@@ -916,8 +967,8 @@ def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path
 def test_dotnet_rsp_containment(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path)
     calls: list[tuple[str, ...]] = []
-    run_id, fingerprint = _accepted_dotnet(config, target, calls)
-    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+    run_id, fingerprint, producers = _accepted_dotnet(config, target, calls)
+    outcome = GraphRunner(config, [*producers, build_language(executor_factory=lambda unit, profile:
         dotnet_language_executor(profile, calls, response_file=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
@@ -940,8 +991,8 @@ def test_dotnet_rsp_containment(tmp_path: Path) -> None:
 
 def test_dotnet_windows_only_project_is_explicitly_not_applicable(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path, framework="net8.0-windows")
-    run_id, fingerprint = _accepted_dotnet(config, target, [])
-    GraphRunner(config, [build_language(
+    run_id, fingerprint, producers = _accepted_dotnet(config, target, [])
+    GraphRunner(config, [*producers, build_language(
         executor_factory=lambda unit, profile: DotnetExecutor([]))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
@@ -951,8 +1002,8 @@ def test_dotnet_windows_only_project_is_explicitly_not_applicable(tmp_path: Path
 
 def test_dotnet_failed_build_retains_bounded_diagnostics_as_a_gap(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path)
-    run_id, fingerprint = _accepted_dotnet(config, target, [])
-    outcome = GraphRunner(config, [build_language(
+    run_id, fingerprint, producers = _accepted_dotnet(config, target, [])
+    outcome = GraphRunner(config, [*producers, build_language(
         executor_factory=lambda unit, profile: dotnet_language_executor(profile, [], fail=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
@@ -964,8 +1015,8 @@ def test_dotnet_failed_build_retains_bounded_diagnostics_as_a_gap(tmp_path: Path
 
 def test_dotnet_wrapper_record_without_successful_exec_is_a_provenance_gap(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path)
-    run_id, fingerprint = _accepted_dotnet(config, target, [])
-    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+    run_id, fingerprint, producers = _accepted_dotnet(config, target, [])
+    outcome = GraphRunner(config, [*producers, build_language(executor_factory=lambda unit, profile:
         dotnet_language_executor(profile, [], phantom_compiler=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
@@ -991,8 +1042,8 @@ def test_dotnet_envp_secret_is_redacted_scanned_and_never_retained(tmp_path: Pat
                 argv, environment={**environment, "GITHUB_TOKEN": SYNTHETIC_SECRET}, **options)
 
     config, target = _dotnet_fixture(tmp_path)
-    run_id, fingerprint = _accepted_dotnet(config, target, [])
-    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+    run_id, fingerprint, producers = _accepted_dotnet(config, target, [])
+    outcome = GraphRunner(config, [*producers, build_language(executor_factory=lambda unit, profile:
         SecretEnvironment(dotnet_language_executor(profile, [])))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
@@ -1010,18 +1061,15 @@ def test_dotnet_envp_secret_is_redacted_scanned_and_never_retained(tmp_path: Pat
 
 def test_dotnet_missing_accepted_recipe_remains_an_explicit_blocked_receipt(tmp_path: Path) -> None:
     config, target = _dotnet_fixture(tmp_path)
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan()]).run(
-        target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor([])),
-                             image_resolver_factory=lambda unit: ImageResolver(
-                                 target, releases=unit.job.review_policy.releases))
-    GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
-                                       run_id=upstream["run_id"])
-    outcome = GraphRunner(config, [build_language(
+    run_id, fingerprint, producers = _accept(config, target, [
+        build_intake(), build_catalog(), build_plan(),
+        build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, DotnetExecutor([])),
+                       image_resolver_factory=lambda unit: ImageResolver(
+                           target, releases=unit.job.review_policy.releases))])
+    outcome = GraphRunner(config, [*producers, build_language(
         executor_factory=lambda unit, profile: DotnetExecutor([]))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    receipt = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"][0]
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     assert receipt["family"] == "dotnet" and receipt["terminal_status"] == "BLOCKED"
     assert any("validated inference build recipe is unavailable" in gap for gap in receipt["gaps"])
@@ -1060,15 +1108,11 @@ class UnavailableImageResolver:
         raise ValueError(f"base build image identity changed: {profile.name}")
 
 
-def _blocked_project(config, target):
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(infer=NativeRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
-    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor([])),
-                             image_resolver_factory=lambda unit: UnavailableImageResolver())
-    GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
-                                       run_id=upstream["run_id"])
-    return upstream["run_id"], fingerprint
+def _blocked_producers():
+    return [
+        build_intake(), build_catalog(), build_plan(infer=NativeRecipeModel().complete),
+        build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor([])),
+                       image_resolver_factory=lambda unit: UnavailableImageResolver())]
 
 
 def test_failed_native_project_build_is_a_named_gap_in_every_native_lane_job(tmp_path: Path) -> None:
@@ -1079,13 +1123,13 @@ def test_failed_native_project_build_is_a_named_gap_in_every_native_lane_job(tmp
     from appsec_review.jobs.job_cpp_symbol_index import build_job as build_symbols
 
     config, target = _fixture(tmp_path)
-    run_id, fingerprint = _blocked_project(config, target)
-    run_root = config.runtime.runs_dir / run_id
+    outcome = GraphRunner(config, [
+        *_blocked_producers(), build_language(), build_cpp(), build_clang(), build_symbols()]).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+    run_root = config.runtime.runs_dir / outcome["run_id"]
     preparation = load_accepted_builds(run_root)["images"]["native"]["entries"][0]
     assert preparation["action"]["family"] == "native" and preparation["terminal_status"] == "FAILED"
     unit_id = preparation["action"]["build_unit_id"]
-    outcome = GraphRunner(config, [build_language(), build_cpp(), build_clang(), build_symbols()]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["build_unit_id"] == unit_id and receipt["terminal_status"] == "BLOCKED"
     assert receipt["upstream_failure"]["job_id"] == "job_project_build"
@@ -1107,9 +1151,7 @@ def test_target_without_native_units_keeps_the_native_lane_not_applicable(tmp_pa
         path.unlink()
     (target / "native").rmdir()
     (target / "notes.md").write_text("# Notes\n\nPlain text only.\n", encoding="utf-8")
-    run_id, fingerprint = _accepted_project(config, target, [])
-    outcome = GraphRunner(config, [build_language(), build_cpp()]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    outcome, _ = _run_native(config, target, [], build_language(), build_cpp())
     language = outcome["jobs"]["job_language_build"]["handoff"]["outputs"]
     assert language["execute.native"]["terminal_status"] == "NOT_APPLICABLE"
     assert language["execute.native"].get("gaps", []) == []

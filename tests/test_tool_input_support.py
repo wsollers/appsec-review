@@ -28,13 +28,14 @@ from appsec_review.jobs.job_target_analysis_plan import build_job as build_analy
 from appsec_review.jobs.job_target_analysis_plan.planning import _scanner_scope
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
-from appsec_review.storage import file_sha256
+from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.tool_inputs import (
     InputDecision, TOOL_INPUT_SUPPORT, not_applicable_summary, osv_reported_no_package_sources,
     partition_formats, partition_paths,
 )
 
 from tests import test_artifact_security_analysis as asa_tests
+from tests.artifact_input_support import recorded_graph
 from tests import test_ci_configuration_analysis as ci_tests
 from tests import test_clang_static_analysis as clang_tests
 from tests import test_evidence_collection_job as evidence_tests
@@ -285,12 +286,19 @@ def test_ci_supported_definition_failure_is_still_a_gap(tmp_path: Path) -> None:
 ELF = b"\x7fELF\x02\x01\x01" + b"\0" * 64
 
 
-def _asa_scanner(calls: list[str], *, osv_exit: int, osv_stderr: bytes, blint_exit: int = 0):
+def _asa_scanner(calls: list[str], run_root: Path, *, osv_exit: int, osv_stderr: bytes, blint_exit: int = 0):
     def scanner(capability, path, artifact, timeout, limit):
         calls.append(capability)
         exit_code = {"osv": osv_exit, "blint": blint_exit}.get(capability, 0)
+        # A scanner publishes the receipt of its own container execution with its output.
+        execution = (run_root / "data/jobs/job_artifact_security_analysis/attempts/attempt_0001/steps/analyze"
+                     / "tasks" / capability / "containers" / f"fixture-{len(calls):04d}" / "execution.json")
+        atomic_json(execution, {"exit_code": exit_code, "tool": capability})
         return {"stdout": b"{}", "stderr": osv_stderr if capability == "osv" else b"",
                 "exit_code": exit_code, "payload": b"{}",
+                "execution_receipt": {"path": execution.relative_to(run_root).as_posix(),
+                                      "sha256": file_sha256(execution),
+                                      "size_bytes": execution.stat().st_size},
                 "tool_identity": {"scanner": capability, "image": "sha256:" + "e" * 64, "rules": "fixture"}}
     return scanner
 
@@ -298,8 +306,8 @@ def _asa_scanner(calls: list[str], *, osv_exit: int, osv_stderr: bytes, blint_ex
 def test_artifact_scanner_unsupported_formats_are_never_launched(tmp_path: Path) -> None:
     config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(tmp_path)
     calls: list[str] = []
-    outcome = GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
-        calls, osv_exit=0, osv_stderr=b""))]).run(
+    outcome = recorded_graph(config, [build_artifact_security(scanner_runner=_asa_scanner(
+        calls, run_root, osv_exit=0, osv_stderr=b""))], run_id).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     accepted = load_accepted_artifact_security_analysis(run_root)
     # WebAssembly is neither a native binary, JVM bytecode, nor an osv-scanner lockfile.
@@ -318,8 +326,10 @@ def test_artifact_osv_empty_lockfile_report_is_skipped_na(tmp_path: Path) -> Non
     config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(
         tmp_path, payload=b"", name="requirements.txt", kind="generated-output")
     calls: list[str] = []
-    GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
-        calls, osv_exit=128, osv_stderr=b"No package sources found, --help for usage information."))]).run(
+    recorded_graph(config, [build_artifact_security(scanner_runner=_asa_scanner(
+        calls, run_root, osv_exit=128,
+        osv_stderr=b"No package sources found, --help for usage information."))],
+        run_id).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     osv = load_accepted_artifact_security_analysis(run_root)["capabilities"]["osv"]
     assert "osv" in calls
@@ -330,8 +340,9 @@ def test_artifact_osv_empty_lockfile_report_is_skipped_na(tmp_path: Path) -> Non
 def test_artifact_supported_scanner_failures_remain_gaps(tmp_path: Path) -> None:
     config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(tmp_path, payload=ELF)
     calls: list[str] = []
-    outcome = GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
-        calls, osv_exit=128, osv_stderr=b"failed to load local database", blint_exit=2))]).run(
+    outcome = recorded_graph(config, [build_artifact_security(scanner_runner=_asa_scanner(
+        calls, run_root, osv_exit=128, osv_stderr=b"failed to load local database", blint_exit=2))],
+        run_id).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert "blint" in calls  # ELF is supported
@@ -343,8 +354,10 @@ def test_artifact_supported_scanner_failures_remain_gaps(tmp_path: Path) -> None
 def test_artifact_osv_failure_on_a_lockfile_is_a_gap_with_its_reason(tmp_path: Path) -> None:
     config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(
         tmp_path, payload=b"requests==2.19.0\n", name="requirements.txt", kind="generated-output")
-    GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
-        [], osv_exit=128, osv_stderr=b"Scanning...\nfailed to load local database: zip: not a valid zip file\n"))]).run(
+    recorded_graph(config, [build_artifact_security(scanner_runner=_asa_scanner(
+        [], run_root, osv_exit=128,
+        osv_stderr=b"Scanning...\nfailed to load local database: zip: not a valid zip file\n"))],
+        run_id).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     gaps = load_accepted_artifact_security_analysis(run_root)["capabilities"]["osv"]["gaps"]
     assert any("osv scanner exited 128: failed to load local database: zip: not a valid zip file" in gap
