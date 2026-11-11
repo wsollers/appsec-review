@@ -221,3 +221,77 @@ real claim admission and the complete CI UnitExecutor through `publish_handoff`,
 external image/container boundary. Per-unit resume checkpoint machinery and graph-wide terminal
 telemetry are outside these new focused tests; the existing GraphRunner cases were not rewritten.
 No live, integration, acceptance or broad suite was run by the repair agent.
+
+### Parent integration, deployment and first repaired replay
+
+The parent integrated the decoder as `0afa094c5771b36ba6d8176d27f0a4c275fe156c`.
+The same 61-case command in mounted main passed assertions in 126.38 s (132.541 s total),
+but five publication cases took 19.24-77.03 s: this was **not timing-compliant validation**.
+The fixture recursively copied operator-acquired container payloads. The same repair agent
+replaced that copy with the real catalog's declared metadata closure and proved that unrelated
+binary/manifest payloads are not copied. Ready follow-up
+`55683eee8b11043ffa4f0952849be8eb155b8224` integrated as `4124c2eb9`.
+
+The exact guarded six-case follow-up command uses the same flags above with `--expect-tests 6`
+and these selectors:
+
+```text
+tests/test_ci_configuration_analysis_job.py::test_ci_config_fixture_copies_only_declared_catalog_metadata
+tests/test_ci_configuration_analysis_job.py::test_native_zizmor_is_published_with_its_source_span_and_raw_evidence
+tests/test_ci_configuration_analysis_job.py::test_invalid_zizmor_output_is_a_parser_gap_with_raw_evidence
+tests/test_ci_configuration_analysis_job.py::test_native_zizmor_keeps_observation_bounds_redaction_and_raw_output
+```
+
+In the repair checkout it passed six cases in 26.64 s / 32.284 s total, maximum 8.930 s.
+In mounted main it passed six in **26.91 s / 32.413 s total**, no skips or cases over ten seconds.
+The main reports end in `211723-904411-10565.json` (slow) and
+`212407-186300-11114.json` (compliant). The original fixture-independence regression first
+failed as intended; its receipt remains in the repair checkout's `test/tmp/zizmor-fixture-handoff.json`.
+
+After warning about the temporary UI interruption, the parent used
+`scripts/stack-restart.sh --code-location-only`. The image was verified, not rebuilt; all five
+services returned healthy and the UI returned HTTP 200. Mounted and deployed CI source SHA-256
+both equal `82b2f525aac645b3f8b0350328cf9506631bbf694cf8c6144043861db3ca7b28`.
+New measured release:
+`8ee3a51add9a3c4a4793afd4b4e39cfce69c3f4494703796b66e342d41ff8146`.
+Tooling image, frozen configuration, target fingerprint and host pins remained unchanged.
+
+The parent inspected and explicitly admitted plan
+`251ff81f1ebdaf2e645111536a41a248e4a6c82ce9375f8ffdaf69e002988c71`
+from `runs/c094-ci-zizmor-repair-plan-20261111.json`, then applied it with stepwise `recover --plan`.
+It was admissible without refusals: the three always-execute early gates rerun; intake, catalog
+and source history remain reused; CI reruns for changed implementation/validator identity;
+untouched downstream jobs remain pending. No unrelated accepted producer was invalidated.
+All 411 planned unit decisions conservatively say RUN; no failed successful-unit checkpoint
+was transplanted. Original acceptance keys, provenance, seeds and attempts remain preserved.
+
+The early-gate replays were inspected and individually reaccepted:
+model dispatch `cd1e4823-90a9-4829-8655-b5b97282efdb`, image-pin dispatch
+`b399eea8-ee35-4ea2-8c60-2f9b2f60bb15`, and target-acquisition dispatch
+`b61effe6-08f0-4851-8ad4-1f96f75a15e6`. Preserved-key comparisons passed; model results
+retained the configured Sonnet/Opus identities and availability, with only the already-authorized
+unrelated `gemini-4-carbon` inventory addition. All 58 image references matched. Acquisition
+remained `NOT_REQUESTED`, with no target operation.
+
+CI dispatch `05da1677-0fe6-445b-ad7c-cb3d5cd1cf5a`, `attempt_0002`, started at
+**2026-11-11 02:35:17 UTC** and completed at **02:38:54 UTC** (216.863 s).
+This is 35 min 42 s from this recovery request at 01:59:34.770 UTC to rerun start; the original
+pre-crash defect-detection timestamp is not available, so this is not presented as the entire
+fault-to-rerun interval. Acceptance has not occurred.
+
+The read-only content check is retained at
+`runs/metadata/stepwise/2026-11-10-0003/checks/ci-content-attempt_0002.json`.
+It verifies ten definitions, fifteen branches, 63 referenced payload hashes, 90 hierarchy nodes,
+58 observations and 58 canonical findings. All **22 Zizmor results** match native
+rule/message/severity and primary paths/line/column/byte spans in normalized records and SQLite;
+the spans resolve against the unchanged source bytes. Actionlint remains zero, Checkov five,
+and discovery/scan/publication telemetry agree. The framework check also passes; its nine gap
+summaries originate in the retained upstream catalog, not new CI parser gaps.
+
+Content acceptance is nevertheless **withheld**: Checkov's Bitbucket result names lines 1-11
+of a nine-line, 185-byte file. Its native `file_line_range` is `[1, 11]` and root configuration
+metadata ends at 10; the current generic parser carries line 11 while the index clamps only
+the byte end. The rule's actual evidence (`image: alpine:latest`) exists at line 1, but the
+published range is impossible. This newly observed CI-local source-binding defect was assigned
+back to the same bounded repair agent. Build-environment analysis has not run. All seventeen
+recorded dispatches were reverified stopped; the old CI attempts and evidence are untouched.

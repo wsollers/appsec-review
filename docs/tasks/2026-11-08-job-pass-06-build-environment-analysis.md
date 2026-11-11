@@ -101,3 +101,22 @@ Not run: integration/live.
 
 - `job_target_analysis_plan`: optional-prior consumption of this producer under the typed input
   contract (the 12 failures above).
+
+## WSOLLERS1 c094 criterion, 2026-11-11
+
+For application run `2026-11-10-0003`, the accepted catalog has 344 files and handoff
+`3c72fcf59141a780efde24e5d67ca65756ef72fc95094f9e40fc37c970b8106b`.
+None is a supported shell/batch environment script selected by the documented
+`env|setup|setvars|bootstrap` stem rule. Five cataloged PowerShell files exist:
+`projects/powershell/case-{020,054,062}/run.ps1`, `scripts/build.ps1` and `scripts/smoke.ps1`.
+They are unsupported data, not permission to execute Windows or target scripts.
+
+Before acceptance, require zero selected/inspected scripts and declarations, the exact catalog
+handoff and target fingerprint, and the explicit sole gap
+`PowerShell environment scripts are not supported`. The expected payload is
+`availability: UNAVAILABLE`, `coverage: partial`; this is not a clean or not-applicable claim.
+The publication must carry that limitation as one nonretryable `producer_reported_gap` record
+and complete with gaps. No missing-source, hash, parser, tool-startup or bound-exhaustion error
+is acceptable. Verify the artifact hash, configured bounds (64 scripts, 262144 bytes, depth 4,
+4096 assignments, 30 seconds), claim's admitted catalog pin, and all three telemetry events
+against the actual payload. The target must remain unchanged.
