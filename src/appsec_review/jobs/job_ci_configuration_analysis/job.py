@@ -160,6 +160,69 @@ _FINDING_FIELDS = frozenset({"check_id", "rule_id", "kind", "code", "message", "
                              "details", "line", "location", "file_line_range"})
 
 
+class _CiOutputParseError(ValueError):
+    """Native linter output cannot be represented as source-bound observations."""
+
+
+def _zizmor_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
+    """Decode one native array atomically; malformed findings must not look like clean scans."""
+    try:
+        findings = json.loads(payload.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise _CiOutputParseError("Zizmor output is not a UTF-8 JSON array") from exc
+    if not isinstance(findings, list):
+        raise _CiOutputParseError("Zizmor output must be an array")
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(findings):
+        try:
+            if not isinstance(item, Mapping) or type(item.get("ignored")) is not bool:
+                raise ValueError("expected a finding with a boolean ignored flag")
+            if item["ignored"]:
+                continue
+            rule, message = item["ident"], item["desc"]
+            severity = item["determinations"]["severity"]
+            if any(not isinstance(value, str) or not value.strip() for value in (rule, message, severity)):
+                raise ValueError("ident, desc and severity must be nonempty strings")
+            locations = item["locations"]
+            if not isinstance(locations, list) or any(
+                not isinstance(location, Mapping) or not isinstance(location.get("symbolic"), Mapping)
+                for location in locations
+            ):
+                raise ValueError("locations must contain symbolic locations")
+            primary = [location for location in locations if location["symbolic"].get("kind") == "Primary"]
+            if len(primary) != 1:
+                raise ValueError("expected exactly one Primary location")
+            location = primary[0]
+            native_path = location["symbolic"]["key"]["Local"]["verbatim_path"]
+            if native_path not in (path, f"/target/{path}"):
+                raise ValueError("Primary location does not identify the scanned definition")
+            span = location["concrete"]["location"]
+            start = (span["start_point"]["row"], span["start_point"]["column"])
+            end = (span["end_point"]["row"], span["end_point"]["column"])
+            start_byte, end_byte = span["offset_span"]["start"], span["offset_span"]["end"]
+            if any(type(value) is not int or value < 0 for value in (*start, *end, start_byte, end_byte)):
+                raise ValueError("Primary coordinates must be nonnegative integers")
+            if end < start or end_byte < start_byte:
+                raise ValueError("Primary span is reversed")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise _CiOutputParseError(f"Zizmor finding {index}: {exc}") from exc
+        records.append({
+            "provider": spec.provider, "tool_id": spec.tool_id, "native_rule_id": rule,
+            "category": "dangerous-defaults-and-uncaught-static-misconfiguration",
+            "message": message[:4096], "severity": severity.lower(), "path": path,
+            "start_line": start[0] + 1, "end_line": end[0] + 1,
+            "start_column": start[1] + 1, "end_column": end[1] + 1,
+            "start_byte": start_byte, "end_byte": end_byte,
+        })
+    return records
+
+
+def _external_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
+    if spec.tool_id == "tool-zizmor":
+        return _zizmor_records(spec, payload, path)
+    return _generic_external_records(spec, payload, path)
+
+
 def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
     text = payload.decode("utf-8", "replace").strip()
     if not text:
@@ -213,7 +276,8 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
 
     The unit result's ``gaps`` are ``producer-gap/1`` records: an unavailable pinned image is
     ``producer_blocked`` and retryable (the operator re-pins), a linter that fails or raises is
-    ``producer_failed``, an unreadable or over-bound definition and a provider with no linter are
+    ``producer_failed``, malformed native output is ``parser_error``, an unreadable or over-bound
+    definition and a provider with no linter are
     ``producer_reported_gap`` scoped to the definition, a hit observation bound is ``truncated``. A
     provider with no definitions is ``NOT_APPLICABLE`` and no gap. The raw artifact keeps the reasons.
     """
@@ -305,7 +369,10 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                                          f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}",
                                          unit.unit_id, scope=definition["path"]))
                         continue
-                    records.extend(_generic_external_records(spec, stdout.read_bytes(), definition["path"]))
+                    records.extend(_external_records(spec, stdout.read_bytes(), definition["path"]))
+                except _CiOutputParseError as exc:
+                    gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: {exc}",
+                                     unit.unit_id, scope=definition["path"]))
                 except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
                     safety.fail(f"{spec.tool_id} failed: {exc}", action="ci.scan")
                     gaps.append(_gap(GapCode.PRODUCER_FAILED,
@@ -395,8 +462,10 @@ def _source_location(unit: UnitContext, record: Mapping[str, Any]) -> SourceLoca
     data = source.read_bytes()
     offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
     start_line, end_line = int(record["start_line"]), int(record["end_line"])
-    start_byte = int(record.get("start_byte") or offsets[min(start_line - 1, len(offsets) - 1)])
-    end_byte = int(record.get("end_byte") or (offsets[end_line] if end_line < len(offsets) else len(data)))
+    start_byte = int(record["start_byte"] if record.get("start_byte") is not None
+                     else offsets[min(start_line - 1, len(offsets) - 1)])
+    end_byte = int(record["end_byte"] if record.get("end_byte") is not None
+                   else (offsets[end_line] if end_line < len(offsets) else len(data)))
     return SourceLocation(
         target_snapshot=unit.job.source_fingerprint, path=str(record["path"]), file_sha256=file_sha256(source),
         start_byte=min(start_byte, len(data)), end_byte=min(max(start_byte, end_byte), len(data)),

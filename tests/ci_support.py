@@ -11,15 +11,35 @@ from appsec_review.container_runtime.executor import ExecutionResult
 DIGEST = "sha256:" + "c" * 64
 
 
+def zizmor_finding(*, path: str = ".github/workflows/build.yml", row: int = 14,
+                   column: int = 8, offset: int = 198,
+                   feature: str = "uses: actions/checkout@v4") -> dict:
+    """An inert native JSON finding, including zero-based coordinates and byte offsets."""
+    return {
+        "ident": "artipacked", "desc": "credential persistence through GitHub Actions artifacts",
+        "determinations": {"confidence": "Low", "severity": "Medium", "persona": "Regular"},
+        "ignored": False, "fixes": [],
+        "locations": [{
+            "symbolic": {"key": {"Local": {"verbatim_path": f"/target/{path}"}},
+                         "annotation": "does not set persist-credentials: false", "kind": "Primary"},
+            "concrete": {"location": {
+                "start_point": {"row": row, "column": column},
+                "end_point": {"row": row, "column": column + len(feature)},
+                "offset_span": {"start": offset, "end": offset + len(feature.encode())}},
+                "feature": feature, "comments": []},
+        }],
+    }
+
+
 class FakeExecutor:
-    """Records every request and answers with an empty JSON document on stdout (exit 0).
+    """Records every request and answers with an empty JSON array on stdout (exit 0).
 
     ``stdout`` is the bytes every tool prints, or a ``{tool_id: bytes}`` mapping (tools not named
-    print ``{}``), so a test can make exactly one linter speak.
+    print ``[]``), so a test can make exactly one linter speak.
     """
 
     def __init__(self, repository: Path, run_root: Path, calls: list[tuple[str, tuple[str, ...]]],
-                 *, stdout: bytes | dict[str, bytes] = b"{}", exit_code: int = 0):
+                 *, stdout: bytes | dict[str, bytes] = b"[]", exit_code: int = 0):
         self.catalog = load_catalog(repository)
         self.run_root = run_root
         self.calls = calls
@@ -28,7 +48,7 @@ class FakeExecutor:
 
     def _stdout(self, tool_id: str) -> bytes:
         if isinstance(self.stdout_bytes, dict):
-            return self.stdout_bytes.get(tool_id, b"{}")
+            return self.stdout_bytes.get(tool_id, b"[]")
         return self.stdout_bytes
 
     def resolve_image(self, tool):

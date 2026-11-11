@@ -6,12 +6,16 @@ Docker, no model, no network, no targets/ checkout. The static rules, discovery 
 unit-tested in tests/test_ci_configuration_analysis.py; this file proves what the job publishes, how its
 bounded gaps become producer-gap/1 records, how a failing or unavailable linter is reported while its
 siblings survive, and the job's telemetry.
+
+The native-output regressions use the real upstream graph and full CI UnitExecutor publication path;
+per-unit resume checkpoints and graph-wide terminal telemetry are outside those focused regressions.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 import shutil
+import sqlite3
 
 import pytest
 
@@ -22,7 +26,10 @@ from appsec_review.jobs.job_ci_configuration_analysis.job import JOB_ID, SPECS, 
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
-from tests.ci_support import DIGEST, FakeExecutor
+from appsec_review.runtime.consume import upstream_scope
+from appsec_review.runtime.runner import JobRunner
+from appsec_review.storage.shared import publication_scope
+from tests.ci_support import DIGEST, FakeExecutor, zizmor_finding
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +96,27 @@ def _run(config, target: Path, job):
 
 def _outputs(outcome) -> dict:
     return outcome["jobs"][JOB_ID]["result"]["outputs"]
+
+
+def _run_ci_publication(config, target: Path, job):
+    """Run real upstreams and the full CI UnitExecutor, without per-unit resume checkpoints.
+
+    The regression covers CI artifacts through publish_handoff, not graph telemetry or resumption.
+    No handler, validator, index writer or upstream admission is replaced.
+    """
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog()]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    assert upstream["status"] == "SUCCEEDED", upstream
+    runner = JobRunner(config)
+    claim = runner.begin_attempt(
+        job, run_id=upstream["run_id"], target_root=target, source_fingerprint=fingerprint,
+        upstream_handoffs={key: upstream["jobs"][key]["handoff_sha256"] for key in job.consumes})
+    context = runner._context_from_claim(job, claim)
+    with publication_scope(context), upstream_scope(
+        context.run_root, job.job_id, context.upstream_handoffs, contract=job.contract
+    ):
+        return job.execute(context), context.run_root
 
 
 def test_a_mixed_target_publishes_definitions_observations_findings_and_coverage(tmp_path: Path) -> None:
@@ -229,6 +257,74 @@ def test_linter_observations_are_parsed_redacted_and_correlated_with_the_static_
     assert outcome["status"] == "SUCCEEDED"
 
 
+def test_native_zizmor_is_published_with_its_source_span_and_raw_evidence(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    path = ".github/workflows/build.yml"
+    feature = "uses: actions/checkout@main"
+    offset = WORKFLOW.index(feature)
+    native = zizmor_finding(path=path, row=10, column=8, offset=offset, feature=feature)
+    native["fixes"] = [{"title": "untrusted fix data must remain inert"}]
+    ignored = zizmor_finding()
+    ignored["ignored"] = True
+    payload = json.dumps([native, ignored]).encode()
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, [],
+                                        stdout={"tool-zizmor": payload})
+    target = _target(tmp_path, {path: WORKFLOW})
+    outcome, run_root = _run_ci_publication(config, target, build_job(executor_factory=factory))
+    assert outcome["status"] == "SUCCEEDED", outcome
+    outputs = outcome["outputs"]
+    scan = outputs["ci_analysis.github_zizmor_scan"]
+    assert scan["terminal_status"] == "SUCCEEDED" and scan["gaps"] == [] and scan["record_count"] == 1
+    [execution] = scan["executions"]
+    assert (run_root / execution["stdout_path"]).read_bytes() == payload
+    raw = json.loads((run_root / scan["raw_artifact"]["path"]).read_bytes())
+    assert raw["executions"] == json.loads(json.dumps(scan["executions"]))
+    assert raw["records"][0]["native_rule_id"] == "artipacked"
+    indexed = outputs["ci_observation_publication.github_zizmor_index"]
+    [record] = indexed["records"]
+    assert (record["native_rule_id"], record["message"], record["severity"]) == (
+        native["ident"], native["desc"], "medium")
+    assert record["category"] == "dangerous-defaults-and-uncaught-static-misconfiguration"
+    assert (record["path"], record["start_line"], record["end_line"],
+            record["start_column"], record["end_column"]) == (path, 11, 11, 9, 36)
+    assert (record["start_byte"], record["end_byte"]) == (offset, offset + len(feature))
+    with sqlite3.connect(run_root / indexed["artifact"]["path"]) as connection:
+        [location] = connection.execute(
+            "SELECT path, start_byte, end_byte, start_line, end_line, start_column, end_column FROM locations"
+        ).fetchall()
+    assert location == (path, offset, offset + len(feature), 11, 11, 9, 36)
+    assert (target / path).read_text() == WORKFLOW, "native fixes are evidence, not instructions"
+    findings = outputs["ci_correlation.correlate_findings"]["findings"]
+    assert any(f["tools"] == ["tool-zizmor"] and f["observation_ids"] == [record["observation_id"]] for f in findings)
+    assert outputs["ci_coverage.join_coverage"]["coverage_status"] == "complete"
+    assert outputs["ci_coverage.publish_handoff"]["finding_count"] == len(findings)
+
+
+@pytest.mark.parametrize("payload", [b"{}", b"[{}", b""], ids=["object", "invalid-json", "empty-stdout"])
+def test_invalid_zizmor_output_is_a_parser_gap_with_raw_evidence(tmp_path: Path, payload: bytes) -> None:
+    config = _config(tmp_path)
+    path = ".github/workflows/build.yml"
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, [],
+                                        stdout={"tool-zizmor": payload})
+    outcome, run_root = _run_ci_publication(config, _target(tmp_path, {path: WORKFLOW}), build_job(executor_factory=factory))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS", outcome
+    outputs = outcome["outputs"]
+    scan = outputs["ci_analysis.github_zizmor_scan"]
+    assert scan["terminal_status"] == "FAILED" and scan["record_count"] == 0
+    [gap] = scan["gaps"]
+    assert gap["code"] == "parser_error" and gap["scope_id"] == path
+    assert gap["unit_id"] == "ci_analysis.github_zizmor_scan" and "Zizmor" in gap["reason"]
+    [execution] = scan["executions"]
+    assert (run_root / execution["stdout_path"]).read_bytes() == payload
+    indexed = outputs["ci_observation_publication.github_zizmor_index"]
+    assert indexed["records"] == [] and list(indexed["index_identity"]["gaps"]) == [gap["reason"]]
+    assert outputs["ci_analysis.github_actionlint_scan"]["terminal_status"] == "SUCCEEDED"
+    assert outputs["ci_analysis.github_checkov_scan"]["terminal_status"] == "SUCCEEDED"
+    assert outputs["ci_coverage.join_coverage"]["gap_records"] == [gap]
+    published = outputs["ci_coverage.publish_handoff"]
+    assert published["gap_count"] == 1 and published["coverage_status"] == "partial"
+
+
 def test_a_target_without_ci_definitions_is_not_applicable_everywhere_and_succeeds(tmp_path: Path) -> None:
     config = _config(tmp_path)
     factory = lambda unit: pytest.fail("no linter may be launched without a definition")
@@ -317,3 +413,30 @@ def test_the_observation_bound_keeps_the_first_observations_and_declares_truncat
     assert gap["code"] == "truncated" and gap["scope_id"] is None and "observation bound reached at 1" in gap["reason"]
     [record] = outputs["ci_observation_publication.github_checkov_index"]["records"]
     assert record["native_rule_id"] == "CKV_GHA_7"
+
+
+def test_native_zizmor_keeps_observation_bounds_redaction_and_raw_output(tmp_path: Path) -> None:
+    config = _config_with_setting(tmp_path, "max_observations_per_tool", 1)
+    path = ".github/workflows/build.yml"
+    workflow = "name: build\non: push\njobs: {}\n"
+    first = zizmor_finding(row=0, column=0, offset=0, feature="name: build")
+    first["desc"] = "credential persistence token=synthetic-secret"
+    second = zizmor_finding(row=1, column=0, offset=12, feature="on: push")
+    second["ident"] = "another-rule"
+    payload = json.dumps([first, second]).encode()
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, [],
+                                        stdout={"tool-zizmor": payload})
+    outcome, run_root = _run_ci_publication(
+        config, _target(tmp_path, {path: workflow}), build_job(executor_factory=factory))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS", outcome
+    outputs = outcome["outputs"]
+    scan = outputs["ci_analysis.github_zizmor_scan"]
+    assert scan["record_count"] == 1 and scan["terminal_status"] == "PARTIAL"
+    [gap] = scan["gaps"]
+    assert gap["code"] == "truncated" and "observation bound reached at 1" in gap["reason"]
+    [record] = outputs["ci_observation_publication.github_zizmor_index"]["records"]
+    assert record["native_rule_id"] == "artipacked"
+    assert record["message"] == "credential persistence token=<redacted>"
+    [execution] = scan["executions"]
+    assert (run_root / execution["stdout_path"]).read_bytes() == payload
+    assert outputs["ci_coverage.join_coverage"]["gap_records"] == [gap]
