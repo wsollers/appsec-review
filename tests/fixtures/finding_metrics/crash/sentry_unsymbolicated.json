@@ -1,0 +1,28 @@
+{
+  "event_id": "fedcba9876543210fedcba9876543210",
+  "timestamp": 1741064767,
+  "platform": "native",
+  "exception": {
+    "values": [
+      {
+        "type": "SIGSEGV",
+        "value": "Segfault",
+        "mechanism": {
+          "type": "signalhandler",
+          "handled": false,
+          "meta": {"signal": {"number": 11, "code": 1, "name": "SIGSEGV", "code_name": "SEGV_MAPERR"}}
+        },
+        "stacktrace": {
+          "frames": [
+            {"function": "main", "package": "/opt/example/bin/examplegame", "filename": "main.c", "lineno": 30,
+             "instruction_addr": "0x5555555551a0", "image_addr": "0x555555554000"},
+            {"function": "<unknown>", "package": "/opt/example/bin/examplegame",
+             "instruction_addr": "0x555555555290", "image_addr": "0x555555554000"},
+            {"package": "/opt/example/lib/libexample_net.so", "instruction_addr": "0x7f0000001234"}
+          ]
+        }
+      }
+    ]
+  },
+  "debug_meta": {"images": [{"type": "elf", "code_file": "/opt/example/bin/examplegame"}]}
+}

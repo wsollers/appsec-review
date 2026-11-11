@@ -25,9 +25,11 @@ import tomllib
 from typing import Any
 
 from .funnel import DEFAULT_EXPECTATIONS, resolve_run
+from appsec_review.observability.findings.contracts import weakness_family
+
 from .scoring_model import (CWE_MATCH_REFERENCE, DEFAULT_MAX_COMBINATION, DEFAULT_TOLERANCE, DEFAULT_TOP_LIST,
-                            FILE_SCOPE, SCORING_SCHEMA, TOP25_REFERENCE, EntryKind, KeyEntry, Report,
-                            ReportOutcome, ScoringKey, normalize_cwe)
+                            FILE_SCOPE, SCOPE_MATCH_PRODUCERS, SCORING_SCHEMA, SEVERITY_BANDS, TOP25_REFERENCE,
+                            EntryKind, KeyEntry, Report, ReportOutcome, ScoringKey, normalize_cwe)
 
 TOP25_SCHEMA = "appsec-review/cwe-top25/1"
 CWE_MATCH_SCHEMA = "appsec-review/cwe-match/1"
@@ -113,9 +115,12 @@ def _entry(item: Any, kind: EntryKind, source: Path) -> KeyEntry:
     summary = item.get("summary", "")
     if not isinstance(summary, str):
         raise ValueError(f"{entry_id}: summary must be a string")
+    severity = item.get("severity")
+    if severity is not None and (kind is EntryKind.CONTROL or severity not in SEVERITY_BANDS):
+        raise ValueError(f"{entry_id}: severity is one of {', '.join(SEVERITY_BANDS)} and only on a defect")
     return KeyEntry(id=entry_id, kind=kind, path=path, cwe=cwe, lines=lines, scope=scope, summary=summary,
                     pair=_optional_text(item, "pair", entry_id), upstream=_optional_text(item, "upstream", entry_id),
-                    producers=tuple(producers))
+                    producers=tuple(producers), severity=severity)
 
 
 def _check_scopes(entries: Sequence[KeyEntry]) -> None:
@@ -298,12 +303,24 @@ class ProducerScore:
     accuracy: float | None
     outcomes: dict[str, int]
     unattributed: tuple[Report, ...]
+    # Function-scope and weakness-family match (finding-metrics.md 5.4): a defect case counts when a
+    # report attributed to its scope names a CWE of the key CWE's family; every other attributed
+    # report is a false positive. ``headline_match`` says which match is this producer's headline.
+    scope_tp: int
+    scope_fp: int
+    scope_precision: float | None
+    scope_recall: float | None
+    headline_match: str  # "scope_family" for the review producer, "strict" for scanners
+    unique_tp: int  # defect cases only this producer hit (strict match)
 
     def as_dict(self) -> dict[str, Any]:
         return {"producer": self.producer, "reports": self.reports, "castle_score": self.castle_score,
                 "tp": self.tp, "fp": self.fp, "fn": self.fn, "tn": self.tn, "tn_measurable": self.tn is not None,
                 "fp_cases": self.fp_cases, "lenient_tp": self.lenient_tp, "precision": self.precision,
-                "recall": self.recall, "accuracy": self.accuracy, "outcomes": dict(self.outcomes),
+                "recall": self.recall, "accuracy": self.accuracy, "accuracy_basis": "cases",
+                "scope_tp": self.scope_tp, "scope_fp": self.scope_fp, "scope_precision": self.scope_precision,
+                "scope_recall": self.scope_recall, "headline_match": self.headline_match,
+                "unique_tp": self.unique_tp, "outcomes": dict(self.outcomes),
                 "unattributed": len(self.unattributed),
                 "unattributed_reports": [_report_dict(report) for report in self.unattributed]}
 
@@ -321,7 +338,8 @@ class ScoringReport:
     cases: tuple[dict[str, Any], ...]
     full_set: dict[str, Any]
     best_combinations: tuple[dict[str, Any], ...]
-    marginal: dict[str, int]
+    marginal: dict[str, int]  # CASTLE-score marginal contribution; paper comparison only
+    marginal_detection: dict[str, dict[str, int]]  # per producer: defects only it hit, and its false positives
     reference_comparison: tuple[dict[str, Any], ...]
     gaps: tuple[str, ...]
     ignored_reports: int  # reports outside [corpus] scored_paths, never scored
@@ -333,7 +351,9 @@ class ScoringReport:
                 "producers": [producer.as_dict() for producer in self.producers],
                 "cases": [dict(case) for case in self.cases], "full_set": dict(self.full_set),
                 "best_combinations": [dict(item) for item in self.best_combinations],
-                "marginal": dict(self.marginal), "reference_comparison": [dict(row) for row in self.reference_comparison],
+                "marginal": dict(self.marginal),
+                "marginal_detection": {name: dict(row) for name, row in self.marginal_detection.items()},
+                "reference_comparison": [dict(row) for row in self.reference_comparison],
                 "gaps": list(self.gaps), "ignored_reports": self.ignored_reports}
 
 
@@ -381,6 +401,8 @@ def score(key: ScoringKey, reports: Iterable[Report], *, tolerance: int = DEFAUL
     attributed: dict[str, dict[str, list[ReportOutcome]]] = {name: {} for name in names}
     unattributed: dict[str, list[Report]] = {name: [] for name in names}
     outcomes: dict[str, dict[str, int]] = {name: {item.value: 0 for item in ReportOutcome} for name in names}
+    scope_hits: dict[str, set[str]] = {name: set() for name in names}
+    scope_misses: dict[str, int] = {name: 0 for name in names}
     collapsed = _collapse(in_scope)
     for report in collapsed:
         entry = _attribute(report, by_path.get(report.path, ()), tolerance)
@@ -390,6 +412,11 @@ def score(key: ScoringKey, reports: Iterable[Report], *, tolerance: int = DEFAUL
             unattributed[report.producer].append(report)
         else:
             attributed[report.producer].setdefault(entry.id, []).append(outcome)
+            family = weakness_family(entry.cwe) if entry.kind is EntryKind.DEFECT else None
+            if family is not None and any(weakness_family(cwe) == family for cwe in report.cwes):
+                scope_hits[report.producer].add(entry.id)
+            else:
+                scope_misses[report.producer] += 1
 
     def cell(name: str, entry: KeyEntry) -> tuple[int, bool]:
         found = attributed[name].get(entry.id, ())
@@ -400,6 +427,7 @@ def score(key: ScoringKey, reports: Iterable[Report], *, tolerance: int = DEFAUL
                    for entry in key.entries)
 
     measurable = bool(key.controls)
+    hitters = {entry.id: [name for name in names if cell(name, entry)[1]] for entry in key.defects}
     producer_scores = []
     for name in names:
         tp = sum(1 for entry in key.defects if cell(name, entry)[1])
@@ -413,8 +441,15 @@ def score(key: ScoringKey, reports: Iterable[Report], *, tolerance: int = DEFAUL
             producer=name, reports=sum(1 for report in collapsed if report.producer == name),
             castle_score=set_score((name,)), tp=tp, fp=fp, fn=fn, tn=tn, fp_cases=fp_cases, lenient_tp=lenient,
             precision=_ratio(tp, tp + fp), recall=_ratio(tp, tp + fn),
-            accuracy=_ratio(tp + tn, tp + tn + fp + fn) if tn is not None else None,
-            outcomes=outcomes[name], unattributed=tuple(unattributed[name])))
+            # Case-based: correctly handled cases over all cases. The per-report false positives of the
+            # paper's accuracy column mixed report and case units and are not used here.
+            accuracy=_ratio(tp + tn, len(key.entries)) if tn is not None else None,
+            outcomes=outcomes[name], unattributed=tuple(unattributed[name]),
+            scope_tp=len(scope_hits[name]), scope_fp=scope_misses[name],
+            scope_precision=_ratio(len(scope_hits[name]), len(scope_hits[name]) + scope_misses[name]),
+            scope_recall=_ratio(len(scope_hits[name]), len(key.defects)),
+            headline_match="scope_family" if name in SCOPE_MATCH_PRODUCERS else "strict",
+            unique_tp=sum(1 for found_by in hitters.values() if found_by == [name])))
 
     cases = []
     for entry in key.entries:
@@ -426,6 +461,7 @@ def score(key: ScoringKey, reports: Iterable[Report], *, tolerance: int = DEFAUL
                 counts[outcome.value] = counts.get(outcome.value, 0) + 1
             case_outcomes[name] = dict(sorted(counts.items()))
         cases.append({"id": entry.id, "kind": entry.kind.value, "path": entry.path, "cwe": entry.cwe,
+                      "severity": entry.severity,
                       "bonus": case_bonus[entry.id] if entry.kind is EntryKind.DEFECT else None,
                       "hit_by": [name for name in present if cell(name, entry)[1]], "outcomes": case_outcomes,
                       "scores": {name: _case_score(entry, (cell(name, entry),), case_bonus[entry.id]) for name in names}})
@@ -450,7 +486,9 @@ def score(key: ScoringKey, reports: Iterable[Report], *, tolerance: int = DEFAUL
         floor_score=CONTROL_POINTS * len(key.controls), defects=len(key.defects), controls=len(key.controls),
         producers=tuple(producer_scores), cases=tuple(cases),
         full_set={"producers": list(names), "castle_score": full_score}, best_combinations=tuple(best),
-        marginal=marginal, reference_comparison=tuple(_reference_rows(reference, by_name)),
+        marginal=marginal,
+        marginal_detection={item.producer: {"unique_tp": item.unique_tp, "fp": item.fp} for item in producer_scores},
+        reference_comparison=tuple(_reference_rows(reference, by_name)),
         gaps=tuple(dict.fromkeys(all_gaps)), ignored_reports=ignored)
 
 
@@ -471,7 +509,12 @@ def render_lines(report: ScoringReport) -> list[str]:
         lines.append(f"   scoring {item.producer} castle={item.castle_score} tp={item.tp} fp={item.fp} fn={item.fn} "
                      f"tn={'n/a' if item.tn is None else item.tn} precision={_number(item.precision)} "
                      f"recall={_number(item.recall)} accuracy={_number(item.accuracy)} lenient_tp={item.lenient_tp} "
-                     f"fp_cases={item.fp_cases} unattributed={len(item.unattributed)}")
+                     f"fp_cases={item.fp_cases} unattributed={len(item.unattributed)} "
+                     f"scope_tp={item.scope_tp} scope_fp={item.scope_fp} "
+                     f"scope_precision={_number(item.scope_precision)} scope_recall={_number(item.scope_recall)} "
+                     f"headline={item.headline_match}")
+    for item in report.producers:
+        lines.append(f"   scoring detection {item.producer} unique_tp={item.unique_tp} fp={item.fp}")
     lines.append(f"   scoring full_set castle={report.full_set['castle_score']} "
                  f"producers={','.join(report.full_set['producers']) or '-'}")
     for item in report.best_combinations:
@@ -488,11 +531,16 @@ def render_lines(report: ScoringReport) -> list[str]:
     return lines
 
 
-def score_run(run_root: Path, expectations: Path, *, include_review: bool = False,
+def score_run(run_root: Path, expectations: Path, *, include_review: bool = True,
               tolerance: int = DEFAULT_TOLERANCE, top_list: str = DEFAULT_TOP_LIST,
               max_combination: int = DEFAULT_MAX_COMBINATION, producers: Iterable[str] | None = None,
               repo_root: Path | None = None) -> ScoringReport:
-    """Score a finished run's producer reports against a scoring key; the shared path of the CLI and stepwise."""
+    """Score a finished run's producer reports against a scoring key; the shared path of the CLI and stepwise.
+
+    The published findings (producer ``review``) are scored by default: they are the product, and the
+    scanners are its inputs. A run without a current accepted report carries the named gap
+    ``review_report_unavailable``; it is never scored as a silent reviewer.
+    """
 
     from .producer_reports import reports_from_run
 
@@ -519,7 +567,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--expectations", type=Path, default=repo_root / DEFAULT_EXPECTATIONS,
                         help="the scoring key (default: the cpp-multivuln-v1 key)")
     parser.add_argument("--tolerance", type=int, default=DEFAULT_TOLERANCE)
-    parser.add_argument("--include-review", action="store_true", help="score accepted final findings as producer 'review'")
+    parser.add_argument("--include-review", action="store_true",
+                        help="accepted for compatibility; the final findings are scored by default")
+    parser.add_argument("--no-review", action="store_true",
+                        help="score scanners only, without the accepted final findings (producer 'review')")
     parser.add_argument("--producers", default=None, help="comma-separated producers to score (default: every producer)")
     parser.add_argument("--max-combination", type=int, default=DEFAULT_MAX_COMBINATION)
     parser.add_argument("--top-list", default=DEFAULT_TOP_LIST)
@@ -531,7 +582,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     try:
         producers = None if args.producers is None else [name for name in args.producers.split(",") if name.strip()]
-        report = score_run(run_root, args.expectations, include_review=args.include_review,
+        report = score_run(run_root, args.expectations, include_review=not args.no_review,
                            tolerance=args.tolerance, top_list=args.top_list, max_combination=args.max_combination,
                            producers=producers, repo_root=repo_root)
     except (OSError, ValueError) as error:

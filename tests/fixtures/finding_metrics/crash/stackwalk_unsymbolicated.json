@@ -1,0 +1,24 @@
+{
+  "crash_info": {"type": "SIGSEGV / SEGV_MAPERR", "address": "0x0000000000000008", "crashing_thread": 0},
+  "system_info": {"os": "Linux", "cpu_arch": "amd64"},
+  "modules": [
+    {
+      "filename": "examplegame",
+      "debug_id": "E20A22685DC6C165B6AAA12FA6765A6E0",
+      "code_id": "68220ae2c65d65c1b6aaa12fa6765a6ec2f5f434",
+      "missing_symbols": true
+    }
+  ],
+  "crashing_thread": {
+    "threads_index": 0,
+    "frames": [
+      {"frame": 0, "module": "examplegame", "offset": "0x00005555555a1a2a", "module_offset": "0x000000000004da2a",
+       "trust": "context", "missing_symbols": true},
+      {"frame": 1, "module": "examplegame", "function": null, "file": null, "line": null,
+       "offset": "0x00005555555a2b3c", "module_offset": "0x000000000004eb3c", "trust": "scan", "missing_symbols": true},
+      {"frame": 2, "module": "examplegame", "function": "run_loop", "file": "/somewhere/else/loop.c", "line": 7,
+       "module_offset": "0x0000000000001000", "trust": "cfi"},
+      {"frame": 3, "trust": "scan"}
+    ]
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "status": "OK",
+  "pid": 4242,
+  "crash_info": {
+    "type": "EXCEPTION_ACCESS_VIOLATION_WRITE",
+    "address": "0x00007ff6deadbeef",
+    "crashing_thread": 0,
+    "assertion": null
+  },
+  "system_info": {"os": "Windows NT", "os_ver": "10.0.19045", "cpu_arch": "amd64"},
+  "main_module": 0,
+  "modules": [
+    {
+      "filename": "examplegame.exe",
+      "debug_file": "examplegame.pdb",
+      "debug_id": "0123456789ABCDEF0123456789ABCDEF1",
+      "code_id": "5F0E1A2B1c000",
+      "version": "1.4.2.0",
+      "base_addr": "0x00007ff6de000000"
+    },
+    {
+      "filename": "C:\\Windows\\System32\\ntdll.dll",
+      "debug_file": "ntdll.pdb",
+      "debug_id": "FEDCBA9876543210FEDCBA98765432101",
+      "code_id": "4A5B6C7D1f000",
+      "version": "10.0.19041.1"
+    }
+  ],
+  "crashing_thread": {
+    "threads_index": 0,
+    "thread_name": "GameThread",
+    "frame_count": 3,
+    "frames": [
+      {
+        "frame": 0,
+        "module": "examplegame.exe",
+        "function": "net::parse_packet(char const*, unsigned long)",
+        "file": "C:\\build\\game\\net\\parse.cpp",
+        "line": 42,
+        "offset": "0x00007ff6de0012a0",
+        "module_offset": "0x00000000000012a0",
+        "trust": "context",
+        "missing_symbols": false,
+        "inlines": [{"function": "net::copy_field", "file": "C:\\build\\game\\net\\field.h", "line": 9}]
+      },
+      {
+        "frame": 1,
+        "module": "examplegame.exe",
+        "function": "net::on_receive",
+        "file": "c:\\BUILD\\game\\net\\session.cpp",
+        "line": 118,
+        "offset": "0x00007ff6de002b10",
+        "module_offset": "0x0000000000002b10",
+        "trust": "cfi"
+      },
+      {
+        "frame": 2,
+        "module": "ntdll.dll",
+        "function": "RtlUserThreadStart",
+        "offset": "0x00007ffa00052651",
+        "module_offset": "0x0000000000052651",
+        "trust": "cfi"
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "event_id": "0123456789abcdef0123456789abcdef",
+  "timestamp": "2025-03-04T05:06:07+02:00",
+  "platform": "native",
+  "release": "examplegame@1.4.2",
+  "dist": "424242",
+  "groupID": "9001",
+  "contexts": {"os": {"name": "Windows", "version": "10.0.19045"}},
+  "exception": {
+    "values": [
+      {"type": "std::runtime_error", "value": "outer wrapper"},
+      {
+        "type": "EXCEPTION_ACCESS_VIOLATION_READ",
+        "value": "Fatal Error: EXCEPTION_ACCESS_VIOLATION_READ",
+        "mechanism": {"type": "minidump", "handled": false, "data": {"relevant_address": "0x10"}},
+        "stacktrace": {
+          "frames": [
+            {"function": "main", "package": "C:\\Games\\Example\\examplegame.exe",
+             "abs_path": "C:\\build\\game\\main.cpp", "filename": "main.cpp", "lineno": 30,
+             "instruction_addr": "0x7ff6de0011a0", "image_addr": "0x7ff6de000000"},
+            {"function": "net::on_receive", "package": "C:\\Games\\Example\\examplegame.exe",
+             "abs_path": "C:\\build\\game\\net\\session.cpp", "filename": "session.cpp", "lineno": 118,
+             "instruction_addr": "0x7ff6de002b10", "image_addr": "0x7ff6de000000"},
+            {"function": "net::parse_packet", "package": "C:\\Games\\Example\\examplegame.exe",
+             "abs_path": "C:\\build\\game\\net\\parse.cpp", "filename": "parse.cpp", "lineno": 42,
+             "instruction_addr": "0x7ff6de0012a0", "image_addr": "0x7ff6de000000"}
+          ]
+        }
+      }
+    ]
+  },
+  "debug_meta": {
+    "images": [
+      {"type": "pe", "debug_id": "01234567-89ab-cdef-0123-456789abcdef-1", "code_id": "5f0e1a2b1c000",
+       "code_file": "C:\\Games\\Example\\examplegame.exe", "debug_file": "examplegame.pdb",
+       "image_addr": "0x7ff6de000000", "image_size": 1835008}
+    ]
+  }
+}

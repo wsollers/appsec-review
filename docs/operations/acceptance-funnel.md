@@ -45,12 +45,15 @@ is printed as `scoring unavailable` and recorded. For any finished run, read-onl
 
 ```text
 PYTHONPATH=src python -m appsec_review.acceptance.scoring --run <run dir or run id> \
-    [--expectations <key.toml>] [--include-review] [--producers codeql,cppcheck] \
+    [--expectations <key.toml>] [--no-review] [--producers codeql,cppcheck] \
     [--tolerance 2] [--max-combination 3] [--top-list castle-2025-table2|mitre-2024] [--json]
 ```
 
 Each tool observation is a report of its producer (`codeql`, `cppcheck`, `semgrep`, `clang-static-analyzer`,
-`infer`, ...); `--include-review` adds the accepted final findings as producer `review`. A report hits a
+`infer`, ...); the accepted final findings are scored by default as producer `review` (`--no-review` scores
+scanners only; report schema `appsec-review/detector-scoring/2`). `review`'s headline match is function scope
+and weakness family (`scope_tp`, `scope_precision`, `scope_recall`), because a reviewer cites the missing
+check and not necessarily the sink line; scanners keep the strict match below. A report hits a
 defect when it lies within `--tolerance` lines of the defect's lines and one of its CWEs is accepted for the
 key CWE (`data/reference/scoring/cwe-match.json`; tool rules without CWEs are mapped through
 `data/reference/scoring/rule-cwe.json`). Reports inside a case's scope that miss are false positives, each
@@ -58,7 +61,8 @@ report counted; reports in no case's scope are listed as unattributed and not sc
 
 | Line | Meaning |
 | --- | --- |
-| `scoring <producer>` | TP, FP (per report), FN, TN, precision, recall, accuracy and the CASTLE score (paper eq. 1-2) |
+| `scoring <producer>` | TP, FP (per report), FN, TN, precision, recall, case-based accuracy, the CASTLE score (paper eq. 1-2, kept for the paper comparison), then the scope-and-family match and which match is the producer's headline |
+| `scoring detection` | per producer: defects only it hit (`unique_tp`) and its false positives |
 | `scoring full_set` / `scoring best` | the CASTLE combination score of all producers and of the best subsets: each true positive credited once, every other report a cumulative penalty |
 | `scoring marginal` | `score(all) - score(all without p)`; `net-negative` means the producer costs more in noise than it finds |
 | `scoring reference` | CASTLE-C250 only: the paper's Table 3 row beside ours |

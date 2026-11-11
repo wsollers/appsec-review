@@ -52,6 +52,26 @@ until each is rewritten into the entry format when it is next touched.
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | open |
 | T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
 | T-056 | [Build discovery test program: build points, total assignment, case matrix](#t-056-build-discovery-test-program-build-points-total-assignment-case-matrix) | topology | open |
+| T-060 | [Track findings across revisions with a stable identity](#t-060-track-findings-across-revisions-with-a-stable-identity) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-061 | [Verify a fix by re-checking the prior finding](#t-061-verify-a-fix-by-re-checking-the-prior-finding) | review | in-progress |
+| T-062 | [Measure triage effectiveness against answer-key labels](#t-062-measure-triage-effectiveness-against-answer-key-labels) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-063 | [Score the published review findings by default](#t-063-score-the-published-review-findings-by-default) | testing | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-064 | [Report severity-banded actionable yield](#t-064-report-severity-banded-actionable-yield) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-065 | [Feed real runs into the stability experiments](#t-065-feed-real-runs-into-the-stability-experiments) | testing | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-066 | [Compare quality trends across prompt model and configuration changes](#t-066-compare-quality-trends-across-prompt-model-and-configuration-changes) | testing | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-067 | [Build a CVE fix-pair corpus and a private holdout](#t-067-build-a-cve-fix-pair-corpus-and-a-private-holdout) | testing | in-progress |
+| T-068 | [Measure hunt-lane value and attack-surface coverage](#t-068-measure-hunt-lane-value-and-attack-surface-coverage) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-069 | [Ingest developer outcomes and audit dismissed leads](#t-069-ingest-developer-outcomes-and-audit-dismissed-leads) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-070 | [Slice findings by a game threat model](#t-070-slice-findings-by-a-game-threat-model) | review | in-progress |
+| T-071 | [Measure model-specific failure rates](#t-071-measure-model-specific-failure-rates) | review | in-progress |
+| T-072 | [Ingest crash reports as finding evidence](#t-072-ingest-crash-reports-as-finding-evidence) | evidence | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
+| T-073 | [Derive reviewed units and entry points from a run](#t-073-derive-reviewed-units-and-entry-points-from-a-run) | review | open |
+| T-074 | [Wire the fix re-check to the verifier role](#t-074-wire-the-fix-re-check-to-the-verifier-role) | review | open |
+| T-075 | [Run crash evidence as a job and a lane A lead family](#t-075-run-crash-evidence-as-a-job-and-a-lane-a-lead-family) | evidence | open |
+| T-076 | [Record attacker position owner function and remediation on findings](#t-076-record-attacker-position-owner-function-and-remediation-on-findings) | review | open |
+| T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | open |
+| T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | open |
+| T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -718,9 +738,372 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** `docs/plans/build-discovery-test-program-2026-11-08.md`, `src/appsec_review/jobs/build_discovery.py`,
   `docs/tasks/2026-11-08-job-pass-05-target-catalog.md`, T-045.
 
+### T-060 — Track findings across revisions with a stable identity
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** review
+- **Blocks:** T-061
+- **Why:** nothing can say whether a previous finding was fixed. The experiments normalizer hashes
+  the source revision into `root_cause_id` ("different source revisions remain different
+  identities"), and no run reads a prior run's findings, so the same defect at two commits is two
+  unrelated findings. Found in the 2026-11-11 metrics critique.
+- **Scope:** a revision-independent finding fingerprint (CWE, normalized path, enclosing function,
+  source and sink symbols, code-context hash; no commit and no line number) with exact and
+  relocated match tiers, and a per-run lifecycle against a named prior run: `new`, `persisting`,
+  `regressed`, `not_redetected` (absent, code unchanged), `not_covered` (the unit was not reviewed
+  this run) and `fix_candidate` (absent, code changed). Absence alone never yields `fixed`; that
+  state belongs to T-061. Per-changelist use reports the findings a change introduced.
+- **Done when:** a unit test over two recorded finding sets of one target at two revisions assigns
+  every prior finding exactly one lifecycle state, including a moved function and an uncovered
+  unit, and the run-metrics summary carries the counts with null, not zero, when no prior run is
+  named.
+- **Refs:** `src/appsec_review/observability/experiments/contracts.py` (`root_cause_id`),
+  `docs/operations/glasswing-experiments.md`, `docs/operations/metrics.md`, T-030.
+  Remaining work: T-073.
+
+### T-061 — Verify a fix by re-checking the prior finding
+
+- **State:** in-progress
+- **Area:** review
+- **Blocked by:** T-067, T-074
+- **Why:** open-ended discovery is not repeatable enough to treat a finding's absence as a fix, and
+  `docs/operations/metrics.md` already states that no completion metric establishes a fixed finding.
+- **Scope:** for each `fix_candidate` and `not_redetected` finding of T-060, one bounded
+  verifier task on the new revision that is given the prior claim and its evidence and returns
+  `fixed` (the guard or change is cited), `still_present`, or `insufficient_evidence`. Results are
+  recorded per finding; counts by state enter the run metrics.
+- **Done when:** on the fix-pair corpus of T-067 the post-fix revision yields `fixed` and the
+  pre-fix revision `still_present` for the keyed defects, with the miss and false-fix counts
+  reported.
+- **Refs:** T-060, T-067, `src/appsec_review/jobs/job_remediation_validation/`.
+  Remaining work: T-074.
+
+### T-062 — Measure triage effectiveness against answer-key labels
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** review
+- **Why:** `triage_reduction` measures volume only. `ratio_over_resolved` reaches 1.0 when triage
+  dismisses everything, it adds `no_claim_raised` (silence) to `dismissed_by_adjudication`
+  (a reasoned refutation), and no run reports how many true leads triage removed. The
+  retention and removal formulas exist only in the offline experiments module.
+- **Scope:** on a corpus run, label every lane A lead inside a key scope from the answer key and
+  add to the section: true-lead retention, false-lead removal, the stage that removed each true
+  lead (red no-proposal, blue, judge, verifier), and the share of negative controls that end
+  `supported` or `confirmed`. Report the two reduced dispositions as separate ratios and stop
+  presenting a combined ratio without the retention figure beside it. Without a key the labelled
+  fields are null.
+- **Done when:** unit tests over a recorded lane A document and key produce the labelled counts and
+  per-stage attribution, and `stepwise.py system` prints them beside the funnel.
+- **Refs:** `src/appsec_review/observability/triage_reduction.py`,
+  `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/experiments/metrics.py`
+  (`_triage`), `docs/operations/metrics.md`.
+  Remaining work: T-077.
+
+### T-063 — Score the published review findings by default
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** testing
+- **Why:** detector scoring treats scanners as the subject and the final findings as an optional
+  producer (`--include-review`), although the published findings are the product. The strict
+  two-line match undercounts model findings that cite the missing check and not the sink, the
+  CASTLE score is a composite with arbitrary weights and a Top-25 bonus that favours web weaknesses,
+  and `accuracy` mixes per-report false positives with per-case true negatives.
+- **Scope:** `review` scored by default, with an unavailable final report still a named gap; a
+  function-scope and weakness-family match for `review` reported beside the strict match; marginal
+  contribution computed on true and false positives; the CASTLE score kept only in the
+  paper-reference comparison; `accuracy` removed or recomputed on cases. Schema bump of
+  `appsec-review/detector-scoring/1`.
+- **Done when:** `tests/test_detector_scoring.py` covers the default `review` producer, both match
+  rules and the case-based rates, and the `acceptance_trend` adapter reads `review` without a flag.
+- **Refs:** `src/appsec_review/acceptance/scoring.py`, `docs/reviews/castle-style-detector-scoring.md`,
+  `docs/operations/acceptance-funnel.md`.
+
+### T-064 — Report severity-banded actionable yield
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** review
+- **Why:** no metric says how many results are worth a developer's time. `finding_states` counts
+  `FINDING_TRANSITION` events, so one finding with two transitions is counted twice, and it has no
+  severity, CWE or component dimension. Severity bands and ship-block status exist per finding but
+  feed no metric, and answer keys carry no expected severity, so over- and under-rating cannot be
+  measured.
+- **Scope:** a final-state snapshot of published findings, deduplicated by root cause, by severity
+  band, ship-block status, CWE family and lane; yield of confirmed high and critical findings per
+  run, per reviewed KLOC and per known cost; the unrated (`decision_pending`) share; the duplicate
+  rate after clustering. Optional `severity` on `[[defect]]` in `expectations.toml`, with a severity
+  agreement count and precision within the high and critical band on corpus runs.
+- **Done when:** the run-metrics summary carries the section with null for unavailable inputs, and a
+  unit test shows a finding with several transitions counted once.
+- **Refs:** `src/appsec_review/observability/telemetry.py` (`finding_states`),
+  `src/appsec_review/review/ship_block.py`, `src/appsec_review/review/scoring/risk_model.py`,
+  `src/appsec_review/acceptance/scoring.py`.
+
+### T-065 — Feed real runs into the stability experiments
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** testing
+- **Why:** run-over-run stability, pairwise stability and recurrence are implemented but
+  `rebuild` reads only a hand-assembled document; the accepted-artifact adapter is still owed, so
+  no real run has a stability figure. Single-run recall on a seven-defect key moves 14 points per
+  defect and carries no interval.
+- **Scope:** an adapter that builds launch and completion records from an accepted run at the
+  candidate, verified and published stages; per-defect detection rate over repeated corpus runs
+  with a binomial interval; stability of the high and critical subset; counts of root causes whose
+  severity or disposition changes between comparable runs.
+- **Done when:** the adapter turns recorded run fixtures into a valid
+  `appsec-review/quality-experiment/1` document under unit test, and the operations doc gives the
+  manual command for a five-run corpus series. The series itself is user-owned.
+- **Refs:** `src/appsec_review/observability/experiments/`, `docs/operations/glasswing-experiments.md`,
+  `docs/reviews/appsec-system-review-2026-11-06.md` (section 10).
+
+### T-066 — Compare quality trends across prompt model and configuration changes
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** testing
+- **Why:** `compare_trends` returns `incomparable` unless corpus, configuration, prompt and model
+  identities are all equal, so it cannot answer whether a prompt or model change helped. The
+  implementation and model identities are operator-supplied arguments, not read from the run.
+- **Scope:** comparability requires the same corpus, key, scorer, role and case count; prompt, model
+  and configuration identities become recorded independent variables named in the result.
+  Identities are read from the run's frozen configuration and guidance bundle, and a mismatch with
+  a supplied value is an error.
+- **Done when:** `tests/test_operations_quality.py` compares two trends that differ only in prompt
+  identity and reports the changed variable with the metric deltas.
+- **Refs:** `src/appsec_review/observability/quality.py`, `docs/operations/quality-and-retention.md`.
+
+### T-067 — Build a CVE fix-pair corpus and a private holdout
+
+- **State:** in-progress
+- **Area:** testing
+- **Blocks:** T-061
+- **Why:** the keyed corpora are seven seeded defects with seven controls and CASTLE-C250, which is
+  public single-file C that a model may have memorised. Neither resembles a game codebase or
+  exercises fix detection.
+- **Scope:** pinned pairs of pre-fix and post-fix commits for published CVEs in open game and
+  engine code, each with a key entry on the pre-fix revision and a control on the post-fix
+  revision, held outside the target like the existing keys; a second set never used for prompt or
+  guidance tuning, with its use recorded. Target acquisition and pinning stay with the user.
+- **Done when:** at least ten pairs are keyed, the loader validates them, and a document lists the
+  candidate projects and the licence of each.
+- **Refs:** `test/acceptance/`, `src/appsec_review/acceptance/scoring.py`,
+  `docs/reviews/castle-style-detector-scoring.md`, T-005.
+
+### T-068 — Measure hunt-lane value and attack-surface coverage
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** review
+- **Why:** lane B claims are only counted as excluded from triage reduction, so nothing shows what
+  the review found that no scanner flagged, which is the case for running it at all. Finding
+  counts also have no denominator: nothing reports how much of the exposed surface was reviewed.
+- **Scope:** per run, confirmed and supported hunt-lane findings with no scanner observation at the
+  same root cause, by CWE family; and coverage of catalogued entry points (network handlers,
+  parsers, RPC handlers, file loaders) as reviewed, not admitted and not built, from existing
+  package and admission records. No target scan at metric time.
+- **Done when:** both sections are in the run-metrics summary under unit test, with uncovered
+  entry points listed by residual-coverage reason.
+- **Refs:** `src/appsec_review/observability/triage_reduction.py` (`hunt_lane_claims_excluded`),
+  `src/appsec_review/review/packages.py`, `docs/architecture/review-prioritization.md`.
+  Remaining work: T-073.
+
+### T-069 — Ingest developer outcomes and audit dismissed leads
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** review
+- **Why:** on a real target the only ground truth is what the developers do with a finding, and
+  nothing records it. Dismissed leads are never sampled, so the miss rate of triage on real code is
+  unknown. No metric says whether a finding is complete enough to act on.
+- **Scope:** an operator-supplied outcome file keyed by the T-060 fingerprint (fixed, rejected as
+  false, accepted risk with expiry, duplicate), admitted as labels; fix rate, rejected rate and
+  time to disposition by severity band; a reproducible random sample of dismissed and no-claim
+  leads exported for human labelling, with the estimated miss rate and interval; per finding, the
+  presence of a resolving entry-to-sink path, stated preconditions, an owner and a validated fix.
+- **Done when:** unit tests admit an outcome file and a labelled sample and produce the rates, and
+  the final report states actionability completeness per finding.
+- **Refs:** T-060, `src/appsec_review/observability/experiments/contracts.py` (labels),
+  `docs/operations/final-report.md`.
+  Remaining work: T-076.
+
+### T-070 — Slice findings by a game threat model
+
+- **State:** in-progress
+- **Area:** review
+- **Why:** severity and every metric use a generic application matrix. A game team ranks by
+  attacker position and by what it can fix, and no persona, corpus case or key entry covers the
+  weaknesses specific to games.
+- **Scope:** per finding, recorded attacker position (client to dedicated server, server to client,
+  peer to peer, hostile content such as mods, maps, replays and save files, local), ownership
+  (first-party, engine, middleware) and build configuration (shipping, development, editor), each
+  null when not established; metric slices on those fields; engine and middleware findings routed
+  as dependency findings. Corpus cases and review guidance for server trust in client state,
+  unvalidated replication RPCs, bitstream length handling and entitlement bypass, through the
+  runtime-guidance procedure.
+- **Done when:** the fields are in the finding schema and report, the T-064 section slices by them,
+  and at least one keyed corpus case exists per named weakness class.
+- **Refs:** T-002, T-005, T-026, T-064, `pipeline/prompt-fragments/`,
+  `docs/reviews/dependency-output-filtering-design.md`.
+  Remaining work: T-076.
+
+### T-071 — Measure model-specific failure rates
+
+- **State:** in-progress
+- **Area:** review
+- **Why:** failures peculiar to model reviewers are not counted: citations that do not resolve to
+  source, target text that addresses the reviewer, and provider-side model change under an
+  unchanged configuration.
+- **Scope:** per run and role, the share of claim citations that fail to resolve; a corpus case
+  whose comments instruct the reviewer, with the outcome recorded; a documented scheduled canary
+  series on a fixed corpus and configuration whose detection-rate change flags drift. The canary
+  runs are user-owned.
+- **Done when:** the citation-resolution rate is in the run-metrics summary under unit test, the
+  injection case is keyed, and the operations doc gives the canary command.
+- **Refs:** T-065, `src/appsec_review/review/evidence.py`, `pipeline/prompt-fragments/governing-rules.md`.
+
+### T-072 — Ingest crash reports as finding evidence
+
+- **State:** done (2026-11-11, docs/architecture/finding-metrics.md section 12)
+- **Area:** evidence
+- **Why:** a game team's crash reports are independent evidence that a defect is real and
+  reachable, and memory-safety crashes with no finding are the nearest thing to a recall measure
+  on a real target. Nothing ingests them.
+- **Scope:** `job_crash_evidence_ingestion` over an operator-exported directory, with no network
+  access and no raw dump retained: pluggable adapters to `appsec-review/crash-report/1`
+  (first tranche `stackwalk_json`, `sanitizer_report`, `sentry_event`; then
+  `unreal_crash_context` and raw `minidump` walked in a pinned tool container), build, revision
+  and symbol binding tiers against the debug-symbol index, a `crash_report` lead family with a
+  deterministic fault-class ordering, crash corroboration of published findings, the list of
+  memory-safety buckets with no finding, and the crash metrics. Annotations pass an allowlist and
+  user, device and session identifiers are dropped at parse time.
+- **Done when:** each first-tranche adapter parses a recorded fixture into bounded records under
+  unit test, a fixture run binds a crash to a finding and reports one uncovered bucket, and the
+  job passes the job-contract tests. A run against a real crash export is user-owned.
+- **Refs:** `docs/architecture/finding-metrics.md` (section 7), T-026, T-060,
+  `docs/architecture/debug-symbol-indexing.md`, `src/appsec_review/review/lead_families.py`,
+  `docs/operations/sanitizer-build.md`.
+
+### T-073 — Derive reviewed units and entry points from a run
+
+- **State:** open
+- **Area:** review
+- **Why:** a run records review units by component, not by source file, so the finding snapshot
+  cannot say which files a run covered. The operator must supply `reviewed-units/1` and the
+  entry-point catalogue by hand; without them an absent finding can only be `not_covered` and
+  coverage is "not measured".
+- **Scope:** an adapter from accepted run artifacts (catalog path index, review package manifests,
+  lane coverage) to the reviewed and unreviewed source files with their content hashes, and to the
+  catalogued entry points with `reviewed`, `not_admitted` and `not_built` status. No target scan.
+- **Done when:** `snapshot` needs no `--units` for a run with an accepted catalog, the integration
+  test asserts non-null `reviewed_units`, and `scorecard` prints entry-point coverage without an
+  operator file.
+- **Refs:** T-060, T-068, `src/appsec_review/observability/findings/run_adapter.py`,
+  `docs/architecture/finding-metrics.md` (section 12, decision 3).
+
+### T-074 — Wire the fix re-check to the verifier role
+
+- **State:** open
+- **Area:** review
+- **Blocks:** T-061
+- **Why:** `recheck.run_rechecks` takes an injected transport and never calls a model, so no real
+  fix has been verified. Absence still cannot become `fixed` on a real target.
+- **Scope:** one bounded, no-tool verifier turn per `fix-recheck-request/1`, through the existing
+  role bundle and budget (the pattern of `review/evaluation.py`), opt-in with an explicit live flag,
+  with the request, response and receipt stored run-owned. Model, budget and timeout settings in the
+  central configuration.
+- **Done when:** unit tests drive the transport with a recorded response, and a user-requested live
+  run on the fix-pair corpus reports `fix_recall` and `false_fix_rate`.
+- **Refs:** T-061, T-067, `src/appsec_review/observability/findings/recheck.py`,
+  `src/appsec_review/review/evaluation.py`.
+
+### T-075 — Run crash evidence as a job and a lane A lead family
+
+- **State:** open
+- **Area:** evidence
+- **Why:** crash ingestion is an operator command. Crash buckets do not reach the review as leads,
+  the judge does not see corroboration, and raw minidumps must be walked by the operator first.
+- **Scope:** `job_crash_evidence_ingestion` under the job-contract checklist (typed settings,
+  registry and topology parity, declared datasets, accepted external input identity), a
+  `crash_report` lead family fed from `crash.lead_candidates`, corroboration supplied to the judge
+  as evidence, a pinned stackwalker tool container for raw `.dmp` files and Crashpad database
+  exports, and an `unreal_crash_context` adapter. No network access at run time.
+- **Done when:** the job passes the job-contract tests, a fixture run admits a crash lead, and a
+  user-requested run over a real export publishes crash evidence.
+- **Refs:** T-072, T-026, `src/appsec_review/observability/findings/crash/`,
+  `.claude/skills/add-a-job-contract/SKILL.md`.
+
+### T-076 — Record attacker position owner function and remediation on findings
+
+- **State:** open
+- **Area:** review
+- **Why:** the review does not record a finding's attacker position, owner, enclosing function,
+  source and sink symbols or remediation. The scorecard therefore shows them as not established,
+  the fingerprint rests on code context alone, and the final report states no actionability.
+- **Scope:** those fields on the claim and finding package (closed vocabularies of
+  `observability/findings/contracts.py`), carried by `run_adapter`; actionability completeness in
+  the final report; corpus cases and runtime guidance for server trust in client state,
+  unvalidated replication RPCs, bitstream length handling and entitlement bypass, through the
+  runtime-guidance checklist.
+- **Done when:** a fixture review publishes the fields, the snapshot fingerprint basis is
+  `function_and_code`, the report lists what each finding is missing, and one keyed corpus case
+  exists per named weakness class.
+- **Refs:** T-069, T-070, T-002, `src/appsec_review/jobs/accepted_review.py`,
+  `.claude/skills/add-runtime-guidance/SKILL.md`.
+
+### T-077 — Derive lead records with stage attribution from a run
+
+- **State:** open
+- **Area:** review
+- **Why:** `triage.effectiveness` needs one record per lane A lead with its disposition and the
+  stage that removed it, and labels for them. Both are operator files today, so true-lead retention
+  is not printed by `stepwise.py system`.
+- **Scope:** an adapter from the lane A lead manifest, lead accounting and claim projection (the
+  inputs `triage_reduction` already verifies) and the funnel's stage vocabulary to lead records;
+  lead labels from the answer key by scope; the paired figures printed beside the funnel.
+- **Done when:** unit tests build lead records from a recorded lane A document, and
+  `stepwise.py system` prints true-lead retention beside false-lead removal for a keyed corpus.
+- **Refs:** T-062, `src/appsec_review/observability/triage_reduction.py`,
+  `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/triage.py`.
+
+### T-078 — Check the model login before a review is submitted
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** on 2026-11-11 review `2026-11-11-0001` failed in under a minute at
+  `job_model_connectivity` because the mounted Claude CLI token had expired. `stack-start` probes
+  the model; `review-start` does not, so the expiry was found only after a run, a submission intent
+  and a failed attempt existed, each of which then had to be cleared by hand.
+- **Scope:** `review-start` and `review_run.py submit` run the same bounded model probe as
+  `stack-start` for the selected profile before recording a submission intent, and refuse with the
+  provider's error class and the documented remedy. `--no-probe` opts out, as on `stack-start`.
+  No credential is read, stored or printed.
+- **Done when:** unit tests of the launcher show an unanswered probe refusing the launch with no
+  intent written and no Dagster call, and an answered probe proceeding unchanged.
+- **Refs:** `scripts/review-start.sh`, `deploy/dagster/bin/review_run.py`, `scripts/stack-start.sh`,
+  `docs/operations/operator-scripts.md`, T-057.
+
+### T-079 — One guarded command for run recovery
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** resuming a failed run takes a reconcile of the terminal submission, a
+  `verify-repair-stop` inside the container for each dispatch, `plan-repair`, `admit-repair` and
+  `resume`, run in the right order from two environments. On 2026-11-11 a resume was refused twice
+  (unreconciled submission, then "Dagster dispatch stop requires verify-repair-stop") and the run
+  was abandoned for a fresh one, which is only acceptable when nothing has been accepted yet.
+- **Scope:** a `review-recover` operator script that runs the existing steps in order for one
+  application run, prints the repair plan and what will be reused, and asks for one confirmation
+  before admission and resume. Every existing check still runs and still refuses: no step is
+  weakened, skipped or automated past its refusal, a failed step is still not proof a worker
+  stopped, and an unreconciled submission still blocks a launch. When no job of the run has an
+  accepted handoff the script says so and offers a fresh run instead.
+- **Done when:** unit tests with fake Dagster and lifecycle boundaries cover the ordered happy
+  path, each refusal stopping the sequence with its reason, the declined confirmation, and the
+  nothing-accepted case; the operator guide documents it beside the single-step commands.
+- **Refs:** `docs/operations/recovery-repair.md`, `docs/tasks/2026-11-10-t057-repair-loop-safeguards.md`,
+  `deploy/dagster/bin/review_run.py`, `deploy/dagster/bin/stepwise.py`, T-057.
+
 ## Legacy backlog
 
 Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
+  Remaining work: T-075.
 
 ### T-001 — Finish OWASP acceptance beyond bounded static assessment
 

@@ -1,0 +1,29 @@
+starting example test binary
+=================================================================
+==4242==ERROR: AddressSanitizer: heap-use-after-free on address 0x603000000040 at pc 0x0000004f1a2b bp 0x7ffc00000010 sp 0x7ffc00000008
+READ of size 4 at 0x603000000040 thread T0
+    #0 0x4f1a2a in parse_packet /home/builder/src/net/parse.c:11:5
+    #1 0x4f2b3c in on_receive(char const*, unsigned long) /home/builder/src/net/session.c:118:9
+    #2 0x7f0000021b96 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x21b96) (BuildId: 0123456789ABCDEF0123456789abcdef01234567)
+
+0x603000000040 is located 0 bytes inside of 16-byte region [0x603000000040,0x603000000050)
+freed by thread T0 here:
+    #0 0x4a0000 in free (/opt/example/bin/examplegame+0xa0000)
+    #1 0x4f1900 in release_buffer /home/builder/src/net/buffer.c:20:3
+
+previously allocated by thread T0 here:
+    #0 0x4a0100 in malloc (/opt/example/bin/examplegame+0xa0100)
+
+SUMMARY: AddressSanitizer: heap-use-after-free /home/builder/src/net/parse.c:11:5 in parse_packet
+==4242==ABORTING
+==================
+WARNING: ThreadSanitizer: data race (pid=4243)
+  Write of size 4 at 0x7b0400000010 by thread T1:
+    #0 update_score /home/builder/src/game/score.c:7 (examplegame+0x00000000a360)
+
+  Previous write of size 4 at 0x7b0400000010 by main thread:
+    #0 main /home/builder/src/main.c:30 (examplegame+0x00000000a3b4)
+
+SUMMARY: ThreadSanitizer: data race /home/builder/src/game/score.c:7 in update_score
+==================
+/home/builder/src/game/math.c:3:5: runtime error: signed integer overflow: 2147483647 + 1 cannot be represented in type 'int'

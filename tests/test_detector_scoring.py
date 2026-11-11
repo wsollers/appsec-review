@@ -156,7 +156,9 @@ def test_single_producer_reproduces_paper_equations(tmp_path):
     # d1: 5 - (2 - 1) + 5 = 9; d2: 5 - 0 + 1 = 6; c1 silent: 2; c2 one report: -1.
     assert alpha.castle_score == 9 + 6 + 2 - 1 == 16
     assert (alpha.tp, alpha.fn, alpha.tn, alpha.fp, alpha.fp_cases, alpha.lenient_tp) == (2, 0, 1, 2, 2, 2)
-    assert (alpha.precision, alpha.recall, alpha.accuracy) == (0.5, 1.0, 0.6)  # 2/4, 2/2, 3/5
+    # Accuracy is case-based: d1 and d2 hit, c1 silent, c2 reported -> 3 of 4 cases handled correctly.
+    assert (alpha.precision, alpha.recall, alpha.accuracy) == (0.5, 1.0, 0.75)  # 2/4, 2/2, 3/4
+    assert report.as_dict()["producers"][0]["accuracy_basis"] == "cases"
     assert alpha.outcomes == {"hit": 2, "location_hit_cwe_miss": 0, "location_hit_cwe_unknown": 0,
                               "off_location": 1, "control": 1, "unattributed": 1}
     assert [(item.path, item.start_line) for item in alpha.unattributed] == [("src/a.c", 100)]
@@ -369,6 +371,79 @@ def test_cli_json_with_fake_producer_reports(tmp_path, monkeypatch, capsys):
     assert scoring.main(["--run", str(run), "--expectations", str(key), "--producers", "gamma"]) == 0
     assert "   scoring gamma castle=4 " in capsys.readouterr().out
     assert scoring.main(["--run", str(tmp_path / "absent"), "--expectations", str(key)]) == 2
+
+
+def test_cli_scores_the_review_by_default_and_no_review_opts_out(tmp_path, monkeypatch, capsys):
+    run = tmp_path / "run"
+    (run / "data").mkdir(parents=True)
+    key = tmp_path / "key.toml"
+    key.write_text(MINI, encoding="utf-8")
+    calls = []
+
+    def reports_from_run(run_root, *, include_review=False):
+        calls.append(include_review)
+        return list(ALPHA), []
+
+    fake = types.ModuleType("appsec_review.acceptance.producer_reports")
+    fake.reports_from_run = reports_from_run
+    monkeypatch.setitem(sys.modules, "appsec_review.acceptance.producer_reports", fake)
+    assert scoring.main(["--run", str(run), "--expectations", str(key)]) == 0
+    assert scoring.main(["--run", str(run), "--expectations", str(key), "--no-review"]) == 0
+    scoring.score_run(run, key)
+    assert calls == [True, False, True]
+    capsys.readouterr()
+
+
+# ------------------------------------------------------------- scope and weakness-family match
+
+def test_review_is_matched_at_function_scope_and_weakness_family(tmp_path):
+    reports = [_r("review", "src/a.c", 18, "CWE-125"),  # d1's scope, off its lines, same family as CWE-787
+               _r("review", "src/b.c", 15, "CWE-78"),   # d2's scope, another family: a false positive
+               _r("review", "src/a.c", 30, "CWE-787"),  # on control c1: a false positive
+               _r("review", "src/a.c", 200, "CWE-787"),  # in no scope: unattributed, never scored
+               _r("alpha", "src/a.c", 18, "CWE-125")]
+    report = score(_key(tmp_path), reports)
+    review = _producer(report, "review")
+    # Strict line-and-CWE match sees nothing; the scope-and-family match credits d1 once.
+    assert (review.tp, review.fn, review.outcomes["off_location"]) == (0, 2, 2)
+    assert (review.scope_tp, review.scope_fp, review.scope_precision, review.scope_recall) == (1, 2, 0.3333, 0.5)
+    assert review.headline_match == "scope_family"
+    alpha = _producer(report, "alpha")
+    assert (alpha.scope_tp, alpha.headline_match) == (1, "strict")
+    row = next(item for item in report.as_dict()["producers"] if item["producer"] == "review")
+    assert row["headline_match"] == "scope_family" and row["scope_tp"] == 1 and row["scope_fp"] == 2
+    assert any("headline=scope_family" in line and line.startswith("   scoring review ") for line in render_lines(report))
+
+
+def test_scope_match_counts_a_case_once_and_ignores_reports_without_a_cwe(tmp_path):
+    reports = [_r("review", "src/a.c", 6, "CWE-787"), _r("review", "src/a.c", 19, "CWE-121"),
+               _r("review", "src/a.c", 12)]
+    review = _producer(score(_key(tmp_path), reports), "review")
+    assert (review.scope_tp, review.scope_fp) == (1, 1)  # two family reports credit d1 once; no CWE never matches
+    assert (review.scope_precision, review.scope_recall) == (0.5, 0.5)
+    silent = _producer(score(_key(tmp_path), ALPHA, producers=["review"]), "review")
+    assert (silent.scope_tp, silent.scope_precision, silent.scope_recall) == (0, None, 0.0)
+
+
+def test_detection_marginals_count_defects_only_one_producer_hit(tmp_path):
+    report = score(_key(tmp_path), ALPHA + BETA + GAMMA)
+    # d1 is hit by alpha and beta; d2 only by alpha (beta's report there has no CWE).
+    assert report.marginal_detection == {"alpha": {"unique_tp": 1, "fp": 2}, "beta": {"unique_tp": 0, "fp": 2},
+                                         "gamma": {"unique_tp": 0, "fp": 1}}
+    assert report.as_dict()["marginal_detection"]["alpha"] == {"unique_tp": 1, "fp": 2}
+    assert "   scoring detection alpha unique_tp=1 fp=2" in render_lines(report)
+
+
+def test_key_severity_is_optional_on_defects_and_refused_elsewhere(tmp_path):
+    text = MINI.replace('pair = "c1"\n', 'pair = "c1"\nseverity = "critical"\n')
+    key = _key(tmp_path, text)
+    assert [entry.severity for entry in key.entries] == ["critical", None, None, None]
+    cases = {case["id"]: case["severity"] for case in score(key, []).as_dict()["cases"]}
+    assert cases == {"d1": "critical", "d2": None, "c1": None, "c2": None}
+    with pytest.raises(ValueError, match="severity"):
+        _key(tmp_path, MINI.replace('pair = "c1"\n', 'pair = "c1"\nseverity = "severe"\n'), "bad-band.toml")
+    with pytest.raises(ValueError, match="severity"):
+        _key(tmp_path, MINI.replace('pair = "d1"\n', 'pair = "d1"\nseverity = "high"\n'), "control.toml")
 
 
 def test_report_outcome_vocabulary_is_complete(tmp_path):
