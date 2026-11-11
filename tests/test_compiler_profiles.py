@@ -164,7 +164,8 @@ def test_cpp_image_profiles_record_closure_targets_and_environment():
     records = _records(CPP)
     assert sorted(records) == ["clang", "gcc"]
     clang = records["clang"]
-    assert clang["schema"] == "appsec-review/static-compiler-profile/2"
+    assert clang["schema"] == "appsec-review/static-compiler-profile/3"
+    assert clang["invocation_paths"] == ["/usr/bin/cc", "/usr/bin/clang"]
     assert clang["executable"] == "/usr/lib/llvm-18/bin/clang"
     assert clang["invocation_names"] == ["cc", "clang"]
     assert clang["wrapper_closure"] == [{"path": "/usr/bin/clang", "target": "../lib/llvm-18/bin/clang"}]
@@ -505,7 +506,9 @@ def _profile() -> BuildProfile:
 def test_collector_runs_one_isolated_native_protocol_probe_and_hashes_copied_bytes(tmp_path):
     engine = Engine(CPP)
     verifier = Verifier()
-    result = cp.collect_compiler_profiles(_profile(), scratch=tmp_path, runner=engine, image_verifier=verifier)
+    executor = cp.BuildContainerExecutor(_profile(), timeout_seconds=120, output_bytes=cp.MAX_TRANSCRIPT_BYTES,
+                                         runner=engine, image_verifier=verifier)
+    result = executor.compiler_profiles(scratch=tmp_path)
     assert verifier.calls == [(IMAGE, "appsec-review/buildenv-cpp:test")]
     assert [call[:3] for call in engine.calls] == [
         ("docker", "image", "inspect"), ("docker", "run", "--rm"), ("docker", "rm", "--force")]

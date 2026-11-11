@@ -24,7 +24,7 @@ DATASETS = (
     indexed("jvm_build_actions", "execute", "build", "appsec-review/retrieval-index/2",
             "Sanitized JVM build commands, observed tool invocations and artifacts.",
             indexes=("build",), prefixes=("jvm-",), route="find/trace index=build"),
-    artifact_only("language_build_receipts", "acceptance", "build", "appsec-review/language-build-handoff/1",
+    artifact_only("language_build_receipts", "acceptance", "build", "appsec-review/language-build-handoff/2",
                   "Accepted build receipts with topology, dependency identities and artifact hashes.",
                   artifacts=(_A + "/artifacts/language-build/*.json",),
                   reason="receipts embed exact recipes and environment values; sanitized facts are in the build "
@@ -50,7 +50,7 @@ CONTRACT = JobContract(
         InputRequirement("job_project_build", "topology_refinement_inputs",
                          "appsec-review/build-topology-refinement/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_project_build", "project_build_dispatch",
-                         "appsec-review/project-build-dispatch/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         "appsec-review/project-build-dispatch/3", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_project_build", "probe_workspaces",
                          "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_project_build", "image_build_streams",

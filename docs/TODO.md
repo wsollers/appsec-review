@@ -298,6 +298,7 @@ until each is rewritten into the entry format when it is next touched.
   unit, and no manufactured `direct-native` root for a source a sibling descriptor names. The
   compiler now has the facts to fold `role == member` units as `contained`; when it does, remove
   the Gradle root-with-build-file absorption in `discover_build_units` so both Gradle shapes agree.
+  Static target proof is no longer load-bearing; T-035 still owns component identity and ownership.
 - **Done when:** `tests/test_topology_fixture.py` xfails `ownership-*`, `relation-*` and
   `ownership-gradle-settings` flip to passes with their marks removed; a Barracuda slice plan shows
   tens of components, not hundreds of roots.
@@ -319,6 +320,7 @@ until each is rewritten into the entry format when it is next touched.
   component with a disposition rather than absent; selection-policy rows for `composer`,
   `npm|pnpm|yarn`, `gradle` (by build system, not only `declared_platform`); `job_project_build`
   never sends a non-`compiled` component to an image handler.
+  Static target proof is no longer load-bearing; T-036 still owns component build-mode disposition.
 - **Done when:** fixture xfails `build-mode-disposition` and `discovery-marker` flip; a plan on the
   fixture publishes with zero BLOCKED image entries for shapes D–G.
 - **Refs:** T-035, `appsec-review.toml` `[jobs.job_project_build.settings.build_selection]`.
@@ -339,6 +341,7 @@ until each is rewritten into the entry format when it is next touched.
   record `recipe_provenance` and the declaration hash in the plan; run inference only for
   components still null or marked `infer`; all three pass `validate_build_recipe` and the same
   command policy.
+  Static target proof is no longer load-bearing; T-037 still owns declared/canonical/inferred recipe provenance.
 - **Done when:** fixture xfail `deterministic-recipe` flips; a Barracuda slice plan has no null
   recipes for cmake/make units and model calls fall by an order of magnitude (recorded in
   `plan["feedback"]`).

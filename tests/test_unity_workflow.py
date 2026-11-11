@@ -167,7 +167,7 @@ def test_engine_telemetry_and_report_preserve_nonexecution_and_failure(tmp_path:
     projects = receipt("projects.json", {"projects": [{"root": "."}]})
     targets = receipt("targets.json", {"targets": [
         {"family": "dotnet", "engine": {"kind": "unity"}}]})
-    builds = receipt("builds.json", {"schema": "appsec-review/language-build-handoff/1", "receipts": [
+    builds = receipt("builds.json", {"schema": "appsec-review/language-build-handoff/2", "receipts": [
         {"family": "dotnet", "build_unit_id": "unity-a", "root": ".", "engine": {"kind": "unity"},
          "terminal_status": "NOT_REQUESTED", "gaps": ["Unity builds disabled"], "artifacts": []},
         {"family": "dotnet", "build_unit_id": "unity-b", "root": ".", "engine": {"kind": "unity"},

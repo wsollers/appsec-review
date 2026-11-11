@@ -131,7 +131,7 @@ def test_go386_disagrees_with_explicit_x64_policy_and_cannot_borrow_host_default
     bound, = refine_build_topology(graph, [unit], policy=selection("go", os="linux"))["units"]
     assert "native_compile" in {operation["kind"] for operation in bound["operations"]}
     assert bound["enforcement"]
-    assert "unenforced_native_target" in bound["blockers"]
+    assert "unenforced_native_target" not in bound["blockers"]
     assert all(proof["status"] != "proven" for proof in bound["enforcement"])
     assert bound["selection"]["required_axes"]["isa"] == "x86_64"
     assert bound["selection"]["required_axes"]["hardware_generation"] is None
@@ -158,7 +158,7 @@ def test_node_gyp_requires_effective_native_operation_including_invoked_lifecycl
         graph, [unit], policy=selection("node", os="linux"))["units"]
     if invokes_native:
         assert "native_compile" in {op["kind"] for op in bound["operations"]}
-        assert bound["enforcement"] and "unenforced_native_target" in bound["blockers"]
+        assert bound["enforcement"] and "unenforced_native_target" not in bound["blockers"]
     else:
         assert not bound["enforcement"]
         assert {op["kind"] for op in bound["operations"]} == {"package"}
@@ -221,7 +221,7 @@ def test_synthetic_captured_native_solution_uses_actual_mapping_and_keeps_dll_im
     assert not any(d["role"] == "import_library" and d["declared_path"] == "out/shared.dll"
                    for d in graph["declarations"])
     if expected_status == "incompatible":
-        assert "unenforced_native_target" in bound["blockers"]
+        assert "unenforced_native_target" not in bound["blockers"]
     assert bound["selection"]["required_axes"]["hardware_generation"] is None
 
 

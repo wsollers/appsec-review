@@ -303,7 +303,7 @@ def publish_build(case):
                "image": {"image_tag": "audit-buildenv-cpp:local", "image_id": "sha256:" + "a" * 64,
                          "user": "10001:10001"}, "recipe": {"build_dir": "."}, "artifacts": []}
     path = case.root / "data/jobs/job_language_build/attempts/attempt_0001/artifacts/language-build/receipts.json"
-    atomic_json(path, {"schema": "appsec-review/language-build-handoff/1", "receipts": [receipt]})
+    atomic_json(path, {"schema": "appsec-review/language-build-handoff/2", "receipts": [receipt]})
     return case.publish(LANGUAGE, {"acceptance.publish_handoff": {"artifact": artifact_ref(case.root, path)}})
 
 

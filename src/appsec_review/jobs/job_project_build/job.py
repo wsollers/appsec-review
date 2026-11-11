@@ -52,9 +52,11 @@ from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical
 from .repair import REPAIR_SCHEMA, apply_repair, repair_options, validate_repair_proposal
 from appsec_review.jobs.job_project_build.datasets import CONTRACT, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
+from .enforcement import scoped_gaps, validate_enforcement
+from appsec_review.interchange import producer_gap
 
 
-SCHEMA = "appsec-review/project-build-dispatch/2"
+SCHEMA = "appsec-review/project-build-dispatch/3"
 EXECUTOR_IDENTITY = "appsec-review/build-container-executor/3"
 REPAIR_CACHE_SCHEMA = "appsec-review/build-image-repair-cache/1"
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
@@ -68,6 +70,10 @@ _BUILD_CAPABILITIES = {
     "dotnet": ("build", "bytecode", "codeql", "binary"), "python": ("package", "codeql"),
     "php": ("package",), "wasm": ("build", "ir", "binary"),
 }
+
+
+class ProjectBuildFailed(RuntimeError):
+    """Native execution or its required capture could not be accepted."""
 
 
 def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
@@ -929,6 +935,12 @@ def load_accepted_builds(run_root: Path, *, for_execution: bool = False) -> Mapp
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema") != SCHEMA:
         raise ValueError("project-build dispatch schema is unsupported")
+    for receipt in document["probe_receipts"]:
+        if receipt.get("family") == "native" and receipt.get("commands"):
+            proofs = receipt.get("enforcement", ())
+            if len(proofs) != 1:
+                raise ValueError("native build must retain exactly one captured enforcement record")
+            validate_enforcement(proofs[0], dispatch=receipt)
     if type(for_execution) is not bool:
         raise ValueError("project-build execution reader mode must be explicit")
     if for_execution:
@@ -1024,6 +1036,14 @@ def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_id
 def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
     if action.get("family") != "native" or action.get("build_system") != "cmake":
         return None
+    selected = action.get("recipe")
+    if isinstance(selected, Mapping):
+        from appsec_review.jobs.build_topology import capture_trust_blockers
+        commands = [*selected.get("configure_commands", ()), *selected.get("build_commands", ())]
+        if (validate_build_recipe(selected, action) or capture_trust_blockers(selected)
+                or selected.get("image_repairs") or not commands
+                or any(not argv or argv[0] != "cmake" for argv in commands)):
+            return None
     root = str(action["root"])
     source = _safe_root(unit.job.target_root or Path(), root)
     marker = source / "CMakeLists.txt"
@@ -1034,11 +1054,12 @@ def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -
     recipe = {"schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
               "image_profile": "native", "source_dir": root, "build_dir": build_dir,
               "system_packages": [], "environment": {}, "dependency_files": [marker_path],
-              "configure_commands": [["cmake", "-S", root, "-B", build_dir,
+              "configure_commands": [["cmake", "-G", "Ninja", "-S", root, "-B", build_dir,
                                         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"]],
               "build_commands": [["cmake", "--build", build_dir, "--parallel", "2"]],
-              "expected_outputs": [build_dir], "network_required": False,
+              "expected_outputs": list(selected["expected_outputs"]) if isinstance(selected, Mapping) else [build_dir],
+              "network_required": False,
               "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker."}
     pseudo_unit = {"build_unit_id": action["build_unit_id"], "family": "native", "root": root,
                    "build_system": "cmake", "markers": [{"path": marker_path}],
@@ -1137,6 +1158,23 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
     if errors:
         raise ValueError("deterministic JVM recipe is invalid: " + "; ".join(errors))
     return recipe
+
+def _prepared_dispatch(unit: UnitContext, entry: Mapping[str, Any]) -> dict[str, Any]:
+    action, image = entry["action"], entry["image"]
+    from appsec_review.jobs.build_topology_artifacts import guard_action
+    bound = guard_action(unit.job.run_root, {**action, "image": image},
+                         releases=unit.job.review_policy.releases.view())
+    return {
+        **action, "workflow": "lang_jobflow_build", "image": image,
+        "recipe_identity": image["recipe_identity"], "source_fingerprint": unit.job.source_fingerprint,
+        "preparation_identity": hashlib.sha256(canonical_json(entry)).hexdigest(),
+        "execution_mode": "iterative", "build_dependencies": list(action.get("build_dependencies", ())),
+        "execution_owner": "job_language_build",
+        "capabilities": list(_BUILD_CAPABILITIES[action["family"]]),
+        "target_annotation": [{key: proof[key] for key in ("proof_kind", "status", "unresolved_inputs")}
+                              for proof in bound["enforcement"]],
+    }
+
 
 def build_job(*, executor_factory=None, image_resolver_factory=None, unity_executor_factory=None,
               infer: Infer | None = None) -> Job:
@@ -1362,6 +1400,38 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
     def probe_handler(family: str):
         def execute(unit: UnitContext) -> Mapping[str, Any]:
             receipts = []
+            if family == "native":
+                from appsec_review.jobs.job_language_build.job import _execute_one
+                graph = unit.output("plan.load_recipes")["execution_graph"]
+                connected = {edge[key] for edge in graph["edges"]
+                             for key in ("producer_build_unit_id", "consumer_build_unit_id")}
+                for entry in unit.output("image.native")["entries"]:
+                    action = entry["action"]
+                    if action["build_unit_id"] in connected:
+                        continue  # Product-connected units retain the shared-workspace iteration owner.
+                    if entry["terminal_status"] != "SUCCEEDED":
+                        receipts.append({
+                            "build_unit_id": action["build_unit_id"], "family": family,
+                            "root": action["root"], "build_system": action["build_system"],
+                            "terminal_status": "BLOCKED", "probe_disposition": "BLOCKED",
+                            "artifacts": [], "commands": [],
+                            "gaps": scoped_gaps(entry["gaps"], unit.unit_id, action["build_unit_id"])})
+                        continue
+                    dispatch = _prepared_dispatch(unit, entry)
+                    try:
+                        receipt = _execute_one(
+                            unit, dispatch, {}, executor_factory,
+                            input_handoff_sha256=unit.job.upstream_handoffs["job_target_analysis_plan"])
+                    except (OSError, ValueError, RuntimeError) as error:
+                        atomic_json(unit.unit_root / action["build_unit_id"] / "failure.json", {
+                            "gaps": [producer_gap("producer_failed", str(error),
+                                                 scope_id=action["build_unit_id"])],
+                            "terminal_status": "FAILED"})
+                        unit.job.events.write("PROJECT_NATIVE_BUILD_FAILED", unit_id=unit.unit_id,
+                                              build_unit_id=action["build_unit_id"],
+                                              error_type=type(error).__name__)
+                        raise ProjectBuildFailed(str(error)) from error
+                    receipts.append({**receipt, "probe_disposition": "CAPTURED"})
             if family == "dotnet":
                 from appsec_review.config.unity import parse_unity_build_settings
                 from appsec_review.jobs.unity_build import execute_unity_build
@@ -1372,7 +1442,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                             unit, action, settings, executor_factory=unity_executor_factory)
                         receipts.append({**receipt, "probe_disposition": receipt.get(
                             "probe_disposition", "COMPUTED")})
-            gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value["gaps"]]
+            gaps = [record for value in receipts for record in
+                    scoped_gaps(value["gaps"], unit.unit_id, value["build_unit_id"])]
             return {"family": family, "receipts": receipts, "probe_count": len(receipts),
                     "reused_count": sum(value.get("probe_disposition") == "REUSED" for value in receipts),
                     "terminal_status": "NOT_APPLICABLE" if not receipts else "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED",
@@ -1391,27 +1462,14 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                     continue
                 accepted_recipe = action["recipe"]
                 accepted_image = entry["image"]
-                value = {"workflow": "lang_jobflow_build", "family": family, "build_unit_id": action["build_unit_id"],
-                         "root": action["root"], "build_system": action["build_system"],
-                         "recipe": accepted_recipe,
-                         "topology_refinement": action["topology_refinement"],
-                         "build_variant": dict(action.get("build_variant", {})),
-                         "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
-                         "recipe_identity": accepted_image["recipe_identity"], "image": accepted_image,
-                         "source_fingerprint": unit.job.source_fingerprint,
-                         "preparation_identity": hashlib.sha256(canonical_json(entry)).hexdigest(),
-                         "build_dependencies": list(entry["action"].get("build_dependencies", ())),
-                         "execution_mode": "iterative",
-                         "markers": list(entry["action"].get("markers", ())),
-                         "descriptor_package": dict(entry["action"].get("descriptor_package", {})),
-                         "descriptor_facts": dict(entry["action"].get("descriptor_facts", {})),
-                         "native_components": [dict(item) for item in
-                                               entry["action"].get("native_components", ())],
-                         "required_image_profile": entry["action"].get(
-                             "required_image_profile", accepted_recipe.get("image_profile")),
-                         "processing_facts": dict(entry["action"].get("processing_facts", {})),
-                         "build_capture_decision": dict(entry["action"].get("build_capture_decision", {})),
-                         "capabilities": list(_BUILD_CAPABILITIES[family])}
+                value = _prepared_dispatch(unit, entry)
+                if family == "native":
+                    receipt = next((item for item in receipts
+                                    if item["build_unit_id"] == action["build_unit_id"]), None)
+                    if receipt is not None:
+                        value.update(execution_owner="job_project_build",
+                                     build_receipt_sha256=hashlib.sha256(canonical_json(receipt)).hexdigest(),
+                                     enforcement=receipt.get("enforcement", []))
                 from appsec_review.jobs.build_topology_artifacts import guard_action
                 guard_action(unit.job.run_root, value, releases=unit.job.review_policy.releases.view())
                 dispatches.append(value)
@@ -1454,7 +1512,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                     "build_dispatches": [item for value in builds.values() for item in value["dispatches"]],
                     "probe_artifact_count": sum(len(item["artifacts"]) for item in receipts),
                     "processing_decisions": processing_decisions,
-                    "gaps": list(dict.fromkeys([*gaps, *processing_gaps]))}
+                    "gaps": scoped_gaps([*gaps, *processing_gaps], unit.unit_id)}
         artifact = _artifact(unit, "accepted-project-build-dispatch.json", document)
         return {"artifact": artifact, "probe_count": len(receipts),
                 "probe_reused_count": sum(item.get("probe_disposition") == "REUSED" for item in receipts),
@@ -1464,15 +1522,22 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
                 "dispositions": processing_decisions,
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 
-    units: list[Unit] = [Unit("plan.load_recipes", plan)]
-    units.extend(Unit(f"image.{family}", image_handler(family), ("plan.load_recipes",)) for family in BUILD_FAMILIES)
-    units.extend(Unit(f"static_dispatch.{lane}", static_handler(lane), ("plan.load_recipes",)) for lane in STATIC_LANES)
-    units.extend(Unit(f"probe.{family}", probe_handler(family), (f"image.{family}",)) for family in BUILD_FAMILIES)
-    units.extend(Unit(f"build_dispatch.{family}", build_dispatch_handler(family),
+    def typed(handler):
+        def execute(unit):
+            output = dict(handler(unit))
+            output["gaps"] = scoped_gaps(output.get("gaps", ()), unit.unit_id)
+            return output
+        return execute
+
+    units: list[Unit] = [Unit("plan.load_recipes", typed(plan))]
+    units.extend(Unit(f"image.{family}", typed(image_handler(family)), ("plan.load_recipes",)) for family in BUILD_FAMILIES)
+    units.extend(Unit(f"static_dispatch.{lane}", typed(static_handler(lane)), ("plan.load_recipes",)) for lane in STATIC_LANES)
+    units.extend(Unit(f"probe.{family}", typed(probe_handler(family)), (f"image.{family}",)) for family in BUILD_FAMILIES)
+    units.extend(Unit(f"build_dispatch.{family}", typed(build_dispatch_handler(family)),
                       (f"image.{family}", f"probe.{family}")) for family in BUILD_FAMILIES)
     terminal = tuple([*(f"static_dispatch.{lane}" for lane in STATIC_LANES),
                       *(f"build_dispatch.{family}" for family in BUILD_FAMILIES)])
-    units.append(Unit("acceptance.publish_handoff", publish, terminal))
+    units.append(Unit("acceptance.publish_handoff", typed(publish), terminal))
     source_files = (Path(__file__), Path(__file__).with_name("repair.py"),
                     Path(__file__).parents[2] / "container_runtime" / "build_executor.py",
                     Path(__file__).parents[2] / "container_runtime" / "project_images.py")
@@ -1480,4 +1545,4 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, implementation_identity=implementation,
                validation_identity=None, units=tuple(units),
-               datasets=DATASETS, contract=CONTRACT)
+               datasets=DATASETS, contract=CONTRACT, strict_gaps=True)

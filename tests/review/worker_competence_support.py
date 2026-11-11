@@ -101,7 +101,7 @@ def remediation_corpus(directory: Path, *, build: bool = True, wrong_build: bool
             "recipe": {"build_dir": "native/build"}, "artifacts": [],
         }
         receipts = base / "receipt-set.json"
-        atomic_json(receipts, {"schema": "appsec-review/language-build-handoff/1", "receipts": [receipt]})
+        atomic_json(receipts, {"schema": "appsec-review/language-build-handoff/2", "receipts": [receipt]})
         handoff = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "attempt_0001" / "handoff.json"
         write_fixture_handoff(run_root, handoff, {"job_id": "job_language_build", "outputs": {
             "acceptance.publish_handoff": {"artifact": artifact_ref(run_root, receipts)}}})

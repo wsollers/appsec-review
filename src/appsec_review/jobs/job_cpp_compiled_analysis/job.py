@@ -57,9 +57,14 @@ def _json_artifact(unit: UnitContext, path: Path, value: Any) -> dict[str, Any]:
 
 def _terminal_gap(output: Mapping[str, Any]) -> str | None:
     if output.get("terminal_status") in {"SUCCEEDED", "NOT_APPLICABLE"}:
+        receipt = output.get("build_receipt", output)
+        database = receipt.get("native_compile_database")
+        if receipt.get("family") == "native" and isinstance(database, Mapping) and database.get("entry_count") == 0:
+            return "capture-backed native compile database is empty"
         return None
     gaps = output.get("gaps", ())
-    return str(gaps[0]) if gaps else "upstream C++ case action did not succeed"
+    from appsec_review.jobs.job_project_build.enforcement import gap_text
+    return gap_text(gaps[0]) if gaps else "upstream C++ case action did not succeed"
 
 
 def _checkpoint_identity(unit: UnitContext, case_id: str, stage: str, values: Mapping[str, Any],
@@ -884,6 +889,8 @@ def native_analysis_actions(accepted: Mapping[str, Any], target_root: Path) -> l
                  receipt.get("terminal_status") == "SUCCEEDED")
         if receipt.get("family") != "native" and not mixed:
             continue
+        if receipt.get("family") == "native" and receipt.get("workspace") and not isinstance(component_database, Mapping):
+            raise ValueError("accepted native build lacks a capture-backed compile database")
         root = PurePosixPath(str(receipt.get("root", "")))
         if root.is_absolute() or ".." in root.parts:
             raise ValueError("accepted native build root is invalid")
@@ -901,9 +908,8 @@ def native_analysis_actions(accepted: Mapping[str, Any], target_root: Path) -> l
                         "project_id": f"cpp:{root.as_posix()}",
                         "family": str(receipt.get("family", "native")),
                         "native_components": [dict(item) for item in receipt.get("native_components", ())],
-                        "compile_database_origin": ("captured-native-components" if mixed and
-                                                    receipt.get("family") != "native"
-                                                    else "build-system"),
+                        "compile_database_origin": ("captured-native-components" if isinstance(
+                            component_database, Mapping) else "unavailable"),
                         "source_count": len(native_sources)})
     return actions
 
@@ -916,7 +922,8 @@ def unbuilt_native_gap(receipt: Mapping[str, Any], root: str) -> str:
         reason = upstream.get("reason")
     else:
         job_id, status = "job_language_build", receipt.get("terminal_status")
-        gaps = [str(value) for value in receipt.get("gaps", ()) if value]
+        from appsec_review.jobs.job_project_build.enforcement import gap_text
+        gaps = [gap_text(value) for value in receipt.get("gaps", ()) if value]
         reason = gaps[0] if gaps else "no reason recorded"
     return (f"{receipt.get('build_unit_id')} ({root}): C/C++ analysis unavailable because the native "
             f"build failed upstream in {job_id} ({status}): {reason}")

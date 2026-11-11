@@ -46,6 +46,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from appsec_review.acceptance.answer_key import evaluate, load_answer_key, observations_from_run  # noqa: E402
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
+from appsec_review.acceptance.project_build import project_build_content_problems  # noqa: E402
 from appsec_review.acceptance import funnel as funnel_report  # noqa: E402
 from appsec_review.acceptance import scoring as detector_scoring  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
@@ -252,21 +253,25 @@ def check(args, state: StepwiseState, path: Path, job_key: str) -> bool:
                   f"added={json.dumps(change['added'])} removed={json.dumps(change['removed'])}")
         for entry in differences[:args.show]:
             print(f"   {entry['class']} {entry['path']}: {entry['expected'][:160]} -> {entry['actual'][:160]}")
-    passed = (run["status"] == "SUCCESS" and not findings
+    content_problems = (project_build_content_problems(run_root, attempt)
+                        if item["job_id"] == "job_project_build" and run["status"] == "SUCCESS" else [])
+    for problem in content_problems:
+        print(f"   content: {problem}")
+    passed = (run["status"] == "SUCCESS" and not findings and not content_problems
               and (comparison is None or comparison["passed"]))
     report = {"job_id": item["job_id"], "dagster_run_id": dagster_run_id, "dagster_status": run["status"],
               "dagster_failures": failures, "job_status": document["status"],
               "attempt": attempt.name if attempt else None, "gaps": [{"gap": gap, "count": count} for gap, count in gaps],
               "partial_units": partial, "failed_units": document["failed_units"],
               "skipped_units": document["skipped_units"], "audit": [finding.as_dict() for finding in findings],
-              "replay_comparison": comparison, "passed": passed}
+              "replay_comparison": comparison, "content_problems": content_problems, "passed": passed}
     report_path = path.parent / "checks" / f"{item['job_id']}-{dagster_run_id}.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     state.record_check(item["job_id"], passed=passed, summary={
         "dagster_run_id": dagster_run_id, "dagster_status": run["status"], "job_status": document["status"],
         "audit": summarize(findings), "report": str(report_path.relative_to(ROOT)),
-        "replay_comparison": comparison})
+        "replay_comparison": comparison, "content_problems": content_problems})
     state.save(path)
     print(f"   check {'PASSED' if passed else 'FAILED'}; report {report_path.relative_to(ROOT)}")
     return passed
