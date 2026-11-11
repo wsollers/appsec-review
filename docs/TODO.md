@@ -72,6 +72,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | open |
 | T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | open |
 | T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | open |
+| T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | open |
+| T-081 | [Fix the stepwise system call to review_run submit](#t-081-fix-the-stepwise-system-call-to-review_run-submit) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1099,6 +1101,45 @@ until each is rewritten into the entry format when it is next touched.
   nothing-accepted case; the operator guide documents it beside the single-step commands.
 - **Refs:** `docs/operations/recovery-repair.md`, `docs/tasks/2026-11-10-t057-repair-loop-safeguards.md`,
   `deploy/dagster/bin/review_run.py`, `deploy/dagster/bin/stepwise.py`, T-057.
+
+### T-080 — Derive default release ids and allow an overlay to override them
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** review `2026-11-11-0003` blocked all 22 build units with "missing release evidence:
+  build_toolchain, platform, validation". The three ids are now committed as fixed strings in
+  `[review_policy.releases]` so builds can run, but a fixed string does not change when the thing
+  it names changes, nothing checks it, and it is the same on every host although build images are
+  host-local. The capacity overlay cannot set releases. The documentation also says a missing
+  declaration "disables reuse", while `jobs/build_iterations.py` refuses to dispatch any build.
+- **Scope:** (1) `[review_policy.releases]` joins the overlay allowlist, with the overlay layer hash
+  covering it and unknown keys still refused. (2) Derived defaults when a release is not declared:
+  `build_toolchain` from the native build image id in the host pins, and `platform` from the source
+  identity the stack measures at reload, if the loader can read it at load time; `validation`
+  stays declared. An explicit value in the base file or an overlay always wins, and the resolved
+  configuration records for each id whether it was declared or derived and from what. (3) The
+  committed strings are removed once the derived defaults exist. (4) The documentation states what
+  a missing id does for each consumer: no build dispatch, no image reuse, no CodeQL reuse.
+- **Done when:** unit tests cover declared, derived, overlay-overridden and unavailable-source
+  cases for each id and the layer hash; a build-iteration test shows a derived `build_toolchain`
+  dispatching; `docs/operations/performance-assurance.md` and `language-build.md` agree with the
+  code on the effect of a missing id.
+- **Refs:** `appsec-review.toml` (`[review_policy.releases]`), `src/appsec_review/jobs/build_iterations.py`,
+  `src/appsec_review/config/loader.py`, `src/appsec_review/config/host_pins.py`,
+  `docs/operations/performance-assurance.md`, T-051, T-057.
+
+### T-081 — Fix the stepwise system call to review_run submit
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `deploy/dagster/bin/stepwise.py` calls `review_run.submit(dagster_run_id)` with one
+  argument, but `submit(run_id, url, ...)` requires the GraphQL endpoint as well, so that path would
+  raise `TypeError` when reached. Found by reading the code on 2026-11-11 while adding the
+  pre-launch model check; not observed in a run.
+- **Scope:** pass the endpoint the walk already uses, and add a unit test that drives that call
+  through the script's fake boundary so a signature change cannot go unnoticed again.
+- **Done when:** the unit test fails on the current call and passes with the fix.
+- **Refs:** `deploy/dagster/bin/stepwise.py`, `deploy/dagster/bin/review_run.py`, `tests/test_operator_scripts.py`, T-078.
 
 ## Legacy backlog
 
