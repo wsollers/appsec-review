@@ -548,7 +548,7 @@ def command_system(args) -> int:
             raise RuntimeError(f"the code location reviews {configured}, but {tag} was accepted on "
                                f"{provenance['target']}")
         dagster_run_id = str(uuid4())
-        review_run.submit(dagster_run_id)
+        review_run.submit(dagster_run_id, args.url)
         run = wait(args.url, dagster_run_id, args.interval_seconds)
         app_run_id = run["tag_map"].get("appsec/application_run_id")
         if run["status"] != "SUCCESS" or not app_run_id:
