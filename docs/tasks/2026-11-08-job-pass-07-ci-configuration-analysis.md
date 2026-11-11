@@ -295,3 +295,68 @@ the byte end. The rule's actual evidence (`image: alpine:latest`) exists at line
 published range is impossible. This newly observed CI-local source-binding defect was assigned
 back to the same bounded repair agent. Build-environment analysis has not run. All seventeen
 recorded dispatches were reverified stopped; the old CI attempts and evidence are untouched.
+
+### Completed source-binding repair and CI acceptance
+
+Ready commits `47e8a0f3ef7e5c3c94fb47c14efbdc4293524248` and
+`ece9d8dfd37080c29cb6fc51fcbef579ddb300bd` were integrated together as
+`190617b3b` and `1c2d4fe05`. Pre-integration inspection caught Checkov's additional GitHub
+`[0,1]` permissions sentinel; the first commit was deliberately not deployed by itself.
+The final decoder preserves all five observed native ranges. Positive ranges extending past
+EOF are clipped only to verified physical source bounds, with the original range retained.
+The narrowly recognized workflow-permissions sentinel maps to whole-workflow scope.
+Both are explicitly `ambiguous`, confidence `0.5`, with native provenance and distinct mapping
+methods in normalized observations and both SQLite indexes. They are not precise line-one
+claims. Foreign paths, unsupported sentinels, negative/malformed or non-overlapping ranges fail
+explicitly. Existing exact mappings and Zizmor behavior remain unchanged.
+
+The repair checkout's final exact collection was 105 cases (0.66 s); its guarded run passed
+105 in 36.92 s / 42.155 s total, maximum case 9.156 s. Mounted-main verification used:
+
+```sh
+.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 105 --parallel \
+  --test-workers 2 --shuffle-seed 11101 --strict -- tests/test_ci_checkov_locations.py \
+  tests/test_ci_zizmor_output.py \
+  tests/test_ci_configuration_analysis_job.py::test_checkov_out_of_source_range_publishes_an_explicit_coarse_span \
+  tests/test_ci_configuration_analysis_job.py::test_checkov_permission_zero_sentinel_publishes_workflow_scope_not_line_one \
+  tests/test_ci_configuration_analysis_job.py::test_native_zizmor_is_published_with_its_source_span_and_raw_evidence \
+  tests/test_ci_configuration_analysis_job.py::test_invalid_zizmor_output_is_a_parser_gap_with_raw_evidence \
+  tests/test_ci_configuration_analysis_job.py::test_native_zizmor_keeps_observation_bounds_redaction_and_raw_output \
+  tests/test_ci_configuration_analysis.py::test_spans_hierarchy_redaction_and_exact_only_correlation
+```
+
+Result: **105 passed in 34.27 s / 39.815 s total**, no skips or cases over ten seconds.
+Main report: `test/tmp/reports/tests-custom-20261110-215911-342253-13262.json`.
+The isolated checkout retains the original clipping regression failure (one case, 10.48 s),
+the initial 86-case pass (35.55 s), and the two sentinel regression failures (10.61 s) before
+the final pass. Full commands, counts and timings remain in
+`test/tmp/checkov-range-handoff.json` and `test/tmp/checkov-sentinel-handoff.json`.
+
+Following another UI warning, source reload retained the same tooling image and restored all
+five healthy services/HTTP 200. Mounted/deployed CI bytes match
+`eaa1b848f9f95a1a7b62456b1f0f75a51e5f985ce91ef1a133074e0c36c3e997`;
+measured release is `963b2e3a6926971ca0050ff93bb0682a96a1212bbc35e58e39d88b470d326072`.
+Fresh plan `c024600f85c68586a5c2f120929ae14cc772b536784d6f90c553c4942ac0facf`
+was inspected, explicitly admitted and applied with `recover --plan`. Its invalidation/reuse
+decisions match the prior CI-only repair; no release-scoping change or unrelated invalidation
+was required. Configuration, target and image identities remain unchanged.
+
+The three early gates again passed actual-output verification and preserved-key comparison,
+then were individually reaccepted. CI `attempt_0003`, dispatch
+`b34ac72d-0648-4b87-944b-e5026c2bc4c4`, ran **03:13:34.708-03:17:07.007 UTC**
+on 2026-11-11 (212.298 s). The content criterion passed at **03:18:32 UTC** and CI was
+individually **accepted at 03:18:56.104 UTC**. From the retained Checkov fault check at
+02:41:25.931 UTC: 32 min 9 s to rerun start and 37 min 30 s to acceptance.
+From the recovery request: 79 min 21 s to CI acceptance, including both observed repair loops.
+
+`runs/metadata/stepwise/2026-11-10-0003/checks/ci-content-attempt_0003.json` records:
+ten verified definitions; all fifteen dispositions; 22 native Zizmor observations with exact
+source spans; all five Checkov observations, including the two explicit coarse mappings;
+zero actionlint findings; 58 observations/58 canonical findings; 63 verified references;
+90 hierarchy nodes; and consistent discovery, scan and publication telemetry. No source-span
+errors remain. CI-owned gaps are empty; accepted upstream catalog limitations remain visible.
+Original attempts, failed content check and all prior acceptance evidence are preserved.
+
+The next build-environment job was then run and accepted only after meeting its separately
+written criterion, including the honest unsupported-PowerShell gap. Security inference has
+not been launched.

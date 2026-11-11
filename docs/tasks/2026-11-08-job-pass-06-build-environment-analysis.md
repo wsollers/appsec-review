@@ -120,3 +120,11 @@ and complete with gaps. No missing-source, hash, parser, tool-startup or bound-e
 is acceptable. Verify the artifact hash, configured bounds (64 scripts, 262144 bytes, depth 4,
 4096 assignments, 30 seconds), claim's admitted catalog pin, and all three telemetry events
 against the actual payload. The target must remain unchanged.
+
+The criterion held for dispatch `56848812-f48c-4a04-92c9-76c0ca0aaa15`, `attempt_0001`.
+Actual artifact SHA-256 `224393bdff15e4d2043e721e9b8e9940a03d3f330fe621f5c1eb94be02b451ed`
+resolves to the verified 605-byte payload: zero selected/inspected scripts or declarations,
+`UNAVAILABLE`/`partial`, and precisely the declared PowerShell limitation. The claim pins the
+expected catalog hash; all three telemetry events agree. The parent individually accepted
+the job with its explicit gap, not as clean coverage. No source repair or target execution
+was needed.
