@@ -1,0 +1,657 @@
+{
+ "artifacts": [
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/status.json",
+   "sha256": "f3b71ec7ef3f9d68b9ad8dffc9ee0b65d0f22e1c865ee67cd1203ada950e62ac"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/resolve_models/status.json",
+   "sha256": "4aa1b519981c0a90751387413ae55c6965d4845ca1e2535e0e2ff6823169a8f2"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/status.json",
+   "sha256": "527a39c4d94fdc57e1bbfe54177c1a100ce08b395b7da043f237288eb9e269d3"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/fingerprint_target/status.json",
+   "sha256": "b78d6a40cdff001859de4237d9517cc6320c1f0e313df1869ea55b26a3a03698"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/resolve_target/status.json",
+   "sha256": "f22573a7454e17c178aaae950e7aca26463d0a783b422e34a3be844a92de204e"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/validate_target/status.json",
+   "sha256": "e4abfb10d1c0ac5aad67ba2979215e9de574f4798451206a41cdcf1044423149"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/status.json",
+   "sha256": "3b0b9dda6a1c529d65d5467810584407bc253f18b469989ad633de80007336ec"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/fetch_config/status.json",
+   "sha256": "7d1a0fdaa60f3f516d7a817c623824287ed6ebff277ed7a01f4bd262f614ddc6"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/freeze_config/status.json",
+   "sha256": "0d40fc94ce60d9f93736508910e5c801ca42c750741e1b1e4f00e4242ad0ed10"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/resolve_layers/status.json",
+   "sha256": "3c12e23dbd42da8d66ee889846de519e482ef7961fc4614cc591afdfe42ec9fc"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/resolve_target/result.json",
+   "sha256": "e9216f090ba46a95e2c5017c23f185a0f12455bce953e9f1f54d8665f68aa2de"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/fetch_config/result.json",
+   "sha256": "b55d4250c455038c7d79c942a0fba98124e4d329062d5f8de8f8e94a3e0be916"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/claim.json",
+   "sha256": "f25bc343c15fd57842663fbf3cd73b3dcedac23a85300bafe40dc97ef09499b0"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/resolve_models/result.json",
+   "sha256": "1732b45ff10cb4a98d1920b95cc4c4d9328f7bcce56b52586634fc127d62e9a3"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/fingerprint_target/result.json",
+   "sha256": "12a7e543cff3f45abf67068e16ef22106c371c63da26fff47fbaffe845174b9e"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/freeze_config/result.json",
+   "sha256": "bf8199a813527cf5ea2c03751cbfc5ee0bf4439e08f4a2812611e55cc53db095"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/binary-evidence.json",
+   "sha256": "8e302e48fe9828cecea98c60234dd40d81ae99d30284fece3a10dd9996be39dc"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/result.json",
+   "sha256": "77f195f49d5fa2e539ba99db4d7ab78042c4db5c4e3bb321d199a1dcc21b0a42"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/resolve_layers/result.json",
+   "sha256": "46ae505bea7538180f4b563227fb68cc39f1da5ae448e824e89e21265fc2bb0e"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/result.json",
+   "sha256": "ad72e9fe7cd02026a8295be05c2e346a3b5208fe008bc6b809db5506873a0d99"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/result.json",
+   "sha256": "3e488495b05c13b17c40df64f2ab469178c858aa284dba9eb89a7d6fc2873280"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/validate_target/result.json",
+   "sha256": "07402a64d507c8ca5492d5201fc318eca25b4b38f55b9eba497e4d2915a74511"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/model-preflight.json",
+   "sha256": "307df61674b5fd6f6d533bbcd3fc899c84c70917554bcdc79d2c98e763c0a354"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/review-intake.json",
+   "sha256": "bc625f6c6eb12664190d89e7a834198d073094de2cf818f71847f165c2f90d58"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/outcomes.json",
+   "sha256": "71b3fa98b85a1f7c967c146f2ca00c10eab07715f8b8a9c54f9243dba34b1f9f"
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/review-intake-job/3",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_review_intake",
+ "outputs": {
+  "binary_evidence.resolve_publications": {
+   "artifact": {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/binary-evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "binaries": [],
+   "binary_gaps": [],
+   "schema": "appsec-review/binary-evidence-intake/1",
+   "terminal_status": "SUCCEEDED"
+  },
+  "model_preflight.resolve_models": {
+   "model_count": 2,
+   "not_required": [
+    {
+     "enabled": false,
+     "job_id": "job_post_build_security_assessment",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "reason": "model setting disabled",
+     "setting": "settings.model"
+    }
+   ],
+   "required": [
+    {
+     "enabled": true,
+     "job_id": "job_dependency_intelligence",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.default"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-opus-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.strong"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.triage"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_owasp_control_assessment",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_owasp_control_assessment",
+     "model": "claude-opus-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.reviewer"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_poc_generation",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.models.default"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_project_build",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_remediation_planning",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.writer"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_remediation_validation",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.reviewer"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_target_analysis_plan",
+     "model": "claude-sonnet-5.5",
+     "provider": "copilot-sdk",
+     "setting": "settings.model"
+    }
+   ]
+  },
+  "model_preflight.verify_models": {
+   "artifact": {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/model-preflight.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "providers": [
+    "copilot-sdk"
+   ],
+   "schema": "appsec-review/model-preflight/1",
+   "terminal_status": "SUCCEEDED",
+   "verified": [
+    "copilot-sdk/claude-opus-5.5",
+    "copilot-sdk/claude-sonnet-5.5"
+   ]
+  },
+  "prepare_target.fingerprint_target": {
+   "acquisition": null,
+   "algorithm": "sha256-bounded-tree-v1",
+   "coverage": {
+    "configured_exclusions": [
+     {
+      "path": ".gitignore",
+      "pattern": ".gitignore",
+      "scope": "global"
+     }
+    ],
+    "coverage_gaps": [
+     {
+      "path": ".git",
+      "reason": "excluded_directory"
+     }
+    ],
+    "file_count": 17,
+    "file_discovery": {
+     "content_bytes_retained": 9290,
+     "content_files_omitted": 0,
+     "content_files_retained": 14,
+     "descriptor_coverage": "complete",
+     "descriptors_matched": 3,
+     "descriptors_retained": 3,
+     "descriptors_unavailable": 0,
+     "file_paths_examined": 18,
+     "semantics": "appsec-review/file-discovery/1"
+    },
+    "total_bytes": 16069
+   },
+   "sha256": "<sha256>"
+  },
+  "prepare_target.resolve_target": {
+   "kind": "directory",
+   "path": "<target>"
+  },
+  "prepare_target.validate_target": {
+   "configured_exclusions": [
+    {
+     "path": ".gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    }
+   ],
+   "coverage_gaps": [
+    {
+     "path": ".git",
+     "reason": "excluded_directory"
+    }
+   ],
+   "file_count": 17,
+   "file_discovery": {
+    "content_bytes_retained": 9290,
+    "content_files_omitted": 0,
+    "content_files_retained": 14,
+    "descriptor_coverage": "complete",
+    "descriptors_matched": 3,
+    "descriptors_retained": 3,
+    "descriptors_unavailable": 0,
+    "file_paths_examined": 18,
+    "semantics": "appsec-review/file-discovery/1"
+   },
+   "total_bytes": 16069
+  },
+  "publish_intake.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/review-intake.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "binary_evidence": {
+    "artifact": {
+     "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/binary-evidence.json",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    "binaries": [],
+    "binary_gaps": [],
+    "schema": "appsec-review/binary-evidence-intake/1",
+    "terminal_status": "SUCCEEDED"
+   },
+   "schema": "appsec-review/review-intake/1",
+   "terminal_status": "SUCCEEDED"
+  },
+  "resolve_configuration.fetch_config": {
+   "path": "<repo>/appsec-review.toml",
+   "sha256": "<sha256>"
+  },
+  "resolve_configuration.freeze_config": {
+   "layers": [
+    {
+     "path": "<repo>/appsec-review.toml",
+     "sha256": "<sha256>"
+    },
+    {
+     "layer": "runtime_profile",
+     "path": "<repo>/profiles/copilot-prod.toml",
+     "sha256": "<sha256>"
+    },
+    {
+     "layer": "capacity_overlay",
+     "path": "<repo>/test/acceptance/prod-capacity-overlay.toml",
+     "sha256": "<sha256>"
+    },
+    {
+     "layer": "host-pins",
+     "path": "<repo>/deploy/dagster/host-pins.toml",
+     "sha256": "<sha256>"
+    }
+   ],
+   "path": "data/configuration/appsec-review.toml",
+   "profile": "copilot-prod",
+   "sha256": "<sha256>"
+  },
+  "resolve_configuration.resolve_layers": {
+   "capacity_keys": [
+    "orchestration.dagster.pools.scanner",
+    "review_policy.resources.io_slots"
+   ],
+   "layers": [
+    {
+     "path": "<repo>/appsec-review.toml",
+     "sha256": "<sha256>"
+    },
+    {
+     "layer": "runtime_profile",
+     "path": "<repo>/profiles/copilot-prod.toml",
+     "sha256": "<sha256>"
+    },
+    {
+     "layer": "capacity_overlay",
+     "path": "<repo>/test/acceptance/prod-capacity-overlay.toml",
+     "sha256": "<sha256>"
+    },
+    {
+     "layer": "host-pins",
+     "path": "<repo>/deploy/dagster/host-pins.toml",
+     "sha256": "<sha256>"
+    }
+   ],
+   "profile": "copilot-prod",
+   "profile_keys": {
+    "<summary>": {
+     "count": 96,
+     "sha256": "7fab928ccaa260f9f726933346687aa58d03334640dfdf9ad2e904591c834be2"
+    }
+   },
+   "strategy": "explicit-or-repository-default-with-profile-and-capacity-overlay-with-host-pins"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "binary_evidence": "SUCCEEDED",
+  "model_preflight": "SUCCEEDED",
+  "prepare_target": "SUCCEEDED",
+  "publish_intake": "SUCCEEDED",
+  "resolve_configuration": "SUCCEEDED"
+ },
+ "units": {
+  "binary_evidence.resolve_publications": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "model_preflight.resolve_models": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "model_preflight.verify_models": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prepare_target.fingerprint_target": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prepare_target.resolve_target": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prepare_target.validate_target": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_intake.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_configuration.fetch_config": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_configuration.freeze_config": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_configuration.resolve_layers": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/claim.json",
+    "sha256": "3966c0f40c2eb51c66a6334b97a4b0784e6264261001304c23f93207ca0d6955",
+    "size_bytes": 9921
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/outcomes.json",
+    "sha256": "d5d40d86643125bbc90a19f5d3e06d070a9066bdf10cbe1c8f8872b538ae4238",
+    "size_bytes": 6414
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/binary-evidence.json",
+    "sha256": "a96b1875cd0f35543b35677fbdd22d3005a726cacf6afd540874e69967908b7a",
+    "size_bytes": 207
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/result.json",
+    "sha256": "83d59ef42004f3bce61dac6c60373325f942918c3f951e8da5642c6dbae6f410",
+    "size_bytes": 358
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/binary_evidence/tasks/resolve_publications/status.json",
+    "sha256": "36acd331f8af8c3b21367d3b0cc705037db23766356a4b1bbc534361b306b890",
+    "size_bytes": 684
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/resolve_models/result.json",
+    "sha256": "cecda08aa0b012532280c0f9c6853a93a03d8cb7c7c532659bc4af565a12b420",
+    "size_bytes": 1748
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/resolve_models/status.json",
+    "sha256": "ec6e0a0f2e14037a2072b4b62c5e56b65d261160988892589059017c9ad719f0",
+    "size_bytes": 659
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/model-preflight.json",
+    "sha256": "2d9300dcea3277975340d9d001de259ef249fed8d5808922c05407aa117a2531",
+    "size_bytes": 2505
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/result.json",
+    "sha256": "d22c4d84806aee11e76287c2322efa646bc29f9a4ed915e56d315048ad0c514f",
+    "size_bytes": 417
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/status.json",
+    "sha256": "0a6b867a41ecf2df8bcdc0011d56d83f0b50c1d272cba26e9f5acb9c2a077369",
+    "size_bytes": 695
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/fingerprint_target/result.json",
+    "sha256": "dc598f06cf4d1eea374822b26b7726f7ecf641f14f1fcbbc6c344ae55310c315",
+    "size_bytes": 628
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/fingerprint_target/status.json",
+    "sha256": "ea3c965fc437bf7e4222cecbca97f1415b166046585eebfebda2c029450f3cde",
+    "size_bytes": 700
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/resolve_target/result.json",
+    "sha256": "8747d5be4ae9f6b1b65c8e8a80c99fdf09b5561a6a2afbfcf1c538d6eda81516",
+    "size_bytes": 70
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/resolve_target/status.json",
+    "sha256": "c6cd6a798e504fcf915c934b3a4071d11d394647bcd580641ea98ada5d01126a",
+    "size_bytes": 656
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/validate_target/result.json",
+    "sha256": "6ce9c07d48ae766d287edb13020724cb0354c6983b39d17fce60fc7fdeb16a34",
+    "size_bytes": 483
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/prepare_target/tasks/validate_target/status.json",
+    "sha256": "db41e612dd6002b33cff65db25e3bd5c430b4143a801232981d1c0315dd4b1e6",
+    "size_bytes": 690
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/result.json",
+    "sha256": "72a83e494084d6bcac88fd79ee93128f0874c5745c68215214713d5980bda0a5",
+    "size_bytes": 687
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/review-intake.json",
+    "sha256": "7ea94e1caca9f4831f87637fa8a468ce3ad48d86ebb0c501f6dbbf2edfa45cff",
+    "size_bytes": 2404
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/status.json",
+    "sha256": "0ed4b07e04a39c54a6a68e27cfb4ec42e9c5f2f0196c776390431526838aaa38",
+    "size_bytes": 810
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/fetch_config/result.json",
+    "sha256": "0040ed3b57a387004d65432d4b4e7db49ee544231d19074a116ba1a96aec489e",
+    "size_bytes": 115
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/fetch_config/status.json",
+    "sha256": "e0f4bf725f7779a66bf41082e992229e7ca72246f36084a03579531ff116d78a",
+    "size_bytes": 671
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/freeze_config/result.json",
+    "sha256": "74ba882c490b26a9596e7ba2a30aabe339abe02876fcc38c6fab8954554f1deb",
+    "size_bytes": 737
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/freeze_config/status.json",
+    "sha256": "645e16ee3f6831b96ac816973ad3cc983a2fce4f61a28bb5bbdb7149b16864d8",
+    "size_bytes": 712
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/resolve_layers/result.json",
+    "sha256": "f1cd000e546dc6d5ff09821922743e8dc3f0dbd79b0d7f241b6d9ac95658d6ef",
+    "size_bytes": 7229
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/resolve_configuration/tasks/resolve_layers/status.json",
+    "sha256": "5d5f9c1af8d35ec65c1261ca3fd7c8a26c62f20f5a9f20fec86ef0e9bf8aaac4",
+    "size_bytes": 713
+   }
+  ]
+ }
+}

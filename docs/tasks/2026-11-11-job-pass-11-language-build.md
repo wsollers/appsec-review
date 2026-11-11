@@ -6,6 +6,11 @@ authorized a serial c094 walk through document-issue analysis, stopping before s
 inference, followed by a separate full-corpus walk only after the scoped checks succeed.
 No push, image rebuild, capture bypass or frozen-run rewrite is authorized.
 
+**Live result: accepted** in fresh run `2026-11-11-0004` at
+2026-11-11 22:45:17.753270 UTC. The original project receipt, binary, eight compile entries
+and proven enforcement were retained exactly; no second compilation or internal build
+iteration ran. The operational environment read is now present in the actual input receipts.
+
 ## Observed failure and repair
 
 On main `9e31a83233783114a8f57e1be9cdaa9c4d7c18a1`, run `2026-11-11-0003`
@@ -93,4 +98,41 @@ Before accepting job 11 on the fresh walk, verify that its published receipt ret
 project binary, captured compile database and proven enforcement identity without rebuilding
 the independent c094 unit, and that it records the newly admitted environment read. Classify
 all canonical gaps and every absent-family disposition before proceeding to job 12.
-Live repaired acceptance has not yet been established by the unit results above.
+Live repaired acceptance is established by
+`runs/metadata/stepwise/2026-11-11-0004/checks/language-build-content-attempt_0001.json`
+and the accepted operator state, separately from the unit results above.
+
+## Repaired live walk
+
+Repair commit `395e02fd5` was source-reloaded without rebuilding the application image.
+Measured release:
+`ded5204765f8878d6bf203d1f4e89895585b592a4cc31f44562ba9d195e3a9c1`.
+Run `2026-11-11-0004` uses new keys `appsec-multi-vuln-c094-scoped-v3`, the same clean
+target tag and fingerprint, and the same image pins. Jobs 1-10 were checked individually
+again because the input contract changed; their canonical gap counts were
+`0, 0, 0, 0, 28, 6, 0, 0, 18, 0`.
+
+Job 10 compiled the binary in 17.119 s. Its SHA-256 remained
+`569b207768a1fc228d1642429657e920133ce1674705361edff69fb72bbdd347`,
+160384 bytes. Job 11 dispatch `54af6ffc-4a54-4161-8f4a-a12fa9eb7ef1`
+took 89.239 s and published the exact project receipt, including enforcement
+`b6a78309eab638c3d369e866ce722338e8b59f112f7dde117ceb83a858be3f7a`.
+The binary remains in the target-analysis lane. Two canonical records report its unknown
+shipment intent (`delivery_fact_unavailable`); this is not missing compiler capture or
+permission to exclude the binary from analysis.
+
+The preserved failed check on run `0003` is timestamped 21:48:11.386155 UTC.
+To first repaired job-11 acceptance is **3426.367115 s (57 min 6 s)**, including
+the fresh prerequisite walk, not just repair or compilation time.
+
+Subsequent live input/output checks, on the same frozen source:
+
+| Job | Result | Canonical gaps / evidence |
+| --- | --- | --- |
+| 12 Tree-sitter AST | accepted 22:48:31.208091 UTC | 12: Git exclusion and propagated generated-source/delivery uncertainty. Two untruncated C/C++ scopes parsed all nine files into 3008 nodes with zero diagnostics; every record's file hash matched source. |
+| 13 change context | accepted 22:52:13.102055 UTC | 18: disabled deployment/organization inputs, missing time zone, inherited history limits and function mapping unavailable for seven non-code documents/descriptors. No unmapped contributor identities; 17 files and 21 functions represented. |
+| 14 artifact indexing | stopped, not accepted | Separate undeclared intake-target-path read; see `2026-11-11-job-pass-14-artifact-indexing.md`. |
+
+All fourteen dispatch workers were verified stopped after job 14 failed. No security-inference
+or full-corpus job was launched. Unchanged jobs 12/13 received live content checks, not a claim
+that their entire unit/integration suites were executed.

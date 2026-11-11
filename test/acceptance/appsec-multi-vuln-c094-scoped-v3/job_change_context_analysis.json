@@ -1,0 +1,1973 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "75bb1b38c77a29fb246d0891a05cb12bf3ebe44adbffc56ea380f56cb8d0f6f2"
+  },
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "75bb1b38c77a29fb246d0891a05cb12bf3ebe44adbffc56ea380f56cb8d0f6f2"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1796a9696fc704d81dc871e5b9f9e143e1e3617234864190abb54fb6d4ce648a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1e0065cd1318133ebc1ed7335804cf2f6ffbf208163b3fdf1a0a68b50bae5cc4"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "2170c0b4d083c600a0c91d31e86215b8d236e341a206007bee73f1494fa9c1ab"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "2b45129ea7d2e9a6cfe44a265f08a4b31751fb31a94ae035686b6b232825b2b6"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "3d5d954e9366032f9bc133537282dbc01f78afddf37527b97fcc9fe22964c22c"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "413e31fa28689f712d23a870d47fdef8e7df2b6cb4fc6b8c845feeae6ffbfe74"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "a7ccb5964aa0abeb8e51a8e36be5d1e0b7e8dab3caa9cb48a5989275120a9583"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "bb57c93c1e905bde7421f7f4eea6038d1247c61e6d90940c440856fea31758c6"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "c34c0175b340c9a16781e9251fca20d0c0b46128da18a9f9d9601197b2e480a7"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "df420d4cf648186164167c0c2099b59677bed2e4208ef0075df2e60a8814f521"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "abef03e3d127c8fa1ce7d3ca1cf551539dbfb0745ed20810c20ccff919765e3e"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "2ac4e5b830f6e12d8b381044cf53cb67e6a158143430a7b2decbeaf431e2eaa0"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "dc0b37d624b465448524f2984d61fb9713f2bfbb17080513d74b426fd62528f6"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "10312f8f4c48a7145ddd5f89d06bb5e2d0ae934d3c2d5adac4fa693b2ad56386"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "11ff401a767028292b21048f6bdc4dbc6faa5c1b2dd1f0da2a25ee217f176bbb"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1c31d1274c9995e0fd82db64326210658d40e148c8442718b8faad5362bdd72a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "257742fc883bc1a11f0f60ce3364a68f08ffa230ba3d16d1a876819730361523"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9c96336219ee6230de6096c5eb2a5975e195884c275611720e42c4ebdf0189b1"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "eaa3c388fcc445fb0e74b61b422ac712007829c7eed754a0065e3248ec1b10b9"
+  },
+  {
+   "count": 12,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/github_enrichment/artifacts/github-enrichment.json",
+   "sha256": "45963bf4078da7b7d8528a0e0aa09e057b391a970b0c3040e3db7f24a9486f6a"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/change-context.json",
+   "sha256": "06059d301524359815348ef8c701b214814dde32c99bf87f8bc88b132190ed7c"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+   "sha256": "eacdefb49c0a2c7263142cb3ceebc8fa02af4f2fca833542abd0377614b17698"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/status.json",
+   "sha256": "0cabf49cfd971ba71b90c15a4ef1749c8e8fadd9507de8199fc38b5024baf608"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/status.json",
+   "sha256": "4e656d4cb9e3f6d50562ecdbf57d6ce566d52ebc7a18e25fe433ee66593692b6"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/status.json",
+   "sha256": "7a7764704337958f652194b01e68e4e24b7d04acf3a5ca9e8b89bc1d36cfbe39"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/status.json",
+   "sha256": "23d3450084c85f26d99887e856dd9a779dbc4b73dee6df7abb7cfefd77d5c298"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/status.json",
+   "sha256": "e0944c271696f02b39c3d875a4f43e0defb8bb70bce603f8cfb464b49d0a24db"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/status.json",
+   "sha256": "7c3490f6d6170692c32910582a5306643f8f3059042adbe9ab4c5997c222229c"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/status.json",
+   "sha256": "c149424368402190b18b7bb2e6476bba853a692e052b631cb59f76aa1d1fd064"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/index_change_context/status.json",
+   "sha256": "764aee3fc46612a35170fb5d090887740da0ab1a61676d1ec54130198ee6bbe3"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/status.json",
+   "sha256": "c6b038d5b6e61d5e18ab34eca0586ca8824a4fdc7e91edf02c892345822d0fd8"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 22,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/result.json",
+   "sha256": "0467464fe52c62983224ed193996b68440c042754dacdd4ad49a1e08b2bdf620"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+   "sha256": "29f2fd21d99bcc9d48b9ab8882f997b582a71ba357332f264d9a1bcc642b7973"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "0c7a81bf1405a05fc96076e97f2a1e49a30424f0eeb04091eb1dcddc18d60a78"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "16bfe16a69079698b64b52ef8b98daee9840fd3c263e6203b70b6908e2a67ed7"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "1d77b4edfe95add78365d725442b51294ba5f3f2bf3f31c9e81b37dd49a0d890"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "22c1107c00cec99be7b81c33746663a5d61370ed480f0d754a6cc322670d7182"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "38fe01d6eac61eb938396169d5a7ed5cdb93f21e958571c758dfa06b5865d04e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "4d39743869e1190d49839800a774d5ec37608c74a870ae59eb05c409b119619e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "7155d9f5fa4892f94cdb9741803f3c731d127b504c6d2d019d570c4b47b1366a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "8c01619bfb95a25fa73a647f2881a3e2cac907ab4ec79d424a7c29969ab331b7"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "ae706e44cc6dacb15097880a2abbbafda77bb1457c3bc6131fbf837b539a7d92"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "cbfa347e12b2e2da677845955f37ea14663a5f0457317609956aa0adfb04b4f8"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/claim.json",
+   "sha256": "891fafeb86f01cf43be1c6b36f500ddb0a7d36dc38b29462997344f85ac0844e"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/claim.json",
+   "sha256": "9598cd0485872197b9467650259de2cb9da1e9aac66494f997deb0befde00530"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/claim.json",
+   "sha256": "94b06f197cd5085b66be45ae8277d9f4cbbc057dbcd4e6d0a28ba1c8a62e8d7b"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/claim.json",
+   "sha256": "6354f249abcf246884bc306530879afd648d82c883fef7c142622878c5da0e81"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/claim.json",
+   "sha256": "97c35d010ac7376251cfaffacbb09830fcffe505592f1838d97b0b35e36512fd"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/result.json",
+   "sha256": "97a352ffb4f9f48e6f46a00c33ce6cd9912cbce46a2b64cbc9f2a925bdfd3e16"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/artifacts/units.json",
+   "sha256": "9a0f8bb343fa2d2e17a689de5da83948cb317fc4084eeb45b63c396cc6383bdf"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/index_change_context/result.json",
+   "sha256": "5100aa1b003b433b0e5f5bd98c9cbd25a2b03324f58a3ebb09c7ebba294c4365"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/artifacts/change-records.json",
+   "sha256": "de8777f0565d8066cd1272de1a347fbb96494466d65cb74d134449f35c23a1a0"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/result.json",
+   "sha256": "aef0ad68da50f20b399f968aef7bdedf8c6ec2af2e8462b5f41a8a9b19df2f39"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+   "sha256": "a1136e3523104e6690bad89175612c66219dd99776c6e7488de6eb4c9bd5ca15"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/result.json",
+   "sha256": "7a1b2169269c10c7613ec6413dea80a267352017f4e199ff789508cb5f2c778e"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/artifacts/attribution.json",
+   "sha256": "518a8de91ce60a37c37e68b27d01d237690b7950b6986e55dd4c9fdff928a430"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/artifacts/external-sources.json",
+   "sha256": "bd3a5245a342308bc0cabaf0c3e5e8a2fb2a972fca080dd8ca32a8d1a90c3bc4"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/result.json",
+   "sha256": "ccb9fd5b8934467916b890b591750691d83bd66493662c7dcff41a152f061d59"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/result.json",
+   "sha256": "f0e8f7129525959a00a16d6e6d26815374729173e82b00c007ea2062fb783947"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/result.json",
+   "sha256": "10b80a666dbd9d09aa1039e2ed4ecd378a6d21189be430c9a94b523fe49ca49f"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/result.json",
+   "sha256": "87eb9c70bec944da4bc7c81ac054cc016067608065d61219a6da39f3d8ab165c"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+   "sha256": "b648ba309e746f78194d00663c8ddea973c2b8f7c1aac77489fecfd24e6787bf"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/change-context-<attempt>.json",
+   "sha256": "a8b403ede2af89b03a231c21b4e82ba20f556e94986e0e17868cc8a31c18bd7f"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+   "sha256": "73e51b7d688f5c0c47788697518eba48c831bf66d62e3e9ff302e04f3e74b798"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/artifacts/lifetime.json",
+   "sha256": "6810124cbd721a21271ecd9f93a5cc73bdd68c80de76e90d2238d38be6320074"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/outcomes.json",
+   "sha256": "75b30aab285ed44081cca227b0d450c9974937c2e66d583f89f0f900863eee95"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+   "sha256": "0f19d14784edda42f9182137038d984bc9d57fa506ac206de606f29ef531eba3"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+   "sha256": "233ab1315cd398175fb147521f5242fe72a4f526c99e6a7afa0ce5509d2abfb8"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "partial": 1
+   },
+   "entity_kinds": {
+    "ast_node": 236,
+    "source_file": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 237,
+    "locations": 237,
+    "metadata": 8,
+    "relations": 236
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "unavailable": 1
+   },
+   "entity_kinds": {
+    "build_action": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "build_action": 2,
+    "evidence_artifact": 9,
+    "executable": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/language-build-<attempt>-<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 12,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "component": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/components/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "symbol": 2
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 2,
+    "locations": 2,
+    "metadata": 8,
+    "relations": 2
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 2,
+    "unavailable": 2
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite",
+   "rows": {
+    "coverage": 4,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 3,
+    "partial": 2,
+    "unavailable": 3
+   },
+   "entity_kinds": {
+    "change": 9,
+    "change_context_signal": 39,
+    "review_unit": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/history/change-context/<sha256>.sqlite",
+   "rows": {
+    "coverage": 8,
+    "entities": 49,
+    "locations": 38,
+    "metadata": 8,
+    "relations": 93
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 3,
+    "partial": 3,
+    "unavailable": 2
+   },
+   "entity_kinds": {
+    "change": 9,
+    "history_signal": 39,
+    "hotspot": 20
+   },
+   "kind": "sqlite",
+   "path": "data/indices/history/git-history/<sha256>.sqlite",
+   "rows": {
+    "coverage": 8,
+    "entities": 68,
+    "locations": 58,
+    "metadata": 8,
+    "relations": 82
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 8,
+    "partial": 8
+   },
+   "entity_kinds": {
+    "ast_node": 2772,
+    "source_file": 8
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 16,
+    "entities": 2780,
+    "locations": 2780,
+    "metadata": 8,
+    "relations": 2772
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1,
+    "unavailable": 6
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/documents/<sha256>.sqlite",
+   "rows": {
+    "coverage": 7,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "build_action": 1,
+    "component": 1,
+    "evidence_artifact": 14
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 16,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 110
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "source_file": 17
+   },
+   "kind": "sqlite",
+   "path": "data/indices/source/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 17,
+    "locations": 17,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "analysis-plan",
+    "gap": ".git: excluded_directory; no recognized project manifests; compile_commands.json not present; build topology: no accepted compile database; compiled-unit coverage is unavailable; build topology: logical descriptor targets do not establish compiled link outputs without accepted build artifacts; executable build graph: incomplete_dependency_discovery: only supported direct descriptor declarations are resolved; absence of an edge is not independence",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/analysis/<sha256>-target-analysis-plan.sqlite"
+  },
+  {
+   "count": 9,
+   "gap": {
+    "area": "syntax-projection:asr:source_file:<sha256>",
+    "gap": "bounded syntax subset; names, imports and call targets are unresolved",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/analysis/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "catalog-exclusions",
+    "gap": ".git: excluded_directory",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "generated-source-lane",
+    "gap": "@generated: generated_source_producer_gap: build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "compile-units",
+    "gap": "compile_commands.json not present",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/build/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents",
+    "gap": "design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test: no accepted target document; source inventory .git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:design",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:dfd",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:openapi",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:postman",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:threat_model",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:unit_test",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "deployment-events",
+    "gap": "deployment_disabled",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/change-context/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "function-attribution",
+    "gap": "function_mapping_unreliable",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/change-context/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "git-change-context",
+    "gap": "symbol_language_unsupported; working_tree_divergent",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/change-context/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "off-hours-schedule",
+    "gap": "time_zone_not_configured",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/change-context/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "organization-membership",
+    "gap": "organization_disabled",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/change-context/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "deployment-timing",
+    "gap": "deployment_timing_not_acquired",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "git-history",
+    "gap": "working_tree_divergent; head_differs_from_mainline",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "history-hotspots",
+    "gap": "symbol_language_unsupported; working_tree_divergent",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "pull-request-timing",
+    "gap": "pr_timing_not_acquired",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "symbol-spans",
+    "gap": "symbol_language_unsupported",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-files",
+    "gap": ".git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/source/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": "function_mapping_unreliable",
+   "unit": "attribute.line_attribution"
+  },
+  {
+   "count": 1,
+   "gap": "symbol_language_unsupported",
+   "unit": "load.accepted_history"
+  },
+  {
+   "count": 1,
+   "gap": "working_tree_divergent",
+   "unit": "load.accepted_history"
+  },
+  {
+   "count": 2,
+   "gap": "deployment_disabled",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "organization_disabled",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "time_zone_not_configured",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "deployment_disabled",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "function_mapping_unreliable",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "organization_disabled",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "symbol_language_unsupported",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "time_zone_not_configured",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "working_tree_divergent",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 1,
+   "gap": "deployment_disabled",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "function_mapping_unreliable",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "organization_disabled",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "symbol_language_unsupported",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "time_zone_not_configured",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "working_tree_divergent",
+   "unit": "publish.publish_handoff"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/change-context-analysis/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_source_history_analysis",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_change_context_analysis",
+ "outputs": {
+  "analyze.change_signals": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/artifacts/change-records.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "change_count": 21,
+   "flag_counts": {
+    "off_hours": 0,
+    "pre_deployment": 0,
+    "sprawling": 0,
+    "unapproved_mainline": 21,
+    "untested_production": 11
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.rank": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "ranked": {
+    "components": 1,
+    "files": 17,
+    "functions": 21
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.unit_signals": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/artifacts/units.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "component_count": 1,
+   "file_count": 17,
+   "function_count": 21,
+   "terminal_status": "SUCCEEDED"
+  },
+  "attribute.fix_on_fix": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "event_count": 0,
+   "status": "available",
+   "terminal_status": "SUCCEEDED"
+  },
+  "attribute.line_attribution": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/artifacts/attribution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "attributed_file_count": 16,
+   "candidate_count": 16,
+   "function_count": 21,
+   "terminal_status": "PARTIAL"
+  },
+  "load.accepted_history": {
+   "available": true,
+   "catalog_handoff_sha256": "<sha256>",
+   "changes": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "classification": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "classification_gaps": [],
+   "components": [
+    {
+     "component_id": "component:0001",
+     "root": "."
+    }
+   ],
+   "eligible": {
+    ".gitlab-ci.yml": {
+     "blob_id": "84808c4d27b8df6f14ae4085052eb7d4c6959b62",
+     "exact": true,
+     "language": null,
+     "line_count": 8,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": ".gitlab-ci.yml",
+     "source_root": ".",
+     "span_lines": 9
+    },
+    "Jenkinsfile": {
+     "blob_id": "fdb5230570c613d7012b2d0e4e78679850339f92",
+     "exact": true,
+     "language": null,
+     "line_count": 10,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "Jenkinsfile",
+     "source_root": ".",
+     "span_lines": 10
+    },
+    "NOTICE": {
+     "blob_id": "216ed24b8d5062d7dfc5209ef0ba2ec419c37481",
+     "exact": true,
+     "language": null,
+     "line_count": 7,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "NOTICE",
+     "source_root": ".",
+     "span_lines": 9
+    },
+    "README.md": {
+     "blob_id": "01e99a948182b8db55fde2b32b982ef273112d4f",
+     "exact": false,
+     "language": null,
+     "line_count": 87,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "README.md",
+     "source_root": ".",
+     "span_lines": 109
+    },
+    "azure-pipelines.yml": {
+     "blob_id": "6a98d1a57afd96d473a5648384316944bce84900",
+     "exact": true,
+     "language": null,
+     "line_count": 7,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "azure-pipelines.yml",
+     "source_root": ".",
+     "span_lines": 9
+    },
+    "bitbucket-pipelines.yml": {
+     "blob_id": "7e3f1e2802b02c2128df758aba7ba0d604c78ebc",
+     "exact": true,
+     "language": null,
+     "line_count": 8,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "bitbucket-pipelines.yml",
+     "source_root": ".",
+     "span_lines": 9
+    },
+    "projects/native/case-094/CMakeLists.txt": {
+     "blob_id": "e9b033b22d40e52d75eb30faa7dfb4648eeac3f6",
+     "exact": true,
+     "language": null,
+     "line_count": 16,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/CMakeLists.txt",
+     "source_root": ".",
+     "span_lines": 17
+    },
+    "projects/native/case-094/README.md": {
+     "blob_id": "55c339d43dc4c8046a11f7355465c33aea510e24",
+     "exact": true,
+     "language": null,
+     "line_count": 6,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/README.md",
+     "source_root": ".",
+     "span_lines": 8
+    },
+    "projects/native/case-094/src/access.cpp": {
+     "blob_id": "5355b2562848d396a3b49c9ad3b01f029b216a64",
+     "exact": true,
+     "language": "C++",
+     "line_count": 33,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/access.cpp",
+     "source_root": ".",
+     "span_lines": 39
+    },
+    "projects/native/case-094/src/blocks.cpp": {
+     "blob_id": "17921a355c1ac6dc4e968a9ff1b293bbd2455d3c",
+     "exact": true,
+     "language": "C++",
+     "line_count": 39,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/blocks.cpp",
+     "source_root": ".",
+     "span_lines": 45
+    },
+    "projects/native/case-094/src/console.cpp": {
+     "blob_id": "3b84de31af3fdff328df64ecee086fd39f5efa51",
+     "exact": true,
+     "language": "C++",
+     "line_count": 11,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/console.cpp",
+     "source_root": ".",
+     "span_lines": 14
+    },
+    "projects/native/case-094/src/directory.cpp": {
+     "blob_id": "6715fb3c548422a4af98708ba8dbb0bbef798abe",
+     "exact": true,
+     "language": "C++",
+     "line_count": 37,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/directory.cpp",
+     "source_root": ".",
+     "span_lines": 45
+    },
+    "projects/native/case-094/src/echo.cpp": {
+     "blob_id": "913fe4f0228cccad13c0e95e368ad438f6edab02",
+     "exact": true,
+     "language": "C++",
+     "line_count": 30,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/echo.cpp",
+     "source_root": ".",
+     "span_lines": 36
+    },
+    "projects/native/case-094/src/main.cpp": {
+     "blob_id": "ead363112a834471495a055e6575bdac87899d0d",
+     "exact": true,
+     "language": "C++",
+     "line_count": 83,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/main.cpp",
+     "source_root": ".",
+     "span_lines": 91
+    },
+    "projects/native/case-094/src/notes.cpp": {
+     "blob_id": "9148562205706c32c5ad6f9f98152ed335cd7fbe",
+     "exact": true,
+     "language": "C++",
+     "line_count": 15,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/notes.cpp",
+     "source_root": ".",
+     "span_lines": 18
+    },
+    "projects/native/case-094/src/title.cpp": {
+     "blob_id": "1f9cd7da410ab1e74fff929e80c2f9702232e078",
+     "exact": true,
+     "language": "C++",
+     "line_count": 18,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/title.cpp",
+     "source_root": ".",
+     "span_lines": 21
+    },
+    "projects/native/case-094/src/tool.h": {
+     "blob_id": "fc28fc354f6635193face799b963b99de0398ce0",
+     "exact": true,
+     "language": "C/C++",
+     "line_count": 21,
+     "pinned_revision": null,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "source_id": ".",
+     "source_path": "projects/native/case-094/src/tool.h",
+     "source_root": ".",
+     "span_lines": 30
+    }
+   },
+   "git": {
+    "decision": "SUCCEEDED",
+    "git_dir": ".git",
+    "head_commit": "bd69bfe83fec49155366303604475512c98c4ce6",
+    "mainline_ref": "refs/heads/main",
+    "object_format": "sha1",
+    "observations": [
+     "head_differs_from_mainline"
+    ],
+    "reason": "resolved",
+    "shallow": [],
+    "snapshot_commit": "422845994f4e28fb93032efa704592d97ce498a0"
+   },
+   "github": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/github_enrichment/artifacts/github-enrichment.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "github_gaps": [],
+   "github_reason": null,
+   "github_status": "SUCCEEDED",
+   "history_gaps": [
+    "symbol_language_unsupported",
+    "working_tree_divergent"
+   ],
+   "history_handoff_sha256": "<sha256>",
+   "history_identity": "<sha256>",
+   "history_signals": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "lifetime": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/artifacts/lifetime.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "review_records": null,
+   "snapshot_commit": "422845994f4e28fb93032efa704592d97ce498a0",
+   "source": {
+    "component_id": "component:0001",
+    "github_repository": "wsollers/appsec-multi-vuln",
+    "identity": {},
+    "manifest_sha256": null,
+    "pinned_revision": null,
+    "review_export": null,
+    "root": ".",
+    "source_count": 1,
+    "source_id": "."
+   },
+   "terminal_status": "PARTIAL"
+  },
+  "load.external_sources": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/artifacts/external-sources.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_exports": {},
+   "sources": {
+    "deployment": {
+     "environments": [
+      "production"
+     ],
+     "event_count": 0,
+     "status": "unavailable"
+    },
+    "organization": {
+     "member_count": 0,
+     "status": "unavailable"
+    },
+    "review": {
+     "record_count": 21,
+     "source": "github_enrichment",
+     "status": "complete"
+    },
+    "schedule": {
+     "status": "unavailable",
+     "time_zone": null
+    },
+    "test_association": {
+     "status": "complete"
+    }
+   },
+   "terminal_status": "PARTIAL"
+  },
+  "publish.index_change_context": {
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "history",
+    "producer": {
+     "job": "job_change_context_analysis",
+     "vcs": "git"
+    },
+    "relative_path": "data/indices/history/change-context/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "change-context"
+   },
+   "manifest": {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "terminal_status": "PARTIAL"
+  },
+  "publish.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/change-context.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 39,
+   "schema": "appsec-review/change-context-analysis/1",
+   "terminal_status": "PARTIAL"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "analyze": "SUCCEEDED",
+  "attribute": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "publish": "SUCCEEDED"
+ },
+ "units": {
+  "analyze.change_signals": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.rank": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.unit_signals": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "attribute.fix_on_fix": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "attribute.line_attribution": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_history": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.external_sources": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.index_change_context": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.publish_handoff": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "sha256": "b909d5326bb1a106f27568f924feacb512e2bfe626b10a369b5a317666c8783d",
+    "size_bytes": 188416
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "1bf5fd3d38e0cc83fbc372360d4402be4ce316712bbb768fce33e65298ada313",
+    "size_bytes": 794624
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "c6dc1ba9cfa392fb499a1d05565f9749d561c20e3503b51730ca82b80ee4d363",
+    "size_bytes": 8642560
+   },
+   {
+    "path": "data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite",
+    "sha256": "9aac3841b596a87d4e6326a68c4e1c2e4c819612e259ffb534a704ce894253d1",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/build/<sha256>.sqlite",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/indices/build/language-build-<attempt>-<sha256>.sqlite",
+    "sha256": "e6126553a8363fe0d8bda29dc0450129263f5398d55f74dbe7eb4016645869b3",
+    "size_bytes": 77824
+   },
+   {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/history/change-context/<sha256>.sqlite",
+    "sha256": "dd56025e4a2dda0d91594623fd7df1cabe28a83d52876191f648b4ce15de2a68",
+    "size_bytes": 393216
+   },
+   {
+    "path": "data/indices/history/git-history/<sha256>.sqlite",
+    "sha256": "ea7928c74d43a6c11cfe70ce69f5daee8378281480ee426c1bcf91de3742055c",
+    "size_bytes": 466944
+   },
+   {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "ed946513faa6b97978a95f39631100ed4cd5d63001fad3f9adb748b00b3232ff",
+    "size_bytes": 8458
+   },
+   {
+    "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+    "sha256": "95c8bd392a9caf743d6e7c8b75739a5b1308d95124b6aaad81f261dd4180d144",
+    "size_bytes": 7860
+   },
+   {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/claim.json",
+    "sha256": "1a7355c92be6ee3d20e587e1df9be5b42005c8d7ce867015f475ba2e2abc2f28",
+    "size_bytes": 22127
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/outcomes.json",
+    "sha256": "c33773c3d9b447b06760791d91bd3506890b288e89905cdd7ca923c8438eb4eb",
+    "size_bytes": 19549
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "03d52e4553e04ba20f17d785773b08562bd463521cbd7b34f415171d2a9b1dd7",
+    "size_bytes": 1616
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "09abb6ca8b66fd1d1c126704acd171670f77dc0855c9ddbaba8a2d1aac89428b",
+    "size_bytes": 1641
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "820210702b8cbf13d2abb7885d40e2c5be7bc3e24a3cff91a5b240eb711e6111",
+    "size_bytes": 1400
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "a41ca62386caa8e72cea7f355f79d0d0bb47528b34da2440e776b1010305605f",
+    "size_bytes": 936
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "a6125a6d34404e2ee1842b55509ccaf3146d53c90a430137290e3d590d6244bc",
+    "size_bytes": 1618
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "c79e66381ec7244946a20dbf10dec7e591743ccbf9f4cbca30fc11eec95a4507",
+    "size_bytes": 1645
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "cda666cad986bc7a33b9a58c8b22066409c5cecf90da03acc2c7e186c4f7f5b9",
+    "size_bytes": 1612
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "e315e7f12c9243c60f758546cda186eab2432cefa4f2ad80665f2b5880a2ef36",
+    "size_bytes": 1610
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "e415c5f06b6236d8b5f42dce990764f9266c3d8faa75366b8e35e62e58dfaf49",
+    "size_bytes": 937
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "f59e0349de18550b11b88738e047050a4bbd75c5291816e7f2830694578cfe4a",
+    "size_bytes": 1614
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "f67a265257f02accd6f1e41d64530e1d07308ca6cceaeae6e8658b1f2deb9a16",
+    "size_bytes": 1658
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "f93dcc8248a2317e8908ee4c01c31f7d0814791915978e497bb7e85812ed54c2",
+    "size_bytes": 1620
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/artifacts/change-records.json",
+    "sha256": "2bbfee1431cd67a116eb02e1079c53d637163111d0f32be6336024e49984b731",
+    "size_bytes": 46337
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/result.json",
+    "sha256": "4ecd51d5ee3264379c177261a9826c7578da546cc6e0f2f1d4978fb0e284490f",
+    "size_bytes": 415
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/status.json",
+    "sha256": "ebdfe0ba5f8abd2b83be4b2484a6690367cb0dd946fe8acd36609e539ae9bd6e",
+    "size_bytes": 675
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "25b56ee08ca11bcd49d3f56956ec8314824e7b1070bffa48f5840f94868c777d",
+    "size_bytes": 125922
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/result.json",
+    "sha256": "2c4ad7cbee186390dae151ca785817f8c39259dfd70b66a731b863fe84dc457b",
+    "size_bytes": 320
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/status.json",
+    "sha256": "2805ec13b2ffcefc0416d0f24fa0c52efc1b6e5f79c9c1cc3b138381f0458d20",
+    "size_bytes": 644
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/artifacts/units.json",
+    "sha256": "f9be957087f77c4b9182b63d2b53ba468292c1b3f2943cc356bfa489ec174e5c",
+    "size_bytes": 106202
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/result.json",
+    "sha256": "0894b00c3d7eb46b69f01cb13faab75ab0ccce75061c58f94b5f74dafed2df7b",
+    "size_bytes": 330
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/status.json",
+    "sha256": "1fb20c98dd9ca5c39a1f2088df642ac410cf1ac85aca659a88eb0e66f2de83e2",
+    "size_bytes": 722
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+    "sha256": "0d22b57615369a0cd0901435debd2f78e960c38b965c533eacbfd8770c9c3087",
+    "size_bytes": 130
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/result.json",
+    "sha256": "d32134a7b9792f5d55ae08404c4bfa1a42cacf20dfb56cf4572021e3f95e80bc",
+    "size_bytes": 313
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/status.json",
+    "sha256": "8631a256b5a28b6a5125997baa4f6b9e7c5c9da14d06604276add903f554bdbe",
+    "size_bytes": 669
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/artifacts/attribution.json",
+    "sha256": "c563b6d0a0615b3f3145dccca2257d31224824f8dfba42c141ce3f7e39ad037c",
+    "size_bytes": 21770
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/result.json",
+    "sha256": "e86c5071123e691a9fb00f2be868097cf4b0c0323ffbc958ffbe0fb2cd29c778",
+    "size_bytes": 380
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/status.json",
+    "sha256": "744d31f30cdfe1c1d85ebbf112473db54d49a2683a1df55ed7e10f221e83e28f",
+    "size_bytes": 1130
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/artifacts/lifetime.json",
+    "sha256": "ec9b02a879cd4c645415b93c30adc601902ddf281b881c7ddf9aca0897addd62",
+    "size_bytes": 1412
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/result.json",
+    "sha256": "2ab328e131b82a8fe136463b77f9239ea0cd4fe93734b6198308e561d4d791f5",
+    "size_bytes": 8285
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/status.json",
+    "sha256": "0942711e0be1f9e3d17de7d4d05c74b6f9dc6d8f4b75acb20408597305fb3258",
+    "size_bytes": 1544
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/artifacts/external-sources.json",
+    "sha256": "de3f8b1ee802a9319ac6aaf7918279d939d221b191a2d62ce536f1810c07bbdd",
+    "size_bytes": 5687
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/result.json",
+    "sha256": "1dc2ef7867163aa70f35410610807472ac3b19f3d89fc29027b2c39f0af3978c",
+    "size_bytes": 816
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/status.json",
+    "sha256": "cdb5c33c13ef63b5dd31b7fa113b1a008aac005e88ff4c8f575eda84cc36c9d8",
+    "size_bytes": 670
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/index_change_context/result.json",
+    "sha256": "41d775342f47b31aa2361f2f953f8d95a015e998c9656ab07483104f581c8d6b",
+    "size_bytes": 987
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/index_change_context/status.json",
+    "sha256": "7131b2c46f955b16e3f07f9ef0c3a955769edf0957f81237213df41ed87d39d2",
+    "size_bytes": 1278
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/change-context.json",
+    "sha256": "4644dee411b7561ec4f359759ed617e6236e85a89a4bfaacf011efdefe65090b",
+    "size_bytes": 13047
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/result.json",
+    "sha256": "83261cac1cfdb16fbe3cdb639fdc6b00b793725ec02f9fd48716dbd63bdfc457",
+    "size_bytes": 685
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/status.json",
+    "sha256": "33f20e34aa262c24ab77a305def772b768cb90350a6c4b5f68adf8e84363358c",
+    "size_bytes": 683
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/claim.json",
+    "sha256": "f511be072ad0ea805538f0d0a264185caa1cc95814058ed99250f8558e0ace19",
+    "size_bytes": 26838
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "a0d059bf91373adea3ce666c8cb7aa6f93e2bd2037aebb90804048cf30ef6276",
+    "size_bytes": 1371
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/claim.json",
+    "sha256": "71a95c2ddc264a33a350107ef71c12e376838a9700c668ff3dbd6798021b4fb8",
+    "size_bytes": 17659
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "4e8626e42784df4591ffd4915f8c8b7571c2f8ec03a116606597c5aa628c494c",
+    "size_bytes": 1394
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/github_enrichment/artifacts/github-enrichment.json",
+    "sha256": "aa10a7b796f4a419f20eb01670e8ae41c4705714c94ca698a2a04799ff8d916e",
+    "size_bytes": 16835
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+    "sha256": "56d89483e47945f2c67b52beec50eae011af1c3b4fb64233dc85bed3138a1ccb",
+    "size_bytes": 85044
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+    "sha256": "df685491e9c0cd0226d7900a84bf8b3751507ee458d94b8a3dba971884da25d1",
+    "size_bytes": 3899
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "573b2d391e93dea18e8a158d3902612ccb891606253394f3eeb5c0025804f301",
+    "size_bytes": 76806
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/claim.json",
+    "sha256": "4244ef941a87298cda8366903fdcff6f47d50784b481633964c098613c41ba01",
+    "size_bytes": 21667
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "62680bfedbb4a2d67a9c96366b03e060ebc0ffdac8d660be1f60f10209c2ff4d",
+    "size_bytes": 1770
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+    "sha256": "ba5387bf0c3c7a90e045f7690dadd8cc389794909dcf28b8e053ee899207e3c5",
+    "size_bytes": 12333
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "3d48384694a8e702900fa0e0eaecc081d054485ce64d587ae8de0b71fa5deccb",
+    "size_bytes": 1340
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "6387a9c5533035d7ba6ec96f47af2aa8bc600038a4b5099022f1eaad223e3d93",
+    "size_bytes": 1346
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "94a5d530036ab8f0806976032da5d2aa775d10b08f7819ce89e9a256a71ae680",
+    "size_bytes": 1344
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "cb43726c0a8b4e6829b55d68fc4857ec4c2aead957ebf7822f8035edb42ad196",
+    "size_bytes": 1342
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "f56b0e0ec6f6031cd5e965d10c6e09f1e052e3c3a126cc2bc43b552961d8d76c",
+    "size_bytes": 1336
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/claim.json",
+    "sha256": "bc90f4d536a4446e7c7264986e3b836f2df5323f1d041eb5af3e2af7f6be2763",
+    "size_bytes": 20819
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "51c57702ec2fe2f57e1df6a68ceaa78e2d20a3abb80357f1ad1cb14e1b972757",
+    "size_bytes": 1312
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "1c5da840336f1021c108795b8f0b32f621e5417b0704680a5817f5326ddbbcd1",
+    "size_bytes": 302
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "2d24458acbf0cca72670943a99123dc2ba7f330dbab6bc6d16f2a00380ca9ab0",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "382c191bdc783a8f8e59154f3c89e7715855eb5c8ab560432eee708cee3862e6",
+    "size_bytes": 279
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "5b1a10dec8778fb6300673a250d32cb0210587a6566e9ddacc02b97c2c5cba5e",
+    "size_bytes": 274
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "679d0321626582fa13e1069986c629b6195174b11ecd16de5c25f084b24ad09d",
+    "size_bytes": 292
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7b58f2de7e81ff6229d0ee2e822f5adc4a518c3bfd605d191278b3d8a94c8b7a",
+    "size_bytes": 276
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7e98965d078f7a7ac642f43630c9f45ca005ff66e67021715fb307dc2fe350b2",
+    "size_bytes": 277
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "aad11ac57ebfc078874ec5259d7d6520dc7b33d900d546cce7a3df2b4bfd5069",
+    "size_bytes": 246
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "f0b55dbecbd5d2222f68a48303331298bfea95aab16b566ba6139280db72fb0c",
+    "size_bytes": 299
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "f9b0b49cffa53280f479feb1e28219432ade31d74d94507ef97be88d66834cbb",
+    "size_bytes": 289
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "9aac3841b596a87d4e6326a68c4e1c2e4c819612e259ffb534a704ce894253d1",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "b909d5326bb1a106f27568f924feacb512e2bfe626b10a369b5a317666c8783d",
+    "size_bytes": 188416
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "dd56025e4a2dda0d91594623fd7df1cabe28a83d52876191f648b4ce15de2a68",
+    "size_bytes": 393216
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "e6126553a8363fe0d8bda29dc0450129263f5398d55f74dbe7eb4016645869b3",
+    "size_bytes": 77824
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "ea7928c74d43a6c11cfe70ce69f5daee8378281480ee426c1bcf91de3742055c",
+    "size_bytes": 466944
+   }
+  ]
+ }
+}
