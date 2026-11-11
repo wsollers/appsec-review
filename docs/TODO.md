@@ -70,6 +70,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-075 | [Run crash evidence as a job and a lane A lead family](#t-075-run-crash-evidence-as-a-job-and-a-lane-a-lead-family) | evidence | open |
 | T-076 | [Record attacker position owner function and remediation on findings](#t-076-record-attacker-position-owner-function-and-remediation-on-findings) | review | open |
 | T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | open |
+| T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | open |
+| T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1056,6 +1058,44 @@ until each is rewritten into the entry format when it is next touched.
   `stepwise.py system` prints true-lead retention beside false-lead removal for a keyed corpus.
 - **Refs:** T-062, `src/appsec_review/observability/triage_reduction.py`,
   `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/triage.py`.
+
+### T-078 — Check the model login before a review is submitted
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** on 2026-11-11 review `2026-11-11-0001` failed in under a minute at
+  `job_model_connectivity` because the mounted Claude CLI token had expired. `stack-start` probes
+  the model; `review-start` does not, so the expiry was found only after a run, a submission intent
+  and a failed attempt existed, each of which then had to be cleared by hand.
+- **Scope:** `review-start` and `review_run.py submit` run the same bounded model probe as
+  `stack-start` for the selected profile before recording a submission intent, and refuse with the
+  provider's error class and the documented remedy. `--no-probe` opts out, as on `stack-start`.
+  No credential is read, stored or printed.
+- **Done when:** unit tests of the launcher show an unanswered probe refusing the launch with no
+  intent written and no Dagster call, and an answered probe proceeding unchanged.
+- **Refs:** `scripts/review-start.sh`, `deploy/dagster/bin/review_run.py`, `scripts/stack-start.sh`,
+  `docs/operations/operator-scripts.md`, T-057.
+
+### T-079 — One guarded command for run recovery
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** resuming a failed run takes a reconcile of the terminal submission, a
+  `verify-repair-stop` inside the container for each dispatch, `plan-repair`, `admit-repair` and
+  `resume`, run in the right order from two environments. On 2026-11-11 a resume was refused twice
+  (unreconciled submission, then "Dagster dispatch stop requires verify-repair-stop") and the run
+  was abandoned for a fresh one, which is only acceptable when nothing has been accepted yet.
+- **Scope:** a `review-recover` operator script that runs the existing steps in order for one
+  application run, prints the repair plan and what will be reused, and asks for one confirmation
+  before admission and resume. Every existing check still runs and still refuses: no step is
+  weakened, skipped or automated past its refusal, a failed step is still not proof a worker
+  stopped, and an unreconciled submission still blocks a launch. When no job of the run has an
+  accepted handoff the script says so and offers a fresh run instead.
+- **Done when:** unit tests with fake Dagster and lifecycle boundaries cover the ordered happy
+  path, each refusal stopping the sequence with its reason, the declined confirmation, and the
+  nothing-accepted case; the operator guide documents it beside the single-step commands.
+- **Refs:** `docs/operations/recovery-repair.md`, `docs/tasks/2026-11-10-t057-repair-loop-safeguards.md`,
+  `deploy/dagster/bin/review_run.py`, `deploy/dagster/bin/stepwise.py`, T-057.
 
 ## Legacy backlog
 
