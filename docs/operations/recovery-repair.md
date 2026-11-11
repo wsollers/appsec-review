@@ -187,6 +187,32 @@ Once corrected, new keys must not need the inventory comparison exemption; exist
 keys/evidence must not be rewritten or silently reaccepted. The publication fix is not
 implemented by this operator-only change.
 
+Source-history replay also has a closed, evidence-checked mount-path comparison. It covers only
+`acquire.git_history`'s `log` and `messages` executions and `resolve_sources.bind_snapshot`'s
+`tree` execution: `/target` read-only, `/scratch` writable, and `/gitdir` read-only. The original
+key, provenance, claim and accepted publication must resolve; both attempts' claims must retain
+the same repository/target, source fingerprint and configuration. Each affected JSON artifact's
+raw reference must match its publication, and its original normalized signature must reproduce
+from those exact bytes, including the preserved key's digests.
+
+The verified original execution receipts bind logical `source` paths to their recorded Docker
+Desktop `runtime_source` aliases. Accounting requires consistent, distinct target/runs alias
+roots from one distribution, exact claim-owned relative suffixes on both attempts, and the new
+runtime paths rooted in the current checkout. Path shape alone is not proof. The embedded
+execution copies must match their pinned unit results; the separately published `log` and
+`messages` receipts must also agree with those copies. The `tree` execution's retained proof is
+its hash-pinned `bind_snapshot/result.json` copy, not an unpinned scratch file.
+
+Only the qualifying structured `mounts[].runtime_source` fields are projected for comparison.
+All four affected normalized artifact signatures are accounted for only after **every** proof
+succeeds and the remaining normalized artifact content matches. Unknown roots, traversal,
+different suffixes/sources/targets/permissions, missing or corrupt pins, conflicting copies and
+partial proofs cannot establish equivalence. Other path strings and semantic changes still
+fail. Reports retain `verified_mount_path_changes` with raw old/new paths, logical and runtime
+roots, relative suffixes, claim/provenance references, raw artifact references and both unmodified
+signatures. This checks recorded evidence, not current Docker state; it neither rewrites a key
+nor constitutes operator acceptance.
+
 Current comparison accounting is closed, not a producer-wide exemption:
 
 | Producer/artifact | Accounted-for difference | Everything else |
@@ -194,17 +220,19 @@ Current comparison accounting is closed, not a producer-wide exemption:
 | Any replay's `claim.json` | Verified current admission reference and admitted checkpoint decisions/conservative runner fallback, only if the rest of the normalized claim matches | Strict existing normalized diff |
 | `job_model_connectivity`, `steps/connectivity/tasks/verify_models/model-connectivity.json` | Temporary pass-01 workaround: only unrelated names added/removed from `providers.<provider>.listed`, after raw-reference and normalized-signature proof | Strict; configured/checked models, results, provider set, transport, errors and gaps cannot change |
 | `job_review_intake`, `steps/model_preflight/tasks/verify_models/model-preflight.json` | Temporary pass-04 workaround: the identical inventory-only rule for this named artifact | Strict, as above |
+| `job_source_history_analysis`, `acquire.git_history` and `resolve_sources.bind_snapshot` result JSON, plus the published `log`/`messages` execution JSON | Only the proved Desktop-to-checkout mount aliases described above, including their dependent normalized signatures | Strict; all raw pins and the rest of each normalized artifact must match |
 | Every other artifact/producer | No additional equivalence rule | Strict existing normalized diff |
 
 Comparison receipts retain both `unadjusted_differences` and the final `differences`, alongside
-the exact admitted control and inventory changes and their resolving evidence. Accounting for a
+the exact admitted control, inventory and mount-path changes and their resolving evidence. Accounting for a
 verified difference never deletes its raw artifact, prior key or provenance.
 
 This is host-side operator tooling; it does not change measured runtime sources, release
 scoping, job policies, frozen configuration or admission/signing enforcement. The three early
 gates still declare `always_execute=True` and `propagate_handoff=False`; the release still
 includes each job package's static cross-job import closure and shared common/validator/script
-dependencies. Unit regressions for the rewind are in `tests/test_stepwise_rewind.py`.
+dependencies. Unit regressions for the rewind are in `tests/test_stepwise_rewind.py` and
+`tests/test_stepwise_mount_paths.py`.
 
 The original configuration, target fingerprint, review policy and evidence are retained.
 Configuration changes and schema/dataset-contract changes are not compatible source repairs.

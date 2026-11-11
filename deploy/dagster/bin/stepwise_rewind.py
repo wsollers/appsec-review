@@ -5,6 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 import inspect
 import json
+from pathlib import PurePosixPath
+import re
 
 from appsec_review.acceptance.diff import diff_job_outputs, failing
 from appsec_review.acceptance.normalize import digest as normalized_digest, normalize_job_output, normalize_value
@@ -21,6 +23,12 @@ MODEL_PREFLIGHT_ARTIFACTS = {
     "job_model_connectivity": "steps/connectivity/tasks/verify_models/model-connectivity.json",
     "job_review_intake": "steps/model_preflight/tasks/verify_models/model-preflight.json",
 }
+SOURCE_HISTORY_EXECUTIONS = {
+    "acquire.git_history": ("log", "messages"),
+    "resolve_sources.bind_snapshot": ("tree",),
+}
+DESKTOP_BIND = re.compile(
+    r"(/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/[A-Za-z0-9_.-]+/[0-9a-f]{64})/(.+)")
 
 
 def inspect_runtime(config, run_root, topology, dispatch_ids, instance, *, verify_stops=False):
@@ -255,6 +263,8 @@ def apply_rewind(root, path, acceptance_root, state, plan, runtime, masks):
                                    read_document(key), document, masks)
             advertised_inventory_changes(run_root, walk, baseline, job_id, read_document(claim_path),
                                          read_document(key), document, masks)
+            verified_mount_path_changes(run_root, walk, baseline, job_id, read_document(claim_path),
+                                        read_document(key), document, masks)
             original_claim = verify_reference(walk, baseline["claim"]).read_bytes()
         if failing(diff_job_outputs(read_document(key), document, job_id)):
             raise StateError(f"{job_id}: existing accepted key differs from the accepted attempt")
@@ -375,6 +385,181 @@ def advertised_inventory_changes(run_root, walk, baseline, job_id, claim, expect
     return changes
 
 
+def _mount_path(value):
+    if (not isinstance(value, str) or not value.startswith("/") or value.startswith("//")
+            or "\\" in value or "\0" in value
+            or str(PurePosixPath(value)) != value or ".." in PurePosixPath(value).parts):
+        raise StateError("mount evidence path is not canonical absolute POSIX")
+    return PurePosixPath(value)
+
+
+def _mount_artifact(run_root, output, handoff, path, masks, *, signature=True):
+    """Resolve a key's masked path to the exact raw reference in its pinned publication."""
+    masked = masks.text(path)
+    raw = [entry for entry in output["volatile"]["artifacts"] if entry["path"] == masked]
+    published = [entry for entry in handoff["artifacts"] if entry["path"] == path]
+    if len(raw) != 1 or len(published) != 1 or {**raw[0], "path": path} != published[0]:
+        raise StateError("mount artifact raw reference is missing, ambiguous or differs from publication")
+    ref = published[0]
+    document = read_document(verify_reference(run_root, ref))
+    normalized = normalize_value(document, masks)
+    found = [entry for entry in output["artifacts"] if entry["path"] == masked]
+    if signature and (len(found) != 1 or found[0] != {
+            "path": masked, "kind": "json", "count": len(document), "sha256": normalized_digest(normalized)}):
+        raise StateError("mount artifact signature differs from its resolving bytes")
+    return document, normalized, found[0] if signature else None, ref
+
+
+def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expected, actual, masks):
+    """Prove only source-history's Desktop-to-checkout bind aliases, atomically in a comparison copy."""
+    if job_id != "job_source_history_analysis":
+        return []
+    if all(expected["outputs"].get(unit, {}).get("executions") == actual["outputs"].get(unit, {}).get("executions")
+           for unit in SOURCE_HISTORY_EXECUTIONS):
+        return []
+    original = read_document(verify_reference(walk, baseline["claim"]))
+    origin = read_document(verify_reference(walk, baseline["provenance"]))
+    if read_document(verify_reference(walk, baseline["key"])) != expected:
+        raise StateError("mount baseline key differs from its preserved evidence")
+    for key in ("repository_root", "target_root", "source_fingerprint", "resolved_config_sha256"):
+        if not original.get(key) or original[key] != claim.get(key):
+            raise StateError(f"mount comparison requires unchanged claim {key}")
+    if (origin.get("application_run_id") != run_root.name or origin.get("job_id") != job_id
+            or origin.get("attempt") != original["attempt_id"]
+            or origin.get("target") != original["target_root"]
+            or origin.get("dagster_run_id") != original["orchestration"].get("run_id")):
+        raise StateError("mount baseline provenance differs from the original claim")
+    repository = _mount_path(original["repository_root"])
+    target = _mount_path(original["target_root"])
+    if target.parent != repository / "targets" or run_root.parent.name != "runs":
+        return []
+    native = _mount_path(run_root.parent.parent.as_posix())
+    pointer = read_document(run_root / f"data/jobs/{job_id}/latest.json")
+    handoffs, claim_refs = [], []
+    for source_claim, output, sha in ((original, expected, origin["handoff_sha256"]),
+                                      (claim, actual, pointer["handoff_sha256"])):
+        attempt = f"data/jobs/{job_id}/attempts/{source_claim['attempt_id']}"
+        if (source_claim["run_id"] != run_root.name or source_claim["job_id"] != job_id
+                or not re.fullmatch(r"attempt_[0-9]{4}", source_claim["attempt_id"])
+                or source_claim["attempt_path"] != attempt):
+            raise StateError("mount claim belongs to a different run/job/attempt")
+        handoff_path = safe_path(run_root, attempt + "/handoff.json")
+        if file_sha256(handoff_path) != sha:
+            raise StateError("mount publication digest differs from its provenance")
+        handoff = read_document(handoff_path)
+        if (handoff.get("status") != "ACCEPTED" or handoff["resolving_paths"]["attempt"] != attempt
+                or any(handoff.get(key) != source_claim[key] for key in
+                       ("run_id", "job_id", "attempt_id", "source_fingerprint", "resolved_config_sha256"))
+                or (source_claim is claim and pointer["handoff_path"] != attempt + "/handoff.json")):
+            raise StateError("mount publication differs from the claimed attempt")
+        verify_publication(run_root, handoff, sha)
+        raw_claim, _, _, claim_ref = _mount_artifact(
+            run_root, output, handoff, attempt + "/claim.json", masks, signature=False)
+        if raw_claim != source_claim:
+            raise StateError("mount claim differs from its published raw reference")
+        handoffs.append(handoff)
+        claim_refs.append(claim_ref)
+
+    aliases, changes, signatures, output_mounts = {}, [], [], []
+
+    def project_execution(before, after, projected, unit, name):
+        step, task = unit.split(".")
+        mounts = []
+        for source_claim, execution in ((original, before), (claim, after)):
+            receipt = (f"{source_claim['attempt_path']}/steps/{step}/tasks/{task}"
+                       f"/scratch/executions/{name}/execution.json")
+            if (execution.get("schema") != "appsec-review/container-execution/1"
+                    or execution.get("tool_id") != "tool-git" or execution.get("receipt_path") != receipt
+                    or not isinstance(execution.get("mounts"), list) or len(execution["mounts"]) != 3):
+                return None
+        for index, (destination, readonly) in enumerate((("/target", True), ("/scratch", False), ("/gitdir", True))):
+            suffixes = []
+            for source_claim, execution in ((original, before), (claim, after)):
+                mount = execution["mounts"][index]
+                root = repository / ("targets" if destination == "/target" else "runs")
+                suffix = (target.name if destination == "/target" else
+                          f"{run_root.name}/{source_claim['attempt_path']}/steps/{step}/tasks/{task}/scratch/"
+                          + (f"executions/{name}" if destination == "/scratch" else "gitdir"))
+                if (not isinstance(mount, dict)
+                        or set(mount) != {"source", "runtime_source", "target", "read_only"}
+                        or mount["source"] != str(root / suffix) or mount["target"] != destination
+                        or mount["read_only"] is not readonly):
+                    return None
+                _mount_path(mount["source"])
+                _mount_path(mount["runtime_source"])
+                suffixes.append(suffix)
+            left, right = before["mounts"][index], after["mounts"][index]
+            match = DESKTOP_BIND.fullmatch(left["runtime_source"])
+            host_root = native / ("targets" if destination == "/target" else "runs")
+            if (not match or match[2] != suffixes[0]
+                    or right["runtime_source"] != str(host_root / suffixes[1])):
+                return None
+            if aliases.setdefault(str(root), match[1]) != match[1]:
+                return None
+            projected["mounts"][index]["runtime_source"] = masks.text(left["runtime_source"])
+            mounts.append({"field": f"mounts[{index}].runtime_source", "source": left["source"],
+                           "actual_source": right["source"], "target": destination, "read_only": readonly,
+                           "expected_runtime_source": left["runtime_source"],
+                           "actual_runtime_source": right["runtime_source"], "logical_root": str(root),
+                           "expected_runtime_root": match[1], "actual_runtime_root": str(host_root),
+                           "expected_relative_suffix": suffixes[0], "actual_relative_suffix": suffixes[1]})
+        return mounts
+
+    def account(before, after, projected, mounts):
+        if projected != before[1]:
+            return False
+        signatures.append((after[2], before[2]))
+        changes.append({"artifact": before[2]["path"], "expected_reference": before[3], "actual_reference": after[3],
+                        "expected_signature": deepcopy(before[2]), "actual_signature": deepcopy(after[2]),
+                        "expected_claim_reference": claim_refs[0], "actual_claim_reference": claim_refs[1],
+                        "provenance": baseline["provenance"], "mounts": mounts})
+        return True
+
+    for unit, names in SOURCE_HISTORY_EXECUTIONS.items():
+        step, task = unit.split(".")
+        suffix = f"steps/{step}/tasks/{task}/result.json"
+        pair = [_mount_artifact(run_root, output, handoff, f"{source_claim['attempt_path']}/{suffix}", masks)
+                for source_claim, output, handoff in ((original, expected, handoffs[0]), (claim, actual, handoffs[1]))]
+        before, after = pair
+        for value, output in ((before, expected), (after, actual)):
+            executions = value[0].get("executions")
+            if not isinstance(executions, list) or len(executions) != len(names):
+                return []
+            if normalize_value(executions, masks) != output["outputs"].get(unit, {}).get("executions"):
+                raise StateError("mount output execution copy differs from its raw artifact")
+        projected, mounts = deepcopy(after[1]), []
+        for index, name in enumerate(names):
+            left, right = before[0]["executions"][index], after[0]["executions"][index]
+            mapped = project_execution(left, right, projected["executions"][index], unit, name)
+            if not mapped:
+                return []
+            mounts.extend({**entry, "field": f"executions[{index}].{entry['field']}"} for entry in mapped)
+            for mount_index in range(3):
+                output_mounts.append((actual["outputs"][unit]["executions"][index]["mounts"][mount_index],
+                                      masks.text(left["mounts"][mount_index]["runtime_source"])))
+            if unit == "acquire.git_history":
+                copies = [_mount_artifact(run_root, output, handoff, execution["receipt_path"], masks)
+                          for output, handoff, execution in ((expected, handoffs[0], left), (actual, handoffs[1], right))]
+                for value, execution in zip(copies, (left, right)):
+                    if any(value[0][key] != execution[key] for key in value[0].keys() & execution.keys()):
+                        raise StateError("mount execution receipt differs from its result copy")
+                copy_projection = deepcopy(copies[1][1])
+                copy_mapped = project_execution(copies[0][0], copies[1][0], copy_projection, unit, name)
+                if not copy_mapped or not account(*copies, copy_projection, copy_mapped):
+                    return []
+        if not account(before, after, projected, mounts):
+            return []
+    roots = list(aliases.values())
+    if len(set(roots)) != 2 or PurePosixPath(roots[0]).parent != PurePosixPath(roots[1]).parent:
+        return []
+    # No mutation until every copy, raw pin, suffix and remaining normalized byte has matched.
+    for new_signature, old_signature in signatures:
+        new_signature.update(old_signature)
+    for mount, value in output_mounts:
+        mount["runtime_source"] = value
+    return changes
+
+
 def replay_comparison(run_root, walk, state, item, attempt, document, masks):
     """Use the archived key, not a mutable corpus file; never reclass semantic differences."""
     replays = item.get("replays", [])
@@ -410,10 +595,13 @@ def replay_comparison(run_root, walk, state, item, attempt, document, masks):
                 walk, evidence, baseline, item["job_id"], claim, expected, actual, masks)
             inventory_changes = advertised_inventory_changes(
                 run_root, walk, baseline, item["job_id"], claim, expected, actual, masks)
+            mount_changes = verified_mount_path_changes(
+                run_root, walk, baseline, item["job_id"], claim, expected, actual, masks)
             differences = diff_job_outputs(expected, actual, item["job_id"])
             return {"baseline": baseline, "evidence": entry["evidence"],
                     "admitted_control_changes": control_changes,
                     "advertised_inventory_changes": inventory_changes,
+                    "verified_mount_path_changes": mount_changes,
                     "passed": not failing(differences),
                     "differences": [difference.as_dict() for difference in differences],
                     "unadjusted_differences": [
