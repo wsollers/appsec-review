@@ -148,7 +148,8 @@ _LANE_SCHEMA = "appsec-review/inference-review-lane/1"
 _RECEIPT_SCHEMA = "appsec-review/claim-ledger-head/1"
 _PROJECTION_SCHEMA = "appsec-review/claim-projection/1"
 _LEAD_OUTCOMES = ("proposal", "no_proposal", "blocked", "unaccounted")
-_UNLINKED = "(unlinked)"
+UNLINKED = "(unlinked)"            # family and scanner of an admitted lead no finding_lead package lists
+_UNLINKED = UNLINKED
 _READ_ERRORS: tuple[type[BaseException], ...] = (ValueError, OSError, KeyError, TypeError, AttributeError)
 
 
@@ -254,6 +255,7 @@ def _load_manifest(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any]:
     non_lead = manifest["counts"]["non_lead_observations"]
     non_lead_total = sum(int(value) for value in non_lead.values()) if isinstance(non_lead, Mapping) else int(non_lead)
     return {"admission": admission, "lead_packages": lead_packages, "non_lead_observations": non_lead_total,
+            "index_manifest_sha256": manifest.get("manifest_sha256"),      # the accepted index set the leads came from
             "sources": {"lead_packages": set_ref, "lead_package_manifest": manifest_ref}}
 
 
@@ -297,7 +299,9 @@ def _load_projection(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any
                                      "origin_cell_ids": tuple(claim.get("origin_cell_ids") or ())}
     cells = {str(cell_id): {str(record["package_id"]) for record in records}
              for cell_id, records in projection["cells"].items()}
-    return {"claims": claims, "cell_packages": cells,
+    # ``document`` is the verified projection itself, for adapters that read what the section does
+    # not (relations, cell roles, state history); the section never reads it.
+    return {"claims": claims, "cell_packages": cells, "document": projection,
             "sources": {"claim_ledger_receipt": receipt_ref, "claim_projection": projection_ref}}
 
 
@@ -336,10 +340,15 @@ def _linked_claims(packages: Iterable[str], index: Mapping[str, set[str]]) -> se
 
 
 def _proposal_disposition(claim_ids: set[str], projection: Mapping[str, Any], gaps: set[str]
-                          ) -> tuple[str, str | None, set[str]]:
-    """(disposition, unresolved reason, dismissing states) of a lead whose red cells proposed."""
+                          ) -> tuple[str, str | None, set[str], set[str]]:
+    """(disposition, unresolved reason, dismissing states, deciding canonical claims) of a proposing lead.
+
+    The deciding claims are the canonical claims in the state that decided the disposition: the
+    confirmed (else supported) ones of a surviving lead, every claim of a dismissed lead, none of an
+    unresolved one.
+    """
     claims = projection["claims"]
-    states: set[str] = set()
+    resolved: dict[str, str] = {}
     not_final = False
     for claim_id in claim_ids:
         if claim_id not in claims:
@@ -351,23 +360,56 @@ def _proposal_disposition(claim_ids: set[str], projection: Mapping[str, Any], ga
             gaps.add("duplicate_unresolved")
             not_final = True
             continue
-        states.add(claims[canonical]["state"])
+        resolved[canonical] = claims[canonical]["state"]
+    states = set(resolved.values())
     if not claim_ids:
-        return "unresolved", "proposal_without_claim", set()
-    if "confirmed" in states:
-        return "survived_confirmed", None, set()
-    if "supported" in states:
-        return "survived_supported", None, set()
+        return "unresolved", "proposal_without_claim", set(), set()
+    for survivor in SURVIVED_DISPOSITIONS:
+        state = survivor.removeprefix("survived_")
+        if state in states:
+            return survivor, None, set(), {claim_id for claim_id, value in resolved.items() if value == state}
     for reason in ("insufficient_evidence", "coverage_gap"):
         if reason in states:
-            return "unresolved", reason, set()
+            return "unresolved", reason, set(), set()
     if not_final or not states or not states <= set(DISMISSED_STATES):
-        return "unresolved", "claim_not_final", set()
-    return "dismissed_by_adjudication", None, states
+        return "unresolved", "claim_not_final", set(), set()
+    return "dismissed_by_adjudication", None, states, set(resolved)
 
 
-def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mapping[str, Any],
-             projection: Mapping[str, Any]) -> dict[str, Any]:
+def load_verified_documents(run_root: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """The four verified inputs of the section, or ``(None, <integrity gap code>)``.
+
+    ``{"review", "manifest", "lane", "projection"}``: the accepted review handoff, the lane A package
+    manifest, the lane A document and the claim projection, each read once through the hash-bound
+    readers named in the module docstring. This is the only run read of the section and of the
+    adapters that derive records from the same documents (``observability.findings.lead_adapter``).
+    It never raises for a missing or unverifiable input.
+    """
+    from appsec_review.storage.validation import validation_scope
+
+    root = Path(run_root).resolve()
+    try:
+        with validation_scope(root):
+            review = _stage("review_handoff_unavailable", _load_review, root)
+            manifest = _stage("lead_manifest_unavailable", _load_manifest, root, review)
+            lane = _stage("lane_document_unavailable", _load_lane, root, review)
+            projection = _stage("claim_projection_unavailable", _load_projection, root, review)
+    except _Unavailable as unavailable:
+        return None, unavailable.code
+    return {"review": review, "manifest": manifest, "lane": lane, "projection": projection}, None
+
+
+def lead_dispositions(documents: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """One row per admitted lane A lead, in lead id order, and the integrity gap codes found.
+
+    ``documents`` is the first element of :func:`load_verified_documents`. A row is
+    ``{"lead_id", "disposition", "unresolved_reason", "dismissed_states", "claim_ids", "family",
+    "scanner"}``: the disposition is the one the section counts for that lead, ``dismissed_states``
+    and ``claim_ids`` are sorted, and ``claim_ids`` names the canonical claims that decided a
+    surviving or dismissed disposition (empty otherwise). ``family`` and ``scanner`` are
+    ``UNLINKED`` for a lead no ``finding_lead`` package lists.
+    """
+    manifest, lane, projection = documents["manifest"], documents["lane"], documents["projection"]
     gaps: set[str] = set()
     packages_of: dict[str, list[str]] = {}
     menu: dict[str, tuple[str, str]] = {}
@@ -375,18 +417,8 @@ def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mappi
         for lead_id, family, scanner in leads:
             packages_of.setdefault(lead_id, []).append(package_id)
             menu.setdefault(lead_id, (family, scanner))
-
-    observed = Counter(outcome for leads in lane["lead_accounting"].values() for outcome in leads.values()
-                       if outcome in _LEAD_OUTCOMES)
-    if any(observed[outcome] != review["leads_by_outcome"][outcome] for outcome in _LEAD_OUTCOMES):
-        gaps.add("lead_outcome_mismatch")
-
-    dispositions = empty_dispositions()
-    dismissed_states = dict.fromkeys(DISMISSED_STATES, 0)
-    unresolved = dict.fromkeys(UNRESOLVED_REASONS, 0)
-    by_family: dict[str, dict[str, int]] = {}
-    by_scanner: dict[str, dict[str, int]] = {}
     claim_index = _claims_by_package(lane, projection)
+    rows: list[dict[str, Any]] = []
     admitted = [lead_id for lead_id, status, _ in manifest["admission"] if status == "admitted"]
     for lead_id in sorted(admitted):
         packages = packages_of.get(lead_id, [])
@@ -401,23 +433,47 @@ def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mappi
             outcomes.append(outcome)
         reason: str | None = None
         states: set[str] = set()
+        deciding: set[str] = set()
         if not outcomes:
             disposition, reason = "unresolved", "unaccounted"
         elif "proposal" in outcomes:
-            disposition, reason, states = _proposal_disposition(
+            disposition, reason, states, deciding = _proposal_disposition(
                 _linked_claims(packages, claim_index), projection, gaps)
         elif all(outcome == "no_proposal" for outcome in outcomes):
             disposition = "no_claim_raised"
         else:
             disposition = "unresolved"
             reason = "blocked" if "blocked" in outcomes else "unaccounted"
-        dispositions[disposition] += 1
-        if reason is not None:
-            unresolved[reason] += 1
-        for state in states:
-            dismissed_states[state] += 1
         family, scanner = menu.get(lead_id, (_UNLINKED, _UNLINKED))
-        for table, key in ((by_family, family), (by_scanner, scanner)):
+        rows.append({"lead_id": lead_id, "disposition": disposition, "unresolved_reason": reason,
+                     "dismissed_states": sorted(states), "claim_ids": sorted(deciding),
+                     "family": family, "scanner": scanner})
+    return rows, sorted(gaps)
+
+
+def _compute(review: Mapping[str, Any], manifest: Mapping[str, Any], lane: Mapping[str, Any],
+             projection: Mapping[str, Any]) -> dict[str, Any]:
+    rows, row_gaps = lead_dispositions({"manifest": manifest, "lane": lane, "projection": projection})
+    gaps: set[str] = set(row_gaps)
+    observed = Counter(outcome for leads in lane["lead_accounting"].values() for outcome in leads.values()
+                       if outcome in _LEAD_OUTCOMES)
+    if any(observed[outcome] != review["leads_by_outcome"][outcome] for outcome in _LEAD_OUTCOMES):
+        gaps.add("lead_outcome_mismatch")
+
+    dispositions = empty_dispositions()
+    dismissed_states = dict.fromkeys(DISMISSED_STATES, 0)
+    unresolved = dict.fromkeys(UNRESOLVED_REASONS, 0)
+    by_family: dict[str, dict[str, int]] = {}
+    by_scanner: dict[str, dict[str, int]] = {}
+    admitted = [row["lead_id"] for row in rows]
+    for lead in rows:
+        disposition = lead["disposition"]
+        dispositions[disposition] += 1
+        if lead["unresolved_reason"] is not None:
+            unresolved[lead["unresolved_reason"]] += 1
+        for state in lead["dismissed_states"]:
+            dismissed_states[state] += 1
+        for table, key in ((by_family, lead["family"]), (by_scanner, lead["scanner"])):
             row = table.setdefault(key, {"admitted": 0, **empty_dispositions()})
             row["admitted"] += 1
             row[disposition] += 1
@@ -460,15 +516,7 @@ def triage_reduction_metrics(run_root: Any) -> dict[str, Any]:
     Never raises for missing or unverifiable inputs; returns ``unavailable_section`` with the
     named integrity gap code of the first input that could not be read and verified instead.
     """
-    from appsec_review.storage.validation import validation_scope
-
-    root = Path(run_root).resolve()
-    try:
-        with validation_scope(root):
-            review = _stage("review_handoff_unavailable", _load_review, root)
-            manifest = _stage("lead_manifest_unavailable", _load_manifest, root, review)
-            lane = _stage("lane_document_unavailable", _load_lane, root, review)
-            projection = _stage("claim_projection_unavailable", _load_projection, root, review)
-    except _Unavailable as unavailable:
-        return unavailable_section([unavailable.code])
-    return _compute(review, manifest, lane, projection)
+    documents, code = load_verified_documents(run_root)
+    if documents is None:
+        return unavailable_section([str(code)])
+    return _compute(documents["review"], documents["manifest"], documents["lane"], documents["projection"])

@@ -5,7 +5,8 @@ service or reads a target:
 
 * ``snapshot``     read one accepted run and publish its ``finding-snapshot/1`` into a history store
 * ``scorecard``    build and print the scorecard of one stored snapshot from whatever independent
-                   inputs are supplied (answer key, prior run, outcomes, leads, crash evidence, ...)
+                   inputs are supplied (answer key, prior run, outcomes, leads, crash evidence, ...);
+                   with ``--run`` the lead records and their key labels are derived from the run
 * ``crash-ingest`` parse operator-exported crash files into a content-addressed ``crash-evidence/1``
 * ``audit-sample`` draw the reproducible sample of removed leads for human labelling
 
@@ -23,7 +24,7 @@ from typing import Any
 
 from appsec_review.storage import canonical_json
 
-from . import history, labels, lifecycle, run_adapter, scorecard, slices
+from . import history, labels, lead_adapter, lifecycle, run_adapter, scorecard, slices
 from .crash import bind_all, corroborate, ingest, metrics as crash_metrics, missed_buckets, publish_evidence
 
 UNITS_SCHEMA = "appsec-review/reviewed-units/1"
@@ -108,10 +109,19 @@ def _scorecard(args: argparse.Namespace) -> int:
     if args.run_summary is not None:
         triage_section = _read_json(args.run_summary).get("triage_reduction")
     crash, crash_labels = _crash(args, snapshot)
+    leads = _read_json(args.leads) if args.leads else None
+    lead_labels = _read_json(args.lead_labels) if args.lead_labels else None
+    input_gaps: list[str] = []
+    if args.run is not None:
+        if args.leads is not None or args.lead_labels is not None:
+            raise ValueError("--run derives the lead records and labels; give it or --leads/--lead-labels, not both")
+        if args.run.name != args.run_id:
+            raise ValueError(f"--run names run {args.run.name!r}, not --run-id {args.run_id!r}")
+        derived = lead_adapter.leads_from_run(args.run, key=key, loader=lead_adapter.load_lead_documents)
+        leads, lead_labels = derived["leads"], derived["labels"]
+        input_gaps.extend(derived["gaps"])
     inputs = scorecard.Inputs(
-        triage_reduction=triage_section,
-        leads=_read_json(args.leads) if args.leads else None,
-        lead_labels=_read_json(args.lead_labels) if args.lead_labels else None,
+        triage_reduction=triage_section, leads=leads, lead_labels=lead_labels, input_gaps=tuple(input_gaps),
         answer_key=key, outcomes=outcomes, lifecycle=classified,
         ages=history.ages(loaded) if classified is not None else None,
         entry_points=_read_json(args.entry_points) if args.entry_points else None,
@@ -176,6 +186,8 @@ def parser() -> argparse.ArgumentParser:
                                              "'none' to skip the comparison")
     card.add_argument("--key", type=Path, help="answer key (expectations.toml) for a corpus run")
     card.add_argument("--run-summary", type=Path, help="the run's telemetry summary.json (triage_reduction section)")
+    card.add_argument("--run", type=Path, help="run directory (runs/<run-id>): derive the lead records, and with "
+                                               "--key their labels, from the run instead of --leads/--lead-labels")
     card.add_argument("--leads", type=Path, help="lead records for labelled triage effectiveness")
     card.add_argument("--lead-labels", type=Path)
     card.add_argument("--outcomes", type=Path, help="developer-outcomes/1 file")

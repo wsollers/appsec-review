@@ -410,7 +410,7 @@ confirmed high or critical finding.
 | Targeted fix re-check: requests, admission, scoring | `recheck` | implemented, model-free | T-061 |
 | Live verifier transport for the re-check | none | open | T-074 |
 | Labelled triage effectiveness, split ratios, audit miss rate | `triage`, `labels` | implemented | T-062 |
-| Lead records with stage attribution derived from a run | caller-supplied today | open | T-077 |
+| Lead records with stage attribution derived from a run | `lead_adapter` | implemented for `scorecard --run`; not printed by `stepwise.py system` | T-077 |
 | Review scored by default; scope and family match | `acceptance/scoring` | implemented | T-063 |
 | Final-state snapshot, usefulness, severity in keys | `run_adapter`, `usefulness` | implemented | T-064 |
 | Run adapter into experiments, series, detection rates, flapping | `stability` | implemented | T-065 |
@@ -482,3 +482,12 @@ Where the code differs from the text above, the code is authoritative and this s
 17. **Crash adapters were written from public format documentation**, not real exports. Each
     adapter's docstring lists the fields it could not confirm (most of the Sentry exception
     interface, several sanitizer header variants).
+18. **The removing stage is read from counted evidence, and `judge` is never derived.** Section 5.2
+    lists red no-proposal, blue, judge and verifier. Only the deterministic adjudication table
+    moves a claim, and it dismisses one when a required predicate has a counted `contradicts`
+    relation and no counted support. `lead_adapter` therefore names the role of the cell that
+    produced that relation: `blue` for a refuter, `verifier` when only the independent verifier
+    did. A judge sets no state and its relations are not counted, so no lead is attributed to it.
+    `out_of_scope`, an unrecorded deciding row, an unknown producer and claims dismissed by
+    different stages are `unattributed` with a counted gap. Lead labels from a key use location
+    only, because a scanner rule often carries no reliable CWE.

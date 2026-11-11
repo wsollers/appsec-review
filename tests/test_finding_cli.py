@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from appsec_review.observability.findings import cli, run_adapter
+from appsec_review.observability.findings import cli, lead_adapter, run_adapter
 from appsec_review.observability.findings.contracts import METRICS_SCHEMA
 from appsec_review.observability.findings.run_adapter import RunDocuments
 
@@ -238,3 +238,82 @@ def test_unusable_inputs_exit_two_with_a_named_reason(tmp_path, runs, capsys, ar
     filled = [item.format(h=tmp_path / "history", r=tmp_path / "runs" / "run-1", u=bad_units) for item in arguments]
     assert cli.main(filled) == 2
     assert message in capsys.readouterr().err
+
+
+# ------------------------------------------------------------------ inputs derived from the run (T-077)
+
+def lead_documents(rows, locations):
+    """A fake of the lead read boundary: ``rows`` are (lead id, red outcome, claim state or None)."""
+    packages = {f"pkg-{lead_id}": [(lead_id, "sast", "semgrep")] for lead_id, _outcome, _state in rows}
+    claims = {f"claim-{lead_id}": {"lane": "lead", "package_id": f"pkg-{lead_id}", "state": state,
+                                   "duplicate_of": None, "origin_cell_ids": ()}
+              for lead_id, _outcome, state in rows if state is not None}
+    triage_documents = {
+        "manifest": {"admission": [(lead_id, "admitted", "review_pending") for lead_id, *_ in rows],
+                     "lead_packages": packages},
+        "lane": {"lead_accounting": {f"pkg-{lead_id}": {lead_id: outcome} for lead_id, outcome, _state in rows},
+                 "proposals": {claim_id: (claim["package_id"],) for claim_id, claim in claims.items()}},
+        "projection": {"claims": claims, "cell_packages": {}, "document": {}}}
+    return lead_adapter.LeadDocuments(triage_documents, locations, ())
+
+
+@pytest.fixture
+def lead_runs(monkeypatch):
+    table = {"run-2": lead_documents(
+        [("L1", "proposal", "confirmed"), ("L2", "no_proposal", None), ("L3", "proposal", "supported")],
+        {"L1": {"path": "net/parse.c", "start_line": 11, "end_line": 11},
+         "L2": {"path": "net/parse.c", "start_line": 20, "end_line": 20},
+         "L3": {"path": "net/safe.c", "start_line": 11, "end_line": 11}})}
+
+    def load(run_root):
+        return table.get(Path(run_root).name, lead_adapter.LeadDocuments(
+            None, None, ("lead_documents_unavailable:review_handoff_unavailable",)))
+
+    monkeypatch.setattr(lead_adapter, "load_lead_documents", load)
+    return table
+
+
+def test_scorecard_derives_lead_records_and_key_labels_from_the_run(tmp_path, runs, lead_runs, capsys):
+    both_runs(tmp_path)
+    key = tmp_path / "key.toml"
+    key.write_text(KEY, encoding="utf-8")
+    capsys.readouterr()
+    run = str(tmp_path / "runs" / "run-2")
+    assert scorecard(tmp_path, "--run", run, "--key", str(key), "--json") == 0
+    document = json.loads(capsys.readouterr().out)
+    effect = document["triage"]["effectiveness"]
+    assert effect["available"] is True and (effect["admitted"], effect["labelled"]) == (3, 3)
+    assert (effect["true_lead_retention"]["numerator"], effect["true_lead_retention"]["denominator"]) == (1, 2)
+    assert effect["true_leads_removed_by_stage"]["red_no_proposal"] == 1
+    assert effect["control_false_positive_rate"]["value"] == 1.0      # the lead on control c1 survived
+    assert document["input_gaps"] == []
+    assert scorecard(tmp_path, "--run", run, "--key", str(key)) == 0
+    assert "   true-lead retention 1/2 (0.500" in capsys.readouterr().out
+    # without a key the records are derived and the labels are named as missing, never invented
+    assert scorecard(tmp_path, "--run", run, "--json") == 0
+    assert json.loads(capsys.readouterr().out)["triage"]["effectiveness"] == {
+        "available": False, "reason": "no_lead_labels"}
+
+
+def test_scorecard_names_a_run_whose_lead_documents_are_unavailable(tmp_path, runs, lead_runs, capsys):
+    both_runs(tmp_path)
+    lead_runs.clear()
+    capsys.readouterr()
+    assert scorecard(tmp_path, "--run", str(tmp_path / "runs" / "run-2")) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "   true-lead retention and false-lead removal: n/a (no_lead_records)" in lines
+    assert "   gap (derived input): lead_documents_unavailable:review_handoff_unavailable" in lines
+
+
+def test_scorecard_refuses_operator_lead_files_beside_a_run_and_a_run_of_another_id(tmp_path, runs, lead_runs,
+                                                                                    capsys):
+    both_runs(tmp_path)
+    leads = tmp_path / "leads.json"
+    leads.write_text("[]", encoding="utf-8")
+    capsys.readouterr()
+    run = str(tmp_path / "runs" / "run-2")
+    for flag in ("--leads", "--lead-labels"):
+        assert scorecard(tmp_path, "--run", run, flag, str(leads)) == 2
+        assert "not both" in capsys.readouterr().err
+    assert scorecard(tmp_path, "--run", str(tmp_path / "runs" / "run-1")) == 2
+    assert "not --run-id 'run-2'" in capsys.readouterr().err

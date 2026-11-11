@@ -59,7 +59,7 @@ and a second, different snapshot of the same run and stage is refused.
   --history runs/metadata/finding-history --target-id <name> --run-id <run-id> \
   [--prior-run-id <run-id>|none] [--key <expectations.toml>] \
   [--run-summary runs/<run-id>/data/telemetry/summary.json] \
-  [--leads <leads.json> --lead-labels <labels.json>] \
+  [--run runs/<run-id> | --leads <leads.json> --lead-labels <labels.json>] \
   [--outcomes <developer-outcomes.json> --as-of YYYY-MM-DD] \
   [--entry-points <catalogue.json>] \
   [--crash-evidence <evidence.json> --debug-id <id> --crash-revision <version>] \
@@ -75,7 +75,7 @@ listed under "not measured" with its reason.
 | a prior snapshot in the store (default: the latest earlier run) | new, persisting, regressed, fix candidate, not re-detected, not covered |
 | `--key` | this run's recall and control false positives with intervals; precision; severity agreement |
 | `--run-summary` | refutation and silence as separate ratios, unresolved share |
-| `--leads` with `--lead-labels` | true-lead retention beside false-lead removal, by stage |
+| `--run` with `--key`, or `--leads` with `--lead-labels` | true-lead retention beside false-lead removal, by stage |
 | `--outcomes` with `--as-of` | fix rate, rejected-as-false rate, accepted risk and expiry, time to disposition |
 | `--entry-points` | share of entry points reviewed; the uncovered list |
 | `--crash-evidence` | crash-corroborated findings; memory-safety crash buckets with no finding |
@@ -91,6 +91,33 @@ Reading rules:
   findings). Stability figures over overlapping run pairs carry none.
 - One run on a small key is a noisy estimate. Trend the repeated-run detection rate instead
   (section 5).
+
+Lead records from the run (`--run`, T-077). `--run` names the run directory of `--run-id`; giving
+it together with `--leads` or `--lead-labels` is an error. The run's lane A documents are read
+through the verified readers of the `triage_reduction` section, so the dispositions are that
+section's:
+
+- One record per lane A lead. An admitted lead carries the section's disposition; a lead that was
+  not admitted has none and is outside every ratio.
+- The removing stage of a lead where no claim was raised is `red_no_proposal`. For a lead dismissed
+  by adjudication it is `blue` when a refuter cell produced a contradiction the adjudication table
+  counted on a required predicate, `verifier` when only the independent verifier did, and
+  `unattributed` otherwise. `unattributed` covers `out_of_scope` (a scope rule dismissed the claim,
+  no role did), a claim whose state history does not record the deciding row, a dismissal with no
+  counted contradiction recorded, an unknown producing cell, and a lead whose claims were dismissed
+  by different stages. Each is counted in a gap `dismissal_unattributed:<reason>:<leads>`.
+- `judge` is never derived: a judge sets no claim state and the adjudication table does not count
+  its relations, so a judge that sided with blue did not remove the lead.
+- With `--key`, a lead is labelled by location only: `true` inside a defect's scope, `false` inside
+  a control's scope (the lead then counts toward that control's false-positive rate), unlabelled
+  elsewhere. Scanner rules often carry no reliable CWE, so the weakness is not compared. Lead
+  locations come from the accepted observation index; when it cannot be read, or is not the index
+  set the review used, there are no labels and the gap `lead_locations_unavailable:<reason>` says so.
+- Gaps of the derivation are printed as `gap (derived input): …` and are in the document's
+  `input_gaps`. Unreadable lane A documents give `n/a (no_lead_records)`, never an empty lead list.
+
+Without `--run`, `--leads` is a list of `{"lead_id", "admitted", "disposition", "removed_stage",
+"family", "scanner", "control_id"}` records and `--lead-labels` maps a lead id to a label.
 
 Developer outcomes file (`fingerprint` is the finding's `fingerprint.exact` from the snapshot):
 
