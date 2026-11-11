@@ -83,3 +83,32 @@ was applied. The parent reverified all 27 recorded dispatches stopped and paused
 environment and planner replays. Original acceptance keys and raw evidence remain intact.
 Any new comparison rule requires a narrowly justified evidence check, not treating changed
 content hashes as automatically volatile.
+
+The user subsequently authorized the specific receipt-backed mount-path comparison repair.
+Ready commit `e963e98ed3adbd43b468c439c4c90581376c3eec` integrated as `e06306df2`.
+The three changed paths are outside the deployed release's measured inputs, verified against
+its manifest; no image build, source reload or new admission was needed.
+
+The isolated agent's final guarded verification passed 111 cases (43 new mount-proof cases
+and 68 existing rewind cases) in 89.03 s, without skips or cases over ten seconds. Mounted main:
+
+```sh
+.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 111 --parallel \
+  --test-workers 2 --shuffle-seed 11103 --strict -- tests/test_stepwise_mount_paths.py \
+  tests/test_stepwise_rewind.py
+```
+
+Result: **111 passed in 76.29 s / 82.215 s total**, no skips or cases over ten seconds;
+report `test/tmp/reports/tests-custom-20261111-094108-320901-24650.json`.
+The repair checkout retains exact red/green commands, two initial fixture failures and the
+expected original-comparison failure in `test/tmp/mount-path-repair/handoff.json`.
+Ruff was unavailable there; syntax/whitespace checks and the focused regressions passed.
+
+The parent reran the existing blocked `stepwise.py check`, not the history job. It now records
+four fully verified artifact proofs and fifteen raw mapping receipts (including duplicated
+execution copies), retains all thirteen unadjusted differences, and has zero remaining
+nonvolatile differences. Only the closed source-history mount projection described in
+`docs/operations/recovery-repair.md` is accounted for. Original raw hashes, acceptance key,
+provenance and seed remain unchanged. The parent then individually reaccepted this attempt.
+CI and build-environment replays also passed their preserved-key and actual-content checks;
+no additional comparison exemption was required.

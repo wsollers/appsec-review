@@ -528,48 +528,25 @@ def test_iterative_receipts_reach_accepted_artifact_index(
 
 
 def test_unsupported_and_unresolved_iteration_receipts_survive_publication(tmp_path: Path) -> None:
-    from appsec_review.jobs.job_artifact_indexing import (
-        build_job as build_artifact_index, load_accepted_artifact_index,
-    )
-
-    config, target = _fixture(tmp_path, declared_releases=False)
-    documents = {
-        "unsupported/legacy.vcproj": '<VisualStudioProject ProjectType="Visual C++"/>\n',
-        "unresolved/CMakeLists.txt": "add_library(C STATIC c.c)\n",
-        "unresolved/c.c": "int c(void) { return 0; }\n",
-    }
-    for relative, content in documents.items():
-        path = target / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-    calls = []
-    run_id, fingerprint = _accepted_project(config, target, calls)
-    calls.clear()
-    GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(profile, calls))]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    run = config.runtime.runs_dir / run_id
-    receipts = {item["root"]: item for item in load_accepted_language_build(run)["receipts"]}
-    assert set(receipts) == {"native", "unsupported", "unresolved"}
-    assert not calls
-    assert receipts["unsupported"]["gaps"] == [
-        "native build unit at unsupported was not built: job_project_build reported BLOCKED: "
-        "unavailable_native_project_toolchain: accepted Visual C++ descriptor requires "
-        "MSBuild/VCBuild capability not supplied by the Linux native profile; Windows platform unproven"]
-    assert receipts["unresolved"]["gaps"] == [
-        "native build unit at unresolved was not built: job_project_build reported BLOCKED: "
-        "build execution blocked: active_coverage_gap:unresolved_ownership; unenforced_native_target"]
-    assert receipts["native"]["gaps"] == [
-        "native build unit at native was not built: job_project_build reported BLOCKED: "
-        "build execution blocked: unenforced_native_target"]
-    assert all(item["terminal_status"] == "BLOCKED" and not item["artifacts"]
-               and not item["commands"] for item in receipts.values())
-    GraphRunner(config, [build_artifact_index()]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    accepted = load_accepted_artifact_index(run)
-    assert accepted["artifact_count"] == 0
-    assert all(f"{item['build_unit_id']}: {gap}" in accepted["gaps"]
-               for item in receipts.values() for gap in item["gaps"])
+    from tests.test_project_build_capture import CASE, _run
+    from appsec_review.jobs.job_artifact_indexing.job import _validate_receipts
+    run, _, document, calls, _ = _run(tmp_path, "multiple", consume=True)
+    accepted = json.loads((run / "data/jobs/job_language_build/attempts/attempt_0001/"
+                          "steps/execute/tasks/native/result.json").read_bytes())
+    receipts = {item["root"]: item for item in accepted["receipts"]}
+    assert set(receipts) == {CASE, "unsupported", "unresolved"}
+    assert len(calls) == 2
+    assert receipts[CASE]["terminal_status"] == "SUCCEEDED"
+    assert receipts[CASE]["enforcement"][0]["proof_kind"] == "captured_invocation"
+    for root, reason in (("unsupported", "unavailable_native_project_toolchain"),
+                         ("unresolved", "unresolved_ownership")):
+        receipt = receipts[root]
+        assert receipt["terminal_status"] == "BLOCKED" and not receipt["artifacts"] and not receipt["commands"]
+        assert any(reason in gap for gap in receipt["gaps"])
+    assert "unenforced_native_target" not in json.dumps(accepted)
+    _, gaps = _validate_receipts(run, document["source_fingerprint"], accepted["receipts"])
+    assert any("unavailable_native_project_toolchain" in gap for gap in gaps)
+    assert any("unresolved_ownership" in gap for gap in gaps)
 
 
 def test_controller_dispatches_registered_dagster_iterations_and_reexecutes_promoted_recipe(

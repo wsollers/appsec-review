@@ -411,6 +411,7 @@ def _load_workspace_manifest(run_root: Path, receipt: Mapping[str, Any]) -> Mapp
 
 def _validate_receipts(run_root: Path, source_fingerprint: str,
                        receipts: Iterable[Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    from appsec_review.jobs.job_project_build.enforcement import gap_text
     validated: list[dict[str, Any]] = []
     gaps: list[str] = []
     seen_units: set[str] = set()
@@ -430,7 +431,7 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
         if not isinstance(artifacts, list):
             raise ArtifactIndexIntegrityError("language-build artifact list is invalid")
         if status != "SUCCEEDED":
-            gaps.extend(f"{unit_id}: {gap}" for gap in receipt.get("gaps", ()))
+            gaps.extend(f"{unit_id}: {gap_text(gap)}" for gap in receipt.get("gaps", ()))
             if artifacts:
                 raise ArtifactIndexIntegrityError("non-successful build receipt publishes artifacts")
             receipt["validated_artifacts"] = []
@@ -510,7 +511,7 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
             verified.append(artifact)
         receipt["validated_artifacts"] = verified
         validated.append(receipt)
-        gaps.extend(f"{unit_id}: {gap}" for gap in receipt.get("gaps", ()))
+        gaps.extend(f"{unit_id}: {gap_text(gap)}" for gap in receipt.get("gaps", ()))
     return validated, list(dict.fromkeys(gaps))
 
 
@@ -987,7 +988,9 @@ def build_job() -> Job:
         target_artifacts, intake_gaps, catalog_handoff = _target_artifacts(unit)
         if not receipts:
             producer_gaps.append("accepted language-build handoff contained no receipts")
-        all_gaps = list(dict.fromkeys([*accepted.get("gaps", ()), *producer_gaps, *intake_gaps]))
+        from appsec_review.jobs.job_project_build.enforcement import gap_text
+        all_gaps = list(dict.fromkeys(gap_text(gap) for gap in
+                                      [*accepted.get("gaps", ()), *producer_gaps, *intake_gaps]))
         return {"receipts": receipts, "receipt_count": len(receipts),
                 "target_artifacts": target_artifacts, "target_catalog_handoff_sha256": catalog_handoff,
                 "producer_gaps": all_gaps,

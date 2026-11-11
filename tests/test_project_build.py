@@ -812,97 +812,35 @@ def _fixture(tmp_path: Path, *, declared_releases: bool = False):
 
 
 def test_project_build_prepares_dispatch_without_a_second_build_or_fake_probe(tmp_path: Path) -> None:
-    config, target = _fixture(tmp_path)
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]).run(
-        target_root=target, source_fingerprint=fingerprint)
-    calls, image_resolver_calls = [], []
-
-    def image_resolver(unit):
-        image_resolver_calls.append(unit.unit_id)
-        return FakeImageResolver()
-
-    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
-                         image_resolver_factory=image_resolver)
-    outcome = GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
-                                             run_id=upstream["run_id"])
-    # These descriptors/recipes carry no closed compiler target proof. Preparation must
-    # publish the exact block without deriving an image or inventing a probe/build.
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
-    assert accepted["probe_artifact_count"] == 0
-    assert accepted["probe_receipts"] == []
+    from tests.test_project_build_capture import _run
+    _, outcome, accepted, calls, image_calls = _run(tmp_path, "cmake")
+    assert outcome["status"] == "SUCCEEDED"
+    assert accepted["probe_artifact_count"] > 0
+    assert len(accepted["probe_receipts"]) == 1
     assert accepted["execution_mode"] == "iterative"
-    assert accepted["execution_graph"]["source_fingerprint"] == fingerprint
-    assert accepted["build_dispatches"] == []
-    assert {item["family"] for item in accepted["static_dispatches"]
-            if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
-    prepared = []
-    for family in ("native", "rust"):
-        image_entry = accepted["images"][family]["entries"][0]
-        action = image_entry["action"]
-        prepared.append(action)
-        assert image_entry["terminal_status"] == "BLOCKED" and image_entry["image"] is None
-        assert image_entry["gaps"] == [
-            f"{action['build_unit_id']}: build execution blocked: unenforced_native_target"]
-        assert action["executable"] is False
-        assert action["topology_refinement"]
-    assert sorted(accepted["gaps"]) == sorted(
-        f"{action['build_unit_id']}: build execution blocked: unenforced_native_target"
-        for action in prepared)
-    assert calls == [] and image_resolver_calls == []
-    assert all("preparation_identity" not in item and "probe_identity" not in item
-               for item in prepared)
-    native = next(item for item in prepared if item["family"] == "native")
-    assert native["recipe_provenance"] == "deterministic-cmake-marker"
-    assert native["recipe"]["system_packages"] == []
-    assert native["descriptor_facts"] == {}
+    dispatch, = accepted["build_dispatches"]
+    assert dispatch["execution_owner"] == "job_project_build"
+    assert dispatch["target_annotation"][0]["status"] == "unknown"
+    assert dispatch["enforcement"][0]["status"] == "proven"
+    assert len(calls) == 2 and image_calls
+    assert accepted["gaps"] == []
 
 
 @pytest.mark.parametrize("repair_baseline", (False, True))
 def test_missing_builder_blocks_only_affected_preparation(tmp_path: Path, repair_baseline) -> None:
-    config, target = _fixture(tmp_path)
-    fingerprint = source_fingerprint(target)
-    upstream = GraphRunner(config, [
-        build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete),
-    ]).run(target_root=target, source_fingerprint=fingerprint)
-    tags = {value["tag"]: value["image_id"]
-            for value in config.job("job_project_build").settings["profiles"].values()}
-    image_calls, calls = [], []
-
-    def runner(argv, timeout):
-        image_calls.append(tuple(argv))
-        if argv[:3] == ("docker", "image", "inspect"):
-            identity = tags.get(argv[3])
-            return (0, identity.encode(), b"", False) if identity else (1, b"", b"missing", False)
-        return 1, b"", b"unapproved default-network preparation was reached", False
-
-    def resolver(unit):
-        return ProjectImageResolver(
-            metadata_root=unit.job.metadata_root, target_root=unit.job.target_root,
-            run_root=unit.job.run_root, releases=unit.job.review_policy.releases, runner=runner,
-        )
-
-    model = RepairModel((["libfixture-dev"],))
-    job = build_projects(
-        executor_factory=lambda unit, profile: (
-            RepairingExecutor(calls, profile, success_package=None)
-            if repair_baseline else FakeBuildExecutor(calls)),
-        image_resolver_factory=resolver, infer=model.complete,
-    )
-    outcome = GraphRunner(config, [job]).run(
-        target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    from tests.test_project_build_capture import _run
+    _, outcome, accepted, calls, image_calls = _run(tmp_path, "derived" if repair_baseline else "cmake")
     native = accepted["images"]["native"]["entries"][0]
-    rust = accepted["images"]["rust"]["entries"][0]
-    assert outcome["status"] == "COMPLETED_WITH_GAPS"
-    assert rust["terminal_status"] == "BLOCKED"
-    assert any("derived_image_preparation_unavailable" in gap for gap in rust["gaps"])
     assert not any(argv[:3] == ("docker", "buildx", "build") for argv in image_calls)
-    assert native["terminal_status"] == "SUCCEEDED"
-    assert {x["family"] for x in accepted["build_dispatches"]} == {"native"}
-    assert calls == [] and model.calls == 0
-    assert accepted["probe_receipts"] == []
+    if repair_baseline:
+        assert outcome["status"] == "COMPLETED_WITH_GAPS"
+        assert native["terminal_status"] == "BLOCKED"
+        assert any("derived_image_preparation_unavailable" in gap for gap in native["gaps"])
+        assert not calls and not accepted["build_dispatches"]
+    else:
+        assert outcome["status"] == native["terminal_status"] == "SUCCEEDED"
+        assert {item["family"] for item in accepted["build_dispatches"]} == {"native"}
+        assert len(calls) == 2
 
 
 def test_native_windows_placeholder_is_blocked_without_hiding_alternate_cmake_authority(tmp_path: Path) -> None:

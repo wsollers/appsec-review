@@ -139,7 +139,7 @@ def test_node_requested_native_stage_comes_from_applicable_captured_lifecycle_no
     assert bool(bound["enforcement"]) is native
     if native:
         assert all(proof["status"] == "unknown" for proof in bound["enforcement"])
-        assert "unenforced_native_target" in bound["blockers"]
+        assert "unenforced_native_target" not in bound["blockers"]
     if unknown:
         assert "operation_unknown" in bound["blockers"]
     script_facts = [fact for fact in graph["facts"] if fact["predicate"] == "node:script"]
@@ -182,7 +182,8 @@ def test_direct_compiler_closes_discovered_native_components_only_from_real_acce
         assert bound["blockers"] == []
         assert all(proof["status"] == "proven" for proof in bound["enforcement"])
     else:
-        assert "unenforced_native_target" in bound["blockers"]
+        assert "unenforced_native_target" not in bound["blockers"]
+        assert any(reason.startswith("invalid_recipe:") for reason in bound["blockers"])
         assert all("compiler_source_closure_unknown" in proof["unresolved_inputs"] for proof in bound["enforcement"])
 
 
@@ -225,7 +226,7 @@ def test_replaced_m32_recipe_is_incompatible_without_changing_accepted_graph():
     unit["recipe"]["build_commands"][0].append("-m32")
     refinement = refine_build_topology(graph, [unit], profiles=profile)
     assert all(proof["status"] == "incompatible" for proof in refinement["units"][0]["enforcement"])
-    assert "unenforced_native_target" in refinement["units"][0]["blockers"]
+    assert "unenforced_native_target" not in refinement["units"][0]["blockers"]
     assert canonical_json(graph) == sealed
 
 
@@ -563,7 +564,7 @@ def test_go_missing_or_conflicting_target_and_unproven_cgo_never_admit(key, valu
                    "provenance": "synthetic-explicit-platform-intent"}],
     }
     bound = refine_build_topology(graph, [unit], policy=policy)["units"][0]
-    assert "unenforced_native_target" in bound["blockers"]
+    assert "unenforced_native_target" not in bound["blockers"]
     assert bound["enforcement"]
     assert all(proof["proof_kind"] == "go_explicit_target" and proof["status"] == status
                for proof in bound["enforcement"])

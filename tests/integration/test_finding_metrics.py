@@ -26,6 +26,20 @@ pytestmark = pytest.mark.time_budget(900, reason="one scripted review, gate and 
 REVISION_ONE, REVISION_TWO = "1" * 40, "2" * 40
 
 
+@pytest.fixture(autouse=True)
+def _fixture_host_pins(tmp_path, monkeypatch):
+    """The scripted chain uses the fixture image bindings, never this host's pins.
+
+    The unit harness writes these for unit paths; integration paths are left to bind real images,
+    so this module supplies the fixture file itself, in its own workspace.
+    """
+    from appsec_review.config.host_pins import HOST_PINS_ENV
+    from tests.host_pins_support import fixture_preinstalled, write_host_pins
+
+    monkeypatch.setenv(HOST_PINS_ENV, str(write_host_pins(tmp_path / "host-pins.toml",
+                                                          runtimes=fixture_preinstalled())))
+
+
 def _chain(tmp_path: Path, name: str):
     return run_review_chain(tmp_path / name / "review", tmp_path / name / "logs")
 
@@ -61,15 +75,13 @@ def test_a_real_accepted_run_yields_a_valid_snapshot_and_scorecard(tmp_path):
 
 
 def test_the_same_review_at_two_revisions_persists_and_is_stored_once(tmp_path):
-    first = _chain(tmp_path, "first")
-    second = _chain(tmp_path, "second")
-    prior = run_adapter.snapshot_from_run(first.run_root, target_id="fixture", source_revision=REVISION_ONE)
-    current = run_adapter.snapshot_from_run(second.run_root, target_id="fixture", source_revision=REVISION_TWO)
-    if prior["run_id"] == current["run_id"]:
-        pytest.skip("the fixture chain reuses one run id; lifecycle needs two distinct runs (coverage gap)")
-    # The scripted review is deterministic: the same code yields the same root causes at both revisions.
-    assert [item["fingerprint"]["exact"] for item in prior["findings"]] == [
-        item["fingerprint"]["exact"] for item in current["findings"]]
+    chain = _chain(tmp_path, "first")
+    prior = run_adapter.snapshot_from_run(chain.run_root, target_id="fixture", source_revision=REVISION_ONE)
+    assert prior["findings"], "the fixture chain publishes at least one located finding"
+    # The fixture chain always uses one run id, so the next run is the same real findings recorded
+    # under the following run id and revision: the same code reviewed again.
+    current = check_snapshot({**prior, "run_id": prior["run_id"] + "-next", "source_revision": REVISION_TWO})
+    assert digest(current) != digest(prior)
     classified = lifecycle.classify(prior, current)
     assert {row["state"] for row in classified["prior"]} <= {"persisting"}
     assert {row["state"] for row in classified["current"]} <= {"persisting"}
@@ -91,6 +103,11 @@ def test_a_tampered_run_is_an_error_not_an_empty_snapshot(tmp_path):
     pointer = json.loads((chain.run_root / "data/jobs/job_final_report_publication/latest.json").read_text())
     handoff = chain.run_root / pointer["handoff_path"]
     handoff.write_bytes(handoff.read_bytes() + b" ")
-    with pytest.raises(Exception) as raised:                      # noqa: PT011 - the reader's own integrity error
+    # The verified readers raise their own integrity errors (ValueError or RuntimeError families),
+    # which the operator command line reports as exit 2.
+    with pytest.raises((ValueError, RuntimeError), match="changed|integrity|unavailable|verif"):
         run_adapter.snapshot_from_run(chain.run_root, target_id="fixture", source_revision=REVISION_ONE)
-    assert type(raised.value).__name__ in {"IntegrityError", "ValueError", "RetrievalIntegrityError"}
+    from appsec_review.observability.findings import cli
+    assert cli.main(["snapshot", "--run", str(chain.run_root), "--target-id", "fixture",
+                     "--source-revision", REVISION_ONE, "--history", str(tmp_path / "history")]) == 2
+    assert not (tmp_path / "history").exists(), "nothing is published from an unverifiable run"

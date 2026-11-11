@@ -17,7 +17,7 @@ DATASETS = (
               artifacts=("artifacts/build/topology/**", "data/build/topology/**"),
               reason="closures retain source documents and exact effective environment values; "
                      "only sanitized identities and coverage are retrieval metadata"),
-    artifact_only("project_build_dispatch", "acceptance", "build", "appsec-review/project-build-dispatch/2",
+    artifact_only("project_build_dispatch", "acceptance", "build", "appsec-review/project-build-dispatch/3",
                   "Accepted image, probe and build dispatch decisions per build unit.",
                   artifacts=(_A + "/artifacts/project-build/*.json",),
                   reason="carries exact recipes and environment values; language-build publishes the sanitized "

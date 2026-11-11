@@ -15,7 +15,7 @@ from appsec_review.storage import canonical_json
 _REDACTED = "<redacted"
 # The build container's root filesystem is read-only: only these mounts are writable by the
 # build, so an executable below them is target-controlled and its name proves nothing.
-_WRITABLE_ROOTS = ("/workspace/", "/capture/", "/tmp/", "/dev/", "/proc/", "/run/", "/var/tmp/")
+_WRITABLE_ROOTS = ("/workspace/", "/install/", "/capture/", "/tmp/", "/dev/", "/proc/", "/run/", "/var/tmp/")
 
 
 def normalized_path(executable: str) -> bool:

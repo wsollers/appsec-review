@@ -359,7 +359,7 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
             elif event == "LANGUAGE_BUILDS_RECORDED":
                 seen_producers.add("build")
                 document = _receipt_json(run_root, details.get("receipt"))
-                if document.get("schema") != "appsec-review/language-build-handoff/1":
+                if document.get("schema") != "appsec-review/language-build-handoff/2":
                     raise ValueError("language build metrics receipt schema is unsupported")
                 build_receipts = list(document.get("receipts", ()))
                 item = details["receipt"]

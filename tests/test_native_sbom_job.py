@@ -106,7 +106,7 @@ def seed(tmp_path: Path, *, files: dict[str, bytes] | None = None, source_syft: 
                {"publish_catalog.publish_handoff": {"artifact": catalog}},
                [partition, dependencies, catalog])
     language = _write(root, "language.json", {
-        "schema": "appsec-review/language-build-handoff/1", "source_fingerprint": SNAPSHOT,
+        "schema": "appsec-review/language-build-handoff/2", "source_fingerprint": SNAPSHOT,
         "receipts": [], "gaps": [],
     })
     _framework(root, "job_language_build",
@@ -187,7 +187,7 @@ def _real_syft_publication(tmp_path):
     root = config.runtime.runs_dir / base["run_id"]
     snapshot = source_fingerprint(target)
     language = _write(root, "language.json", {
-        "schema": "appsec-review/language-build-handoff/1", "source_fingerprint": snapshot,
+        "schema": "appsec-review/language-build-handoff/2", "source_fingerprint": snapshot,
         "receipts": [], "gaps": []})
     language_handoff = _framework(root, "job_language_build",
         {"acceptance.publish_handoff": {"artifact": language}}, [language], snapshot=snapshot,
@@ -448,7 +448,7 @@ def test_workspace_and_embedded_native_evidence_resolves_normalized_selectors(
         "files": {"vendor/zlib/zlib.h": file_sha256(header), "vendor/zlib/README": file_sha256(readme)},
     })
     language = _write(root, "language-native.json", {
-        "schema": "appsec-review/language-build-handoff/1", "source_fingerprint": SNAPSHOT,
+        "schema": "appsec-review/language-build-handoff/2", "source_fingerprint": SNAPSHOT,
         "receipts": [{
             "family": family, "build_unit_id": "native-fixture", "workspace": "build",
             "protected_compile_commands": protected, "workspace_manifest": manifest,

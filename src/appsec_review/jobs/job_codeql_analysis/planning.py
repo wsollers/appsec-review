@@ -266,6 +266,8 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         if not build_unit or build_unit in seen_build_units:
             raise ValueError("language-build handoff contains a duplicate CodeQL build unit")
         seen_build_units.add(build_unit)
+        from appsec_review.jobs.job_project_build.enforcement import gap_text
+        gaps.extend(f"{build_unit}: {gap_text(gap)}" for gap in receipt.get("gaps", ()))
         language = _COMPILED_FAMILIES.get(family) or _SOURCE_FAMILIES[family]
         root = _path(receipt.get("root"))
         selected = _language_files(normalized_files, root, language)

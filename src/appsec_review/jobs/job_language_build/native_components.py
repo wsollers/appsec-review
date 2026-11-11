@@ -24,7 +24,7 @@ from . import native
 from .capture import image_owned
 
 
-SCHEMA = "appsec-review/native-component-compile-database/1"
+SCHEMA = "appsec-review/native-component-compile-database/2"
 _SOURCE_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".c++"})
 _ENTRY_LIMIT = 4096
 
@@ -135,12 +135,37 @@ def publish(root: Path, run_root: Path, *, dispatch: Mapping[str, Any], workspac
     """Write the unit's run-owned native compile database and return its identity and gaps."""
     components = [dict(item) for item in dispatch.get("native_components", ())
                   if isinstance(item, Mapping)]
-    if not components:
+    if not components and dispatch.get("family") != "native":
         return None, []
     source_dir = str(dispatch.get("recipe", {}).get("source_dir", dispatch.get("root", ".")))
     initial = posixpath.normpath(f"/workspace/{source_dir}")
     exclusions = BookkeepingExclusions()
     entries, gaps = compile_entries(captures, initial_directory=initial, exclusions=exclusions)
+    declared_database = None
+    if dispatch.get("family") == "native" and dispatch.get("build_system") == "cmake":
+        from appsec_review.jobs.job_language_build.job import _compile_rows
+        declared, declaration_gaps = _compile_rows(
+            workspace, source_dir, str(dispatch["recipe"]["build_dir"]))
+        gaps.extend(declaration_gaps)
+        path = workspace / str(dispatch["recipe"]["build_dir"]) / "compile_commands.json"
+        if path.is_file() and not path.is_symlink():
+            declared_database = {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path)}
+        correlated = []
+        for row in declared:
+            source = posixpath.normpath(row["input"] if row["input"].startswith("/") else
+                                       posixpath.join(row["directory"], row["input"]))
+            match = next((entry for entry in entries if _command_key(
+                row["directory"], row["argv"]) == _command_key(entry["directory"], entry["arguments"])
+                          and source == entry["file"]), None)
+            if match is None:
+                gaps.append(f"compile database declaration lacks captured invocation: {row['input']}")
+                continue
+            correlated.append({**match, "arguments": [match["executable"], *row["argv"][1:]]})
+        declared_sources = {entry["file"] for entry in correlated}
+        for entry in entries:
+            if entry["file"] not in declared_sources:
+                gaps.append(f"captured compile lacks a compile database declaration: {entry['file']}")
+        entries = correlated
     workspace_root = workspace.resolve()
     compiled = set()
     for entry in entries:
@@ -164,11 +189,31 @@ def publish(root: Path, run_root: Path, *, dispatch: Mapping[str, Any], workspac
     document = {"schema": SCHEMA, "build_unit_id": dispatch["build_unit_id"],
                 "family": dispatch["family"], "root": dispatch["root"],
                 "native_components": components, "entries": entries,
+                "declared_compile_database": declared_database,
                 "excluded_bookkeeping": exclusions.document()}
     atomic_json(path, document)
     return ({"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
              "entry_count": len(entries), "family": dispatch["family"],
+             "declared_compile_database": declared_database,
              "native_components": components}, gaps)
+
+
+def _command_key(directory, argv):
+    """Compare CMake declarations with exec argv without Ninja's dependency-file switches."""
+    ignored = {"-MD", "-MMD", "-MP"}
+    operands = {"-MF", "-MT", "-MQ"}
+    values, index = [], 1
+    while index < len(argv):
+        value = argv[index]
+        if value in operands:
+            index += 2
+            continue
+        if value not in ignored:
+            if not value.startswith("-") and ("/" in value or PurePosixPath(value).suffix):
+                value = posixpath.normpath(value if value.startswith("/") else posixpath.join(directory, value))
+            values.append(value)
+        index += 1
+    return posixpath.normpath(directory), tuple(values)
 
 
 def compile_commands(document: Mapping[str, Any]) -> list[dict[str, Any]]:

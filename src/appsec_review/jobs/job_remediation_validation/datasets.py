@@ -47,7 +47,7 @@ CONTRACT = JobContract(
         InputRequirement("job_language_build", "jvm_build_actions",
                          "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_language_build", "language_build_receipts",
-                         "appsec-review/language-build-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         "appsec-review/language-build-handoff/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_language_build", "build_workspaces",
                          "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_remediation_planning", "handoff", "appsec-review/job-handoff/2",

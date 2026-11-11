@@ -220,16 +220,19 @@ def guard_action(run_root: Path, action: Mapping[str, Any], *, graph=None,
         raise ValueError("native image admission requires an immutable image identity")
     if bound["enforcement"] and image is None:
         raise ValueError("native admission requires a bound prospective or recorded immutable image")
-    for proof in bound["enforcement"]:
-        if proof["proof_kind"] in {"compiler_explicit_target", "compiler_pinned_default",
-                                  "msbuild_selected_mapping"}:
-            metadata = refinement["profiles"]
-            if image is not None and (not isinstance(metadata, Mapping) or metadata.get("image_digest") != image):
-                raise ValueError("native compiler metadata is bound to a different immutable image")
-            if (image_identity is not None and any(action["recipe"].get(field) for field in (
-                    "system_packages", "image_repairs", "environment"))
-                    and metadata.get("image_recipe_digest") != _digest(action["recipe"])):
-                raise ValueError("native image derivation has no prebound compiler/recipe metadata")
+    metadata = refinement["profiles"]
+    # A supplied immutable profile may not be rebound to another image. Missing static
+    # target metadata is not a refusal: the running image is measured after capture.
+    if (isinstance(metadata, Mapping) and metadata.get("image_digest") is not None
+            and image is not None and metadata["image_digest"] != image):
+        raise ValueError("native compiler metadata is bound to a different immutable image")
+    if (isinstance(metadata, Mapping) and metadata.get("image_recipe_digest") is not None
+            and metadata["image_recipe_digest"] != _digest(action["recipe"])):
+        raise ValueError("native image derivation has different compiler/recipe metadata")
+    if (image_identity is not None and isinstance(metadata, Mapping) and metadata.get("image_digest")
+            and any(action["recipe"].get(field) for field in ("system_packages", "image_repairs", "environment"))
+            and metadata.get("image_recipe_digest") != _digest(action["recipe"])):
+        raise ValueError("native image derivation has no prebound compiler/recipe metadata")
     return bound
 
 

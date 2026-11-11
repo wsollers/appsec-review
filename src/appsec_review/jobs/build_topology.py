@@ -532,7 +532,7 @@ _ready_graph1 = ready_build_units
 BUILD_TOPOLOGY_SCHEMA = "appsec-review/build-topology/2"
 BUNDLE_SCHEMA = "appsec-review/build-topology-evidence/1"
 REFINEMENT_SCHEMA = "appsec-review/build-topology-refinement/1"
-ENFORCEMENT_SCHEMA = "appsec-review/native-target-enforcement/1"
+ENFORCEMENT_SCHEMA = "appsec-review/native-target-enforcement/2"
 RULES = "source-scoped-topology/4"
 OPERATIONS = frozenset({"managed_compile", "bytecode_transform", "native_aot",
                        "native_compile", "native_link", "package", "prebuilt_import", "unknown"})
@@ -1733,6 +1733,38 @@ def _native_enforcement(unit, graph, recipe, selection, operation, facts, profil
 _SAME_PROFILES = object()
 
 
+def capture_trust_blockers(recipe, profiles=None):
+    """Reject recipes that can replace the observed toolchain, not unproven target axes."""
+    if not isinstance(recipe, Mapping):
+        return ["recipe_missing"]
+    commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
+    environment = recipe.get("environment", {})
+    reasons = []
+    if any("$" in str(arg) for argv in commands for arg in argv):
+        reasons.append("dynamic_effective_command")
+    if recipe.get("network_required"):
+        reasons.append("network_required")
+    redirects = {"PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "COMPILER_PATH", "GCC_EXEC_PREFIX",
+                 "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
+                 "CCC_OVERRIDE_OPTIONS", "SDKROOT"}
+    if isinstance(environment, Mapping):
+        if set(environment) & redirects:
+            reasons.append("uncontrolled_compiler_resolution_or_override")
+        allowed = set()
+        if isinstance(profiles, Mapping):
+            if isinstance(profiles.get("executable"), str):
+                allowed.add(profiles["executable"])
+            for records in profiles.get("images", {}).values():
+                for profile in records.values():
+                    allowed.add(profile["executable"])
+                    allowed.update(profile["invocation_names"])
+        if any(value not in allowed for key, value in environment.items() if key in {"CC", "CXX"}):
+            reasons.append("uncontrolled_compiler_resolution_or_override")
+        if any("$" in str(value) for value in environment.values()):
+            reasons.append("dynamic_effective_command")
+    return sorted(set(reasons))
+
+
 def refine_build_topology(graph, units, *, policy=None, profiles=None, environment=None, releases=None,
                           bundle_profiles=_SAME_PROFILES):
     """Bind a recipe to the accepted graph.
@@ -1789,9 +1821,8 @@ def refine_build_topology(graph, units, *, policy=None, profiles=None, environme
             blockers.extend(operation["reasons"])
             if operation["kind"] == "unknown":
                 blockers.append("operation_unknown")
-        for proof in enforcement:
-            if proof["status"] != "proven":
-                blockers.append("unenforced_native_target")
+        if requires_native:
+            blockers.extend(capture_trust_blockers(recipe, profiles))
         for relation in graph["relations"]:
             if relation["consumer_build_unit_id"] != unit["build_unit_id"] or not relation["required"]:
                 continue
@@ -1828,11 +1859,10 @@ def refine_build_topology(graph, units, *, policy=None, profiles=None, environme
         if declaration is None:
             consumer["blockers"].append("required_product_role_unresolved")
             continue
-        if any(proof["status"] != "proven" for proof in [
-                *producer["enforcement"], *consumer["enforcement"]]):
-            consumer["blockers"].append("required_product_target_unproven")
-            continue
-        producer_axes, consumer_axes = proven_product_axes(producer), proven_product_axes(consumer)
+        # Recipe proofs are annotations. Actual product compatibility is checked against
+        # retained products at interface admission, never inferred from this source closure.
+        producer_axes = producer["selection"]["required_axes"]
+        consumer_axes = consumer["selection"]["required_axes"]
         if declaration["role"] not in {"static_archive", "import_library", "runtime_shared",
                                        "executable", "native_object"}:
             continue
@@ -1845,9 +1875,8 @@ def refine_build_topology(graph, units, *, policy=None, profiles=None, environme
         required = {"os", "isa"} | ({"abi"} if edge["requirement"]["kind"] == "library" else set())
         required.update(key for key, value in consumer_axes.items() if value is not None)
         for key in sorted(required):
-            if producer_axes[key] is None or consumer_axes[key] is None:
-                consumer["blockers"].append("required_product_axis_unresolved:" + key)
-            elif producer_axes[key] != consumer_axes[key]:
+            if (producer_axes[key] is not None and consumer_axes[key] is not None
+                    and producer_axes[key] != consumer_axes[key]):
                 consumer["blockers"].append("required_product_axis_incompatible:" + key)
     for unit in values:
         unit["blockers"] = sorted(set(unit["blockers"]))
@@ -1937,7 +1966,9 @@ def proven_product_axes(bound):
 
 def verify_product_contract(bound, products):
     from appsec_review.config.build_selection import AXES
-    expected = proven_product_axes(bound)
+    expected = (proven_product_axes(bound) if any(
+        proof["proof_kind"] == "captured_invocation" for proof in bound["enforcement"])
+                else bound["selection"]["required_axes"])
     roles = {"static_archive", "import_library", "runtime_shared", "executable", "native_object",
              "headers", "metadata", "generated_source", "managed_assembly", "package"}
     for product in products:
@@ -1949,7 +1980,7 @@ def verify_product_contract(bound, products):
             required = {"os", "isa"} | ({"abi"} if role != "executable" else set())
             required.update(key for key, value in expected.items() if value is not None)
             for key in sorted(required):
-                if expected[key] is None or axes.get(key) != expected[key]:
+                if axes.get(key) is None or expected[key] is not None and axes[key] != expected[key]:
                     raise ValueError("native retained product axis is unresolved or incompatible: " + key)
 
 
@@ -2004,7 +2035,7 @@ def ready_build_units(graph, states, *, products=(), verify_product=None, refine
                                     item["owner_build_unit_id"] == producer and
                                     item["product_id"] == edge["requirement"]["product_id"]), None)
                 required_role = declaration["role"] if declaration else None
-                axes = proven_product_axes(producer_bound if edge["kind"] == "requires_host_tool" else bound)
+                axes = (producer_bound if edge["kind"] == "requires_host_tool" else bound)["selection"]["required_axes"]
                 if required_role == "runtime_shared" and axes["os"] == "windows":
                     required_role = "import_library"
                 required_axes = ({"os", "isa"} | ({"abi"} if edge["requirement"]["kind"] == "library" else set())
@@ -2013,7 +2044,8 @@ def ready_build_units(graph, states, *, products=(), verify_product=None, refine
                 required_axes.update(key for key, value in axes.items() if value is not None)
                 records = [record for record in records if required_role is not None and
                            record.get("role") == required_role and isinstance(record.get("axes"), Mapping)
-                           and all(axes[key] is not None and record["axes"].get(key) == axes[key]
+                           and all(record["axes"].get(key) is not None and
+                                   (axes[key] is None or record["axes"].get(key) == axes[key])
                                    for key in required_axes)]
                 if verify_product is None or not any(verify_product(record) for record in records):
                     reasons.append("required_product_unverified:" + producer)

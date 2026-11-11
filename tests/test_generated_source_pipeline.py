@@ -144,7 +144,7 @@ def _fixture(tmp_path, *, build=True, target_source=False, dependency_rows=False
                    "terminal_status": "SUCCEEDED", "workspace": workspace.relative_to(run).as_posix(),
                    "workspace_manifest": workspace_ref, "artifacts": artifacts, "tool_invocations": [], "gaps": []}
         document = _json(run, "fixture/language.json", {
-            "schema": "appsec-review/language-build-handoff/1",
+            "schema": "appsec-review/language-build-handoff/2",
             "source_fingerprint": SNAPSHOT, "receipts": [receipt], "gaps": [],
         })
         _accepted(run, "job_language_build", {"acceptance.publish_handoff": {"artifact": document}})

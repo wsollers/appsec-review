@@ -206,7 +206,7 @@ def accepted_run(root: Path, *, objects: bool = True, compile_rows: bool = True,
         "workspace_manifest": ref(manifest_path), "protected_compile_commands": ref(database),
         "image": {"image_tag": "audit-buildenv-cpp:local", "image_id": "sha256:" + "a" * 64, "user": "10001:10001"},
         "recipe": {"build_dir": build_dir}, "artifacts": artifacts}
-    accepted = {"schema": "appsec-review/language-build-handoff/1", "receipts": [receipt],
+    accepted = {"schema": "appsec-review/language-build-handoff/2", "receipts": [receipt],
                 "language_build_handoff_sha256": "9" * 64}
     return SimpleNamespace(run_root=run_root, accepted=accepted, receipt=receipt, unit_id=unit_id,
                            workspace=workspace, manifest=manifest, database=database, manifest_path=manifest_path)
