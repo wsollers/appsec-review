@@ -133,6 +133,14 @@ The existing model `retries` setting can further tighten the whole conversation 
 calls; it does not add transport or repair calls outside `feedback.max_calls`. Per-call timeout
 also respects the configured model timeout and the remaining internal scope deadline.
 
+Initial scopes are bounded by both unit count and the actual serialized, sanitized request
+bytes, including guidance, allowlists and additional inventory. An oversized multi-unit scope
+is deterministically bisected before inference; no units or evidence are dropped to make it fit.
+The scope-count limit applies to the resulting partitions. A singleton that still exceeds the
+request bound retains an explicit pre-call gap rather than bypassing the bound. Family,
+build-system and image-profile isolation, whole-bundle compilation and configured worker/call
+limits are unchanged.
+
 Only complete, validated non-abstained finals are immutable cache entries beneath
 `data/planning-feedback/`. Keys include source, whole bundle, environment, profiles, rules,
 prompt/guidance/model identities and bounds. Invalid, exhausted or partial results cannot be
