@@ -77,11 +77,18 @@ def _config(tmp_path: Path, *, global_patterns: list[str], catalog_patterns: lis
 def test_config_resolves_global_then_job_patterns_and_freezes_them(tmp_path: Path) -> None:
     config = load_config(_config(tmp_path, global_patterns=[".gitignore"], catalog_patterns=["docs/"]))
 
-    assert [rule.as_dict() for rule in config.job("job_target_catalog").exclusions.rules] == [
+    # Path patterns come first, global then the job's own; the asset-class suffix rules follow them
+    # (tests/test_asset_exclusions.py).
+    def path_rules(job_id: str) -> list[dict[str, str]]:
+        return [rule.as_dict() for rule in config.job(job_id).exclusions.rules if rule.asset_class is None]
+
+    assert path_rules("job_target_catalog") == [
         {"pattern": ".gitignore", "scope": "global"}, {"pattern": "docs/", "scope": "job_target_catalog"}]
-    assert [rule.pattern for rule in config.job("job_codeql_analysis").exclusions.rules] == [".gitignore"]
+    assert path_rules("job_codeql_analysis") == [{"pattern": ".gitignore", "scope": "global"}]
+    ordered = [rule.asset_class is None for rule in config.job("job_target_catalog").exclusions.rules]
+    assert ordered == sorted(ordered, reverse=True)
     resolved = json.loads(config.resolved_json)
-    assert resolved["exclusions"] == {"patterns": [".gitignore"]}
+    assert resolved["exclusions"]["patterns"] == [".gitignore"]
     assert resolved["jobs"]["job_target_catalog"]["exclusions"] == {"patterns": ["docs/"]}
     baseline = load_config(_config(tmp_path, global_patterns=[], catalog_patterns=[]))
     assert baseline.resolved_sha256 != config.resolved_sha256

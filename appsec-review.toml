@@ -5,6 +5,49 @@
 [exclusions]
 patterns = [".gitignore"]
 
+# Non-code asset classes, excluded by file-name suffix (case-insensitive, compound suffixes allowed).
+# A policy exclusion, not a coverage gap: intake and the catalog list every excluded file with its
+# class and total files and bytes per class under excluded_assets. Nothing that can carry code,
+# build logic or packed content belongs here (no archives, .svg, .xpm, .xml, .json, scripts, build
+# files, and never .obj); the loader refuses those suffixes.
+[[exclusions.asset_classes]]
+name = "art-source"
+reason = "3D and image-editor project files are authoring sources for art, not code"
+suffixes = [".blend", ".blend1", ".fbx", ".dae", ".3ds", ".max", ".ma", ".mb", ".psd", ".xcf", ".kra"]
+
+[[exclusions.asset_classes]]
+name = "raster-image"
+reason = "raster and icon images are not code"
+suffixes = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tga", ".tif", ".tiff", ".webp", ".ico", ".icns",
+            ".cur", ".dds", ".ktx", ".pcx", ".ppm", ".pgm", ".exr", ".hdr", ".heic"]
+
+[[exclusions.asset_classes]]
+name = "video"
+reason = "video files are not code"
+suffixes = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", ".flv", ".m4v", ".mpg", ".mpeg", ".ogv"]
+
+[[exclusions.asset_classes]]
+name = "audio"
+reason = "sound and music files are not code"
+suffixes = [".wav", ".mp3", ".ogg", ".oga", ".flac", ".aac", ".m4a", ".opus", ".wma", ".mid", ".midi",
+            ".aiff"]
+
+[[exclusions.asset_classes]]
+name = "font"
+reason = "font files are not code"
+suffixes = [".ttf", ".otf", ".ttc", ".woff", ".woff2", ".eot", ".pfb", ".pfm", ".fon"]
+
+[[exclusions.asset_classes]]
+name = "game-save"
+reason = "game saves and bundled scenarios are data for the program under review, not its code"
+suffixes = [".sav", ".sav.gz", ".sav.bz2", ".sav.xz", ".sav.zst"]
+
+# Largest target file intake and the catalog read into the inventory; a larger file is a named
+# file_too_large gap. 12 MiB admits large translation catalogues and changelogs (the largest seen
+# is a 9.5 MB ChangeLog); it was 2 MiB, hard-coded, until 2026-11-11.
+[inventory]
+max_file_bytes = 12582912
+
 [build_workspaces]
 build_workspace_retention_runs = 3
 

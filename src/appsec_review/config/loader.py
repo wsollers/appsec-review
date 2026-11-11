@@ -19,7 +19,10 @@ from .binary_decompilation import BinaryDecompilationSettings, parse_binary_deco
 from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
-from .exclusions import PathExclusions, global_exclusions, job_exclusions
+from .exclusions import (
+    INVENTORY_FILE_BYTES_DEFAULT, PathExclusions, asset_class_rules, global_exclusions,
+    inventory_max_file_bytes, job_exclusions,
+)
 from .build_outputs import BUILD_OUTPUT_JOBS, BuildOutputPolicy, parse_build_outputs, reject_misplaced
 from .build_workspaces import BuildWorkspacePolicy, parse_build_workspaces
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
@@ -542,6 +545,8 @@ class JobConfig:
     build_capture: BuildCaptureConfig | None = None
     # Global [exclusions] patterns followed by the job's own (config/exclusions.py).
     exclusions: PathExclusions = PathExclusions()
+    # The top-level [inventory] per-file bound of the target inventory (intake and catalog).
+    inventory_max_file_bytes: int = INVENTORY_FILE_BYTES_DEFAULT
     # The top-level [build_outputs] policy; set only on the three build jobs (config/build_outputs.py).
     build_outputs: BuildOutputPolicy | None = None
 
@@ -1003,6 +1008,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     if not isinstance(jobs_value, dict) or not jobs_value:
         raise ValueError("[jobs] must contain at least one job")
     excluded_globally = global_exclusions(document)
+    excluded_assets = asset_class_rules(document)
+    inventory_file_bytes = inventory_max_file_bytes(document)
     build_output_policy = parse_build_outputs(document.get("build_outputs"))
     build_workspace_policy = parse_build_workspaces(document.get("build_workspaces"))
     resolved_document.pop("build_workspaces", None)
@@ -1306,7 +1313,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             steps=MappingProxyType(steps),
             typed_settings=typed_settings,
             build_capture=resolved_capture,
-            exclusions=job_exclusions(job_id, value, excluded_globally),
+            exclusions=job_exclusions(job_id, value, excluded_globally, excluded_assets),
+            inventory_max_file_bytes=inventory_file_bytes,
             build_outputs=build_output_policy if job_id in BUILD_OUTPUT_JOBS else None,
         )
     openvex_job = jobs.get("job_openvex_export")

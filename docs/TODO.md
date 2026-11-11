@@ -87,6 +87,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-092 | [Decide whether a refused build command fails one unit or the whole language build](#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
 | T-093 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-093-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-094 | [Let stepwise accept a target by commit instead of a tag](#t-094-let-stepwise-accept-a-target-by-commit-instead-of-a-tag) | testing | open |
+| T-095 | [Report an intake coverage gap once, not once per unit](#t-095-report-an-intake-coverage-gap-once-not-once-per-unit) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1394,6 +1395,21 @@ until each is rewritten into the entry format when it is next touched.
   unchanged.
 - **Refs:** `deploy/dagster/bin/stepwise.py`, `tests/test_stepwise_target_tag.py`, T-088,
   `docs/tasks/2026-11-11-freeciv-walk-01-model-connectivity.md`.
+
+### T-095 — Report an intake coverage gap once, not once per unit
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** in the Freeciv walk (run `2026-11-11-0008`) `job_review_intake` published 76 canonical
+  gap records for 38 oversized files: `prepare_target.validate_target` reports each inventory gap
+  and `publish_intake.publish_handoff` reports the same gap again from the published document. A
+  tally by record count overstates the job's gaps twofold and every consumer that echoes them.
+- **Scope:** one unit owns each inventory coverage gap in the job's `outcomes.json`; the published
+  document may still list them. No change to what is a gap.
+- **Done when:** a runner-driven intake test with one oversized file shows exactly one canonical
+  gap record for it, and the published intake document still names the file.
+- **Refs:** `src/appsec_review/jobs/job_review_intake/job.py` (`validate_target`, `publish`),
+  `docs/tasks/2026-11-11-freeciv-walk-04-review-intake.md`, T-057.
 
 ## Legacy backlog
 
