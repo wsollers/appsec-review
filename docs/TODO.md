@@ -73,13 +73,15 @@ until each is rewritten into the entry format when it is next touched.
 | T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | done (2026-11-11, 2f6c5ae1) |
 | T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | done (2026-11-11, 83c81a60) |
 | T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | open |
-| T-081 | [Fix the stepwise system call to review_run submit](#t-081-fix-the-stepwise-system-call-to-review_run-submit) | pipeline | open |
+| T-081 | [Fix the stepwise system call to review_run submit](#t-081-fix-the-stepwise-system-call-to-review_run-submit) | pipeline | done (2026-11-11, 49fa3e1a) |
 | T-082 | [Check the guard order in project_build repair reuse](#t-082-check-the-guard-order-in-project_build-repair-reuse) | build | open |
 | T-083 | [Classify the failing judge and budget-clock unit tests](#t-083-classify-the-failing-judge-and-budget-clock-unit-tests) | testing | open |
 | T-084 | [Test language-build iteration dispatch with a ready build unit](#t-084-test-language-build-iteration-dispatch-with-a-ready-build-unit) | testing | open |
 | T-085 | [Probe the model login before recovery admits a repair](#t-085-probe-the-model-login-before-recovery-admits-a-repair) | pipeline | open |
 | T-086 | [Record source ids on un-hunted units and produce entry-point tags](#t-086-record-source-ids-on-un-hunted-units-and-produce-entry-point-tags) | review | open |
 | T-087 | [Normalize crash symbols for corroboration](#t-087-normalize-crash-symbols-for-corroboration) | evidence | open |
+| T-088 | [Decide whether a refused build command fails one unit or the whole language build](#t-088-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
+| T-089 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-089-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-088 | [Keep a target registry and a read-only verify command](#t-088-keep-a-target-registry-and-a-read-only-verify-command) | testing | open |
 | T-089 | [Fetch answer keys from the private answers repository in memory](#t-089-fetch-answer-keys-from-the-private-answers-repository-in-memory) | testing | open |
 | T-090 | [Identify known targets and self-grade a completed run](#t-090-identify-known-targets-and-self-grade-a-completed-run) | testing | blocked |
@@ -1109,7 +1111,8 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** unit tests of the launcher show an unanswered probe refusing the launch with no
   intent written and no Dagster call, and an answered probe proceeding unchanged.
 - **Refs:** `scripts/review-start.sh`, `deploy/dagster/bin/review_run.py`, `scripts/stack-start.sh`,
-  `docs/operations/operator-scripts.md`, T-057.
+  `docs/operations/operator-scripts.md`, T-057. The probe answered `ok` on the real stack before the launches of
+  `2026-11-11-0005` and `-0006`; the refusal path has been exercised by unit tests only.
 
 ### T-079 — One guarded command for run recovery
 
@@ -1160,7 +1163,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-081 — Fix the stepwise system call to review_run submit
 
-- **State:** open
+- **State:** done (2026-11-11, 49fa3e1a)
 - **Area:** pipeline
 - **Why:** `deploy/dagster/bin/stepwise.py` calls `review_run.submit(dagster_run_id)` with one
   argument, but `submit(run_id, url, ...)` requires the GraphQL endpoint as well, so that path would
@@ -1340,6 +1343,40 @@ until each is rewritten into the entry format when it is next touched.
   directories folded as members.
 - **Refs:** T-056, `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/build_points.py`,
   `docs/plans/build-discovery-test-program-2026-11-08.md`.
+
+### T-088 — Decide whether a refused build command fails one unit or the whole language build
+
+- **State:** open
+- **Area:** build
+- **Why:** in review `2026-11-11-0005` the first build iteration (a phpize extension) raised
+  `ValueError: native driver is not the unchanged accepted source descriptor` from
+  `prepare_recipe_command`. The iteration job failed, `language_build__iterations__dispatch` raised
+  `build iteration invocation failed`, and the review ended at 13 of 42 jobs with the other 21 build
+  units never attempted. The phpize cause is fixed (`f4ef5296`), but any other command-custody
+  refusal still ends the whole run.
+- **Scope:** decide and record whether a custody refusal for one unit is a failed build unit with a
+  named gap (siblings continue, as a compile failure does) or a run-level stop; implement the
+  decision in the iteration controller without weakening the refusal itself.
+- **Done when:** a unit test with two ready units, one of which is refused at command
+  preparation, shows the decided outcome for the sibling and for the job's terminal status.
+- **Refs:** `src/appsec_review/jobs/build_recipe_commands.py`, `src/appsec_review/jobs/build_iterations.py`,
+  `src/appsec_review/jobs/job_build_iteration/job.py`, T-057, T-084.
+
+### T-089 — Bind generated Make drivers of configure-style builds to their accepted inputs
+
+- **State:** open
+- **Area:** build
+- **Why:** the Make driver recheck requires the Makefile to be an unchanged accepted source
+  document. `f4ef5296` binds a phpize unit's generated Makefile to its accepted `config.m4`. Any other
+  build whose configure phase generates the Makefile (Autotools `configure.ac`/`Makefile.in`, other
+  generators) would still be refused with the same message; none has been observed in a run.
+- **Scope:** list the build systems the discovery accepts whose build phase runs a generated
+  driver; for each, name the accepted inputs the driver is generated from and bind the recheck to
+  them, or record that the build system is refused by design.
+- **Done when:** `tests/test_build_recipe_commands.py` has a positive and a tampered-input case for
+  each such build system, and the refusal for an unaccepted hand-written Makefile is unchanged.
+- **Refs:** `src/appsec_review/jobs/build_recipe_commands.py`, `src/appsec_review/jobs/build_discovery.py`,
+  `tests/test_build_recipe_commands.py`, T-088.
 
 ## Legacy backlog
 
