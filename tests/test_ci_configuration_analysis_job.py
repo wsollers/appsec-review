@@ -470,3 +470,58 @@ def test_native_zizmor_keeps_observation_bounds_redaction_and_raw_output(tmp_pat
     [execution] = scan["executions"]
     assert (run_root / execution["stdout_path"]).read_bytes() == payload
     assert outputs["ci_coverage.join_coverage"]["gap_records"] == [gap]
+
+
+def test_checkov_out_of_source_range_publishes_an_explicit_coarse_span(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    path = "bitbucket-pipelines.yml"
+    workflow = ("image: alpine:latest\n\npipelines:\n  default:\n    - step:\n"
+                "        name: Build\n        script:\n          - echo hello\n"
+                "          - curl https://example.invalid/install.sh | sh\n")
+    assert len(workflow.splitlines()) == 9
+    native = {
+        "check_id": "CKV_BITBUCKETPIPELINES_1",
+        "check_name": "Ensure the pipeline image uses a non latest version tag",
+        "file_abs_path": f"/target/{path}", "file_path": f"/{path}", "file_line_range": [1, 11],
+        "code_block": None,
+        "check_result": {"result": "FAILED", "results_configuration": {
+            "image": "alpine:latest", "__startline__": 1, "__endline__": 10}},
+    }
+    payload = json.dumps({"results": {"failed_checks": [native]}}).encode()
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, [],
+                                        stdout={"tool-checkov": payload})
+    outcome, run_root = _run_ci_publication(
+        config, _target(tmp_path, {path: workflow}), build_job(executor_factory=factory))
+    assert outcome["status"] == "SUCCEEDED", outcome
+    outputs = outcome["outputs"]
+    indexed = outputs["ci_observation_publication.bitbucket_checkov_index"]
+    [record] = indexed["records"]
+    assert (record["native_rule_id"], record["message"], record["path"]) == (
+        native["check_id"], native["check_name"], path)
+    assert (record["start_line"], record["end_line"]) == (1, 9)
+    assert record["mapping_method"] == "checkov-line-range-clipped"
+    assert record["confidence"] == 0.5 and record["ambiguous"] is True
+    assert record["producer_location"]["file_line_range"] == [1, 11]
+    assert record["producer_location"]["source_line_count"] == 9
+    end_byte = len(workflow.rstrip("\n").encode())
+    end_column = len(workflow.splitlines()[-1].encode()) + 1
+    assert (record["start_byte"], record["end_byte"], record["start_column"], record["end_column"]) == (
+        0, end_byte, 1, end_column)
+    normalized = json.loads((run_root / indexed["normalized_artifact"]["path"]).read_bytes())
+    assert normalized["records"][0]["end_line"] == 9
+    scan = outputs["ci_analysis.bitbucket_checkov_scan"]
+    assert scan["record_count"] == 1 and scan["gaps"] == []
+    assert (run_root / scan["executions"][0]["stdout_path"]).read_bytes() == payload
+    correlation = outputs["ci_correlation.correlate_findings"]
+    [finding] = [value for value in correlation["findings"] if value["tools"] == ["tool-checkov"]]
+    assert finding["end_line"] == 9 and finding["ambiguous"] is True
+    for artifact in (indexed["artifact"], correlation["index_artifact"]):
+        with sqlite3.connect(run_root / artifact["path"]) as connection:
+            [location] = connection.execute(
+                "SELECT path, start_line, end_line, start_byte, end_byte, end_column, "
+                "mapping_method, confidence, ambiguous, producer_location_json FROM locations "
+                "WHERE mapping_method = 'checkov-line-range-clipped'"
+            ).fetchall()
+        assert location[:9] == (path, 1, 9, 0, end_byte, end_column, "checkov-line-range-clipped", 0.5, 1)
+        assert json.loads(location[9])["file_line_range"] == [1, 11]
+    assert outputs["ci_coverage.publish_handoff"]["finding_count"] == len(correlation["findings"])

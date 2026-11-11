@@ -158,6 +158,7 @@ def _argv(spec: ToolSpec, executable: str, path: str) -> tuple[str, ...]:
 
 _FINDING_FIELDS = frozenset({"check_id", "rule_id", "kind", "code", "message", "check_name", "description",
                              "details", "line", "location", "file_line_range"})
+_SOURCE_MAPPING_FIELDS = ("producer_location", "mapping_method", "confidence", "ambiguous")
 
 
 class _CiOutputParseError(ValueError):
@@ -217,6 +218,40 @@ def _zizmor_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str,
     return records
 
 
+def _checkov_source_records(records: list[dict[str, Any]], path: str, data: bytes) -> list[dict[str, Any]]:
+    """Bind Checkov's line ranges to this file; retain overshooting ranges as coarse provenance."""
+    lines = data.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+    bound = []
+    for original in records:
+        record = dict(original)
+        native = record.pop("producer_location")
+        for key, allowed in (("file_abs_path", (f"/target/{path}",)),
+                             ("file_path", (path, f"/{path}", f"/target/{path}"))):
+            if key in native and native[key] not in allowed:
+                raise _CiOutputParseError(f"Checkov {key} does not identify the scanned definition")
+        span = native.get("file_line_range")
+        if (not isinstance(span, list) or len(span) != 2
+                or any(type(value) is not int or value < 1 for value in span) or span[1] < span[0]):
+            raise _CiOutputParseError("Checkov requires a positive ordered file_line_range")
+        start, end = span
+        if start > len(lines):
+            raise _CiOutputParseError("Checkov file_line_range does not overlap the source")
+        if end > len(lines):
+            last_content = lines[-1].rstrip(b"\r\n")
+            record.update(
+                start_line=start, end_line=len(lines), start_column=1, end_column=len(last_content) + 1,
+                start_byte=offsets[start - 1], end_byte=offsets[-2] + len(last_content),
+                producer_location={"tool_id": record["tool_id"], **native, "source_line_count": len(lines),
+                                   "reason": "native_end_line_exceeds_source"},
+                mapping_method="checkov-line-range-clipped", confidence=0.5, ambiguous=True,
+            )
+        bound.append(record)
+    return bound
+
+
 def _external_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
     if spec.tool_id == "tool-zizmor":
         return _zizmor_records(spec, payload, path)
@@ -257,7 +292,7 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
             end_line = int(location.get("end_line") or (lines[-1] if lines else start_line) or start_line)
             message = str(item.get("message") or item.get("check_name") or item.get("description") or
                           item.get("details") or "CI linter observation")[:4096]
-            records.append({
+            record = {
                 "provider": spec.provider, "tool_id": spec.tool_id,
                 "native_rule_id": str(item.get("check_id") or item.get("rule_id") or item.get("kind") or
                                       item.get("code") or spec.name),
@@ -266,7 +301,11 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
                 "path": path, "start_line": max(1, start_line), "end_line": max(start_line, end_line),
                 "start_column": int(location.get("column") or 1),
                 "end_column": int(location.get("end_column") or location.get("column") or 1),
-            })
+            }
+            if spec.tool_id == "tool-checkov":
+                record["producer_location"] = {key: item[key] for key in
+                                               ("file_abs_path", "file_path", "file_line_range") if key in item}
+            records.append(record)
     return records
 
 
@@ -369,7 +408,15 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                                          f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}",
                                          unit.unit_id, scope=definition["path"]))
                         continue
-                    records.extend(_external_records(spec, stdout.read_bytes(), definition["path"]))
+                    parsed = _external_records(spec, stdout.read_bytes(), definition["path"])
+                    if spec.tool_id == "tool-checkov" and parsed:
+                        source = (unit.job.target_root or Path()) / definition["path"]
+                        with source.open("rb") as stream:
+                            data = stream.read(max_bytes + 1)
+                        if len(data) > max_bytes:
+                            raise _CiOutputParseError("Checkov source range exceeds configured max_file_bytes")
+                        parsed = _checkov_source_records(parsed, definition["path"], data)
+                    records.extend(parsed)
                 except _CiOutputParseError as exc:
                     gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: {exc}",
                                      unit.unit_id, scope=definition["path"]))
@@ -399,6 +446,7 @@ def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
         value = {key: record.get(key) for key in (
             "provider", "tool_id", "native_rule_id", "category", "message", "severity", "path",
             "start_line", "end_line", "start_column", "end_column", "start_byte", "end_byte")}
+        value.update({key: record[key] for key in _SOURCE_MAPPING_FIELDS if key in record})
         value["provider"] = value["provider"] or raw["provider"]
         value["tool_id"] = value["tool_id"] or raw["tool_id"]
         value["start_line"] = max(1, int(value["start_line"] or 1))
@@ -470,8 +518,10 @@ def _source_location(unit: UnitContext, record: Mapping[str, Any]) -> SourceLoca
         target_snapshot=unit.job.source_fingerprint, path=str(record["path"]), file_sha256=file_sha256(source),
         start_byte=min(start_byte, len(data)), end_byte=min(max(start_byte, end_byte), len(data)),
         start_line=start_line, end_line=end_line, start_column=int(record["start_column"]),
-        end_column=int(record["end_column"]), producer_location={"tool_id": record["tool_id"]},
-        mapping_method="ci-static-source-span", confidence=1.0,
+        end_column=int(record["end_column"]),
+        producer_location=record.get("producer_location", {"tool_id": record["tool_id"]}),
+        mapping_method=record.get("mapping_method", "ci-static-source-span"),
+        confidence=record.get("confidence", 1.0), ambiguous=record.get("ambiguous", False),
     )
 
 
@@ -530,13 +580,17 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
     findings = []
     for key, observations in sorted(grouped.items(), key=lambda item: repr(item[0])):
         finding_id = "cif:" + hashlib.sha256(canonical_json(key)).hexdigest()
-        findings.append({
+        finding = {
             "finding_id": finding_id, "provider": key[0], "path": key[1], "start_line": key[2],
             "end_line": key[3], "start_column": key[4], "end_column": key[5], "category": key[6],
             "message": key[7], "observation_ids": sorted(item["observation_id"] for item in observations),
             "tools": sorted({item["tool_id"] for item in observations}),
             "exact_duplicate_count": len(observations),
-        })
+        }
+        if observations[0].get("ambiguous"):
+            finding.update({field: observations[0][field]
+                            for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")})
+        findings.append(finding)
     document = {"schema": "appsec-review/canonical-ci-findings/1", "correlation": "exact-only/1",
                 "findings": findings, "finding_count": len(findings)}
     artifact = _write(unit, "canonical-findings.json", document)
@@ -565,9 +619,13 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
 
 
 def correlation_key(record: Mapping[str, Any]) -> tuple[Any, ...]:
-    """Exact-only canonical key; intentionally excludes tool identity and nothing else."""
-    return (record["provider"], record["path"], record["start_line"], record["end_line"],
-            record["start_column"], record["end_column"], record["category"], record["message"])
+    """Coarse mappings must also match provenance; clipping cannot manufacture exact duplicates."""
+    key = (record["provider"], record["path"], record["start_line"], record["end_line"],
+           record["start_column"], record["end_column"], record["category"], record["message"])
+    if record.get("ambiguous"):
+        key += (canonical_json({field: record[field]
+                                for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")}).decode(),)
+    return key
 
 
 def _coverage(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, Any]:
