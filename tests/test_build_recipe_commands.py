@@ -155,3 +155,50 @@ def test_guest_cmake_home_cache_accepts_the_exact_root_or_nested_unit(tmp_path, 
     (workspace / build_dir / "CMakeCache.txt").write_text(f"CMAKE_HOME_DIRECTORY:INTERNAL={guest_home}\n")
     assert prepare_recipe_command(workspace, accepted, recipe, "build", ("cmake", "--build", ".")) == (
         ("cmake", "--build", "."), build_dir)
+
+
+@pytest.fixture
+def phpize_command(tmp_path: Path):
+    """A phpize extension after its configure phase: config.m4 is accepted, the Makefile is generated."""
+    workspace = tmp_path / "workspace"
+    source = workspace / "ext"
+    source.mkdir(parents=True)
+    marker = b"PHP_NEW_EXTENSION([case], [case.c], [$ext_shared])\n"
+    (source / "config.m4").write_bytes(marker)
+    (source / "Makefile").write_bytes(b"all:\n\tcc -shared case.c -o modules/case.so\n")
+    accepted = {"root": "ext", "family": "php", "build_system": "phpize", "descriptor_package": {"documents": [
+        {"path": "ext/config.m4", "sha256": hashlib.sha256(marker).hexdigest()}]}}
+    recipe = {"source_dir": "ext", "build_dir": "ext",
+              "configure_commands": [["phpize"], ["./configure", "--enable-case"]],
+              "build_commands": [["make", "-j1"]]}
+    return workspace, accepted, recipe
+
+
+def test_phpize_generated_makefile_is_bound_to_the_accepted_config_m4(phpize_command):
+    """Review 2026-11-11-0005: `make -j1` of a phpize unit was refused for its generated Makefile."""
+    workspace, accepted, recipe = phpize_command
+    assert prepare_recipe_command(workspace, accepted, recipe, "build", ("make", "-j1")) == (
+        ("make", "-j1"), "ext")
+    (workspace / "ext/config.m4").write_bytes(b"PHP_NEW_EXTENSION([other], [other.c], [$ext_shared])\n")
+    with pytest.raises(ValueError, match="unchanged accepted source descriptor"):
+        prepare_recipe_command(workspace, accepted, recipe, "build", ("make", "-j1"))
+
+
+@pytest.mark.parametrize("change", ["make_build_system", "no_configure_phase", "explicit_makefile",
+                                    "accepted_makefile_changed", "configure_phase"])
+def test_generated_makefile_authority_is_limited_to_the_phpize_build_phase(phpize_command, change):
+    workspace, accepted, recipe = phpize_command
+    raw, phase = ("make", "-j1"), "build"
+    if change == "make_build_system":
+        accepted["build_system"] = "make"
+    elif change == "no_configure_phase":
+        recipe["configure_commands"] = []
+    elif change == "explicit_makefile":
+        raw = ("make", "-f", "Makefile")
+    elif change == "accepted_makefile_changed":
+        accepted["descriptor_package"]["documents"].append(
+            {"path": "ext/Makefile", "sha256": hashlib.sha256(b"all:\n").hexdigest()})
+    else:
+        phase = "configure"
+    with pytest.raises(ValueError, match="unchanged accepted source descriptor"):
+        prepare_recipe_command(workspace, accepted, recipe, phase, raw)
