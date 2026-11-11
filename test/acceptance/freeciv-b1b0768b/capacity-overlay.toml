@@ -1,0 +1,11 @@
+# Capacity overlay for the job-by-job Freeciv walk (target b1b0768b) on the 24-core / 15 GiB WSL host.
+#
+# Select with `scripts/stack-restart.sh --target freeciv --overlay freeciv-b1b0768b/capacity-overlay.toml`.
+# Raises the action CPU budget and the concurrent container I/O slots so heavy steps do not run one
+# action at a time. Memory is this host's ceiling: memory_mb stays at the checked-in 10240 and the
+# Dagster pools stay at their defaults. If a step is killed for memory, lower io_slots to 2 and
+# record it; raising memory is the host owner's decision. Timings are not comparable across overlays.
+
+[review_policy.resources]
+cpu = 20
+io_slots = 4
