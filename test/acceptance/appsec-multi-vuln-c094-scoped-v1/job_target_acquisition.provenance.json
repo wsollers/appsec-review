@@ -1,0 +1,15 @@
+{
+  "accepted_at": "2026-11-11T17:54:55.882088+00:00",
+  "application_run_id": "2026-11-11-0002",
+  "attempt": "attempt_0001",
+  "corpus_tag": "appsec-multi-vuln-c094-scoped-v1",
+  "dagster_run_id": "90d27d1e-81f9-4266-8171-e2e8d78de497",
+  "handoff_sha256": "63e8413024d1e022efbab39d169d709abe603cd531c010e258ad0bbb29b03163",
+  "job_id": "job_target_acquisition",
+  "repository_commit": "44850359b14601d31101dcd43173367502162ad2",
+  "repository_dirty": false,
+  "schema": "appsec-review/acceptance-provenance/1",
+  "target": "/opt/app/targets/appsec-multi-vuln-c094",
+  "target_commit": "bd69bfe83fec49155366303604475512c98c4ce6",
+  "target_tag": "appsec-multi-vuln-c094-v1"
+}

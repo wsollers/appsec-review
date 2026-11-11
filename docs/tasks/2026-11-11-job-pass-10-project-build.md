@@ -174,3 +174,64 @@ Initial acceptance under a new scoped corpus name was refused because the operat
 the key-directory name to a target Git tag. No old key or target tag was modified. A narrow
 operator-only follow-up separates the explicitly verified target tag from the new corpus-key
 namespace; it must retain the target-tag/HEAD check and all existing acceptance guards.
+
+The follow-up `6438da6888f0bc68f0fb7e77517521d02eb32d6c` integrated as `cccd98aa6`.
+The walk uses `--tag appsec-multi-vuln-c094-scoped-v1 --target-tag appsec-multi-vuln-c094-v1`
+on each acceptance. No runtime source, image, target tag or old key was changed by that fix.
+Its exact seven-case selection is `tests/test_stepwise_target_tag.py` plus
+`tests/test_stepwise_rewind.py::test_matching_replay_reaccepts_without_replacing_key_provenance_or_seed`.
+The parent's first invocation omitted the latter node; the count guard refused six versus seven
+before execution. Restoring the complete selection passed seven cases in 6.50 s with no slow cases
+(`tests-custom-20261111-124011-605963-51497.json`).
+
+## First live job-10 result: capture-wrapper classification defect
+
+Jobs 1-9 were individually accepted after their scoped criteria held. The catalog has 17 files
+and one CMake unit. All nine c094 code files have complete history-symbol coverage; the history
+gaps concern root CI-file symbols and the root README's differing selected-mainline binding.
+CI has four definitions, nine observations/findings and no owned gaps. Environment analysis is
+not applicable with no gaps. Planning has one valid offline native recipe and no contradiction,
+abstention or feedback-budget failure.
+
+Job-10 dispatch `953f9f42-f943-402c-a296-f5c051e4216a`, `attempt_0001`, ran
+**2026-11-11 18:25:17.591-18:27:41.420 UTC** (143.828 s total job duration).
+The native build itself took **16.935 s**, produced eight correlated compile-database entries
+and an actual 160384-byte x86-64 ELF executable:
+
+```text
+data/build/probes/units/build-unit-adf13d8306cb272dea43/attempts/attempt_0001/workspace/projects/native/case-094/build/case094
+SHA-256: 569b207768a1fc228d1642429657e920133ce1674705361edff69fb72bbdd347
+```
+
+The content check correctly refused acceptance at **18:28:20.906 UTC**. The binary remains in
+`rejected_artifacts`, not accepted evidence. Native enforcement incorrectly classified eleven
+`/bin/sh` launchers and nine `/usr/bin/python3 /capture/tool-wrapper.py` logger invocations as
+compilers because their argv contains `-c`. Their all-null axes were mixed with the genuine
+Linux/x86-64/GNU compiler axes, yielding `unknown_compiler_in_capture` and
+`mixed_targets_in_capture`. All fifteen actual Clang executions were trusted and agreed.
+
+The resolving sanitized events are command-002 ordinals 300/306 (shell `-c` command strings)
+and 315/414 (the platform capture wrapper forwarding compiler arguments). Its `events.jsonl`
+hash is `d8ccdca0e3be8ef6a91ee879a78a4c57781c89a7dcf0017d0626d6dc4facff24`.
+The correction is limited to distinguishing proven capture scaffolding from actual compiler
+execution; unknown compilers and missing underlying compiler execution must still fail closed.
+All ten dispatches were verified stopped before the bounded repair.
+
+Canonical first-attempt gap counts, from hash/size-verified handoff `outcomes` references:
+
+| Job | Canonical gaps | Content disposition |
+| --- | ---: | --- |
+| 1 model connectivity | 0 | accepted |
+| 2 image pins | 0 | accepted; 58 immutable references matched |
+| 3 acquisition | 0 | accepted; not requested |
+| 4 intake | 0 | accepted; scoped fingerprint/17 files |
+| 5 catalog | 28 | accepted; absent optional documents/package manifests/compile data and Git exclusion |
+| 6 history | 6 | accepted; root CI symbol support and README/mainline binding limitations |
+| 7 CI | 0 | accepted; four definitions/nine source-bound findings |
+| 8 environment | 0 | accepted; not applicable |
+| 9 planning | 18 | accepted; pre-build absence/policy and bounded dependency-discovery limitations |
+| 10 project build | 4 | **not accepted**; two false classifier reasons declared by two units |
+
+These are not the recursively repeated gap strings printed by framework checks. No other corpus
+case is in the accepted source inventory. The first accepted job-10 result and final turnaround
+remain pending; compiled-but-rejected output is not counted as acceptance.
