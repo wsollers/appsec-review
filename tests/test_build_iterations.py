@@ -133,6 +133,26 @@ def test_failed_destructive_consumer_restart_and_revision_preserves_producer(tmp
         assert (workspace.paths.target / relative).is_file()
 
 
+def test_a_refused_dispatch_reports_a_producer_status(tmp_path):
+    """A dispatch whose inputs are refused is a unit output, so its status is a ProducerStatus.
+
+    Review 2026-11-11-0003 failed at ``language_build`` publication because this result said
+    ``BLOCKED_BY_DEPENDENCY``, which is not in the closed vocabulary. Why it is blocked is a fact.
+    """
+    from appsec_review.interchange import ProducerStatus
+
+    source, _documents, run, graph, dispatches = fixture(tmp_path)
+    worker = Mock()
+    result = controller(source, run, graph, dispatches, releases={}).run(worker, invoke=Mock())
+    worker.assert_not_called()
+    statuses = {status.value for status in ProducerStatus}
+    assert result["terminal_status"] == ProducerStatus.BLOCKED.value
+    assert result["availability"] == "blocked_by_dependency"
+    assert result["gaps"], "a blocked dispatch names why"
+    assert set(result["states"].values()) <= statuses
+    assert {item["terminal_status"] for item in result["receipts"]} <= statuses
+
+
 def test_missing_release_evidence_never_dispatches_or_reuses(tmp_path):
     source, _documents, run, graph, dispatches = fixture(tmp_path)
     worker = Mock()
