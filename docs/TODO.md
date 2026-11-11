@@ -80,12 +80,12 @@ until each is rewritten into the entry format when it is next touched.
 | T-085 | [Probe the model login before recovery admits a repair](#t-085-probe-the-model-login-before-recovery-admits-a-repair) | pipeline | open |
 | T-086 | [Record source ids on un-hunted units and produce entry-point tags](#t-086-record-source-ids-on-un-hunted-units-and-produce-entry-point-tags) | review | open |
 | T-087 | [Normalize crash symbols for corroboration](#t-087-normalize-crash-symbols-for-corroboration) | evidence | open |
-| T-088 | [Decide whether a refused build command fails one unit or the whole language build](#t-088-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
-| T-089 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-089-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-088 | [Keep a target registry and a read-only verify command](#t-088-keep-a-target-registry-and-a-read-only-verify-command) | testing | open |
 | T-089 | [Fetch answer keys from the private answers repository in memory](#t-089-fetch-answer-keys-from-the-private-answers-repository-in-memory) | testing | open |
 | T-090 | [Identify known targets and self-grade a completed run](#t-090-identify-known-targets-and-self-grade-a-completed-run) | testing | blocked |
 | T-091 | [Resolve conditional automake SUBDIRS in build discovery](#t-091-resolve-conditional-automake-subdirs-in-build-discovery) | topology | open |
+| T-092 | [Decide whether a refused build command fails one unit or the whole language build](#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
+| T-093 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-093-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1344,7 +1344,7 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** T-056, `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/build_points.py`,
   `docs/plans/build-discovery-test-program-2026-11-08.md`.
 
-### T-088 — Decide whether a refused build command fails one unit or the whole language build
+### T-092 — Decide whether a refused build command fails one unit or the whole language build
 
 - **State:** open
 - **Area:** build
@@ -1362,7 +1362,7 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** `src/appsec_review/jobs/build_recipe_commands.py`, `src/appsec_review/jobs/build_iterations.py`,
   `src/appsec_review/jobs/job_build_iteration/job.py`, T-057, T-084.
 
-### T-089 — Bind generated Make drivers of configure-style builds to their accepted inputs
+### T-093 — Bind generated Make drivers of configure-style builds to their accepted inputs
 
 - **State:** open
 - **Area:** build
@@ -1376,7 +1376,7 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** `tests/test_build_recipe_commands.py` has a positive and a tampered-input case for
   each such build system, and the refusal for an unaccepted hand-written Makefile is unchanged.
 - **Refs:** `src/appsec_review/jobs/build_recipe_commands.py`, `src/appsec_review/jobs/build_discovery.py`,
-  `tests/test_build_recipe_commands.py`, T-088.
+  `tests/test_build_recipe_commands.py`, T-092, T-091.
 
 ## Legacy backlog
 
