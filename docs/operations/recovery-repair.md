@@ -216,6 +216,18 @@ roots, relative suffixes, claim/provenance references, raw artifact references a
 signatures. This checks recorded evidence, not current Docker state; it neither rewrites a key
 nor constitutes operator acceptance.
 
+The same proof also covers exactly the Azure, Bitbucket and GitLab Checkov branches of
+`job_ci_configuration_analysis`: each `ci_analysis.<provider>_checkov_scan` result, its
+`ci_normalization.<provider>_checkov_normalize` result, and their shared, pinned
+`artifacts/ci/<scan-unit-sha256-prefix>/raw-observations.json`. Each has exactly one
+`tool-checkov` execution, with `/target` read-only and `/scratch` writable at the scan unit's
+`scratch/file_0001`. All three execution copies must agree, and both result references must
+resolve to the exact raw artifact published for that scan unit. Raw observation content outside
+`executions` (including definitions, records, gaps, status and image identity) must match exactly;
+execution image, argv and environment identities also remain exact. The remaining normalized
+content of all nine artifacts must match before any comparison adjustment is applied. Other
+CI providers, tools, units, artifacts or scratch suffixes receive no additional equivalence.
+
 Current comparison accounting is closed, not a producer-wide exemption:
 
 | Producer/artifact | Accounted-for difference | Everything else |
@@ -224,6 +236,7 @@ Current comparison accounting is closed, not a producer-wide exemption:
 | `job_model_connectivity`, `steps/connectivity/tasks/verify_models/model-connectivity.json` | Temporary pass-01 workaround: only unrelated names added/removed from `providers.<provider>.listed`, after raw-reference and normalized-signature proof | Strict; configured/checked models, results, provider set, transport, errors and gaps cannot change |
 | `job_review_intake`, `steps/model_preflight/tasks/verify_models/model-preflight.json` | Temporary pass-04 workaround: the identical inventory-only rule for this named artifact | Strict, as above |
 | `job_source_history_analysis`, `acquire.git_history` and `resolve_sources.bind_snapshot` result JSON, plus the published `log`/`messages` execution JSON | Only the proved Desktop/native mount aliases described above, in either direction with unchanged mounts permitted, including their dependent normalized signatures | Strict; all raw pins and the rest of each normalized artifact must match |
+| `job_ci_configuration_analysis`, Azure/Bitbucket/GitLab Checkov scan and normalization results and their three pinned raw observation artifacts | Only the same proved mount aliases and dependent signatures, with exact execution-copy/reference agreement | Strict; all other raw observation content and remaining normalized artifact content must match |
 | Every other artifact/producer | No additional equivalence rule | Strict existing normalized diff |
 
 Comparison receipts retain both `unadjusted_differences` and the final `differences`, alongside
@@ -235,7 +248,7 @@ scoping, job policies, frozen configuration or admission/signing enforcement. Th
 gates still declare `always_execute=True` and `propagate_handoff=False`; the release still
 includes each job package's static cross-job import closure and shared common/validator/script
 dependencies. Unit regressions for the rewind are in `tests/test_stepwise_rewind.py` and
-`tests/test_stepwise_mount_paths.py`.
+`tests/test_stepwise_mount_paths.py`; the closed CI extension is in `tests/test_stepwise_ci_mount_paths.py`.
 
 The original configuration, target fingerprint, review policy and evidence are retained.
 Configuration changes and schema/dataset-contract changes are not compatible source repairs.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import inspect
 import json
 from pathlib import PurePosixPath
@@ -26,6 +27,11 @@ MODEL_PREFLIGHT_ARTIFACTS = {
 SOURCE_HISTORY_EXECUTIONS = {
     "acquire.git_history": ("log", "messages"),
     "resolve_sources.bind_snapshot": ("tree",),
+}
+CI_CHECKOV_EXECUTIONS = {
+    f"{step}.{provider}_checkov_{task}": ("file_0001",)
+    for step, task in (("ci_analysis", "scan"), ("ci_normalization", "normalize"))
+    for provider in ("azure", "bitbucket", "gitlab")
 }
 DESKTOP_BIND = re.compile(
     r"(/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/[A-Za-z0-9_.-]+/[0-9a-f]{64})/(.+)")
@@ -411,11 +417,13 @@ def _mount_artifact(run_root, output, handoff, path, masks, *, signature=True):
 
 
 def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expected, actual, masks):
-    """Prove only source-history's Desktop/checkout bind aliases, atomically in a comparison copy."""
-    if job_id != "job_source_history_analysis":
+    """Prove the closed source-history/CI bind aliases, atomically in a comparison copy."""
+    ci = job_id == "job_ci_configuration_analysis"
+    if job_id != "job_source_history_analysis" and not ci:
         return []
+    unit_executions = CI_CHECKOV_EXECUTIONS if ci else SOURCE_HISTORY_EXECUTIONS
     if all(expected["outputs"].get(unit, {}).get("executions") == actual["outputs"].get(unit, {}).get("executions")
-           for unit in SOURCE_HISTORY_EXECUTIONS):
+           for unit in unit_executions):
         return []
     original = read_document(verify_reference(walk, baseline["claim"]))
     origin = read_document(verify_reference(walk, baseline["provenance"]))
@@ -464,22 +472,31 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
 
     def project_execution(before, after, projected, unit, name):
         step, task = unit.split(".")
+        if ci:
+            step, task = "ci_analysis", task.replace("_normalize", "_scan")
+            if any(before.get(key) != after.get(key) for key in
+                   ("image_id", "image_digest", "image_tag", "argv_identity", "environment_sha256")):
+                return None
+        scratch = name if ci else f"executions/{name}"
+        roles = (("/target", True), ("/scratch", False)) if ci else (
+            ("/target", True), ("/scratch", False), ("/gitdir", True))
         mounts = []
         for source_claim, execution in ((original, before), (claim, after)):
             receipt = (f"{source_claim['attempt_path']}/steps/{step}/tasks/{task}"
-                       f"/scratch/executions/{name}/execution.json")
+                       f"/scratch/{scratch}/execution.json")
             if (execution.get("schema") != "appsec-review/container-execution/1"
-                    or execution.get("tool_id") != "tool-git" or execution.get("receipt_path") != receipt
-                    or not isinstance(execution.get("mounts"), list) or len(execution["mounts"]) != 3):
+                    or execution.get("tool_id") != ("tool-checkov" if ci else "tool-git")
+                    or execution.get("receipt_path") != receipt
+                    or not isinstance(execution.get("mounts"), list) or len(execution["mounts"]) != len(roles)):
                 return None
-        for index, (destination, readonly) in enumerate((("/target", True), ("/scratch", False), ("/gitdir", True))):
+        for index, (destination, readonly) in enumerate(roles):
             suffixes = []
             for source_claim, execution in ((original, before), (claim, after)):
                 mount = execution["mounts"][index]
                 root = repository / ("targets" if destination == "/target" else "runs")
                 suffix = (target.name if destination == "/target" else
                           f"{run_root.name}/{source_claim['attempt_path']}/steps/{step}/tasks/{task}/scratch/"
-                          + (f"executions/{name}" if destination == "/scratch" else "gitdir"))
+                          + (scratch if destination == "/scratch" else "gitdir"))
                 if (not isinstance(mount, dict)
                         or set(mount) != {"source", "runtime_source", "target", "read_only"}
                         or mount["source"] != str(root / suffix) or mount["target"] != destination
@@ -523,12 +540,31 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
                         "provenance": baseline["provenance"], "mounts": mounts})
         return True
 
-    for unit, names in SOURCE_HISTORY_EXECUTIONS.items():
+    for unit, names in unit_executions.items():
         step, task = unit.split(".")
         suffix = f"steps/{step}/tasks/{task}/result.json"
         pair = [_mount_artifact(run_root, output, handoff, f"{source_claim['attempt_path']}/{suffix}", masks)
                 for source_claim, output, handoff in ((original, expected, handoffs[0]), (claim, actual, handoffs[1]))]
         before, after = pair
+        if ci:
+            provider = task.split("_")[0]
+            scan_unit = f"ci_analysis.{provider}_checkov_scan"
+            task_key = hashlib.sha256(scan_unit.encode()).hexdigest()[:12]
+            raw_pair = [_mount_artifact(
+                run_root, output, handoff,
+                f"{source_claim['attempt_path']}/artifacts/ci/{task_key}/raw-observations.json", masks)
+                for source_claim, output, handoff in ((original, expected, handoffs[0]), (claim, actual, handoffs[1]))]
+            for result, raw in zip(pair, raw_pair):
+                if (result[0].get("provider") != provider or result[0].get("tool_id") != "tool-checkov"
+                        or raw[0].get("schema") != "appsec-review/ci-raw-observations/1"
+                        or raw[0].get("provider") != provider or raw[0].get("tool_id") != "tool-checkov"):
+                    return []
+                if (result[0].get("raw_artifact") != raw[3]
+                        or result[0].get("executions") != raw[0].get("executions")):
+                    raise StateError("CI mount execution copy or raw reference differs from its pinned artifact")
+            if ({key: value for key, value in raw_pair[0][0].items() if key != "executions"}
+                    != {key: value for key, value in raw_pair[1][0].items() if key != "executions"}):
+                return []
         for value, output in ((before, expected), (after, actual)):
             executions = value[0].get("executions")
             if not isinstance(executions, list) or len(executions) != len(names):
@@ -542,7 +578,7 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
             if not mapped:
                 return []
             mounts.extend({**entry, "field": f"executions[{index}].{entry['field']}"} for entry in mapped)
-            for mount_index in range(3):
+            for mount_index in range(len(left["mounts"])):
                 output_mounts.append((actual["outputs"][unit]["executions"][index]["mounts"][mount_index],
                                       masks.text(left["mounts"][mount_index]["runtime_source"])))
             if unit == "acquire.git_history":
@@ -557,6 +593,13 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
                     return []
         if not account(before, after, projected, mounts):
             return []
+        if ci and step == "ci_analysis":
+            raw_projected = deepcopy(raw_pair[1][1])
+            mapped = project_execution(raw_pair[0][0]["executions"][0], raw_pair[1][0]["executions"][0],
+                                       raw_projected["executions"][0], unit, "file_0001")
+            if not mapped or not account(*raw_pair, raw_projected, [
+                    {**entry, "field": f"executions[0].{entry['field']}"} for entry in mapped]):
+                return []
     native_roots = {str(native / "targets"), str(native / "runs")}
     for side in aliases:
         roots = [value for value in side.values() if value not in native_roots]
