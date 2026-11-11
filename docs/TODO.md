@@ -49,7 +49,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | done (2026-11-10, docs/tasks/2026-11-10-t051-host-local-pins.md) |
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
-| T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | open |
+| T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | done (2026-11-11, 962ed773) |
 | T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
 | T-056 | [Build discovery test program: build points, total assignment, case matrix](#t-056-build-discovery-test-program-build-points-total-assignment-case-matrix) | topology | open |
 | T-060 | [Track findings across revisions with a stable identity](#t-060-track-findings-across-revisions-with-a-stable-identity) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
@@ -65,15 +65,21 @@ until each is rewritten into the entry format when it is next touched.
 | T-070 | [Slice findings by a game threat model](#t-070-slice-findings-by-a-game-threat-model) | review | in-progress |
 | T-071 | [Measure model-specific failure rates](#t-071-measure-model-specific-failure-rates) | review | in-progress |
 | T-072 | [Ingest crash reports as finding evidence](#t-072-ingest-crash-reports-as-finding-evidence) | evidence | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
-| T-073 | [Derive reviewed units and entry points from a run](#t-073-derive-reviewed-units-and-entry-points-from-a-run) | review | open |
+| T-073 | [Derive reviewed units and entry points from a run](#t-073-derive-reviewed-units-and-entry-points-from-a-run) | review | in-progress |
 | T-074 | [Wire the fix re-check to the verifier role](#t-074-wire-the-fix-re-check-to-the-verifier-role) | review | open |
 | T-075 | [Run crash evidence as a job and a lane A lead family](#t-075-run-crash-evidence-as-a-job-and-a-lane-a-lead-family) | evidence | open |
 | T-076 | [Record attacker position owner function and remediation on findings](#t-076-record-attacker-position-owner-function-and-remediation-on-findings) | review | open |
-| T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | open |
-| T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | open |
-| T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | open |
+| T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | in-progress |
+| T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | done (2026-11-11, 2f6c5ae1) |
+| T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | done (2026-11-11, 83c81a60) |
 | T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | open |
 | T-081 | [Fix the stepwise system call to review_run submit](#t-081-fix-the-stepwise-system-call-to-review_run-submit) | pipeline | open |
+| T-082 | [Check the guard order in project_build repair reuse](#t-082-check-the-guard-order-in-project_build-repair-reuse) | build | open |
+| T-083 | [Classify the failing judge and budget-clock unit tests](#t-083-classify-the-failing-judge-and-budget-clock-unit-tests) | testing | open |
+| T-084 | [Test language-build iteration dispatch with a ready build unit](#t-084-test-language-build-iteration-dispatch-with-a-ready-build-unit) | testing | open |
+| T-085 | [Probe the model login before recovery admits a repair](#t-085-probe-the-model-login-before-recovery-admits-a-repair) | pipeline | open |
+| T-086 | [Record source ids on un-hunted units and produce entry-point tags](#t-086-record-source-ids-on-un-hunted-units-and-produce-entry-point-tags) | review | open |
+| T-087 | [Normalize crash symbols for corroboration](#t-087-normalize-crash-symbols-for-corroboration) | evidence | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -542,6 +548,13 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** classify each failing test as stale fixture or runtime regression; fix fixtures
   through `consume`/`inputs` helpers, not by relaxing contracts; file any runtime regression as its
   own T-item.
+- **Progress:** 2026-11-11: four stale fixtures repaired (`61a7718a`: the shared fake executor in
+  `tests/capture_fakes.py` supplies compiler profiles, default-collection tests, acceptance
+  inventory job list, configuration-layer assertions, judge-test fixture). The undeclared-input
+  runtime regressions were T-054. Remaining, classified stale and not fixed: about 75 tests that
+  build single-job graphs or hand-written run trees in `tests/test_language_build.py`,
+  `tests/test_project_build.py`, `tests/test_tool_input_support.py` and
+  `tests/test_native_sbom_job.py`. Unclassified judge and budget-clock failures are T-083.
 - **Done when:** the differential against `fe328d76`'s baseline shows no failures attributable to
   the merge.
 - **Refs:** `docs/tasks/2026-11-07-job-control-schema-standardization.md` (differential method).
@@ -662,7 +675,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-054 — Declare the inputs binary_evidence_indexing and artifact_indexing actually read
 
-- **State:** open
+- **State:** done (2026-11-11, 962ed773)
 - **Area:** pipeline
 - **Why:** since the fleet "typed job input contracts" merge, `job_binary_evidence_indexing` fails
   at publication with `undeclared consumption by job_binary_evidence_indexing: job_target_catalog/handoff`
@@ -676,6 +689,10 @@ until each is rewritten into the entry format when it is next touched.
   `job_artifact_indexing` the intake read comes through `load_target_catalog`, which job pass 07 gave
   an `intake_target_root` keyword: a job that does not use `ScanCatalog.target_root` passes `False`
   rather than declaring an input it never reads. Part of T-057 Phase 1.
+- **Outcome:** `962ed773` (branch commit `d4aabebe`) declared the missing inputs. The scope was
+  wider than the title: review `2026-11-11-0002` failed at 13 of 42 jobs on the same signature in
+  `job_evidence_collection`, `job_language_build` and `job_build_iteration`, which the commit also
+  covers. The undeclared-consumption check is unchanged.
 - **Done when:** the eight tests pass without weakening the undeclared-consumption check.
 - **Refs:** T-047, `src/appsec_review/runtime/inputs.py`, `src/appsec_review/runtime/consume.py`.
 
@@ -888,7 +905,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** at least ten pairs are keyed, the loader validates them, and a document lists the
   candidate projects and the licence of each.
 - **Refs:** `test/acceptance/`, `src/appsec_review/acceptance/scoring.py`,
-  `docs/reviews/castle-style-detector-scoring.md`, T-005.
+  `docs/reviews/castle-style-detector-scoring.md`, T-005. Candidates (26 verified pairs, none
+  pinned or keyed yet): `docs/reviews/fix-pair-corpus-candidates.md`,
+  `test/acceptance/fix-pairs-candidates/pairs.toml`.
 
 ### T-068 — Measure hunt-lane value and attack-surface coverage
 
@@ -984,7 +1003,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-073 — Derive reviewed units and entry points from a run
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** a run records review units by component, not by source file, so the finding snapshot
   cannot say which files a run covered. The operator must supply `reviewed-units/1` and the
@@ -993,6 +1012,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** an adapter from accepted run artifacts (catalog path index, review package manifests,
   lane coverage) to the reviewed and unreviewed source files with their content hashes, and to the
   catalogued entry points with `reviewed`, `not_admitted` and `not_built` status. No target scan.
+- **Progress:** `observability/findings/coverage_adapter.py` derives reviewed source files and
+  entry points from a run (2026-11-11, `a71681a1`). Covered by unit tests only; not yet checked
+  against a real run. Entry points are empty on real runs until T-086 gives them a producer.
 - **Done when:** `snapshot` needs no `--units` for a run with an accepted catalog, the integration
   test asserts non-null `reviewed_units`, and `scorecard` prints entry-point coverage without an
   operator file.
@@ -1051,7 +1073,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-077 — Derive lead records with stage attribution from a run
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** `triage.effectiveness` needs one record per lane A lead with its disposition and the
   stage that removed it, and labels for them. Both are operator files today, so true-lead retention
@@ -1059,6 +1081,10 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** an adapter from the lane A lead manifest, lead accounting and claim projection (the
   inputs `triage_reduction` already verifies) and the funnel's stage vocabulary to lead records;
   lead labels from the answer key by scope; the paired figures printed beside the funnel.
+- **Progress:** `observability/findings/lead_adapter.py` derives lane A lead records with
+  removal-stage attribution from a run, and `scorecard --run` uses it (2026-11-11, `a71681a1`).
+  Covered by unit tests only; not yet checked against a real run, and `stepwise.py system` does not
+  print the paired figures.
 - **Done when:** unit tests build lead records from a recorded lane A document, and
   `stepwise.py system` prints true-lead retention beside false-lead removal for a keyed corpus.
 - **Refs:** T-062, `src/appsec_review/observability/triage_reduction.py`,
@@ -1066,7 +1092,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-078 — Check the model login before a review is submitted
 
-- **State:** open
+- **State:** done (2026-11-11, 2f6c5ae1)
 - **Area:** pipeline
 - **Why:** on 2026-11-11 review `2026-11-11-0001` failed in under a minute at
   `job_model_connectivity` because the mounted Claude CLI token had expired. `stack-start` probes
@@ -1083,7 +1109,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-079 — One guarded command for run recovery
 
-- **State:** open
+- **State:** done (2026-11-11, 83c81a60)
 - **Area:** pipeline
 - **Why:** resuming a failed run takes a reconcile of the terminal submission, a
   `verify-repair-stop` inside the container for each dispatch, `plan-repair`, `admit-repair` and
@@ -1140,6 +1166,88 @@ until each is rewritten into the entry format when it is next touched.
   through the script's fake boundary so a signature change cannot go unnoticed again.
 - **Done when:** the unit test fails on the current call and passes with the fix.
 - **Refs:** `deploy/dagster/bin/stepwise.py`, `deploy/dagster/bin/review_run.py`, `tests/test_operator_scripts.py`, T-078.
+
+### T-082 — Check the guard order in project_build repair reuse
+
+- **State:** open
+- **Area:** build
+- **Why:** `_reuse_accepted_repair` in `jobs/job_project_build/job.py` calls a guard that needs
+  an image profile before the early return for missing release declarations, so a run without
+  release ids may fail in the guard instead of reporting the missing declaration. Found by reading
+  the code on 2026-11-11; not observed in a run.
+- **Scope:** confirm or refute with a unit test that drives the function without release ids and
+  without an image profile; if confirmed, order the early return first.
+- **Done when:** the test shows the missing-release outcome for that input, or the entry is closed
+  with the reason the order is correct.
+- **Refs:** `src/appsec_review/jobs/job_project_build/job.py`, T-080.
+
+### T-083 — Classify the failing judge and budget-clock unit tests
+
+- **State:** open
+- **Area:** testing
+- **Why:** three unit failures seen on 2026-11-11 are not explained by T-047's fixture groups:
+  `tests/review/test_judge.py::test_r5_outcomes_are_unchanged_with_and_without_a_judge_for_the_same_inputs`
+  fails, `test_both_assignments_de_shuffle_to_the_same_red_correct_verdict_in_real_cells` in the
+  same file fails intermittently, and `tests/review/test_team_handler.py` reports `budget clock
+  regressed` under host load.
+- **Scope:** reproduce each alone and shuffled; classify as fixture, test-isolation defect,
+  timing assumption or product defect; fix the first three kinds and file a product defect as its
+  own entry.
+- **Done when:** each of the three passes alone, shuffled and under `-n 8` on a loaded host, or has
+  its own entry naming the product defect.
+- **Refs:** `tests/review/test_judge.py`, `tests/review/test_team_handler.py`, T-047.
+
+### T-084 — Test language-build iteration dispatch with a ready build unit
+
+- **State:** open
+- **Area:** testing
+- **Why:** review `2026-11-11-0003` failed at language_build finalize on a status word that no
+  unit test reached, because no unit test drives `iterations.dispatch` end to end with a build unit
+  that is ready to dispatch; the refused path is the only one covered.
+- **Scope:** one unit test through the fake executor boundary: a ready unit is dispatched, its
+  result is accepted and the job finalizes with a `ProducerStatus` word.
+- **Done when:** the test fails when the dispatch result or the terminal status is malformed and
+  runs in under 10 seconds.
+- **Refs:** `src/appsec_review/jobs/build_iterations.py`, `tests/test_language_build.py`, T-057.
+
+### T-085 — Probe the model login before recovery admits a repair
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `review-recover` checks the model login only inside the resume (`review-start`), after
+  the repair plan has been admitted. An expired login therefore leaves an admitted plan and no
+  resumed run.
+- **Scope:** run the existing bounded probe before the confirmation in step 5, with the same
+  refusal text and `--no-probe` opt-out; the resume keeps its own probe.
+- **Done when:** a unit test shows an unanswered probe refusing before `admit-repair` is called.
+- **Refs:** `deploy/dagster/bin/ops.py`, `docs/operations/operator-scripts.md`, T-078, T-079.
+
+### T-086 — Record source ids on un-hunted units and produce entry-point tags
+
+- **State:** open
+- **Area:** review
+- **Why:** the coverage adapter (T-073) cannot name the source files of manifest `units` rows
+  that were not hunted, because those rows carry no `source_ids`, and it finds no entry points on
+  real runs, because no job assigns `surface:entry:*` tags.
+- **Scope:** record `source_ids` on every manifest unit row; either add a producer for
+  `surface:entry:*` tags or decide to read entry points from the code-graph entry-point facts, and
+  record the decision.
+- **Done when:** on a completed run the adapter reports reviewed and unreviewed files for every
+  unit and a non-empty entry-point list for a target that has entry points.
+- **Refs:** `src/appsec_review/observability/findings/coverage_adapter.py`, T-073, T-068.
+
+### T-087 — Normalize crash symbols for corroboration
+
+- **State:** open
+- **Area:** evidence
+- **Why:** crash-report ingestion corroborates a finding by comparing frame symbols with the
+  finding's function, and the two are spelled differently (mangled names, template arguments,
+  anonymous namespaces, inlined frames), so a true corroboration can be missed.
+- **Scope:** one normalization applied to both sides before comparison, with the raw symbol
+  retained; cases for Itanium and MSVC mangling, templates and inlined frames.
+- **Done when:** unit tests show each case matching and an unrelated symbol with a shared prefix
+  not matching.
+- **Refs:** `src/appsec_review/observability/findings/`, T-072, T-075.
 
 ## Legacy backlog
 
@@ -1468,8 +1576,9 @@ verified against the installed package. The new rows go to the supply_chain lane
 packages. Order, from
 [the design's deferred ecosystems](reviews/dependency-output-filtering-design.md#d1-scope-of-the-first-implementation):
 
-1. Go (next): `vendor/modules.txt` written by a recipe's `go mod vendor`.
-2. PHP Composer: `vendor/composer/installed.json`; also move `composer_metadata` production packages
+1. Go: done 2026-11-11 (`71063c16`, unit tests only; no real Go build exercised):
+   `vendor/modules.txt` written by a recipe's `go mod vendor`.
+2. PHP Composer (next): `vendor/composer/installed.json`; also move `composer_metadata` production packages
    from `unknown` to `runtime_dependency`.
 3. .NET: `obj/project.assets.json` for package assemblies copied into `bin/`.
 4. Rust: the receipt's `cargo_metadata` package sources for registry crates' `target/*/deps`
@@ -1515,6 +1624,12 @@ runs one invocation per project and raises only osv-scanner's limit (`osv_memory
 which bounds the blast radius but still pays the full ecosystem cost per launch. Extracting package
 versions with osv-scanner (or the catalog) and looking them up in the indexed snapshot would make
 the cost proportional to the dependencies actually present.
+
+Progress 2026-11-11: a version matcher against the snapshot index (`src/appsec_review/osv_matching.py`,
+default off) exists on branch `wave2-osv` (`5bf3475a`) and is not merged: it bumps the sync-step
+output schema `osv-index/1` to `/2`, so its effect on reuse of an accepted third-party sync output
+must be checked first. Still open after that merge: wiring the matcher into evidence collection in
+place of the per-project osv-scanner launch, and measuring memory against the 2.2 GB baseline.
 
 ### T-014 — Measure and extend seeded CodeQL neighborhoods
 
