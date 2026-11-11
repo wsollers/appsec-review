@@ -346,10 +346,11 @@ consumes each configured binary's publication through three stages.
 ### Index: `job_binary_evidence_indexing`
 
 The job depends on `job_target_catalog` (and so on the accepted intake) and runs in the CLI graph
-after `job_cpg_analysis` and in the Dagster wave-1 topology. It reads only the accepted intake
-handoff, re-verifies each frozen publication, and refuses one whose manifest hash, identity, or
-binary hash differs from what intake recorded. For each binary it writes one current `binary`
-retrieval shard:
+after `job_cpg_analysis` and in the Dagster wave-1 topology. Its evidence is the accepted intake
+handoff: it re-verifies each frozen publication, and refuses one whose manifest hash, identity, or
+binary hash differs from what intake recorded. Its contract also requires the accepted
+`job_target_catalog` envelope, whose pinned retrieval manifest the binary shards are composed onto;
+inherited shards are integrity-verified and carried forward, never queried. For each binary it writes one current `binary` retrieval shard:
 
 | Entity | Located | Content |
 | --- | --- | --- |

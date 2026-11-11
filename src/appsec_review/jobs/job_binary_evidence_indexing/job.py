@@ -1,8 +1,9 @@
 """Bounded retrieval indices over frozen binary decompilation publications.
 
-The job consumes only the accepted ``job_review_intake`` handoff, whose ``binary_evidence`` step
-froze each configured binary's publication identity and manifest hash. For every resolved binary
-it re-verifies the publication chain, detaches each decompiled function's pseudo-C into the run,
+The job's evidence is the accepted ``job_review_intake`` handoff, whose ``binary_evidence`` step
+froze each configured binary's publication identity and manifest hash. The accepted
+``job_target_catalog`` envelope supplies only the retrieval manifest that the binary shards are
+composed onto. For every resolved binary it re-verifies the publication chain, detaches each decompiled function's pseudo-C into the run,
 and builds one ``binary`` retrieval shard with:
 
 * ``binary_function`` entities, located in ``@binary/<sha256>/<address>.c`` pseudo-C;

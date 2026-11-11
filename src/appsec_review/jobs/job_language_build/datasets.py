@@ -44,6 +44,13 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        # load_accepted_plan (dispatch guards, refinement and .NET topology) re-reads the environment
+        # publication the accepted plan is bound to, so that producer is a declared, optional input.
+        # job_build_iteration inherits these inputs.
+        InputRequirement("job_build_environment_analysis", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.OPERATIONAL),
+        InputRequirement("job_build_environment_analysis", "build_environment",
+                         "appsec-review/build-environment-analysis/1", authority=EvidenceAuthority.OPERATIONAL),
         InputRequirement("job_project_build", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE,
                          availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),

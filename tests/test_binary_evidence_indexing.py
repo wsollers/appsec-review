@@ -26,6 +26,7 @@ from appsec_review.review.evidence import BINARY_CITATION_GAP, binary_anchor, re
 from appsec_review.review.models import EvidenceRelation, Gap, Predicate, RelationKind
 from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.registry import builtin_registry
+from appsec_review.runtime.runner import JobRunner
 from tests.binary_decompilation_fakes import FakeDocker, write_export
 
 
@@ -210,9 +211,14 @@ def test_a_publication_changed_after_intake_froze_it_is_refused(tmp_path: Path) 
     pseudo_c = Path(result["path"]) / "pseudo-c" / "0x1011b0.c"
     pseudo_c.chmod(0o644)
     pseudo_c.write_text("void print_label(void) {}\n", encoding="utf-8")
+    # A single-job graph projects no producers, so the accepted handoffs the job declares are
+    # supplied explicitly: an existing latest.json never grants an input.
+    job = build_binary()
+    assert set(job.consumes) == {"job_review_intake", "job_target_catalog"}
     with pytest.raises(RuntimeError, match="function file does not match its row"):
-        GraphRunner(config, [build_binary()]).run(target_root=target, source_fingerprint=fingerprint,
-                                                  run_id=upstream["run_id"])
+        JobRunner(config).run(
+            job, run_id=upstream["run_id"], target_root=target, source_fingerprint=fingerprint,
+            upstream_handoffs={key: upstream["jobs"][key]["handoff_sha256"] for key in job.consumes})
 
 
 def test_bounds_truncate_into_named_gaps(tmp_path: Path) -> None:
