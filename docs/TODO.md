@@ -72,7 +72,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | in-progress |
 | T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | done (2026-11-11, 2f6c5ae1) |
 | T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | done (2026-11-11, 83c81a60) |
-| T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | open |
+| T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | done (2026-11-11, cab4d770) |
 | T-081 | [Fix the stepwise system call to review_run submit](#t-081-fix-the-stepwise-system-call-to-review_run-submit) | pipeline | done (2026-11-11, 49fa3e1a) |
 | T-082 | [Check the guard order in project_build repair reuse](#t-082-check-the-guard-order-in-project_build-repair-reuse) | build | open |
 | T-083 | [Classify the failing judge and budget-clock unit tests](#t-083-classify-the-failing-judge-and-budget-clock-unit-tests) | testing | open |
@@ -1139,7 +1139,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-080 — Derive default release ids and allow an overlay to override them
 
-- **State:** open
+- **State:** done (2026-11-11, cab4d770; `build_toolchain` is derived from the host-pinned native build image and the overlay may set release ids; `platform` is still declared, not derived)
 - **Area:** pipeline
 - **Why:** review `2026-11-11-0003` blocked all 22 build units with "missing release evidence:
   build_toolchain, platform, validation". The three ids are now committed as fixed strings in
