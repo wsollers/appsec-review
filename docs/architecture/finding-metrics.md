@@ -1,8 +1,12 @@
 # Finding metrics
 
-Status: **design, 2026-11-11. Not implemented** except where a row says "exists". The work is
-tracked in [`../TODO.md`](../TODO.md) as T-060 to T-072; this document describes the system those
-items build and does not carry its own backlog.
+Status: **implemented 2026-11-11 as an offline operator domain**
+(`src/appsec_review/observability/findings/`, operator guide
+[`../operations/finding-metrics.md`](../operations/finding-metrics.md)), with the parts listed in
+[section 11](#11-implementation-map) still open. Section 12 records where the implementation
+differs from the design text and why. The unit tests have been run; the integration and acceptance
+suites are written and have not been run. Work is tracked in [`../TODO.md`](../TODO.md) as T-060 to
+T-077; this document does not carry its own backlog.
 
 Finding metrics answer one question: *are the findings this system publishes correct, useful to
 the team that must fix them, repeatable, and acted on?* They are distinct from the performance and
@@ -12,7 +16,7 @@ cost?* A run can score perfectly on the second and be useless on the first.
 
 ## 1. Questions and where each is answered
 
-| # | Question | Metric family | Today | Item |
+| # | Question | Metric family | Before this work | Item |
 | --- | --- | --- | --- | --- |
 | 1 | How many observations, leads, claims and findings did the run produce? | Volume (§5.1) | exists as event counts; no final-state snapshot | T-064 |
 | 2 | How much did triage remove, and did it remove the right things? | Triage (§5.2) | volume exists (`triage_reduction`); effectiveness does not | T-062 |
@@ -84,9 +88,9 @@ flowchart LR
 
 Three stores, all derived:
 
-- **Per run:** a `finding-metrics` section in the run-owned summary
-  (`runs/<run-id>/data/telemetry/summary.json`), beside the existing sections, plus an immutable
-  `finding-snapshot/1` of the published findings.
+- **Per run:** an immutable `finding-snapshot/1` of the published findings and, on request, a
+  `finding-metrics/1` document built from it. Neither is written into the run-owned telemetry
+  summary (decision 1 of section 12).
 - **Per target, across runs:** a finding history under `runs/metadata/finding-history/<target-id>/`,
   content-addressed and rebuilt from the snapshots it names. It holds identities, lifecycle states,
   labels and crash links. It is not evidence authority and never feeds a worker prompt.
@@ -399,22 +403,69 @@ confirmed high or critical finding.
 
 ## 11. Implementation map
 
-| Part of this design | Item |
-| --- | --- |
-| Fingerprint, lifecycle, finding history | T-060 |
-| Targeted fix re-check | T-061 |
-| Labelled triage effectiveness | T-062 |
-| Review scored by default; match rules | T-063 |
-| Final-state snapshot, usefulness, severity in keys | T-064 |
-| Run adapter, repeated series, flapping | T-065 |
-| Trend comparability | T-066 |
-| CVE fix pairs and holdout | T-067 |
-| Hunt-lane value and coverage | T-068 |
-| Developer outcomes, audit sample, actionability | T-069 |
-| Game threat-model slices and cases | T-070 |
-| Reviewer integrity | T-071 |
-| Crash evidence ingestion and corroboration | T-072 |
+| Part of this design | Module (`observability/findings/`) | State | Item |
+| --- | --- | --- | --- |
+| Fingerprint, lifecycle, finding history | `identity`, `lifecycle`, `history` | implemented | T-060 |
+| Reviewed units and entry points derived from a run | caller-supplied today | open | T-073 |
+| Targeted fix re-check: requests, admission, scoring | `recheck` | implemented, model-free | T-061 |
+| Live verifier transport for the re-check | none | open | T-074 |
+| Labelled triage effectiveness, split ratios, audit miss rate | `triage`, `labels` | implemented | T-062 |
+| Lead records with stage attribution derived from a run | caller-supplied today | open | T-077 |
+| Review scored by default; scope and family match | `acceptance/scoring` | implemented | T-063 |
+| Final-state snapshot, usefulness, severity in keys | `run_adapter`, `usefulness` | implemented | T-064 |
+| Run adapter into experiments, series, detection rates, flapping | `stability` | implemented | T-065 |
+| Trend comparability | `observability/quality` | implemented | T-066 |
+| Fix-pair corpus format, key writer, holdout ledger | `corpus` | implemented; no real pairs yet | T-067 |
+| Hunt-lane value and coverage | `coverage` | implemented | T-068 |
+| Developer outcomes, audit sample, actionability | `labels`, `actionability` | implemented | T-069 |
+| Game slices from path rules | `slices` | implemented | T-070 |
+| Attacker position, owner, function and remediation recorded by the review; game cases and guidance | none | open | T-076 |
+| Reviewer integrity: citations, verification, canary drift | `integrity` | implemented; injection case not keyed | T-071 |
+| Crash adapters, binding, corroboration, missed buckets, lead candidates | `crash/` | implemented | T-072 |
+| Crash evidence as a review-graph job and lane A lead family; raw minidumps | none | open | T-075 |
+| Scorecard and operator command line | `scorecard`, `cli` | implemented | T-060 to T-072 |
 
-A new job (`job_crash_evidence_ingestion`) follows the job-contract checklist; a new lead family
-and any guidance for game weakness classes follow the runtime-guidance checklist. Corpus series,
-canary runs and live reviews remain user-owned manual validation.
+Corpus series, canary runs and live reviews remain user-owned manual validation.
+
+## 12. Implementation decisions
+
+Where the code differs from the text above, the code is authoritative and this section says why.
+
+1. **A separate document, not a run-summary section.** `finding-metrics/1` is built on request by
+   the operator command. The run-owned telemetry summary and its schema are unchanged: the summary
+   is recomputed at every job completion, and verifying the whole review there would add cost to
+   every run and couple a derived view to the run lifecycle.
+2. **Triage reduction is not edited.** The split ratios are computed from the existing
+   `triage_reduction` section by `triage.split_ratios`; the section keeps its `/1` schema.
+3. **Coverage is supplied, not derived.** A run records review units by component, not by source
+   file, so `reviewed_units` and the entry-point catalogue are operator inputs. Without them an
+   absent finding is `not_covered` and the snapshot names the gap (T-073).
+4. **Code change is judged per file.** `fix_candidate` needs a known, different content hash for a
+   file of the prior finding; an unknown hash is `not_redetected`, never a candidate.
+5. **The fingerprint works with what a run records.** Enclosing functions and source and sink
+   symbols are not recorded by the review, so run-built fingerprints rest on weakness family, path
+   and normalized code context (`basis: "code"`); the stronger bases apply when a caller supplies
+   functions (T-076). A finding known only by its path cannot be recognised after a move.
+6. **The re-check never calls a model.** `recheck.run_rechecks` takes an injected transport. A
+   `fixed` result is admitted only when it cites a reviewed unit whose content changed; otherwise it
+   is downgraded to `insufficient_evidence`. The live verifier transport is T-074.
+7. **Scanner backing of a hunt-lane finding** is an overlap test against the run's observation
+   index (two lines either side). Without an index it is unknown, and unknown is never counted as
+   scanner-independent.
+8. **"Verifier overturn"** is read from the judge verdict's disagreement with the claim state.
+9. **Slices come from path rules.** Ownership, build configuration and component are assigned from
+   an operator rules file when every location of a finding agrees. Attacker position is never
+   inferred; it stays null until the review records it (T-076).
+10. **Crash evidence is an operator facility, not yet a job.** Adapters, binding, corroboration,
+    the missed-bucket list and lead candidates are implemented and unit tested.
+    `job_crash_evidence_ingestion`, the `crash_report` lane A lead family, raw minidump walking and
+    symbolication are not (T-075): registering a job changes the review graph and the lead family
+    changes what a model reviews, and neither can be validated without live runs.
+11. **The experiments domain has no `published` stage.** The adapter registers published snapshots
+    as `verified` and says so in its result. The experiments root-cause identity includes line
+    ranges and the fingerprint does not, so a finding cited on different lines in two runs counts
+    once in `stability.series` and twice in `experiments.rebuild`; the adapter names that gap.
+12. **Detector scoring keeps the CASTLE figures** in its report for the paper comparison and adds
+    the scope-and-family match, case-based accuracy and detection marginals beside them (`/2`).
+13. **No real fix pairs are checked in.** The corpus format, loader, key writer and holdout ledger
+    exist; selecting and pinning real advisories and commits is user-owned (T-067).

@@ -1,6 +1,10 @@
 # CASTLE-style detector scoring, negative controls and the CASTLE regression corpus
 
-Status: implemented 2026-11-02 in chunks A-E below (coordinator session). Live acceptance of case-094 and
+Status: implemented 2026-11-02 in chunks A-E below (coordinator session). Changed 2026-11-11 by
+[`../architecture/finding-metrics.md`](../architecture/finding-metrics.md) (T-063): report schema `/2`, the
+published findings (`review`) scored by default, a function-scope and weakness-family match beside the strict
+one, case-based accuracy (decision 7's per-report accuracy is no longer computed), detection marginals, and an
+optional `severity` on `[[defect]]`. Where the decisions below differ, the code and that document are current. Live acceptance of case-094 and
 the CASTLE-C250 scoring run are user-owned and not yet run.
 
 Source: Dubniczky et al., "CASTLE: Benchmarking Dataset for Static Code Analyzers and LLMs towards
