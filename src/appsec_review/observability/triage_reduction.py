@@ -256,6 +256,7 @@ def _load_manifest(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any]:
     non_lead_total = sum(int(value) for value in non_lead.values()) if isinstance(non_lead, Mapping) else int(non_lead)
     return {"admission": admission, "lead_packages": lead_packages, "non_lead_observations": non_lead_total,
             "index_manifest_sha256": manifest.get("manifest_sha256"),      # the accepted index set the leads came from
+            "document": manifest,              # the verified manifest itself, for adapters; the section never reads it
             "sources": {"lead_packages": set_ref, "lead_package_manifest": manifest_ref}}
 
 

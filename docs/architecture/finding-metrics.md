@@ -406,7 +406,8 @@ confirmed high or critical finding.
 | Part of this design | Module (`observability/findings/`) | State | Item |
 | --- | --- | --- | --- |
 | Fingerprint, lifecycle, finding history | `identity`, `lifecycle`, `history` | implemented | T-060 |
-| Reviewed units and entry points derived from a run | caller-supplied today | open | T-073 |
+| Reviewed units derived from a run | `coverage_adapter` | implemented; not run against a real accepted run; files of units below the hunt cutoff are not recorded by a run | T-073 |
+| Entry points derived from a run | `coverage_adapter` | implemented from `surface:entry:*` tags; no producer assigns those tags yet, and no tag marks a parser | T-073 |
 | Targeted fix re-check: requests, admission, scoring | `recheck` | implemented, model-free | T-061 |
 | Live verifier transport for the re-check | none | open | T-074 |
 | Labelled triage effectiveness, split ratios, audit miss rate | `triage`, `labels` | implemented | T-062 |
@@ -437,9 +438,28 @@ Where the code differs from the text above, the code is authoritative and this s
    every run and couple a derived view to the run lifecycle.
 2. **Triage reduction is not edited.** The split ratios are computed from the existing
    `triage_reduction` section by `triage.split_ratios`; the section keeps its `/1` schema.
-3. **Coverage is supplied, not derived.** A run records review units by component, not by source
-   file, so `reviewed_units` and the entry-point catalogue are operator inputs. Without them an
-   absent finding is `not_covered` and the snapshot names the gap (T-073).
+3. **Coverage is derived from what a run records, and supplied for the rest.** A run records review
+   units by component, not by source file, but every review package body names the accepted
+   `source_file` identities in its scope, the claim projection records each cell's role and
+   terminal status, and the accepted source catalog maps an identity to its path and content hash.
+   `coverage_adapter` joins them: a catalogued file is reviewed when a package that contained it had
+   every red cell succeed; any other catalogued file is `cells_incomplete`, `not_launched` or
+   `not_packaged`. Three things are not derivable and are named instead of guessed:
+   - The files of a review unit below the hunt cutoff. The package manifest lists such a unit by
+     key only, so its files are `not_packaged` like files of no unit, and
+     `units_below_hunt_cutoff:<n>` counts the units. The manifest's `units` rows would have to carry
+     their `source_ids` to split them.
+   - A parser entry point. Entry points are derived from accepted `surface:entry:*` tags
+     (`http-public`, `http-internal` and `message-consumer` as network handlers, `rpc` as RPC
+     handlers, `file-input` as file loaders). No term of that group is a parser, and
+     `func:data:parse-*` marks code that calls a parser, not an entry point.
+   - Entry points at all, for now. The vocabulary defines `surface:entry:*`, but no tagging
+     producer assigns it, so the derived catalogue is null with a named gap until one does. The
+     code graph's `entry_point` facts (taint sources with a `source_class`) are a candidate second
+     source and are not used: a source site is not an entry point of one of the four kinds.
+
+   An operator `--units` or `--entry-points` file still takes precedence. When neither a file nor a
+   derivation gives the units, an absent finding is `not_covered` and the snapshot names the gap.
 4. **Code change is judged per file.** `fix_candidate` needs a known, different content hash for a
    file of the prior finding; an unknown hash is `not_redetected`, never a candidate.
 5. **The fingerprint works with what a run records.** Enclosing functions and source and sink

@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from appsec_review.observability.findings import cli, lead_adapter, run_adapter
+from appsec_review.observability.findings import cli, coverage_adapter, lead_adapter, run_adapter
 from appsec_review.observability.findings.contracts import METRICS_SCHEMA
+from appsec_review.observability.findings.coverage_adapter import CoverageDocuments
 from appsec_review.observability.findings.run_adapter import RunDocuments
 
 FIXTURES = Path(__file__).parent / "fixtures" / "finding_metrics" / "crash"
@@ -57,13 +58,32 @@ def documents(rows):
                                     "model_sha256": "c" * 64})
 
 
+def cell(cell_id, package_id, status="succeeded"):
+    return {cell_id: [{"cell_id": cell_id, "lane": "hunt", "package_id": package_id, "role": "hypothesis_hunter",
+                       "status": status}]}
+
+
+# run-3 is the only run whose coverage documents are available (T-073).
+COVERAGE = {"run-3": CoverageDocuments(
+    catalog={"asr:source_file:parse": {"path": "net/parse.c", "sha256": "a" * 64, "built": True},
+             "asr:source_file:rpc": {"path": "net/rpc.c", "sha256": "b" * 64, "built": True},
+             "asr:source_file:mods": {"path": "mods/load.c", "sha256": None, "built": False}},
+    packages=[{"package_id": "hunt-1", "source_ids": ["asr:source_file:parse"]},
+              {"package_id": "hunt-2", "source_ids": ["asr:source_file:rpc"]}],
+    cells={**cell("c1", "hunt-1"), **cell("c2", "hunt-2", "timed_out")},
+    units=[{"unit_key": "unit-1", "hunted": True}, {"unit_key": "unit-2", "hunted": False}],
+    tags=[{"tag": "surface:entry:http-public", "subject_id": "asr:source_file:parse", "path": "net/parse.c"},
+          {"tag": "surface:entry:rpc", "subject_id": "asr:source_file:rpc", "path": "net/rpc.c"},
+          {"tag": "surface:entry:file-input", "subject_id": "asr:source_file:mods", "path": "mods/load.c"},
+          {"tag": "surface:entry:cli", "subject_id": "asr:source_file:parse", "path": "net/parse.c"}])}
+
 RUN_ONE = [("F1", "net/parse.c", "CWE-416", "use(buffer);"), ("F2", "net/old.c", "CWE-121", "strcpy(b, p);")]
 RUN_TWO = [("F1", "net/parse.c", "CWE-416", "use(buffer);"), ("F3", "net/new.c", "CWE-190", "n = a * b;")]
 
 
 @pytest.fixture
 def runs(monkeypatch):
-    table = {"run-1": documents(RUN_ONE), "run-2": documents(RUN_TWO)}
+    table = {"run-1": documents(RUN_ONE), "run-2": documents(RUN_TWO), "run-3": documents(RUN_ONE)}
 
     def load(run_root):
         if Path(run_root).name not in table:
@@ -71,6 +91,9 @@ def runs(monkeypatch):
         return table[Path(run_root).name]
 
     monkeypatch.setattr(run_adapter, "load_run", load)
+    # The second read boundary: a run with no accepted review documents derives no coverage.
+    monkeypatch.setattr(coverage_adapter, "load_coverage_documents", lambda run_root: COVERAGE.get(
+        Path(run_root).name, CoverageDocuments(gaps=("reviewed_units_not_derived:review_handoff_unavailable",))))
     return table
 
 
@@ -103,7 +126,9 @@ def test_snapshot_publishes_once_and_reports_its_gaps(tmp_path, runs, capsys):
     assert cli.main(arguments) == 0
     first = json.loads(capsys.readouterr().out)
     assert (first["status"], first["run_id"], first["findings"]) == ("published", "run-1", 2)
-    assert first["gaps"] == ["reviewed_units_not_supplied"] and first["slice_rules_sha256"] is None
+    # no --units: the units are derived from the run, and a run that cannot give them names why
+    assert first["gaps"] == ["reviewed_units_not_derived:review_handoff_unavailable"]
+    assert first["slice_rules_sha256"] is None
     assert Path(first["path"]).is_file()
     assert cli.main(arguments) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "duplicate"
@@ -286,7 +311,7 @@ def test_scorecard_derives_lead_records_and_key_labels_from_the_run(tmp_path, ru
     assert (effect["true_lead_retention"]["numerator"], effect["true_lead_retention"]["denominator"]) == (1, 2)
     assert effect["true_leads_removed_by_stage"]["red_no_proposal"] == 1
     assert effect["control_false_positive_rate"]["value"] == 1.0      # the lead on control c1 survived
-    assert document["input_gaps"] == []
+    assert not [gap for gap in document["input_gaps"] if gap.startswith(("lead", "dismissal"))]
     assert scorecard(tmp_path, "--run", run, "--key", str(key)) == 0
     assert "   true-lead retention 1/2 (0.500" in capsys.readouterr().out
     # without a key the records are derived and the labels are named as missing, never invented
@@ -317,3 +342,57 @@ def test_scorecard_refuses_operator_lead_files_beside_a_run_and_a_run_of_another
         assert "not both" in capsys.readouterr().err
     assert scorecard(tmp_path, "--run", str(tmp_path / "runs" / "run-1")) == 2
     assert "not --run-id 'run-2'" in capsys.readouterr().err
+
+
+# ------------------------------------------------------- units and entry points derived from the run (T-073)
+
+def test_snapshot_derives_the_reviewed_units_when_no_units_file_is_given(tmp_path, runs, capsys):
+    assert cli.main(["snapshot", "--run", str(tmp_path / "runs" / "run-3"), "--target-id", "game",
+                     "--source-revision", "3" * 40, "--history", str(tmp_path / "history")]) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["gaps"] == ["units_below_hunt_cutoff:1"], "the generic not-supplied gap is gone"
+    stored = json.loads(Path(receipt["path"]).read_text(encoding="utf-8"))
+    assert stored["reviewed_units"] == {"net/parse.c": "a" * 64}
+    assert stored["unreviewed_units"] == {"mods/load.c": "not_packaged", "net/rpc.c": "cells_incomplete"}
+
+
+def test_an_operator_units_file_still_wins_over_the_derivation(tmp_path, runs, capsys):
+    assert publish(tmp_path, "run-3", "3" * 40, {"net/other.c": None}) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["gaps"] == []
+    assert json.loads(Path(receipt["path"]).read_text(encoding="utf-8"))["reviewed_units"] == {"net/other.c": None}
+
+
+def test_scorecard_derives_the_entry_point_catalogue_from_the_run(tmp_path, runs, lead_runs, capsys):
+    assert publish(tmp_path, "run-3", "3" * 40, {"net/parse.c": "a" * 64}) == 0
+    capsys.readouterr()
+    arguments = ["scorecard", "--history", str(tmp_path / "history"), "--target-id", "game", "--run-id", "run-3",
+                 "--prior-run-id", "none", "--run", str(tmp_path / "runs" / "run-3")]
+    assert cli.main([*arguments, "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    entry = document["coverage"]["entry_points"]
+    assert entry["available"] is True and entry["total"] == 3
+    assert entry["by_status"] == {"reviewed": 1, "not_admitted": 1, "not_built": 1}
+    assert entry["uncovered_by_reason"] == {"cells_incomplete": 1, "no_build_unit": 1}
+    assert {"entry_point_kind_unmapped:parser", "entry_tags_without_kind:1"} <= set(document["input_gaps"])
+    assert cli.main(arguments) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "   entry points reviewed: 1/3 (0.333)" in lines and "   uncovered entry points: 2" in lines
+    # an operator catalogue is used as given and the run is not asked for one
+    catalogue = tmp_path / "entries.json"
+    catalogue.write_text(json.dumps([{"entry_id": "e1", "kind": "parser", "path": "net/parse.c",
+                                      "status": "reviewed"}]), encoding="utf-8")
+    assert cli.main([*arguments, "--entry-points", str(catalogue), "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    assert document["coverage"]["entry_points"]["by_kind"]["parser"]["total"] == 1
+    assert "entry_point_kind_unmapped:parser" not in document["input_gaps"]
+
+
+def test_scorecard_names_a_run_that_yields_no_entry_point_catalogue(tmp_path, runs, lead_runs, capsys):
+    both_runs(tmp_path)
+    capsys.readouterr()
+    assert scorecard(tmp_path, "--run", str(tmp_path / "runs" / "run-2")) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert "   entry points reviewed: n/a (entry_point_catalog_unavailable)" in lines
+    assert "   gap (derived input): entry_points_not_derived:security_tags_unavailable" in lines
+    assert "   gap (derived input): reviewed_units_not_derived:review_handoff_unavailable" in lines
