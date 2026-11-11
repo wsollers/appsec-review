@@ -43,6 +43,12 @@ CONTRACT = JobContract(
                          "appsec-review/binary-evidence-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_review_intake", "review_intake",
                          "appsec-review/review-intake/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        # The publish step composes the binary shards onto the catalog's accepted retrieval manifest,
+        # so the envelope that carries that manifest is a required, pinned input. Inherited catalog
+        # shards are integrity-verified and carried forward by identity; none is queried.
+        InputRequirement("job_target_catalog", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),
     ),
     schedule_after=('job_target_catalog',),
     dispatch=DispatchClass.REVIEW_GRAPH,

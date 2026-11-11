@@ -237,7 +237,11 @@ def test_invalid_target_artifact_provenance_is_rejected_before_payload_access(tm
     catalog = SimpleNamespace(source_fingerprint="target", handoff_sha256="b" * 64,
                               target_artifact_inventory_available=True, target_artifact_gaps=(),
                               target_artifacts=(raw,))
-    monkeypatch.setattr(evidence, "load_target_catalog", lambda _: catalog)
+    def load_catalog_without_intake(_root, *, intake_target_root):
+        # Artifact indexing declares no job_review_intake input, so it must not ask for that read.
+        assert intake_target_root is False
+        return catalog
+    monkeypatch.setattr(evidence, "load_target_catalog", load_catalog_without_intake)
     monkeypatch.setattr(shared, "verify_reference",
                         lambda *args: pytest.fail("invalid provenance reached payload verification"))
     unit = SimpleNamespace(job=SimpleNamespace(run_root=tmp_path, source_fingerprint="target"))

@@ -18,7 +18,7 @@ of every private reader, enabled-job combination, race or live tool path.
 | `job_ci_configuration_analysis` | Accepted catalog/source context; static CI definitions. |
 | `job_target_analysis_plan` | Accepted catalog, history and environment; CI scheduling does not itself grant consumption. |
 | `job_project_build` | Accepted plan/catalog/environment and configured build profiles. |
-| `job_language_build` | Accepted project/plan/catalog/intake and exact build/workspace references. |
+| `job_language_build` | Accepted project/plan/catalog/intake, the plan-bound environment publication, and exact build/workspace references. |
 | `job_build_iteration` | Immutable controller request and selected build inputs; internal transaction, never an unconditional review publisher. |
 | `job_tree_sitter_ast` | Accepted intake/catalog/language-build context and source/generated-source identity. |
 | `job_change_context_analysis` | Catalog/history/Tree-sitter handoffs and original shards. |
@@ -27,14 +27,14 @@ of every private reader, enabled-job combination, race or live tool path.
 | `job_test_coverage` | Accepted catalog/build/artifacts; imported coverage, not test execution. |
 | `job_profile_data` | Accepted catalog/build/artifacts; imported workload observations. |
 | `job_artifact_security_analysis` | Accepted language build/artifact catalog and exact scanner inputs. |
-| `job_evidence_collection` | Catalog/intake/plan plus selected immutable local feed snapshots. |
+| `job_evidence_collection` | Catalog/intake/plan, the plan-bound environment publication, plus selected immutable local feed snapshots. |
 | `job_cpp_compiled_analysis` | Accepted native language build, catalog, plan and scanner seed context. |
 | `job_clang_static_analysis` | Accepted C++ scopes and original catalog/scanner seeds. |
 | `job_svf_alias_analysis` | Accepted C++ bitcode/scopes and original seed context; disabled selection stays explicit. |
 | `job_cpp_symbol_index` | Accepted C++ scopes and original catalog/scanner seed context. |
 | `job_cpg_analysis` | Accepted C++ scopes/seed context; deprecated/disabled coverage is not clean evidence. |
 | `job_sanitizer_build` | Accepted native language-build recipe/workspace; compilation only. |
-| `job_binary_evidence_indexing` | Intake-frozen binary publication references. |
+| `job_binary_evidence_indexing` | Intake-frozen binary publication references; the accepted catalog envelope for its retrieval manifest only. |
 | `job_post_build_security_assessment` | Accepted compiled/build/plan/catalog/environment properties. |
 | `job_dependency_intelligence` | Catalog/build/artifact/scanner/compiled inputs and selected feed snapshots. |
 | `job_codeql_analysis` | Accepted plan/build/catalog plus explicitly declared scanner, compiled, symbol and source context. |
