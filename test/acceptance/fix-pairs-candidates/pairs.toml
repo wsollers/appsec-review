@@ -1,0 +1,471 @@
+# Draft fix-pair corpus for T-067. UNREVIEWED: produced from public advisory and commit pages only.
+# Nothing was cloned or built. See docs/reviews/fix-pair-corpus-candidates.md before using any pair.
+
+[corpus]
+name = "game-fix-pairs-candidates"
+holdout = false
+description = "UNREVIEWED DRAFT. Candidate CVE fix pairs in open game, engine and game-networking code, assembled from public advisory and commit pages; no revision was cloned, built or pinned. Not a scoring key until the owner reviews it (docs/reviews/fix-pair-corpus-candidates.md)."
+
+[[pair]]
+id = "gns-cve-2020-6016"
+project = "ValveSoftware/GameNetworkingSockets"
+advisory = "CVE-2020-6016"
+license = "BSD-3-Clause"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2020-6016"
+pre_revision = "e950c994de831c02972e4d11495ca83146b9714b"
+post_revision = "e0c86dcb9139771db3db0cfdb1fb8bef0af19c43"
+path = "src/steamnetworkingsockets/clientlib/steamnetworkingsockets_snp.cpp"
+line = 580
+end_line = 584
+scope_start = 577
+scope_end = 587
+cwe = "CWE-590"
+severity = "critical"
+attacker_position = "peer_to_peer"
+weakness_class = "bitstream_length_handling"
+
+[[pair]]
+id = "gns-cve-2020-6018"
+project = "ValveSoftware/GameNetworkingSockets"
+advisory = "CVE-2020-6018"
+license = "BSD-3-Clause"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2020-6018"
+pre_revision = "d885e72b436b0f76d73c8926de7368c1a2fad173"
+post_revision = "bea84e2844b647532a9b7fbc3a6a8989d66e49e3"
+path = "src/common/crypto_libsodium.cpp"
+line = 75
+end_line = 85
+scope_start = 72
+scope_end = 88
+cwe = "CWE-120"
+severity = "critical"
+attacker_position = "peer_to_peer"
+weakness_class = "output_buffer_size_not_checked"
+
+[[pair]]
+id = "gns-cve-2020-6019"
+project = "ValveSoftware/GameNetworkingSockets"
+advisory = "CVE-2020-6019"
+license = "BSD-3-Clause"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2020-6019"
+pre_revision = "e0c86dcb9139771db3db0cfdb1fb8bef0af19c43"
+post_revision = "d944a10808891d202bb1d5e1998de6e0423af678"
+path = "src/steamnetworkingsockets/clientlib/steamnetworkingsockets_udp.cpp"
+line = 843
+end_line = 843
+scope_start = 840
+scope_end = 848
+cwe = "CWE-248"
+severity = "high"
+attacker_position = "peer_to_peer"
+weakness_class = "bitstream_length_handling"
+
+[[pair]]
+id = "teeworlds-cve-2020-12066"
+project = "teeworlds/teeworlds"
+advisory = "CVE-2020-12066"
+license = "Zlib"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2020-12066"
+pre_revision = "b992b0a5e114ecfb06fb5155029dbc5238614cbe"
+post_revision = "c68402fa7e279d42886d5951d1ea8ac2facc1ea5"
+path = "src/engine/server/server.cpp"
+line = 499
+end_line = 500
+scope_start = 496
+scope_end = 503
+cwe = "CWE-20"
+severity = "high"
+attacker_position = "client_to_server"
+weakness_class = "client_id_not_validated"
+
+[[pair]]
+id = "teeworlds-cve-2016-9400"
+project = "teeworlds/teeworlds"
+advisory = "CVE-2016-9400"
+license = "Zlib"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2016-9400"
+pre_revision = "3e1d02283896d4b03e1ab9f9ef20ce4c30c8a0cd"
+post_revision = "ff254722a2683867fcb3e67569ffd36226c4bc62"
+path = "src/engine/client/client.cpp"
+line = 1242
+end_line = 1242
+scope_start = 1239
+scope_end = 1245
+cwe = "CWE-119"
+severity = "critical"
+attacker_position = "server_to_client"
+weakness_class = "snapshot_part_bounds"
+
+[[pair]]
+id = "teeworlds-cve-2019-10878"
+project = "teeworlds/teeworlds"
+advisory = "CVE-2019-10878"
+license = "Zlib"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2019-10878"
+pre_revision = "d25869626a8cfbdd320929ba93ce73abed1402ce"
+post_revision = "e086f4b35b1adf7edc35b4ad332dc7ed1edc5988"
+path = "src/engine/shared/datafile.cpp"
+line = 313
+end_line = 329
+scope_start = 249
+scope_end = 330
+cwe = "CWE-787"
+severity = "critical"
+attacker_position = "hostile_content"
+weakness_class = "map_index_bounds"
+
+[[pair]]
+id = "teeworlds-cve-2019-10879"
+project = "teeworlds/teeworlds"
+advisory = "CVE-2019-10879"
+license = "Zlib"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2019-10879"
+pre_revision = "40bedbecbd004d13e435d79fb7be3f3d55787d9a"
+post_revision = "4d529dcd2d01022e979ebfa0b91167dee37cdb8e"
+path = "src/engine/shared/datafile.cpp"
+line = 131
+end_line = 140
+scope_start = 128
+scope_end = 143
+cwe = "CWE-190"
+severity = "critical"
+attacker_position = "hostile_content"
+weakness_class = "map_header_size_overflow"
+
+[[pair]]
+id = "ioq3-cve-2017-11721"
+project = "ioquake/ioq3"
+advisory = "CVE-2017-11721"
+license = "GPL-2.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2017-11721"
+pre_revision = "2d6171f44c72177a4b996eb721f353839fb5273d"
+post_revision = "d2b1d124d4055c2fcbe5126863487c52fd58cca1"
+path = "code/qcommon/msg.c"
+line = 179
+end_line = 218
+scope_start = 167
+scope_end = 220
+cwe = "CWE-119"
+severity = "critical"
+attacker_position = "client_to_server"
+weakness_class = "bitstream_length_handling"
+
+[[pair]]
+id = "chocolate-doom-cve-2020-14983"
+project = "chocolate-doom/chocolate-doom"
+advisory = "CVE-2020-14983"
+license = "GPL-2.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2020-14983"
+pre_revision = "5bf73c4864fedb6b97b27bf302435a1168ba8f4c"
+post_revision = "f1a8d991aa8a14afcb605cf2f65cd15fda204c56"
+path = "src/net_structrw.c"
+line = 119
+end_line = 122
+scope_start = 116
+scope_end = 122
+cwe = "CWE-120"
+severity = "critical"
+attacker_position = "client_to_server"
+weakness_class = "client_count_not_validated"
+
+[[pair]]
+id = "minetest-cve-2022-24300"
+project = "luanti-org/luanti"
+advisory = "CVE-2022-24300"
+license = "LGPL-2.1-or-later"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2022-24300"
+pre_revision = "ed0882fd58fb0f663cc115d23a11643874facc06"
+post_revision = "b5956bde259faa240a81060ff4e598e25ad52dae"
+path = "src/itemstackmetadata.cpp"
+line = 42
+end_line = 43
+scope_start = 40
+scope_end = 46
+cwe = "CWE-74"
+severity = "critical"
+attacker_position = "client_to_server"
+weakness_class = "serialization_delimiter_injection"
+
+[[pair]]
+id = "minetest-cve-2022-24301"
+project = "luanti-org/luanti"
+advisory = "CVE-2022-24301"
+license = "LGPL-2.1-or-later"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2022-24301"
+pre_revision = "d28f1b01707dfa15e770096a26495452513bc56f"
+post_revision = "3693b6871eba268ecc79b3f52d00d3cefe761131"
+path = "src/network/serverpackethandler.cpp"
+line = 633
+end_line = 639
+scope_start = 630
+scope_end = 642
+cwe = "CWE-276"
+severity = "medium"
+attacker_position = "client_to_server"
+weakness_class = "server_trust_in_client_state"
+
+[[pair]]
+id = "minetest-cve-2022-35978"
+project = "luanti-org/luanti"
+advisory = "CVE-2022-35978"
+license = "LGPL-2.1-or-later"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2022-35978"
+pre_revision = "bccaf5fc2d11c31615d64b9bca91f908d06b7044"
+post_revision = "da71e86633d0b27cd02d7aac9fdac625d141ca13"
+path = "src/script/lua_api/l_settings.cpp"
+line = 41
+end_line = 58
+cwe = "CWE-693"
+severity = "high"
+attacker_position = "hostile_content"
+weakness_class = "mod_sandbox_escape"
+
+[[pair]]
+id = "luanti-cve-2026-41196"
+project = "luanti-org/luanti"
+advisory = "CVE-2026-41196"
+license = "LGPL-2.1-or-later"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2026-41196"
+pre_revision = "b3de90634a3061b9612eecf2067b3e3d2075db3a"
+post_revision = "8a929dfb97aa08337f49ba1bb96a56d6557dc896"
+path = "src/script/cpp_api/s_security.cpp"
+line = 28
+end_line = 49
+scope_start = 25
+scope_end = 410
+cwe = "CWE-94"
+severity = "critical"
+attacker_position = "hostile_content"
+weakness_class = "mod_sandbox_escape"
+
+[[pair]]
+id = "godot-cve-2021-26826"
+project = "godotengine/godot"
+advisory = "CVE-2021-26826"
+license = "MIT"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2021-26826"
+pre_revision = "1d1310f3d7fbde091771ee7bb98bb94e60432696"
+post_revision = "403e4fd08b0b212e96f53d926e6273e0745eaa5a"
+path = "modules/tga/image_loader_tga.cpp"
+line = 133
+end_line = 175
+scope_start = 82
+scope_end = 191
+cwe = "CWE-787"
+severity = "high"
+attacker_position = "hostile_content"
+weakness_class = "image_decoder_bounds"
+
+[[pair]]
+id = "sdl-cve-2021-33657"
+project = "libsdl-org/SDL"
+advisory = "CVE-2021-33657"
+license = "Zlib"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2021-33657"
+pre_revision = "056c09942dbffaa128612fc6f1969ab0fc28e2ac"
+post_revision = "8c91cf7dba5193f5ce12d06db1336515851c9ee9"
+path = "src/video/SDL_pixels.c"
+line = 950
+end_line = 950
+scope_start = 947
+scope_end = 977
+cwe = "CWE-787"
+severity = "high"
+attacker_position = "hostile_content"
+weakness_class = "palette_index_bounds"
+
+[[pair]]
+id = "rathena-cve-2025-58447"
+project = "rathena/rathena"
+advisory = "CVE-2025-58447"
+license = "GPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2025-58447"
+pre_revision = "6f23443ab8169afe7295a8375f7532af45947912"
+post_revision = "2f5248b9cd9a8c6b42422ddecfc4cc2cd0e69e4b"
+path = "src/login/loginclif.cpp"
+line = 343
+end_line = 343
+scope_start = 340
+scope_end = 346
+cwe = "CWE-122"
+severity = "critical"
+attacker_position = "client_to_server"
+weakness_class = "packet_length_field_trusted"
+
+[[pair]]
+id = "rathena-cve-2025-58448"
+project = "rathena/rathena"
+advisory = "CVE-2025-58448"
+license = "GPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2025-58448"
+pre_revision = "2f5248b9cd9a8c6b42422ddecfc4cc2cd0e69e4b"
+post_revision = "0d89ae071ff5e46e8dedcf45d060acec84b3abb5"
+path = "src/web/partybooking_controller.cpp"
+line = 259
+end_line = 259
+scope_start = 252
+scope_end = 262
+cwe = "CWE-89"
+severity = "critical"
+attacker_position = "client_to_server"
+weakness_class = "sql_injection"
+
+[[pair]]
+id = "rathena-cve-2025-58750"
+project = "rathena/rathena"
+advisory = "CVE-2025-58750"
+license = "GPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2025-58750"
+pre_revision = "0d89ae071ff5e46e8dedcf45d060acec84b3abb5"
+post_revision = "0cc348b186bbcc3c604c17c39589a319f27d469b"
+path = "src/char/char_clif.cpp"
+line = 79
+end_line = 87
+scope_start = 76
+scope_end = 90
+cwe = "CWE-787"
+severity = "high"
+attacker_position = "client_to_server"
+weakness_class = "client_index_not_validated"
+
+[[pair]]
+id = "rathena-cve-2025-62170"
+project = "rathena/rathena"
+advisory = "CVE-2025-62170"
+license = "GPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2025-62170"
+pre_revision = "6b5c231ff08faa4027bb3b1806295b889c5ae9e0"
+post_revision = "af2f3ba33fc03dc6dd510f8cfe84cd9185af748d"
+path = "src/map/clif.cpp"
+line = 16718
+end_line = 16718
+scope_start = 16715
+scope_end = 16721
+cwe = "CWE-416"
+severity = "high"
+attacker_position = "client_to_server"
+weakness_class = "stale_inventory_reference"
+
+[[pair]]
+id = "freeciv21-cve-2026-33250"
+project = "longturn/freeciv21"
+advisory = "CVE-2026-33250"
+license = "GPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2026-33250"
+pre_revision = "2b1aedc1c7b4607ae2e646b51379d94b1d8fe4bc"
+post_revision = "ad8e18ca22595529599782b2984bf44df8d69ed6"
+path = "common/networking/packets.cpp"
+line = 464
+end_line = 464
+scope_start = 336
+scope_end = 465
+cwe = "CWE-121"
+severity = "high"
+attacker_position = "client_to_server"
+weakness_class = "recursive_packet_decompression"
+
+[[pair]]
+id = "freeciv-cve-2026-90556"
+project = "freeciv/freeciv"
+advisory = "CVE-2026-90556"
+license = "GPL-2.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2026-90556"
+pre_revision = "b1b0768bfaca9b2fae68f9466defe1e80636e9fa"
+post_revision = "75ecde3e86ddf2fe775768450e9a290a4f4d4387"
+path = "server/savegame/savegame3.c"
+line = 980
+end_line = 983
+scope_start = 979
+scope_end = 984
+cwe = "CWE-122"
+severity = "high"
+attacker_position = "hostile_content"
+weakness_class = "savegame_length_field_trusted"
+
+[[pair]]
+id = "freeciv-cve-2026-90557"
+project = "freeciv/freeciv"
+advisory = "CVE-2026-90557"
+license = "GPL-2.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2026-90557"
+pre_revision = "75ecde3e86ddf2fe775768450e9a290a4f4d4387"
+post_revision = "ef0c76c2765fe383140eb1a70dbea1228844152e"
+path = "server/savegame/savegame3.c"
+line = 6121
+end_line = 6122
+scope_start = 6115
+scope_end = 6125
+cwe = "CWE-125"
+severity = "medium"
+attacker_position = "hostile_content"
+weakness_class = "savegame_index_not_validated"
+
+[[pair]]
+id = "assimp-cve-2026-117608"
+project = "assimp/assimp"
+advisory = "CVE-2026-117608"
+license = "BSD-3-Clause"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2026-117608"
+pre_revision = "1edd666bbe6370e316716d1b2b74e04a24901493"
+post_revision = "7dbc85d9218fae017d4fad70269e7569f7b0c870"
+path = "code/AssetLib/MD2/MD2Loader.cpp"
+line = 174
+end_line = 180
+scope_start = 171
+scope_end = 183
+cwe = "CWE-190"
+severity = "medium"
+attacker_position = "hostile_content"
+weakness_class = "asset_header_size_overflow"
+
+[[pair]]
+id = "tinygltf-cve-2022-3008"
+project = "syoyo/tinygltf"
+advisory = "CVE-2022-3008"
+license = "MIT"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2022-3008"
+pre_revision = "544969b7324cd6bba29f6203c7d78c7ea92dbab0"
+post_revision = "52ff00a38447f06a17eab1caa2cf0730a119c751"
+path = "tiny_gltf.h"
+line = 2607
+end_line = 2655
+cwe = "CWE-78"
+severity = "high"
+attacker_position = "hostile_content"
+weakness_class = "asset_path_shell_expansion"
+
+[[pair]]
+id = "akashi-cve-2022-31135"
+project = "AttorneyOnline/akashi"
+advisory = "CVE-2022-31135"
+license = "AGPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2022-31135"
+pre_revision = "78f3e1d3d175c94c14734b3b2d0a3f1167eec2f7"
+post_revision = "5566cdfedddef1f219aee33477d9c9690bf2f78b"
+path = "core/src/packets.cpp"
+line = 381
+end_line = 381
+scope_start = 378
+scope_end = 397
+cwe = "CWE-129"
+severity = "medium"
+attacker_position = "client_to_server"
+weakness_class = "client_index_off_by_one"
+
+[[pair]]
+id = "moonlight-cve-2023-42801"
+project = "moonlight-stream/moonlight-common-c"
+advisory = "CVE-2023-42801"
+license = "GPL-3.0"
+source = "https://nvd.nist.gov/vuln/detail/CVE-2023-42801"
+pre_revision = "8b84d17c8d34e76d2531c6695d61349776474df2"
+post_revision = "b2497a3918a6d79808d9fd0c04734786e70d5954"
+path = "src/Misc.c"
+line = 83
+end_line = 108
+scope_start = 82
+scope_end = 111
+cwe = "CWE-120"
+severity = "high"
+attacker_position = "server_to_client"
+weakness_class = "unbounded_string_copy"
