@@ -411,7 +411,7 @@ def _mount_artifact(run_root, output, handoff, path, masks, *, signature=True):
 
 
 def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expected, actual, masks):
-    """Prove only source-history's Desktop-to-checkout bind aliases, atomically in a comparison copy."""
+    """Prove only source-history's Desktop/checkout bind aliases, atomically in a comparison copy."""
     if job_id != "job_source_history_analysis":
         return []
     if all(expected["outputs"].get(unit, {}).get("executions") == actual["outputs"].get(unit, {}).get("executions")
@@ -460,7 +460,7 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
         handoffs.append(handoff)
         claim_refs.append(claim_ref)
 
-    aliases, changes, signatures, output_mounts = {}, [], [], []
+    aliases, changes, signatures, output_mounts = ({}, {}), [], [], []
 
     def project_execution(before, after, projected, unit, name):
         step, task = unit.split(".")
@@ -489,19 +489,27 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
                 _mount_path(mount["runtime_source"])
                 suffixes.append(suffix)
             left, right = before["mounts"][index], after["mounts"][index]
-            match = DESKTOP_BIND.fullmatch(left["runtime_source"])
-            host_root = native / ("targets" if destination == "/target" else "runs")
-            if (not match or match[2] != suffixes[0]
-                    or right["runtime_source"] != str(host_root / suffixes[1])):
-                return None
-            if aliases.setdefault(str(root), match[1]) != match[1]:
+            host_root = str(native / ("targets" if destination == "/target" else "runs"))
+            runtime_roots = []
+            for side, (mount, suffix) in enumerate(zip((left, right), suffixes)):
+                runtime_root = host_root
+                if mount["runtime_source"] != f"{host_root}/{suffix}":
+                    match = DESKTOP_BIND.fullmatch(mount["runtime_source"])
+                    if not match or match[2] != suffix:
+                        return None
+                    runtime_root = match[1]
+                if aliases[side].setdefault(str(root), runtime_root) != runtime_root:
+                    return None
+                runtime_roots.append(runtime_root)
+            if runtime_roots[0] != runtime_roots[1] and host_root not in runtime_roots:
+                # This proof does not authorize remapping one Desktop alias to another.
                 return None
             projected["mounts"][index]["runtime_source"] = masks.text(left["runtime_source"])
             mounts.append({"field": f"mounts[{index}].runtime_source", "source": left["source"],
                            "actual_source": right["source"], "target": destination, "read_only": readonly,
                            "expected_runtime_source": left["runtime_source"],
                            "actual_runtime_source": right["runtime_source"], "logical_root": str(root),
-                           "expected_runtime_root": match[1], "actual_runtime_root": str(host_root),
+                           "expected_runtime_root": runtime_roots[0], "actual_runtime_root": runtime_roots[1],
                            "expected_relative_suffix": suffixes[0], "actual_relative_suffix": suffixes[1]})
         return mounts
 
@@ -549,9 +557,11 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
                     return []
         if not account(before, after, projected, mounts):
             return []
-    roots = list(aliases.values())
-    if len(set(roots)) != 2 or PurePosixPath(roots[0]).parent != PurePosixPath(roots[1]).parent:
-        return []
+    native_roots = {str(native / "targets"), str(native / "runs")}
+    for side in aliases:
+        roots = [value for value in side.values() if value not in native_roots]
+        if len(set(roots)) != len(roots) or len({PurePosixPath(root).parent for root in roots}) > 1:
+            return []
     # No mutation until every copy, raw pin, suffix and remaining normalized byte has matched.
     for new_signature, old_signature in signatures:
         new_signature.update(old_signature)

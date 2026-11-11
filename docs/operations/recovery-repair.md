@@ -195,10 +195,13 @@ the same repository/target, source fingerprint and configuration. Each affected 
 raw reference must match its publication, and its original normalized signature must reproduce
 from those exact bytes, including the preserved key's digests.
 
-The verified original execution receipts bind logical `source` paths to their recorded Docker
-Desktop `runtime_source` aliases. Accounting requires consistent, distinct target/runs alias
-roots from one distribution, exact claim-owned relative suffixes on both attempts, and the new
-runtime paths rooted in the current checkout. Path shape alone is not proof. The embedded
+The verified execution receipts bind logical `source` paths to their recorded `runtime_source`
+paths. Either side may use the exact native checkout root or a Docker Desktop alias. Accounting
+permits Desktop/native changes in either direction and unchanged mounts (including a native
+target alongside changed scratch/gitdir mounts), but not Desktop-to-different-Desktop remaps.
+Within each attempt, each logical root must map consistently, and any Desktop roots must be
+distinct and from one distribution. Both sides retain exact claim-owned relative suffixes.
+Path shape alone is not proof. The embedded
 execution copies must match their pinned unit results; the separately published `log` and
 `messages` receipts must also agree with those copies. The `tree` execution's retained proof is
 its hash-pinned `bind_snapshot/result.json` copy, not an unpinned scratch file.
@@ -220,7 +223,7 @@ Current comparison accounting is closed, not a producer-wide exemption:
 | Any replay's `claim.json` | Verified current admission reference and admitted checkpoint decisions/conservative runner fallback, only if the rest of the normalized claim matches | Strict existing normalized diff |
 | `job_model_connectivity`, `steps/connectivity/tasks/verify_models/model-connectivity.json` | Temporary pass-01 workaround: only unrelated names added/removed from `providers.<provider>.listed`, after raw-reference and normalized-signature proof | Strict; configured/checked models, results, provider set, transport, errors and gaps cannot change |
 | `job_review_intake`, `steps/model_preflight/tasks/verify_models/model-preflight.json` | Temporary pass-04 workaround: the identical inventory-only rule for this named artifact | Strict, as above |
-| `job_source_history_analysis`, `acquire.git_history` and `resolve_sources.bind_snapshot` result JSON, plus the published `log`/`messages` execution JSON | Only the proved Desktop-to-checkout mount aliases described above, including their dependent normalized signatures | Strict; all raw pins and the rest of each normalized artifact must match |
+| `job_source_history_analysis`, `acquire.git_history` and `resolve_sources.bind_snapshot` result JSON, plus the published `log`/`messages` execution JSON | Only the proved Desktop/native mount aliases described above, in either direction with unchanged mounts permitted, including their dependent normalized signatures | Strict; all raw pins and the rest of each normalized artifact must match |
 | Every other artifact/producer | No additional equivalence rule | Strict existing normalized diff |
 
 Comparison receipts retain both `unadjusted_differences` and the final `differences`, alongside

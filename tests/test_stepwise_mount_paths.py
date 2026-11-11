@@ -31,6 +31,8 @@ def mount_walk(tmp_path, monkeypatch, request):
     target = tmp_path / "targets/fixture"
     target.mkdir(parents=True)
     control = SimpleNamespace(change=lambda document, unit: None, receipt_change=lambda document: None)
+    routes = request.param if isinstance(getattr(request, "param", None), tuple) else (
+        (True, True), (False, False))
 
     def produce(unit):
         old = unit.job.attempt_id == "attempt_0001"
@@ -43,14 +45,15 @@ def mount_walk(tmp_path, monkeypatch, request):
             for source, destination, readonly in zip(sources, ("/target", "/scratch", "/gitdir"), (True, False, True)):
                 root = tmp_path / ("targets" if destination == "/target" else "runs")
                 alias = f"{DESKTOP}/{'a' * 64 if destination == '/target' else 'b' * 64}"
+                desktop = routes[0 if old else 1][0 if destination == "/target" else 1]
                 mounts.append({"source": str(source), "target": destination, "read_only": readonly,
-                               "runtime_source": f"{alias}/{source.relative_to(root)}" if old else str(source)})
+                               "runtime_source": f"{alias}/{source.relative_to(root)}" if desktop else str(source)})
             execution = {"schema": "appsec-review/container-execution/1", "tool_id": "tool-git",
                          "receipt_path": path.relative_to(unit.job.run_root).as_posix(),
                          "mounts": mounts, "exit_code": 0, "timed_out": False, "terminal_status": "SUCCEEDED"}
             executions.append(execution)
         document = {"executions": executions, "gaps": [], "terminal_status": "SUCCEEDED", "count": 7}
-        if old and hasattr(request, "param"):
+        if old and isinstance(getattr(request, "param", None), str):
             mount = executions[0]["mounts"][1]
             if request.param == "foreign-root":
                 mount["runtime_source"] = mount["runtime_source"].replace("/run/desktop/", "/foreign/desktop/")
@@ -149,7 +152,18 @@ def mount_walk(tmp_path, monkeypatch, request):
                            masks=stepwise.masks_for(run_id, str(target)))
 
 
-def test_verified_mount_aliases_preserve_evidence_and_reacceptance(mount_walk):
+@pytest.mark.parametrize("mount_walk,changed_mounts", [
+    (((True, True), (False, False)), 9),
+    (((False, False), (True, True)), 9),
+    (((False, False), (False, True)), 6),
+    (((False, True), (False, False)), 6),
+    (((True, False), (True, True)), 6),
+    (((True, True), (True, False)), 6),
+], indirect=["mount_walk"], ids=[
+    "forward", "reverse", "reverse-native-target", "forward-native-target",
+    "reverse-desktop-target", "forward-desktop-target",
+])
+def test_verified_mount_aliases_preserve_evidence_and_reacceptance(mount_walk, changed_mounts):
     walk = mount_walk
     key_root = stepwise.ACCEPTANCE_ROOT / "mount-v1"
     original = {path: path.read_bytes() for path in key_root.rglob("*") if path.is_file()}
@@ -162,7 +176,9 @@ def test_verified_mount_aliases_preserve_evidence_and_reacceptance(mount_walk):
     changes = comparison["verified_mount_path_changes"]
     assert len(changes) == 4
     assert sum(len(change["mounts"]) for change in changes) == 15
-    assert sum(entry["class"] != "volatile" for entry in comparison["unadjusted_differences"]) >= 13
+    assert sum(entry["path"].endswith(".runtime_source")
+               for entry in comparison["unadjusted_differences"]) == changed_mounts
+    assert sum(entry["class"] != "volatile" for entry in comparison["unadjusted_differences"]) >= changed_mounts + 4
     for change in changes:
         for side in ("expected", "actual"):
             verify_reference(walk.run_root, change[f"{side}_reference"])
@@ -199,9 +215,12 @@ def compare(walk, result, actual=None):
                                     Path(result["attempt_root"]), document if actual is None else actual, walk.masks)
 
 
+@pytest.mark.parametrize("mount_walk", [None, ((False, False), (False, True))],
+                         indirect=True, ids=["forward", "reverse-mixed"])
 @pytest.mark.parametrize("damage", [
     "source", "native-root", "relative-suffix", "target", "read-only", "integer-read-only", "traversal",
     "content", "unrelated-path", "schema", "tool", "missing-mount", "extra-mount", "partial-proof", "receipt-copy",
+    "inconsistent-root",
 ])
 def test_mount_mapping_does_not_hide_nonqualifying_changes(mount_walk, damage):
     walk = mount_walk
@@ -236,6 +255,9 @@ def test_mount_mapping_does_not_hide_nonqualifying_changes(mount_walk, damage):
             document["executions"][0]["mounts"].append(deepcopy(mount))
         elif damage == "partial-proof" and unit == "resolve_sources.bind_snapshot":
             mount["runtime_source"] += "/other"
+        elif damage == "inconsistent-root":
+            mount["runtime_source"] = mount["runtime_source"].replace("b" * 64, "d" * 64).replace(
+                str(walk.root / "runs"), f"{DESKTOP}/{'d' * 64}")
 
     walk.control.change = change
     if damage == "receipt-copy":
