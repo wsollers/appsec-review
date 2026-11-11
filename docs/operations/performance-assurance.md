@@ -74,8 +74,9 @@ The target lane admits every analysis capability. The supply_chain lane admits o
 machine code; see [produced-artifact security analysis](artifact-security-analysis.md)). The
 evidence lane admits only `inventory`. The excluded
 lane admits nothing. `runtime_dependency` marks a package that npm's installer record lists outside
-its dev tree, or a module that a build-written Go `vendor/modules.txt` lists and the vendored tree
-verifies. That package belongs to the production dependency closure, but this does not prove it
+its dev tree, a module that a build-written Go `vendor/modules.txt` lists and the vendored tree
+verifies, a verified package that a build-written Composer `vendor/composer/installed.json` lists
+outside `dev-package-names`, or a `composer.lock` `packages` entry. That package belongs to the production dependency closure, but this does not prove it
 ships, so it is reviewed as supply chain rather than per file (see
 [installed npm dependencies](language-build.md)). Only an accepted delivery fact, such as an
 `npm pack` member, makes a dependency `shipped_dependency`. In artifact security analysis, a

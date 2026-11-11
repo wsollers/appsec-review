@@ -130,8 +130,10 @@ file as before: retained native addons, shared libraries, symbol files and packa
 a verified package, accepted `npm pack` members, root and workspace `package.json` files, project
 lockfiles, and every per-file row of an unverified package or an unavailable record. A Go
 `vendor/modules.txt` record and its module anchors (see vendored Go modules in
-[language build](language-build.md)) have no scan-once presentation and are handled per row. pnpm,
-Yarn and other ecosystems have no parsed installer record.
+[language build](language-build.md)) have no scan-once presentation and are handled per row, and
+neither have a Composer `vendor/composer/installed.json` record and its package anchors (see
+installed Composer packages there). pnpm, Yarn and other ecosystems have no parsed installer
+record.
 
 **Gaps.** After a covering record's scan, the unit adds these gaps, prefixed with the record's
 `artifact_id` like other scan gaps. `<record>` is the record's `workspace_path`; counts are of the

@@ -240,8 +240,10 @@ def test_php_and_generic_catalogs_keep_scope_and_runtime_candidates(tmp_path):
     companion = next(row for row in artifacts if row["workspace_path"] == "helper.dll")
     assert companion["scope_role"] == "unknown" and delivery_gap(companion) in gaps
     metadata, gaps = php.composer_metadata(workspace, ".")
-    assert [row["scope_role"] for row in metadata["packages"]] == ["unknown", "build_dependency"]
-    assert any("fixture/runtime" in gap and "delivery status is unknown" in gap for gap in gaps)
+    # The lock's production section is the runtime closure: supply-chain review, no unknown gap.
+    assert [row["scope_role"] for row in metadata["packages"]] == ["runtime_dependency", "build_dependency"]
+    assert {row["analysis_lane"] for row in metadata["packages"]} == {"supply_chain"}
+    assert not any("delivery status is unknown" in gap for gap in gaps)
     (workspace / "compile_commands.json").write_text("[]")
     generic, _ = language._catalog(tmp_path, workspace, {}, 100, "fixture")
     evidence = next(row for row in generic if row["kind"] == "compile-database")
