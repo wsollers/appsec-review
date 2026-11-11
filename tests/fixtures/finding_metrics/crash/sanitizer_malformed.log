@@ -1,0 +1,4 @@
+MALFORMED_MARKER this log holds no sanitizer report at all
+    #0 0x4f1a2a in orphan_frame /home/builder/src/orphan.c:1:1
+ERROR: SomethingElseSanitizer: not a known tool
+SUMMARY: nothing

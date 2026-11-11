@@ -469,3 +469,16 @@ Where the code differs from the text above, the code is authoritative and this s
     the scope-and-family match, case-based accuracy and detection marginals beside them (`/2`).
 13. **No real fix pairs are checked in.** The corpus format, loader, key writer and holdout ledger
     exist; selecting and pinning real advisories and commits is user-owned (T-067).
+14. **Crash annotations are all dropped.** Section 7.1 describes an allowlist; none exists yet, so
+    no annotation, tag or message is read. Stackwalker JSON carries no access type, so a POSIX
+    fault from that adapter classifies as `unknown` with the gap `no_access_type`.
+15. **Crash symbols match by exact name.** Binding and corroboration compare a frame function with
+    a finding function as strings, or a frame file and line with a finding location. Crash symbols
+    often carry signatures, and run-built findings carry no function (decision 5), so on real data
+    corroboration rests mainly on file and line until a symbol-normalization rule exists (T-075).
+16. **Crash buckets merge across builds.** Reports merge on adapter and bucket and keep one
+    report's build, so `crash.fix_support` cannot split occurrences by version precisely; its
+    result always carries `establishes_fix: false`.
+17. **Crash adapters were written from public format documentation**, not real exports. Each
+    adapter's docstring lists the fields it could not confirm (most of the Sentry exception
+    interface, several sanitizer header variants).

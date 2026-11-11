@@ -1,0 +1,46 @@
+{
+  "event_id": "00000000000000000000000000000001",
+  "timestamp": "2025-03-04T05:06:07Z",
+  "platform": "native",
+  "release": "examplegame@2.0.0",
+  "environment": "ZZPII-environment",
+  "server_name": "ZZPII-HOST-01",
+  "message": "ZZPII message: zzpii.user@example.invalid crashed",
+  "logentry": {"formatted": "ZZPII logentry for session ZZPII-session-9"},
+  "user": {"id": "ZZPII-user-1", "email": "zzpii.user@example.invalid", "ip_address": "203.0.113.77",
+           "username": "zzpii-alice"},
+  "request": {"url": "https://game.example.invalid/login?token=ZZPII-secret",
+              "headers": {"Cookie": "ZZPII-cookie"}, "env": {"REMOTE_ADDR": "203.0.113.77"}},
+  "breadcrumbs": {"values": [{"message": "ZZPII breadcrumb: opened chat with zzpii-bob", "category": "ui"}]},
+  "tags": {"player": "ZZPII-player-tag", "device": "ZZPII-serial-0001"},
+  "extra": {"cmdline": "examplegame --token=ZZPII-secret", "environ": {"HOME": "/home/zzpii-alice"}},
+  "contexts": {
+    "os": {"name": "Linux", "kernel_version": "6.1.0 ZZPII-HOST-01"},
+    "device": {"name": "ZZPII-device-name", "model": "ZZPII-model", "device_unique_identifier": "ZZPII-serial-0001"},
+    "app": {"device_app_hash": "ZZPII-app-hash"}
+  },
+  "threads": {"values": [{"id": 7, "name": "ZZPII-worker-alice", "crashed": false}]},
+  "exception": {
+    "values": [
+      {
+        "type": "ZZPII lowercase type that is not a code",
+        "value": "ZZPII exception value mentioning zzpii.user@example.invalid",
+        "thread_id": 7,
+        "mechanism": {"type": "signalhandler", "handled": false, "description": "ZZPII mechanism description",
+                      "meta": {"signal": {"number": 6, "name": "SIGABRT"}}},
+        "stacktrace": {
+          "frames": [
+            {"function": "main", "package": "/home/zzpii-alice/game/bin/examplegame",
+             "abs_path": "/home/builder/src/main.c", "lineno": 30, "vars": {"password": "ZZPII-secret"},
+             "context_line": "login(\"zzpii-alice\", \"ZZPII-secret\");", "pre_context": ["// ZZPII pre"]},
+            {"function": "check_login", "package": "/home/zzpii-alice/game/bin/examplegame",
+             "abs_path": "/home/zzpii-alice/src/auth/login.c", "filename": "/home/zzpii-alice/src/auth/login.c",
+             "lineno": 77, "vars": {"user": "zzpii-alice"}}
+          ]
+        }
+      }
+    ]
+  },
+  "debug_meta": {"images": [{"type": "elf", "debug_id": "aaaabbbb-cccc-dddd-eeee-ffff00001111",
+                             "code_file": "/home/zzpii-alice/game/bin/examplegame"}]}
+}

@@ -1,0 +1,15 @@
+[ZZPII-HOST-01] launching for zzpii.user@example.invalid from 203.0.113.77 with --token=ZZPII-secret
+==7==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7ffc00000100 at pc 0x0000004f1a2b bp 0x7ffc00000010 sp 0x7ffc00000008
+WRITE of size 64 at 0x7ffc00000100 thread T3 (ZZPII-worker-alice)
+    #0 0x4f1a2a in check_login /home/zzpii-alice/src/auth/login.c:77:3
+    #1 0x4f2b3c in main /home/builder/src/main.c:30:9
+
+Address 0x7ffc00000100 is located in stack of thread T3 (ZZPII-worker-alice) at offset 96 in frame
+    #0 0x4f19ff in check_login /home/zzpii-alice/src/auth/login.c:60
+  This frame has 1 object(s):
+    [32, 96) 'ZZPII_password_buffer' (line 62) <== Memory access at offset 96 overflows this variable
+Thread T3 (ZZPII-worker-alice) created by T0 here:
+    #0 0x4a0000 in pthread_create (/home/zzpii-alice/game/bin/examplegame+0xa0000)
+SUMMARY: AddressSanitizer: stack-buffer-overflow /home/zzpii-alice/src/auth/login.c:77:3 in check_login
+Shadow bytes around the buggy address: ZZPII-shadow
+/home/zzpii-alice/src/auth/hash.c:9:12: runtime error: left shift of 1 by 40 places for user ZZPII-user-1

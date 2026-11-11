@@ -1,0 +1,36 @@
+{
+  "pid": 31337,
+  "crash_info": {
+    "type": "SIGABRT",
+    "address": "0x0000000000000000",
+    "crashing_thread": 1,
+    "assertion": "ZZPII assertion failed for zzpii.user@example.invalid connecting from 203.0.113.77"
+  },
+  "system_info": {"os": "Linux", "os_ver": "6.1.0 ZZPII-HOST-01", "cpu_arch": "amd64"},
+  "lsb_release": {"id": "ZZPII-distro", "release": "ZZPII-release"},
+  "mac_boot_args": "ZZPII-boot-args",
+  "crashpad_info": {"annotations": {"user_id": "ZZPII-user-1", "hostname": "ZZPII-HOST-01",
+                                    "cmdline": "examplegame --token=ZZPII-secret", "session": "ZZPII-session-9"}},
+  "annotations": {"device_serial": "ZZPII-serial-0001", "ip": "203.0.113.77"},
+  "main_module": 0,
+  "modules": [
+    {"filename": "/home/zzpii-alice/game/bin/examplegame", "debug_file": "/home/zzpii-alice/game/bin/examplegame.dbg",
+     "debug_id": "AAAABBBBCCCCDDDDEEEEFFFF000011110", "code_id": "aaaabbbbccccddddeeeeffff0000111122223333",
+     "version": "2.0.0", "symbol_url": "https://symbols.example.invalid/ZZPII-key"}
+  ],
+  "threads": [
+    {"thread_name": "ZZPII-worker-alice", "frames": [{"frame": 0, "function": "ZZPII_other_thread_function"}]}
+  ],
+  "crashing_thread": {
+    "threads_index": 1,
+    "thread_name": "ZZPII-main-alice",
+    "last_error_value": "ZZPII-last-error",
+    "frames": [
+      {"frame": 0, "module": "/home/zzpii-alice/game/bin/examplegame", "function": "check_login",
+       "file": "/home/zzpii-alice/src/auth/login.c", "line": 77, "module_offset": "0x0000000000002222",
+       "trust": "context"},
+      {"frame": 1, "module": "/home/zzpii-alice/game/bin/examplegame", "function": "main",
+       "file": "/home/builder/src/main.c", "line": 30, "module_offset": "0x0000000000001111", "trust": "cfi"}
+    ]
+  }
+}

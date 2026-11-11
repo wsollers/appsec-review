@@ -1,0 +1,1 @@
+{"crash_info": {"type": "SIGSEGV", "address": "0x10"}, "crashing_thread": {"frames": [{"function": "MALFORMED_MARKER_truncated
