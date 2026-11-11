@@ -56,7 +56,8 @@ def prepared(tmp_path: Path, monkeypatch):
     base.mkdir()
     config = write_config(base, base / "runs", overrides={"backoff_seconds": [0]},
                           extra=job_tables("job_third_party_data_sync"))
-    fixture = build_accepted_index_set(tmp_path / "review")
+    # The run is bound to the configuration its attempts resolve, not the repository default.
+    fixture = build_accepted_index_set(tmp_path / "review", config=config)
     job = build_job(infer=ScriptedInfer({"ids": fixture.ids}), repository_root=ROOT)
     runner = JobRunner(load_config(config))
     claim = runner.begin_attempt(job, run_id=fixture.run_id,

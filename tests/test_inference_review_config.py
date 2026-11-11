@@ -10,6 +10,7 @@ from appsec_review.config import (
     CAPACITY_KEYS, PENDING_JOBS, InferenceSecurityReviewSettings, load_config, overlay_capacity_keys,
     semantic_settings_sha256, semantic_settings_view,
 )
+from appsec_review.config.host_pins import HOST_PINS_LAYER
 from appsec_review.config.loader import OVERLAY_ENVIRONMENT
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
@@ -200,7 +201,10 @@ def test_capacity_overlay_is_merged_frozen_and_hashed_as_its_own_layer(tmp_path:
     assert config.overlay_sha256 == expected_sha and config.source_sha256 == base.source_sha256
     assert config.layers[1] == {"path": str(overlay_path.resolve()), "sha256": expected_sha,
                                 "layer": "capacity_overlay"}
-    assert len(base.layers) == 1
+    # The unit session's host image pins are their own trailing layer; the overlay is the only difference.
+    assert [layer.get("layer") for layer in base.layers] == [None, HOST_PINS_LAYER]
+    assert [layer.get("layer") for layer in config.layers] == [None, "capacity_overlay", HOST_PINS_LAYER]
+    assert config.layers[2] == base.layers[1]
     resolved = json.loads(config.resolved_json)
     assert resolved["configuration_overlay"]["sha256"] == expected_sha
     assert resolved["configuration_overlay"]["keys"] == [
@@ -292,7 +296,7 @@ def test_review_intake_records_the_overlay_layer(tmp_path: Path) -> None:
     assert manifest["sources"] == [dict(layer) for layer in config.layers]
     intake = json.loads(next(run_root.rglob("review-intake.json")).read_text(encoding="utf-8"))
     layers = intake["configuration"]["layers"]
-    assert [layer.get("layer") for layer in layers] == [None, "capacity_overlay"]
+    assert [layer.get("layer") for layer in layers] == [None, "capacity_overlay", HOST_PINS_LAYER]
     assert layers[1]["sha256"] == config.overlay_sha256
 
 
@@ -305,7 +309,11 @@ def test_review_intake_without_overlay_keeps_a_single_layer(tmp_path: Path) -> N
                                                         source_fingerprint=source_fingerprint(target))
     run_root = config.runtime.runs_dir / outcome["run_id"]
     intake = json.loads(next(run_root.rglob("review-intake.json")).read_text(encoding="utf-8"))
-    assert intake["configuration"]["layers"] == [{"path": str(config.source_path), "sha256": config.source_sha256}]
+    # No overlay layer: the base document, then the host image pins every run binds.
+    layers = intake["configuration"]["layers"]
+    assert layers[0] == {"path": str(config.source_path), "sha256": config.source_sha256}
+    assert [layer.get("layer") for layer in layers] == [None, HOST_PINS_LAYER]
+    assert layers == [dict(layer) for layer in config.layers]
 
 
 # ---------------------------------------------------------------- semantic view
