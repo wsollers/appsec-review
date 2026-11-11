@@ -164,6 +164,7 @@ WEAKNESS_FAMILIES: Mapping[str, frozenset[int]] = {
 }
 _CWE = re.compile(r"^(?:CWE-)?(\d{1,5})$", re.I)
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_TARGET_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")   # also a directory name of the history store
 
 
 def normalize_cwe(value: Any) -> str | None:
@@ -406,6 +407,8 @@ def build_snapshot(*, run_id: str, target_id: str, source_revision: str, finding
     """
     if stage not in SNAPSHOT_STAGES:
         raise ValueError(f"unknown snapshot stage {stage!r}")
+    if not isinstance(target_id, str) or not _TARGET_ID.match(target_id):
+        raise ValueError("snapshot target_id must match [a-z0-9][a-z0-9._-]{0,63}: it names a history store")
     hashes = {"configuration_sha256": configuration_sha256, "guidance_sha256": guidance_sha256,
               "model_sha256": model_sha256}
     for name, item in hashes.items():
@@ -458,6 +461,21 @@ def check_snapshot(value: Any) -> dict[str, Any]:
         raise ValueError("finding snapshot stage or findings are invalid")
     if len(value["findings"]) > MAX_FINDINGS:
         raise ValueError("finding snapshot exceeds the bounded number of findings")
+    if not isinstance(value["target_id"], str) or not _TARGET_ID.match(value["target_id"]):
+        raise ValueError("finding snapshot target_id is not a store-safe identifier")
+    reviewed, unreviewed = value["reviewed_units"], value["unreviewed_units"]
+    for units, hashed in ((reviewed, True), (unreviewed, False)):
+        if units is None:
+            continue
+        if not isinstance(units, Mapping):
+            raise ValueError("finding snapshot unit coverage must be an object or null")
+        for path, item in units.items():
+            if normalize_path(path) != path:
+                raise ValueError("finding snapshot unit paths must be normalized target-relative paths")
+            if hashed and item is not None and not is_sha256(item):
+                raise ValueError("a reviewed unit's content identity must be a SHA-256 or null")
+            if not hashed:
+                _text(item, "residual coverage reason", optional=False)
     for finding in value["findings"]:
         identity = finding.get("fingerprint") if isinstance(finding, Mapping) else None
         if (not isinstance(identity, Mapping) or identity.get("version") != FINGERPRINT_VERSION
