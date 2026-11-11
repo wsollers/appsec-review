@@ -185,6 +185,22 @@ def test_snapshot_from_run_takes_supplied_coverage_and_annotation(tmp_path):
     assert built["findings"][0]["fingerprint"] == plain["findings"][0]["fingerprint"]
 
 
+def test_snapshot_from_run_records_the_gaps_of_derived_units(tmp_path):
+    def build(**coverage):
+        return adapter.snapshot_from_run(tmp_path / "run-7", target_id="game", source_revision="c" * 40,
+                                         loader=lambda _: documents(), **coverage)
+
+    failed = build(unit_gaps=["reviewed_units_not_derived:accepted_index_unreadable"])
+    # a derivation that failed names its own reason in place of the generic not-supplied gap
+    assert failed["reviewed_units"] is None
+    assert failed["gaps"] == ["reviewed_units_not_derived:accepted_index_unreadable"]
+    derived = build(reviewed_units={"src/net/parse.c": None}, unreviewed_units={"src/x.c": "not_packaged"},
+                    unit_gaps=["units_below_hunt_cutoff:2", "units_below_hunt_cutoff:2"])
+    assert derived["gaps"] == ["units_below_hunt_cutoff:2"] and derived["unreviewed_units"] == {
+        "src/x.c": "not_packaged"}
+    assert build(unit_gaps=[])["gaps"] == ["reviewed_units_not_supplied"]
+
+
 def test_snapshot_from_run_lets_a_loader_failure_surface(tmp_path):
     def loader(_run_root):
         raise RuntimeError("current accepted report is unavailable")

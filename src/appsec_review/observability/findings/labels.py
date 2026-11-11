@@ -114,6 +114,17 @@ def _in_scope(entry: KeyEntry, path: str, location: Mapping[str, Any]) -> bool:
                                    and location["end_line"] >= entry.scope[0])
 
 
+def key_entries_at(key: ScoringKey, locations: Iterable[Mapping[str, Any]]) -> list[KeyEntry]:
+    """The key's entries, in id order, whose scope one of ``locations`` overlaps.
+
+    This is the scope rule of every answer-key label: same normalized path, and the lines overlap
+    the entry's scope when it declares one. Locations are validated, never mutated.
+    """
+    normalized = [normalize_location(item) for item in locations]
+    return [entry for entry, path in _key_entries(key)
+            if any(_in_scope(entry, path, location) for location in normalized)]
+
+
 def _relations(entries: list[tuple[KeyEntry, str]], finding: Mapping[str, Any]) -> dict[str, list[KeyEntry]]:
     """How one finding relates to the key cases its locations fall in.
 
@@ -450,5 +461,5 @@ def merge(*label_maps: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
 __all__ = [
     "AUDIT_ELIGIBLE_DISPOSITIONS", "LABEL_FIELDS", "MAX_AUDIT_SAMPLE", "MAX_OUTCOMES", "OUTCOME_FIELDS",
     "OUTCOME_FILE_FIELDS", "admit_audit_labels", "admit_outcomes", "export_audit_sample", "key_case_hits",
-    "label_findings_from_key", "merge", "outcome_metrics",
+    "key_entries_at", "label_findings_from_key", "merge", "outcome_metrics",
 ]

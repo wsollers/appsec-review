@@ -30,9 +30,21 @@ and a second, different snapshot of the same run and stage is refused.
 
 - `--target-id` is your stable name for the target (`[a-z0-9][a-z0-9._-]*`). A run names its
   target by path and fingerprint, neither of which survives a new revision.
-- `--units` supplies which source files this run reviewed. A run does not record this today, so
-  without it the snapshot carries the gap `reviewed_units_not_supplied` and a later comparison can
-  only say `not_covered` for an absent finding (T-073). Format:
+- Without `--units` the reviewed source files are derived from the run (T-073):
+  - A catalogued file is **reviewed** when a review package that contained it had every red cell
+    succeed. Its content hash is the accepted source catalog's. Reviewed means a review ran over
+    the file, never that the file is clean.
+  - Every other catalogued file is unreviewed with one reason: `cells_incomplete` (in a package
+    whose red cells did not all succeed), `not_launched` (in a package no red cell was launched
+    for) or `not_packaged` (in no assembled package). A run does not record the files of a review
+    unit below the hunt cutoff, so those files are `not_packaged` too; the gap
+    `units_below_hunt_cutoff:<n>` counts the units.
+  - Files the run never catalogued are not listed.
+  - When the derivation fails the snapshot has no units and the gap
+    `reviewed_units_not_derived:<reason>` names why (no accepted review, an unreadable package or
+    index, or an accepted index set that is no longer the one the review used). A later comparison
+    can then only say `not_covered` for an absent finding.
+- `--units` supplies the reviewed files yourself and turns the derivation off. Format:
 
   ```json
   {"schema": "appsec-review/reviewed-units/1",
@@ -59,7 +71,7 @@ and a second, different snapshot of the same run and stage is refused.
   --history runs/metadata/finding-history --target-id <name> --run-id <run-id> \
   [--prior-run-id <run-id>|none] [--key <expectations.toml>] \
   [--run-summary runs/<run-id>/data/telemetry/summary.json] \
-  [--leads <leads.json> --lead-labels <labels.json>] \
+  [--run runs/<run-id> | --leads <leads.json> --lead-labels <labels.json>] \
   [--outcomes <developer-outcomes.json> --as-of YYYY-MM-DD] \
   [--entry-points <catalogue.json>] \
   [--crash-evidence <evidence.json> --debug-id <id> --crash-revision <version>] \
@@ -75,9 +87,9 @@ listed under "not measured" with its reason.
 | a prior snapshot in the store (default: the latest earlier run) | new, persisting, regressed, fix candidate, not re-detected, not covered |
 | `--key` | this run's recall and control false positives with intervals; precision; severity agreement |
 | `--run-summary` | refutation and silence as separate ratios, unresolved share |
-| `--leads` with `--lead-labels` | true-lead retention beside false-lead removal, by stage |
+| `--run` with `--key`, or `--leads` with `--lead-labels` | true-lead retention beside false-lead removal, by stage |
 | `--outcomes` with `--as-of` | fix rate, rejected-as-false rate, accepted risk and expiry, time to disposition |
-| `--entry-points` | share of entry points reviewed; the uncovered list |
+| `--entry-points`, or `--run` | share of entry points reviewed; the uncovered list |
 | `--crash-evidence` | crash-corroborated findings; memory-safety crash buckets with no finding |
 
 Reading rules:
@@ -91,6 +103,53 @@ Reading rules:
   findings). Stability figures over overlapping run pairs carry none.
 - One run on a small key is a noisy estimate. Trend the repeated-run detection rate instead
   (section 5).
+
+Lead records from the run (`--run`, T-077). `--run` names the run directory of `--run-id`; giving
+it together with `--leads` or `--lead-labels` is an error. The run's lane A documents are read
+through the verified readers of the `triage_reduction` section, so the dispositions are that
+section's:
+
+- One record per lane A lead. An admitted lead carries the section's disposition; a lead that was
+  not admitted has none and is outside every ratio.
+- The removing stage of a lead where no claim was raised is `red_no_proposal`. For a lead dismissed
+  by adjudication it is `blue` when a refuter cell produced a contradiction the adjudication table
+  counted on a required predicate, `verifier` when only the independent verifier did, and
+  `unattributed` otherwise. `unattributed` covers `out_of_scope` (a scope rule dismissed the claim,
+  no role did), a claim whose state history does not record the deciding row, a dismissal with no
+  counted contradiction recorded, an unknown producing cell, and a lead whose claims were dismissed
+  by different stages. Each is counted in a gap `dismissal_unattributed:<reason>:<leads>`.
+- `judge` is never derived: a judge sets no claim state and the adjudication table does not count
+  its relations, so a judge that sided with blue did not remove the lead.
+- With `--key`, a lead is labelled by location only: `true` inside a defect's scope, `false` inside
+  a control's scope (the lead then counts toward that control's false-positive rate), unlabelled
+  elsewhere. Scanner rules often carry no reliable CWE, so the weakness is not compared. Lead
+  locations come from the accepted observation index; when it cannot be read, or is not the index
+  set the review used, there are no labels and the gap `lead_locations_unavailable:<reason>` says so.
+- Gaps of the derivation are printed as `gap (derived input): …` and are in the document's
+  `input_gaps`. Unreadable lane A documents give `n/a (no_lead_records)`, never an empty lead list.
+
+Entry points from the run (`--run` without `--entry-points`, T-073). The catalogue is built from
+the run's accepted `surface:entry:*` security tags:
+
+| Tag | Kind |
+| --- | --- |
+| `surface:entry:http-public`, `surface:entry:http-internal`, `surface:entry:message-consumer` | `network_handler` |
+| `surface:entry:rpc` | `rpc_handler` |
+| `surface:entry:file-input` | `file_loader` |
+
+- An entry point is `reviewed` when its file is reviewed (section 1), `not_built` when its file is
+  under no accepted build unit, and otherwise `not_admitted` with its file's reason.
+- No tag marks a parser, so the `parser` kind is never derived
+  (`entry_point_kind_unmapped:parser`). The other entry terms (`cli`, `env-config`, `local-ipc`,
+  `mobile-deeplink`, `cloud-public`, `ci-untrusted`) are none of the four kinds and are counted in
+  `entry_tags_without_kind:<n>`.
+- The tagging producers assign no `surface:entry:*` tag today. Until one does, the derived
+  catalogue is `n/a` with the gap `entry_points_not_derived:no_entry_point_tags`; supply
+  `--entry-points` to measure entry-point coverage in the meantime. The file is a list of
+  `{"entry_id", "kind", "path", "status", "reason"}` rows.
+
+Without `--run`, `--leads` is a list of `{"lead_id", "admitted", "disposition", "removed_stage",
+"family", "scanner", "control_id"}` records and `--lead-labels` maps a lead id to a label.
 
 Developer outcomes file (`fingerprint` is the finding's `fingerprint.exact` from the snapshot):
 
