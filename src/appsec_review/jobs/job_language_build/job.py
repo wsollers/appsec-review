@@ -332,15 +332,20 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         return node.catalog(run_root, workspace, before, limit, build_unit_id, dispositions=dispositions)
     if dispositions is None:
         dispositions = BuildOutputDispositions(family=family, bookkeeping=exclusions)
-    artifacts, gaps = [], []
+    # A recipe-run `go mod vendor` leaves an installer record; its verified modules are registered
+    # before the walk and become one supply-chain row each instead of per-file rows.
+    vendored = go.VendoredCatalog(workspace, before, dispositions) if family == "go" else None
+    artifacts: list[dict[str, Any]] = []
+    gaps: list[str] = list(vendored.gaps) if vendored is not None else []
     for relative, decision in dispositions.walk(workspace):
         path = workspace / relative
-        kind = _kind(path, family, relative=relative, before=before)
+        installed = vendored.visit(relative, decision) if vendored is not None else None
+        kind = installed or _kind(path, family, relative=relative, before=before)
         if kind is None:
             continue
         digest = file_sha256(path)
         unchanged = before.get(relative) == digest
-        if unchanged and kind not in {
+        if unchanged and installed is None and kind not in {
                 "test-coverage", "execution-profile", "executable", "shared-library", "static-library",
                 "native-output", "package", "jvm-archive"}:
             continue
@@ -355,6 +360,8 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
                           "artifact_origin": "accepted-input" if unchanged else "build-output"}
         if decision.scope_role is not None:
             artifact.update(scope_role=decision.scope_role, build_output_root=decision.root)
+        if vendored is not None:
+            vendored.describe(artifact, decision)
         if kind in {"executable", "shared-library", "native-output"}:
             try:
                 facts = elf.loader_facts(path)
@@ -370,6 +377,8 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         if len(artifacts) >= limit:
             gaps.append("artifact catalog truncated at configured count bound")
             break
+    if vendored is not None:
+        gaps.extend(vendored.summary(dispositions))
     gaps.extend(dispositions.named_gaps())
     if tagged_outputs is not None:
         native_outputs.tag_and_promote(artifacts, tagged_outputs)

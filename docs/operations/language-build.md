@@ -365,6 +365,86 @@ exec events, unreconciled tool-call records, an unobserved compiler, an executab
 observed linker, an unparseable catalog, and an unparseable output are named gaps; a unit with an
 incomplete capture or incomplete tool provenance is not checkpointed.
 
+**Vendored Go modules.** A recipe that runs `go mod vendor` writes a `vendor` tree and its own
+installer record, `vendor/modules.txt`, into the workspace. Scope for that tree comes only from
+that record, never from directory names, `go.mod` or `go.sum`
+(`src/appsec_review/jobs/job_language_build/go_vendored.py`; the catalog side is `VendoredCatalog`
+in `go.py`, called from the generic `_catalog` for the `go` family). The contract is the
+installed npm dependencies contract described below, with the differences named here.
+
+- **Which trees.** The catalog finds at most 32 prefixes: directories holding a real (non-symlink)
+  `vendor` directory with a `vendor/modules.txt` entry or a regular `go.mod` or `go.work` beside
+  it. Go vendor trees are not descended. A `vendor` directory with neither belongs to another tool
+  and is ignored. Only a record the build wrote is used: a `vendor/modules.txt` whose digest equals
+  the pre-build snapshot is committed target content, so its tree is not classified and gets no
+  record row and no gap; its unchanged files produce no rows and its changed files stay per-file,
+  as before. A `vendor` tree with no record is reported only when the build added a file to it.
+- **Record format.** A regular file of at most 16 MiB, UTF-8, with lines of at most 4,096 bytes,
+  at most 20,000 module lines and 200,000 package lines. The accepted forms are the ones
+  `go mod vendor` writes: `## workspace` as the first line; `# <module> <version>`, optionally
+  followed by `=> <directory>` or `=> <module> <version>`; `# <module> => <directory>` or
+  `# <module> => <module> <version>` for a replacement that provides no package; one
+  `## explicit`, `## explicit; go <version>` or `## go <version>` line directly after its module
+  line; and one import path per vendored package. The go command ignores lines it does not
+  understand; the parser does not. Any other line, a blank line, a duplicate module or package, a
+  package outside its module's path or inside a deeper listed module, or an undecodable byte makes
+  the whole record unavailable.
+- **Verification.** `modules.txt` has no content digests and Go 1.17 and later strip each
+  dependency's `go.mod`, so there is no installed manifest to compare a name and version with.
+  A module that lists packages is verified structurally: it is not replaced by a directory; its
+  `vendor/<module path>` and every listed `vendor/<import path>` are real directories reached
+  through no symlink; every listed package directory holds a regular `.go` file; and no other
+  directory of the module's tree, outside nested listed modules, holds a `.go` file. The walk
+  visits at most 500,000 directory entries per record. The bytes of a verified module are not
+  compared with anything. A module or replacement line with no package copied nothing and gets no
+  row and no gap.
+- **Rows.** Each verified module becomes one `package-metadata` row. With no manifest to anchor
+  on, the anchor is the first `.go` file, by name, of the module's first package. `package_metadata`
+  has `format` `go-source-file`, `role` `installed-dependency-package`, `ecosystem` and `manager`
+  `go`, `name` (the module path), `version`, `replacement` (`{"path", "version"}` or null),
+  `explicit`, `go_version`, `packages` (a count), `install_path`, and `files`, `bytes` and
+  `retained_files`. `delivery_evidence` is `{"kind": "go-vendor-modules-record", "workspace_path":
+  "<prefix>/vendor/modules.txt", "sha256": "<record sha256>", "entry": "<module path>"}`. The record
+  names no build-only module (`## explicit` says only that `go.mod` requires the module directly),
+  so every verified module is `runtime_dependency`; no Go row is `build_dependency`. The record is
+  a `resolved-dependency-metadata` row with `dependency_metadata`
+  `{"format": "modules.txt", "manager": "go", "role": "installed-dependency-record"}`. Both are in
+  the supply_chain lane. Executables and shared and static libraries under a verified module keep
+  their own rows with the module's role and evidence (`keep_linked`, at most `max_kept_per_root`).
+  Every other file under a verified module gets no row. If the anchor's digest changes between
+  verification and cataloging, the catalog fails with
+  `vendored Go module anchor changed during cataloging`.
+- **Dispositions.** Each verified module is a `supply_chain` root with basis `installer-record`,
+  confidence `fact`, name `go-vendored-module`, reason `verified against vendored packages`,
+  `evidence_ref` `<record path>#<module path>` and `bound_group` `<prefix>/vendor`. An unverified
+  module inside a verified one is a `per_file` root named `go-unverified-module`.
+- **Gaps.**
+  - `dependency-content-summarized: <N> modules (<F> files, <B> bytes) recorded by <prefix>/vendor/modules.txt routed to supply_chain review; per-file target review not performed`,
+    with `; <U> files under vendor not covered by the installer record remain per-file` when such
+    files exist;
+  - `<prefix>/vendor: Go installer record unavailable (<reason>); dependency files cataloged per-file in the target lane`,
+    where `<reason>` is `missing`, `unreadable`, `bound-exceeded:record-bytes`,
+    `bound-exceeded:line-bytes:<line>`, `bound-exceeded:modules`, `bound-exceeded:packages`,
+    `invalid-encoding:<line>`, `line-invalid:<line>`, `duplicate-module:<line>`,
+    `duplicate-package:<line>` or `package-outside-module:<line or import path>`;
+  - for the first 50 unverified modules,
+    `<install_path>: vendored module is not verified against the Go installer record (<reason>); cataloged per-file`,
+    where `<reason>` is `local-replacement`, `install-path-missing`, `package-missing:<import path>`,
+    `package-empty:<import path>`, `unrecorded-package:<directory>`, `tree-unreadable`,
+    `anchor-unreadable` or `bound-exceeded:tree-entries` (target text bounded to 200 characters),
+    then `<n> further unverified Go modules cataloged per-file`;
+  - `<prefix>/vendor: Go installer record covers no vendored module; <U> files under vendor remain per-file`
+    when an available record verifies nothing and files exist; and
+  - `Go installer record discovery bound reached; remaining prefixes cataloged per-file`.
+
+Files that no verified module covers keep the generic per-file rows (a new `.go`, `.c` or `.h`
+file is `generated-source` in the target lane). The Go capture identity is
+`appsec-review/go-build-capture/4`. Artifact security analysis has no scan-once presentation for
+this record: its npm rule is keyed on npm's own record and evidence kind
+([the TODO](../TODO.md#follow-ups-from-the-scanner-launch-reduction)). Go target admission is
+unchanged and still inspects every `executable` row, so a prebuilt executable inside a vendored
+module fails the unit as it did before.
+
 The Rust adapter accepts bounded Cargo workspace/package, target triple, profile, feature,
 `--locked`, and `--offline` choices. Central policy permits dependency download and can still
 require a lockfile when configured. Cargo incremental compilation is disabled for probes and builds:
@@ -510,8 +590,9 @@ records, files of unverified packages, and `node_modules` files outside any pack
 Files under `node_modules` are kept even when the build did not change them.
 These rows get the default roles: most kinds are `unknown` in the target lane with a
 `delivery_fact_unavailable` gap, while manifests and lockfiles default to `build_chain`. The Node
-capture identity is `appsec-review/node-build-capture/3`. Only npm is covered; pnpm, Yarn and
-other ecosystems' installed trees stay per-file (see
+capture identity is `appsec-review/node-build-capture/3`. In the Node family only npm is covered;
+pnpm and Yarn trees stay per-file. Go vendor trees are covered (see vendored Go modules above); the
+remaining ecosystems' installed trees stay per-file (see
 [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems)).
 
 **Build-output dispositions.** `node.catalog` takes its rows from the shared build-output
