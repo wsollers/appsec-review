@@ -23,8 +23,12 @@ Retained native bytes are checked for machine/class and bounded archive-member c
 addition to the seven-axis product contract. A runtime DLL cannot satisfy an import-library
 requirement. Unsupported native containers/closure and Go PE build settings remain named gaps.
 
-`job_language_build` consumes only the accepted, hash-verified `job_project_build` handoff. The
-current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kotlin, Go,
+`job_language_build` takes its build dispatches from the accepted, hash-verified
+`job_project_build` handoff. Revalidating their immutable plan also reads the plan-bound
+`job_build_environment_analysis` handoff and artifact, declared as operational inputs in the
+language-build contract (and inherited by internal build iterations). These declarations admit
+the pinned read; they do not turn advisory environment facts into compiler proof.
+The current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kotlin, Go,
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.

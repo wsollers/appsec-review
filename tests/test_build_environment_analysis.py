@@ -168,6 +168,50 @@ def test_real_static_producer_publication_and_strict_current_reader(tmp_path):
         (root / value["artifact"]["path"]).read_bytes()).hexdigest()
 
 
+@pytest.mark.parametrize("consumer_id", ["job_language_build", "job_evidence_collection"])
+def test_plan_consumer_admits_and_records_bound_environment(tmp_path, consumer_id):
+    from appsec_review.jobs.job_evidence_collection.datasets import CONTRACT as evidence_contract
+    from appsec_review.jobs.job_language_build.datasets import CONTRACT as language_contract
+    from appsec_review.jobs.job_project_build.datasets import DATASETS as project_datasets
+    from appsec_review.runtime import Job, JobRunner, Unit
+    from appsec_review.runtime.contracts import EvidenceAuthority
+
+    config, root, source, environment = _published(tmp_path)
+    runner = JobRunner(config)
+    target = tmp_path / "target"
+    # This input fixture supplies the required project handoff; no build behavior is under test.
+    runner.run(Job("job_project_build", config.job("job_project_build").name, lambda _: {},
+                   units=(Unit("acceptance.publish_handoff", lambda _: {}),),
+                   datasets=project_datasets),
+               run_id=root.name, target_root=target, source_fingerprint=source)
+    contract = language_contract if consumer_id == "job_language_build" else evidence_contract
+    inputs = [item for item in contract.inputs if item.producer == JOB_ID]
+    assert {item.output_kind for item in inputs} == {"handoff", "build_environment"}
+    assert all(item.authority is EvidenceAuthority.OPERATIONAL for item in inputs)
+
+    def read_environment(unit):
+        return {"environment": load_environment(unit.job.run_root, source, environment)}
+
+    unit_id = "iterations.dispatch" if consumer_id == "job_language_build" else "source_sast.semgrep_scan"
+    consumer = Job(consumer_id, config.job(consumer_id).name, lambda _: {},
+                   units=(Unit(unit_id, read_environment),), contract=contract,
+                   input_identity=lambda _: "environment-reader-fixture-no-external-feeds")
+    result = runner.run(consumer, run_id=root.name, target_root=target, source_fingerprint=source)
+    attempt = Path(result["attempt_root"])
+    claim = json.loads((attempt / "claim.json").read_bytes())
+    assert claim["upstream_handoffs"][JOB_ID] == environment["reference"]
+    step, task = unit_id.split(".")
+    unit_path = attempt / "steps" / step / "tasks" / task
+    status = json.loads((unit_path / "status.json").read_bytes())
+    assert any(item["producer"] == JOB_ID and item["read"]
+               and item["authority"] == "operational"
+               and item["handoff_sha256"] == environment["reference"]
+               for item in status["input_consumption"]["reads"])
+    output = json.loads((unit_path / "result.json").read_bytes())
+    assert output["environment"]["reference"] == environment["reference"]
+    assert output["environment"]["evidence"]["declarations"][0]["name"] == "SDK_ROOT"
+
+
 def test_real_environment_publication_uses_registered_build_dataset_contract(tmp_path):
     from appsec_review.jobs.job_build_environment_analysis.datasets import CONSUMES, DATASETS
     from appsec_review.runtime.datasets import FAMILIES, METADATA_ROUTE, read_dataset_contract
