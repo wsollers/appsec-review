@@ -65,6 +65,21 @@ different target fingerprint, and its corpus keys will not be overwritten.
 - Jobs 1-9 on the new run require individual content checks. Canonical gaps must concern c094
   or explicit tooling limits, not omitted corpus cases.
 
+The scoped walk uses these per-job content criteria, in addition to framework integrity:
+
+| Job | Scoped criterion |
+| --- | --- |
+| 1 model connectivity | Configured provider/models are available; no missing-model or transport gap. |
+| 2 image pins | Every frozen selected image reference matches its immutable local ID; no image mutation. |
+| 3 target acquisition | Explicit target remains `NOT_REQUESTED`; no pull or target acquisition. |
+| 4 intake | Exact tag/HEAD and scoped fingerprint above, clean target, verified configuration/guidance. |
+| 5 catalog | Exactly one c094 CMake build unit; inventory resolves to retained root files or c094; no other corpus unit. Compile database may be absent before building. |
+| 6 history | Source binding and symbols concern accepted scoped files; distinguish selected mainline from review HEAD and retain any honest binding/tooling limitation. No other-case parser/bound gaps. |
+| 7 CI | Four retained root definitions (Azure, GitLab, Bitbucket, Jenkins); other provider branches not applicable. Observations/source spans and actual tool counts agree. |
+| 8 environment | No selected shell/batch environment scripts and no retained PowerShell inputs: zero declarations, not-applicable coverage, no unsupported-other-case gap. |
+| 9 planning | One c094 unit/recipe, offline pinned native profile, reproducible graph, no byte-budget exhaustion or unrelated-unit abstention. |
+| 10 project build | Actual binary, nonempty correlated compile database, one proven capture-derived compatible enforcement record; checked by `stepwise check`. |
+
 ## Verification and live receipt
 
 Implementation, focused commands/counts/timings, the T-047 differential, coverage, exact ready
@@ -79,3 +94,83 @@ no directory/full-suite selector or unrequested heavy-tier validation is authori
 
 The final receipt will include the new run ID, canonical gap table for jobs 1-10, c094 enforcement
 record, accepted binary/compile-database references and finding-to-first-acceptance turnaround.
+
+## Implementation and focused verification
+
+Ready commit `114f51197080483b5a9ea76565784d4618034c07` was integrated on mounted main
+as `c2899203c`. Project-build dispatch is now `/3`, language-build handoff `/2`, and captured
+native enforcement `/2`; the affected typed consumer declarations were changed together,
+without dual-reading the old output shape. Independent native units execute once in job 10;
+connected units retain their iteration owner. Later consumers retain unit gaps and consume
+the accepted build instead of silently rebuilding it. Binary-evidence indexing remains an
+intake-only producer, not a consumer of build output.
+
+`probe_receipts[]` carries the accepted binary in `artifacts`, one capture-derived `enforcement`
+record, the correlated `native_compile_database`, and the retained original CMake
+`declared_compile_database`. Unproven outputs are diagnostic `rejected_artifacts`; typed gaps
+retain their build-unit scopes. The stepwise content gate checks the actual single-c094 planning
+input, binary type/hash, proven enforcement and correlated/nonempty compile database.
+
+| Before | After / focused assertion |
+| --- | --- |
+| Native static target uncertainty prevents a CMake build | Capture-trust refusals remain pre-build; CMake executes and its observed target is checked afterward |
+| Non-Unity job-10 probes are no-ops | Independent native execution publishes real build/capture artifacts; language-build consumes that result |
+| No job-10 binary/content gate | `stepwise check` and acceptance reject missing binary, missing/unproven enforcement or empty/uncorrelated compile data |
+| Static-proof tests encode refusal | Tests now cover CMake/direct compiler parity, mixed/disallowed targets, unknown compiler, empty capture, and pre-build dynamic/environment/network/recipe/operation refusals |
+| Consumer artifacts could omit new unit evidence | Focused publication/consumer cases retain proof, scoped gaps and rejected-artifact diagnostics |
+
+All commands below use the checkout's own environment, two workers, seed 11110, exact selectors,
+and the unchanged 200-node / 30-second collection / 300-second total guard.
+
+```sh
+.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 21 --parallel \
+  --test-workers 2 --shuffle-seed 11110 --strict -- tests/test_project_build_capture.py
+```
+
+Final isolated result: **21 passed in 76.64 s / 83.477 s total**, no case over ten seconds.
+Mounted-main result: **21 passed in 65.44 s / 71.294 s total**, no case over ten seconds;
+`test/tmp/reports/tests-custom-20261111-122200-874252-49723.json`.
+Coverage from the isolated exact core run is retained in `test/tmp/pass10-coverage-final.json`:
+native enforcement 90%, whole project-build package 46%. The uncovered package lines are
+principally legacy probe/repair and other-family paths, not claimed covered by this c094 pass.
+The enforcement report names its 15 uncovered lines explicitly. Syntax and Ruff passed for the
+58 affected Python files. Whitespace inspection preserves the existing CRLF fixture.
+
+The scoped pre-pass baseline at
+`e2bb58e245b0b5096c78778c31b53f056da5289d` collected 94 cases: 89 passed, five failed,
+34.944 s total (`tests-custom-20261111-110248-810990-37159.json` in the repair checkout).
+The final exact affected differential collected 125 cases: **123 passed, two unchanged
+failures, zero new failures and three fixed**, 26.25 s pytest / 32.408 s total
+(`tests-custom-20261111-121241-879693-47606.json`). Its expanded command and exact selector
+manifest are retained in that report; baseline file is `test/tmp/pass10-prepass-failures.txt`.
+The selectors cover native enforcement, topology refinement, the three existing project-build
+preparation cases, language-build unsupported/unresolved receipt publication, review metrics,
+job-control schemas and five compiler-profile boundary cases.
+
+The two unchanged failures are
+`test_direct_resume_planner_reuses_valid_releases_and_rejects_stale_recipe` and
+`test_task_checkpoint_requires_the_same_recipe_refinement_before_reuse` in
+`tests/test_build_topology_refinement.py`. They respectively expect REUSE where the baseline
+returns RUN, and attempt an immutable checkpoint replacement which the baseline refuses.
+Neither was changed or weakened, and neither is presented as passing.
+Historical T-047/`fe328d76` failure evidence was unavailable: this is a measured **pre-pass**
+differential, not a fabricated historical T-047/full-suite result. No broad suite was run.
+Intermediate failing/slow fixtures remain in the repair checkout's guarded reports.
+
+## Source deployment and fresh-run boundary
+
+After the UI warning, `scripts/stack-restart.sh --code-location-only` re-signed/reloaded mounted
+sources and restored five healthy services without rebuilding an image. Measured release:
+`427d2c281c808fbdf4031775a009f1cfbf83ac3881ee84d6c85522fbe95bf3f8`.
+The application tooling image remains
+`sha256:29682648dd80ac803efe7cde0ce362098782312b7f44a1a658873823ac522d2b`.
+Mounted/deployed enforcement bytes both hash to
+`30b9a73925a32d293aa748e76a2e2e55e40a45725b6d6538899db90a0bec0b3d`.
+
+Fresh application run **`2026-11-11-0002`** was initialized against the scoped target.
+Its first model-connectivity dispatch is `a1f6312e-0864-4812-9adb-200c57703767`;
+configured Sonnet/Opus availability, transport and zero gaps were verified.
+Initial acceptance under a new scoped corpus name was refused because the operator coupled
+the key-directory name to a target Git tag. No old key or target tag was modified. A narrow
+operator-only follow-up separates the explicitly verified target tag from the new corpus-key
+namespace; it must retain the target-tag/HEAD check and all existing acceptance guards.
