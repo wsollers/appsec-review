@@ -277,6 +277,32 @@ def simulated_executor(profile: BuildProfile, behavior: Behavior, *, scanner: Sc
 _CONTAINER_DEFAULTS = {"HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TZ": "UTC"}
 
 
+def fixture_compiler_profiles(profile: BuildProfile) -> dict:
+    """The compiler profile set a native build image's probe yields, for ``profile``'s image.
+
+    Only the in-container probe is replaced: the transcript is the collector format the probe
+    emits (the shared C/C++ fixture transcript plus a ``clang++`` driver link) and it goes through
+    the real ``parse_probe_transcript``, ``build_profile_records`` and ``profile_set``, so native
+    target enforcement evaluates real records rather than a stub.
+    """
+    from appsec_review.container_runtime import compiler_profiles
+    from tests.test_compiler_profiles import CPP, _executables
+
+    transcript = CPP.replace("@@tool gcc", """@@tool clang++
+|/usr/bin/clang++
+@@link clang++
+|/usr/bin/clang++
+|../lib/llvm-18/bin/clang
+@@real clang++
+|/usr/lib/llvm-18/bin/clang
+@@tool gcc""")
+    records = compiler_profiles.build_profile_records(
+        compiler_profiles.parse_probe_transcript(transcript.encode()), image_digest=profile.image_id,
+        executables=_executables(["clang", "gcc"]),
+        transcript_sha256=hashlib.sha256(transcript.encode()).hexdigest(), image_signature="not-enforced")
+    return compiler_profiles.profile_set(profile.image_id, records)
+
+
 class CapturingFake:
     """Give a family fake that only implements `execute` a real captured execution path.
 
@@ -288,6 +314,7 @@ class CapturingFake:
 
     def __init__(self, profile: BuildProfile, fake: object) -> None:
         self._fake = fake
+        self._profile = profile
 
         def behavior(argv, workspace, working_directory, environment, container):
             container.exec(f"/usr/bin/{argv[0]}", list(argv))
@@ -301,6 +328,11 @@ class CapturingFake:
 
     def execute_captured(self, argv, **options):
         return self._captured.execute_captured(argv, **options)
+
+    def compiler_profiles(self, *, scratch: Path):
+        """A family fake's own profile set when it defines one, else the fixture image profiles."""
+        own = getattr(self._fake, "compiler_profiles", None)
+        return own(scratch=scratch) if own is not None else fixture_compiler_profiles(self._profile)
 
     def __getattr__(self, name: str):
         return getattr(self._fake, name)
