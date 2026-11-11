@@ -332,6 +332,7 @@ them; it never changes a running stack. Profile and capacity overlay can instead
 | `review-status [--limit N]` | Recent runs with status, application run id, start and duration, and for each active run its started and finished jobs and current steps. |
 | `review-stop [--now] [--yes] [--reason TEXT] [--dry-run]` | End the current review: lists every non-terminal run, then terminates them through `recover_runs.py`. Default policy `SAFE_TERMINATE`; `--now` uses `MARK_AS_CANCELED_IMMEDIATELY`, which marks runs canceled without waiting (their tool containers may keep running). Needs `--yes` when more than one run is affected. Nothing active is a no-op, exit 0. |
 | `review-stop-id <id> [--now] [--yes] [--reason TEXT] [--dry-run]` | End one review. `<id>` is a Dagster run id (uuid) or an application run id such as `2026-10-21-0007`, resolved through the runs' tags. Refuses (3) a terminal run, answers 4 when nothing matches; needs `--yes` if several active Dagster runs share the application run. A queued run has no application tag yet, so use its Dagster id. |
+| `review-recover <run-id> [--yes] [--no-probe] [--id-wait S] [--dry-run] [--force]` | Recover one failed application run: the existing recovery steps, in their documented order, stopping at the first refusal ([below](#recovering-a-failed-run)). Asks once before admission and resume; `--yes` pre-confirms. Exit 3 on any refusal or a declined confirmation, 4 when the run or its Dagster dispatches are not found, 0 after the resume was submitted or when nothing was accepted and a fresh review is offered instead. |
 
 ```bash
 scripts/review-start.sh --dry-run
@@ -339,12 +340,46 @@ scripts/review-start.sh
 scripts/review-watch.sh --interval 30
 scripts/review-status.sh --limit 5
 scripts/review-stop-id.sh 2026-10-21-0007 --dry-run
+scripts/review-recover.sh 2026-11-11-0001 --dry-run
+scripts/review-recover.sh 2026-11-11-0001
 ```
 
 ```powershell
 .\scripts\review-start.ps1 -Wsl
 .\scripts\review-watch.ps1 -Wsl -Run 2026-10-21-0007 -Once
+.\scripts\review-recover.ps1 -Wsl 2026-11-11-0001 -DryRun
 ```
+
+### Recovering a failed run
+
+`review-recover <run-id>` runs, for one application run, the steps that
+[recovery and repair admission](recovery-repair.md) documents as single commands. It adds no
+authority: each step is the existing check, it refuses for the existing reasons, and the first
+refusal ends the sequence with that step's own message (exit 3). Nothing is retried, skipped or
+forced past a refusal, and no step is implied by an earlier one succeeding.
+
+| Step | What runs | Refuses when |
+| --- | --- | --- |
+| 1 | Lists the run's recorded Dagster dispatches (runs tagged with the application run, plus the dispatch each attempt `claim.json` names), then the active-run guard. | A dispatch of this run is not terminal (never overridden by `--force`), a claimed dispatch is unknown to Dagster, Dagster cannot be queried, or another review is active (`--force` overrides only that last case, as on `review-start`). |
+| 2 | `review_run.py reconcile` logic for this run's `SUBMITTED` submission intent. | The intent is `UNCERTAIN`, belongs to a dispatch that is not this run's, or reconciliation itself refuses (not terminal, identity mismatch, endpoint). The intent is retained; an unreconciled submission still blocks every launch. |
+| 3 | The stop-verification probe of `stepwise.py recover`, inside the code-location container, for every dispatch, under the run's resume and admission locks. | Any dispatch is absent, foreign, non-terminal or has a live or unknown worker; a registered worker or retained lease remains; the probe fails or does not cover a dispatch. A failed step is not proof that a worker stopped. |
+| 4 | `appsec-review plan-repair` in the code-location container (it holds the measured release and deployment identity), under the run's recorded profile and overlay. The plan is saved under `runs/metadata/review-recover/<run-id>/repair-plan-<plan_sha256>.json` and summarized: jobs reused, jobs re-run with their reasons, refusal reasons. | The plan is not admissible or `plan-repair` fails. |
+| 5 | One confirmation, then `appsec-review admit-repair --plan <that file>` in the container, then `review-start --run-id <run-id>` with all of its guards (submission identity, image pins, resource budget, model login). | The confirmation is declined or absent, admission refuses (for example the plan changed), or `review-start` refuses. |
+
+- `--yes` (`-Yes`) pre-confirms step 5. `--force` never confirms anything.
+- `--dry-run` performs the read-only part of steps 1 and 2 (it can refuse), prints the ordered
+  commands of steps 2 to 5 and executes none of them: no reconcile, no container command, no plan
+  file, no launch.
+- `--no-probe` and `--id-wait` are passed to the resume (`review-start`).
+- When no job of the run has an accepted handoff (no `data/jobs/<job>/latest.json`), a repair would
+  reuse nothing. After steps 1 and 2 the script says so, prints the `review-start` command for a
+  fresh review and exits 0 without launching it or planning a repair.
+- A stepwise walk (`runs/metadata/stepwise/<run-id>/state.json`) is refused: recover it serially
+  with `stepwise.py recover`, because a whole-graph resume would bypass its job-by-job acceptance.
+- A refusal after step 2 leaves the submission reconciled, after step 3 leaves the stop receipts,
+  and after step 4 leaves the plan file; each is the same evidence the single commands leave, and
+  running the script again repeats every check. If the resume in step 5 refuses after admission,
+  fix the cause and run the script again; it plans and admits against the then-current binding.
 
 ## clean-temp
 
@@ -558,4 +593,10 @@ recording stand-in for `lifecycle.py`, and a local Dagster GraphQL server on a r
 sandbox copy of the repository under `test/tmp`. It checks `bash -n`, `shellcheck` and the PowerShell
 parser when those tools exist, the help and error output, the arguments each script passes to
 `lifecycle.py` and `docker exec`, the active-run guard, the stop policies and confirmations, and the
-`clean-temp` and `run-tests` rules. The tests never touch the real stack.
+`clean-temp` and `run-tests` rules. For `review-start` they script the model probe's answer and
+check that an unanswered probe leaves no submission intent and no launch; for `review-recover` they
+script the container's stop-verification, `plan-repair` and `admit-repair` answers and check the
+order of the container and Dagster calls, each refusal stopping the sequence, the confirmation and
+the dry run. The tests never touch the real stack, and they do not exercise the real
+`plan-repair`, `admit-repair` or stop verifier, which have their own unit tests
+(`tests/test_repair_admission.py`, `tests/test_stepwise_rewind.py`).

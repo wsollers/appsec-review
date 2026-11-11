@@ -1066,6 +1066,273 @@ def cmd_review_stop_id(args: argparse.Namespace) -> int:
     return terminate(args, active, args.reason or f"operator review-stop-id {args.id}")
 
 
+# -- review recover -------------------------------------------------------------------------------
+# One guarded command over the existing recovery steps (docs/operations/recovery-repair.md). It adds no
+# authority: every step is the existing check, run in the documented order, and the first refusal ends
+# the sequence with that step's own reason. Nothing is retried, skipped or forced past a refusal.
+CONTAINER_RUNS = "/opt/app/runs"
+REPAIR_PLAN_SCHEMA = "appsec-review/repair-plan/1"
+DISPATCH_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+PLAN_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def recorded_dispatches(url: str, run_id: str) -> list[dict]:
+    """Every Dagster dispatch recorded for one application run: its tagged runs and its attempt claims."""
+    try:
+        runs = {run["runId"]: run for run in list_runs(url, 1000)
+                if tag_map(run).get("appsec/application_run_id") == run_id}
+    except OpsError as error:
+        raise OpsError(f"refusing to recover {run_id}: its dispatches cannot be read from Dagster ({error})",
+                       REFUSED) from error
+    for path in sorted((ROOT / "runs" / run_id / "data" / "jobs").glob("*/attempts/*/claim.json")):
+        shown = path.relative_to(ROOT).as_posix()
+        try:
+            orchestration = json.loads(path.read_text(encoding="utf-8")).get("orchestration") or {}
+        except (OSError, ValueError, AttributeError) as error:
+            raise OpsError(f"refusing to recover {run_id}: attempt claim {shown} is unreadable ({error})",
+                           REFUSED) from error
+        dispatch = orchestration.get("run_id")
+        if orchestration.get("system") != "dagster" or dispatch in runs:
+            continue
+        if not isinstance(dispatch, str) or not DISPATCH_ID.fullmatch(dispatch):
+            raise OpsError(f"refusing to recover {run_id}: attempt claim {shown} names no usable Dagster dispatch",
+                           REFUSED)
+        try:
+            runs[dispatch] = get_run(url, dispatch)
+        except OpsError as error:
+            raise OpsError(f"refusing to recover {run_id}: dispatch {dispatch} recorded by {shown} cannot be read "
+                           f"from Dagster ({error}); its state is unknown", REFUSED) from error
+    return sorted(runs.values(), key=lambda run: (run.get("startTime") or 0, run["runId"]))
+
+
+def unreconciled_submission(run_id: str, dispatch_ids: list[str]) -> dict | None:
+    """This run's ``SUBMITTED`` intent, ``None`` when no intent blocks a launch; any other occupant refuses."""
+    import review_run
+
+    try:
+        record = review_run.read_submission(ROOT)
+    except (OSError, ValueError) as error:
+        raise OpsError(f"the submission intent cannot be read ({error}); inspect "
+                       f"{review_run.submission_directory(ROOT) / 'active.json'}", REFUSED) from error
+    if record is None or record["state"] == "RECONCILED":
+        return None
+    uuid, state = record["dagster_run_id"], record["state"]
+    manual = (f"python deploy/dagster/bin/review_run.py reconcile --run-id {uuid} "
+              f"--url {record['identity'].get('url')}")
+    if uuid not in dispatch_ids:
+        raise OpsError(f"submission {uuid} remains {state} and is not a dispatch of {run_id}; an unreconciled "
+                       f"submission blocks every launch. Inspect that exact run and reconcile it yourself once it is "
+                       f"confirmed terminal ({manual}); review-recover reconciles only this run's own submission.",
+                       REFUSED)
+    if state != "SUBMITTED":
+        raise OpsError(f"submission {uuid} of {run_id} is {state}: its launch response was lost, so whether Dagster "
+                       f"accepted it is not established. Inspect that exact run and reconcile it yourself ({manual}); "
+                       "review-recover reconciles only a SUBMITTED intent.", REFUSED)
+    return record
+
+
+def selection_environment(selection: tuple[str | None, str | None]) -> list[str]:
+    """``docker exec -e`` options that give the container CLI the profile and overlay the run recorded."""
+    profile, overlay = selection
+    options = ["-e", f"{PROFILE_VARIABLE}={profile}"] if profile else []
+    return options + (["-e", f"{OVERLAY_VARIABLE}={overlay}"] if overlay is not None else [])
+
+
+def verify_dispatch_stops(code: Container, run_id: str, dispatch_ids: list[str]) -> None:
+    """Worker-stop verification of every dispatch, by the probe ``stepwise.py recover`` sends to the container."""
+    import stepwise_rewind
+    from appsec_review.storage import FileLock, LockUnavailable
+
+    run_root = ROOT / "runs" / run_id
+    try:
+        # The gates admission and worker registration use: no attempt may change while stops are verified.
+        with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"):
+            result = docker("exec", code.id, "python", "-c", stepwise_rewind.RUNTIME_PROBE, run_id,
+                            json.dumps(dispatch_ids), "verify-stops", timeout=300)
+    except LockUnavailable as error:
+        raise OpsError(f"stop verification refused: {error} (a worker or another operator command holds it)",
+                       REFUSED) from error
+    if result.returncode != 0:
+        raise OpsError(f"stop verification refused (exit {result.returncode}): "
+                       f"{redact(result.stderr or result.stdout, 800)}", REFUSED)
+    try:
+        runtime = json.loads(result.stdout)
+        refusals, verified = list(runtime["refusals"]), set(runtime["verified_dispatches"])
+        if runtime["run_id"] != run_id:
+            raise ValueError("it belongs to another application run")
+    except (ValueError, KeyError, TypeError) as error:
+        raise OpsError(f"stop verification returned no usable result ({error}); nothing is verified", REFUSED) from error
+    if refusals:
+        raise OpsError("recovery requires verified stopped execution: " + "; ".join(str(item) for item in refusals)
+                       + ". A failed step is not proof that a worker stopped.", REFUSED)
+    unverified = sorted(set(dispatch_ids) - verified)
+    if unverified:
+        raise OpsError(f"stop verification did not cover dispatch(es) {', '.join(unverified)}", REFUSED)
+    say(f"  verified stopped: {', '.join(sorted(verified))}")
+
+
+def plan_summary(plan: dict) -> None:
+    decisions = [item for item in plan.get("decisions") or [] if isinstance(item, dict)]
+    reused = [item for item in decisions if item.get("action") == "REUSE"]
+    rerun = [item for item in decisions if item.get("action") != "REUSE"]
+    say(f"repair plan {plan['plan_sha256']}")
+    say(f"  release:  {plan.get('release_sha256') or 'none'}")
+    say(f"  reused ({len(reused)}): {', '.join(str(item.get('job_id')) for item in reused) or '-'}")
+    say(f"  re-run ({len(rerun)}):" + ("" if rerun else " -"))
+    for item in rerun:
+        reasons = "; ".join(str(reason) for reason in item.get("reasons") or []) or "no reason recorded"
+        say(f"    {item.get('job_id')}  {item.get('action')}  {reasons}")
+    refusals = [str(reason) for reason in plan.get("refusals") or []]
+    say(f"  refusals ({len(refusals)}):" + ("" if refusals else " none"))
+    for reason in refusals:
+        say(f"    {reason}")
+
+
+def confirmed(question: str) -> bool:
+    print(f"{question} [y/N] ", end="", flush=True)
+    try:
+        answer = sys.stdin.readline()
+    except (OSError, ValueError):
+        answer = ""
+    say()
+    return answer.strip().lower() in {"y", "yes"}
+
+
+def fresh_start_command(selection: tuple[str | None, str | None]) -> str:
+    profile, overlay = selection
+    command = ["scripts/review-start.sh", *(["--profile", profile] if profile else [])]
+    if overlay is not None:
+        command += ["--overlay", overlay.removeprefix(CONTAINER_ACCEPTANCE + "/") or NO_OVERLAY]
+    return shlex.join(command)
+
+
+def cmd_review_recover(args: argparse.Namespace) -> int:
+    run_id = args.run_id
+    if not APP_RUN_ID.fullmatch(run_id):
+        raise OpsError(f"{run_id!r} is not an application run id like 2026-10-21-0007", USAGE)
+    run_root = ROOT / "runs" / run_id
+    if not run_root.is_dir():
+        raise OpsError(f"no application run runs/{run_id} to recover", NOT_FOUND)
+    if (ROOT / "runs" / "metadata" / "stepwise" / run_id / "state.json").is_file():
+        raise OpsError(f"{run_id} is a stepwise walk: recover it serially with "
+                       f"deploy/dagster/bin/stepwise.py recover --app-run {run_id} "
+                       "(a whole-graph resume would bypass its job-by-job acceptance)", REFUSED)
+    project = deployment_project()
+    containers = stack_containers(project)
+    say(f"review-recover: application run {run_id}, project {project}" + (" (dry run)" if args.dry_run else ""))
+    _webserver, code = webserver_and_code(containers)
+    require_own_stack(containers)
+    selection = recorded_selection(run_id)
+    target = code.settings.get(TARGET_VARIABLE) or f"{CONTAINER_TARGETS}/appsec-multi-vuln"
+
+    say("step 1/5: recorded Dagster dispatches (a non-terminal one refuses)")
+    dispatches = recorded_dispatches(args.url, run_id)
+    if not dispatches:
+        raise OpsError(f"no Dagster dispatch is recorded for application run {run_id} (no tagged run, no Dagster "
+                       "attempt claim); a run the local CLI started is resumed with `appsec-review resume`", NOT_FOUND)
+    for run in dispatches:
+        say(f"  {describe(run)}")
+    running = active_only(dispatches)
+    if running:
+        raise OpsError(f"refusing to recover {run_id}: {len(running)} of its Dagster dispatch(es) are not terminal: "
+                       + "; ".join(f"{run['runId']} {run['status']}" for run in running)
+                       + f". Wait for them (review-watch) or end them (review-stop-id {run_id}). "
+                       "--force does not override this.", REFUSED)
+    guard_active_runs(args.url, containers, args.force, "recover a review")
+    dispatch_ids = [run["runId"] for run in dispatches]
+
+    say("step 2/5: submission intent")
+    submission = unreconciled_submission(run_id, dispatch_ids)
+    reconcile = ([sys.executable, str(BIN / "review_run.py"), "reconcile", "--run-id", submission["dagster_run_id"],
+                  "--url", submission["identity"]["url"]] if submission else None)
+    if submission is None:
+        say("  no unreconciled submission blocks a launch")
+    accepted = sorted(path.parent.name for path in (run_root / "data" / "jobs").glob("*/latest.json"))
+    probe = ["exec", code.id, "python", "-c", "<stepwise_rewind.RUNTIME_PROBE>", run_id, json.dumps(dispatch_ids),
+             "verify-stops"]
+    repair = ["exec", *selection_environment(selection), code.id, "python", "-m", "appsec_review"]
+    plan_command = [*repair, "plan-repair", "--run-id", run_id, "--target", target]
+    plan_directory = ROOT / "runs" / "metadata" / "review-recover" / run_id
+    resume = ["review-start", "--url", args.url, "--run-id", run_id, "--id-wait", str(args.id_wait),
+              *(["--force"] if args.force else []), *(["--no-probe"] if args.no_probe else [])]
+    resume_shown = "scripts/review-start.sh " + shlex.join(resume[1:])
+
+    def nothing_accepted() -> int:
+        say(f"no job of {run_id} has an accepted handoff: a repair would reuse nothing, so none is planned.")
+        say("start a fresh review instead (not launched here; it runs every launch guard):")
+        say(f"  {fresh_start_command(selection)}")
+        return OK
+
+    if args.dry_run:
+        say("dry run: the steps that would run, in this order, each stopping the sequence when it refuses:")
+        say("  2. " + ("+ " + shlex.join(reconcile) if reconcile else "(nothing to reconcile)"))
+        if accepted:
+            say("  3. + docker " + shlex.join(probe))
+            say("  4. + docker " + shlex.join(plan_command) + f"  > {plan_directory.relative_to(ROOT).as_posix()}"
+                "/repair-plan-<plan_sha256>.json, then print reused and re-run jobs and refusals")
+            say("  5. one confirmation" + (" (pre-confirmed by --yes)" if args.yes else "") + ", then")
+            say("     + docker " + shlex.join([*repair, "admit-repair", "--run-id", run_id, "--target", target, "--plan",
+                                               f"{CONTAINER_RUNS}/metadata/review-recover/{run_id}/"
+                                               "repair-plan-<plan_sha256>.json"]))
+            say(f"     + {resume_shown}")
+        else:
+            nothing_accepted()
+        say("dry run: nothing executed")
+        return OK
+
+    if submission:
+        import review_run
+
+        say("+ " + shlex.join(reconcile))
+        try:
+            review_run.reconcile_submission(submission["dagster_run_id"], submission["identity"]["url"])
+        except (OSError, ValueError, RuntimeError) as error:
+            raise OpsError(f"reconcile refused: {error}", REFUSED) from error
+    if not accepted:
+        return nothing_accepted()
+
+    say("step 3/5: worker stop of every recorded dispatch")
+    say("+ docker " + shlex.join(probe))
+    verify_dispatch_stops(code, run_id, dispatch_ids)
+
+    say("step 4/5: repair plan")
+    say("+ docker " + shlex.join(plan_command))
+    planned = docker(*plan_command, timeout=900)
+    try:
+        plan = json.loads(planned.stdout)
+        if (planned.returncode not in {0, 2} or plan["schema"] != REPAIR_PLAN_SCHEMA or plan["run_id"] != run_id
+                or not PLAN_SHA256.fullmatch(plan["plan_sha256"])):
+            raise ValueError("not a repair plan for this run")
+    except (ValueError, KeyError, TypeError) as error:
+        raise OpsError(f"plan-repair refused (exit {planned.returncode}): "
+                       f"{redact(planned.stderr or planned.stdout, 800) or error}", REFUSED) from error
+    plan_file = plan_directory / f"repair-plan-{plan['plan_sha256']}.json"
+    plan_directory.mkdir(parents=True, exist_ok=True)
+    plan_file.write_text(planned.stdout, encoding="utf-8")  # exactly what plan-repair printed; admission rederives it
+    plan_summary(plan)
+    say(f"  plan file: {plan_file.relative_to(ROOT).as_posix()}")
+    if planned.returncode != 0 or plan.get("admissible") is not True or plan.get("refusals"):
+        raise OpsError("the repair plan is not admissible (its refusals are listed above); nothing was admitted or "
+                       "resumed", REFUSED)
+
+    say("step 5/5: admit exactly this plan, then resume")
+    if args.yes:
+        say("  confirmed by --yes")
+    elif not confirmed(f"Admit repair plan {plan['plan_sha256'][:12]} and resume {run_id}?"):
+        raise OpsError("declined: nothing was admitted and nothing was resumed (the plan file is kept for inspection)",
+                       REFUSED)
+    admit_command = [*repair, "admit-repair", "--run-id", run_id, "--target", target, "--plan",
+                     f"{CONTAINER_RUNS}/{plan_file.relative_to(ROOT / 'runs').as_posix()}"]
+    say("+ docker " + shlex.join(admit_command))
+    admitted = docker(*admit_command, timeout=900)
+    if admitted.returncode != 0:
+        raise OpsError(f"admit-repair refused (exit {admitted.returncode}): "
+                       f"{redact(admitted.stderr or admitted.stdout, 800)}; nothing was resumed", REFUSED)
+    say(f"  admitted repair plan {plan['plan_sha256']}")
+    say(f"+ {resume_shown}")
+    return cmd_review_start(build_parser().parse_args(resume))
+
+
 # -- command line ---------------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ops.py", description=__doc__.split("\n\n")[0])
@@ -1136,6 +1403,23 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("--reason", help="recorded in runs/metadata/dagster-recovery evidence")
         if name == "review-stop-id":
             sub.add_argument("id", help="Dagster run id (uuid) or application run id (YYYY-MM-DD-NNNN)")
+    recover = add("review-recover", cmd_review_recover,
+                  "Recover one failed application run through the existing guarded steps, in order.",
+                  dry_run=True, force=True)
+    recover.description = (
+        "Recover one failed application run. Runs the existing steps in their documented order and stops at the "
+        "first refusal with that step's reason: (1) the run's recorded Dagster dispatches must all be terminal; "
+        "(2) this run's SUBMITTED submission intent is reconciled; (3) worker stop is verified for every dispatch "
+        "inside the code location; (4) plan-repair, then the plan summary (reused jobs, re-run jobs, refusals); "
+        "(5) one confirmation, admit-repair with exactly that plan, then review-start --run-id. It adds no "
+        "authority and overrides no check. --force only lets the launch proceed while another review is active; it "
+        "never confirms, and never overrides this run's own non-terminal dispatch or any refusal.")
+    recover.add_argument("run_id", metavar="RUN_ID", help="application run id (YYYY-MM-DD-NNNN)")
+    recover.add_argument("--yes", action="store_true",
+                         help="pre-confirm admission and resume (never implied by --force)")
+    recover.add_argument("--no-probe", action="store_true", help="resume without the model login probe (see review-start)")
+    recover.add_argument("--id-wait", type=float, default=60,
+                         help="seconds the resume waits for the application run id (default %(default)s)")
     import ops_clean
     import ops_readiness
     import ops_tests

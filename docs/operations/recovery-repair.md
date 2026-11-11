@@ -109,6 +109,42 @@ decisions and refusal reasons. Review it before admission. `admit-repair` rederi
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command
 only records admission. It does not execute the restart.
 
+### One command for a `wave1_review` run
+
+For an application run launched with `review-start`, `scripts/review-recover` runs the single-step
+commands above in this order, from the host, and stops at the first one that refuses:
+
+```sh
+scripts/review-recover.sh RUN --dry-run     # read-only checks, then the ordered commands; executes none
+scripts/review-recover.sh RUN               # asks once before admission and resume; --yes pre-confirms
+```
+
+1. every recorded Dagster dispatch of `RUN` must be terminal, and the active-run guard must pass;
+2. the terminal `SUBMITTED` submission intent of `RUN` is reconciled (`review_run.py reconcile`);
+3. worker stop is verified for every recorded dispatch, inside the code-location container, with
+   the same probe `stepwise.py recover` sends (it writes the same
+   `data/recovery/dispatches/<uuid>.json` receipts as `verify-repair-stop`);
+4. `plan-repair` runs in the container and its summary is printed: jobs reused, jobs re-run,
+   refusal reasons;
+5. after one confirmation, `admit-repair` receives exactly that plan, then
+   `review-start --run-id RUN` resumes the run.
+
+**It adds no new authority.** Each step is the existing command's logic with the existing
+refusals; the script does not weaken, skip, retry around or automate past any of them. A failed
+step is still not proof that a worker stopped, an unreconciled submission still blocks a launch,
+an inadmissible plan is still not admitted, and `--force` still overrides only the active-run
+guard for *other* reviews: never this run's own non-terminal dispatch, never a refusal, never the
+confirmation. Everything the script does can be done, and inspected, with the single commands; use
+them when a step needs a closer look. When no job of the run has an accepted handoff the script
+plans no repair and prints the command for a fresh `review-start` instead. Options, exit codes and
+the per-step refusals are in [operator scripts](operator-scripts.md#recovering-a-failed-run).
+
+`plan-repair` and `admit-repair` run in the code-location container because the plan binds the
+deployed release manifest and deployment identity (`APPSEC_REVIEW_RELEASE_MANIFEST`,
+`APPSEC_REVIEW_IMAGE_ID`), which the host does not have. The script passes the profile and overlay
+the run recorded in `data/configuration/manifest.json`, so the plan resolves the run's own frozen
+configuration; a mismatch is a plan refusal, as it is by hand.
+
 ### Serial recovery of an existing stepwise walk
 
 Keep the job-driven loop serial. These are manual operator actions, not automatic repair gates:
