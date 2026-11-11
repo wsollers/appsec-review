@@ -171,7 +171,8 @@ def normalize_cwe(value: Any) -> str | None:
     if isinstance(value, bool):
         return None
     match = _CWE.match(str(value).strip()) if isinstance(value, (str, int)) else None
-    return f"CWE-{int(match.group(1))}" if match else None
+    # CWE-0 is not a weakness; the answer-key scorer refuses it too.
+    return f"CWE-{int(match.group(1))}" if match and int(match.group(1)) else None
 
 
 def weakness_family(cwe: Any) -> str | None:

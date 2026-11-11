@@ -47,8 +47,16 @@ def test_thresholds_incomparability_missing_results_and_duplicates():
     changed["variants"]["full"]["rows"][0]["correct"] = False
     second = trend(changed, cases, revision="2")
     assert compare_trends(first, second, thresholds={"recall": 0})["status"] == "regression"
+    # A changed configuration is an independent variable: it is named, and the comparison proceeds.
     second["identity"]["configuration"] = "d" * 64
-    assert compare_trends(first, second, thresholds={"recall": 0})["status"] == "incomparable"
+    compared = compare_trends(first, second, thresholds={"recall": 0})
+    assert compared["status"] == "regression"
+    assert compared["changed"] == ["implementation_sha", "configuration"] and compared["unknown"] == []
+    # A different corpus is never comparable, whatever else agrees.
+    other_corpus = deepcopy(second)
+    other_corpus["identity"]["corpus"] = "e" * 64
+    refused = compare_trends(first, other_corpus, thresholds={"recall": 0})
+    assert (refused["status"], refused["reason"], refused["checks"]) == ("incomparable", "corpus_differs_or_unknown", {})
     changed["variants"]["full"]["rows"].pop()
     missing = trend(changed, cases, revision="2")
     assert missing["status"] == "missing_results"
@@ -56,6 +64,73 @@ def test_thresholds_incomparability_missing_results_and_duplicates():
     changed["variants"]["full"]["rows"].append(changed["variants"]["full"]["rows"][0])
     with pytest.raises(ValueError, match="duplicate"):
         trend(changed, cases)
+
+
+def test_a_prompt_change_is_compared_and_named_with_its_metric_deltas():
+    report, cases = fixture()
+    baseline = trend(report, cases)
+    reworded = deepcopy(report)
+    for row in reworded["variants"]["full"]["rows"]:
+        row["guidance_sha256"] = "f" * 64
+    reworded["variants"]["full"]["rows"][0]["correct"] = False      # the one vulnerable case is now missed
+    candidate = evaluation_trend(reworded, cases, variant="full", implementation_sha="1" * 40,
+                                 model_sha256="c" * 64)
+    compared = compare_trends(baseline, candidate, thresholds={"precision": 1, "recall": 0})
+    assert compared["changed"] == ["prompts"] and compared["unknown"] == []
+    assert compared["status"] == "regression" and compared["checks"] == {"precision": "passed", "recall": "regression"}
+    assert compared["deltas"]["recall"] == -1.0
+    improved = compare_trends(candidate, baseline, thresholds={"recall": 0})
+    assert (improved["status"], improved["deltas"]["recall"], improved["changed"]) == ("passed", 1.0, ["prompts"])
+
+
+def test_an_unknown_identity_is_reported_as_unknown_not_as_unchanged():
+    report, cases = fixture()
+    baseline = trend(report, cases)
+    candidate = evaluation_trend(report, cases, variant="full", implementation_sha="2" * 40, model_sha256=None)
+    compared = compare_trends(baseline, candidate, thresholds={"recall": 0})
+    assert compared["status"] == "passed"
+    assert compared["unknown"] == ["model"] and compared["changed"] == ["implementation_sha"]
+
+
+@pytest.mark.parametrize("field, value, reason", [
+    ("case_count", 99, "differs:case_count"), ("role", "red_team_analyst", "differs:role"),
+    ("source_schema", "appsec-review/other/1", "differs:source_schema"), ("variant", "other", "differs:variant"),
+], ids=["case_count", "role", "source_schema", "variant"])
+def test_what_was_measured_must_agree(field, value, reason):
+    report, cases = fixture()
+    baseline = trend(report, cases)
+    candidate = {**trend(report, cases, revision="2"), field: value}
+    compared = compare_trends(baseline, candidate, thresholds={"recall": 0})
+    assert (compared["status"], compared["reason"]) == ("incomparable", reason)
+
+
+@pytest.mark.parametrize("thresholds", [{"castle": 0}, {"recall": 1.5}, {"recall": -0.1}, {"recall": True}],
+                         ids=["unknown_metric", "above_one", "negative", "boolean"])
+def test_invalid_thresholds_are_refused_before_any_comparison(thresholds):
+    report, cases = fixture()
+    with pytest.raises(ValueError, match="threshold"):
+        compare_trends(trend(report, cases), trend(report, cases, revision="2"), thresholds=thresholds)
+
+
+def test_run_identities_come_from_the_runs_frozen_records(tmp_path):
+    from appsec_review.observability.quality import check_supplied_identities, run_identities
+    run = tmp_path / "run-1"
+    assert run_identities(run) == {"configuration": None, "prompts": None}
+    configuration = run / "data" / "configuration"
+    configuration.mkdir(parents=True)
+    (configuration / "resolved.json").write_bytes(b'{"jobs": {}}')
+    digest = hashlib.sha256(b'{"jobs": {}}').hexdigest()
+    (configuration / "manifest.json").write_text(json.dumps({"resolved_sha256": digest}), encoding="utf-8")
+    for name in ("b" * 64, "a" * 64, "not-a-bundle"):
+        (run / "data" / "guidance" / name).mkdir(parents=True)
+    recorded = run_identities(run)
+    assert recorded == {"configuration": digest, "prompts": sha256_hex(["a" * 64, "b" * 64])}
+    check_supplied_identities({"configuration": digest, "prompts": None}, recorded)
+    with pytest.raises(ValueError, match="configuration identity"):
+        check_supplied_identities({"configuration": "0" * 64}, recorded)
+    # A manifest that no longer matches the file is not an identity.
+    (configuration / "resolved.json").write_bytes(b'{"jobs": {"x": 1}}')
+    assert run_identities(run)["configuration"] is None
 
 
 def test_empty_denominators_and_unknown_usage_are_explicit():

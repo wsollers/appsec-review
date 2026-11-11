@@ -12,7 +12,11 @@ from enum import Enum
 from pathlib import Path
 import re
 
-SCORING_SCHEMA = "appsec-review/detector-scoring/1"
+SCORING_SCHEMA = "appsec-review/detector-scoring/2"
+SEVERITY_BANDS = ("low", "medium", "high", "critical")  # optional expected severity of a defect
+# Producers whose headline match is function scope and weakness family, not the strict line-and-CWE
+# match: a reviewer cites the missing check, not necessarily the sink line (finding-metrics.md 5.4).
+SCOPE_MATCH_PRODUCERS = frozenset({"review"})
 DEFAULT_TOLERANCE = 2  # lines either side of a defect's target lines (decision 3)
 DEFAULT_MAX_COMBINATION = 3  # largest producer subset searched besides the full set (decision 8)
 FILE_SCOPE = "file"  # ``scope = "file"``: the case covers the whole file (CASTLE, decision 1)
@@ -74,6 +78,7 @@ class KeyEntry:
     pair: str | None = None  # id of the counterpart entry (a defect's fixed twin, or the reverse)
     upstream: str | None = None  # provenance name of the source test (CASTLE file name)
     producers: tuple[str, ...] = ()  # defects only: the hypothesis carried over from [[defect]]
+    severity: str | None = None  # defects only: the expected severity band, when the key states one
 
     def __post_init__(self) -> None:
         if not self.id or not self.path or self.path.startswith("/") or "\\" in self.path:
@@ -84,6 +89,8 @@ class KeyEntry:
             raise ValueError(f"{self.id}: a defect needs a CWE")
         if self.scope is not None and not (1 <= self.scope[0] <= self.lines[0] and self.lines[-1] <= self.scope[1]):
             raise ValueError(f"{self.id}: scope must contain the target lines")
+        if self.severity is not None and (self.kind is not EntryKind.DEFECT or self.severity not in SEVERITY_BANDS):
+            raise ValueError(f"{self.id}: severity is one of {', '.join(SEVERITY_BANDS)} and only on a defect")
 
 
 @dataclass(frozen=True)

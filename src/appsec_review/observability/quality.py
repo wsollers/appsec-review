@@ -134,36 +134,104 @@ def publish_trend(directory: Path, trend: Mapping[str, Any]) -> dict[str, str]:
     return {"status": "published", "sha256": digest, "path": str(path)}
 
 
+# Identities that fix WHAT was measured: two observations are comparable only when these agree.
+_FIXED = ("role", "variant", "case_count", "source_schema")
+# Identities that are the independent variables of a comparison: a change is named, not refused.
+_VARIABLES = ("implementation_sha", "configuration", "prompts", "model")
+_LOWER_IS_BETTER = frozenset({"unsupported_conclusion_rate", "duplicate_rate"})
+_THRESHOLD_METRICS = frozenset({"precision", "recall", "abstention_precision", "abstention_recall",
+                                "unsupported_conclusion_rate", "duplicate_rate"})
+
+
+def _result(status: str, *, changed: Sequence[str] = (), unknown: Sequence[str] = (),
+            checks: Mapping[str, str] | None = None, deltas: Mapping[str, Any] | None = None,
+            reason: str | None = None) -> dict[str, Any]:
+    return {"status": status, "reason": reason, "changed": list(changed), "unknown": list(unknown),
+            "checks": dict(checks or {}), "deltas": dict(deltas or {})}
+
+
 def compare_trends(baseline: Mapping[str, Any], candidate: Mapping[str, Any], *,
                    thresholds: Mapping[str, float]) -> dict[str, Any]:
+    """Compare two observations of the same corpus, naming what changed between them.
+
+    Comparable means the same corpus, role, variant, case count and scorer (``source_schema``).
+    The implementation commit and the configuration, prompt and model identities are the independent
+    variables: a difference is reported in ``changed`` and the comparison proceeds, so a prompt or
+    model change can be judged. An identity that is unknown on either side is listed in ``unknown``;
+    it is neither equal nor different, and the caller must not attribute a delta to it.
+
+    ``status`` is ``duplicate``, ``incomparable`` (with ``reason``), ``missing_results``,
+    ``regression``, ``incomplete`` or ``passed``. ``deltas`` holds ``candidate - baseline`` per
+    thresholded metric, ``None`` when either side is unavailable.
+    """
     for trend in (baseline, candidate):
         if trend.get("schema") != SCHEMA:
             raise ValueError("unsupported quality trend schema")
-    if canonical_json(baseline) == canonical_json(candidate):
-        return {"status": "duplicate", "checks": {}}
-    left, right = baseline["identity"], candidate["identity"]
-    if any(not left.get(key) or left.get(key) != right.get(key) for key in _IDENTITIES) or any(
-        baseline.get(key) != candidate.get(key) for key in ("role", "variant", "case_count", "source_schema")
-    ):
-        return {"status": "incomparable", "checks": {}}
-    if baseline["status"] != "complete" or candidate["status"] != "complete":
-        return {"status": "missing_results", "checks": {}}
-    checks = {}
-    for metric, maximum_regression in sorted(thresholds.items()):
-        if (metric not in {"precision", "recall", "abstention_precision", "abstention_recall",
-                           "unsupported_conclusion_rate", "duplicate_rate"}
-                or type(maximum_regression) not in (int, float) or not 0 <= maximum_regression <= 1):
+    for metric, maximum_regression in thresholds.items():
+        if (metric not in _THRESHOLD_METRICS or type(maximum_regression) not in (int, float)
+                or not 0 <= maximum_regression <= 1):
             raise ValueError("invalid deterministic regression threshold")
+    if canonical_json(baseline) == canonical_json(candidate):
+        return _result("duplicate")
+    left, right = baseline["identity"], candidate["identity"]
+    if not left.get("corpus") or left.get("corpus") != right.get("corpus"):
+        return _result("incomparable", reason="corpus_differs_or_unknown")
+    differing = [key for key in _FIXED if baseline.get(key) != candidate.get(key)]
+    if differing:
+        return _result("incomparable", reason="differs:" + ",".join(differing))
+    if "mixed_configuration_identities" in (baseline["status"], candidate["status"]):
+        return _result("incomparable", reason="mixed_configuration_identities")
+    unknown = [key for key in _VARIABLES if not left.get(key) or not right.get(key)]
+    changed = [key for key in _VARIABLES if key not in unknown and left[key] != right[key]]
+    if baseline["status"] != "complete" or candidate["status"] != "complete":
+        return _result("missing_results", changed=changed, unknown=unknown)
+    checks, deltas = {}, {}
+    for metric, maximum_regression in sorted(thresholds.items()):
         a, b = baseline["metrics"].get(metric), candidate["metrics"].get(metric)
         a, b = a.get("value") if isinstance(a, Mapping) else None, b.get("value") if isinstance(b, Mapping) else None
         if a is None or b is None:
-            checks[metric] = "unavailable_or_empty_denominator"
+            checks[metric], deltas[metric] = "unavailable_or_empty_denominator", None
         else:
-            regression = b - a if metric in {"unsupported_conclusion_rate", "duplicate_rate"} else a - b
+            regression = b - a if metric in _LOWER_IS_BETTER else a - b
             checks[metric] = "passed" if regression <= maximum_regression else "regression"
+            deltas[metric] = b - a
     status = "regression" if "regression" in checks.values() else (
         "incomplete" if not checks or any(value != "passed" for value in checks.values()) else "passed")
-    return {"status": status, "checks": checks}
+    return _result(status, changed=changed, unknown=unknown, checks=checks, deltas=deltas)
+
+
+def run_identities(run_root: Path) -> dict[str, str | None]:
+    """Configuration and prompt identities read from a run's own frozen records.
+
+    ``configuration`` is the SHA-256 the run's configuration manifest records for ``resolved.json``,
+    re-checked against the file; ``prompts`` hashes the sorted guidance-bundle identities pinned under
+    ``data/guidance``. An absent or inconsistent record yields ``None`` for that identity, never a guess.
+    """
+    run_root = Path(run_root)
+    identities: dict[str, str | None] = {"configuration": None, "prompts": None}
+    configuration = run_root / "data" / "configuration"
+    try:
+        recorded = json.loads((configuration / "manifest.json").read_text(encoding="utf-8")).get("resolved_sha256")
+        actual = hashlib.sha256((configuration / "resolved.json").read_bytes()).hexdigest()
+        if isinstance(recorded, str) and recorded == actual:
+            identities["configuration"] = actual
+    except (OSError, ValueError, AttributeError):
+        pass
+    guidance = run_root / "data" / "guidance"
+    if guidance.is_dir():
+        bundles = sorted(item.name for item in guidance.iterdir()
+                         if item.is_dir() and re.fullmatch("[0-9a-f]{64}", item.name))
+        if bundles:
+            identities["prompts"] = sha256_hex(bundles)
+    return identities
+
+
+def check_supplied_identities(supplied: Mapping[str, Any], recorded: Mapping[str, str | None]) -> None:
+    """A supplied identity that contradicts the run's own record is an error, not an annotation."""
+    for key, value in sorted(recorded.items()):
+        given = supplied.get(key)
+        if value is not None and given is not None and given != value:
+            raise ValueError(f"supplied {key} identity does not match the run's frozen record")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -174,6 +242,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--model-sha256")
     parser.add_argument("--variant", default="full")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--run", type=Path,
+                        help="run directory whose frozen configuration and guidance identities must agree "
+                             "with the report's recorded identities")
     args = parser.parse_args(argv)
     report = json.loads(args.report.read_text())
     cases = json.loads(args.cases.read_text())["cases"]
@@ -184,6 +255,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = competence_trend(report, cases, implementation_sha=args.implementation_sha)
         if args.model_sha256 and args.model_sha256 != result["identity"]["model"]:
             parser.error("model identity assertion does not match the recorded competence model")
+    if args.run is not None:
+        try:
+            check_supplied_identities(result["identity"], run_identities(args.run))
+        except ValueError as error:
+            parser.error(str(error))
     print(json.dumps(publish_trend(args.output, result), sort_keys=True))
     return 0
 

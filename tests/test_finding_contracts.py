@@ -68,6 +68,7 @@ def test_counts_are_zero_filled_and_keep_unestablished_values_as_their_own_row()
 
 @pytest.mark.parametrize("value, expected", [("CWE-120", "CWE-120"), ("cwe-120", "CWE-120"), ("120", "CWE-120"),
                                              (120, "CWE-120"), ("CWE-0120", "CWE-120"), ("buffer", None),
+                                             ("CWE-0", None), (0, None),
                                              (True, None), (None, None)], ids=str)
 def test_normalize_cwe(value, expected):
     assert c.normalize_cwe(value) == expected
