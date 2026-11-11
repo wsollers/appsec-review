@@ -150,3 +150,74 @@ failures are not accepted merely because the job publishes with gaps; any remain
 checked against declared static-analysis limits. Provider counts, per-branch execution/status/gap
 metrics, hierarchy, published shards and lifecycle must agree. Workflow commands are analyzed as
 data, never executed. The target must remain unchanged.
+
+## WSOLLERS1 c094 native Zizmor repair
+
+The interrupted review was reclaimed on 2026-11-11 by parent session
+`83ad90fb-4e0a-4161-aa81-57e1bc0bd04f`. The parent owns mounted-main integration and live
+operations; one replacement repair agent owns the isolated `william-sollers-xbox-fuzzy-funicular`
+checkout at `cb4d47bf86e17499c6c747727fb73f411e6cdba5` (the same tracked tree as mounted main
+`d3c8e733d5aa48a01c1a82a9209a6ec2d5e9167e`). The previous paused agent was inaccessible.
+
+Fresh inspection confirmed five healthy services, HTTP 200, no nonterminal Dagster dispatches,
+the original tooling image `29682648dd80ac803efe7cde0ce362098782312b7f44a1a658873823ac522d2b`,
+measured release `9966930659bf5359aa3f1503192d4793de96a3dae5f00120c249d2700cc2fa3a`,
+resolved configuration `9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8`,
+and host-pins hash `f5ea6a78d4d0fc1e9adb88bd9cddff68d9608c513172c58eda994db45eef73bf`.
+The target remains clean at `bd69bfe83fec49155366303604475512c98c4ce6`.
+The operator-owned untracked `data/feeds/` was left untouched.
+
+The failed content criterion is recorded against application run `2026-11-10-0003`,
+CI `attempt_0001`, dispatch `cb054c06-2022-4911-ae97-2f54092d6b31`: execution succeeded, but
+operator acceptance remains withheld. The four native `stdout.bin` arrays under
+`steps/ci_analysis/tasks/github_zizmor_scan/scratch/file_0001` through `file_0004` contain
+11, 5, 3 and 3 nonignored results, while the scan result and published observations contain zero.
+The generic decoder does not recognize Zizmor's native fields. Actionlint's four empty arrays
+are genuinely clean; Checkov retains five observations (GitHub three, Bitbucket one, CircleCI one).
+
+The repair criterion adds exact accounting for all 22 nonignored native results. Rule/message,
+severity and the actual `Primary` location must survive normalization and shard publication.
+Native row/column coordinates are zero-based; related or hidden locations must not replace the
+primary, and foreign or malformed locations must produce explicit parser evidence rather than a
+fabricated input-file/line-one observation. Ignored results produce no observations, valid `[]`
+is clean, and tool-provided fixes are never applied. All fifteen branch dispositions, ten
+definition hashes, source spans, raw evidence, coverage, correlation and telemetry must agree.
+
+Before any integration, `.venv/bin/python deploy/dagster/bin/stepwise.py recover --app-run
+2026-11-10-0003` verified all thirteen recorded dispatches stopped. It performed no admission
+or launch. A new measured repair plan, explicit admission and replay are still required.
+No existing CI output has been accepted or downstream job launched during this recovery.
+
+The ready repair is `de5d5fa96a1bc2c7bd1f9a97fb9d12acfc59ece3`. Its four-file diff changes the
+CI decoder/dispatch, preserves explicit zero byte offsets when publishing source locations, changes
+the fake clean linter output to `[]`, and adds native-output units and publication regressions.
+An invalid native finding rejects that file's payload with a scoped `parser_error` gap and retained
+stdout; other definition scans remain independent. Schemas, contracts, image recipes, frozen
+configuration and release scoping are unchanged.
+
+In the isolated checkout, exact collection found 61 tests in 0.64 s. The final guarded command was:
+
+```sh
+.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 61 --parallel \
+  --test-workers 2 --shuffle-seed 11101 --strict -- tests/test_ci_zizmor_output.py \
+  tests/test_ci_configuration_analysis_job.py::test_native_zizmor_is_published_with_its_source_span_and_raw_evidence \
+  tests/test_ci_configuration_analysis_job.py::test_invalid_zizmor_output_is_a_parser_gap_with_raw_evidence \
+  tests/test_ci_configuration_analysis_job.py::test_native_zizmor_keeps_observation_bounds_redaction_and_raw_output \
+  tests/test_ci_configuration_analysis_job.py::test_configured_topology_matches_the_job_and_the_job_is_strict \
+  tests/test_ci_configuration_analysis_job.py::test_out_of_range_bounds_are_refused_at_claim_time_not_inside_a_unit
+```
+
+Result: **61 passed**, 29.00 s pytest / 34.546 s total, maximum case 9.603 s, no skips.
+The 200-node, 30 s collection, 300 s total and two-worker bounds were not raised. Report:
+`test/tmp/reports/tests-custom-20261110-211410-441998-10353.json` in the repair checkout.
+The detailed command/count/timing record is `test/tmp/zizmor-repair-handoff.json` there.
+
+Earlier iterations remain failures or slow checks, not accepted verification: the original parser
+failed all four publication regressions (33.53 s); a fixture column assertion failed (18.65 s);
+a profiled full-GraphRunner assertion run passed but took 35.37 s with a 33.377 s case; subsequent
+focused fixture iterations had four undeclared-pin failures and four tuple/list comparison failures.
+The final publication tests retain real configuration, real intake/catalog GraphRunner upstreams,
+real claim admission and the complete CI UnitExecutor through `publish_handoff`, faking only the
+external image/container boundary. Per-unit resume checkpoint machinery and graph-wide terminal
+telemetry are outside these new focused tests; the existing GraphRunner cases were not rewritten.
+No live, integration, acceptance or broad suite was run by the repair agent.
