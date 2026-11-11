@@ -1,0 +1,243 @@
+{
+ "artifacts": [
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/status.json",
+   "sha256": "075fb64a0893629deb055299f3c83075c29e53520e3af1d93af9d631f4a692cd"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/status.json",
+   "sha256": "dae1e82c671031ec5771c46063ca7547ee35e54364ec5257448850da1c99b348"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/status.json",
+   "sha256": "6da8a305736a9776b57c8a1ecb6e19a8ef0d087475a74dc680f9a40d1d1b1096"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/claim.json",
+   "sha256": "543d25fb10d865a95fff7950523bcc0c1b1420839f341eba45c741932914b56e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/image-pin-verification-handoff.json",
+   "sha256": "f49d3557d712a56ad26310a8f090905642fac11a75756f83485d8a50c9cbf1d0"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/result.json",
+   "sha256": "61b3a511faf4b3e62ca14f84bec1cce29da9b103a96eb37ba17135e81d8091f1"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/result.json",
+   "sha256": "90446853da6a654a3a11b92caf379aab0214d7a98b07748cd3c4b77c1f07c2bb"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/image-pin-plan.json",
+   "sha256": "c1c8203b9aa828cedbb60a365da69f1bdc6d42c8f6ed0a8793455f85ef40f9fd"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/image-pin-verification.json",
+   "sha256": "6ccf31af647bc025db3bf2fc4dbfd92793d573c99c49ceff277a1f1158985dbe"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/result.json",
+   "sha256": "5517756bbe47eb63cc3f463141df503ae5d1865857688f0ba919b5b80c121ef6"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/outcomes.json",
+   "sha256": "fec19a7b4231bccea095bbf016ae6267c69d74bde03083e6c96ca383f00edeb6"
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/image-pin-verification-job/3",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_image_pin_verification",
+ "outputs": {
+  "publication.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/image-pin-verification-handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "images": {
+    "<summary>": {
+     "count": 58,
+     "sha256": "602b825778d23925209abc8743e07f776bf836f727542882dbb27856591978a8"
+    }
+   },
+   "pin_count": 58,
+   "schema": "appsec-review/image-pin-verification/1",
+   "terminal_status": "SUCCEEDED"
+  },
+  "selection.resolve_pins": {
+   "artifact": {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/image-pin-plan.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "pin_count": 58,
+   "pins": {
+    "<summary>": {
+     "count": 58,
+     "sha256": "5ac35164df53443c16200c86f69e4f42d23a0c49bdc166593e095c77b1050b15"
+    }
+   },
+   "schema": "appsec-review/image-pin-plan/2"
+  },
+  "verification.inspect_images": {
+   "artifact": {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/image-pin-verification.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "images": {
+    "<summary>": {
+     "count": 58,
+     "sha256": "602b825778d23925209abc8743e07f776bf836f727542882dbb27856591978a8"
+    }
+   },
+   "pin_count": 58,
+   "schema": "appsec-review/image-pin-verification/1"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "publication": "SUCCEEDED",
+  "selection": "SUCCEEDED",
+  "verification": "SUCCEEDED"
+ },
+ "units": {
+  "publication.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "selection.resolve_pins": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "verification.inspect_images": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/claim.json",
+    "sha256": "c40b140f959a23d5a7c63f4a0de8e584926f0b788c108a575d7541ebaacfa459",
+    "size_bytes": 4434
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/outcomes.json",
+    "sha256": "07d8dfaa3df57fc74da9067ecf2ae40b10700bfeeac8ca7a9d2f8968780c3fa2",
+    "size_bytes": 2086
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/image-pin-verification-handoff.json",
+    "sha256": "655e0ba7c3e6ed8515dc9716c84bb6263f60023098e5edd295b7d976e715849d",
+    "size_bytes": 18076
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/result.json",
+    "sha256": "c0d0f06c53da713b5eb62fc709242b4b399c8d643a9eedb8045a529044633df1",
+    "size_bytes": 18139
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/status.json",
+    "sha256": "83ab0786d9b63ee18093d1c3c17d04d78762a9816331f36f2c564f58ac393fb6",
+    "size_bytes": 695
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/image-pin-plan.json",
+    "sha256": "ac055203741c70402681930cfe19c90b4f96b19b3a9e5807b800c37225ba5fb6",
+    "size_bytes": 11676
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/result.json",
+    "sha256": "a4b82e57b004854a81d4975de65043a9b427fb81e7d496a807fcdccb6ecc0076",
+    "size_bytes": 11514
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/status.json",
+    "sha256": "135c5606ec5d6e511f035401a90e961854b221ca59d0347a8ce0a67393158fd2",
+    "size_bytes": 644
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/image-pin-verification.json",
+    "sha256": "0b9ac6df8d51735e5c2ed59be3c2ecb35d5791fbbe0ecfdfc74e72d888a5b73b",
+    "size_bytes": 18781
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/result.json",
+    "sha256": "950178fa32fb0ca80c4b5242ff516d959b10398ab92da1f3fa15d876a4fb551f",
+    "size_bytes": 18091
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/status.json",
+    "sha256": "09bf97ddfa82fd6684b27942956bf9eb1d231484747cfa64e3757f07a12a7218",
+    "size_bytes": 683
+   }
+  ]
+ }
+}

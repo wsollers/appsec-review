@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 import os
+import shlex
 import struct
 from dataclasses import replace
 from pathlib import Path
@@ -127,10 +128,27 @@ def _executor(profile, calls, scenario):
         flags = ["-m64"] if scenario != "cross" else ["-m32"]
         compile_argv = ["/usr/bin/clang++", *flags, "-o", f"/workspace/{CASE}/build/main.o",
                         "-c", f"/workspace/{CASE}/main.cpp"]
-        if scenario != "empty":
+        invocation = [compile_argv[0], "-MD", "-MT", "main.o", "-MF", "main.o.d", *compile_argv[1:]]
+        wrapped = scenario in {"wrapped", "wrappers-only", "unmatched-wrapper", "unknown-python", "unknown-shell"}
+        link = ["/usr/bin/clang++", f"/workspace/{CASE}/build/main.o", "-o", f"/workspace/{CASE}/build/case094"]
+        if wrapped:
+            for command, linking in ((invocation, False), (link, True)):
+                forwarded = [value if value != "-m64" or scenario != "unmatched-wrapper" else "-m32"
+                             for value in command[1:]]
+                shell = shlex.join(["/capture/wrappers/clang++", *forwarded])
+                container.exec("/bin/sh", ["/bin/sh", "-c", f": && {shell} && :" if linking else shell])
+                container.exec("/usr/bin/python3",
+                               ["/usr/bin/python3", "/capture/tool-wrapper.py", "clang++", *forwarded])
+                container.tool_call("clang++", forwarded, executable="/usr/bin/clang++")
+            if scenario != "wrappers-only":
+                container.exec("/usr/bin/clang++", link)
+            if scenario in {"unknown-python", "unknown-shell"}:
+                interpreter, script = (("/usr/bin/python3", "/workspace/compiler.py")
+                                       if scenario == "unknown-python" else ("/bin/sh", "/workspace/compiler.sh"))
+                container.exec(interpreter, [interpreter, script, *invocation[1:]])
+        if scenario not in {"empty", "wrappers-only"}:
             executable = "/workspace/compiler/clang++" if scenario == "outside" else "/usr/bin/clang++"
-            container.exec(executable, [compile_argv[0], "-MD", "-MT", "main.o", "-MF", "main.o.d",
-                                       *compile_argv[1:]])
+            container.exec(executable, invocation)
             if scenario == "mixed":
                 container.exec(executable, [value if value != "-m64" else "-m32" for value in compile_argv])
         declared_argv = [arg if arg != "-m64" or scenario != "database-target" else "-m32"
@@ -295,6 +313,36 @@ def test_native_target_is_proven_only_by_captured_execution(tmp_path, scenario, 
     attempt = run / "data/jobs/job_project_build/attempts/attempt_0001"
     problems = project_build_content_problems(run, attempt)
     assert (not problems) is (reason is None or scenario == "direct"), problems
+
+
+@pytest.mark.parametrize("scenario,reason", [
+    ("wrapped", None), ("wrappers-only", "capture_empty"),
+    ("unmatched-wrapper", "unknown_compiler_in_capture"),
+    ("unknown-python", "unknown_compiler_in_capture"),
+    ("unknown-shell", "unknown_compiler_in_capture"),
+])
+def test_capture_intermediaries_require_correlated_real_compiler_execution(tmp_path, scenario, reason):
+    run, _, document, _, _ = _run(tmp_path, scenario)
+    receipt, = document["probe_receipts"]
+    proof, = receipt["enforcement"]
+    assert_job_lifecycle(run, "job_project_build",
+                         terminal="SUCCEEDED" if reason is None else "COMPLETED_WITH_GAPS")
+    if reason is None:
+        assert proof["status"] == "proven" and receipt["gaps"] == []
+        assert len(proof["closure_manifest"]["observed_axes"]) == 1
+        assert all(item["trusted"] and item["executable"] == "/usr/bin/clang++"
+                   for item in proof["closure_manifest"]["compilers"])
+        assert proof["proven_axes"]["os"] == "linux" and proof["proven_axes"]["isa"] == "x86_64"
+        assert proof["proven_axes"]["abi"] == "gnu"
+        assert receipt["native_compile_database"]["entry_count"] == 1
+        assert any(item["kind"] == "executable" for item in receipt["artifacts"])
+    else:
+        assert proof["status"] == "unknown" and not receipt["artifacts"]
+        assert any(item["code"] == "producer_reported_gap" and item["reason"] == reason
+                   and item["scope_id"] == receipt["build_unit_id"] for item in receipt["gaps"])
+        if scenario == "wrappers-only":
+            assert proof["closure_manifest"]["translation_units"] == []
+            assert receipt["native_compile_database"]["entry_count"] == 0
 
 
 @pytest.mark.parametrize("scenario", ["dynamic", "path", "cc", "network", "missing", "invalid", "unknown"])

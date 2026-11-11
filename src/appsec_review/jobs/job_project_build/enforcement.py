@@ -6,6 +6,7 @@ from functools import lru_cache
 import json
 from pathlib import Path, PurePosixPath
 import posixpath
+import shlex
 from typing import Any
 
 from appsec_review.config.build_selection import AXES, parse_build_selection
@@ -70,6 +71,36 @@ def _targets(argv, defaults):
     return flags, [{key: value.get(key) for key in AXES} for value in axes], malformed
 
 
+def _capture_wrapper_invocation(executable, argv):
+    """Identify instrumentation frames; their arguments are not execution evidence."""
+    tool = PurePosixPath(executable).name
+    if executable == f"/capture/wrappers/{tool}":
+        return tool, argv[1:]
+    if (executable == "/usr/bin/python3" and len(argv) >= 3
+            and argv[1] == "/capture/tool-wrapper.py"):
+        return argv[2], argv[3:]
+    if executable != "/bin/sh" or len(argv) != 3 or argv[1] != "-c":
+        return None
+    if "$" in argv[2] or "`" in argv[2]:
+        return None
+    try:
+        lexer = shlex.shlex(argv[2], posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        command = list(lexer)
+    except ValueError:
+        return None
+    # Ninja surrounds a linker command with these no-op guards.
+    if command[:2] == [":", "&&"]:
+        command = command[2:]
+    if command[-2:] == ["&&", ":"]:
+        command = command[:-2]
+    if not command or any(value in {";", "&&", "||", "|", "&", "<", ">", "(", ")"} for value in command):
+        return None
+    tool = PurePosixPath(command[0]).name
+    return (tool, command[1:]) if command[0] == f"/capture/wrappers/{tool}" else None
+
+
 def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],
                          dispatch: Mapping[str, Any], bound: Mapping[str, Any],
                          profiles: Mapping[str, Any], policy, run_root: Path,
@@ -90,11 +121,16 @@ def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],
             raise ValueError("execution capture belongs to a different pinned image")
         incomplete |= bool(capture.gaps) or not capture.document.get("limits", {}).get("capture_envp")
         events = list(capture.events())
-        image_calls = {canonical_json(event["argv"][1:]) for event in events
-                       if event.get("kind") == "process_exec" and event.get("result") == 0
-                       and isinstance(event.get("argv"), list)
-                       and isinstance(event.get("executable"), str)
-                       and _profile_for(event["executable"], records) is not None}
+        image_calls = set()
+        for event in events:
+            if (event.get("kind") != "process_exec" or event.get("result") != 0
+                    or event.get("argv_truncated") or not isinstance(event.get("argv"), list)
+                    or not isinstance(event.get("executable"), str)):
+                continue
+            profile = _profile_for(event["executable"], records)
+            if profile is not None:
+                image_calls.update((name, canonical_json(event["argv"][1:]))
+                                   for name in profile["invocation_names"])
         for event in events:
             if event.get("kind") != "process_exec" or event.get("result") != 0:
                 continue
@@ -104,10 +140,13 @@ def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],
                 incomplete = True
                 continue
             kind = tool_kind(executable, argv)
-            if (executable.startswith("/capture/wrappers/")
-                    and canonical_json(argv[1:]) in image_calls):
-                continue  # The capture launcher is not the image compiler it exec'd.
-            if kind not in {"compiler", "linker-driver"}:
+            wrapper = _capture_wrapper_invocation(executable, argv)
+            if (wrapper is not None and not event.get("argv_truncated")
+                    and (wrapper[0], canonical_json(wrapper[1])) in image_calls):
+                continue  # Only the matching kernel-observed image compiler proves execution.
+            compiler_wrapper = wrapper is not None and tool_kind(
+                wrapper[0], [wrapper[0], *wrapper[1]]) in {"compiler", "linker-driver"}
+            if kind not in {"compiler", "linker-driver"} and not compiler_wrapper:
                 # An unrecognised executable with compile flags cannot borrow a known driver's name.
                 source_argument = any(PurePosixPath(value).suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".c++"}
                                       for value in argv[1:])

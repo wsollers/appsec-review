@@ -1,0 +1,1668 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/result.json",
+   "sha256": "31d2e552e22773142a3978d69bd0387f81bccf7c320a1d0b1a07e9c6cf335a4c"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "10312f8f4c48a7145ddd5f89d06bb5e2d0ae934d3c2d5adac4fa693b2ad56386"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "11ff401a767028292b21048f6bdc4dbc6faa5c1b2dd1f0da2a25ee217f176bbb"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1c31d1274c9995e0fd82db64326210658d40e148c8442718b8faad5362bdd72a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "257742fc883bc1a11f0f60ce3364a68f08ffa230ba3d16d1a876819730361523"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9c96336219ee6230de6096c5eb2a5975e195884c275611720e42c4ebdf0189b1"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/status.json",
+   "sha256": "5727a24b5ae424d456ac0bc0240c0618b6c85ae7ef4752943381e66574190dde"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/status.json",
+   "sha256": "b9db994733650511a3813870ba33f04edcabfce52f6c8344ad806680409eeece"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/status.json",
+   "sha256": "864b6720caffd0a9f45976a47752852972352f8bb72c28cb37caf85796ef5720"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/status.json",
+   "sha256": "42995a6a0f7d015dca3772c3656247b3d498b2b96db169f01ce458319f718603"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/status.json",
+   "sha256": "4023a9fe252b2bb0ba7e334425f800d5a8bf299611fac1eb1d40d9fdad0d8d8b"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/status.json",
+   "sha256": "7ee6c139b6183a06ccc3bf19e85dee9b15ddb5b0dc786e561ce33421a8a8d875"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/status.json",
+   "sha256": "dcba47096a776a2d479ab88ccdeaa19e445275d1eeaa87b1bff8d162d258e245"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/status.json",
+   "sha256": "d23a0e3cbc78d84f073f99a76997fa14555580e1dfb60b5784a3aa89f43711a9"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/status.json",
+   "sha256": "a08ee0d5757580416ea72182903fc2c982123715aa4796323b43806b477bdcb6"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/status.json",
+   "sha256": "15dd064479fb8e8ab1b1341f9976529b0e1ee6d0b461535d07012bc778712531"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/status.json",
+   "sha256": "6963ebef13b74446834cd83ce0d622af016a43fef71d7f53799833d6f6847b52"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/status.json",
+   "sha256": "20d748391d4751eb95a3216e3da9ea4531d410ca8646683536cfd8b64d03221b"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/status.json",
+   "sha256": "935661c195ac2200d2236b2b96f26b6f646e2f04b1ad72b25ee7fcb9ec922f84"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/status.json",
+   "sha256": "6ac46c0f373357d4e47485b8acf873faf2a727ba124c4db9b110cde715865850"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+   "sha256": "0ea01f6dd44c7b64bab4e1e91dbe079d23795fe4c301b5ad0fa31dc6899d3b54"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+   "sha256": "47db49fc079ac0a471da3e880d625ca39210895cc9cd079f918fbff17b28e94a"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+   "sha256": "29f2fd21d99bcc9d48b9ab8882f997b582a71ba357332f264d9a1bcc642b7973"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+   "sha256": "7e679ada3f9ffc1989011ae7987be14988355b3106511695aec7fa83eb2b37b4"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+   "sha256": "b6faea2be9028779766ff6c398b3bf50c3154c1d4c76f8bb0e2b15e045b311cf"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+   "sha256": "2bdd457f4ab8c9ceabc636eb4f08f520a53fd8f7f38bb4d6bbe075061e3e4f95"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/result.json",
+   "sha256": "2abad6b7b593b1aaedaf36cc47a966861b1bf8b33e11040f3e1371aeaae9a12b"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/result.json",
+   "sha256": "0ba25b58953185611dd8a4b60ad43b49c8e538521eae9894feed0a1fce50c54d"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "0c7a81bf1405a05fc96076e97f2a1e49a30424f0eeb04091eb1dcddc18d60a78"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "22c1107c00cec99be7b81c33746663a5d61370ed480f0d754a6cc322670d7182"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "4d39743869e1190d49839800a774d5ec37608c74a870ae59eb05c409b119619e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "7155d9f5fa4892f94cdb9741803f3c731d127b504c6d2d019d570c4b47b1366a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "cbfa347e12b2e2da677845955f37ea14663a5f0457317609956aa0adfb04b4f8"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+   "sha256": "ecd98d1604c08144917bf5b7b44b0e3b5606a90b8b2ad45131d029be0f71cd63"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+   "sha256": "84040d71fd2c963837d5b64d3c4ac3ce3db41bd8d29c9a60c36c233940d9b2b7"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/result.json",
+   "sha256": "c1a2d166659131c17d109ab47969e7b31492b71e334b6bc04412ca12699b9755"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/result.json",
+   "sha256": "2e38a7807b54b0d7b0c76bd7633b85bc329cc012d111b026a188c6727375ebfd"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/result.json",
+   "sha256": "1aef83569c9c366d2a735980469350902a73cbf4d6b1b48676c85689c93ab270"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/result.json",
+   "sha256": "d56381f5be8e2ecd9b204faad153e9bcb714bfc91b2cfc8d1ee85779c0138f0a"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/result.json",
+   "sha256": "5902b2620329da57ab8bd1f94f3abdbfb515f81bf373e7eca94716861828a2d3"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/result.json",
+   "sha256": "8270221dcedf22f94037cba44c9a74962b6da1972c13ba99fa261203fef43e1c"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/result.json",
+   "sha256": "49d399cad145fd3b604751b45ef68ad7cc67fa3bf3ea745cb30830d73631dbb9"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+   "sha256": "071cc0b815be7377901d3b874dd5b25ef7fa962f899e74076ee795f1285487c2"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/result.json",
+   "sha256": "ce374f3dd269c6ce9bd05a90b37b0c61f81762c98f75ec71f1ff70bced8ff77b"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/result.json",
+   "sha256": "b92c644cc1765a923a9b9fbcc8bbfb761ec160c8e70f680f2a7d062ef27157ad"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/result.json",
+   "sha256": "5f60110c8656da204d96d5c1872ec4b1f47d5777f70c4ae7fd52de914087685c"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/result.json",
+   "sha256": "b7554214ee712f2141f8589d77a3aa7a316d058d1e207d48ef19c99ee4f3ddc6"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/catalog-<attempt>.json",
+   "sha256": "8171904f2efe24019c502ceb4e9e82886ed71352820fbee789433d5b8f034d5f"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/outcomes.json",
+   "sha256": "7c4c71456a1499de5da7c786144cb87b68ea8cb8e35695b3020c56b16cca75c8"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+   "sha256": "35f8fe3b73271b190ae20b64c451cea640fc751eb6be1bf2b0fe51e1d5ccff2d"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "unavailable": 1
+   },
+   "entity_kinds": {
+    "build_action": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "component": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/components/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "symbol": 2
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 2,
+    "locations": 2,
+    "metadata": 8,
+    "relations": 2
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1,
+    "unavailable": 6
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/documents/<sha256>.sqlite",
+   "rows": {
+    "coverage": 7,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "source_file": 17
+   },
+   "kind": "sqlite",
+   "path": "data/indices/source/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 17,
+    "locations": 17,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "compile-units",
+    "gap": "compile_commands.json not present",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/build/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents",
+    "gap": "design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test: no accepted target document; source inventory .git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:design",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:dfd",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:openapi",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:postman",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:threat_model",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:unit_test",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-files",
+    "gap": ".git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/source/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": "compile_commands.json not present",
+   "unit": "build_discovery.discover_compile_commands"
+  },
+  {
+   "count": 1,
+   "gap": "component:0001: no manifest for dependency extraction",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "design: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "dfd: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "openapi: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "postman: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "threat_model: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "unit_test: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "design: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "dfd: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "openapi: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "postman: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "threat_model: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "unit_test: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "no recognized project manifests",
+   "unit": "repository_discovery.discover_projects"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "repository_discovery.partition_repository"
+  },
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "retrieval_indexes.build_path_index"
+  },
+  {
+   "count": 2,
+   "gap": "design: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "dfd: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "openapi: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "postman: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "threat_model: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "unit_test: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  }
+ ],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/target-catalog-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_review_intake"
+  ]
+ },
+ "job_id": "job_target_catalog",
+ "outputs": {
+  "build_discovery.catalog_build_targets": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "engine_discovery": {
+    "counts": {
+     "bytes_read": 0,
+     "catalog_files": 17,
+     "eligible_descriptors": 0,
+     "projects": 0,
+     "read_descriptors": 0,
+     "roots_inspected": 0,
+     "roots_observed": 0,
+     "uninspected_descriptors": 0,
+     "uninspected_roots": 0
+    },
+    "observations": []
+   },
+   "schema": "appsec-review/build-targets/2",
+   "targets": [
+    {
+     "build_points": [
+      {
+       "evidence": "projects/native/case-094/CMakeLists.txt:7",
+       "headers": [],
+       "include_dirs": [],
+       "kind": "executable",
+       "name": "case094",
+       "sources": [
+        "projects/native/case-094/src/access.cpp",
+        "projects/native/case-094/src/blocks.cpp",
+        "projects/native/case-094/src/console.cpp",
+        "projects/native/case-094/src/directory.cpp",
+        "projects/native/case-094/src/echo.cpp",
+        "projects/native/case-094/src/main.cpp",
+        "projects/native/case-094/src/notes.cpp",
+        "projects/native/case-094/src/title.cpp"
+       ]
+      }
+     ],
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-adf13d8306cb272dea43",
+     "descriptor_facts": {},
+     "descriptor_package": {
+      "bounds": {
+       "actual_bytes": 725,
+       "actual_files": 2,
+       "max_file_bytes": 65536,
+       "max_files": 24,
+       "max_total_bytes": 262144
+      },
+      "build_unit": {
+       "build_points": [
+        {
+         "evidence": "projects/native/case-094/CMakeLists.txt:7",
+         "headers": [],
+         "include_dirs": [],
+         "kind": "executable",
+         "name": "case094",
+         "sources": [
+          "projects/native/case-094/src/access.cpp",
+          "projects/native/case-094/src/blocks.cpp",
+          "projects/native/case-094/src/console.cpp",
+          "projects/native/case-094/src/directory.cpp",
+          "projects/native/case-094/src/echo.cpp",
+          "projects/native/case-094/src/main.cpp",
+          "projects/native/case-094/src/notes.cpp",
+          "projects/native/case-094/src/title.cpp"
+         ]
+        }
+       ],
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-adf13d8306cb272dea43",
+       "family": "native",
+       "markers": [
+        {
+         "path": "projects/native/case-094/CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "provenance": "deterministic-marker",
+       "root": "projects/native/case-094",
+       "source_resolution": "complete"
+      },
+      "documents": [
+       {
+        "content": "cmake_minimum_required(VERSION 3.20)\nproject(case_094 LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nadd_executable(case094\n  src/access.cpp\n  src/blocks.cpp\n  src/console.cpp\n  src/directory.cpp\n  src/echo.cpp\n  src/main.cpp\n  src/notes.cpp\n  src/title.cpp\n)\ntarget_compile_options(case094 PRIVATE -Wall -Wextra -Wpedantic)\n",
+        "path": "projects/native/case-094/CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "content": "# case-094\n\nSmall CMake C++ console program. `src/main.cpp` takes a command name and a\nvalue from its two arguments and passes the value to the matching routine in\n`src/`: text copies and printing, note records, a key table lookup, block\nbuffers, an `echo` call, and an access check.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+        "path": "projects/native/case-094/README.md",
+        "sha256": "<sha256>"
+       }
+      ],
+      "schema": "appsec-review/build-descriptor-package/1"
+     },
+     "family": "native",
+     "markers": [
+      {
+       "path": "projects/native/case-094/CMakeLists.txt",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "project_type": "generic",
+     "provenance": "deterministic-marker",
+     "required_image_profile": "native",
+     "root": "projects/native/case-094",
+     "source_resolution": "complete"
+    }
+   ]
+  },
+  "build_discovery.discover_build_systems": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "build_units": [
+    {
+     "build_points": [
+      {
+       "evidence": "projects/native/case-094/CMakeLists.txt:7",
+       "headers": [],
+       "include_dirs": [],
+       "kind": "executable",
+       "name": "case094",
+       "sources": [
+        "projects/native/case-094/src/access.cpp",
+        "projects/native/case-094/src/blocks.cpp",
+        "projects/native/case-094/src/console.cpp",
+        "projects/native/case-094/src/directory.cpp",
+        "projects/native/case-094/src/echo.cpp",
+        "projects/native/case-094/src/main.cpp",
+        "projects/native/case-094/src/notes.cpp",
+        "projects/native/case-094/src/title.cpp"
+       ]
+      }
+     ],
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-adf13d8306cb272dea43",
+     "family": "native",
+     "markers": [
+      {
+       "path": "projects/native/case-094/CMakeLists.txt",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "provenance": "deterministic-marker",
+     "root": "projects/native/case-094",
+     "source_resolution": "complete"
+    }
+   ],
+   "demoted_markers": [],
+   "engine_discovery": {
+    "counts": {
+     "bytes_read": 0,
+     "catalog_files": 17,
+     "eligible_descriptors": 0,
+     "projects": 0,
+     "read_descriptors": 0,
+     "roots_inspected": 0,
+     "roots_observed": 0,
+     "uninspected_descriptors": 0,
+     "uninspected_roots": 0
+    },
+    "observations": [],
+    "projects": []
+   },
+   "folded_roots": [],
+   "orphaned_sources": [],
+   "schema": "appsec-review/build-systems/4",
+   "source_only_scopes": [],
+   "systems": [
+    {
+     "kind": "CMakeLists.txt",
+     "path": "projects/native/case-094/CMakeLists.txt",
+     "sha256": "<sha256>"
+    }
+   ]
+  },
+  "build_discovery.discover_compile_commands": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "files": [],
+   "schema": "appsec-review/compile-commands/1"
+  },
+  "component_discovery.catalog_components": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "components": [
+    {
+     "component_id": "component:0001",
+     "manifest": null,
+     "manifest_sha256": null,
+     "root": "."
+    }
+   ],
+   "schema": "appsec-review/component-catalog/1"
+  },
+  "component_discovery.catalog_dependencies": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dependencies": [],
+   "schema": "appsec-review/dependency-catalog/1"
+  },
+  "publish_catalog.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/target-catalog/1"
+  },
+  "publish_catalog.validate_catalog": {
+   "status": "VALID",
+   "validated": [
+    "retrieval_indexes.build_path_index",
+    "retrieval_indexes.build_symbol_index",
+    "retrieval_indexes.build_component_index",
+    "retrieval_indexes.build_target_documents"
+   ]
+  },
+  "repository_discovery.census_languages": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "languages": [
+    {
+     "file_count": 8,
+     "language": "C++"
+    },
+    {
+     "file_count": 1,
+     "language": "C/C++"
+    },
+    {
+     "file_count": 8,
+     "language": "Other"
+    }
+   ],
+   "schema": "appsec-review/language-census/1"
+  },
+  "repository_discovery.discover_projects": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "engine_observations": [],
+   "projects": [],
+   "schema": "appsec-review/project-catalog/1"
+  },
+  "repository_discovery.partition_repository": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "configured_exclusions": [
+    {
+     "path": ".gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    }
+   ],
+   "file_discovery": {
+    "content_bytes_retained": 9290,
+    "content_files_omitted": 0,
+    "content_files_retained": 14,
+    "descriptor_coverage": "complete",
+    "descriptors_matched": 3,
+    "descriptors_retained": 3,
+    "descriptors_unavailable": 0,
+    "file_paths_examined": 18,
+    "semantics": "appsec-review/file-discovery/1"
+   },
+   "files": [
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": ".gitlab-ci.yml",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": "Jenkinsfile",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": "NOTICE",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": "README.md",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": "azure-pipelines.yml",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": "bitbucket-pipelines.yml",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "supply_chain",
+     "analysis_reason": "target-build-chain-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "not_established",
+     "generated": false,
+     "language": null,
+     "path": "projects/native/case-094/CMakeLists.txt",
+     "scope_role": "build_chain",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": null,
+     "path": "projects/native/case-094/README.md",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/access.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/blocks.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/console.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/directory.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/echo.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/main.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/notes.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C++",
+     "path": "projects/native/case-094/src/title.cpp",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "analysis_lane": "target",
+     "analysis_reason": "target-source-review",
+     "artifact_origin": "target-intake",
+     "delivery_status": "unknown",
+     "generated": false,
+     "language": "C/C++",
+     "path": "projects/native/case-094/src/tool.h",
+     "scope_role": "target_source",
+     "scope_version": "appsec-review/delivered-scope/2",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    }
+   ],
+   "target_artifacts": []
+  },
+  "retrieval_indexes.build_component_index": {
+   "artifact": {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "components",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_component_index"
+    },
+    "relative_path": "data/indices/components/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>"
+   },
+   "item_count": 1
+  },
+  "retrieval_indexes.build_path_index": {
+   "artifact": {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "source",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_path_index"
+    },
+    "relative_path": "data/indices/source/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "default"
+   },
+   "item_count": 17
+  },
+  "retrieval_indexes.build_symbol_index": {
+   "artifact": {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "analysis",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_symbol_index"
+    },
+    "relative_path": "data/indices/analysis/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>"
+   },
+   "item_count": 2
+  },
+  "retrieval_indexes.build_target_documents": {
+   "artifact": {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "documents",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_target_documents"
+    },
+    "relative_path": "data/indices/documents/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "default"
+   },
+   "item_count": 0,
+   "link_count": 0
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "build_discovery": "SUCCEEDED",
+  "component_discovery": "SUCCEEDED",
+  "publish_catalog": "SUCCEEDED",
+  "repository_discovery": "SUCCEEDED",
+  "retrieval_indexes": "SUCCEEDED"
+ },
+ "units": {
+  "build_discovery.catalog_build_targets": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_discovery.discover_build_systems": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_discovery.discover_compile_commands": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "component_discovery.catalog_components": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "component_discovery.catalog_dependencies": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_catalog.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_catalog.validate_catalog": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.census_languages": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.discover_projects": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.partition_repository": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_component_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_path_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_symbol_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_target_documents": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/build/<sha256>.sqlite",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "7a441546e3d4d89e9a6375a5fff4ea6fc2e7ce3268c74985bfbf7c55d83d187e",
+    "size_bytes": 2878
+   },
+   {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+    "sha256": "ef0e1024a116537c010e18b614400b29f5fa1b407b62798853b547d76966f16d",
+    "size_bytes": 1411
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+    "sha256": "6301793edc51bf7dde8234d4e1a903e89e3cc9191e21e4bfc18df89ee742634f",
+    "size_bytes": 3311
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+    "sha256": "bab0acaa828bf81d08a1166dfe10b966d94f9f06a9151a11464c45ab681a3cef",
+    "size_bytes": 102
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+    "sha256": "7e9923022b8e2d7d059b5b3df8f0ebc167e7064076315bfad44df187b172d901",
+    "size_bytes": 156
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+    "sha256": "9996948de03b1121f747bf6e9915404fc37f32dddf491974b53be646a077c87d",
+    "size_bytes": 131
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+    "sha256": "321e0ce1256e397c731c40f9e930acb4e5f7589f22389716ddc13536bee34cde",
+    "size_bytes": 165
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+    "sha256": "c9f9140229b4473eff2dd5df21773027a168228ff55027bc5f8f2a9d3e876b7b",
+    "size_bytes": 127
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+    "sha256": "24ea5083f9fadb0b8025635ee7bb9c16302aa7559fa39ff0220eb1cc7aa3edec",
+    "size_bytes": 9757
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+    "sha256": "fcdcd9b808a0f027b9397cfe1573a4235caff7a9289e86ebe566044135654667",
+    "size_bytes": 3531
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+    "sha256": "95911c836346ed44af5ea5b475bdf3fc90759ef9484afe59535e15424fc68a2b",
+    "size_bytes": 12333
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/outcomes.json",
+    "sha256": "72f6cdb212f5f779c9a34ddb4c0d3d08e1a9d0b01289cba5e67e9f3a74336d8a",
+    "size_bytes": 31313
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "45d38d851125d73105ddf96259f186207662462bd7dd3ce54afad1c0b4b32e58",
+    "size_bytes": 1336
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "5c71fd85bea3b4832d82446e277844a6d041e9f53b932092bf8a88d4a6f74994",
+    "size_bytes": 1340
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "74ecfff590db01a0ca13c9f03018176bf39ec96e72e1eb837f3ebefd34c936d1",
+    "size_bytes": 1342
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "86ff7878814745884d352a801ce352aaa455399fd0bf417c2d449769ab279ec6",
+    "size_bytes": 1346
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "c5f18580d77bfdac3545692e0b90591d70e8802606c33408c8a650cdbea9b676",
+    "size_bytes": 1344
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/result.json",
+    "sha256": "d276e09a57213624c8d77035ff4558fa911807d07cff0ac8f1f160da3c9ac908",
+    "size_bytes": 3515
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/catalog_build_targets/status.json",
+    "sha256": "24211a8b160c960ea35bcbb37a8e595335ad8bf9fbb29c840620efb50a26ebf5",
+    "size_bytes": 809
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/result.json",
+    "sha256": "1aa40d99b32099f0fdb464b8b6e732eaf240e380c0b3b747f6775947261da07e",
+    "size_bytes": 1615
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_build_systems/status.json",
+    "sha256": "5d2202cd97c798df3520d9c8b8d828386d4ea8c634d6a3572a66417b6ca8c5fe",
+    "size_bytes": 727
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/result.json",
+    "sha256": "476b5f969002b6602a0380cb49ab8d9e0e3dfb0d8bd3de9d3761ee2eba383015",
+    "size_bytes": 308
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/build_discovery/tasks/discover_compile_commands/status.json",
+    "sha256": "ed98fc513252b2c8b03247ae191f6eae42e7743ac8bb50dfe6b3b1d8185ab614",
+    "size_bytes": 736
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/result.json",
+    "sha256": "859c8243ab24756fb2bd7f5c0f9d79a3b53aacb2dcd12b2120e79909b05dc21d",
+    "size_bytes": 356
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_components/status.json",
+    "sha256": "804a8a64da1bb615dbfedc0b26b6795f0ad3193c05329483d6cc3ac74fb39951",
+    "size_bytes": 724
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/result.json",
+    "sha256": "5b18989d3641631e9bb799abb6179657d9b876deea4c27cdc9130be2d91568c9",
+    "size_bytes": 333
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/component_discovery/tasks/catalog_dependencies/status.json",
+    "sha256": "a33660b696a593042121e16e45e6459a8018a59bf628fade90c9095b06209ceb",
+    "size_bytes": 730
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/result.json",
+    "sha256": "77a53ad01c608f5ce4437e9a71dc815fddd13f600f01ee0bf6c0b7330eca282d",
+    "size_bytes": 736
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/publish_handoff/status.json",
+    "sha256": "9b1463e9711367da39f6600382360d3c4293aa59a2d56146c453c6da802fb754",
+    "size_bytes": 820
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/result.json",
+    "sha256": "41aa43a4607cea2312a1cd4120a26d7a2883ad309c8bc94c4e06209b0bed50b8",
+    "size_bytes": 510
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/publish_catalog/tasks/validate_catalog/status.json",
+    "sha256": "283bb37283660d6e5a60beee4853c6b9feb519d16c1256230bd4f5472debd097",
+    "size_bytes": 826
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/result.json",
+    "sha256": "494d0aee0bfdd02347e62ebe7ff86a1ec248f498edcfcb33745de1696f510fb5",
+    "size_bytes": 370
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/census_languages/status.json",
+    "sha256": "64b897edf3a28a228cae4334cf40bf0c51cffcfe9d314c6767f0216a47f88f2d",
+    "size_bytes": 724
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/result.json",
+    "sha256": "ecbc39fdda64e30d90370c96d1f04ac3027180bd6f5cb140a8781e720394e39c",
+    "size_bytes": 325
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/discover_projects/status.json",
+    "sha256": "41948c4d4b96910280e1412f1ba4242712e5f7220b2874439516c28b7006acb6",
+    "size_bytes": 768
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/result.json",
+    "sha256": "f218ef7012a067425b495c99b64007b76a1f8e5513412ead0cadfc732063aa86",
+    "size_bytes": 7085
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/repository_discovery/tasks/partition_repository/status.json",
+    "sha256": "4ef2cfef1342f695a6713a7a99747f15ab616bf07aef16c14a3ca853c399d57e",
+    "size_bytes": 693
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/result.json",
+    "sha256": "f65ea88f1f2822a0803c76a9a9265f16953af7702624543e74a1248219ccd9bc",
+    "size_bytes": 692
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_component_index/status.json",
+    "sha256": "00584638a6eeac45f2d5de1c7e5e7c5f37dbb3225ae7d4743e96ce0ac8abf576",
+    "size_bytes": 1157
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/result.json",
+    "sha256": "1565f8c595c946b659dc31946c61520e4f70dc0d5b244efee8a33d012364a1bd",
+    "size_bytes": 750
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_path_index/status.json",
+    "sha256": "463373f2b988a9afcf3b092fe4c1fb4612222ee4a3742cf4dbf1ea6899460d14",
+    "size_bytes": 1179
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/result.json",
+    "sha256": "9db4c8adfac98f3f728e6de5192bc65a7b12102059c28283b5324a34446ee3b9",
+    "size_bytes": 683
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_symbol_index/status.json",
+    "sha256": "614e36d17aa88ee4362eff973d88031849226c7c62324420ff7151467fe67cdc",
+    "size_bytes": 1144
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/result.json",
+    "sha256": "8c69bedccdc6f2398ef135f73ee6d7e8770aee7627af16053109e22f5d95a1ec",
+    "size_bytes": 1284
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/steps/retrieval_indexes/tasks/build_target_documents/status.json",
+    "sha256": "0a39c73d4aa5170054a3ae5e7ffb96559055e0d02cb9d82399989828e35e7a8c",
+    "size_bytes": 1462
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "2d24458acbf0cca72670943a99123dc2ba7f330dbab6bc6d16f2a00380ca9ab0",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "382c191bdc783a8f8e59154f3c89e7715855eb5c8ab560432eee708cee3862e6",
+    "size_bytes": 279
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "5b1a10dec8778fb6300673a250d32cb0210587a6566e9ddacc02b97c2c5cba5e",
+    "size_bytes": 274
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7b58f2de7e81ff6229d0ee2e822f5adc4a518c3bfd605d191278b3d8a94c8b7a",
+    "size_bytes": 276
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7e98965d078f7a7ac642f43630c9f45ca005ff66e67021715fb307dc2fe350b2",
+    "size_bytes": 277
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   }
+  ]
+ }
+}
