@@ -20,6 +20,7 @@ import sqlite3
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.container_runtime import load_catalog
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_ci_configuration_analysis import build_job
 from appsec_review.jobs.job_ci_configuration_analysis.job import JOB_ID, SPECS, CiConfigurationAnalysisFailed, analysis_bounds
@@ -69,11 +70,40 @@ TARGET = {".github/workflows/build.yml": WORKFLOW, ".gitlab-ci.yml": GITLAB, "Je
           "src/main.c": "int main(void) { return 0; }\n", "Makefile": "all:\n\t$(CC) src/main.c -o main\n"}
 
 
-def _config(tmp_path: Path):
-    shutil.copyfile(ROOT / "appsec-review.toml", tmp_path / "appsec-review.toml")
-    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+def _config(tmp_path: Path, *, repository: Path = ROOT):
+    shutil.copyfile(repository / "appsec-review.toml", tmp_path / "appsec-review.toml")
+    catalog = load_catalog(repository)
+    # Match the runtime catalog's declared metadata closure, never operator-acquired tool payloads.
+    for source in sorted({catalog.source, catalog.runtime_policy,
+                          *(tool.manifest_path for tool in catalog.tools.values())}):
+        destination = tmp_path / source.relative_to(repository)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
     (tmp_path / "profiles").mkdir()
     return load_config(tmp_path / "appsec-review.toml", profile="dev")
+
+
+def test_ci_config_fixture_copies_only_declared_catalog_metadata(tmp_path: Path) -> None:
+    source, destination = tmp_path / "source", tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+    _config(source)
+    payload = source / "containers/tools/codeql/downloads/nested"
+    payload.mkdir(parents=True)
+    (payload / "tool.bin").write_bytes(b"irrelevant operator-acquired binary")
+    (payload / "tool.toml").write_text("not a declared manifest or valid TOML")
+
+    config = _config(destination, repository=source)
+    assert not (destination / payload.relative_to(source)).exists()
+    original = load_catalog(source)
+    copied = load_catalog(config.runtime.repository_root)
+    expected = {path.relative_to(source) for path in (
+        original.source, original.runtime_policy, *(tool.manifest_path for tool in original.tools.values()))}
+    actual = {path.relative_to(destination) for path in (destination / "containers").rglob("*") if path.is_file()}
+    assert actual == expected
+    assert set(copied.tools) == set(original.tools)
+    for relative in expected:
+        assert (destination / relative).read_bytes() == (source / relative).read_bytes()
 
 
 def _target(tmp_path: Path, files: dict[str, str] = TARGET) -> Path:
