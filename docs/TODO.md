@@ -86,6 +86,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-091 | [Resolve conditional automake SUBDIRS in build discovery](#t-091-resolve-conditional-automake-subdirs-in-build-discovery) | topology | open |
 | T-092 | [Decide whether a refused build command fails one unit or the whole language build](#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
 | T-093 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-093-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
+| T-094 | [Let stepwise accept a target by commit instead of a tag](#t-094-let-stepwise-accept-a-target-by-commit-instead-of-a-tag) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1377,6 +1378,22 @@ until each is rewritten into the entry format when it is next touched.
   each such build system, and the refusal for an unaccepted hand-written Makefile is unchanged.
 - **Refs:** `src/appsec_review/jobs/build_recipe_commands.py`, `src/appsec_review/jobs/build_discovery.py`,
   `tests/test_build_recipe_commands.py`, T-092, T-091.
+
+### T-094 — Let stepwise accept a target by commit instead of a tag
+
+- **State:** open
+- **Area:** testing
+- **Why:** `stepwise.py accept` requires a Git tag in the target that resolves to HEAD. Third-party
+  targets are pinned at arbitrary commits and agents may not tag a target, so the Freeciv walk
+  needed the user to create a local tag (`freeciv-b1b0768b-v1`) on 2026-11-11 before job 1 could
+  be accepted.
+- **Scope:** an operator-only `accept --target-commit <full sha>` that verifies target HEAD equals
+  the commit and the tree is clean, recorded in the acceptance provenance and seed in place of the
+  tag; no runtime source change.
+- **Done when:** a focused unit test covers match, mismatch, dirty tree and the existing tag path
+  unchanged.
+- **Refs:** `deploy/dagster/bin/stepwise.py`, `tests/test_stepwise_target_tag.py`, T-088,
+  `docs/tasks/2026-11-11-freeciv-walk-01-model-connectivity.md`.
 
 ## Legacy backlog
 
