@@ -501,6 +501,109 @@ def test_review_start_stops_on_a_moved_image_pin(box: Sandbox) -> None:
     assert not [call for call in box.docker_calls() if "launch" in call]
 
 
+# -- review start: the model login is probed before anything is recorded (T-078) --------------------
+EXPIRED_LOGIN = {"match": "claude -p", "rc": 1,
+                 "stderr": "API Error: 401 OAuth access token has expired sk-ant-oat01-ABCDEFGH_secret"}
+
+
+def exec_calls(box: Sandbox) -> list[list[str]]:
+    return [call for call in box.docker_calls() if call[:1] == ["exec"]]
+
+
+def test_review_start_probes_the_model_login_and_then_launches_as_before(box: Sandbox) -> None:
+    box.dagster.runs()
+    result = box.run("review-start", "--id-wait", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    probe, launch = exec_calls(box)  # exactly the probe stack-start uses, then the one launch
+    assert probe[1:4] == [CODE_ID, "claude", "-p"]
+    assert launch[1:5] == [WEBSERVER_ID, "dagster", "job", "launch"]
+    assert "model probe    ok" in result.stdout
+    assert result.stdout.index("model probe") < result.stdout.index("submission intent:")
+    assert review_run.read_submission(box.repo)["state"] == "SUBMITTED"
+
+
+@pytest.mark.parametrize("probe,reason", [
+    (EXPIRED_LOGIN, "the Claude OAuth token looks expired or missing"),
+    ({"match": "claude -p", "rc": 2, "stderr": "boom Bearer abc.def-ghi sk-ant-api03-ABCDEFGH_secret"}, "exit 2: boom"),
+    ({"match": "claude -p", "rc": 0, "stdout": ""}, "exit 0"),
+], ids=["expired-login", "other-failure", "empty-reply"])
+def test_review_start_refuses_an_unanswered_model_probe_and_records_nothing(box: Sandbox, probe: dict,
+                                                                             reason: str) -> None:
+    box.stack(probe=probe)
+    box.dagster.runs()
+    result = box.run("review-start", "--id-wait", "0")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "did not answer the probe" in result.stderr and reason in result.stderr
+    assert 'claude -p "ok"' in result.stderr and "--no-probe" in result.stderr  # the documented remedy
+    assert review_run.read_submission(box.repo) is None
+    assert not (review_run.submission_directory(box.repo) / "active.json").exists()
+    assert [call[2] for call in exec_calls(box)] == ["claude"]  # the probe only: Dagster was never called
+    shown = result.stdout + result.stderr
+    assert "sk-ant" not in shown and "abc.def-ghi" not in shown and "ABCDEFGH" not in shown
+
+
+def test_review_start_probes_only_after_the_other_guards_passed(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs(run(UUID_ONE, "STARTED", app=APP_ID))
+    active = box.run("review-start")
+    assert active.returncode == 3 and UUID_ONE in active.stderr
+    box.dagster.runs()
+    box.state["images"]["img:p1"]["id"] = "sha256:moved"
+    box.save()
+    moved = box.run("review-start")
+    assert moved.returncode == 3 and "preflight failed" in moved.stderr
+    assert exec_calls(box) == []  # a launch another guard refuses never calls the model
+
+
+def test_review_start_no_probe_skips_the_model_probe(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs()
+    result = box.run("review-start", "--no-probe", "--id-wait", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [call[2] for call in exec_calls(box)] == ["dagster"]
+    assert "not probed (--no-probe)" in result.stdout
+    assert "[switch]$NoProbe" in (REPOSITORY / "scripts/review-start.ps1").read_text(encoding="utf-8")
+
+
+def test_review_start_dry_run_never_calls_the_model(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs()
+    result = box.run("review-start", "--dry-run")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "not probed in a dry run" in result.stdout and "dry run: nothing launched" in result.stdout
+    assert exec_calls(box) == []
+    assert not review_run.submission_directory(box.repo).exists()
+
+
+def test_review_start_probes_the_selected_profiles_provider(box: Sandbox) -> None:
+    box.stack(settings={ops.PROFILE_VARIABLE: "copilot-dev"},
+              probe={"match": "copilot_sdk", "rc": 1, "stderr": "CopilotAuthError: not signed in"})
+    box.dagster.runs()
+    result = box.run("review-start", "--profile", "copilot-prod", "--id-wait", "0")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "profile copilot-prod did not answer the probe" in result.stderr and "CopilotAuthError" in result.stderr
+    assert "model-profiles.md" in result.stderr
+    assert [call[2] for call in exec_calls(box)] == ["python"]  # the Copilot catalog check, never `claude`
+    assert review_run.read_submission(box.repo) is None
+
+
+def test_review_run_submit_runs_the_same_probe_and_honours_no_probe(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs()
+    box.dagster.script("ReviewRun", run_data(run(UUID_ONE, "STARTED")))
+    command = [sys.executable, str(box.deploy / "bin" / "review_run.py"), "submit", "--run-id", UUID_ONE,
+               "--url", box.dagster.url]
+    refused = subprocess.run(command, env=box.environment(), capture_output=True, text=True, timeout=30, check=False)
+    assert refused.returncode == 3 and "did not answer the probe" in refused.stderr
+    assert review_run.read_submission(box.repo) is None
+    assert [call[2] for call in exec_calls(box)] == ["claude"]
+    skipped = subprocess.run([*command, "--no-probe"], env=box.environment(), capture_output=True, text=True,
+                             timeout=30, check=False)
+    assert skipped.returncode == 0, skipped.stdout + skipped.stderr
+    assert review_run.read_submission(box.repo)["dagster_run_id"] == UUID_ONE
+    assert [call[2] for call in exec_calls(box)] == ["claude", "dagster"]
+
+
 @pytest.mark.parametrize("stop_policy", [False, True])
 def test_single_submission_concurrent_invocations_launch_once(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
@@ -520,6 +623,8 @@ def test_single_submission_concurrent_invocations_launch_once(box: Sandbox, stop
 def test_single_submission_lost_response_retains_intent(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
     box.stack(probe={"match": "dagster job launch", "rc": 1, "stderr": "connection lost after submission"})
+    box.state["exec"].insert(0, {"match": "claude -p", "stdout": "ok\n"})  # the model answers; the launch is lost
+    box.save()
     flags = ["--stop-on-first-error"] if stop_policy else []
     result = box.run("review-start", "--id-wait", "0", *flags)
     assert result.returncode == 1 and "UNCERTAIN" in result.stderr

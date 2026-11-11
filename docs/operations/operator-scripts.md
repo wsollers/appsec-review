@@ -101,6 +101,13 @@ several sessions share one Docker daemon and one Dagster stack.
    so a recreate never changes what a stack reviews. Change them only with the options below.
 6. **Evidence.** `review-stop` and `review-stop-id` end runs with `recover_runs.py`, which writes
    `runs/metadata/dagster-recovery/<timestamp>.json`.
+7. **Model login before a launch.** `review-start` and `review_run.py submit` run the same bounded
+   model probe as `stack-start`, for the run's selected profile, after every other guard and before
+   the submission intent is written or Dagster is called. An unanswered probe refuses the launch
+   (exit 3) with the failure class and the remedy below, and leaves nothing behind: no intent, no
+   Dagster run, no application run. `--no-probe` (`-NoProbe`) skips it; `--dry-run` never calls the
+   model. The probe runs the provider's own client inside the code-location container; the scripts
+   read, store and print no credential, and shown output passes the same `[redacted]` filter.
 
 ## Stack
 
@@ -220,8 +227,19 @@ application-run tag when resuming. It is the
 supported route because the Dagster daemon and run storage stay the single owner of the run, the
 Dagster UUID is known before the run exists, and the application run id is read back from the run's
 `appsec/application_run_id` tag. `review_run.py submit` enters the same guarded implementation,
-including the image-pin preflight; its `--run-id` supplies a Dagster UUID, whereas
+including the image-pin preflight and the model login probe (`--no-probe` skips the probe on
+either); its `--run-id` supplies a Dagster UUID, whereas
 `review-start --run-id` selects an existing application run to resume.
+
+The last check before anything is recorded is the model login (safety rule 7). A mounted Claude
+login that has expired answers `401` in seconds; without the check that surfaced only as a failed
+`job_model_connectivity`, after a run, a submission intent and a failed attempt existed. The
+refusal names the class (for example `the Claude OAuth token looks expired or missing`) and the
+remedy `stack-start` prints: on WSL and Linux run `claude -p "ok"` on the host, which refreshes the
+shared `~/.claude` token the stack mounts read-only; on a native Windows stack sign in again inside
+the container; for a Copilot profile sign in the
+[dedicated account](model-profiles.md#copilot-with-a-separate-github-identity). Then start the
+review again. The probe is a login check, not a guarantee: a login can still expire during a run.
 
 Both entrypoints serialize launch admission with a bounded kernel file lock under
 `runs/metadata/dagster-submission/`. After preflight, `active.json` durably records the Dagster UUID,
@@ -309,7 +327,7 @@ them; it never changes a running stack. Profile and capacity overlay can instead
 
 | Script | Purpose |
 | --- | --- |
-| `review-start [--target T] [--profile P] [--overlay F] [--recording M] [--run-id ID] [--stop-on-first-error] [--id-wait S] [--dry-run] [--force]` | Launch `wave1_review` and return at once. Prints the Dagster run id, the application run id (read back for up to `--id-wait` seconds, default 60, else "pending") and the URL. `--profile`/`--overlay` select this run's profile and capacity overlay ([per run](#per-run-profile-and-overlay)); `--target`/`--recording` must match the container. `--run-id` resumes an existing application run (it must exist under `runs/`) and cannot be combined with first-error mode. Refuses when the stack is down, an image pin has moved, a run is active (unless `--force`), or the selected resource budget differs from an active run's or lease's (even with `--force`). |
+| `review-start [--target T] [--profile P] [--overlay F] [--recording M] [--run-id ID] [--stop-on-first-error] [--no-probe] [--id-wait S] [--dry-run] [--force]` | Launch `wave1_review` and return at once. Prints the Dagster run id, the application run id (read back for up to `--id-wait` seconds, default 60, else "pending") and the URL. `--profile`/`--overlay` select this run's profile and capacity overlay ([per run](#per-run-profile-and-overlay)); `--target`/`--recording` must match the container. `--run-id` resumes an existing application run (it must exist under `runs/`) and cannot be combined with first-error mode. Refuses when the stack is down, an image pin has moved, a run is active (unless `--force`), the selected resource budget differs from an active run's or lease's (even with `--force`), or, last and before anything is recorded, the selected profile's model login does not answer the probe (even with `--force`; `--no-probe` skips the probe, `--dry-run` does not run it). |
 | `review-watch [--run ID] [--once] [--interval S]` | Poll the GraphQL API. Prints one line when each job starts (`[ 12.3 min] started codeql_analysis (14/33 jobs)`), one line per failed step, and a final line. Works for any run, whoever started it; `--run` takes a Dagster uuid or an application run id; without it the active run (else the latest). Exit 0 for `SUCCESS`, 1 for `FAILURE`/`CANCELED`. `--once` prints a snapshot and exits. |
 | `review-status [--limit N]` | Recent runs with status, application run id, start and duration, and for each active run its started and finished jobs and current steps. |
 | `review-stop [--now] [--yes] [--reason TEXT] [--dry-run]` | End the current review: lists every non-terminal run, then terminates them through `recover_runs.py`. Default policy `SAFE_TERMINATE`; `--now` uses `MARK_AS_CANCELED_IMMEDIATELY`, which marks runs canceled without waiting (their tool containers may keep running). Needs `--yes` when more than one run is affected. Nothing active is a no-op, exit 0. |

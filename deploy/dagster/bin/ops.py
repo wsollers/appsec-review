@@ -403,34 +403,67 @@ def refresh_advice() -> str:
             "~/.claude, which the stack mounts read-only; then re-run the probe")
 
 
-def probe_model(containers: list[Container], timeout: float = 180) -> bool:
+def probe_model(containers: list[Container], timeout: float = 180, profile: str | None = None) -> bool:
+    return model_probe_failure(containers, timeout, profile) is None
+
+
+def model_probe_failure(containers: list[Container], timeout: float = 180, profile: str | None = None) -> str | None:
+    """Run the one bounded model probe; ``None`` when the model answered, else the printed failure class.
+
+    ``profile`` is the run's selected profile (default: the container's); it picks the provider's probe.
+    The returned text is what the probe line shows: a fixed class, or tool output through ``redact``.
+    No credential is read: the probe runs the provider's own client inside the code-location container.
+    """
     code = by_service(containers).get("code-location")
     if code is None or code.state != "running":
         say("  model probe    skipped: code-location is not running")
-        return False
-    if running_value(code, PROFILE_VARIABLE) in {"copilot-dev", "copilot-prod"}:
+        return "code-location is not running"
+    if (profile or running_value(code, PROFILE_VARIABLE)) in {"copilot-dev", "copilot-prod"}:
         result = docker("exec", code.id, "python", "-c",
                         "from appsec_review.inference.copilot_sdk import verify; verify()", timeout=timeout)
         if result.returncode == 0:
             say("  model catalog  ok (dedicated Copilot login; configured models enabled)")
-            return True
-        say(f"  model catalog  FAILED: {redact(result.stderr or result.stdout)}")
-        return False
+            return None
+        reason = redact(result.stderr or result.stdout)
+        say(f"  model catalog  FAILED: {reason}")
+        return f"Copilot login or model catalog check failed: {reason}"
     try:
         result = docker("exec", code.id, "claude", "-p", "Reply with the single word: ok", timeout=timeout)
     except OpsError as error:
         say(f"  model probe    FAILED: {error}")
-        return False
+        return str(error)
     output = (result.stdout or "") + " " + (result.stderr or "")
     if result.returncode == 0 and (result.stdout or "").strip():
         say(f"  model probe    ok (replied {redact(result.stdout, 40)!r})")
-        return True
+        return None
     if EXPIRED_TOKEN.search(output):
         say("  model probe    FAILED: the Claude OAuth token looks expired or missing")
         say(f"                 fix: {refresh_advice()}")
-    else:
-        say(f"  model probe    FAILED (exit {result.returncode}): {redact(output)}")
-    return False
+        return "the Claude OAuth token looks expired or missing"
+    reason = redact(output)
+    say(f"  model probe    FAILED (exit {result.returncode}): {reason}")
+    return f"exit {result.returncode}: {reason}"
+
+
+def require_model_login(containers: list[Container], profile: str) -> None:
+    """Refuse a launch (exit 3) when the selected profile's model login does not answer the probe.
+
+    A review that cannot reach its model fails at its first job, after a run, a submission intent and a
+    failed attempt exist; this finds it while nothing has been recorded.
+    """
+    say("model login:")
+    try:
+        reason = model_probe_failure(containers, profile=profile)
+    except OpsError as error:
+        reason = str(error)
+        say(f"  model probe    FAILED: {reason}")
+    if reason is None:
+        return
+    remedy = ("sign in the dedicated Copilot account (docs/operations/model-profiles.md, 'Copilot with a separate "
+              "GitHub identity')" if provider_family(profile) == "copilot" else refresh_advice())
+    raise OpsError(f"refusing to start a review: the model login for profile {profile} did not answer the probe "
+                   f"({reason}). No submission intent was recorded and nothing was launched. Fix: {remedy}. "
+                   "Then start the review again, or pass --no-probe to launch without this check.", REFUSED)
 
 
 def bring_up(args: argparse.Namespace, project: str, containers: list[Container], *, build: bool, action: str) -> int:
@@ -833,9 +866,17 @@ def _review_start(args: argparse.Namespace) -> int:
     say(f"compiler:  {compiler_target}")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")
     say("+ docker " + shlex.join(command))
+    probe = not getattr(args, "no_probe", False)
     if args.dry_run:
+        if probe:
+            say("model login: not probed in a dry run (the launch probes it first; --no-probe skips that)")
         say("dry run: nothing launched")
         return OK
+    if probe:
+        # After every other guard, before any intent or Dagster call: an unanswered probe leaves nothing behind.
+        require_model_login(containers, profile)
+    else:
+        say("model login: not probed (--no-probe)")
     record = review_run.begin_submission(ROOT, identity, dagster_run_id)
     say(f"submission intent:  {review_run.submission_directory(ROOT) / 'active.json'}")
     try:
@@ -1078,6 +1119,8 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--run-id", help="resume this existing application run (adds the appsec/application_run_id tag)")
     review.add_argument("--stop-on-first-error", action="store_true",
                         help="freeze the run-scoped no-retry safety policy; requires the matching deployed code")
+    review.add_argument("--no-probe", action="store_true",
+                        help="skip the model login probe that otherwise runs before the submission is recorded")
     review.add_argument("--id-wait", type=float, default=60, help="seconds to wait for the application run id (default %(default)s)")
     watch = add("review-watch", cmd_review_watch, "Print one line per newly started job and the final status.")
     watch.add_argument("--run", help="Dagster run id or application run id (default: the active run)")

@@ -76,6 +76,12 @@ into the deployment image. A restart alone does not update them.
 options make the intended review easier to verify. Launch returns after submission and a bounded
 wait for the application id, not after review completion.
 
+Just before it submits, `review-start` checks the model login with the same one-word probe
+`stack-start` uses. If the login does not answer (most often an expired Claude token), the launch
+is refused with exit 3 and nothing is recorded: no submission intent, no Dagster run. Refresh the
+login as the message says (on WSL and Linux: `claude -p "ok"` on the host) and start the review
+again. See [safety rule 7](operator-scripts.md#safety-rules).
+
 ## Which startup flags to specify
 
 These are **`review-start` script options**, not `appsec-review start` options.
@@ -87,11 +93,12 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | `-Overlay none` | `--overlay none` | New runs inherit the container's capacity overlay. `none` explicitly disables it for this run. A file must be under `test/acceptance`; it may change review-team count, Dagster pools, and `review_policy.resources.*`, not models, assurance, or feature gates. |
 | `-Recording off` | `--recording off` | Inherits the container's model recording mode; unset means off. Choices: `off`, `record`, `replay`. Must match the container, so change it with `stack-restart --recording` first. Replay also needs a replay directory that the standard Compose deployment does not pass; use the [local parity procedure](../processes/local-dagster-parity.md), not this launch sequence, for replay. |
 | `-StopOnFirstError` | `--stop-on-first-error` | **Off by default.** Fresh runs only. Freezes a no-retry safety policy that closes admission on the first unexpected failure. Requires matching deployed code and Linux peer-authenticated Unix sockets; native-broker cancellation is not commissioned for this mode. See [first-error policy](operator-scripts.md#opt-in-first-error-policy). |
-| `-DryRun` | `--dry-run` | Prints choices and the launch command without submitting or writing an intent. Still checks preconditions and can refuse. |
+| `-NoProbe` | `--no-probe` | **Off by default.** Skips the model login probe that otherwise runs last, before the submission intent is written. Without it an unanswered probe refuses the launch (exit 3) and records nothing. Use it only when the probe itself is the problem; a run whose model login is broken fails at its first job. |
+| `-DryRun` | `--dry-run` | Prints choices and the launch command without submitting or writing an intent. Still checks preconditions and can refuse. Does not call the model. |
 | `-RunId 2026-10-21-0007` | `--run-id 2026-10-21-0007` | Resume an **existing application run**, not set the id of a fresh run. The run must exist under `runs/`; its recorded profile/overlay are the defaults and cannot be changed on resume. Cannot combine with first-error mode. |
 | `-IdWait 60` | `--id-wait 60` | Wait up to 60 seconds for the application run id. `pending` means it has not been allocated yet, not that submission failed. Keep the printed Dagster UUID. |
 | `-Url URL` | `--url URL` | GraphQL endpoint; defaults to `APPSEC_DAGSTER_URL`, otherwise `http://127.0.0.1:<port>/graphql`, where the port is `APPSEC_DAGSTER_WEB_PORT` (default `3000`). |
-| `-Force` | `--force` | Overrides the active-run guard only. Not needed for normal launches; it cannot bypass stack ownership, submission identity, image pins, or conflicting active resource budgets. |
+| `-Force` | `--force` | Overrides the active-run guard only. Not needed for normal launches; it cannot bypass stack ownership, submission identity, image pins, conflicting active resource budgets, or the model login probe. |
 | `-Wsl`, `-Distro NAME` | Not applicable | PowerShell routing to the WSL stack; default distribution is `Ubuntu-24.04` unless inferred from the chosen WSL checkout path. |
 | `-Help` | `--help` | Show the script's current option list. |
 
