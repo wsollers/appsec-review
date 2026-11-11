@@ -235,3 +235,48 @@ Canonical first-attempt gap counts, from hash/size-verified handoff `outcomes` r
 These are not the recursively repeated gap strings printed by framework checks. No other corpus
 case is in the accepted source inventory. The first accepted job-10 result and final turnaround
 remain pending; compiled-but-rejected output is not counted as acceptance.
+
+## Bounded classifier repair and admitted replay
+
+Ready classifier fix `f3e10214a77a14a8a54092214a7768df1938c39d` integrated as `673b178b5`.
+It recognizes only the reserved capture-wrapper forms, including the observed shell/Python
+frames, and excludes them only when their tool identity and exact arguments match a successful
+image-profile compiler execution in the same capture. It does not trust a shell command string
+as compiler proof or exempt arbitrary interpreters. Missing-inner, mismatched-wrapper and unknown
+interpreter-compiler cases remain gaps. The original false gap was reproduced before correction.
+
+The exact guarded selection was
+`tests/test_project_build_capture.py::test_capture_intermediaries_require_correlated_real_compiler_execution`
+plus the `mixed-mixed_targets_in_capture`, `outside-unknown_compiler_in_capture` and
+`empty-capture_empty` cases of
+`test_native_target_is_proven_only_by_captured_execution`, using `--expect-tests 8`,
+`--parallel --test-workers 2 --shuffle-seed 11110 --strict`.
+Eight passed in 27.08 s / 32.311 s total in the isolated checkout. Mounted main passed eight in
+27.63 s with no case over ten seconds:
+`test/tmp/reports/tests-custom-20261111-134521-468656-60456.json`.
+
+A source-only reload, with the UI interruption announced, produced release
+`35a3fa344ff7cec950501f34bbd3f3674c8a9d6f0d8e1205df3a91e09ad90894`.
+The image, scoped target fingerprint and frozen configuration remained unchanged. Plan
+`d94906ea03d8ecf3503403220c5f80136133abb004f069192a41885527fff0b1` was inspected and
+explicitly admitted from `runs/c094-scoped-capture-wrapper-repair-plan.json`, then applied with
+stepwise recovery. Existing import closures require history/CI/environment replays and invalidate
+planning/project-build, in addition to the three always-execute early gates. Intake and catalog
+remain reused. No release-scoping redesign or forced reuse was introduced.
+
+The history replay again exposed an operator comparison limitation: this time scratch/gitdir
+mounts changed from native paths to Desktop aliases while target mounts stayed native.
+The same user-authorized, receipt-backed comparison repair was extended symmetrically, retaining
+the closed source-history execution/artifact scope and all original-reference, content, suffix,
+permission and claim checks. Desktop-to-different-Desktop remaps remain outside the rule.
+Ready commit `d9dfb28292bec4445cd2cdc5dd54cc44a37d5280` integrated as `5443ab252`.
+
+The reversed/mixed-root regression first reproduced all ten differences. The exact
+`tests/test_stepwise_mount_paths.py` selector, with `--expect-tests 65 --parallel
+--test-workers 2 --shuffle-seed 11110 --strict`, passed 65 cases in 56.43 s in the repair
+checkout and **52.74 s** on main, no slow cases; main report:
+`test/tmp/reports/tests-custom-20261111-142207-396926-63311.json`.
+The existing history attempt was rechecked, not rerun: four artifact proofs and fifteen mapping
+receipts accounted for the ten differences, while retaining the unadjusted differences and raw
+evidence. It was individually reaccepted. This operator-only change needed no source reload
+or new admission.
