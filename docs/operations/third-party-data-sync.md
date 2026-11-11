@@ -176,6 +176,88 @@ gap on each derived factor. An unavailable catalog derives none.
 Every record from these feeds is reference context. A KEV listing, an EPSS score, or an NVD CVSS
 vector describes the advisory everywhere, not the target, and never satisfies a proof obligation.
 
+## OSV version matching against the index
+
+This section records the state of [T-013](../TODO.md#t-013-match-osv-advisories-against-the-snapshots-own-index).
+
+### What `index/osv.sqlite` holds
+
+| Table | Columns | Use |
+| --- | --- | --- |
+| `advisory` | `id`, `modified`, `published`, `withdrawn`, `summary`, `raw_json` | One row per advisory id. `raw_json` is the whole OSV record of the first archive that held it, so its `affected[].ranges[].events` and `affected[].versions` are in the index. |
+| `package` | `advisory_id`, `ecosystem`, `name` | One row per affected package of every copy of the advisory. Indexed by `(ecosystem, name, advisory_id)`. |
+| `alias` | `advisory_id`, `alias` | Advisory aliases, indexed by alias. |
+| `metadata` | `key`, `value` | `record_count`, `max_lookup_results`, and since `appsec-review/osv-index/2` `index_schema` and `ecosystems`. |
+
+Affected ranges are not broken out into columns. They do not need to be: a package's advisories
+are found through the `package` index, and only those records are parsed. The index step output
+schema is `appsec-review/osv-index/2`. It differs from `/1` only by the two metadata rows.
+`ecosystems` is the sorted JSON list of the archives the index was built from. `package` rows
+cannot show that: an advisory in one archive also lists its packages in other ecosystems, so an
+ecosystem without its own archive still has rows.
+
+### The matcher
+
+`appsec_review.osv_matching` decides one `(ecosystem, name, version)` against the advisories the
+index lists for that package. It is pure: it takes a read-only connection or one stored record and
+never runs a tool. Each advisory gets one of four statuses.
+
+| Status | Meaning |
+| --- | --- |
+| `affected` | An explicit `versions` entry or an evaluated range holds the version. The matched entry or the `introduced` and `fixed`/`last_affected` events are returned as evidence. |
+| `not_affected` | Every `affected` entry of that package was evaluated and none holds the version. |
+| `withdrawn` | The index column or the record marks the advisory withdrawn. |
+| `undetermined` | The version could not be decided. Named gaps say why. This is never a clean result. |
+
+Range events follow the OSV schema's evaluation: events are sorted by version, `introduced` opens
+at or after its version (`0` sorts before everything), `fixed` closes at or after its version,
+`last_affected` closes after its version, and `limit` events restrict the range to versions below
+one of them (`*` is unbounded). At one version `fixed` is applied before `introduced`, so adjacent
+intervals stay affected at their boundary.
+
+| Input | Matched | Otherwise |
+| --- | --- | --- |
+| `versions` list | Exact spelling in every ecosystem. Equal SemVer precedence in npm, Go and crates.io. | In any other ecosystem a miss is `range_ordering_unsupported:<ecosystem>`, because equal versions can be spelled differently there. |
+| `SEMVER` range | Every ecosystem, by Semantic Versioning 2.0.0 precedence (strict parse; Go versions may carry a leading `v`). | `version_unparseable:<ecosystem>` or `range_event_unparseable:<ecosystem>` when a version is not strict SemVer. |
+| `ECOSYSTEM` range | npm, Go and crates.io, whose ordering is SemVer. | `range_ordering_unsupported:<ecosystem>` for PyPI, Maven, Debian, RubyGems, NuGet, Packagist and every other ecosystem. No PEP 440, Maven or Debian comparator exists in this repository, and `packaging` is not a declared dependency. |
+| `GIT` range | Not evaluated. Ignored beside version data of the same entry. | `range_type_unsupported:GIT` when the entry has nothing else. |
+
+Other named gaps: `malformed_advisory_record`, `malformed_affected_entry`, `malformed_range:*`,
+`advisory_record_missing`, `affected_entry_missing` (the `package` table lists the advisory but the
+record has no entry for the package), `affected_entry_has_no_version_data`,
+`advisory_bound_exceeded:*`, `truncated:advisories_per_package`, `package_bound_exceeded`,
+`version_unusable`, `ecosystem_not_in_snapshot:<ecosystem>`, and `snapshot_ecosystems_unrecorded`
+for an index built before `/2`. A package is `complete` only when its ecosystem's archive is in the
+index and every listed advisory was decided. An index without the tables and columns above is an
+integrity error.
+
+### Where it is used
+
+`jobs.job_review_data_indexing.settings.osv_version_matching` selects it for the
+`dependency_advisories` inventory lookup. The default `"disabled"` is the behavior before T-013.
+With `"index"`, each advisory the index lists for a purl-identified dependency is decided for the
+purl's version:
+
+- `affected`: the fact has `applicability_verified: true`, the lookup basis
+  `dependency-inventory-osv-range-match`, and a `version_matches` entry with the matcher id, the
+  `index/osv.sqlite` SHA-256, the version, and the matched range or `versions` entry.
+- `not_affected` and `withdrawn`: no fact is published for that pair.
+- `undetermined`: the fact is the same unverified lead as without the setting, and its
+  `applicability_unverified` gap names the reason.
+
+Only the purl's version counts. The inventory's `version` field can hold a declared constraint, so
+a dependency without a purl version is `version_not_resolved`, and one whose two versions differ is
+`version_identity_conflict`. Name-only lookups are unchanged.
+
+osv-scanner still runs in evidence collection and artifact security analysis with either value, so
+this setting does not yet reduce its memory use. Evidence collection has no accepted package list
+to match: the dependency inventory is built after it. Replacing the osv-scanner launch needs
+lockfile-derived package records from an accepted job; that work stays open under T-013.
+
+No real advisory snapshot or review run has exercised the matcher. Before enabling it, rebuild the
+OSV snapshot so the index records its ecosystems, and compare its matches with osv-scanner's on the
+same lockfiles.
+
 ## Verification status
 
 The fetch, normalize, index, publish, verify and pinning code paths are tested offline with small

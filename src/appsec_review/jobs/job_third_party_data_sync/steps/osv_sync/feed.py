@@ -11,6 +11,10 @@ import zipfile
 from appsec_review.jobs.job_third_party_data_sync.publication import HttpDownloader, publish_snapshot, verify_current
 
 
+# /2 adds the ``index_schema`` and ``ecosystems`` metadata rows; the tables are unchanged from /1.
+INDEX_SCHEMA = "appsec-review/osv-index/2"
+
+
 @dataclass(frozen=True, slots=True)
 class OsvSettings:
     feed_root: Path
@@ -113,10 +117,16 @@ def index(settings: OsvSettings, fetched: Mapping[str, Any], work: Path) -> dict
                             "WHERE advisory_id = ? AND ecosystem = ? AND name = ?)",
                             (identifier, package_ecosystem, name, identifier, package_ecosystem, name))
         connection.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        connection.executemany("INSERT INTO metadata VALUES (?, ?)", (("record_count", str(count)), ("max_lookup_results", str(settings.max_lookup_results))))
+        # ``ecosystems`` names the archives indexed whole. Version matching (appsec_review.osv_matching)
+        # needs it: ``package`` also lists other ecosystems' packages of multi-ecosystem advisories,
+        # so its rows do not show that an ecosystem's advisory set is complete.
+        connection.executemany("INSERT INTO metadata VALUES (?, ?)", (
+            ("record_count", str(count)), ("max_lookup_results", str(settings.max_lookup_results)),
+            ("index_schema", INDEX_SCHEMA),
+            ("ecosystems", json.dumps(sorted(str(name) for name in fetched["archives"]), separators=(",", ":")))))
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise ValueError("OSV SQLite quick_check failed")
-    return {"schema": "appsec-review/osv-index/1", "database_path": str(database), "record_count": count,
+    return {"schema": INDEX_SCHEMA, "database_path": str(database), "record_count": count,
             "max_lookup_results": settings.max_lookup_results, "expanded_bytes": expanded}
 
 
