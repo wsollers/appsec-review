@@ -13,7 +13,7 @@ from .capture import CapturedBuildDescriptor, ToolIdentity
 
 CAPTURE_IDENTITY = "appsec-review/native-build-capture/4"
 _DRIVER = re.compile(r"(?:[a-z0-9_.+-]+-)?(?:cc|c\+\+|gcc|g\+\+|clang|clang\+\+)(?:-[0-9.]+)?")
-_COMPILERS = {"clang-cl", "cl"}
+_COMPILERS = {"clang-cl", "cl", "cc1", "cc1plus"}
 _ASSEMBLERS = {"as", "llvm-as"}
 _LINKERS = {"ld", "ld.bfd", "ld.gold", "ld.lld", "lld", "mold", "collect2", "wasm-ld"}
 _ARCHIVERS = {"ar", "gcc-ar", "llvm-ar", "emar", "lib"}

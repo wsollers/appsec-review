@@ -187,7 +187,7 @@ workers = 1
     accepted_path = (attempt / "artifacts" / "language-build" / "accepted-language-builds.json" if publish else
                      run_root / "data/inputs/artifact-fixture/source-language.json")
     accepted_path.parent.mkdir(parents=True)
-    atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/1",
+    atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/2",
                                 "source_fingerprint": snapshot,
                                 "upstream_project_build_handoff_sha256": "a" * 64,
                                 "receipts": receipts, "gaps": []})

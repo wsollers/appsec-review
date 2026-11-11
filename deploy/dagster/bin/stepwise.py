@@ -3,7 +3,8 @@
   init --target <container path>      launch the first job; it allocates the application run
   next [--app-run ID] [--relaunch]    launch the next job that is not accepted, wait, then check it
   check --job JOB [--app-run ID]      Dagster status, job status and gaps, permission/filesystem audit
-  accept --job JOB --tag TAG          write the normalized output to test/acceptance/<TAG>/<job>.json
+  accept --job JOB --tag TAG [--target-tag GIT_TAG]
+                                    write to test/acceptance/<TAG>/<job>.json; verify GIT_TAG (default TAG)
   rewind --app-run ID --plan FILE     reopen affected decisions from an already admitted repair; no launch
   recover --app-run ID [--plan FILE] verify every stopped worker, then optionally apply an admitted rewind
   compare --app-run ID --tag TAG      diff a full wave1_review run against the accepted outputs
@@ -46,6 +47,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from appsec_review.acceptance.answer_key import evaluate, load_answer_key, observations_from_run  # noqa: E402
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
+from appsec_review.acceptance.project_build import project_build_content_problems  # noqa: E402
 from appsec_review.acceptance import funnel as funnel_report  # noqa: E402
 from appsec_review.acceptance import scoring as detector_scoring  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
@@ -252,21 +254,25 @@ def check(args, state: StepwiseState, path: Path, job_key: str) -> bool:
                   f"added={json.dumps(change['added'])} removed={json.dumps(change['removed'])}")
         for entry in differences[:args.show]:
             print(f"   {entry['class']} {entry['path']}: {entry['expected'][:160]} -> {entry['actual'][:160]}")
-    passed = (run["status"] == "SUCCESS" and not findings
+    content_problems = (project_build_content_problems(run_root, attempt)
+                        if item["job_id"] == "job_project_build" and run["status"] == "SUCCESS" else [])
+    for problem in content_problems:
+        print(f"   content: {problem}")
+    passed = (run["status"] == "SUCCESS" and not findings and not content_problems
               and (comparison is None or comparison["passed"]))
     report = {"job_id": item["job_id"], "dagster_run_id": dagster_run_id, "dagster_status": run["status"],
               "dagster_failures": failures, "job_status": document["status"],
               "attempt": attempt.name if attempt else None, "gaps": [{"gap": gap, "count": count} for gap, count in gaps],
               "partial_units": partial, "failed_units": document["failed_units"],
               "skipped_units": document["skipped_units"], "audit": [finding.as_dict() for finding in findings],
-              "replay_comparison": comparison, "passed": passed}
+              "replay_comparison": comparison, "content_problems": content_problems, "passed": passed}
     report_path = path.parent / "checks" / f"{item['job_id']}-{dagster_run_id}.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     state.record_check(item["job_id"], passed=passed, summary={
         "dagster_run_id": dagster_run_id, "dagster_status": run["status"], "job_status": document["status"],
         "audit": summarize(findings), "report": str(report_path.relative_to(ROOT)),
-        "replay_comparison": comparison})
+        "replay_comparison": comparison, "content_problems": content_problems})
     state.save(path)
     print(f"   check {'PASSED' if passed else 'FAILED'}; report {report_path.relative_to(ROOT)}")
     return passed
@@ -379,6 +385,7 @@ def command_recover(args) -> int:
 
 def command_accept(args) -> int:
     tag = valid_corpus_tag(args.tag)
+    target_tag = getattr(args, "target_tag", None) or tag
     path = state_path(args.app_run)
     state = StepwiseState.load(path)
     item = state.job(args.job)
@@ -387,9 +394,10 @@ def command_accept(args) -> int:
     state.validate_accept(item["job_id"], corpus_tag=tag)
     target = host_path(state.target)
     target_commit = git("rev-parse", "HEAD", cwd=target)
-    tag_commit = git("rev-parse", "--verify", f"{tag}^{{commit}}", cwd=target)
+    git("check-ref-format", f"refs/tags/{target_tag}", cwd=target)
+    tag_commit = git("rev-parse", "--verify", f"refs/tags/{target_tag}^{{commit}}", cwd=target)
     if tag_commit != target_commit:
-        raise StateError(f"target {target} is at {target_commit}, but {tag} is {tag_commit}")
+        raise StateError(f"target {target} is at {target_commit}, but {target_tag} is {tag_commit}")
     run_root = ROOT / "runs" / state.app_run_id
     pointer = run_root / "data" / "jobs" / item["job_id"] / "latest.json"
     handoff_sha256 = json.loads(pointer.read_text(encoding="utf-8"))["handoff_sha256"]
@@ -403,7 +411,7 @@ def command_accept(args) -> int:
     destination = ACCEPTANCE_ROOT / tag
     provenance = {
         "schema": "appsec-review/acceptance-provenance/1", "job_id": item["job_id"], "corpus_tag": tag,
-        "target": state.target, "target_commit": target_commit,
+        "target": state.target, "target_tag": target_tag, "target_commit": target_commit,
         "repository_commit": git("rev-parse", "HEAD", cwd=ROOT),
         "repository_dirty": bool(git("status", "--porcelain", "--untracked-files=no", cwd=ROOT)),
         "application_run_id": state.app_run_id, "dagster_run_id": item["dagster_run_ids"][-1],
@@ -440,7 +448,7 @@ def command_accept(args) -> int:
         ROOT, BlobStore(SEED_STORE), destination / "seeds", tag=tag, job_id=item["job_id"],
         app_run_id=state.app_run_id, base_job=ids[position - 1] if position else None,
         expected_uid=int(environment.get("APPSEC_UID", "0")), expected_gid=int(environment.get("APPSEC_GID", "0")),
-        exclude=SEED_EXCLUDE, extra={"target": state.target, "target_commit": target_commit,
+        exclude=SEED_EXCLUDE, extra={"target": state.target, "target_tag": target_tag, "target_commit": target_commit,
                                      "repository_commit": provenance["repository_commit"],
                                      "topology": state.topology})
     print(f"seed after-{item['job_id']}: {seed['totals']['files']} files, {seed['totals']['bytes']} bytes "
@@ -906,6 +914,14 @@ def _dagster_first(args, topology: dict) -> tuple[StepwiseState, Path]:
     return StepwiseState.load(path), path
 
 
+def acceptance_command(job_id: str, tag: str, app_run_id: str, target_tag: str | None = None) -> str:
+    import shlex
+    arguments = ["stepwise.py", "accept", "--job", job_id, "--tag", tag, "--app-run", app_run_id]
+    if target_tag is not None:
+        arguments.extend(("--target-tag", target_tag))
+    return shlex.join(arguments)
+
+
 def command_parity(args) -> int:
     tag = valid_corpus_tag(args.tag)
     topology = packaged_topology()
@@ -1041,7 +1057,7 @@ def command_parity(args) -> int:
         print(f"   ... {len(failures) - args.show * 5} more in the report")
     print(f"   report {relative(walk / 'report.json')}")
     if verdict == "PARITY OK":
-        print(f"   review it, then: stepwise.py accept --job {job_id} --tag {tag} --app-run {app_run_id}")
+        print(f"   review it, then: {acceptance_command(job_id, tag, app_run_id, getattr(args, 'target_tag', None))}")
     return {"PARITY OK": 0, "RUN FAILED": 1}.get(verdict, 3)
 
 
@@ -1068,7 +1084,8 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_argument("--job", required=True)
         sub.add_argument("--app-run")
         if name == "accept":
-            sub.add_argument("--tag", required=True, help="corpus tag the target checkout is pinned at")
+            sub.add_argument("--tag", required=True, help="acceptance corpus key namespace")
+            sub.add_argument("--target-tag", help="target Git tag that must resolve to HEAD (default: --tag)")
     compare = commands.add_parser("compare")
     compare.add_argument("--app-run", required=True)
     compare.add_argument("--tag", required=True)
@@ -1087,6 +1104,7 @@ def main(argv: list[str] | None = None) -> int:
                          help="proceed although shared inputs differ from the seed")
     parity = commands.add_parser("parity", help="run one job through Dagster and the local launcher and diff them")
     parity.add_argument("--tag", required=True)
+    parity.add_argument("--target-tag", help="target Git tag to carry into the suggested accept command")
     parity.add_argument("--job", required=True)
     parity.add_argument("--target", help="target path inside the code location (first job only)")
     parity.add_argument("--replace", action="store_true", help="move an existing run tree and walk aside")

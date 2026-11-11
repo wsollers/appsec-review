@@ -222,6 +222,7 @@ class BuildIterations:
                             {"prepared": prepared})
                 if receipt.get("terminal_status") != "SUCCEEDED":
                     from appsec_review.jobs.job_project_build.repair import diagnose_failure
+                    from appsec_review.jobs.job_project_build.enforcement import gap_text
                     evidence = [reference(
                         self.run_root, self.run_root / value["path"], expected_sha256=value["sha256"])
                         for command in receipt.get("commands", ())
@@ -234,10 +235,11 @@ class BuildIterations:
                         self.run_root, self.run_root / stderr_ref["path"],
                         expected_sha256=stderr_ref["sha256"])).read_text(errors="replace")[-32768:]
                         if isinstance(stderr_ref, Mapping) else "")
+                    messages = [gap_text(gap) for gap in receipt.get("gaps", ())]
                     diagnosis = diagnose_failure(
                         exit_code=last.get("exit_code"), timed_out=last.get("timed_out", False),
-                        stderr=stderr, gaps=receipt.get("gaps", ()),
-                        capture_gaps=tuple(value for value in receipt.get("gaps", ())
+                        stderr=stderr, gaps=messages,
+                        capture_gaps=tuple(value for value in messages
                                            if "capture" in value.lower()))
                     failure = retain(self.run_root, "failures", {
                         "attempt_id": request["attempt_id"], "binding": binding.view(),
@@ -309,7 +311,8 @@ class BuildIterations:
             return {"schema": SCHEMA, "graph": self.graph_ref,
                     "states": {receipt["build_unit_id"]: receipt["terminal_status"] for receipt in receipts},
                     "receipts": receipts, "gaps": [gap for receipt in receipts for gap in receipt.get("gaps", ())],
-                    "terminal_status": "COMPLETED_WITH_GAPS"}
+                    "terminal_status": ("COMPLETED_WITH_GAPS" if any(item.get("gaps") for item in receipts)
+                                        else "SUCCEEDED" if receipts else "NOT_APPLICABLE")}
         if refusals:
             receipts = [self._gap(node["build_unit_id"], refusals.get(
                 node["build_unit_id"], "shared workspace recovery withheld until selected inputs are admitted"))
@@ -580,15 +583,17 @@ class BuildIterations:
                 states[uid] = "FAILED"
                 (self.run_root / "data/build/iterations/pending.json").unlink()
                 failed_receipt = read_reference(self.run_root, prepared["receipt"])
+                from appsec_review.jobs.job_project_build.enforcement import unique_gaps
                 receipts[uid] = {
                     **failed_receipt, "terminal_status": "FAILED", "artifacts": [],
-                    "gaps": list(dict.fromkeys([*failed_receipt.get("gaps", ()),
-                                               f"{type(error).__name__}: {error}"])),
+                    "gaps": unique_gaps([*failed_receipt.get("gaps", ()),
+                                        f"{type(error).__name__}: {error}"]),
                 }
         for uid, node in nodes.items():
             if uid not in receipts and node["disposition"] != "contained":
                 receipts[uid] = self._gap(uid, node["disposition"])
-        gaps = [f"{uid}: {gap}" for uid, receipt in receipts.items() for gap in receipt.get("gaps", ())]
+        gaps = [gap if isinstance(gap, Mapping) else f"{uid}: {gap}"
+                for uid, receipt in receipts.items() for gap in receipt.get("gaps", ())]
         gaps.extend(f"topology:{item['code']}: {item['reason']}" for item in self.graph["coverage_gaps"])
         return {"schema": SCHEMA, "graph": self.graph_ref, "states": states,
                 "receipts": [receipts[key] for key in sorted(receipts)], "gaps": gaps,
@@ -692,9 +697,26 @@ def finish_build_workspaces(run_root: Path, policy: BuildWorkspacePolicy) -> Non
 
 def durable_artifacts(run_root: Path, receipt: Mapping[str, Any]) -> dict[str, Any]:
     value = copy.deepcopy(dict(receipt))
-    for artifact in value.get("artifacts", ()):
-        reference = put_file(run_root, run_root / str(artifact["path"]))
-        artifact.update(path=reference["path"], sha256=reference["sha256"])
+    retained = {}
+
+    def retain_identity(identity):
+        original = str(identity["path"])
+        if original not in retained:
+            retained[original] = put_file(run_root, run_root / original)
+        reference = retained[original]
+        identity.update(path=reference["path"], sha256=reference["sha256"])
+
+    for key in ("artifacts", "rejected_artifacts"):
+        for artifact in value.get(key, ()):
+            retain_identity(artifact)
+    if isinstance(value.get("declared_compile_database"), Mapping):
+        retain_identity(value["declared_compile_database"])
+    for proof in value.get("enforcement", ()):
+        for artifact in proof["closure_manifest"].get("native_artifacts", ()):
+            retain_identity(artifact)
+        proof["enforcement_id"] = digest({key: item for key, item in proof.items() if key != "enforcement_id"})
+    if value.get("family") == "native" and value.get("terminal_status") != "SUCCEEDED":
+        value["workspace"] = None  # The uncommitted tree will be rolled back; evidence above survives.
     return value
 
 

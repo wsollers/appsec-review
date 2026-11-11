@@ -174,7 +174,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
                 "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
     language_manifest_path = manifest_path.with_name("language-fixture.json")
     write_manifest(language_manifest_path, run_id=run_id, target_snapshot=fingerprint, target_root=target, indexes=[])
-    language_document = {"schema": "appsec-review/language-build-handoff/1",
+    language_document = {"schema": "appsec-review/language-build-handoff/2",
         "source_fingerprint": fingerprint, "upstream_project_build_handoff_sha256": "c" * 64,
         "receipts": [] if no_artifacts else [{"build_unit_id": "build-unit-fixture", "family": "wasm", "fingerprint": "d" * 64,
                       "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": artifacts}],

@@ -235,7 +235,7 @@ def _seed_run(tmp_path: Path) -> tuple[Any, str, Path, Path, dict[str, Any], lis
                 "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
     accepted_path = run_root / "data" / "upstream" / "accepted-language-builds.json"
     accepted_path.parent.mkdir(parents=True)
-    atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/1",
+    atomic_json(accepted_path, {"schema": "appsec-review/language-build-handoff/2",
         "source_fingerprint": SOURCE_FINGERPRINT, "upstream_project_build_handoff_sha256": "c" * 64,
         "receipts": [{"build_unit_id": BUILD_UNIT, "family": "node", "fingerprint": "d" * 64,
                       "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": rows}],

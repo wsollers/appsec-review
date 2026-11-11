@@ -35,8 +35,11 @@ be treated as one container lifecycle:
    `execute_captured` is used, surrounds that command with process capture and a post-command
    gitleaks scan.
 
-The authoritative non-Unity production build now runs in language-build iterations, not once
-as project probes and again as a language rebuild. Standardized captured execution is an
+Independent native units now execute once in `job_project_build`, using the existing captured
+native adapter. Their accepted receipts bind the binary artifacts, workspace, compiler database
+and capture; `job_language_build` consumes them without rebuilding. Product-connected native
+units keep the shared-workspace iteration owner, as do the other non-Unity adapters. Standardized
+captured execution is an
 acceptance requirement for every command of the native C/C++, Rust/Cargo, Go, .NET SDK, Python, PHP and Node adapters in
 `job_language_build` (`_CAPTURED_FAMILIES` in `job_language_build/job.py`), and for the
 WebAssembly lane when a unit has `native_components`. The JVM adapter (Java, Kotlin, Android)
@@ -44,6 +47,28 @@ still uses its own instrumentation trace, and a WebAssembly unit without native 
 plain executor; both now receive shared target/install paths and cleanup propagation, but
 neither must be described as producing the standardized syscall/envp/secret-scan record until
 explicitly migrated and tested. Unity retains its existing single engine execution.
+
+**What proves the native target:** capture, not the recipe. A recipe's static proof is only a
+dispatch annotation. After execution, the pinned image's measured compiler profiles (including
+resolved invocation paths) are matched to kernel-observed executables and every observed target
+switch; compiled translation units and the derived axes are retained in one
+`native-target-enforcement/2` record with `proof_kind: captured_invocation`. Exactly one compatible
+axis set is `proven`; unknown compilers, mixed or forbidden targets and empty captures publish
+unit-scoped `producer-gap/1` records. Dynamic commands, compiler-resolution overrides, missing or
+invalid recipes, unknown operations and network-required native recipes still refuse before
+execution; native execution is network-disabled. CMake's retained `compile_commands.json` is
+declaration evidence until matched to captured compiler invocations; downstream native catalogs
+use that correlated database. Delivery classification remains separately named coverage for the
+language/artifact catalog, not target proof. Fresh `/3` project and `/2` language handoffs replace
+the old shapes; old runs are not migrated or resumed. The stepwise check for the scoped case-094
+input requires a produced executable, exactly one proven captured record and a nonempty,
+capture-backed compile database before acceptance.
+The C++ and CodeQL consumers retain these build-unit gaps. Unproven native outputs remain
+diagnostic `rejected_artifacts`, never accepted compiler products; the existing native-byte
+machine/class and archive-member checks still apply. Build artifact indexing retains partial
+receipts' gaps; `job_binary_evidence_indexing` instead indexes
+intake-frozen decompilation publications before project build and does not consume build receipts.
+
 The current capture backend is in-container
 `ptrace` through `strace`. Configuration reserves `ebpf` as a future backend, but the executor
 rejects it because a safe, build-cgroup-scoped implementation has not been completed.

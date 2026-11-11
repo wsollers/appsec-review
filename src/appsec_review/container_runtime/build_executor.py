@@ -320,6 +320,19 @@ class BuildContainerExecutor:
     def _bind_source(self, path: Path) -> Path:
         return resolve_host_bind_path(path, self.runner)
 
+    @bounded_execution(cpu="1", memory="1g", action="build.compiler_profiles")
+    def compiler_profiles(self, *, scratch: Path):
+        """Measure the pinned image's drivers; target recipes cannot supply these facts."""
+        from .compiler_profiles import collect_compiler_profiles, PROBE_TIMEOUT_SECONDS
+
+        def runner(argv, timeout):
+            with self._container(argv) if tuple(argv[:2]) == ("docker", "run") else nullcontext():
+                return self.runner(argv, timeout)
+
+        return collect_compiler_profiles(
+            self.profile, scratch=scratch, runner=runner, image_verifier=self._verifier(),
+            timeout_seconds=min(self.timeout_seconds, PROBE_TIMEOUT_SECONDS))
+
     def _stop_on_timeout(self, command: Sequence[str], timed_out: bool) -> None:
         """Remove a timed-out container; killing the docker client leaves the container running."""
 

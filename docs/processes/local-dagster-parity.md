@@ -57,10 +57,17 @@ it is a bug to fix or a volatile field the normalizer missed.
 
 ### 1. Corpus identity
 
-`stepwise.py accept` requires the target's git tag to equal the acceptance directory name. The
-target is therefore tagged `cpp-multivuln-v1`, and its answer key moves to
-`test/acceptance/cpp-multivuln-v1/expectations.toml`. Baselines, provenance and seed manifests
-land beside it, as they do for `AcceptanceTest`.
+`stepwise.py accept --tag CORPUS [--target-tag GIT_TAG]` separates the acceptance directory
+(`test/acceptance/CORPUS/`) from the target Git tag. `GIT_TAG` must resolve to the target's `HEAD`;
+omitting it preserves the existing behavior by using `CORPUS` as the Git tag too. Provenance and
+seed manifests record both names and the target commit. For example, a fresh sparse corpus can use
+`--tag appsec-multi-vuln-c094-scoped-v1 --target-tag appsec-multi-vuln-c094-v1` without creating a
+target tag or writing the old full-corpus keys.
+
+Pass `--target-tag` on each acceptance when the names differ. `compare`, `seed`, `verify-job`,
+`model-contract` and `system` still use `--tag` to select the corpus namespace. `parity` accepts
+`--target-tag` to carry it into its suggested acceptance command. Replay/key-preservation guards
+are unchanged; selecting a new namespace does not rewrite or migrate existing keys.
 
 ### 2. One launcher: started the same, validated the same
 

@@ -149,8 +149,10 @@ agents that inspect or change the repository. It is not a prompt for review work
   named-skip rules, and each case carries an explicit declared time budget that is never raised
   to make a slow case pass. Integration (300 s) and live (1800 s) defaults are configured in
   `pyproject.toml`; a longer need is declared with `pytest.mark.time_budget(seconds, reason=...)`.
-- [`docs/architecture/testing.md`](docs/architecture/testing.md) describes the tiers, the harness,
-  and the working loop.
+- Follow the [unit-to-live testing and recovery workflow](docs/architecture/testing.md#working-loop)
+  for exact selector/count guards, baseline attribution, ready-commit handoff, per-job content
+  acceptance and safe recovery. The same document defines the test tiers and harness; the
+  [recovery runbook](docs/operations/recovery-repair.md) supplies the detailed admission procedure.
 - Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
   default. Apply the same scope after merging changes from another branch.
 - Required collection behavior: exclude known integration/live paths from implicit default

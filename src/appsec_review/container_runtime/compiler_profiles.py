@@ -32,7 +32,7 @@ from appsec_review.signing.policy import default_image_verifier
 from .build_executor import BuildContainerExecutor, BuildProfile, Runner, _run, resolve_host_bind_path
 from .identity import application_runtime_user, grant_runtime_user
 
-SCHEMA = "appsec-review/static-compiler-profile/2"
+SCHEMA = "appsec-review/static-compiler-profile/3"
 SET_SCHEMA = "appsec-review/compiler-profile-set/1"
 TRANSCRIPT_SCHEMA = "appsec-review/compiler-probe/1"
 ORIGIN = "image-probe/1"
@@ -160,6 +160,10 @@ _EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 class CompilerProfileError(ValueError):
     """The image probe or its evidence cannot support a compiler profile."""
+
+
+class CompilerProfileCleanupError(CompilerProfileError):
+    """Unconfirmed container cleanup is fatal, not an ordinary missing-profile gap."""
 
 
 @dataclass
@@ -352,7 +356,7 @@ def _go_facts(transcript: ProbeTranscript) -> tuple[str, str, str, dict[str, Any
 def build_profile_records(transcript: ProbeTranscript, *, image_digest: str,
                           executables: Mapping[str, Mapping[str, Any]], transcript_sha256: str,
                           image_signature: str) -> dict[str, dict[str, Any]]:
-    """Build one validated ``/2`` record per driver the image ships.
+    """Build one validated ``/3`` record per driver the image ships.
 
     ``executables`` maps each driver to the ``{"sha256", "format"}`` facts from
     :func:`hash_copied_executables`; ``image_signature`` is the configured signing outcome.
@@ -390,6 +394,8 @@ def build_profile_records(transcript: ProbeTranscript, *, image_digest: str,
             "executable": tool["real"],
             "invocation_names": sorted(name for name, other in transcript.tools.items()
                                        if other["real"] == tool["real"]),
+            "invocation_paths": sorted({other["path"] for other in transcript.tools.values()
+                                        if other["real"] == tool["real"]}),
             "compiler_sha256": executables[driver]["sha256"],
             "executable_format": dict(executables[driver]["format"]),
             "wrapper_closure": [{"path": path, "target": target} for path, target in tool["links"]],
@@ -413,7 +419,7 @@ def build_profile_records(transcript: ProbeTranscript, *, image_digest: str,
 
 
 _RECORD_KEYS = frozenset((
-    "schema", "image_digest", "driver", "executable", "invocation_names", "compiler_sha256",
+    "schema", "image_digest", "driver", "executable", "invocation_names", "invocation_paths", "compiler_sha256",
     "executable_format", "wrapper_closure", "driver_semantics", "version", "default_target",
     "target_axes", "supported_targets", "driver_facts", "image_env", "probe", "provenance"))
 _VERSION_PATTERNS = {"cargo": _CARGO_FIRST, "clang": _VERSION_LINE, "gcc": _VERSION_LINE,
@@ -519,7 +525,7 @@ def _check_probe(record: dict[str, Any]) -> None:
 
 
 def validate_profile(record: Any) -> None:
-    """Reject any ``/2`` record that is not exactly the closed shape the collector produces."""
+    """Reject any record that is not exactly the closed shape the collector produces."""
     if not isinstance(record, dict) or set(record) != _RECORD_KEYS:
         _fail("profile record has unexpected fields")
     driver = record["driver"]
@@ -533,6 +539,11 @@ def validate_profile(record: Any) -> None:
             or names != sorted(set(names)) or not set(names) <= set(INVOCATION_NAMES)
             or driver not in names):
         _fail("profile invocation names are invalid")
+    paths = record["invocation_paths"]
+    if (not isinstance(paths, list) or not paths
+            or any(not _text(path, _PATH) or path != posixpath.normpath(path) for path in paths)
+            or paths != sorted(set(paths))):
+        _fail("profile invocation paths are invalid")
     _check_closure(record)
     _check_targets(record)
     _check_format(record)
@@ -669,11 +680,11 @@ def _reconcile_container(name: str, runner: Runner, output: Path) -> None:
     try:
         code, _stdout, stderr, timed_out = runner(("docker", "rm", "--force", name), 60)
     except Exception as error:
-        raise CompilerProfileError(unconfirmed) from error
+        raise CompilerProfileCleanupError(unconfirmed) from error
     absent = code == 1 and any(text in stderr.decode("utf-8", "replace").lower()
                                for text in ("no such container", "no such object"))
     if timed_out or not (code == 0 or absent):
-        raise CompilerProfileError(unconfirmed)
+        raise CompilerProfileCleanupError(unconfirmed)
 
 
 def _signature_outcome(verifier: Any) -> str:

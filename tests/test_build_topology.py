@@ -534,10 +534,10 @@ def test_make_source_closure_cannot_borrow_explicit_target_past_missing_or_condi
     refinement = _refinement(graph, units)
     bound = refinement["units"][0]
     assert [operation["kind"] for operation in bound["operations"]] == ["native_compile"]
-    assert "unenforced_native_target" in bound["blockers"]
+    assert "unenforced_native_target" not in bound["blockers"]
     assert all(proof["status"] == "unknown" and unresolved in proof["unresolved_inputs"]
                for proof in bound["enforcement"])
-    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
+    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == [units[0]["build_unit_id"]]
 
 
 @pytest.mark.parametrize("target,prerequisite", [
@@ -566,10 +566,10 @@ def test_unsupported_make_names_never_bind_a_colliding_literal_tail(tmp_path, ta
     bound = refinement["units"][0]
     assert [operation["kind"] for operation in bound["operations"]] == ["native_compile"]
     assert len(bound["enforcement"]) == 1
-    assert "unenforced_native_target" in bound["blockers"]
+    assert "unenforced_native_target" not in bound["blockers"]
     assert all(proof["status"] == "unknown" and "make_rule_scope_unresolved" in proof["unresolved_inputs"]
                for proof in bound["enforcement"])
-    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
+    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == [units[0]["build_unit_id"]]
     assert canonical_json(graph) == graph_bytes
 
 
@@ -618,10 +618,7 @@ def test_actual_compiler_inputs_use_whole_bundle_facts_not_unrelated_make_bindin
         else:
             assert proof["status"] == "unknown" and reason in proof["unresolved_inputs"]
     result = ready_build_units(graph, {}, refinement=refinement)
-    if reason is None:
-        assert bound["blockers"] == [] and result["ready"] == [units[0]["build_unit_id"]]
-    else:
-        assert "unenforced_native_target" in bound["blockers"] and result["ready"] == []
+    assert bound["blockers"] == [] and result["ready"] == [units[0]["build_unit_id"]]
     assert canonical_json(graph) == graph_bytes
 
 
@@ -651,7 +648,7 @@ def test_known_project_without_recipe_is_not_ready(tmp_path: Path):
     refinement = _refinement(graph, units)
     result = ready_build_units(graph, {}, refinement=refinement)
     assert result["ready"] == []
-    assert result["blocked"][0]["reasons"] == ["recipe_missing", "unenforced_native_target"]
+    assert result["blocked"][0]["reasons"] == ["recipe_missing"]
     assert all(proof["status"] == "unknown" and proof["recipe_digest"] is None
                for proof in refinement["units"][0]["enforcement"])
 
@@ -775,7 +772,7 @@ def test_observed_32bit_declarations_are_preserved_but_never_native_execution_au
     assert all(node["variant"]["target_arch"] == "x86" for node in graph["nodes"])
     assert any(fact["predicate"] == "cmake:set" and "-m32" in fact["value"] for fact in graph["facts"])
     assert all(proof["status"] == "incompatible" for unit in refinement["units"] for proof in unit["enforcement"])
-    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
+    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == [_ids(graph)["z-library"]]
     assert units == original
 
 

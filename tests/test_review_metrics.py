@@ -49,7 +49,7 @@ def test_review_metrics_resolve_receipts_and_preserve_gaps_reuse_and_deduplicati
     shared = {"kind": "package", "path": shared_path.relative_to(tmp_path).as_posix(),
               "sha256": file_sha256(shared_path), "size_bytes": 100}
     builds = _receipt(tmp_path, "builds.json", {
-        "schema": "appsec-review/language-build-handoff/1", "receipts": [
+        "schema": "appsec-review/language-build-handoff/2", "receipts": [
             {"build_unit_id": "py", "family": "python", "root": ".",
              "terminal_status": "SUCCEEDED", "checkpoint_reused": False, "gaps": [],
              "artifacts": [shared]},
