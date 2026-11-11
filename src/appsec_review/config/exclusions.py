@@ -52,6 +52,8 @@ NEVER_ASSET_SUFFIXES: frozenset[str] = frozenset({
     ".jar", ".svg", ".xpm", ".xml", ".json", ".yml", ".yaml", ".toml", ".lua", ".py", ".sh", ".cmake",
     ".m4", ".in", ".am", ".ac", ".build", ".mk", ".c", ".h", ".cc", ".cpp", ".hpp", ".js", ".ts",
     ".java", ".go", ".rs", ".cs", ".rb", ".php", ".pl", ".ps1", ".bat", ".cmd", ".html", ".css", ".po",
+    # A target's documentation may be delivered as a PDF instead of buildable doc sources.
+    ".pdf",
 })
 # Jobs that select target files themselves and apply their own job-level patterns. Every job that
 # reads the accepted catalog inherits the global (and catalog-level) exclusions through it.

@@ -67,8 +67,9 @@ def test_asset_suffix_matching(path: str, expected: str | None) -> None:
     (_classes(("a", [".svg"])), "may not exclude .svg"),
     (_classes(("a", [".zip"])), "may not exclude .zip"),
     (_classes(("a", [".lua"])), "may not exclude .lua"),
+    (_classes(("a", [".pdf"])), "may not exclude .pdf"),
 ], ids=["not-array", "bad-name", "repeated-name", "missing-reason", "blank-reason", "no-suffix", "no-dot",
-        "upper-case", "glob", "path", "repeated-suffix", "object", "svg", "archive", "script"])
+        "upper-case", "glob", "path", "repeated-suffix", "object", "svg", "archive", "script", "pdf"])
 def test_invalid_asset_classes_fail_at_load(document: dict, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         asset_class_rules(document)
@@ -80,7 +81,8 @@ def test_shipped_asset_classes_exclude_no_code_carrying_suffix() -> None:
     assert {rule.asset_class for rule in rules} == {
         "art-source", "raster-image", "video", "audio", "font", "game-save"}
     assert {".blend", ".png", ".mp4", ".ogg", ".ttf", ".sav", ".sav.gz"} <= suffixes
-    assert not suffixes & NEVER_ASSET_SUFFIXES
+    assert not suffixes & NEVER_ASSET_SUFFIXES and ".pdf" in NEVER_ASSET_SUFFIXES
+    assert all(PathExclusions(rules).match(path) is None for path in ("doc/manual.pdf", "doc/MANUAL.PDF"))
     # Every job carries the asset rules after the path patterns, whichever files it selects.
     config = load_config(ROOT / "appsec-review.toml")
     for job_id in ("job_review_intake", "job_target_catalog", "job_codeql_analysis"):
@@ -98,6 +100,8 @@ def test_inventory_counts_excluded_assets_by_class_and_keeps_source_and_descript
         "data/hills.png": b"\x89PNG\0\0binary", "data/ICON.PNG": b"\x89PNG\0more", "data/logo.svg": b"<svg/>\n",
         "data/music.ogg": b"OggS\0", "data/start.sav": b"[savefile]\n", "data/start.sav.gz": b"\x1f\x8b\0",
         "data/pack.tar.gz": b"\x1f\x8b\0archive", "tools/shape.obj": b"\0object",
+        # Documentation delivered as a PDF stays in the inventory.
+        "doc/manual.pdf": b"%PDF-1.7\n\0binary", "doc/MANUAL.PDF": b"%PDF-1.7\n\0binary",
     }
     for relative, content in contents.items():
         (target / relative).parent.mkdir(parents=True, exist_ok=True)
