@@ -5,6 +5,52 @@ data. Its schedule is declared once in `appsec-review.toml`: nightly at `00:00 U
 Dagster deployment launches this same job for both console and scheduled runs, while the Python
 runtime remains the authority for dependency ordering, validation, receipts, and publication.
 
+## Bounded integration coverage
+
+At the user's explicit request, run only this job's fixture boundaries:
+
+```sh
+scripts/run-tests.sh --allow-heavy --timeout-seconds 1800 \
+  --parallel --test-workers 4 --shuffle-seed 113 --expect-tests 24 -- \
+  tests/integration/job_third_party_data_sync/test_*.py
+```
+
+The wrapper accepts test files, not the directory itself. The suite uses test-owned loopback
+TLS, gzip/ZIP inputs, SQLite indices and immutable publications; it never refreshes public feeds
+or reads the deployment's feed cache. OSV and MITRE's fixed upstream endpoints are routed to the
+fixture TLS server by an injected downloader; the real HTTP transport and parsers still run.
+The job's protected `feed_sync_work` glob covers attempt work files, not the shared feed
+snapshots. The tests place both kinds inside their own temporary workspace and check their
+respective unit schemas, declared work paths and snapshot manifests.
+
+Container cases require existing exact image pins and explicitly verified signatures without
+changing deployment enforcement. Missing prerequisites are named skips, not passes. Grype uses
+the host-pinned catalog image; cve-bin-tool requires its configured `image_id` so the test cannot
+fall through to building an image. These probes neither build nor pull images and make no model
+calls. Tool calls are capped at 30 seconds; the blocked-input cve-bin-tool cleanup probe uses
+two seconds. The integration tier retains its 300-second per-case cap.
+
+The unit tier currently creates synthetic Grype stdout and cve-bin-tool tables in Python; it
+does not load recorded tool-output files. The version and builder tests check those assumptions
+against real tools and write observed provenance beside their temporary outputs, not fabricated
+sidecars beside unit doubles. The successful Grype import additionally gates on
+`APPSEC_TEST_GRYPE_DB_ARCHIVE`: a tiny, fresh v6 `.tar.zst` fixture (at most 8 MiB, raw database at
+most 32 MiB), never a production cache. Its `<archive>.provenance.json` must contain `tool_id`,
+`image_id`, `tool_version`, `built`, `schema_version`, `input_sha256` (archive bytes) and
+`output_sha256` (the SHA-256 of UTF-8 `json.dumps` with sorted keys and `(",", ":")` separators
+over the real `db status` fields `schemaVersion`, `built`, `valid`, `path`). Record that sidecar
+from a real pinned-tool invocation; a tool/pin/hash mismatch fails rather than regenerating it
+inside the test. Missing pins, signatures or fixtures remain tracked under T-113.
+
+The retained KEV TLS and filesystem cases moved from `test_feed_transport_acceptance.py` and
+`test_acceptance_host_probe.py`. The installer-record scan suite consumes feeds for another
+job, and the review-consumer suite only includes the sync configuration; neither runs this
+producer, so neither moves in this walk. There were no sync graph or live cases to fold into
+acceptance. A bounded three-unit KEV executor branch checks real HTTP and parser failures:
+`FAILED` task receipts, blocked dependent tasks and unchanged feed/metadata pointers. These
+failures are exceptions, not synthetic successful results carrying invented gap records.
+Full-job lifecycle and accepted-handoff behavior remain outside this folder.
+
 ## Topology and failure behavior
 
 The unit graph is:

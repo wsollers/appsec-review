@@ -28,7 +28,7 @@ from appsec_review.observability import write_run_metrics
 from tests.fixtures.reference_feeds import kev_document, kev_entry
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 TLS = ROOT / "tests" / "fixtures" / "acceptance_feeds"
 PAYLOAD = json.dumps(kev_document([kev_entry("CVE-2026-0001")]), sort_keys=True).encode()
 VALID_JSON_PREFIX = json.dumps(kev_document([]), sort_keys=True).encode()

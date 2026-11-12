@@ -250,8 +250,8 @@
     {
       "id": "feed-tls", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
       "nodes": [
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[declared-exact]",
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/valid-json-interrupted-ValueError-Content-Length mismatch]"
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[declared-exact]",
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_failure_preserves_last_good_pointer[/valid-json-interrupted-ValueError-Content-Length mismatch]"
       ],
       "boundary": "Real loopback HTTPS -> bounded fetch/normalize/publish/query with last-good pointer preservation",
       "variants": ["exact-limit", "valid-json-prefix-truncation"],
@@ -261,11 +261,11 @@
     {
       "id": "feed-tls-negative-matrix", "gap_ids": ["G-B9"], "case_deadline_seconds": 15,
       "nodes": [
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[stream-exact]",
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/interrupted-ValueError-Content-Length mismatch]",
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/oversize-declared-ValueError-byte bound]",
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/oversize-stream-ValueError-byte bound]",
-        "tests/integration/test_feed_transport_acceptance.py::test_real_https_failure_preserves_last_good_pointer[/status-HTTPError-503]"
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_fetch_publishes_hash_pinned_tiny_kev[stream-exact]",
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_failure_preserves_last_good_pointer[/interrupted-ValueError-Content-Length mismatch]",
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_failure_preserves_last_good_pointer[/oversize-declared-ValueError-byte bound]",
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_failure_preserves_last_good_pointer[/oversize-stream-ValueError-byte bound]",
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py::test_real_https_failure_preserves_last_good_pointer[/status-HTTPError-503]"
       ],
       "boundary": "Real loopback TLS streaming bounds, truncation and HTTP failures preserve last-good publication",
       "variants": ["headerless-stream", "truncation", "declared-oversize", "stream-oversize", "HTTP-503"],

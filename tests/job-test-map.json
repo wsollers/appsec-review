@@ -420,7 +420,16 @@
         "tests/unit/job_third_party_data_sync/test_reference_feed_sync.py",
         "tests/unit/job_third_party_data_sync/test_grype_db_sync.py"
       ],
-      "integration": ["tests/integration/test_feed_transport_acceptance.py"],
+      "integration": [
+        "tests/integration/job_third_party_data_sync/test_feed_transport.py",
+        "tests/integration/job_third_party_data_sync/test_failure_receipts.py",
+        "tests/integration/job_third_party_data_sync/test_publication_filesystem.py",
+        "tests/integration/job_third_party_data_sync/test_reference_transport.py",
+        "tests/integration/job_third_party_data_sync/test_nvd_transport.py",
+        "tests/integration/job_third_party_data_sync/test_fixture_provenance.py",
+        "tests/integration/job_third_party_data_sync/test_grype_container.py",
+        "tests/integration/job_third_party_data_sync/test_cve_builder.py"
+      ],
       "acceptance": [],
       "live": []
     },

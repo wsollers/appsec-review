@@ -1706,6 +1706,20 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_language_build/`, the live toolchain and Gradle checks under
   `tests/acceptance/job_language_build/`, new contract, graph, handler-wiring and receipt/path
   tests). Next: job_build_iteration.
+  Integration follow-up:
+  job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
+  skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,
+  immutable filesystem publication and declared work artifacts. The two existing boundary
+  files moved into its folder; no graph cases, acceptance moves or deletions were needed.
+  Pinned-tool proof remains incomplete: Grype's local tag differs from the host pin;
+  cve-bin-tool lacks an exact configured pin and its observed image is unsigned. The successful
+  Grype import also needs a tiny fresh v6 fixture with a provenance sidecar. Synthetic unit
+  doubles are not tool recordings; no verified tool-output fixture provenance is claimed.
+  A real three-unit KEV executor branch checks HTTP/parser failure receipts, dependent skips
+  and unchanged publication; full-job lifecycle and accepted-handoff behavior remain outside
+  this bounded folder.
+  The wrapper currently requires file selectors, so the integration folder is selected with
+  `tests/integration/job_third_party_data_sync/test_*.py`, not a directory argument.
 - **Done when:** `tests/` has no `test_*.py` outside `tests/unit`, `tests/integration`,
   `tests/acceptance` and `tests/shared`; `scripts/run-tests.sh fast` collects only `tests/unit`
   and finishes in under ten minutes with zero tests over 10 s; every job in the registry has a

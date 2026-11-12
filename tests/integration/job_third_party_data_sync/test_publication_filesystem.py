@@ -1,4 +1,4 @@
-"""Bounded filesystem diagnosis, not a platform-reliability qualification."""
+"""Real atomic feed publication on the test filesystem, not a reliability qualification."""
 from __future__ import annotations
 
 from contextlib import contextmanager
