@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import shutil
+
+from tests.container_fixture import copy_containers
 from types import SimpleNamespace
 
 import pytest
@@ -78,7 +80,7 @@ def fixture(tmp_path: Path):
     text = config_path.read_text()
     config_path.write_text(text.replace("[review_policy.releases]",
         "[review_policy.releases]\n" + "\n".join(f'{key} = "fixture-1"' for key in releases), 1))
-    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    copy_containers(ROOT, tmp_path)
     shutil.copytree(ROOT / "rules", tmp_path / "rules")
     if (ROOT / "data" / "feeds" / "osv").exists():
         shutil.copytree(ROOT / "data" / "feeds" / "osv", tmp_path / "data" / "feeds" / "osv")

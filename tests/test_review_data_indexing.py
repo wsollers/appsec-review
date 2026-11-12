@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import re
 import shutil
+
+from tests.container_fixture import copy_containers
 import sqlite3
 import subprocess
 import sys
@@ -160,7 +162,7 @@ def test_dependency_inventory_osv_match_publishes_unverified_cve_lead(tmp_path: 
 def _configured(tmp_path: Path, extra: str = ""):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8") + extra
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
-    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    copy_containers(ROOT, tmp_path)
     base = load_config(tmp_path / "appsec-review.toml")
     return replace(base, runtime=replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
                                          metadata_dir=tmp_path / "runs" / "metadata"))

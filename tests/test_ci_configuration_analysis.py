@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import shutil
 
+from tests.container_fixture import copy_containers
+
 import pytest
 
 from appsec_review.config import load_config
@@ -23,7 +25,7 @@ ROOT = Path(__file__).parents[1]
 
 def isolated_config(tmp_path: Path):
     shutil.copy2(ROOT / "appsec-review.toml", tmp_path / "appsec-review.toml")
-    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    copy_containers(ROOT, tmp_path)
     return load_config(tmp_path / "appsec-review.toml")
 
 
