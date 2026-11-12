@@ -90,6 +90,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-095 | [Report an intake coverage gap once, not once per unit](#t-095-report-an-intake-coverage-gap-once-not-once-per-unit) | pipeline | open |
 | T-096 | [Stop inferring run artifacts from a data/ path prefix](#t-096-stop-inferring-run-artifacts-from-a-data-path-prefix) | pipeline | open |
 | T-097 | [Use ChangeLog files as a source-history signal](#t-097-use-changelog-files-as-a-source-history-signal) | history | in-progress |
+| T-098 | [Identify vendored third-party code in a target](#t-098-identify-vendored-third-party-code-in-a-target) | topology | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1471,6 +1472,32 @@ until each is rewritten into the entry format when it is next touched.
   `tests/test_source_history_changelog.py`, `tests/fixtures/changelog_history/`,
   [`architecture/source-history-analysis.md`](architecture/source-history-analysis.md)
   ("Change-log history"), T-027, T-029, T-047, T-048.
+
+### T-098 — Identify vendored third-party code in a target
+
+- **State:** open
+- **Area:** topology
+- **Why:** the Freeciv walk (run `2026-11-12-0001`) catalogued the copies of Lua 5.4, tolua 5.2,
+  tinycthread, cvercmp and luasql under `dependencies/` as build units like the project's own
+  code, while the dependency catalog was empty because the target has no package manifest. Nothing
+  says "this directory is third-party code, of this project and version": findings there are not
+  marked as upstream defects, known advisories for the vendored version are not looked up, and
+  the source inventory flags `vendored` only for directories literally named `vendor`,
+  `vendors` or `third_party`. The user decided on 2026-11-11 not to stop the walk for this:
+  vendored code stays in scope as code and its non-identification is a known gap of the walk.
+- **Scope:** decide and record what identifies a vendored component (directory conventions such as
+  `dependencies/`, `third_party/`, `extern/`, a bundled upstream licence, README or version header,
+  a build system that offers a system-library alternative for the same directory) and what the
+  catalog publishes for it: a component with name, version when stated, evidence and confidence,
+  marked vendored, with its sources still reviewed. Feed the dependency catalog and the delivery
+  scope from it. No network lookup in the catalog job.
+- **Done when:** a catalog test with a bundled upstream library under a conventional directory
+  publishes it as a vendored component with its evidence, a directory that merely has that name
+  and no upstream evidence is not marked, and the Freeciv catalog names its five vendored
+  libraries.
+- **Refs:** `src/appsec_review/jobs/cataloging.py`, `src/appsec_review/jobs/job_target_catalog/job.py`,
+  `src/appsec_review/jobs/delivery_scope.py`,
+  `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091.
 
 ## Legacy backlog
 

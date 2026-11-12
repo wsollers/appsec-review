@@ -75,6 +75,50 @@ The checked catalog attempt is dispatch `c8822670-cdd4-4ad6-89b9-cae475d10f01`, 
    unit-test document in the target", "no compile database before a build" and "no package
    manifest" join the expected list.
 
+## The user's answers (2026-11-11, relayed by the coordinating session) and sizing
+
+The walk stays on hold at this job: nothing is launched, fixed or accepted until the user says so.
+
+1. **T-091: agreed that discovery is fixed before going on; not started.** Sizing, read-only:
+   - Every variable Freeciv uses in `SUBDIRS` is assigned in the same `Makefile.am`, as literal
+     lists under `if`/`else` (`SSUBDIRS`, `DSUBDIRS`, `GUI_SUBDIRS +=`, `module_dirs +=`,
+     `CLIENTDATADIRS`, `SERVERDATADIRS = $(SRV_RE_DATADIRS) scenarios`, `RULEDITDIRS`,
+     `LUASUBDIR`, `TINYCTHRDIR`, `CLI_INCLUDE`). The fix is in one function,
+     `build_points.autotools_build_points`: keep every assignment of a variable (`=` and `+=`,
+     all branches) as a union instead of the last one, expand `$(VAR)` references to variables
+     assigned in the same file to a bounded depth, record a reference that has no in-file
+     assignment as `unresolved`, and apply the same reading to `*_PROGRAMS`, `*_LTLIBRARIES` and
+     `*_SOURCES`. The existing folding rule then makes the driven directories members. No change
+     to `configure.ac` handling is needed for Freeciv.
+   - Files: `src/appsec_review/jobs/build_points.py` (about 60 to 80 lines), cases in
+     `tests/test_build_points.py`, the discovery matrix cases for conditional systems (their
+     strict `pending` entries that start passing must be removed in the same change), and the
+     build-discovery docs. Expected Freeciv result: the two parallel root units, no fragment
+     unit, the automake programs and sources under conditionals named. One catalog replay.
+   - Alternative, walking with the meson root only and setting the autotools fragments aside:
+     of 631 C and C++ sources in the catalog, meson's targets name 588 and the autotools units 510.
+     34 are named by autotools only, all vendored: 32 in `dependencies/lua-5.4`, 1 in `luasql`,
+     1 in `tinycthread` (meson uses the system libraries for these by default). 9 are named by
+     neither build. So a meson-only walk would build and analyse the project's own code and lose
+     the bundled Lua, luasql and tinycthread sources from build-backed analysis. It needs a way to
+     set units aside, which does not exist today, so it is not free either.
+2. **Vendored dependencies: agreed.** They stay in scope as code; "vendored dependencies not
+   identified, dependency catalog empty" is a known gap of this walk. T-098 registers the work.
+3. **Gap causes: accepted as expected for this walk**: no compile database before a build; no
+   package manifest and no manifest for dependency extraction; no target-supplied design, DFD,
+   OpenAPI, Postman or threat-model document. **Not yet accepted: `unit_test`.** The kind matches
+   only file names such as `test_*.c`, `*.test.js`, `_test.go`, `_spec.rb`. Freeciv has no file of
+   that shape, and no `check_PROGRAMS`, `TESTS` or meson `test(`. It does have checks the rule
+   does not see: `tests/` holds 18 files, shell scripts that lint the source (`check_macros.sh`,
+   `copyright.sh`, `header_guard.sh`, `trailing_spaces.sh`, `va_list.sh`, `fcintl.sh`) and
+   ruleset load, save and upgrade checks (`rulesets_*.sh.in`), run from `tests/Makefile.am` and
+   `.github/workflows/ci.yml`. So: a true absence of unit-test source, and a detection limit for
+   script-level checks.
+4. **DFD and threat model.** No job in the graph produces either. The catalog only classifies
+   documents the target supplies; `job_document_issue_analysis` analyses supplied documents. The
+   producer is deferred work (the F07 threat-model item in the legacy backlog; T-070 slices
+   findings by a game threat model and is not that producer).
+
 ## Not verified
 
 - The symbol index (15,647 items) and component index were not compared with an independent
