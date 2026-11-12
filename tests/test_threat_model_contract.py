@@ -115,20 +115,21 @@ def test_limits_are_bounded_integers() -> None:
             Limits(max_flows=value)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize(("state", "readable", "code", "retryable"), [
-    (InputState.ABSENT, False, GapCode.INPUT_UNAVAILABLE, True),
-    (InputState.DISABLED, False, GapCode.INPUT_UNAVAILABLE, False),
-    (InputState.EMPTY, False, GapCode.OUTPUT_MISSING, True),
-    (InputState.NOT_REGISTERED, False, GapCode.INPUT_UNAVAILABLE, False),
-    (InputState.PARTIAL, True, GapCode.PRODUCER_REPORTED_GAP, True),
+@pytest.mark.parametrize(("state", "readable", "code"), [
+    (InputState.ABSENT, False, GapCode.INPUT_UNAVAILABLE),
+    (InputState.DISABLED, False, GapCode.INPUT_UNAVAILABLE),
+    (InputState.EMPTY, False, GapCode.OUTPUT_MISSING),
+    (InputState.NOT_REGISTERED, False, GapCode.INPUT_UNAVAILABLE),
+    (InputState.PARTIAL, True, GapCode.PRODUCER_REPORTED_GAP),
 ], ids=["absent", "disabled", "empty", "not_registered", "partial"])
-def test_every_unusable_input_state_is_one_named_producer_gap(state, readable, code, retryable) -> None:
+def test_every_unusable_input_state_is_one_named_producer_gap(state, readable, code) -> None:
     view = FakeEvidenceView().set_status("job_code_graph_index", "code_graph_facts", state, upstream_gap_count=2)
     opened = open_input(view, "job_code_graph_index", "code_graph_facts", unit_id="facts.interactions")
     assert opened.readable is readable and opened.row.state is state
     (gap,) = opened.gaps
+    # Never retryable: only the producer can close an input gap, and its new handoff reruns this job.
     assert (gap["schema"], gap["code"], gap["retryable"], gap["unit_id"]) == (
-        GAP_SCHEMA, code.value, retryable, "facts.interactions")
+        GAP_SCHEMA, code.value, False, "facts.interactions")
     assert "job_code_graph_index" in gap["reason"]
 
 

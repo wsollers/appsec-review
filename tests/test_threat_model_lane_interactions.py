@@ -192,7 +192,7 @@ def test_without_graph_facts_the_lane_reports_the_gap_and_uses_syntax() -> None:
         (Basis.OBSERVED_SYNTAX, "network_connect")]
     assert codes(result) == [(GapCode.INPUT_UNAVAILABLE.value, GRAPH[0]), (GapCode.INPUT_UNAVAILABLE.value, SIGNALS[0])]
     assert all(gap["schema"] == GAP_SCHEMA and gap["unit_id"] == UNIT for gap in result.gaps)
-    assert [gap["retryable"] for gap in result.gaps] == [True, False]
+    assert [gap["retryable"] for gap in result.gaps] == [False, False]
     assert [(row.producer, row.output_kind, row.state, row.records_read) for row in result.ledger] == [
         (*GRAPH, InputState.ABSENT, 0), (*SYNTAX, InputState.READ, 1), (*SIGNALS, InputState.DISABLED, 0)]
     assert not [query for query in view.queries if query[0] == "entities"], "an unreadable input is never queried"

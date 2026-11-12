@@ -48,10 +48,14 @@ class OpenedInput:
     gaps: tuple[Mapping[str, Any], ...]
 
 
+# No input gap is retryable. ``retryable`` asks whether running THIS job again could close the gap,
+# and the runtime never reuses an accepted attempt that has a retryable gap. An absent, empty or
+# partial input is closed only by its producer publishing a new accepted handoff, which changes a
+# pinned upstream digest and reruns this job by itself; rerunning over the same pins repeats the gap.
 _UNREADABLE = {
-    InputState.ABSENT: (True, "has no accepted handoff in this attempt's claim"),
-    InputState.DISABLED: (False, "is disabled in configuration"),
-    InputState.NOT_REGISTERED: (False, "producer is not registered"),
+    InputState.ABSENT: "has no accepted handoff in this attempt's claim",
+    InputState.DISABLED: "is disabled in configuration",
+    InputState.NOT_REGISTERED: "producer is not registered",
 }
 
 
@@ -62,19 +66,19 @@ def open_input(view: EvidenceView, producer: str, output_kind: str, *, unit_id: 
     row = InputLedgerRow(producer, output_kind, status.state, status.handoff_sha256,
                          status.coverage_disposition, status.upstream_gap_count)
     if status.state in _UNREADABLE:
-        retryable, why = _UNREADABLE[status.state]
         return OpenedInput(False, row, (producer_gap(
-            GapCode.INPUT_UNAVAILABLE, f"{scope} {why}", unit_id=unit_id, scope_id=producer, retryable=retryable),))
+            GapCode.INPUT_UNAVAILABLE, f"{scope} {_UNREADABLE[status.state]}", unit_id=unit_id,
+            scope_id=producer),))
     if status.state is InputState.EMPTY:
         return OpenedInput(False, row, (producer_gap(
             GapCode.OUTPUT_MISSING, f"{scope} was declared but nothing was published", unit_id=unit_id,
-            scope_id=scope, retryable=True),))
+            scope_id=scope),))
     if status.state is InputState.PARTIAL:
         return OpenedInput(True, row, (producer_gap(
             GapCode.PRODUCER_REPORTED_GAP,
             f"{scope} was accepted with {status.upstream_gap_count} upstream gaps "
             f"(coverage {status.coverage_disposition or 'unstated'})",
-            unit_id=unit_id, scope_id=scope, retryable=True),))
+            unit_id=unit_id, scope_id=scope),))
     return OpenedInput(True, row, ())
 
 

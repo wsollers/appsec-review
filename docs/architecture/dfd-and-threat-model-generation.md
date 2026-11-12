@@ -440,17 +440,22 @@ The job sets `strict_gaps=True`. Every gap is built with `interchange.producer_g
 
 | Situation | `GapCode` | `scope_id` | Retryable |
 | --- | --- | --- | --- |
-| Declared producer has no accepted handoff in the claim | `input_unavailable` | `<producer>` | yes |
+| Declared producer has no accepted handoff in the claim | `input_unavailable` | `<producer>` | no |
 | Producer is disabled in configuration | `input_unavailable` | `<producer>` | no |
 | Producer not registered (deployment inventory before T-108) | `input_unavailable` | `job_deployment_inventory` | no |
-| Upstream accepted with gaps or partial coverage | `producer_reported_gap` | `<producer>/<output_kind>` | yes |
-| Output kind declared but no shard or artifact published | `output_missing` | `<producer>/<output_kind>` | yes |
+| Upstream accepted with gaps or partial coverage | `producer_reported_gap` | `<producer>/<output_kind>` | no |
+| Output kind declared but no shard or artifact published | `output_missing` | `<producer>/<output_kind>` | no |
 | Lane read its input and established nothing | `empty_result` | `<lane>` | no |
 | A bounded query, the element count or the render reached its limit | `truncated` | the query or bound name | no |
 | A citation did not resolve | `location_unresolved` | the element id | no |
 | Reference data or an input record failed validation | `parser_error` | file or record | no |
 | Model call failed, timed out or returned invalid output after retries | `producer_failed` | the partition | yes |
 | Model call budget exhausted before every partition was sent | `truncated` | `elaboration.model_review` | no |
+
+No input gap is retryable. The runtime never reuses an accepted attempt that has a retryable gap,
+and running this job again over the same pinned inputs repeats the gap. The gap closes when its
+producer publishes a new accepted handoff; that changes a pinned upstream digest, which reruns
+this job without the flag.
 
 Model elaboration that is disabled in configuration is not a gap: the unit returns the
 disposition `CONFIGURED_DISABLED` and `origin.model` is `null`.

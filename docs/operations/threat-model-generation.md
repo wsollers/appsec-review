@@ -101,14 +101,13 @@ complete.
 ## Reuse and resume
 
 An accepted attempt is reused when its upstream handoff digests, the resolved configuration, the
-dataset contract and the release identities are unchanged and it has no retryable gap. A new
+dataset contract and the release identities are unchanged. A new
 accepted handoff of any declared producer (a repaired upstream) changes a pinned digest, so the job
 runs again and nothing upstream of it does.
 
-An absent optional producer, a declared output that was not published and a partial upstream are
-retryable gaps. While one remains, the runtime does not reuse the accepted attempt: a resume runs
-the job again as a new attempt. A disabled producer and the unregistered deployment producer are not
-retryable and do not prevent reuse.
+No input gap is retryable, so a run with absent, empty, partial or disabled producers is still
+reused on resume. The gap closes when that producer publishes an accepted handoff: the new pinned
+digest reruns this job.
 
 ## Reading the result
 

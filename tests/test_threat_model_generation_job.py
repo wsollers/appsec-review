@@ -380,12 +380,14 @@ def test_every_gap_is_a_producer_gap_record_and_each_is_counted_once(tmp_path: P
     run = _catalog_run(tmp_path, release=True)
     assert run.run()["status"]["status"] == "COMPLETED_WITH_GAPS"
     handoff = run.handoff()
-    # Absent optional producers are retryable gaps, and the runtime never reuses an accepted attempt
-    # that still has one: until they are accepted (or disabled), a resume runs this job again.
-    assert handoff["coverage"]["retry_required"] is True
+    # Absent optional producers are gaps this job cannot close by running again, so none is
+    # retryable and a resume over the same inputs reuses the accepted attempt instead of rerunning.
+    assert handoff["coverage"]["gap_count"] > 1 and handoff["coverage"]["retry_required"] is False
     job = build_job()
-    reasons, _ = ResumePlanner(run.config, run.root, (job,), "none").accepted(job, handoff["upstream_handoff_sha256"])
-    assert reasons == ("accepted job contains a retriable failed producer",)
+    planner = ResumePlanner(run.config, run.root, (job,), "none")
+    assert planner.accepted(job, handoff["upstream_handoff_sha256"])[0] == ()
+    again = JobRunner(run.config).begin_or_reuse_attempt(build_job(), run_id=RUN_ID)
+    assert again.get("reused") is True and again["attempt_id"] == "attempt_0001"
     records = _gap_records(handoff)
     assert records and all(gap["schema"] == GAP_SCHEMA and gap["unit_id"] == unit_id for unit_id, gap in records)
     identities = [gap["gap_id"] for _, gap in records]
@@ -404,6 +406,11 @@ def test_every_gap_is_a_producer_gap_record_and_each_is_counted_once(tmp_path: P
     joined = run.published()["result.json"]["gaps"]
     assert sorted(gap["gap_id"] for gap in joined) == sorted(identities)
     assert {json.dumps(gap, sort_keys=True) for gap in joined} == {json.dumps(gap, sort_keys=True) for _, gap in records}
+
+    # The absent producer arriving is what closes its gap: a new pinned digest, so the job reruns.
+    run.accept_syntax(fixture_calls())
+    assert set(run.pins) > set(handoff["upstream_handoff_sha256"])
+    assert planner.accepted(job, run.pins)[0] == ("upstream handoffs identity changed",)
 
 
 def test_input_ledger_lists_every_declared_input_with_its_state(tmp_path: Path) -> None:
@@ -576,8 +583,8 @@ def test_second_run_with_unchanged_inputs_is_reused_and_a_changed_input_reruns(t
     run = Run(config)
     run.accept_catalog(build=[build_unit()])
     run.accept_syntax(fixture_calls())
-    # Every declared producer has a complete accepted handoff, so no gap of this run is retryable
-    # (an attempt with a retryable gap is never reused; the gap-accounting test shows that case).
+    # Every declared producer has a complete accepted handoff (the gap-accounting test shows reuse
+    # with producers absent).
     run.accept_remaining_inputs()
     assert set(run.pins) == {producer for producer, _ in DECLARED_INPUTS}
     runner, job = JobRunner(run.config), build_job()
