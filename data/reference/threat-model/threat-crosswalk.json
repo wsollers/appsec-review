@@ -1,0 +1,696 @@
+{
+  "schema": "appsec-review/threat-crosswalk/1",
+  "version": 1,
+  "templates": {
+    "argument-privileged-context": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "argument-secret-exposure": {
+      "asvs": [
+        "V14"
+      ],
+      "masvs": [
+        "MASVS-STORAGE"
+      ],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-312"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "argument-value-validation": {
+      "asvs": [
+        "V2"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-134",
+        "CWE-22"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "code-load-capabilities": {
+      "asvs": [
+        "V15"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-94"
+      ],
+      "attacker_positions": [
+        "hostile_content"
+      ]
+    },
+    "code-load-location-control": {
+      "asvs": [
+        "V1",
+        "V15"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A05:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-114",
+        "CWE-470",
+        "CWE-94"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "hostile_content",
+        "local"
+      ]
+    },
+    "code-load-origin": {
+      "asvs": [
+        "V15"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A08:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-114"
+      ],
+      "attacker_positions": [
+        "hostile_content",
+        "local"
+      ]
+    },
+    "code-load-runaway": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-770"
+      ],
+      "attacker_positions": [
+        "hostile_content"
+      ]
+    },
+    "connect-data-sent": {
+      "asvs": [
+        "V12",
+        "V14"
+      ],
+      "masvs": [
+        "MASVS-NETWORK"
+      ],
+      "top10_2025": [
+        "A04:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-312"
+      ],
+      "attacker_positions": [
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "connect-destination-control": {
+      "asvs": [
+        "V1"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A01:2025"
+      ],
+      "api_top10_2023": [
+        "API7:2023"
+      ],
+      "cwe_families": [
+        "CWE-918"
+      ],
+      "attacker_positions": [
+        "client_to_server"
+      ]
+    },
+    "connect-response-validation": {
+      "asvs": [
+        "V2"
+      ],
+      "masvs": [
+        "MASVS-CODE"
+      ],
+      "top10_2025": [
+        "A08:2025"
+      ],
+      "api_top10_2023": [
+        "API10:2023"
+      ],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-502",
+        "CWE-787"
+      ],
+      "attacker_positions": [
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "connect-server-identity": {
+      "asvs": [
+        "V12"
+      ],
+      "masvs": [
+        "MASVS-NETWORK"
+      ],
+      "top10_2025": [
+        "A07:2025"
+      ],
+      "api_top10_2023": [
+        "API10:2023"
+      ],
+      "cwe_families": [
+        "CWE-295"
+      ],
+      "attacker_positions": [
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "connect-unbounded-wait": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [
+        "A10:2025"
+      ],
+      "api_top10_2023": [
+        "API4:2023"
+      ],
+      "cwe_families": [
+        "CWE-770"
+      ],
+      "attacker_positions": [
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "environment-privileged-context": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "environment-secret-exposure": {
+      "asvs": [
+        "V13",
+        "V14"
+      ],
+      "masvs": [
+        "MASVS-STORAGE"
+      ],
+      "top10_2025": [
+        "A02:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-312",
+        "CWE-798"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "environment-value-validation": {
+      "asvs": [
+        "V2"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-134",
+        "CWE-22"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "file-read-content-validation": {
+      "asvs": [
+        "V2",
+        "V5"
+      ],
+      "masvs": [
+        "MASVS-CODE"
+      ],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-502",
+        "CWE-787",
+        "CWE-805"
+      ],
+      "attacker_positions": [
+        "hostile_content"
+      ]
+    },
+    "file-read-origin": {
+      "asvs": [
+        "V5"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A08:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "hostile_content",
+        "local"
+      ]
+    },
+    "file-read-path-control": {
+      "asvs": [
+        "V5"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A01:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-22"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "hostile_content",
+        "local"
+      ]
+    },
+    "file-read-resource-exhaustion": {
+      "asvs": [
+        "V5"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-770",
+        "CWE-789"
+      ],
+      "attacker_positions": [
+        "hostile_content"
+      ]
+    },
+    "ipc-channel-access": {
+      "asvs": [],
+      "masvs": [
+        "MASVS-PLATFORM"
+      ],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "ipc-message-validation": {
+      "asvs": [
+        "V2"
+      ],
+      "masvs": [
+        "MASVS-CODE",
+        "MASVS-PLATFORM"
+      ],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-787",
+        "CWE-805"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "ipc-peer-identity": {
+      "asvs": [],
+      "masvs": [
+        "MASVS-PLATFORM"
+      ],
+      "top10_2025": [
+        "A07:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "listen-action-attribution": {
+      "asvs": [
+        "V16"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A09:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer"
+      ]
+    },
+    "listen-connection-exhaustion": {
+      "asvs": [
+        "V13"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [
+        "API4:2023"
+      ],
+      "cwe_families": [
+        "CWE-770"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer"
+      ]
+    },
+    "listen-exposure-scope": {
+      "asvs": [
+        "V13"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A02:2025"
+      ],
+      "api_top10_2023": [
+        "API8:2023"
+      ],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer"
+      ]
+    },
+    "listen-peer-identity": {
+      "asvs": [
+        "V6"
+      ],
+      "masvs": [
+        "MASVS-AUTH"
+      ],
+      "top10_2025": [
+        "A07:2025"
+      ],
+      "api_top10_2023": [
+        "API2:2023"
+      ],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer"
+      ]
+    },
+    "listen-transport-protection": {
+      "asvs": [
+        "V12"
+      ],
+      "masvs": [
+        "MASVS-NETWORK"
+      ],
+      "top10_2025": [
+        "A04:2025"
+      ],
+      "api_top10_2023": [
+        "API8:2023"
+      ],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer"
+      ]
+    },
+    "privilege-change-completeness": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [
+        "A10:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "privilege-change-record": {
+      "asvs": [
+        "V16"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A09:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "privilege-input-before-change": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "receive-error-detail": {
+      "asvs": [
+        "V16"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A10:2025"
+      ],
+      "api_top10_2023": [
+        "API8:2023"
+      ],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "receive-interpreter-reach": {
+      "asvs": [
+        "V1"
+      ],
+      "masvs": [
+        "MASVS-CODE"
+      ],
+      "top10_2025": [
+        "A05:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-134",
+        "CWE-22",
+        "CWE-74",
+        "CWE-78",
+        "CWE-89"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "receive-length-and-index-checks": {
+      "asvs": [
+        "V15",
+        "V2",
+        "V4"
+      ],
+      "masvs": [
+        "MASVS-CODE"
+      ],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-787",
+        "CWE-789",
+        "CWE-805"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "receive-operation-permission": {
+      "asvs": [
+        "V8"
+      ],
+      "masvs": [
+        "MASVS-AUTH"
+      ],
+      "top10_2025": [
+        "A01:2025"
+      ],
+      "api_top10_2023": [
+        "API1:2023",
+        "API5:2023"
+      ],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer"
+      ]
+    },
+    "receive-peer-identity": {
+      "asvs": [
+        "V6"
+      ],
+      "masvs": [
+        "MASVS-AUTH"
+      ],
+      "top10_2025": [
+        "A07:2025"
+      ],
+      "api_top10_2023": [
+        "API2:2023"
+      ],
+      "cwe_families": [],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "receive-resource-exhaustion": {
+      "asvs": [
+        "V2"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [
+        "API4:2023"
+      ],
+      "cwe_families": [
+        "CWE-770",
+        "CWE-789"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "peer_to_peer",
+        "server_to_client"
+      ]
+    },
+    "spawn-command-construction": {
+      "asvs": [
+        "V1"
+      ],
+      "masvs": [],
+      "top10_2025": [
+        "A05:2025"
+      ],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-78"
+      ],
+      "attacker_positions": [
+        "client_to_server",
+        "hostile_content",
+        "local"
+      ]
+    },
+    "spawn-inherited-authority": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "spawn-output-handling": {
+      "asvs": [
+        "V2"
+      ],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-120",
+        "CWE-787"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    },
+    "spawn-program-resolution": {
+      "asvs": [],
+      "masvs": [],
+      "top10_2025": [],
+      "api_top10_2023": [],
+      "cwe_families": [
+        "CWE-78"
+      ],
+      "attacker_positions": [
+        "local"
+      ]
+    }
+  },
+  "unmapped": {
+    "asvs": [
+      "V3",
+      "V7",
+      "V9",
+      "V10",
+      "V11",
+      "V17"
+    ],
+    "masvs": [
+      "MASVS-CRYPTO",
+      "MASVS-PRIVACY",
+      "MASVS-RESILIENCE"
+    ],
+    "top10_2025": [
+      "A03:2025",
+      "A06:2025"
+    ],
+    "api_top10_2023": [
+      "API3:2023",
+      "API6:2023",
+      "API9:2023"
+    ]
+  }
+}
