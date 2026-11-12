@@ -5,14 +5,14 @@ Terms: [multivuln-bd69bfe8](multivuln-bd69bfe8.md). Updated 2026-11-12.
 | Item | Value |
 | --- | --- |
 | Host and checkout | WSOLLERS1, Ubuntu-22.04, `/home/wsollers/projects/appsec-review`, `main` |
-| Observed main | `ad6284e503b77a70b7dfa2fa77a198858e75381b`; runtime base remains `b21c90b095b7dc12f0c1a3487f1bf904106c5fca`; only walk documents and their ignore rule added; unrelated untracked `data/feeds/` preserved |
+| Observed main | `305486982fc947c5cd39ee05861f16080ad7bb23`; runtime base remains `b21c90b095b7dc12f0c1a3487f1bf904106c5fca`; only walk documents and their ignore rule added; unrelated untracked `data/feeds/` preserved |
 | Run | Not launched; no application run ID allocated |
 | Corpus namespace | Not allocated; must be a fresh ignored `multivuln-bd69bfe8-wsollers1-v*` namespace |
 | Target | `targets/appsec-multi-vuln-c094`, clean at `bd69bfe83fec49155366303604475512c98c4ce6`; existing tag `appsec-multi-vuln-c094-v1` |
 | Profile and overlay | `copilot-prod`; `prod-capacity-overlay.toml` |
 | Accepted | None in this fresh walk |
 | Job in hand | 1: `job_model_connectivity`; [record](../tasks/2026-11-12-multivuln-walk-01-model-connectivity.md) |
-| Stack | Native Docker service is installed but inactive; `sudo -n systemctl start docker` refused because a password is required |
+| Stack | Native Docker is running after the user's intervention; five existing services are healthy, still configured for Barracuda; zero active Dagster dispatches |
 | Expected gap causes | None |
 
 ## Ownership and startup
@@ -37,15 +37,22 @@ rule. No pending runtime-code update was integrated.
 
 ## Waiting on the user
 
-Starting the existing native Docker service requires operator authentication:
-`sudo -n systemctl start docker` returned `sudo: a password is required`.
-No Docker service, stack or job was started. Do not bypass the host privilege
-boundary or request a password through the conversation. The operator can run
-`sudo systemctl start docker` in this Linux checkout's host shell.
+The user confirmed "Docker started—continue the walk". Verified native engine:
+`WSOLLERS1`, systemd cgroups v2, `/var/lib/docker`. The restored stack has five
+healthy services, no non-terminal Dagster runs, profile `copilot-prod`, the
+production capacity overlay, and target `/opt/app/targets/barracuda`. It has not
+been reconfigured or used for this walk.
 
-After that, verify the exact main revision, target, existing image and stack
-state. Use supported lifecycle commands without building an image. Stop if
-startup requires a new host capability, a changed image/key, or a guard override.
+The existing image tag `appsec-review-dagster:wsl-copilot` and the restored
+containers resolve to
+`sha256:243e6d1ab40cb1f85bd34cfb0916ec4e24c0bb7bb1e5e79b7e0b427f1bade15e`
+(created 2026-11-04). The checkout's ignored `.env` instead records
+`sha256:29682648dd80ac803efe7cde0ce362098782312b7f44a1a658873823ac522d2b`;
+`docker image inspect` reports that image absent from this daemon.
+
+Stop for the operator's image decision. Do not silently replace the recorded
+identity with the restored older image, rebuild, re-pin, change a key, or bypass
+verification. No stack-start or review-launch command has executed.
 
 ## In flight
 

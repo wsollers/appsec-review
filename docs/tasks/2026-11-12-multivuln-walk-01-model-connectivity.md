@@ -3,7 +3,7 @@
 This record advances T-057 under the
 [walk terms](../walks/multivuln-bd69bfe8.md).
 
-**Result: stopped before launch; native Docker startup needs operator authentication.** No new application
+**Result: stopped before launch; the recorded runtime image is absent from native Docker.** No new application
 run, Dagster dispatch, attempt or corpus namespace has been allocated.
 
 ## Expected duration and criterion
@@ -56,6 +56,17 @@ baseline only after the other checks hold.
 - `sudo -n systemctl start docker` refused with `sudo: a password is required`.
   The service was not started. The walker stopped at the privilege boundary
   rather than trying another privileged execution route.
+- The user then confirmed "Docker started—continue the walk". `docker info`
+  verified the native systemd/cgroup-v2 engine at `/var/lib/docker`.
+  `ops.py stack-status` found five healthy restored services and zero
+  non-terminal Dagster runs, but their target is Barracuda, not this walk.
+- The restored containers and `appsec-review-dagster:wsl-copilot` tag use
+  `sha256:243e6d1ab40cb1f85bd34cfb0916ec4e24c0bb7bb1e5e79b7e0b427f1bade15e`.
+  The checkout's `.env` records
+  `sha256:29682648dd80ac803efe7cde0ce362098782312b7f44a1a658873823ac522d2b`,
+  which `docker image inspect` reports missing. No image was loaded, built,
+  re-tagged or selected in its place. The pending startup-plan command did not
+  execute because the preceding image inspection failed.
 
 ## Commands and timing
 
@@ -74,6 +85,8 @@ and discovering the Docker-start privilege requirement.
 
 ## Not verified
 
-Live stack health, active Dagster dispatches, loaded source/image identity,
+Compatibility/signatures of the restored image, mounted source identity,
 model availability, all four checks for the new job, and every later job.
+Stack health and zero active Dagster dispatches were verified after Docker started;
+they are not evidence that the mismatched deployment is ready for this walk.
 The findings have not been graded.
