@@ -3,7 +3,7 @@
 This record advances T-057 under the
 [walk terms](../walks/multivuln-bd69bfe8.md).
 
-**Result: paused by the user before launch; the authorized runtime rebuild is in flight.** No new application
+**Result: paused by the user before launch; the authorized runtime rebuild completed.** No new application
 run, Dagster dispatch, attempt or corpus namespace has been allocated.
 
 ## Expected duration and criterion
@@ -77,6 +77,12 @@ baseline only after the other checks hold.
   `runs/metadata/walks/multivuln-bd69bfe8/runtime-image-build.log`.
   The user then said "stop before starting the run. i want to stream line some
   things". No review launch will follow the build without a new user instruction.
+- The runtime build/start command subsequently exited successfully in 256.42 s.
+  It built, signed and verified
+  `sha256:b7fea7d46d7cf2cb87d43326d91340849268212a3d41f511a9c4bc281ea69948`,
+  verified the mounted-module envelope, started the multivuln deployment, and
+  reported all five services healthy and the dedicated Copilot model catalog
+  available. This did not launch or accept a review job; the pause remains.
 
 ## Commands and timing
 
@@ -88,6 +94,13 @@ The historical duration above is calculated from the retained handoff timestamps
 
 No tests ran. Replays: zero.
 
+```sh
+.venv/bin/python deploy/dagster/bin/ops.py stack-rebuild \
+  --profile copilot-prod --target appsec-multi-vuln-c094 \
+  --overlay prod-capacity-overlay.toml --recording record
+# 256.42 seconds; exit 0. No review launch.
+```
+
 Preflight has exceeded the 39.233-second historical job duration. That time is
 not live-job time: it went to correcting the target/checkout, obtaining the
 missing walk decisions, stopping legacy coordination, integrating documentation,
@@ -95,8 +108,9 @@ and discovering the Docker-start privilege requirement.
 
 ## Not verified
 
-Compatibility/signatures of the restored image, mounted source identity,
-model availability, all four checks for the new job, and every later job.
-Stack health and zero active Dagster dispatches were verified after Docker started;
-they are not evidence that the mismatched deployment is ready for this walk.
+All four checks for the new job and every later job. No independent post-start
+comparison of the mounted implementation-release manifest was performed.
+The new runtime's image/module verification, stack health and model-catalog
+availability were reported by the successful supported lifecycle command;
+these are not job acceptance or evidence that a full review will succeed.
 The findings have not been graded.

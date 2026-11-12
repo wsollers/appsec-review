@@ -15,7 +15,7 @@ Terms: [multivuln-bd69bfe8](multivuln-bd69bfe8.md). Updated 2026-11-12.
 | Profile and overlay | `copilot-prod`; `prod-capacity-overlay.toml` |
 | Accepted | None in this fresh walk |
 | Job in hand | 1: `job_model_connectivity`; [record](../tasks/2026-11-12-multivuln-walk-01-model-connectivity.md) |
-| Stack | Native Docker is running after the user's intervention; five existing services are healthy, still configured for Barracuda; zero active Dagster dispatches |
+| Stack | Authorized runtime rebuild and multivuln stack startup completed in 256.42 s; five services healthy and model catalog available; review remains paused |
 | Expected gap causes | None |
 
 ## Ownership and startup
@@ -60,16 +60,21 @@ reading or changing key contents; all prerequisites are present.
 
 The supported `stack-rebuild` started at `2026-11-12T12:49:27Z` for `copilot-prod`, target
 `appsec-multi-vuln-c094`, overlay `prod-capacity-overlay.toml`, recording `record`.
-It rebuilds only the Dagster runtime, verifies it, signs the mounted modules,
-and replaces the idle deployment. Image-build duration is unknown and separate
-from job 1's expected 39.233 seconds. Keep the log under
+It rebuilt only the Dagster runtime, verified it, signed the mounted modules,
+and replaced the idle deployment. The complete build/start command finished
+successfully in **256.42 seconds**, separate from job 1's expected 39.233 seconds.
+The signed and verified runtime image is
+`sha256:b7fea7d46d7cf2cb87d43326d91340849268212a3d41f511a9c4bc281ea69948`.
+All five services passed the wrapper's health check; the dedicated Copilot
+login/model-catalog check passed. The log is
 `runs/metadata/walks/multivuln-bd69bfe8/runtime-image-build.log`. The attached shell
-is `multivuln-runtime-rebuild`; it was still running when the user paused the walk.
-This command does not launch a review. Its completion is not permission to start
-one. No review launch has executed.
+`multivuln-runtime-rebuild` has exited successfully. This command did not launch
+a review. Its completion is not permission to start one. No review launch has
+executed.
 
 ## In flight
 
 No job, unit test, integration suite or acceptance suite has been launched.
-The user-authorized Dagster runtime rebuild is in flight. No target changes,
-scanner-image rebuilds, pushes or baseline copies have been made.
+The user-authorized Dagster runtime rebuild is complete; no build or review
+command remains in flight. No target changes, scanner-image rebuilds, pushes or
+baseline copies have been made.
