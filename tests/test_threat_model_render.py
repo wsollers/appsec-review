@@ -13,7 +13,7 @@ from appsec_review.threat_model.contract import (
     cite, element_id, sorted_records, unknown,
 )
 from appsec_review.threat_model.render import (
-    BANNER, SOURCE_HASH_PREFIX, THREATS_ARE_QUESTIONS, render_markdown, render_mermaid, sanitize_label,
+    BANNER, SOURCE_HASH_PREFIX, THREATS_ARE_QUESTIONS, render_markdown, render_mermaid, sanitize_label, sanitize_text,
 )
 from tests.threat_model_support import SHA_A, record, span
 
@@ -33,7 +33,8 @@ MERMAID_LINE = re.compile(
        |\ +{NODE}(?:\(\("{LABEL}"\)\)|\[\("{LABEL}"\)\]|\["{LABEL}"\])
        |\ +{NODE}\ -->\|"[0-9a-f]{{8}}\ [a-z_]+\ \([a-z_]+\)"\|\ {NODE}
        |\ +%%\ [A-Za-z0-9 _./:#(),-]+)""", re.VERBOSE)
-TABLE_CELL = re.compile(r"[A-Za-z0-9 _./:#,-]+")
+# Names keep the label set; titles, questions, statements and reasons may also hold ``? ( )``.
+TABLE_CELL = re.compile(r"[A-Za-z0-9 _./:#,?()-]+")
 SECTIONS = ("Input ledger", "Elements", "Trust boundaries", "Flows", "Entry points", "Candidate threats", "Unknowns",
             "Gaps")
 
@@ -139,6 +140,19 @@ def test_sanitize_label_keeps_a_closed_character_set_on_one_bounded_line() -> No
         assert re.fullmatch(r"[A-Za-z0-9 _./:#-]{1,80}", once) and sanitize_label(once) == once
 
 
+def test_sanitize_text_allows_sentence_punctuation_and_is_bounded_at_300() -> None:
+    assert sanitize_text("Is the peer (a client, or a proxy) authenticated?") == \
+        "Is the peer (a client, or a proxy) authenticated?"
+    assert sanitize_text('a"b]c;d|e`f<g>h\n\ti{k}%l\'m\\n@o[p]') == "a b c d e f g h i k l m n o p"
+    assert sanitize_text("\n \t") == sanitize_text("") == sanitize_text("'\"`|") == "unnamed"
+    assert len(sanitize_text("x" * 500)) == 300 and len(sanitize_text("x" * 500, limit=40)) == 40
+    assert sanitize_text("what is server's role?") == "what is server s role?", "an apostrophe is still removed"
+    for text in HOSTILE:
+        once = sanitize_text(text)
+        assert re.fullmatch(r"[A-Za-z0-9 _./:#?,()-]{1,300}", once) and sanitize_text(once) == once
+        assert not set(once) & set("'\"`|<>[]{}\\%;\n\r")
+
+
 def test_views_are_byte_stable_for_equal_documents() -> None:
     dfd, threat_model, result = _model()
     other = tuple(_reordered(item) for item in (dfd, threat_model, result))
@@ -196,9 +210,11 @@ def test_labels_are_sanitized_and_node_ids_carry_no_target_text() -> None:
 
     markdown = render_markdown(dfd, threat_model, result)
     rows = _rows(markdown)
-    assert rows and all(TABLE_CELL.fullmatch(cell) and len(cell) <= 200 for row in rows for cell in row)
+    assert rows and all(TABLE_CELL.fullmatch(cell) and len(cell) <= 300 for row in rows for cell in row)
+    titles = [row[2] for row in _rows(_section(markdown, "Candidate threats")) if row[0].startswith("threat:")]
+    assert titles and any("x()" in title for title in titles), "a title keeps sentence punctuation"
     for line in markdown.splitlines():
-        assert not set(line.removeprefix(">")) & set('`<>[]{}"\\%')
+        assert not set(line.removeprefix(">")) & set('`<>[]{}"\\%\'')
         if INSTRUCTION in line:
             assert line.startswith("| ") and line.endswith(" |")
     names = [row[2] for row in _rows(_section(markdown, "Elements"))[1:]]
@@ -337,9 +353,9 @@ def test_markdown_says_threats_are_questions_not_findings() -> None:
     assert headings == [f"Boundary {boundary} (network)", "No boundary"], "threats with no boundary come last"
     crossing, local = (_rows(part) for part in section.split("\n### ")[1:])
     assert crossing[0] == local[0] == ["Id", "STRIDE", "Title", "Question", "Mitigation state", "First locator"]
-    assert crossing[1][1:] == ["spoofing", "Spoofed peer of server", "Is the peer authenticated before its input is used",
+    assert crossing[1][1:] == ["spoofing", "Spoofed peer of server", "Is the peer authenticated before its input is used?",
                                "not_examined", "server/main.c:9-9"]
-    assert local[1][1:] == ["tampering", "Tampered store content", "Is stored content validated when read back",
+    assert local[1][1:] == ["tampering", "Tampered store content", "Is stored content validated when read back?",
                             "not_found_in_evidence", "server/main.c:11-11"]
     assert len(crossing) == len(local) == 2
 

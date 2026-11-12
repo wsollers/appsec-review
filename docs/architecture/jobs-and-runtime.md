@@ -89,7 +89,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 46 jobs, exactly matching the 46 `[jobs.<job_id>]` tables in
+`runtime/registry.py` registers 47 jobs, exactly matching the 47 `[jobs.<job_id>]` tables in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -129,6 +129,7 @@ input, output, tool, and acceptance contracts.
 | `job_owasp_control_assessment` | OWASP control assessment | [owasp-control-assessment](../operations/owasp-control-assessment.md) |
 | `job_review_prioritization` | Function-level review prioritization | [review-prioritization](../operations/review-prioritization.md) |
 | `job_security_tagging` | Basis-qualified security tags | [security-tagging](../operations/security-tagging.md) |
+| `job_threat_model_generation` | Default-disabled deterministic generated DFD and candidate threat model from accepted evidence; artifact-only routing context | [threat-model-generation](../operations/threat-model-generation.md) |
 | `job_review_data_indexing` | Dataset inventory and publication audit | [review-data-indexing](../operations/review-data-indexing.md) |
 | `job_review_package_assembly` | Deterministic pre-adjudication lead and hunt packages | [review-package-contract](review-package-contract.md) |
 | `job_document_issue_analysis` | Private document candidate ledger with verified source mappings | [document-issue-analysis](../operations/document-issue-analysis.md) |

@@ -4,6 +4,7 @@ Payloads use the keys the producers publish (see the module docstring of the lan
 """
 from __future__ import annotations
 
+from dataclasses import replace
 import random
 from typing import Any
 
@@ -269,3 +270,59 @@ def test_nothing_established_is_an_empty_result_gap() -> None:
     nothing_read = structure(FakeEvidenceView(), Limits())
     assert nothing_read.facts == () and _gaps(nothing_read, GapCode.EMPTY_RESULT) == []
     assert len(_gaps(nothing_read, GapCode.INPUT_UNAVAILABLE)) == 6
+
+
+REDACTED_REASON = (" names or paths were redacted or truncated by the index; affected processes are identified "
+                   "by record, not by name")
+
+
+def _withheld(view: FakeEvidenceView) -> tuple[FakeEvidenceView, list[str]]:
+    """Evidence as the index stores it after ``sanitize_producer_data`` withheld names and paths."""
+    unit = _unit({**_point("<redacted>", "executable"), "sources": ["src/a.c", "<redacted>", "<truncated>"]},
+                 _point("<redacted>", "executable", "src/b.c"), _point("server", "executable", "src/main.c"),
+                 _point("<redacted>", "phony_or_aggregate"))
+    # A real entity id is a digest; the helper's id embeds the path, so these two are given their own.
+    hidden = replace(_artifact("<redacted>"), entity_id="ent:artifact:hidden")
+    nested = replace(_artifact("build/<truncated>"), entity_id="ent:artifact:nested")
+    compiled = record(CPP, "cpp_build_graph", "executable", "ent:cpp:hidden", {
+        "kind": "executable", "path": "<redacted>", "project_id": "cpp:."})
+    source = record(CPP, "cpp_build_graph", "compile_unit", "ent:cpp:tu:hidden", {"target_path": "<truncated>"})
+    view.add(unit, hidden, nested, _artifact("build/server"), compiled, source)
+    return view, [f"{unit.entity_id}#0", f"{unit.entity_id}#1", hidden.entity_id, nested.entity_id, compiled.entity_id]
+
+
+def test_redacted_names_are_identified_by_record_and_reported() -> None:
+    view, records = _withheld(FakeEvidenceView())
+    result = structure(view, Limits())
+    processes = _facts(result, FactKind.PROCESS)
+    (server,) = [fact for fact in processes if fact.name != "redacted-name"]
+    assert dict(server.native_identity) == {"build_unit_id": UNIT, "name": "server"} and server.attributes["built"]
+    withheld = {fact.native_identity["record"]: fact for fact in processes if fact.name == "redacted-name"}
+    assert sorted(withheld) == sorted(records), "five withheld names are five processes, never one"
+    assert len({canonical(fact.native_identity) for fact in processes}) == len(processes) == 6
+    assert all(set(fact.native_identity) == {"build_unit_id", "record"} for record_id, fact in withheld.items()
+               if record_id != "ent:cpp:hidden")
+    assert dict(withheld["ent:cpp:hidden"].native_identity) == {"project_id": "cpp:.", "record": "ent:cpp:hidden"}
+    first, second = withheld[records[0]], withheld[records[1]]
+    assert (first.attributes["source_paths"], first.attributes["built"]) == (("src/a.c",), False)
+    assert second.attributes["source_paths"] == ("src/b.c",)
+    for record_id in records[2:]:
+        assert (withheld[record_id].attributes["built"], withheld[record_id].attributes["artifact_path"]) == (True, None)
+    text = canonical(result).decode("utf-8")
+    assert "<redacted>" not in text and "<truncated>" not in text
+
+    (gap,) = [gap for gap in result.gaps if gap["scope_id"] == "structure.redacted"]
+    # Two build-point names, two source entries, two artifact catalog paths, one compiled path, one
+    # compile-unit path. A withheld name of a point that is no process or library changes nothing.
+    assert gap["reason"] == "8" + REDACTED_REASON
+    assert (gap["code"], gap["unit_id"], gap["retryable"]) == (
+        GapCode.PROVENANCE_UNAVAILABLE.value, "facts.structure", False)
+    assert _gaps(result, GapCode.PROVENANCE_UNAVAILABLE) == ["structure.redacted"]
+    for seed in range(3):
+        assert canonical(structure(_withheld(ShuffledView(seed))[0], Limits())) == canonical(result)
+
+
+def test_evidence_without_withheld_values_reports_no_redaction_gap() -> None:
+    result = structure(_populate(FakeEvidenceView()), Limits())
+    assert _gaps(result, GapCode.PROVENANCE_UNAVAILABLE) == []
+    assert all("record" not in fact.native_identity for fact in result.facts if fact.kind is not FactKind.LINK)

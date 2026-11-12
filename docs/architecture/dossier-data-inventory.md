@@ -6,8 +6,9 @@ adds protected complete-only feedback cache and exact additive evidence; raw mod
 not the planning output. These declarations are not new public retrieval endpoints, authenticated
 package identities, shipped artifacts or native target proof. The counts/history below retain
 their named source baselines; this candidate does not claim a new accepted run or dossier result.
-The current static registry and TOML inventory is exactly 46 jobs, including build-environment
-analysis and build iteration; the completion-era 44-job count below is historical.
+The current static registry and TOML inventory is exactly 47 jobs, including build-environment
+analysis, build iteration and the default-disabled generated threat model; the completion-era
+44-job count below is historical.
 
 Status: source-verified inventory, initially at contract commit
 `5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
@@ -419,6 +420,7 @@ sanitized public references do not make those bytes public.
 | [`job_owasp_control_assessment`](../../src/appsec_review/jobs/job_owasp_control_assessment/datasets.py) | `owasp_workbench` (separate store) | `owasp_documents` | `owasp_model_receipts` |
 | [`job_review_prioritization`](../../src/appsec_review/jobs/job_review_prioritization/datasets.py) | `priority_items` | `prioritization_documents` | none |
 | [`job_security_tagging`](../../src/appsec_review/jobs/job_security_tagging/datasets.py) | `tag_assignments` | `tagging_documents` | none |
+| [`job_threat_model_generation`](../../src/appsec_review/jobs/job_threat_model_generation/datasets.py) | none | `generated_dfd`, `generated_threat_model`, `generated_model_evidence`, `generated_model_views`, `threat_model_documents` (default disabled; generated routing context, never a supplied document) | none |
 | [`job_third_party_data_sync`](../../src/appsec_review/jobs/job_third_party_data_sync/datasets.py) | none | none | `feed_sync_work` (published snapshots are pinned separately) |
 | [`job_review_data_indexing`](../../src/appsec_review/jobs/job_review_data_indexing/datasets.py) | `cross_domain_links`, `precomputed_products`, `dataset_inventory` | `accepted_input_summary`, `derived_checkpoints`, `fts_image_validation`, `dataset_audit_report`, `coverage_matrices` | none |
 | [`job_review_package_assembly`](../../src/appsec_review/jobs/job_review_package_assembly/datasets.py) | none | `review_packages` | none |

@@ -1,6 +1,6 @@
 # Job consumer read-path inventory
 
-This is a navigation/checking inventory for the 46 F02 jobs, not another runtime registry.
+This is a navigation/checking inventory for the 47 registered jobs, not another runtime registry.
 `Job.contract`, its exact dataset requirements, and the admitted reader checks remain authoritative.
 The inventory names the principal input access families; it is **not** exhaustive certification
 of every private reader, enabled-job combination, race or live tool path.
@@ -42,6 +42,7 @@ of every private reader, enabled-job combination, race or live tool path.
 | `job_code_graph_index` | Accepted CodeQL exports and original catalog/AST/IR/clangd/SVF/analyzer/prioritization shards. |
 | `job_security_tagging` | Accepted original producer shards; tags remain routing context, not control proof. |
 | `job_owasp_control_assessment` | Declared original source/build/scanner/tag/graph context and selected reference inputs. |
+| `job_threat_model_generation` | Accepted catalog, artifact, build, graph, syntax and prioritization shards through bounded index queries; no checkout. Default disabled; nothing consumes its output. |
 | `job_review_data_indexing` | Accepted original handoffs/shards, exact file ownership, feed pins and bound OWASP publication. |
 | `job_review_package_assembly` | Accepted inventory/indexing publication plus original source/evidence shards; a manifest does not re-own them. |
 | `job_document_issue_analysis` | Accepted packages and original declared document/source context. |

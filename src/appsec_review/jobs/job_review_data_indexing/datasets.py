@@ -365,7 +365,7 @@ CONTRACT = JobContract(
                          "appsec-review/public-feed-use/1", channel=InputChannel.EXTERNAL,
                          authority=EvidenceAuthority.REFERENCE),
     ),
-    schedule_after=('job_binary_evidence_indexing', 'job_dependency_intelligence', 'job_owasp_control_assessment', 'job_profile_data', 'job_sanitizer_build', 'job_test_coverage'),
+    schedule_after=('job_binary_evidence_indexing', 'job_dependency_intelligence', 'job_owasp_control_assessment', 'job_profile_data', 'job_sanitizer_build', 'job_test_coverage', 'job_threat_model_generation'),
     dispatch=DispatchClass.REVIEW_GRAPH,
     target_access=TargetAccess.CHECKOUT,
     always_execute=False,

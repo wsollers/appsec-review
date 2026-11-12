@@ -99,6 +99,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_owasp_control_assessment import build_job as build_owasp_control_assessment
     from appsec_review.jobs.job_security_tagging import build_job as build_security_tagging
     from appsec_review.jobs.job_review_prioritization import build_job as build_review_prioritization
+    from appsec_review.jobs.job_threat_model_generation import build_job as build_threat_model_generation
     from appsec_review.jobs.job_review_data_indexing import build_job as build_review_data_indexing
     from appsec_review.jobs.job_review_package_assembly import build_job as build_review_package_assembly
     from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issue_analysis
@@ -169,6 +170,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_owasp_control_assessment", build_owasp_control_assessment)
     registry.register("job_security_tagging", build_security_tagging)
     registry.register("job_review_prioritization", build_review_prioritization)
+    registry.register("job_threat_model_generation", build_threat_model_generation)
     registry.register("job_review_data_indexing", build_review_data_indexing)
     registry.register("job_review_package_assembly", build_review_package_assembly)
     registry.register("job_document_issue_analysis", build_document_issue_analysis)
