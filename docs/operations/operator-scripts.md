@@ -91,10 +91,11 @@ several sessions share one Docker daemon and one Dagster stack.
    never run `docker compose` on `compose.yaml` alone. The only direct docker calls that change
    state are `docker exec ... dagster job launch` and, for `--purge-volumes`, removal of this
    project's own containers and volumes.
-4. **Signed image only.** `lifecycle.py build` signs the Python package, builds the image, signs the
-   image ID with the operator key and verifies it. `lifecycle.py start`/`reload` verify the image on the
-   host first and launch only that exact ID; if verification fails they exit 3 and the scripts report
-   `refused` without touching Compose. See
+4. **Signed image only.** `lifecycle.py build` builds the tooling image, signs and verifies its ID,
+   then records that selection in `.env`. `lifecycle.py start`/`reload` verify the explicit shell ID
+   or recorded ID and sign the mounted Python package before launching exactly that image. Only an
+   unpinned first launch uses the build tag; a missing pin never falls back to a tag or an implicit
+   build. Verification failure exits 3 and the scripts report `refused` without touching Compose. See
    [Signed image](../../deploy/dagster/README.md#signed-image).
 5. **No silent reverts.** Compose lets the shell override `.env`. `stack-restart`/`rebuild`/`start`
    carry the running code-location's non-empty target, overlay and recording values forward and say so,
@@ -113,12 +114,16 @@ several sessions share one Docker daemon and one Dagster stack.
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
+| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod]` | Build if asked (or if no image is pinned and the first image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
 | `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`, which verifies the image and recreates `code-location`, `webserver` and `daemon` without restarting PostgreSQL. |
-| `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` (sign modules, build, sign and verify the image) then `start`, which recreates containers whose image changed. |
+| `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` (build, sign, verify and select the tooling image) then `start` with that new ID, signing mounted modules and recreating containers whose image changed. |
 | `stack-status` | One screen: containers and health, compose files, image tag and age, deployment settings, active runs, last application run, Dagster URL, free disk of `runs/` and `test/tmp`. Exit 1 when a service is missing or unhealthy. |
 | `stack-logs [service] [--tail N] [--follow]` | `docker logs` for one service, or every service without `--follow`. |
+
+A profile change does not discard an existing image pin. When switching tooling families (for
+example, to Copilot), use an explicit rebuild or select the appropriate verified image ID through
+the lifecycle environment; a plain restart keeps the selected image.
 
 After starting, `stack-start`, `stack-restart` and `stack-rebuild` report:
 

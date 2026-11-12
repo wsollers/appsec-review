@@ -198,19 +198,28 @@ at `/opt/app` (`src`, configuration, `profiles`, `docs/schemas`, `containers`, `
 
 1. `docker build --target <stage>` of the profile's final stage (`runtime`, `runtime-copilot`, or
    `runtime-windows`) with the local tag `appsec-review-dagster:<platform>[-copilot]`;
-2. `sign-image` of the resulting image ID with the operator key, then `verify-image` of that ID.
+2. `sign-image` of the resulting image ID with the operator key, then `verify-image` of that ID;
+3. atomically record the verified ID in `.env` as the selected image for the next launch. A failed
+   build or signature verification leaves the previous selection untouched.
 
 It is needed only when a dependency, a tool or the signing verifier changes; editing application
 code never requires it.
 
-`lifecycle.py start` and `reload` verify the image (the tag, or an explicit
-`APPSEC_REVIEW_DAGSTER_IMAGE` in the process environment) against the host trust anchors before any
-Compose command. If verification fails they exit 3 without starting anything, and the operator
-scripts report `refused`. On success they record `APPSEC_REVIEW_DAGSTER_IMAGE=sha256:<id>` in `.env`,
-then run `appsec-review signing sign-modules` over the checkout's `src/appsec_review` into the
+`lifecycle.py start` and `reload` select `APPSEC_REVIEW_DAGSTER_IMAGE` from the process environment,
+then `.env`. Either must be an exact `sha256:<id>`; an empty or malformed selection refuses the
+launch. Only a first launch with neither selection resolves the host/profile's build tag. A missing
+or unverifiable pinned image never falls back to that tag. They verify the selected image against
+the host trust anchors before any Compose command; a failure exits 3 without starting anything,
+and the operator scripts report `refused`. They then run `appsec-review signing sign-modules`
+over the checkout's `src/appsec_review` into the
 ignored `deploy/dagster/signing/python-modules.json` and `verify-modules` against the trust anchors
 (a failure also exits 3), and Compose launches exactly that ID (`pull_policy: never`, no `build:`
-section) with the checkout and the fresh envelope mounted. A development host may set
+section) with the checkout and the fresh envelope mounted. Only a successful Compose launch
+records its verified ID in `.env`; signing or Compose failures preserve the previous selection
+(a failed Compose operation can still have partially recreated services). `stack-rebuild` and
+`stack-start --build` select the newly built ID even if the caller exported an older pin.
+`stack-start` only auto-builds a missing first image when no image is pinned; recovering a missing
+pinned image requires an explicit build or restoration of that exact image. A development host may set
 `APPSEC_UNSIGNED_MODULES=1` in `.env` to skip module signing and launch with
 `APPSEC_REVIEW_REQUIRE_SIGNED_MODULES=0`; `lifecycle.py` prints a warning, the image is still
 verified, and the mounted sources run unverified until the next launch without the flag. `reload`

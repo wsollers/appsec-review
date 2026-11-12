@@ -955,6 +955,8 @@ until each is rewritten into the entry format when it is next touched.
   `docs/reviews/castle-style-detector-scoring.md`, T-005. Candidates (26 verified pairs, none
   pinned or keyed yet): `docs/reviews/fix-pair-corpus-candidates.md`,
   `test/acceptance/fix-pairs-candidates/pairs.toml`.
+  Shortlist and qualifications:
+  [`docs/reviews/fix-pair-corpus-shortlist.md`](reviews/fix-pair-corpus-shortlist.md).
 
 ### T-068 — Measure hunt-lane value and attack-surface coverage
 
