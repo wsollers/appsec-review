@@ -1,0 +1,1277 @@
+{
+  "schema": "appsec-review/interaction-catalog/1",
+  "version": 1,
+  "graph_source_classes": {
+    "remote": "network_receive",
+    "local_user": "argument_read",
+    "argv": "argument_read",
+    "environment": "environment_read",
+    "file": "file_read",
+    "ipc": "local_ipc",
+    "database": "datastore_query",
+    "internal": null,
+    "unclassified": null
+  },
+  "graph_sink_classes": {
+    "memory_write": null,
+    "memory_read": null,
+    "allocation_size": null,
+    "format_string": null,
+    "command_execution": "process_spawn",
+    "path_access": "file_read",
+    "sql_query": "datastore_query",
+    "code_injection": "code_load",
+    "deserialization": null,
+    "integer_conversion": null,
+    "crypto_misuse": null,
+    "log_output": null,
+    "server_side_request": "network_connect",
+    "xml_external_entity": null,
+    "ldap_query": "datastore_query",
+    "xpath_query": null,
+    "html_output": null,
+    "template_injection": null,
+    "url_redirect": null,
+    "header_injection": null,
+    "regex_injection": null,
+    "unsafe_reflection": "code_load",
+    "unclassified": null
+  },
+  "prioritization_signals": [
+    {
+      "category": "ingress",
+      "surface": "request_binding",
+      "interaction": "network_receive"
+    },
+    {
+      "category": "ingress",
+      "surface": "route_handler",
+      "interaction": "network_receive"
+    },
+    {
+      "category": "privilege_shift",
+      "surface": "impersonation",
+      "interaction": "privilege_change"
+    },
+    {
+      "category": "privilege_shift",
+      "surface": "privileged_action",
+      "interaction": "privilege_change"
+    },
+    {
+      "category": "public_api",
+      "surface": "route",
+      "interaction": "network_listen"
+    },
+    {
+      "category": "sensitive_wrapper",
+      "surface": "ffi",
+      "interaction": "code_load"
+    },
+    {
+      "category": "sink",
+      "surface": "code_eval",
+      "interaction": "code_load"
+    },
+    {
+      "category": "sink",
+      "surface": "command_exec",
+      "interaction": "process_spawn"
+    },
+    {
+      "category": "sink",
+      "surface": "file_path",
+      "interaction": "file_read"
+    },
+    {
+      "category": "sink",
+      "surface": "outbound_request",
+      "interaction": "network_connect"
+    },
+    {
+      "category": "sink",
+      "surface": "sql",
+      "interaction": "datastore_query"
+    },
+    {
+      "category": "state_mutation",
+      "surface": "db_write",
+      "interaction": "datastore_query"
+    },
+    {
+      "category": "state_mutation",
+      "surface": "fs_write",
+      "interaction": "file_write"
+    },
+    {
+      "category": "state_mutation",
+      "surface": "transaction",
+      "interaction": "datastore_query"
+    },
+    {
+      "category": "state_mutation",
+      "surface": "transaction_end",
+      "interaction": "datastore_query"
+    }
+  ],
+  "callees": [
+    {
+      "name": "CreateProcessA",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "CreateProcessW",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "GetEnvironmentVariableA",
+      "interaction": "environment_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "GetEnvironmentVariableW",
+      "interaction": "environment_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "LoadLibraryA",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "LoadLibraryW",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "PQexec",
+      "interaction": "datastore_query",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "PyImport_ImportModule",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "PyRun_SimpleString",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "ReadFile",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "SSL_read",
+      "interaction": "network_receive",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "Tcl_Eval",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "WSARecv",
+      "interaction": "network_receive",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "WriteFile",
+      "interaction": "file_write",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "accept",
+      "interaction": "network_listen",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "accept4",
+      "interaction": "network_listen",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "bind",
+      "interaction": "network_listen",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "chroot",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "connect",
+      "interaction": "network_connect",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "curl_easy_perform",
+      "interaction": "network_connect",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "dlopen",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "execv",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "execve",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "execvp",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "fgets",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "fopen",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "fork",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "fputs",
+      "interaction": "file_write",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "fread",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "fwrite",
+      "interaction": "file_write",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "getaddrinfo",
+      "interaction": "network_connect",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "getenv",
+      "interaction": "environment_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "gethostbyname",
+      "interaction": "network_connect",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "getopt",
+      "interaction": "argument_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "getopt_long",
+      "interaction": "argument_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "initgroups",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "listen",
+      "interaction": "network_listen",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "luaL_dofile",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "luaL_dostring",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "luaL_loadbuffer",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "luaL_loadfile",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "luaL_loadstring",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "lua_load",
+      "interaction": "code_load",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "mkfifo",
+      "interaction": "local_ipc",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "mq_receive",
+      "interaction": "local_ipc",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "msgrcv",
+      "interaction": "local_ipc",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "mysql_query",
+      "interaction": "datastore_query",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "open",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "openat",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "pipe",
+      "interaction": "local_ipc",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "popen",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "posix_spawn",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "read",
+      "interaction": "file_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "recv",
+      "interaction": "network_receive",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "recvfrom",
+      "interaction": "network_receive",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "recvmsg",
+      "interaction": "network_receive",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "secure_getenv",
+      "interaction": "environment_read",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "setegid",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "seteuid",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "setgid",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "setgroups",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "setresgid",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "setresuid",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "setuid",
+      "interaction": "privilege_change",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "socketpair",
+      "interaction": "local_ipc",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "sqlite3_exec",
+      "interaction": "datastore_query",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "sqlite3_prepare_v2",
+      "interaction": "datastore_query",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "system",
+      "interaction": "process_spawn",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    },
+    {
+      "name": "write",
+      "interaction": "file_write",
+      "languages": [
+        "c",
+        "cpp"
+      ]
+    }
+  ],
+  "dependency_categories": [
+    {
+      "match": "aiohttp",
+      "category": "http_client"
+    },
+    {
+      "match": "angelscript",
+      "category": "scripting"
+    },
+    {
+      "match": "avro*",
+      "category": "serialization"
+    },
+    {
+      "match": "axios",
+      "category": "http_client"
+    },
+    {
+      "match": "bearssl",
+      "category": "tls"
+    },
+    {
+      "match": "boringssl",
+      "category": "tls"
+    },
+    {
+      "match": "brotli*",
+      "category": "compression"
+    },
+    {
+      "match": "bz2",
+      "category": "compression"
+    },
+    {
+      "match": "bzip2*",
+      "category": "compression"
+    },
+    {
+      "match": "capnp*",
+      "category": "serialization"
+    },
+    {
+      "match": "capnproto*",
+      "category": "serialization"
+    },
+    {
+      "match": "cereal",
+      "category": "serialization"
+    },
+    {
+      "match": "chaiscript",
+      "category": "scripting"
+    },
+    {
+      "match": "cjson",
+      "category": "serialization"
+    },
+    {
+      "match": "cpp-httplib",
+      "category": "http_client"
+    },
+    {
+      "match": "cpr",
+      "category": "http_client"
+    },
+    {
+      "match": "curl",
+      "category": "http_client"
+    },
+    {
+      "match": "duktape",
+      "category": "scripting"
+    },
+    {
+      "match": "expat",
+      "category": "serialization"
+    },
+    {
+      "match": "flatbuffers*",
+      "category": "serialization"
+    },
+    {
+      "match": "gnutls*",
+      "category": "tls"
+    },
+    {
+      "match": "got",
+      "category": "http_client"
+    },
+    {
+      "match": "gson",
+      "category": "serialization"
+    },
+    {
+      "match": "guile*",
+      "category": "scripting"
+    },
+    {
+      "match": "hiredis*",
+      "category": "database"
+    },
+    {
+      "match": "httplib",
+      "category": "http_client"
+    },
+    {
+      "match": "httpx",
+      "category": "http_client"
+    },
+    {
+      "match": "hyper",
+      "category": "http_client"
+    },
+    {
+      "match": "jackson-*",
+      "category": "serialization"
+    },
+    {
+      "match": "jansson",
+      "category": "serialization"
+    },
+    {
+      "match": "json-c",
+      "category": "serialization"
+    },
+    {
+      "match": "jsoncpp*",
+      "category": "serialization"
+    },
+    {
+      "match": "leveldb",
+      "category": "database"
+    },
+    {
+      "match": "libarchive*",
+      "category": "compression"
+    },
+    {
+      "match": "libbrotli*",
+      "category": "compression"
+    },
+    {
+      "match": "libbz2*",
+      "category": "compression"
+    },
+    {
+      "match": "libcjson*",
+      "category": "serialization"
+    },
+    {
+      "match": "libcurl*",
+      "category": "http_client"
+    },
+    {
+      "match": "libexpat*",
+      "category": "serialization"
+    },
+    {
+      "match": "libgnutls*",
+      "category": "tls"
+    },
+    {
+      "match": "libguile*",
+      "category": "scripting"
+    },
+    {
+      "match": "libjansson*",
+      "category": "serialization"
+    },
+    {
+      "match": "libjson-c*",
+      "category": "serialization"
+    },
+    {
+      "match": "libjsoncpp*",
+      "category": "serialization"
+    },
+    {
+      "match": "liblua*",
+      "category": "scripting"
+    },
+    {
+      "match": "libluajit*",
+      "category": "scripting"
+    },
+    {
+      "match": "liblz4*",
+      "category": "compression"
+    },
+    {
+      "match": "liblzma*",
+      "category": "compression"
+    },
+    {
+      "match": "libmariadb*",
+      "category": "database"
+    },
+    {
+      "match": "libmbedtls*",
+      "category": "tls"
+    },
+    {
+      "match": "libmongoc*",
+      "category": "database"
+    },
+    {
+      "match": "libmysql*",
+      "category": "database"
+    },
+    {
+      "match": "libnss3*",
+      "category": "tls"
+    },
+    {
+      "match": "libperl*",
+      "category": "scripting"
+    },
+    {
+      "match": "libpq*",
+      "category": "database"
+    },
+    {
+      "match": "libprotobuf*",
+      "category": "serialization"
+    },
+    {
+      "match": "libpython*",
+      "category": "scripting"
+    },
+    {
+      "match": "libressl*",
+      "category": "tls"
+    },
+    {
+      "match": "libsnappy*",
+      "category": "compression"
+    },
+    {
+      "match": "libsoup*",
+      "category": "http_client"
+    },
+    {
+      "match": "libsqlite*",
+      "category": "database"
+    },
+    {
+      "match": "libssl*",
+      "category": "tls"
+    },
+    {
+      "match": "libtcl*",
+      "category": "scripting"
+    },
+    {
+      "match": "libwolfssl*",
+      "category": "tls"
+    },
+    {
+      "match": "libxml2*",
+      "category": "serialization"
+    },
+    {
+      "match": "libyaml*",
+      "category": "serialization"
+    },
+    {
+      "match": "libz",
+      "category": "compression"
+    },
+    {
+      "match": "libzip*",
+      "category": "compression"
+    },
+    {
+      "match": "libzstd*",
+      "category": "compression"
+    },
+    {
+      "match": "lmdb",
+      "category": "database"
+    },
+    {
+      "match": "lua",
+      "category": "scripting"
+    },
+    {
+      "match": "lua5*",
+      "category": "scripting"
+    },
+    {
+      "match": "luajit*",
+      "category": "scripting"
+    },
+    {
+      "match": "lz4*",
+      "category": "compression"
+    },
+    {
+      "match": "lzma",
+      "category": "compression"
+    },
+    {
+      "match": "mariadb*",
+      "category": "database"
+    },
+    {
+      "match": "mbedtls*",
+      "category": "tls"
+    },
+    {
+      "match": "minizip*",
+      "category": "compression"
+    },
+    {
+      "match": "mongo*",
+      "category": "database"
+    },
+    {
+      "match": "mruby",
+      "category": "scripting"
+    },
+    {
+      "match": "msgpack*",
+      "category": "serialization"
+    },
+    {
+      "match": "mysql*",
+      "category": "database"
+    },
+    {
+      "match": "nlohmann-json",
+      "category": "serialization"
+    },
+    {
+      "match": "nlohmann_json",
+      "category": "serialization"
+    },
+    {
+      "match": "node-fetch",
+      "category": "http_client"
+    },
+    {
+      "match": "nss",
+      "category": "tls"
+    },
+    {
+      "match": "odbc",
+      "category": "database"
+    },
+    {
+      "match": "okhttp*",
+      "category": "http_client"
+    },
+    {
+      "match": "openssl*",
+      "category": "tls"
+    },
+    {
+      "match": "pg",
+      "category": "database"
+    },
+    {
+      "match": "postgres*",
+      "category": "database"
+    },
+    {
+      "match": "pq",
+      "category": "database"
+    },
+    {
+      "match": "protobuf*",
+      "category": "serialization"
+    },
+    {
+      "match": "psycopg*",
+      "category": "database"
+    },
+    {
+      "match": "pugixml",
+      "category": "serialization"
+    },
+    {
+      "match": "pymysql",
+      "category": "database"
+    },
+    {
+      "match": "python",
+      "category": "scripting"
+    },
+    {
+      "match": "python3",
+      "category": "scripting"
+    },
+    {
+      "match": "pyyaml",
+      "category": "serialization"
+    },
+    {
+      "match": "quickjs*",
+      "category": "scripting"
+    },
+    {
+      "match": "rapidjson",
+      "category": "serialization"
+    },
+    {
+      "match": "redis*",
+      "category": "database"
+    },
+    {
+      "match": "requests",
+      "category": "http_client"
+    },
+    {
+      "match": "reqwest",
+      "category": "http_client"
+    },
+    {
+      "match": "restsharp",
+      "category": "http_client"
+    },
+    {
+      "match": "rocksdb",
+      "category": "database"
+    },
+    {
+      "match": "rustls*",
+      "category": "tls"
+    },
+    {
+      "match": "s2n*",
+      "category": "tls"
+    },
+    {
+      "match": "serde*",
+      "category": "serialization"
+    },
+    {
+      "match": "snappy*",
+      "category": "compression"
+    },
+    {
+      "match": "sqlalchemy",
+      "category": "database"
+    },
+    {
+      "match": "sqlite*",
+      "category": "database"
+    },
+    {
+      "match": "squirrel",
+      "category": "scripting"
+    },
+    {
+      "match": "superagent",
+      "category": "http_client"
+    },
+    {
+      "match": "tcl",
+      "category": "scripting"
+    },
+    {
+      "match": "thrift*",
+      "category": "serialization"
+    },
+    {
+      "match": "tinyxml*",
+      "category": "serialization"
+    },
+    {
+      "match": "tolua*",
+      "category": "scripting"
+    },
+    {
+      "match": "undici",
+      "category": "http_client"
+    },
+    {
+      "match": "unixodbc",
+      "category": "database"
+    },
+    {
+      "match": "urllib3",
+      "category": "http_client"
+    },
+    {
+      "match": "v8",
+      "category": "scripting"
+    },
+    {
+      "match": "wolfssl*",
+      "category": "tls"
+    },
+    {
+      "match": "wren",
+      "category": "scripting"
+    },
+    {
+      "match": "xz",
+      "category": "compression"
+    },
+    {
+      "match": "xz-utils",
+      "category": "compression"
+    },
+    {
+      "match": "yaml-cpp",
+      "category": "serialization"
+    },
+    {
+      "match": "z",
+      "category": "compression"
+    },
+    {
+      "match": "zlib*",
+      "category": "compression"
+    },
+    {
+      "match": "zstd*",
+      "category": "compression"
+    }
+  ],
+  "boundary_for": {
+    "network_listen": {
+      "boundary_kind": "network",
+      "external_entity": {
+        "key": "remote_network_peer",
+        "name": "Remote network peer"
+      },
+      "direction": "inbound"
+    },
+    "network_receive": {
+      "boundary_kind": "network",
+      "external_entity": {
+        "key": "remote_network_peer",
+        "name": "Remote network peer"
+      },
+      "direction": "inbound"
+    },
+    "network_connect": {
+      "boundary_kind": "network",
+      "external_entity": {
+        "key": "unidentified_remote_service",
+        "name": "Unidentified remote service"
+      },
+      "direction": "outbound"
+    },
+    "file_read": {
+      "boundary_kind": "file_content",
+      "external_entity": {
+        "key": "file_supplier",
+        "name": "File supplier"
+      },
+      "direction": "inbound"
+    },
+    "file_write": null,
+    "datastore_query": null,
+    "code_load": {
+      "boundary_kind": "loaded_code",
+      "external_entity": {
+        "key": "loaded_code_supplier",
+        "name": "Loaded code supplier"
+      },
+      "direction": "inbound"
+    },
+    "process_spawn": {
+      "boundary_kind": "process",
+      "external_entity": {
+        "key": "local_process",
+        "name": "Local process"
+      },
+      "direction": "outbound"
+    },
+    "environment_read": {
+      "boundary_kind": "launch_environment",
+      "external_entity": {
+        "key": "launch_environment",
+        "name": "Launch environment"
+      },
+      "direction": "inbound"
+    },
+    "argument_read": {
+      "boundary_kind": "local_user",
+      "external_entity": {
+        "key": "local_operator",
+        "name": "Local operator"
+      },
+      "direction": "inbound"
+    },
+    "local_ipc": {
+      "boundary_kind": "process",
+      "external_entity": {
+        "key": "local_process",
+        "name": "Local process"
+      },
+      "direction": "inbound"
+    },
+    "privilege_change": {
+      "boundary_kind": "privilege",
+      "external_entity": {
+        "key": "local_operator",
+        "name": "Local operator"
+      },
+      "direction": "inbound"
+    }
+  }
+}
