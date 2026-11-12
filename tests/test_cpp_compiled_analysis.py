@@ -63,10 +63,12 @@ def _target(root: Path) -> tuple[Path, tuple[str, str]]:
 
 
 class FakeNativeExecutor:
-    def __init__(self, run_root: Path, calls: list[tuple[str, str]], fail: tuple[str, str] | None = None):
+    def __init__(self, run_root: Path, calls: list[tuple[str, str]], fail: tuple[str, str] | None = None,
+                 *, infer_path: str = "/target/source/main.cpp"):
         self.run_root = run_root
         self.calls = calls
         self.fail = fail
+        self.infer_path = infer_path
 
     def execute(self, request):
         root = request.scratch_root
@@ -82,7 +84,8 @@ class FakeNativeExecutor:
         project = project_root.name
         self.calls.append((project, mode))
         exit_code = 9 if self.fail == (project, mode) else 0
-        sources = sorted(path.name for path in (project_root / "source").glob("*.cpp"))
+        sources = ([row["file"] for row in json.loads((root / "compile_commands.json").read_bytes())]
+                   if infer else sorted(path.name for path in (project_root / "source").glob("*.cpp")))
         if mode == "compile" and exit_code == 0:
             build = root / "build"
             build.mkdir(exist_ok=True)
@@ -134,7 +137,7 @@ class FakeNativeExecutor:
             (destination / "report.json").write_text(json.dumps([{
                 "bug_type": "NULLPTR_DEREFERENCE", "qualifier": "fixture null dereference",
                 "severity": "ERROR", "category": "Null pointer dereference", "line": 1,
-                "column": 1, "procedure": "main", "file": "/target/source/main.cpp",
+                "column": 1, "procedure": "main", "file": self.infer_path,
                 "key": f"{project}:main:NULLPTR_DEREFERENCE", "bug_trace": [],
             }]), encoding="utf-8")
             (destination / "logs").write_text(
@@ -201,6 +204,77 @@ def test_infer_compile_database_uses_stable_read_only_container_paths() -> None:
         "arguments": ["clang++", "-I/target/source/include", "-std=c++20",
                       "/target/source/main.cpp"],
     }]
+
+
+@pytest.mark.parametrize("reported_path,resolved", [
+    ("/target/source/src/main.cpp", True),
+    ("source/src/main.cpp", True),
+    ("source\\src\\main.cpp", True),
+    ("/foreign/source/src/main.cpp", False),
+    ("/target/source/../src/main.cpp", False),
+    ("src/main.cpp", False),
+], ids=["absolute", "relative", "backslashes", "foreign", "traversal", "bare"])
+def test_infer_paths_resolve_only_through_the_published_source_mapping(
+        tmp_path: Path, reported_path: str, resolved: bool) -> None:
+    from appsec_review.jobs.job_cpp_compiled_analysis.job import (
+        _artifact, _case_root, _infer_index, _run_infer,
+    )
+    from appsec_review.retrieval import IndexIdentity, write_manifest
+    from appsec_review.runtime import Job, JobRunner, Unit
+    from appsec_review.storage import atomic_json, file_sha256
+
+    shutil.copy2(ROOT / "appsec-review.toml", tmp_path / "appsec-review.toml")
+    config = load_config(tmp_path / "appsec-review.toml")
+    target = tmp_path / "target"
+    project_root = "projects/native/fixture"
+    project = _project_key(PurePosixPath(project_root))
+    target_path = project_root + "/src/main.cpp"
+    (target / project_root / "src").mkdir(parents=True)
+    (target / target_path).write_text("int main() { return 0; }\n", encoding="utf-8")
+    source_sha = file_sha256(target / target_path)
+    snapshot = source_fingerprint(target)
+    calls = []
+
+    def infer(unit):
+        root = _case_root(unit, project)
+        (root / "source/src").mkdir(parents=True)
+        shutil.copyfile(target / target_path, root / "source/src/main.cpp")
+        rows = [{"target_path": target_path, "arguments": [
+            "clang++-18", "-g", "/scratch/source/src/main.cpp"]}]
+        database = root / "normalized-compile-commands.json"
+        atomic_json(database, rows)
+        catalog = {"mapping": {
+            "root": project_root, "project_id": "cpp:" + project_root,
+            "case_snapshot": snapshot, "files": [{
+                "target_path": target_path, "scratch_path": "source/src/main.cpp", "sha256": source_sha}]},
+            "compile_commands": rows, "compile_database": _artifact(unit.job.run_root, database)}
+        execution = _run_infer(unit, project, catalog, executor_factory=lambda context:
+            FakeNativeExecutor(context.job.run_root, calls, infer_path=reported_path))
+        result = _infer_index(unit, project, catalog, execution)
+        manifest = unit.job.run_root / "data/indices/manifests/infer-fixture.json"
+        write_manifest(manifest, run_id=unit.job.run_id, target_snapshot=snapshot,
+                       target_root=target, indexes=[IndexIdentity(**result["index_identity"])])
+        return {**result, "execution": execution,
+                "index_manifest": _artifact(unit.job.run_root, manifest)}
+
+    original = build_job()
+    job = Job(original.job_id, original.name, lambda _: {}, units=(Unit("infer.projects", infer),),
+              datasets=original.datasets, schema_identity=original.schema_identity)
+    outcome = JobRunner(config).run(job, target_root=target, source_fingerprint=snapshot)
+    output = json.loads((Path(outcome["attempt_root"]) /
+                         "steps/infer/tasks/projects/result.json").read_bytes())
+    run_id = outcome["status"]["run_id"]
+    core = RetrievalCore(config.runtime.runs_dir, run_id)
+    records = core.search(query="NULLPTR_DEREFERENCE", indexes=("observations",))["results"]
+    assert calls == [(project, "infer")]
+    assert output["observation_count"] == len(records) == int(resolved)
+    assert output["captured_source_files"] == output["expected_source_files"] == 1
+    if resolved:
+        assert output["gaps"] == []
+        assert records[0]["payload"]["target_path"] == target_path
+        assert records[0]["payload"]["source_sha256"] == source_sha
+    else:
+        assert any("did not resolve to accepted source" in gap for gap in output["gaps"])
 
 
 def test_clang_ast_loader_accepts_bounded_concatenated_declarations(tmp_path: Path) -> None:

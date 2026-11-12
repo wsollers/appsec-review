@@ -81,3 +81,36 @@ under the admitted rewind. Job 14 has not yet rerun with the repair. A fresh sco
 would avoid rewriting the preserved key, but rechecking jobs 1-13 previously took about
 45 minutes. Further restart direction is being requested from the user rather than silently
 starting another long prerequisite walk or weakening comparison.
+
+## Fresh-run live acceptance
+
+The user authorized a fresh scoped walk at 19:15 EST. Run `2026-11-12-0002`
+uses namespace `appsec-multi-vuln-c094-scoped-v4` on unchanged source release `6bfb8daf...`.
+The history job needed one same-source retry after one unavailable GitHub page; the retry
+had no indeterminate enrichment records. No source edit, reload or whole-walk restart was
+used for that transient failure.
+
+Job 14 dispatch `1b16c2b4-7915-4ddd-aa4c-e17a73a69060` completed in 41.363 s and was
+operator-accepted after input/output verification. Its actual reads are exactly the
+language-build and target-catalog handoffs, with no intake lookup. All ten build artifacts
+are indexed. A real `RetrievalCore.find` resolves the c094 executable as
+`asr:executable:63cfcce7a546defc554d4204013969fb5ed62e9b20572aaef0558970142e0918`
+with SHA-256 `569b207768a1fc228d1642429657e920133ce1674705361edff69fb72bbdd347`,
+160384 bytes and `analysis_lane=target`.
+
+Five canonical gap declarations retain unknown shipment intent and ambiguous producing-action
+attribution for CMake's `compile_commands.json`; neither is missing binary or compile-data
+capture. The correlated compile database uses
+`appsec-review/native-component-compile-database/2` with eight `entries`, not a bare JSON
+array. An operator verification initially assumed an array and stopped before acceptance;
+the corrected check verified the actual envelope, entry count and byte hash.
+
+Jobs 15-19 subsequently received content acceptance with their explicit coverage limits.
+Debug symbols produced 6914 records and binary-specific retrieval, but source/address/type
+coverage is partial and `main.cpp.o` has unsupported ambiguous ELF sections. Coverage and
+profile jobs correctly published unavailable data, not invented scores. Artifact scanning
+retained two native-report-backed Blint compatibility observations. Static evidence retained
+67 records (66 source-bound, one artifact-only Checkov finding); Cppcheck's C-mode diagnostic
+for a C++ header was not treated as a confirmed vulnerability. Its content receipt is
+`runs/metadata/stepwise/2026-11-12-0002/checks/evidence-content-attempt_0001.json`.
+The next observed defect is documented in `2026-11-11-job-pass-20-cpp-compiled-analysis.md`.

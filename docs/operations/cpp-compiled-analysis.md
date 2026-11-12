@@ -70,6 +70,11 @@ The producer retains Infer's JSON report, execution receipt, compilation databas
 run-owned artifacts. Each observation resolves through the accepted source mapping and is indexed
 as tool evidence rather than an adjudicated finding. A capture-count mismatch, invalid report,
 timeout, OOM, nonzero exit, or unmapped result path is an explicit coverage gap.
+Infer may report `/target/source/<path>` or project-relative `source/<path>`. Both resolve
+only through the prepared source mapping and its verified source hash; foreign roots,
+bare paths and traversal do not acquire authority. The Infer adapter identity is included
+in both branch checkpoints and index fingerprints, so a mapping repair cannot reuse an
+old empty observation index.
 
 ## Blind evaluation boundary
 

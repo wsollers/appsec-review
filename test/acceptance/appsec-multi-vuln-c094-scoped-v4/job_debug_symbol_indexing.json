@@ -1,0 +1,1615 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/clang_dwarf/result.json",
+   "sha256": "c9380926e73828aa566bb09d418df0ec61b41cc77eea328a53731349816fcb61"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1842b9b3aae29efd6d0383313d1d53c5d28f55f35555be6701a07d4cad446ece"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "636409a65f640289b7a75f945a368d3ecf01cee1d7ab6089c6b2d1b5e039f6c4"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "7e4002507d04b73f10e19f1e22dd604eb34b088f9d7c98f17b57c8e7594992ea"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "f6086702e830219eac09729500a18701937c628097de812454d2b45cceb35267"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "0020409d034148dd9e572cd88a8be1dba5e7775e104dcd9b65b3af6ca31bbd52"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "06f5705479bf53d7e7bb132a4f5351b53bebd1b52d1ed49407909ddff86bafc1"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "08602c0943e7b4e971d88dcaee4e67fc6966bede3039491f9c8c9154df2c967a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "4ea01c3996558e3ee94f25314f74b0c811d7818f49bc1b811344b1840d358eea"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "737f07da5a1d9eb4c3961bb501da7b6921dcaa1c0a311b6fae24b512012c2c8d"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "7c510efb815bac308e3b6fc1bf10863fe4c0e8f95e6d06f4d9ca7c5c8e2a128b"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "85183b91b3ac27f3968852f8734df834689659862cea4a0961f6f2d9c105efa8"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "8fd3b97cb876998a07c29d16e37853d7b51e9cb1d765771e53d93c65091b97e3"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9ac44204fbbc0d91349b7eb0aff1fd3714990d26476827257041b207ecd19294"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9e73f98e0422eb53346a828b103a45983816415640816020016fae24a6d36353"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "b97683dc10313ae484c4861799685e46785e771f7cb535518aa7e28567b54ea6"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "cb739964ce0fb79141ded0924cdbd24c921ac18c017053d3a69de2c229dcd762"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "e8943d982bbb1b4a7f7789491c4e29bb8f83db0cabf5b83bdfe3130a29d99172"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "abef03e3d127c8fa1ce7d3ca1cf551539dbfb0745ed20810c20ccff919765e3e"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "2ac4e5b830f6e12d8b381044cf53cb67e6a158143430a7b2decbeaf431e2eaa0"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "dc0b37d624b465448524f2984d61fb9713f2bfbb17080513d74b426fd62528f6"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "10312f8f4c48a7145ddd5f89d06bb5e2d0ae934d3c2d5adac4fa693b2ad56386"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "11ff401a767028292b21048f6bdc4dbc6faa5c1b2dd1f0da2a25ee217f176bbb"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1c31d1274c9995e0fd82db64326210658d40e148c8442718b8faad5362bdd72a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "257742fc883bc1a11f0f60ce3364a68f08ffa230ba3d16d1a876819730361523"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9c96336219ee6230de6096c5eb2a5975e195884c275611720e42c4ebdf0189b1"
+  },
+  {
+   "count": 12,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/accepted-index.json",
+   "sha256": "f065be67603074067d1517da735ca3c78936593f547921e8b46d633a2207c574"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/decision.json",
+   "sha256": "c2ef508cbfc03b51833e0064dc2a8f09245f48367d56bcee5386877550e1823a"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/status.json",
+   "sha256": "7fb0bce679301bfe44ca37e10e0e4304759cc49e373c8c7b4c6583a74fd32987"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/decide/tasks/target/status.json",
+   "sha256": "eb1e6276646ff8c37692fff873d2acde4c5581cd6af89a1941ea2e2024cda5f0"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/clang_dwarf/status.json",
+   "sha256": "9d4db7f64e61f7e0097915b1427e7aca8f33ea8ffc5db6791122ceaa4fa98fed"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/msvc_pdb/status.json",
+   "sha256": "2706b680981ebd9a0299bf52396957f50161b73ada9248e192f242ee2f9f0d66"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+   "sha256": "29f2fd21d99bcc9d48b9ab8882f997b582a71ba357332f264d9a1bcc642b7973"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/coverage.json",
+   "sha256": "38054732a3a3f30df6ef650c3b4f27d4b96ec1b21c9282f22664701fc6e54f9d"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/raw-refs.json",
+   "sha256": "2cd0df28af3166b2a2b256e3c13a2d24b09107a8309e3526d7d324c56b4ec7c6"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "0c7a81bf1405a05fc96076e97f2a1e49a30424f0eeb04091eb1dcddc18d60a78"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "16bfe16a69079698b64b52ef8b98daee9840fd3c263e6203b70b6908e2a67ed7"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "22c1107c00cec99be7b81c33746663a5d61370ed480f0d754a6cc322670d7182"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "38fe01d6eac61eb938396169d5a7ed5cdb93f21e958571c758dfa06b5865d04e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "4d39743869e1190d49839800a774d5ec37608c74a870ae59eb05c409b119619e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "7155d9f5fa4892f94cdb9741803f3c731d127b504c6d2d019d570c4b47b1366a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "a6fb146bee587d195e05d9f4b50a3177ca1853f341acbf8e5592b4a04fedf5c1"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "a6fb146bee587d195e05d9f4b50a3177ca1853f341acbf8e5592b4a04fedf5c1"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "a6fb146bee587d195e05d9f4b50a3177ca1853f341acbf8e5592b4a04fedf5c1"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "a6fb146bee587d195e05d9f4b50a3177ca1853f341acbf8e5592b4a04fedf5c1"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "ae706e44cc6dacb15097880a2abbbafda77bb1457c3bc6131fbf837b539a7d92"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "b14c4f568b1501a1d863a9361ffc2863e78c5258cf6e415a772ab01cd6fda13e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "cbfa347e12b2e2da677845955f37ea14663a5f0457317609956aa0adfb04b4f8"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/claim.json",
+   "sha256": "22ceb2b64a1015d478a60c393d65f086c47c5b08d431ce2dbdef6ca129714d3b"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/claim.json",
+   "sha256": "cd8c43a2e597ad21d08be6abca07a7eb5e4805136a855c4de70491d424ba81f7"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/claim.json",
+   "sha256": "9598cd0485872197b9467650259de2cb9da1e9aac66494f997deb0befde00530"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/claim.json",
+   "sha256": "94b06f197cd5085b66be45ae8277d9f4cbbc057dbcd4e6d0a28ba1c8a62e8d7b"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/claim.json",
+   "sha256": "6354f249abcf246884bc306530879afd648d82c883fef7c142622878c5da0e81"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/decide/tasks/target/result.json",
+   "sha256": "73b8ad18e642a7c80c806c0b33846bc037714d42ba7768861707d5d938b4e4b0"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/result.json",
+   "sha256": "b82395c31295f36f3e0e98306ab5e9908c229774bdb10848bb86012fa99eed28"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/msvc_pdb/result.json",
+   "sha256": "9451b35c1d5e61489243fe82838a353b98593a3594bb7f50b7722994e15a1096"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+   "sha256": "c28628e17a954c3539c7fdcba743868ca2ef9321f3fdda3f01bc58133601d5cc"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/debug-symbol-indexing-<attempt>.json",
+   "sha256": "4c247df688eb716744383db292f685bd101b6ff0ccffc976963a839e296142d8"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/outcomes.json",
+   "sha256": "834cccccfe42a463e3ffb297bd64426ee5ef1d8e2b481a91ad44f61bfba6d387"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "unavailable": 1
+   },
+   "entity_kinds": {
+    "build_action": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "build_action": 2,
+    "evidence_artifact": 9,
+    "executable": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/language-build-<attempt>-<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 12,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "build_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/artifacts/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "component": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/components/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "executable": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/artifacts/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "object_file": 8
+   },
+   "kind": "sqlite",
+   "path": "data/indices/artifacts/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 8,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "symbol": 2
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 2,
+    "locations": 2,
+    "metadata": 8,
+    "relations": 2
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 3,
+    "partial": 3,
+    "unavailable": 2
+   },
+   "entity_kinds": {
+    "change": 9,
+    "history_signal": 39,
+    "hotspot": 20
+   },
+   "kind": "sqlite",
+   "path": "data/indices/history/git-history/<sha256>.sqlite",
+   "rows": {
+    "coverage": 8,
+    "entities": 68,
+    "locations": 58,
+    "metadata": 8,
+    "relations": 82
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 9,
+    "partial": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/artifacts/<sha256>.sqlite",
+   "rows": {
+    "coverage": 10,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 19
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1,
+    "unavailable": 6
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/documents/<sha256>.sqlite",
+   "rows": {
+    "coverage": 7,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "build_action": 1,
+    "component": 1,
+    "evidence_artifact": 14
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 16,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 110
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "source_file": 17
+   },
+   "kind": "sqlite",
+   "path": "data/indices/source/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 17,
+    "locations": 17,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 8,
+    "unavailable": 2
+   },
+   "entity_kinds": {
+    "compile_unit": 15,
+    "ir_entity": 3281,
+    "symbol": 3618
+   },
+   "kind": "sqlite",
+   "path": "data/indices/debug_symbols/<sha256>.sqlite",
+   "rows": {
+    "coverage": 10,
+    "debug_symbol_addresses": 3507,
+    "debug_symbol_records": 6914,
+    "entities": 6914,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 13118
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "asr:build_artifact:<sha256>: unsupported_binary_format",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: functions_without_address_ranges",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: location_expressions_not_evaluated",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: optimized_debug_information",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: source_checksums_unavailable",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: source_mapping_unverified: checksum unavailable",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: source_paths_unverified",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: type_size_unavailable",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:executable:<sha256>: variable_locations_not_indexed",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "asr:object_file:<sha256>: ambiguous_elf_sections",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: functions_without_address_ranges",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "asr:object_file:<sha256>: inline_frames_not_emitted",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: location_expressions_not_evaluated",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: optimized_debug_information",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: source_checksums_unavailable",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: source_mapping_unverified: checksum unavailable",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: source_paths_unverified",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: type_size_unavailable",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 7,
+   "gap": "asr:object_file:<sha256>: variable_locations_not_indexed",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "projects/native/case-094/build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "analysis-plan",
+    "gap": ".git: excluded_directory; no recognized project manifests; compile_commands.json not present; build topology: no accepted compile database; compiled-unit coverage is unavailable; build topology: logical descriptor targets do not establish compiled link outputs without accepted build artifacts; executable build graph: incomplete_dependency_discovery: only supported direct descriptor declarations are resolved; absence of an edge is not independence",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/analysis/<sha256>-target-analysis-plan.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "projects/native/case-094/build/compile_commands.json",
+    "gap": "projects/native/case-094/build/compile_commands.json: producing action mapping is ambiguous",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/artifacts/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "compile-units",
+    "gap": "compile_commands.json not present",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/build/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "asr:build_artifact:<sha256>",
+    "gap": "unsupported_binary_format",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/debug_symbols/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "asr:executable:<sha256>",
+    "gap": "functions_without_address_ranges; location_expressions_not_evaluated; optimized_debug_information; source_checksums_unavailable; source_mapping_unverified: checksum unavailable; source_paths_unverified; type_size_unavailable; variable_locations_not_indexed",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/debug_symbols/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "asr:object_file:<sha256>",
+    "gap": "ambiguous_elf_sections",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/debug_symbols/<sha256>.sqlite"
+  },
+  {
+   "count": 2,
+   "gap": {
+    "area": "asr:object_file:<sha256>",
+    "gap": "functions_without_address_ranges; inline_frames_not_emitted; location_expressions_not_evaluated; optimized_debug_information; source_checksums_unavailable; source_mapping_unverified: checksum unavailable; source_paths_unverified; type_size_unavailable; variable_locations_not_indexed",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/debug_symbols/<sha256>.sqlite"
+  },
+  {
+   "count": 5,
+   "gap": {
+    "area": "asr:object_file:<sha256>",
+    "gap": "functions_without_address_ranges; location_expressions_not_evaluated; optimized_debug_information; source_checksums_unavailable; source_mapping_unverified: checksum unavailable; source_paths_unverified; type_size_unavailable; variable_locations_not_indexed",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/debug_symbols/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents",
+    "gap": "design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test: no accepted target document; source inventory .git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:design",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:dfd",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:openapi",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:postman",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:threat_model",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:unit_test",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "deployment-timing",
+    "gap": "deployment_timing_not_acquired",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "git-history",
+    "gap": "working_tree_divergent; head_differs_from_mainline",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "history-hotspots",
+    "gap": "symbol_language_unsupported; working_tree_divergent",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "pull-request-timing",
+    "gap": "pr_timing_not_acquired",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "symbol-spans",
+    "gap": "symbol_language_unsupported",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-files",
+    "gap": ".git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/source/<sha256>.sqlite"
+  },
+  {
+   "count": 2,
+   "gap": "asr:build_artifact:<sha256>: unsupported_binary_format",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: functions_without_address_ranges",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: location_expressions_not_evaluated",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: optimized_debug_information",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: source_checksums_unavailable",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: source_mapping_unverified: checksum unavailable",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: source_paths_unverified",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: type_size_unavailable",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:executable:<sha256>: variable_locations_not_indexed",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "asr:object_file:<sha256>: ambiguous_elf_sections",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: functions_without_address_ranges",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 4,
+   "gap": "asr:object_file:<sha256>: inline_frames_not_emitted",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: location_expressions_not_evaluated",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: optimized_debug_information",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: source_checksums_unavailable",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: source_mapping_unverified: checksum unavailable",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: source_paths_unverified",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: type_size_unavailable",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 14,
+   "gap": "asr:object_file:<sha256>: variable_locations_not_indexed",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)",
+   "unit": "extract.clang_dwarf"
+  },
+  {
+   "count": 2,
+   "gap": "projects/native/case-094/build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "extract.clang_dwarf"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/debug-symbol-indexing/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_language_build"
+  ]
+ },
+ "job_id": "job_debug_symbol_indexing",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/accepted-index.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/debug-symbol-indexing-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 6914,
+   "schema": "appsec-review/debug-symbol-indexing/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "decide.target": {
+   "artifact": {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/decision.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "compiler_target": "clang",
+   "input_fingerprint": "<sha256>",
+   "selected_lane": "clang_dwarf",
+   "terminal_status": "SUCCEEDED"
+  },
+  "extract.clang_dwarf": {
+   "artifact": {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/raw-refs.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "artifact_count": 10,
+   "coverage": {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/coverage.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "duration_ms": "<duration>",
+   "indexes": [
+    {
+     "fingerprint": "<sha256>",
+     "name": "debug_symbols",
+     "producer": {
+      "compiler_target": "clang",
+      "job_id": "job_debug_symbol_indexing",
+      "lane": "clang_dwarf",
+      "reader_identity": "<sha256>"
+     },
+     "relative_path": "data/indices/debug_symbols/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "symbols-clang_dwarf"
+    }
+   ],
+   "input_fingerprint": "<sha256>",
+   "record_count": 6914,
+   "status": "COMPLETED",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "extract.msvc_pdb": {
+   "indexes": [],
+   "input_fingerprint": "<sha256>",
+   "reason": "unselected_compiler_target",
+   "status": "SKIPPED",
+   "terminal_status": "SKIPPED_NA"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "decide": "SUCCEEDED",
+  "extract": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "decide.target": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "extract.clang_dwarf": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "extract.msvc_pdb": {
+   "disposition": "SKIPPED_NA",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "sha256": "883c48106d58bc5a501f99fcd863f4af8b16fc54b237979090fa60ab10da7b4d",
+    "size_bytes": 188416
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/artifacts/<sha256>.sqlite",
+    "sha256": "28f6e7a0f4815092a5fed7014a1ff58297b8a285d40bf1687517bc9690c62571",
+    "size_bytes": 69632
+   },
+   {
+    "path": "data/indices/artifacts/<sha256>.sqlite",
+    "sha256": "2a2f694786339b46f81bb989eb7f9c0664366f0658aff5a69a667c53dfe37114",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/artifacts/<sha256>.sqlite",
+    "sha256": "652ef025de9fb4bfbd219b9e644b5fed7a46dd306c217ecdd3d98fa6a2323959",
+    "size_bytes": 90112
+   },
+   {
+    "path": "data/indices/artifacts/<sha256>.sqlite",
+    "sha256": "b3549abd9228038682476cbf538f27a8e83f541056d8471cc44f2391a472c464",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/build/<sha256>.sqlite",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/indices/build/language-build-<attempt>-<sha256>.sqlite",
+    "sha256": "cb4801c42c13c92ca8df9f442307416308c3e0799cfbade6ad791e86a6797484",
+    "size_bytes": 77824
+   },
+   {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/debug_symbols/<sha256>.sqlite",
+    "sha256": "c76ff5c7343f337639fe2de26d6196281d29af2608c7529e9599c4c96d655031",
+    "size_bytes": 107835392
+   },
+   {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/history/git-history/<sha256>.sqlite",
+    "sha256": "9c86d6a5cf789a8020e501a70665d7b3df954cde83433a3555b2d3dc188ebe3a",
+    "size_bytes": 466944
+   },
+   {
+    "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+    "sha256": "04b189eecdca336e017fc6997b5ee1a26dc5006eda87b51c9d80b301e4eb98f2",
+    "size_bytes": 7087
+   },
+   {
+    "path": "data/indices/manifests/debug-symbol-indexing-<attempt>.json",
+    "sha256": "73a491af287b0076dbe64b52a498a66491f3d2f7d0cd375ab1d250a7593a24bb",
+    "size_bytes": 15706
+   },
+   {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/claim.json",
+    "sha256": "4827f4cb2125e17f7e72a6bde5a539dfbedbd112da33ca162f6c6a2252d42333",
+    "size_bytes": 16890
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "6b0c641c1ae6ffbfc38bcc508cf74cbbeb318753d642dfc79cab4907ca6aef7d",
+    "size_bytes": 1400
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "72771d2cf6570a3255f796f5862209ea89e633a4290f924a8598ced5becf328a",
+    "size_bytes": 1399
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "87bf5325fba9055cb319239dd7263e91a66c70df3430db2a3f183ccc18a9ccad",
+    "size_bytes": 1403
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "cae30267d14a1c95c5a8e38f9437b49cb33ded56e795b75696cf323a4fa07028",
+    "size_bytes": 1395
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/accepted-index.json",
+    "sha256": "20ad35de6599f7624575aead5b09a06bf52e69054756556c7a8d80ddbf339ec4",
+    "size_bytes": 9077
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/coverage.json",
+    "sha256": "73fe6696cf6056a42486e00739775a8ef6e09b9efbb8614f36717a8c2aa4ef12",
+    "size_bytes": 3579
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/decision.json",
+    "sha256": "a592d66607492ec026fcf60d0c5348295a2c284764f10fd81a4f4c646961320f",
+    "size_bytes": 12956
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/artifacts/debug-symbols/raw-refs.json",
+    "sha256": "cf657ef8c233e29e8f4f6ac409a3340a4c12d3f689a92a87505ce029a863c205",
+    "size_bytes": 3102182
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/claim.json",
+    "sha256": "417ffe3647698d6c785178ce521f53bdd5ee6edd4e02da66ceaafefb64095520",
+    "size_bytes": 16226
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/outcomes.json",
+    "sha256": "6e90433e4cb5ac763f1d2751895e656c1d7f3d0f2557c0492178bfae6314fb8f",
+    "size_bytes": 121387
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "0c5f0288c854bb9fd94663cd4884c74011e8b9ff063cd610046271d1cc268997",
+    "size_bytes": 1633
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "0e9b5533837726fd18b16ea10f52789d295838e89ec7528e5a2a79dc9515289b",
+    "size_bytes": 1660
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "3f21bfdaf9801465f735c6232cdc9009f2480da416d5f708b0f7bc93ee936425",
+    "size_bytes": 1610
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "405e0e3f2b1f8d9dca26f9a9a881df211315e92f92c6f74f1a8453db6c55af7e",
+    "size_bytes": 1608
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "42d609cf63f55948ce7eb2f06452c427b35a91b012662a7b004f1cf11cd53c1d",
+    "size_bytes": 1650
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "4bc6cabc35a3f6d1be76d74e2e29f08b8e93bc73d360d9d138ec8d89ce2a3c93",
+    "size_bytes": 1606
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "5a4edf2ad386aea52017c8e57f3e6d77945105194825f56d9db7f3fa0f8072ba",
+    "size_bytes": 1612
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "65622a744cb5cd4e641016e963ce429bd777fac309198678e59c65575139d177",
+    "size_bytes": 1656
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7a722b3d8309b1a3aa46d2cf2d026e736ad53d4c03dc8309345e933282b01328",
+    "size_bytes": 1637
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "89092a41f2cc34eed9f5c5f986f54903f6eda422b16dfa527ee25358bbb1a1ce",
+    "size_bytes": 1602
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "8b75e02c7c99bf8aad1501a2cd6242f5d58045eb26c5ca53cfd21fd230122f98",
+    "size_bytes": 1652
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "c8697e6808e53fd1f4dae1fd0daf328308f50e4db08c1dfc0188ed769b43f673",
+    "size_bytes": 1400
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "e1ea1c2c21ec1f8b0ff53e7a947b77f54a618cf51d02a2f6b339ce3113fcf036",
+    "size_bytes": 1657
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/result.json",
+    "sha256": "73c8fa178dce067e421521cabce99e638c655ff526c469a58711add38ef4b3d7",
+    "size_bytes": 8554
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/status.json",
+    "sha256": "796b90dc5a8ccb2d9a56d664f6e71d724ec19eee526ddf20dcf0cec9fd93b41e",
+    "size_bytes": 712
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/decide/tasks/target/result.json",
+    "sha256": "de239e774264e01f7e262525908985db2424ea9c976165e80e73ba45c964758c",
+    "size_bytes": 388
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/decide/tasks/target/status.json",
+    "sha256": "b5f6be37fa592b402ee56c224bd6a13858d85dccd9813c3e048c49319617868a",
+    "size_bytes": 1515
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/clang_dwarf/result.json",
+    "sha256": "9f01175574b2fd95b25692908b0cc69b77f3d1c12292c91462ba789177fb9926",
+    "size_bytes": 17288
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/clang_dwarf/status.json",
+    "sha256": "5512b22869bfd785725c301eebd9fe084c9da95fe01e446b4e21154ac9056dfe",
+    "size_bytes": 666
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/msvc_pdb/result.json",
+    "sha256": "3ae8e113f1f26579265daec50ca56cfcf91ccc64207a3c9849f23d4162db5b3e",
+    "size_bytes": 200
+   },
+   {
+    "path": "data/jobs/job_debug_symbol_indexing/attempts/<attempt>/steps/extract/tasks/msvc_pdb/status.json",
+    "sha256": "db84f95aef6891dfd26ca4e007a0d6d30465c80067c3d6603ed9781082d528ca",
+    "size_bytes": 648
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/claim.json",
+    "sha256": "77c7c7b670f2d308a3e0b4e72456d2df34ab077cd1b26ebc5f34c06f7200df5c",
+    "size_bytes": 26838
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7447c3ede9b3c5f95673384b1afe84e8bb32751f5a6c2820b2705a5d54b224a9",
+    "size_bytes": 1371
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/claim.json",
+    "sha256": "16c251c431598507d886fc50a61fe585e568902248c49a641c88a2c7e66b4f72",
+    "size_bytes": 17659
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "94fb74fdeea3eefc92cbfbcfc4a9651e3659f6007051556ff2a334070ca38f5c",
+    "size_bytes": 1394
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/claim.json",
+    "sha256": "e3c458128092cdfe3a33dba771c124942cbc040b64cce96a6926ab8e903a327b",
+    "size_bytes": 21667
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7bb4b8320c47c0b4e7ca0321b5dd4cf8f622c89b47a859c738edc9232e966dfa",
+    "size_bytes": 1770
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+    "sha256": "1add2de3174e83836f10fd3ceb222b7c06365ce7103225969bfc1bb97953d3f5",
+    "size_bytes": 12333
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "002402330bb561a9de814024d21806f86e1cd3422f1e297d1c603e9d9d7fb609",
+    "size_bytes": 1344
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "2de20bbd1e343d2413c9465478b68cded25c830c16cc32d5cca9568b359b0438",
+    "size_bytes": 1336
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "6771ae258695b4ae35af77a2e7dce3e9525893eddd4e9ed463c062054d980d31",
+    "size_bytes": 1346
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7188b95f4bbbeafd4d6980044836d41869488fac38e0e88ef01f2da0c23785ee",
+    "size_bytes": 1342
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "cae0e3180268e6042a5285e384ef9de1b7dd54102ddbce272f3c964c0ef33c4b",
+    "size_bytes": 1340
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "2d24458acbf0cca72670943a99123dc2ba7f330dbab6bc6d16f2a00380ca9ab0",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "37048779ab1a0a2b73a15a11afdbc58747cbba5e0fc79eb691dec0c24766033d",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "382c191bdc783a8f8e59154f3c89e7715855eb5c8ab560432eee708cee3862e6",
+    "size_bytes": 279
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "40555ffb3fd0f1039eb927826e036fa3425462e9d4397acbaf1a41558f79953c",
+    "size_bytes": 289
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "483fafb1cbaf7a3dbbca1fc7cb9b3095624584ea16fc29e7d6d55db408ee100a",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "52dab35acc0df4bd6129ac2b0810be0075536d93cfac8f70f1bb2ae7f201733c",
+    "size_bytes": 299
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "53dbf797882020ec038ec15750a08a5d979af9fdcd501a42bbfc683c84c5353d",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "5b1a10dec8778fb6300673a250d32cb0210587a6566e9ddacc02b97c2c5cba5e",
+    "size_bytes": 274
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "5c83a0d0f7e4480fc4498156f8201379b8290ed03bb81da789cc7f287830af40",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "69950a4eeb4f949d2449dc078b73eb3e3c5494296d4f949c84aa86ec538416bf",
+    "size_bytes": 302
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7b58f2de7e81ff6229d0ee2e822f5adc4a518c3bfd605d191278b3d8a94c8b7a",
+    "size_bytes": 276
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7e98965d078f7a7ac642f43630c9f45ca005ff66e67021715fb307dc2fe350b2",
+    "size_bytes": 277
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "eb4534f5d53d30ed1bd32b70a64b2a78500fe34cb6c474118115e64e11d58f93",
+    "size_bytes": 286
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "28f6e7a0f4815092a5fed7014a1ff58297b8a285d40bf1687517bc9690c62571",
+    "size_bytes": 69632
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "2a2f694786339b46f81bb989eb7f9c0664366f0658aff5a69a667c53dfe37114",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "652ef025de9fb4bfbd219b9e644b5fed7a46dd306c217ecdd3d98fa6a2323959",
+    "size_bytes": 90112
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "883c48106d58bc5a501f99fcd863f4af8b16fc54b237979090fa60ab10da7b4d",
+    "size_bytes": 188416
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "9c86d6a5cf789a8020e501a70665d7b3df954cde83433a3555b2d3dc188ebe3a",
+    "size_bytes": 466944
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "b3549abd9228038682476cbf538f27a8e83f541056d8471cc44f2391a472c464",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "c76ff5c7343f337639fe2de26d6196281d29af2608c7529e9599c4c96d655031",
+    "size_bytes": 107835392
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "cb4801c42c13c92ca8df9f442307416308c3e0799cfbade6ad791e86a6797484",
+    "size_bytes": 77824
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   }
+  ]
+ }
+}

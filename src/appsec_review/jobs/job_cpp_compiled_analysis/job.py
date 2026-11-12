@@ -33,7 +33,7 @@ PROJECT_TASKS = ("projects",)
 BRANCHES = ("compiled", "ast", "ir", "infer", "binary")
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
                    "ir": "llvm-ir/2",
-                   "infer": "infer-cpp-adapter/1",
+                   "infer": "infer-cpp-adapter/2",
                    "binary": "elf-symbols/2"}
 
 
@@ -755,7 +755,8 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
         artifacts.append(_artifact(unit.job.run_root, log_path))
     builder, path, fingerprint, shard = _new_builder(
         unit, "observations", case_id, "infer", artifacts, gaps,
-        {"tool": "infer", "version": execution["tool_version"], "image": execution["image_id"],
+        {"tool": "infer", "version": execution["tool_version"], "adapter": BRANCH_IDENTITY["infer"],
+         "image": execution["image_id"],
          "image_digest": execution["image_digest"]}, catalog["mapping"]["case_snapshot"])
 
     by_relative = {
@@ -766,7 +767,8 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     count = 0
     for ordinal, record in enumerate(records):
         raw_path = str(record.get("file", "")).replace("\\", "/")
-        relative = raw_path[len("/target/source/"):] if raw_path.startswith("/target/source/") else ""
+        relative = raw_path.removeprefix("/target/")
+        relative = relative[len("source/"):] if relative.startswith("source/") else ""
         source = by_relative.get(relative)
         if source is None:
             gaps.append(f"Infer observation path did not resolve to accepted source: {raw_path[:512]}")
