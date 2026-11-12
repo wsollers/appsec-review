@@ -1,9 +1,9 @@
 """Run the bounded lifecycle commands for the local Dagster Compose project.
 
-``build`` signs ``src/appsec_review`` into the module envelope, builds the final image stage, signs the
-image ID with the operator key and verifies it. ``start`` and ``reload`` verify the image on the host
-first and refuse (exit 3) without touching Compose unless a trusted key signed it; Compose then
-launches that exact image ID, which is recorded in ``.env`` for later ``exec`` commands. ``reload``
+``build`` builds the tooling-only final image stage, signs and verifies its ID, then records it in
+``.env``. ``start`` and ``reload`` verify the selected image on the host and sign the mounted sources
+before touching Compose. The shell's explicit image ID takes precedence over the recorded ID; the
+build tag is used only before an ID has been selected. Successful launches record the verified ID. ``reload``
 recreates every service in ``IMAGE_SERVICES`` and leaves PostgreSQL running. Only ``start`` and ``reload``
 create containers, so only they carry ``GITHUB_TOKEN`` from this shell's ``gh`` login
 (``host.compose_environment``).
@@ -22,7 +22,7 @@ from typing import Mapping
 from host import (IMAGE_SERVICES, IMAGE_VARIABLE, actual_platform, compose_environment, deployment_profile,
                   image_tag, image_target, non_launching_environment, provider_overlay, read_environment,
                   reject_native_environment, reject_other_deployments, validate_deployment)
-from image_signing import Runner, SigningError, SigningSettings, sign_image, sign_modules, verify_image
+from image_signing import IMAGE_ID, Runner, SigningError, SigningSettings, sign_image, sign_modules, verify_image
 
 
 deployment = Path(__file__).resolve().parents[1]
@@ -80,8 +80,15 @@ def build(platform: str, profile: str, environ: Mapping[str, str], *, runner: Ru
 
 def verified_image(platform: str, profile: str, environ: Mapping[str, str], *,
                    runner: Runner = subprocess.run) -> str:
-    """Verify ``APPSEC_REVIEW_DAGSTER_IMAGE`` from the process environment, else this host's build tag."""
-    reference = environ.get(IMAGE_VARIABLE) or image_tag(platform, profile)
+    """Verify the explicit or recorded exact ID; use the build tag only for an unpinned first launch."""
+    recorded = read_environment(environment_file) if environment_file.is_file() else {}
+    if IMAGE_VARIABLE in environ or IMAGE_VARIABLE in recorded:
+        reference = environ[IMAGE_VARIABLE] if IMAGE_VARIABLE in environ else recorded[IMAGE_VARIABLE]
+        if not IMAGE_ID.fullmatch(reference):
+            raise SigningError(f"{IMAGE_VARIABLE} must be an exact sha256 image ID; "
+                               "use lifecycle.py build to select a newly signed image")
+    else:
+        reference = image_tag(platform, profile)
     return verify_image(signing_settings(environ), repository, reference, runner=runner)
 
 
@@ -132,10 +139,11 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
     environ = dict(os.environ if environ is None else environ)
     if action == "build":
         try:
-            build(platform, profile, environ, runner=runner)
+            image_id = build(platform, profile, environ, runner=runner)
         except SigningError as error:
             print(f"lifecycle build failed: {error}", file=sys.stderr, flush=True)
             return FAILED
+        record_image(environment_file, image_id)
         return OK
     if action in LAUNCHING:
         try:
@@ -145,7 +153,6 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
             print(f"refusing to {action}: the image signature did not verify on this host: {error}",
                   file=sys.stderr, flush=True)
             return REFUSED
-        record_image(environment_file, image_id)
         print(f"verified {image_id}; Compose launches exactly this image", flush=True)
         try:
             modules = module_environment(settings, environ, runner=runner)
@@ -162,8 +169,11 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
     from appsec_review.config.host_pins import HOST_PINS_ENV, HOST_PINS_PATH
     pins = Path(environ.get(HOST_PINS_ENV) or repository / HOST_PINS_PATH)
     environment[HOST_PINS_ENV] = str(pins if pins.is_absolute() else repository / pins)
-    return runner(compose_base(platform, profile) + commands[action], cwd=repository, env=environment,
-                  check=False).returncode
+    result = runner(compose_base(platform, profile) + commands[action], cwd=repository, env=environment,
+                    check=False).returncode
+    if action in LAUNCHING and result == OK:
+        record_image(environment_file, image_id)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
