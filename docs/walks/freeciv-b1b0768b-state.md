@@ -5,8 +5,9 @@ The walker rewrites this file at every acceptance, stop and restart
 ([walk charter](../processes/walk-charter.md), section 7). A fresh session compares it with the
 host before acting.
 
-**As of:** 2026-11-12 about 03:30 EST, `main` at `b63ef2df`. Written by the walker after the replay
-that followed the merge of `origin/main`.
+**As of:** 2026-11-12 about 04:00 EST, `main` and `origin/main` at `a6c29142` (pushed at the user's
+"Yes, merge and push"; the charter is on `main`). Written by the walker after the replay that followed the
+merge of `origin/main`; no job has run since.
 
 | Item | Value |
 | --- | --- |
@@ -62,10 +63,10 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
 
 ## Waiting on the user
 
-- Merging the walk charter commit `6c402042` to `main` (it adds a rule to `AGENTS.md`) and pushing
-  `main` to origin. Both were requested through another session; the walker asked the user
-  directly and has not had an explicit answer. The charter, with section 10 and the corrected
-  terms, is on branch `freeciv-walk`, not on `main`.
+- The go-ahead to launch job 6 in a fresh session.
+- Wording for an optional untracked per-host notes file (the user, 2026-11-12: "if you guys need
+  to keep local state you can add an untracked file"); the charter text is put to the user before
+  it is committed.
 
 ## In flight
 
