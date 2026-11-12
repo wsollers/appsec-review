@@ -42,8 +42,11 @@ GitHub only adds review-process facts on top of it.
 ## Decisions
 
 - Acquired sources follow the first-parent chain at the component's pinned acquisition revision.
-  Direct-checkout history follows `main`, else `master`, else `HEAD`. A direct-checkout `HEAD` that
-  differs from the mainline is recorded as the `head_differs_from_mainline` observation.
+  Direct-checkout history follows the checked-out `HEAD`, because the reviewed tree is that
+  revision: a checkout pinned behind a newer `main` is analysed at the pin and never reaches later
+  commits. `main`, else `master`, is used only when `HEAD` cannot be resolved, and that is recorded
+  as the `head_unresolved_using_mainline` observation. `mainline_ref` in the resolved source names
+  the ref the snapshot was taken from and is empty when `HEAD` is not that tip.
 - The ranking is the SII over relative churn, revision frequency, author entropy, and complexity,
   with weights in TOML. Every other signal is published alongside it, unweighted.
 - Generated code, lockfiles, fixtures, documentation, vendored code, bulk changes, and formatting
@@ -335,7 +338,7 @@ additive; the new artifact has its own id, `appsec-review/source-history-changel
 
 The window is `history_window_months` (M, default 6) calendar months ending at each source's selected
 snapshot commit's committer time, read as UTC (`appsec-review/history-window/calendar-months-utc/1`).
-This is the acquisition pin for an acquired source, or the selected mainline tip for a direct source.
+This is the acquisition pin for an acquired source, or the checked-out `HEAD` for a direct source.
 Wall-clock time is never used, so the same inputs give byte-identical outputs. The start keeps the
 anchor's day of month and time of day. When that day does not exist in the start month, it clamps to
 the month's last day:
@@ -907,7 +910,7 @@ The runtime identity covers the catalog entries for `tool-git` and `tool-tree-si
 | `changelog_format_unrecognized`, `changelog_mixed_format`, `changelog_unparsed_lines` | `GAP` (`parser_error`) | no recognised entry, or lines the detected format cannot place; the record counts the lines |
 | `changelog_paths_unbound` | `GAP` (`location_unresolved`) | named paths that are ambiguous, unmatched or invalid against the accepted catalog |
 | `pr_timing_not_acquired`, `deployment_timing_not_acquired` | unavailable signal | never inferred from commit timestamps |
-| `replace_refs_ignored`, `grafts_ignored`, `config_includes_ignored`, `mainline_not_found_using_head`, `head_differs_from_mainline`, `timestamp_anomaly:<n>` | observation | recorded, never honoured |
+| `replace_refs_ignored`, `grafts_ignored`, `config_includes_ignored`, `mainline_not_found_using_head`, `head_unresolved_using_mainline`, `timestamp_anomaly:<n>` | observation | recorded, never honoured |
 
 Each of the following is a hard failure that blocks publication instead of creating a gap:
 

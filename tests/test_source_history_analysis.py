@@ -6,8 +6,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import resource
 import shutil
+
+from tests.container_fixture import copy_containers
 import subprocess
 from fractions import Fraction
 import weakref
@@ -204,7 +207,11 @@ class LocalDocker:
         if argv[:3] == ["docker", "image", "inspect"]:
             pinned = load_catalog(ROOT).tool("tool-tree-sitter")
             if argv[3] == pinned.tag:
-                return CommandOutcome(0, pinned.expected_image_id.encode() + b"\n", b"")
+                # Observed ids are host-local (T-051): the tracked catalog carries none, and the
+                # executor checks an id only when one is bound. Use the bound id when there is one,
+                # else a fixed id derived from the tag, so the test does not depend on a host.
+                image_id = pinned.expected_image_id or "sha256:" + hashlib.sha256(pinned.tag.encode()).hexdigest()
+                return CommandOutcome(0, image_id.encode() + b"\n", b"")
             return CommandOutcome(0, b"sha256:" + b"a" * 64 + b"\n", b"")
         assert argv[:2] == ["docker", "run"], argv
         self.containers.add(argv[argv.index("--name") + 1])
@@ -390,8 +397,10 @@ def configured(tmp_path: Path, *, github: bool = False, replacements: tuple[tupl
         from tests.release_support import write_release
         write_release(tmp_path, ("job_review_intake", "job_target_catalog",
                                 "job_source_history_analysis", "job_target_analysis_plan"))
-        text = text.replace("[review_policy.releases]\n", '[review_policy.releases]\n'
-                            'platform = "fixture-platform/1"\nvalidation = "fixture-validation/1"\n', 1)
+        # The repository configuration already declares both; replace them, never add a duplicate key.
+        text, platform_count = re.subn(r'(?m)^platform = ".*"$', 'platform = "fixture-platform/1"', text, count=1)
+        text, validation_count = re.subn(r'(?m)^validation = ".*"$', 'validation = "fixture-validation/1"', text, count=1)
+        assert platform_count == validation_count == 1, "appsec-review.toml must declare platform and validation"
     for old, new in (*replacements, *((overrides or {}).items())):
         assert old in text, old
         text = text.replace(old, new)
@@ -400,7 +409,7 @@ def configured(tmp_path: Path, *, github: bool = False, replacements: tuple[tupl
                             '[jobs.job_source_history_analysis.settings.github]\nenabled = true')
         text = text.replace('repository = ""\ntoken_env = "GITHUB_TOKEN"', 'repository = "acme/widget"\ntoken_env = "GITHUB_TOKEN"')
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
-    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    copy_containers(ROOT, tmp_path)
     return load_config(tmp_path / "appsec-review.toml")
 
 
@@ -703,9 +712,11 @@ def test_source_resolution_rejects_escapes_and_selects_mainline(tmp_path: Path) 
     write(outside, "app/feature.py", "X = 1\n")
     commit(outside, "feature work", T0 + 10 * DAY)
     source = resolve_git_source(outside)
-    assert source.mainline_ref == "refs/heads/main"
-    assert source.snapshot_commit != source.head_commit
-    assert "head_differs_from_mainline" in source.observations
+    assert source.mainline_ref is None, "HEAD is not the main tip"
+    assert source.snapshot_commit == source.head_commit == git(outside, "rev-parse", "HEAD")
+    assert "head_differs_from_mainline" not in source.observations
+    git(outside, "checkout", "-q", "main")
+    assert resolve_git_source(outside).mainline_ref == "refs/heads/main"
     git(outside, "branch", "-m", "main", "master")
     assert resolve_git_source(outside).mainline_ref == "refs/heads/master"
     linked = tmp_path / "linked"
@@ -720,6 +731,34 @@ def test_source_resolution_rejects_escapes_and_selects_mainline(tmp_path: Path) 
     git(outside, "config", "extensions.partialclone", "origin")
     assert resolve_git_source(outside).reason == "partial_clone_objects_missing"
     assert blob_id(b"hello\n", "sha1") == "ce013625030ba8dba906f756967f9e9ca394464a"
+
+
+def test_pinned_detached_head_is_the_snapshot_not_a_newer_main(tmp_path: Path) -> None:
+    """A checkout pinned behind main is analysed at its HEAD: the working tree is that revision."""
+    target = tmp_path / "pinned"
+    build_repository(target)
+    pin = git(target, "rev-parse", "HEAD")
+    write(target, "app/later.py", "LATER = 1\n")
+    commit(target, "work after the pin", T0 + 20 * DAY)
+    main_tip = git(target, "rev-parse", "HEAD")
+    assert main_tip != pin
+    git(target, "checkout", "-q", "--detach", pin)
+    source = resolve_git_source(target)
+    assert source.mainline_ref is None
+    assert source.head_commit == pin
+    assert source.snapshot_commit == pin, "history must not reach past the checked-out revision"
+    assert "head_differs_from_mainline" not in source.observations
+
+
+def test_unreadable_head_falls_back_to_the_mainline_tip_and_says_so(tmp_path: Path) -> None:
+    target = tmp_path / "nohead"
+    build_repository(target)
+    tip = git(target, "rev-parse", "HEAD")
+    (target / ".git" / "HEAD").write_text("not-a-revision\n", encoding="ascii")
+    source = resolve_git_source(target)
+    assert source.head_commit is None
+    assert source.snapshot_commit == tip
+    assert "head_unresolved_using_mainline" in source.observations
 
 
 def test_job_binds_mainline_history_ranks_by_sii_and_feeds_the_plan(tmp_path: Path) -> None:

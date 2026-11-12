@@ -175,11 +175,19 @@ def resolve_git_source(target_root: Path) -> GitSource:
         head = head_value if _HEX[object_format].fullmatch(head_value) else None
         break
     mainline_ref = next((ref for ref in MAINLINE_REFS if _resolve_ref(git_dir, ref, object_format)), None)
-    snapshot = _resolve_ref(git_dir, mainline_ref, object_format) if mainline_ref else head
+    # The reviewed tree is the checked-out revision, so history is anchored at HEAD. A checkout
+    # pinned behind a newer main must never be analysed at main: that would bind the working tree
+    # to blobs it does not contain and walk commits later than the pin. The mainline tip is used
+    # only when HEAD cannot be resolved, and that is recorded.
     if mainline_ref is None:
         observations.append("mainline_not_found_using_head")
-    elif head is not None and snapshot != head:
-        observations.append("head_differs_from_mainline")
+    snapshot = head
+    if head is None and mainline_ref is not None:
+        snapshot = _resolve_ref(git_dir, mainline_ref, object_format)
+        observations.append("head_unresolved_using_mainline")
+    # mainline_ref names the ref the snapshot was taken from; it is None when HEAD is not that tip.
+    if mainline_ref is not None and _resolve_ref(git_dir, mainline_ref, object_format) != snapshot:
+        mainline_ref = None
     if snapshot is None:
         return GitSource("SKIPPED_NA", "no_commits", relative, object_format, mainline_ref,
                          observations=tuple(observations))
