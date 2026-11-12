@@ -1002,6 +1002,86 @@ def meson_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     return {"build_points": points, "drives": drives, "includes": [], "unresolved": unresolved}
 
 
+_AM_ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\+?=\s*(.*)$")
+_AM_REFERENCE = re.compile(r"^\$[({]([A-Za-z_][A-Za-z0-9_]*)[)}]$")
+_AM_EXPANSION_DEPTH = 8
+
+
+def _automake_assignments(text: str) -> dict[str, list[tuple[list[str], int, str | None]]]:
+    """Every ``VAR =`` and ``VAR +=`` of a Makefile.am, in file order and across all branches.
+
+    Each assignment is ``(tokens, line, condition)``: the line is where the assignment starts and
+    the condition is the enclosing automake ``if``/``else`` nesting (``A && !B``), or ``None``.
+    Automake decides conditionals at configure time; discovery reads what any configuration can
+    build, so no branch is dropped and none is evaluated.
+    """
+    values: dict[str, list[tuple[list[str], int, str | None]]] = {}
+    stack: list[str] = []
+    lines = text.split("\n")
+    index = 0
+    while index < len(lines):
+        start = index
+        logical = lines[index]
+        while logical.endswith("\\") and index + 1 < len(lines):
+            index += 1
+            logical = logical[:-1] + " " + lines[index]
+        index += 1
+        if lines[start][:1] == "\t":
+            continue  # a recipe line
+        stripped = logical.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        words = stripped.split(None, 1)
+        if words[0] == "if" and len(words) == 2:
+            stack.append(words[1].strip())
+        elif words[0] == "else":
+            if stack:
+                stack[-1] = stack[-1][1:] if stack[-1].startswith("!") else "!" + stack[-1]
+        elif words[0] == "endif":
+            if stack:
+                stack.pop()
+        else:
+            match = _AM_ASSIGNMENT.match(logical)
+            if match:
+                values.setdefault(match.group(1), []).append(
+                    (match.group(2).split(), start + 1, " && ".join(stack) or None))
+    return values
+
+
+def _automake_values(values: Mapping[str, list[tuple[list[str], int, str | None]]], name: str,
+                     ) -> tuple[list[tuple[str, int, str | None]], list[tuple[str, int]]]:
+    """The union of ``name``'s values over every assignment and branch.
+
+    A token that is exactly ``$(VAR)`` or ``${VAR}`` is replaced by that variable's values when the
+    variable is assigned in the same file (bounded depth, no cycles). Returns ``(tokens,
+    unresolved)``: each token once, in first-seen order, with the line it is written on and the
+    condition under which it arrives (``None`` when any assignment reaches it unconditionally),
+    and the references that have no assignment in this file with the line that makes them.
+    """
+    arrivals: dict[str, tuple[int, list[tuple[str, ...]]]] = {}
+    unresolved: list[tuple[str, int]] = []
+
+    def walk(variable: str, conditions: tuple[str, ...], depth: int, seen: frozenset[str]) -> None:
+        for tokens, line, condition in values.get(variable, ()):
+            under = conditions + ((condition,) if condition else ())
+            for token in tokens:
+                reference = _AM_REFERENCE.match(token)
+                if reference is None:
+                    arrivals.setdefault(token, (line, []))[1].append(under)
+                elif reference.group(1) in values and reference.group(1) not in seen and depth > 0:
+                    walk(reference.group(1), under, depth - 1, seen | {reference.group(1)})
+                elif (reference.group(1), line) not in unresolved:
+                    unresolved.append((reference.group(1), line))
+
+    walk(name, (), _AM_EXPANSION_DEPTH, frozenset({name}))
+    resolved = []
+    for token, (line, conditions) in arrivals.items():
+        condition = None if any(not item for item in conditions) else \
+            " || ".join(sorted({" && ".join(item) for item in conditions}))
+        resolved.append((token, line, condition))
+    return resolved, unresolved
+
+
 def autotools_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequence[str]) -> dict[str, Any]:
     points: list[dict[str, Any]] = []
     drives: list[dict[str, Any]] = []
@@ -1010,17 +1090,33 @@ def autotools_build_points(root: str, descriptors: Mapping[str, str], inventory:
         text = descriptors[path]
         base = posixpath.dirname(path) or "."
         if posixpath.basename(path) == "Makefile.am":
-            assigns = {m.group(1): m.group(2) for m in re.finditer(r"^([A-Za-z_][A-Za-z0-9_]*)\s*\+?=\s*((?:[^\\\n]|\\\n)*)$", text, re.M)}
+            # T-091: a variable is the union of all its assignments (``=`` and ``+=``, every branch
+            # of ``if``/``else``), and ``$(VAR)`` of a variable assigned in this file is expanded.
+            assigns = _automake_assignments(text)
+
+            def missing(variable: str, references: list[tuple[str, int]]) -> None:
+                for name, line in references:
+                    unresolved.append({"evidence": f"{path}:{line}", "kind": "unassigned_variable",
+                                       "reason": f"{variable} references $({name}), which has no assignment in this file"})
+
             for variable, kind in (("bin_PROGRAMS", "program"), ("noinst_PROGRAMS", "program"), ("lib_LTLIBRARIES", "libtool_library"),
                                    ("lib_LIBRARIES", "static_library"), ("noinst_LTLIBRARIES", "libtool_library"), ("check_PROGRAMS", "test_program")):
-                for target_name in assigns.get(variable, "").replace("\\\n", " ").split():
+                targets, references = _automake_values(assigns, variable)
+                missing(variable, references)
+                for target_name, line, condition in targets:
+                    if target_name.startswith(("$", "@")):
+                        continue  # a substituted name is not a literal target
                     key = re.sub(r"[^A-Za-z0-9_]", "_", target_name) + "_SOURCES"
-                    sources = [t for t in (_norm(base, token) for token in assigns.get(key, "").replace("\\\n", " ").split()) if t and t in inventory]
-                    points.append(_point(target_name, kind, f"{path}:{_line_of(text, variable) or 1}", sources=sources))
-            for sub in assigns.get("SUBDIRS", "").replace("\\\n", " ").split():
+                    named, references = _automake_values(assigns, key)
+                    missing(key, references)
+                    sources = [t for t in (_norm(base, token) for token, _line, _condition in named) if t and t in inventory]
+                    points.append(_point(target_name, kind, f"{path}:{line}", sources=sources, condition=condition))
+            subdirs, references = _automake_values(assigns, "SUBDIRS")
+            missing("SUBDIRS", references)
+            for sub, line, condition in subdirs:
                 target = _norm(base, sub)
                 if target and target != base:
-                    drives.append(_drive(target, "SUBDIRS", f"{path}:{_line_of(text, 'SUBDIRS') or 1}"))
+                    drives.append(_drive(target, "SUBDIRS", f"{path}:{line}", condition))
             # Hand-written rules in a Makefile.am (all-local, a vendored build) are rules like Make's.
             rules, rule_drives, _includes, rule_unresolved = _make_rules(root, path, text, inventory, automake=True)
             points.extend(rules)

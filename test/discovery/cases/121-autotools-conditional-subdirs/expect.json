@@ -1,0 +1,128 @@
+{
+  "schema": "appsec-review/discovery-case/1",
+  "case": "121-autotools-conditional-subdirs",
+  "matrix": "E2",
+  "polarity": "positive",
+  "mirrors": "an autotools project whose top-level SUBDIRS reaches directories through variables assigned under automake conditionals (SSUBDIRS under if/else, DSUBDIRS), whose client Makefile.am appends GUI directories and programs with += inside if blocks, and whose program sources come through a variable: one configure, one build, so one unit with every directory a member and every conditional build point kept with its condition (T-091; seen in Freeciv)",
+  "units": [
+    {
+      "root": ".",
+      "build_system": "autotools",
+      "family": "native",
+      "profile": "native",
+      "markers": [
+        "Makefile.am",
+        "configure.ac"
+      ],
+      "build_points": [
+        {
+          "name": "libcommon.la",
+          "kind": "libtool_library",
+          "evidence": "common/Makefile.am:1",
+          "sources": ["common/map.c", "common/map.h"]
+        },
+        {
+          "name": "gamed",
+          "kind": "program",
+          "evidence": "server/Makefile.am:1",
+          "sources": ["server/main.c"]
+        },
+        {
+          "name": "game-cli",
+          "kind": "program",
+          "evidence": "client/Makefile.am:12",
+          "condition": "CLI",
+          "sources": ["client/cli.c"]
+        },
+        {
+          "name": "game-gtk",
+          "kind": "program",
+          "evidence": "client/gui-gtk/Makefile.am:1",
+          "sources": ["client/gui-gtk/gtk.c"]
+        },
+        {
+          "name": "game-sdl",
+          "kind": "program",
+          "evidence": "client/gui-sdl/Makefile.am:1",
+          "sources": ["client/gui-sdl/sdl.c"]
+        }
+      ],
+      "build_points_exact": true,
+      "facts": {
+        "drives": [
+          {"path": "data", "via": "SUBDIRS", "evidence": "Makefile.am:8", "condition": "MAKE_DATA"},
+          {"path": "common", "via": "SUBDIRS", "evidence": "Makefile.am:13"},
+          {"path": "server", "via": "SUBDIRS", "evidence": "Makefile.am:2", "condition": "SERVER"},
+          {"path": "client", "via": "SUBDIRS", "evidence": "Makefile.am:13"},
+          {"path": "client/gui-gtk", "via": "SUBDIRS", "evidence": "client/Makefile.am:3", "condition": "GUI_GTK"},
+          {"path": "client/gui-sdl", "via": "SUBDIRS", "evidence": "client/Makefile.am:6", "condition": "GUI_SDL"}
+        ]
+      },
+      "facts_absent": ["unresolved"]
+    }
+  ],
+  "not_units": [
+    {
+      "root": "common",
+      "build_system": "autotools",
+      "marker": "common/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "named literally by the top-level SUBDIRS"
+    },
+    {
+      "root": "server",
+      "build_system": "autotools",
+      "marker": "server/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "reached through $(SSUBDIRS), assigned under if SERVER: a conditional member of the one build, not its own project"
+    },
+    {
+      "root": "data",
+      "build_system": "autotools",
+      "marker": "data/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "reached through $(DSUBDIRS); it installs data and declares no build point, and a driven directory without a build point stays a member"
+    },
+    {
+      "root": "client",
+      "build_system": "autotools",
+      "marker": "client/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "named literally by the top-level SUBDIRS"
+    },
+    {
+      "root": "client/gui-gtk",
+      "build_system": "autotools",
+      "marker": "client/gui-gtk/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "appended to GUI_SUBDIRS under if GUI_GTK and reached through SUBDIRS = $(GUI_SUBDIRS)"
+    },
+    {
+      "root": "client/gui-sdl",
+      "build_system": "autotools",
+      "marker": "client/gui-sdl/Makefile.am",
+      "role": "evidence_of:.|autotools",
+      "reason": "appended to GUI_SUBDIRS under if GUI_SDL: both appends are kept, not only the last"
+    }
+  ],
+  "assignment": {
+    "Makefile.am": "evidence_of:.|autotools",
+    "configure.ac": "evidence_of:.|autotools",
+    "client/Makefile.am": "evidence_of:.|autotools",
+    "client/cli.c": "evidence_of:.|autotools#game-cli",
+    "client/gui-gtk/Makefile.am": "evidence_of:.|autotools",
+    "client/gui-gtk/gtk.c": "evidence_of:.|autotools#game-gtk",
+    "client/gui-sdl/Makefile.am": "evidence_of:.|autotools",
+    "client/gui-sdl/sdl.c": "evidence_of:.|autotools#game-sdl",
+    "common/Makefile.am": "evidence_of:.|autotools",
+    "common/map.c": "evidence_of:.|autotools#libcommon.la",
+    "common/map.h": "evidence_of:.|autotools#libcommon.la",
+    "data/Makefile.am": "evidence_of:.|autotools",
+    "data/rules.txt": "inert",
+    "docs/README.md": "inert",
+    "server/Makefile.am": "evidence_of:.|autotools",
+    "server/main.c": "evidence_of:.|autotools#gamed"
+  },
+  "orphaned_sources": [],
+  "pending": []
+}

@@ -83,7 +83,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-088 | [Keep a target registry and a read-only verify command](#t-088-keep-a-target-registry-and-a-read-only-verify-command) | testing | open |
 | T-089 | [Fetch answer keys from the private answers repository in memory](#t-089-fetch-answer-keys-from-the-private-answers-repository-in-memory) | testing | open |
 | T-090 | [Identify known targets and self-grade a completed run](#t-090-identify-known-targets-and-self-grade-a-completed-run) | testing | blocked |
-| T-091 | [Resolve conditional automake SUBDIRS in build discovery](#t-091-resolve-conditional-automake-subdirs-in-build-discovery) | topology | open |
+| T-091 | [Resolve conditional automake SUBDIRS in build discovery](#t-091-resolve-conditional-automake-subdirs-in-build-discovery) | topology | done (2026-11-12, walk 05 record) |
 | T-092 | [Decide whether a refused build command fails one unit or the whole language build](#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
 | T-093 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-093-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-094 | [Let stepwise accept a target by commit instead of a tag](#t-094-let-stepwise-accept-a-target-by-commit-instead-of-a-tag) | testing | open |
@@ -1331,7 +1331,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-091 — Resolve conditional automake SUBDIRS in build discovery
 
-- **State:** open
+- **State:** done (2026-11-12, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`; automake variables are the union of all assignments, in-file `$(VAR)` is expanded, conditions are recorded on drives and build points; discovery case 121; Freeciv yields the two parallel root units)
 - **Area:** topology
 - **Why:** a read-only discovery preview of Freeciv at `b1b0768b` (2026-11-11) found 31 build
   units for what is one project with two parallel build systems. The root autotools and meson

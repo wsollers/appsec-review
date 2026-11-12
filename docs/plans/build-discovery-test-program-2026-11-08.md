@@ -295,6 +295,7 @@ single-purpose; the composite monorepo is the only large one.
 - E3 `.vcxproj` configurations (Debug|x64, Release|ARM64); `.sln` configuration mapping.
 - E4 Gradle product flavors; Cargo `[target.'cfg(windows)']`; Go build tags.
 - Expectation: build points carry `condition` facts; the plan (T-036) decides dispositions; discovery never drops a conditional build point and never claims it unconditionally.
+- Automake (T-091, case 121): a variable is the union of every `=` and `+=` assignment across all `if`/`else` branches, and `$(VAR)` of a variable assigned in the same `Makefile.am` is expanded, for `SUBDIRS` and for the program, library and source lists. A directory reached that way is a member of the one build with the condition recorded on its drive; a reference with no in-file assignment is an `unresolved` record (`unassigned_variable`).
 
 **F. Multi-language roots**
 - F1 CMake with C, C++, CUDA, and Swift/ObjC targets in one project.
