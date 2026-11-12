@@ -6,6 +6,9 @@ scoring key yet.** Choosing pairs, acquiring and pinning targets, and splitting 
 private holdout are owned by the repository owner
 ([`../architecture/finding-metrics.md`](../architecture/finding-metrics.md) section 6 and decision 13).
 
+The [2026-11-12 ten-candidate shortlist](fix-pair-corpus-shortlist.md) adds historical-licence evidence,
+size estimates, case qualifications, and separate Unity/Unreal leads; it does not admit or key pairs.
+
 ## 1. Purpose
 
 T-067 needs published, fixed vulnerabilities in open game, engine and game-networking code written in C or
