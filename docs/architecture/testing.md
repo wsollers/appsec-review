@@ -82,9 +82,11 @@ Everything below is implemented in `tests/conftest.py` and applies to every test
    configuration part.
 6. **Skips name what is missing.** A skip is a coverage gap, never a pass. No `xfail` to hide a
    failure.
-7. **Real Docker is not a unit dependency.** A small set of unit-collected tests still start real
-   containers and skip without the engine or images; their home is deferred work
-   ([T-052](../TODO.md)). Tests that only assert `docker` argv through fakes are ordinary unit tests.
+7. **Real Docker is not a unit dependency.** No unit-collected test starts a real container or
+   probes the engine for an image; tests that do (rule packs run in the pinned Semgrep, OpenGrep
+   and gitleaks images, the Tree-sitter, Syft and LaTeX images, the PoC build image, the wave-1
+   Dagster graph) live under `tests/integration/` or `tests/live/` and skip there, naming what is
+   missing. Tests that only assert `docker` argv through fakes are ordinary unit tests.
 
 ## Standards for integration, acceptance and live tests
 

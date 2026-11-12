@@ -13,7 +13,7 @@ The image renders the review report's LaTeX to a deterministic PDF. It replaces 
 - deterministic render: `render-pdf.sh` sets `SOURCE_DATE_EPOCH` (from `/input/source-date-epoch`) and
   `FORCE_SOURCE_DATE=1`, runs without shell escape, repeats until references settle;
 - structural checks: `render-pdf` prints `pdfinfo` and writes `report.txt` (`pdftotext`); `pdftoppm`
-  is in the image for visual checks; `tests/reporting/test_pdf_docker.py` checks the PDF structure.
+  is in the image for visual checks; `tests/integration/test_pdf_docker.py` checks the PDF structure.
 
 Runtime: the standard boundary of `runtime-policy.toml` (no network, UID 10001, read-only root, all
 capabilities dropped). Mounts: `/template` and `/input` read-only, `/scratch` writable. Dossier
@@ -58,7 +58,7 @@ The harmless seeded fixture creates both finding and PoC dossiers for layout rev
 ```text
 python -m tests.dossier_fixture --run runs/dossier-synthetic-sample --image-id sha256:<verified-image-id>
 python -m pytest tests/test_dossiers.py tests/test_dossier_publication.py -q --basetemp=test/tmp/dossiers
-python -m pytest tests/test_dossier_live.py -q --basetemp=test/tmp/dossier-live
+python -m pytest tests/integration/test_dossier_live.py -q --basetemp=test/tmp/dossier-live
 ```
 
 The live test uses the real local image and renders twice, checking PDF structure, core text,

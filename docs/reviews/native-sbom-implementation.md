@@ -173,7 +173,7 @@ was weakened.
 ```powershell
 .\.venv\Scripts\python.exe -m pytest `
   tests\test_native_discovery.py tests\test_native_spdx.py `
-  tests\test_native_sbom_job.py tests\test_native_sbom_metrics.py tests\test_native_sbom_image.py `
+  tests\test_native_sbom_job.py tests\test_native_sbom_metrics.py tests\integration\test_native_sbom_image.py `
   tests\test_dependency_intelligence.py tests\test_review_metrics.py tests\test_config.py `
   tests\test_retrieval_core.py tests\test_retrieval_interfaces.py tests\test_retrieval_artifacts.py `
   tests\test_skill_separation.py -q --tb=short `

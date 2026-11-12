@@ -147,7 +147,7 @@ artifacts under `runs/dossier-navigation-final`; the paths and hashes above iden
 Refresh these snapshots from the corresponding `preview.png`, `evidence-preview.png` and
 `provenance-preview.png` after regenerating the PDFs with the
 [seed fixture](../../tests/dossier_fixture.py) and
-[live rendering tests](../../tests/test_dossier_live.py). Copy the generated images unchanged;
+[live rendering tests](../../tests/integration/test_dossier_live.py). Copy the generated images unchanged;
 do not hand-edit them or substitute protected real-review material.
 
 ## Process telemetry
