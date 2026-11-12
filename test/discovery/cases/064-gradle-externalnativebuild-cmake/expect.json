@@ -71,7 +71,7 @@
     "build.gradle": "evidence_of:.|gradle",
     "gradle.properties": "context:.|gradle",
     "gradle/wrapper/gradle-wrapper.properties": "context:.|gradle",
-    "app/build.gradle": "evidence_of:.|gradle",
+    "app/build.gradle": "evidence_of:.|gradle#app",
     "app/src/main/AndroidManifest.xml": "context:.|gradle",
     "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#app",
     "app/src/main/cpp/CMakeLists.txt": "evidence_of:app/src/main/cpp|cmake",
@@ -79,11 +79,6 @@
   },
   "orphaned_sources": [],
   "pending": [
-    {
-      "check": "unit:.|gradle.profile",
-      "ref": "T-056.4",
-      "note": "the module applies com.android.application: the required image is android, read from the module build file at discovery"
-    },
     {
       "check": "unit:.|gradle.facts",
       "ref": "T-056.5",
@@ -97,16 +92,6 @@
     {
       "check": "unit:app/src/main/cpp|cmake.facts",
       "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:app/build.gradle",
-      "ref": "T-056.2",
-      "note": "a module build file is a descriptor of the Gradle build, not context"
-    },
-    {
-      "check": "assignment:app/src/main/AndroidManifest.xml",
-      "ref": "T-056.4",
-      "note": "the manifest is an input the Android build reads"
     }
   ]
 }

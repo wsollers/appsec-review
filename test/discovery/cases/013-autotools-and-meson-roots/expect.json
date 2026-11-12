@@ -67,11 +67,6 @@
     {
       "check": "unit:codec|autotools.build_point:codec_tool|executable",
       "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:viewer/meson_options.txt",
-      "ref": "T-056.4",
-      "note": "meson reads meson_options.txt at configure time; it is context, not an inert text file"
     }
   ]
 }

@@ -68,10 +68,6 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "assignment:win/app/app.vcxproj.filters",
-      "ref": "T-056.4"
-    },
-    {
       "check": "unit:win|msbuild.facts",
       "ref": "T-056.4",
       "note": "sub-check of a unit not discovered yet; lands with it"

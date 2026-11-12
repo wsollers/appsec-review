@@ -255,6 +255,26 @@ def solution_marker(sln_path: str, text: str | None, inventory: Sequence[str]) -
     return _SUFFIX_MARKERS[".sln"]
 
 
+def marker_lookalike(path: PurePosixPath, inventory: set[str] | frozenset[str]) -> str | None:
+    """Why a marker-named file is not a root here (plan §2.1 item 8), or None when it stands.
+
+    ``setup.cfg`` is a build descriptor only beside ``setup.py`` or ``pyproject.toml``; alone it is tool
+    configuration. ``Makefile.am`` is automake input only where a ``configure.ac``/``configure.in``
+    sits in its directory or an ancestor; with nothing to generate from, it is not a root.
+    """
+    directory = path.parent
+    if path.name == "setup.cfg":
+        if not any((directory / sibling).as_posix() in inventory for sibling in ("setup.py", "pyproject.toml")):
+            return "setup.cfg without setup.py or pyproject.toml is tool configuration, not a build descriptor"
+        return None
+    if path.name == "Makefile.am":
+        for ancestor in (directory, *directory.parents):
+            if any((ancestor / name).as_posix() in inventory for name in ("configure.ac", "configure.in")):
+                return None
+        return "Makefile.am without a configure.ac above it cannot be configured: automake input with nothing to generate from"
+    return None
+
+
 def _marker_root(path: PurePosixPath) -> str:
     """The build unit root a marker file belongs to (its directory, or the bundle's parent)."""
     if path.name == "project.pbxproj" and path.parent.suffix.lower() == ".xcodeproj":
@@ -516,6 +536,14 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
                            "markers": [str(m["path"]) for m in candidate.get("markers", ())],
                            "folded_into": unit_label(unit), "via": drive["via"], "evidence": drive["evidence"]})
         unit["build_points"] = extracted["build_points"]
+        if extracted.get("descriptors"):
+            member_descriptors.extend(d for d in extracted["descriptors"] if d not in member_descriptors)
+        if unit["build_system"] == "gradle":
+            facts = android_descriptor_facts({"documents": [
+                {"path": path, "sha256": "", "content": text} for path, text in descriptors.items()]})
+            if facts is not None:
+                # The profile follows the descriptor (an Android application builds in the android image).
+                unit["descriptor_facts"] = {key: value for key, value in facts.items() if key != "declarations"}
         if unit["build_system"] in {"msbuild", "dotnet", "vcbuild"}:
             languages = {str(p["name"]): [p["language"]] for p in extracted["build_points"] if p.get("language")}
             if languages:
@@ -541,6 +569,19 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
             demoted.append({"build_unit_id": unit["build_unit_id"], "root": root, "build_system": unit["build_system"],
                             "markers": own_markers,
                             "reason": "no build point, nothing driven: the descriptor declares no build"})
+        elif (unit["build_system"] == "make" and not extracted["drives"] and not extracted["unresolved"]
+              and len(by_root[root]) == 1
+              and not any(p.get("sources") or p.get("headers") or p.get("kind") == "delegating" for p in extracted["build_points"])):
+            # Rules that name no compiled source and drive nothing (a document converter, a deploy
+            # script): no build point for the review, so not a unit (plan §2.1 item 8). A Makefile
+            # sharing its root with another system is read as a wrapper or parallel unit instead
+            # (decision 2, ``_resolve_parallel_systems``).
+            demoted.append({"build_unit_id": unit["build_unit_id"], "root": root, "build_system": unit["build_system"],
+                            "markers": own_markers,
+                            "reason": "no rule names a compiled source, nothing driven: no compiled product"})
+        elif extracted.get("declares_no_build"):
+            demoted.append({"build_unit_id": unit["build_unit_id"], "root": root, "build_system": unit["build_system"],
+                            "markers": own_markers, "reason": str(extracted["declares_no_build"])})
     folded_set = {item["build_unit_id"] for item in folded}
     # A drive to a standing unit of another build system: recorded on the driven unit.
     standing = [unit for unit in units if unit["build_unit_id"] not in folded_set]
@@ -553,6 +594,39 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
                     continue
                 driven["driven_by"] = {"unit": unit_label(unit), "via": drive["via"], "evidence": drive["evidence"]}
     return demoted, folded
+
+
+_HEADER_SUFFIXES = frozenset({".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp"})
+
+
+def _bind_unnamed_headers(units: list[dict[str, Any]], inventory_paths: Sequence[str],
+                          build_trees: Sequence[str], trees: Sequence[Mapping[str, Any]]) -> None:
+    """A header no construct names, beside a source a build point compiles, is that point's header.
+
+    Plan §2.1 item 7's companion for headers: the compiler finds ``pack.h`` from ``pack.c`` through the
+    source's own directory, so the header belongs to the first point (descriptor order) of the innermost
+    unit that names a source in the header's directory. Headers an include directory or a prerequisite
+    already names keep that point.
+    """
+    claimed = {p for unit in units for point in unit.get("build_points", ()) for p in (*point.get("sources", ()), *point.get("headers", ()))}
+    roots = [str(unit["root"]) for unit in units]
+    for path in inventory_paths:
+        if (PurePosixPath(path).suffix.lower() not in _HEADER_SUFFIXES or path in claimed or _under_generated_dir(path)
+                or _under_build_tree(path, build_trees) or _under_installed_tree(path, trees) is not None):
+            continue
+        directory = PurePosixPath(path).parent.as_posix()
+        containing = sorted((unit for unit in units if _is_under(path, str(unit["root"]))),
+                            key=lambda unit: (-len(PurePosixPath(str(unit["root"])).parts), str(unit["root"]),
+                                              str(unit["build_system"])))
+        for unit in containing:
+            if any(other != str(unit["root"]) and _is_under(path, other) and _is_under(other, str(unit["root"])) for other in roots):
+                continue  # a nested unit's tree is that unit's
+            point = next((p for p in unit.get("build_points", ())
+                          if any(PurePosixPath(s).parent.as_posix() == directory for s in p.get("sources", ()))), None)
+            if point is not None:
+                point["headers"] = sorted({*point.get("headers", ()), path})
+                claimed.add(path)
+                break
 
 
 # Plan §2.1 decision 2: when several native build systems share one root, the unit whose build the
@@ -688,12 +762,20 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
                 listed_projects.update(solution_projects(path, text, inventory_paths))
             solution_types[path] = solution_marker(path, text, inventory_paths)
     trees = installed_trees(inventory_paths)
+    inventory_set = set(inventory_paths)
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    lookalikes: list[dict[str, Any]] = []
     for item in files:
         path = PurePosixPath(str(item["path"]))
         marker = _marker(path)
         if (marker is None or str(path) in listed_projects or _under_build_tree(str(path), build_trees)
                 or _under_installed_tree(str(path), trees) is not None):
+            continue
+        lookalike = marker_lookalike(path, inventory_set)
+        if lookalike is not None:
+            root = _marker_root(path)
+            lookalikes.append({"build_unit_id": _id(root, *marker), "root": root, "build_system": marker[1],
+                               "markers": [str(path)], "reason": lookalike})
             continue
         owner = unity_owner(path)
         if owner is not None and (
@@ -741,10 +823,24 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
     values.sort(key=lambda value: (str(value["root"]), str(value["family"]), str(value["build_system"])))
     by_path = {str(item["path"]): item for item in files}
     demoted, folded = _attach_build_points(values, inventory_paths, read_text, build_trees, trees)
+    demoted = lookalikes + demoted
     removed = {d["build_unit_id"] for d in demoted} | {f["build_unit_id"] for f in folded}
     values = [unit for unit in values if unit["build_unit_id"] not in removed]
     demoted.extend(_resolve_parallel_systems(values, folded, read_text))
     values = [unit for unit in values if unit["build_unit_id"] not in {d["build_unit_id"] for d in demoted}]
+    for unit in values:
+        # Descriptors that define a unit's build points beside its markers (§2.1 item 5): a workspace
+        # file at an Xcode project's root, a Unity project's embedded package manifests.
+        extra: list[str] = []
+        if unit["build_system"] == "xcodebuild":
+            prefix = "" if unit["root"] == "." else str(unit["root"]) + "/"
+            extra.extend(p for p in inventory_paths if p.startswith(prefix) and p.endswith("/contents.xcworkspacedata")
+                         and p[len(prefix):].count("/") == 1)
+        if unit["build_system"] == UNITY_BUILD_SYSTEM:
+            extra.extend(str(item["path"]) for item in unit["engine_project"].get("inventory", {}).get("embedded_packages", ()))
+        if extra:
+            unit["descriptors"] = sorted(dict.fromkeys([*unit.get("descriptors", ()), *extra]))
+    _bind_unnamed_headers(values, inventory_paths, build_trees, trees)
     # Orphan decision: a compiled-language source is claimed when a build point names it (source or
     # header through an include directory, or containment in a member directory), or when it sits
     # under a unit of its family whose build points could not be read completely (unresolved
@@ -815,7 +911,13 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
             "installed_trees": trees}
 
 
-_INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}
+# Interpreted languages with no build step (plan §2.1 item 8): outside every unit their sources are
+# ``source_only:<language>`` and ``source_only_scopes`` names every such tree, not only Python and PHP.
+INTERPRETED_LANGUAGE_SUFFIXES: dict[str, str] = {
+    ".php": "php", ".py": "python", ".rb": "ruby", ".pl": "perl", ".sh": "shell", ".bash": "shell", ".ps1": "powershell",
+    ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".ts": "typescript", ".lua": "lua", ".sql": "sql",
+}
+_INTERPRETED_SUFFIXES = INTERPRETED_LANGUAGE_SUFFIXES
 SOURCE_ONLY_SCOPE_SOURCE_LIMIT = 256
 
 

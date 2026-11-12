@@ -77,37 +77,5 @@
       "nearest_unit": "."
     }
   ],
-  "pending": [
-    {
-      "check": "not_unit:docs|make",
-      "ref": "T-056.4",
-      "note": "unit-ness needs a compile build point or a driver relation; a pandoc recipe is neither"
-    },
-    {
-      "check": "assignment:docs/Makefile",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "not_unit:legacy|autotools",
-      "ref": "T-056.4",
-      "note": "Makefile.am is an autotools marker only beside configure.ac/configure.in"
-    },
-    {
-      "check": "assignment:legacy/Makefile.am",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:legacy/Makefile.in",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:legacy/legacy.c",
-      "ref": "T-056.4",
-      "note": "with no configurable descriptor the source is orphaned, not evidence of a phantom autotools unit"
-    },
-    {
-      "check": "orphaned_sources",
-      "ref": "T-056.4"
-    }
-  ]
+  "pending": []
 }

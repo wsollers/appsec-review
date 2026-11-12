@@ -53,11 +53,5 @@
     "app/src/main/java/shop/app/Main.java": "evidence_of:.|maven#app",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "assignment:mvnw",
-      "ref": "T-056.4",
-      "note": "the Maven wrapper script is context like gradlew"
-    }
-  ]
+  "pending": []
 }

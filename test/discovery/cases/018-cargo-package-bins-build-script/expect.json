@@ -59,10 +59,5 @@
     "tests/roundtrip.rs": "evidence_of:.|cargo#roundtrip",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "assignment:src/main.rs",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

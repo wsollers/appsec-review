@@ -52,23 +52,5 @@
     "web/Assets/styles.css": "inert",
     "web/Assets/logo.svg": "inert"
   },
-  "pending": [
-    {
-      "check": "unit:game|unity.build_point:Acme.Tools|assembly",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:game/Packages/com.acme.tools/package.json",
-      "ref": "T-056.4",
-      "note": "the embedded package manifest is a descriptor the engine inventory reads as a package of the project"
-    },
-    {
-      "check": "assignment:game/Packages/com.acme.tools/Runtime/Acme.Tools.asmdef",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:game/Packages/com.acme.tools/Runtime/Tools.cs",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

@@ -65,11 +65,5 @@
       "nearest_unit": "."
     }
   ],
-  "pending": [
-    {
-      "check": "assignment:app/app.vcxproj.filters",
-      "ref": "T-056.4",
-      "note": "a .filters file is not read by MSBuild"
-    }
-  ]
+  "pending": []
 }

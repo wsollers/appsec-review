@@ -37,11 +37,5 @@
     "tool/NOTES.txt": "inert",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "assignment:tool/pack.h",
-      "ref": "T-056.2",
-      "note": "a header only pack.c includes binds with it"
-    }
-  ]
+  "pending": []
 }

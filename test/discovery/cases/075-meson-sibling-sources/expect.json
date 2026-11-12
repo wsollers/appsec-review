@@ -51,11 +51,6 @@
       "check": "unit:tools/packer|meson.facts",
       "ref": "T-056.5",
       "note": "minimum materialization root from the ../../ source and include references"
-    },
-    {
-      "check": "assignment:common/include/util.h",
-      "ref": "T-056.2",
-      "note": "headers reached through include_directories()"
     }
   ]
 }

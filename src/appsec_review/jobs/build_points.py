@@ -324,9 +324,11 @@ def _cmake_calls(text: str):
 def _cmake_dir(base: str, root: str, value: str) -> str | None:
     """A directory argument with the source-dir variables resolved; None when it stays dynamic."""
     for variable in _CMAKE_SOURCE_DIR_VARIABLES:
+        anchor = root if variable in ("${CMAKE_SOURCE_DIR}/", "${PROJECT_SOURCE_DIR}/") else base
         if value.startswith(variable):
-            anchor = root if variable in ("${CMAKE_SOURCE_DIR}/", "${PROJECT_SOURCE_DIR}/") else base
             return _norm(anchor, value[len(variable):])
+        if value == variable[:-1]:
+            return anchor  # the bare variable names the directory itself (an include dir of ".")
     return _norm(base, value)
 
 
@@ -503,6 +505,7 @@ _MAKE_COND = re.compile(r"^(ifeq|ifneq|ifdef|ifndef)\s*(.*)$|^(else|endif)\b", r
 _MAKE_SOURCE_TOKEN = re.compile(r"(?<![\w/.-])((?:\.\./|\./)?[\w./*-]+\.(?:c|cc|cpp|cxx|m|mm|s|S|asm|cu))(?![\w.-])")
 _MAKE_INCLUDE_FLAG = re.compile(r"-I\s*([^\s\"']+)")
 _MAKE_OBJECT_TOKEN = re.compile(r"(?<![\w/.-])((?:\.\./|\./)?[\w./-]+\.(?:o|obj))(?![\w.-])")
+_MAKE_HEADER_TOKEN = re.compile(r"(?<![\w/.-])((?:\.\./|\./)?[\w./-]+\.(?:h|hh|hpp|hxx|inl|ipp))(?![\w.-])")
 _OBJECT_SOURCE_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".m", ".mm", ".s", ".S", ".asm", ".cu"})
 
 
@@ -613,6 +616,9 @@ def _make_rules(root: str, path: str, text: str, inventory: Sequence[str], *, au
             if target is None:
                 continue
             sources.extend(_expand(target, inventory))
+        # A header listed as a prerequisite (``main.o: main.c tool.h``) is named by the rule (§2.1 item 6).
+        named_headers = [h for h in (_norm(base, token) for token in _MAKE_HEADER_TOKEN.findall(expand(prereqs)))
+                         if h is not None and h in inventory]
         for token in _MAKE_OBJECT_TOKEN.findall(prereqs if "$" not in prereqs else expand(prereqs)):
             # An object prerequisite is compiled from the source of the same stem (a pattern or
             # suffix rule); the source in the tree is the evidence.
@@ -631,7 +637,7 @@ def _make_rules(root: str, path: str, text: str, inventory: Sequence[str], *, au
                 kind = "phony_or_aggregate"
             point = _point(target_name, kind, f"{path}:{line}", sources=sources, include_dirs=include_dirs,
                            condition=line_conditions.get(line))
-            point["headers"] = _headers_under(include_dirs, inventory) if include_dirs else []
+            point["headers"] = sorted(set(named_headers) | set(_headers_under(include_dirs, inventory) if include_dirs else []))
             if recipe_lines and not sources and _MAKE_SUBMAKE.search(raw):
                 point["kind"] = "delegating"
             points.append(point)
@@ -677,12 +683,14 @@ def _cargo_package_points(manifest: str, text: str, document: Mapping[str, Any],
     srcs = [p for p in inventory if _under(p, posixpath.join(base, "src") if base != "." else "src") and p.endswith(".rs")]
     bins: list[tuple[str, str | None, int | None]] = []
     main = _norm(base, "src/main.rs")
-    if main in inventory:
-        bins.append((str(package["name"]), main, None))
     for index, binary in enumerate(document.get("bin", []) if isinstance(document.get("bin"), list) else []):
         if isinstance(binary, Mapping) and binary.get("name"):
             path = _norm(base, str(binary.get("path", f"src/bin/{binary['name']}.rs")))
             bins.append((str(binary["name"]), path, _line_of(text, "[[bin]]", index)))
+    if main in inventory and not any(b[1] == main for b in bins):
+        # Cargo's default binary; a ``[[bin]]`` whose path is src/main.rs replaces it (§2.1 item 7:
+        # the source has one point, the one that names it).
+        bins.insert(0, (str(package["name"]), main, None))
     for path in sorted(p for p in srcs if _under(p, posixpath.join(base, "src/bin") if base != "." else "src/bin")):
         stem = posixpath.splitext(posixpath.basename(path))[0]
         if not any(b[1] == path for b in bins):
@@ -802,9 +810,16 @@ def node_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequ
     points: list[dict[str, Any]] = []
     drives: list[dict[str, Any]] = []
     base = posixpath.dirname(manifest) or "."
+    scripts = document.get("scripts") if isinstance(document.get("scripts"), Mapping) else {}
+    entry = any(document.get(field) for field in _NODE_ENTRY_FIELDS) or any(
+        _norm(base, f"index{suffix}") in inventory for suffix in (".js", ".mjs", ".cjs", ".ts"))
+    if not scripts and not entry:
+        # No scripts and no entry point: a manifest that only pins developer tooling (formatters,
+        # linters) declares nothing to build and is not a unit (plan §2.1 item 8).
+        return {"build_points": [], "drives": [], "includes": [], "unresolved": [],
+                "declares_no_build": "no scripts and no entry point: the manifest pins tooling, it builds nothing"}
     if document.get("name"):
         points.append(_point(str(document["name"]), "package", f"{manifest}:{_line_of(text, '\"name\"') or 1}"))
-    scripts = document.get("scripts") if isinstance(document.get("scripts"), Mapping) else {}
     for name in sorted(scripts):
         command = str(scripts[name])
         line = _line_of(text, f'"{name}"') or 1
@@ -820,8 +835,10 @@ def node_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequ
         line = _line_of(text, "workspaces") or 1
         patterns.extend((str(p), manifest, line) for p in declared if isinstance(p, str))
     pnpm = (base + "/pnpm-workspace.yaml") if base != "." else "pnpm-workspace.yaml"
+    descriptors_read: list[str] = []
     if pnpm in descriptors:
         from appsec_review.jobs.build_discovery import _pnpm_workspace_patterns
+        descriptors_read.append(pnpm)  # the workspace declaration defines member points: evidence (§2.1 item 5)
         for pattern in _pnpm_workspace_patterns(descriptors[pnpm]) or []:
             patterns.append((pattern, pnpm, _line_of(descriptors[pnpm], pattern) or 1))
     member_dirs = [posixpath.dirname(p) or "." for p in inventory
@@ -843,7 +860,10 @@ def node_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequ
         evidence = f"{member}:{(_line_of(member_text, '\"name\"') if member_text else None) or 1}"
         points.append(_point(name, "workspace_member", evidence, path=drive["path"], descriptor=member,
                              sources=_member_sources(drive["path"], inventory, MEMBER_SOURCE_SUFFIXES["node"])))
-    return {"build_points": points, "drives": drives, "includes": [], "unresolved": []}
+    return {"build_points": points, "drives": drives, "includes": [], "unresolved": [], "descriptors": descriptors_read}
+
+
+_NODE_ENTRY_FIELDS = ("main", "module", "browser", "bin", "exports", "types", "workspaces")
 
 
 _GRADLE_INCLUDE = re.compile(r"(?<![\w.])include\s*\(?\s*((?:['\"]:?[\w:.-]+['\"]\s*,?\s*)+)\)?")
@@ -972,14 +992,29 @@ def meson_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     for path in sorted(p for p in descriptors if posixpath.basename(p) == "meson.build"):
         text = descriptors[path]
         base = posixpath.dirname(path) or "."
+        # ``inc = include_directories('include')``: the variable names the directories, so a target's
+        # ``include_directories: inc`` binds the headers under them (like CMake's include dirs).
+        include_variables: dict[str, list[str]] = {}
+        for match in re.finditer(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*include_directories\s*\(([^)]*)\)", text, re.M):
+            include_variables[match.group(1)] = [d for d in (_norm(base, t) for t in re.findall(r"'([^']+)'", match.group(2))) if d]
         # A target function is called by its bare name. ``compiler.find_library('z')`` and other
         # ``*_library(`` lookups are dependency probes, not something this build produces.
         for match in re.finditer(r"(?<![A-Za-z0-9_.])(executable|library|shared_library|static_library|both_libraries|shared_module)"
-                                 r"\s*\(\s*(?:'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*,([^)]*)\)", text, re.S):
+                                 r"\s*\(\s*(?:'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*,((?:[^()]|\([^()]*\))*)\)", text, re.S):
             kind = {"executable": "executable", "library": "library", "shared_library": "shared_library",
                     "static_library": "static_library", "both_libraries": "library", "shared_module": "module_library"}[match.group(1)]
+            body = match.group(4)
+            include_dirs: list[str] = []
+            for clause in re.finditer(r"include_directories\s*:\s*((?:[^,()]|\([^()]*\))+)", body):
+                value = clause.group(1)
+                inline = re.search(r"include_directories\s*\(([^)]*)\)", value)
+                tokens = re.findall(r"'([^']+)'", inline.group(1)) if inline else []
+                include_dirs.extend(d for d in (_norm(base, t) for t in tokens) if d)
+                for name in re.findall(r"(?<![\w'])([A-Za-z_][A-Za-z0-9_]*)(?![\w'])", value):
+                    include_dirs.extend(include_variables.get(name, ()))
+                body = body.replace(clause.group(0), "")  # its quoted paths are directories, not sources
             sources = []
-            for token in re.findall(r"'([^']+)'", match.group(4)):
+            for token in re.findall(r"'([^']+)'", body):
                 target = _norm(base, token)
                 if target and target in inventory:
                     sources.append(target)
@@ -995,7 +1030,9 @@ def meson_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                                    "reason": f"target name is the variable {name}" + (
                                        f" (literal values in this file: {', '.join(values)})" if values else
                                        " (no literal value in this file)")})
-            points.append(_point(name, kind, evidence, sources=sources))
+            point = _point(name, kind, evidence, sources=sources, include_dirs=include_dirs)
+            point["headers"] = _headers_under(include_dirs, inventory) if include_dirs else []
+            points.append(point)
         for match in re.finditer(r"subdir\s*\(\s*'([^']+)'\s*\)", text):
             target = _norm(base, match.group(1))
             drives.append(_drive(target or match.group(1), "subdir", f"{path}:{_line_at(text, match.start())}", unresolved=target is None))
@@ -1163,6 +1200,34 @@ def xcode_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     return {"build_points": points, "drives": [], "includes": [], "unresolved": []}
 
 
+def unity_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequence[str]) -> dict[str, Any]:
+    """Unity assemblies: every ``.asmdef`` is an ``assembly`` point compiling the C# sources under its
+    directory (minus those under a nested assembly definition). The ``.asmdef`` is the point's
+    descriptor (§2.1 item 5)."""
+    import json
+    asmdefs = sorted(p for p in descriptors if p.endswith(".asmdef"))
+    points: list[dict[str, Any]] = []
+    unresolved: list[dict[str, Any]] = []
+    directories = {posixpath.dirname(p) or "." for p in asmdefs}
+    for path in asmdefs:
+        text = descriptors[path]
+        try:
+            document = json.loads(text)
+        except ValueError as exc:
+            unresolved.append({"evidence": path, "reason": f"assembly definition: {exc}"})
+            continue
+        name = document.get("name") if isinstance(document, Mapping) else None
+        if not isinstance(name, str) or not name:
+            unresolved.append({"evidence": path, "reason": "assembly definition without a name"})
+            continue
+        directory = posixpath.dirname(path) or "."
+        sources = [p for p in _member_sources(directory, inventory, {".cs"})
+                   if not any(other != directory and _under(other, directory) and _under(p, other) for other in directories)]
+        points.append(_point(name, "assembly", f"{path}:{_line_of(text, '\"name\"') or 1}", sources=sources,
+                             path=directory, descriptor=path, language="c#"))
+    return {"build_points": points, "drives": [], "includes": [], "unresolved": unresolved}
+
+
 def package_build_points(kind: str):
     def extract(root: str, descriptors: Mapping[str, str], inventory: Sequence[str]) -> dict[str, Any]:
         manifest = sorted(descriptors)[0] if descriptors else None
@@ -1183,7 +1248,7 @@ EXTRACTORS: dict[str, Callable[[str, Mapping[str, str], Sequence[str]], dict[str
     "dotnet": msbuild_build_points, "vcbuild": msbuild_build_points, "xcodebuild": xcode_build_points,
     "composer": package_build_points("package"), "pip": package_build_points("package"),
     "python": package_build_points("package"), "phpize": package_build_points("extension"),
-    "wasm": package_build_points("wasm_module"), "unity": package_build_points("player"),
+    "wasm": package_build_points("wasm_module"), "unity": unity_build_points,
 }
 
 # Which drives fold a driven unit of the same build system into the driver (plan §2.1 decision 1).

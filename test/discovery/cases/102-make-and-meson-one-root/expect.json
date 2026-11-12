@@ -72,15 +72,5 @@
     "zlibish/README": "inert"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "assignment:zlibish/meson_options.txt",
-      "ref": "T-056.2",
-      "note": "meson reads meson_options.txt: context, not inert"
-    },
-    {
-      "check": "assignment:zlibish/include/zlibish.h",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }

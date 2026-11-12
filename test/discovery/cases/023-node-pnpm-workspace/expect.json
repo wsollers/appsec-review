@@ -80,11 +80,5 @@
     "packages/ui/src/index.ts": "evidence_of:.|node#@mono/ui",
     "README.md": "inert"
   },
-  "pending": [
-    {
-      "check": "assignment:pnpm-workspace.yaml",
-      "ref": "T-056.4",
-      "note": "the workspace declaration is a descriptor of the unit, not a settings file it merely reads"
-    }
-  ]
+  "pending": []
 }

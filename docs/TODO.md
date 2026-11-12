@@ -774,8 +774,13 @@ until each is rewritten into the entry format when it is next touched.
   family from the listed projects, listed projects are never markers, `missing_project` unresolved
   kind, CMake build trees inert; pending → 187). Decision 4 landed 2026-11-08 (`installed_trees`:
   node_modules, Cargo/Go/Composer vendor, Pods → context; buildSrc → context; Go testdata → inert;
-  pending → 164). Next: the §2.1 items 5–8 rules (context/inert names, roots that are not roots,
-  interpreted scopes), then T-056.5/.6 facts.
+  pending → 164). Items 5–8 landed 2026-11-12 (context files owned by the unit of the system that
+  reads them, prose and `.filters` inert, `setup.cfg`/`Makefile.am`/doc-only Makefile/tooling-only
+  `package.json` look-alikes demoted, `.asmdef`/`pnpm-workspace.yaml`/root `.xcworkspacedata`
+  evidence, header prerequisites and meson include dirs bind, unnamed headers follow the first
+  point, every interpreted language is a source-only scope; pending → 103). Next: T-056.5/.6
+  facts; the remaining matrix-A entries are Unity player targets, Xcode target sources, SwiftPM,
+  and node/Python/Composer package sources (T-056.2).
 - **Done when:** every case in the matrix has no `pending` entry and `build-systems.json` carries
   build points with evidence for every unit; the composite monorepo's xfails are re-expressed as
   `pending` entries or closed.

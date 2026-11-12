@@ -273,7 +273,10 @@ def test_a_solution_lists_projects_as_build_points_and_a_vcxproj_names_its_sourc
     ("pom.xml", "<project><artifactId>core</artifactId></project>\n", "project"),
 ])
 def test_other_descriptors_yield_at_least_one_typed_build_point(marker: str, text: str, expected_kind: str) -> None:
-    files, inventory = _inventory({marker: text}, "main.c", "core.c")
+    texts = {marker: text}
+    if marker == "Makefile.am":
+        texts["configure.ac"] = "AC_INIT([x], [1.0])\nAC_OUTPUT\n"  # a Makefile.am alone is not a root (§2.1 item 8)
+    files, inventory = _inventory(texts, "main.c", "core.c")
     kinds = {p["kind"] for u in inventory["units"] for p in u.get("build_points", ())}
     assert expected_kind in kinds, f"{marker}: kinds seen {sorted(kinds)}"
 
@@ -336,3 +339,153 @@ def test_build_outputs_under_a_unit_are_inert_never_orphans_or_roots() -> None:
     assert assignment["tool/obj/Debug/net8.0/Tool.AssemblyInfo.cs"] == "inert"
     assert assignment["tool/bin/Debug/net8.0/Tool.dll"] == "inert"
     assert assignment["crate/src/bin/cli.rs"] == "orphaned:no_build_point"
+
+
+# ----------------------------------------------------------------------------- plan §2.1 items 5–8
+
+def test_marker_lookalikes_are_not_roots_and_their_files_are_inert() -> None:
+    # setup.cfg alone is tool configuration; Makefile.am without a configure.ac above it cannot be
+    # configured (§2.1 item 8). Neither is a unit, both are explained in demoted_markers, and the
+    # compiled source left beside the fragment is an orphan.
+    files, inventory = _inventory({"setup.cfg": "[flake8]\nmax-line-length = 100\n",
+                                   "legacy/Makefile.am": "bin_PROGRAMS = legacy\nlegacy_SOURCES = legacy.c\n"},
+                                  "legacy/legacy.c", "scripts/deploy.py")
+    assert inventory["units"] == []
+    assert {(tuple(d["markers"]), d["build_system"]) for d in inventory["demoted_markers"]} == {
+        (("setup.cfg",), "python"), (("legacy/Makefile.am",), "autotools")}
+    assert [o["path"] for o in inventory["orphaned_sources"]] == ["legacy/legacy.c"]
+    assignment = assign_paths(files, inventory)
+    assert assignment["setup.cfg"] == "inert" and assignment["legacy/Makefile.am"] == "inert"
+    assert assignment["scripts/deploy.py"] == "source_only:python"
+    # Beside a pyproject.toml the same setup.cfg is the unit's context; under a configure.ac the
+    # Makefile.am is a marker.
+    files, inventory = _inventory({"pyproject.toml": "[project]\nname = 'x'\n", "setup.cfg": "[flake8]\n",
+                                   "configure.ac": "AC_INIT([x], [1])\n", "Makefile.am": "bin_PROGRAMS = x\nx_SOURCES = main.c\n"},
+                                  "main.c")
+    assert {(u["root"], u["build_system"]) for u in inventory["units"]} == {(".", "python"), (".", "autotools")}
+    assert assign_paths(files, inventory)["setup.cfg"] == "evidence_of:.|python"
+
+
+def test_a_makefile_whose_rules_name_no_compiled_source_is_not_a_unit() -> None:
+    files, inventory = _inventory({"docs/Makefile": "all: manual.html\n\nmanual.html: manual.md\n\tpandoc -s -o $@ $<\n",
+                                   "core/Makefile": "core: core.c\n\t$(CC) -o core core.c\n"},
+                                  "docs/manual.md", "core/core.c")
+    assert [(u["root"], u["build_system"]) for u in inventory["units"]] == [("core", "make")]
+    [demoted] = inventory["demoted_markers"]
+    assert demoted["markers"] == ["docs/Makefile"] and "no compiled product" in demoted["reason"]
+    assignment = assign_paths(files, inventory)
+    assert assignment["docs/Makefile"] == "inert" and assignment["core/core.c"] == "evidence_of:core|make#core"
+
+
+def test_a_node_manifest_with_no_scripts_and_no_entry_point_is_not_a_unit() -> None:
+    tooling = '{\n  "name": "repo-tooling",\n  "private": true,\n  "devDependencies": {"prettier": "^3.2.0"}\n}\n'
+    app = '{\n  "name": "app",\n  "main": "src/index.js"\n}\n'
+    files, inventory = _inventory({"tooling/package.json": tooling, "app/package.json": app}, "app/src/index.js", "scripts/release.js")
+    assert [(u["root"], u["build_system"]) for u in inventory["units"]] == [("app", "node")]
+    [demoted] = inventory["demoted_markers"]
+    assert demoted["markers"] == ["tooling/package.json"] and "no scripts and no entry point" in demoted["reason"]
+    assignment = assign_paths(files, inventory)
+    assert assignment["tooling/package.json"] == "inert"
+    assert assignment["scripts/release.js"] == "source_only:javascript"
+
+
+def test_a_pnpm_workspace_declaration_is_evidence_of_the_root_it_defines_members_for() -> None:
+    root = '{\n  "name": "mono",\n  "scripts": {"build": "pnpm -r build"}\n}\n'
+    member = '{\n  "name": "@mono/core",\n  "main": "src/index.ts"\n}\n'
+    files, inventory = _inventory({"package.json": root, "pnpm-workspace.yaml": "packages:\n  - packages/*\n",
+                                   "packages/core/package.json": member}, "packages/core/src/index.ts", "pnpm-lock.yaml")
+    unit = _unit(inventory, ".", "node")
+    assert "pnpm-workspace.yaml" in unit["descriptors"]
+    assignment = assign_paths(files, inventory)
+    assert assignment["pnpm-workspace.yaml"] == "evidence_of:.|node"
+    assert assignment["pnpm-lock.yaml"] == "context:.|node"
+
+
+def test_context_files_belong_to_the_unit_of_the_system_that_reads_them() -> None:
+    # CMake and MSBuild share a root: the props and the .user file are MSBuild's context, the presets
+    # CMake's, and the .filters file is inert because MSBuild never reads it (§2.1 item 5).
+    sln = 'Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "engine", "engine.vcxproj", "{1}"\nEndProject\n'
+    vcxproj = '<Project><ItemGroup><ClCompile Include="src\\main.cpp" /></ItemGroup></Project>\n'
+    files, inventory = _inventory({"CMakeLists.txt": "project(engine CXX)\nadd_executable(engine src/main.cpp)\n",
+                                   "engine.sln": sln, "engine.vcxproj": vcxproj},
+                                  "src/main.cpp", "Directory.Build.props", "engine.vcxproj.user", "engine.vcxproj.filters",
+                                  "CMakePresets.json", "meson_options.txt", "legacy/Makefile.am")
+    assignment = assign_paths(files, inventory)
+    assert assignment["Directory.Build.props"] == "context:.|msbuild"
+    assert assignment["engine.vcxproj.user"] == "context:.|msbuild"
+    assert assignment["engine.vcxproj.filters"] == "inert"
+    assert assignment["CMakePresets.json"] == "context:.|cmake"
+    # A file only a system that is not here reads is inert, not context of whichever unit is above it.
+    assert assignment["meson_options.txt"] == "inert"
+    assert assignment["legacy/Makefile.am"] == "inert"
+
+
+def test_wrapper_scripts_and_platform_manifests_are_context_of_their_unit() -> None:
+    files, inventory = _inventory({"pom.xml": "<project><modules><module>core</module></modules></project>\n",
+                                   "core/pom.xml": "<project><artifactId>core</artifactId></project>\n",
+                                   "viewer/meson.build": "project('viewer', 'c')\nexecutable('viewer', 'main.c')\n",
+                                   "ios/App.xcodeproj/project.pbxproj": "// !$*UTF8*$!\n"},
+                                  "mvnw", "mvnw.cmd", "viewer/main.c", "viewer/meson_options.txt", "ios/Podfile",
+                                  "ios/App.xcworkspace/contents.xcworkspacedata")
+    assignment = assign_paths(files, inventory)
+    assert assignment["mvnw"] == "context:.|maven" and assignment["mvnw.cmd"] == "context:.|maven"
+    assert assignment["viewer/meson_options.txt"] == "context:viewer|meson"
+    assert assignment["ios/Podfile"] == "context:ios|xcodebuild"
+    # The workspace at the project root defines what Xcode opens: evidence, not context (§2.1 item 5).
+    assert assignment["ios/App.xcworkspace/contents.xcworkspacedata"] == "evidence_of:ios|xcodebuild"
+
+
+def test_an_unnamed_header_beside_a_points_source_belongs_to_the_first_point_that_compiles_there() -> None:
+    make = ("all: packer libpack.a\n\nlibpack.a: pack.o\n\t$(AR) rcs $@ $^\n\npacker: main.o libpack.a tool.h\n"
+            "\t$(CC) -o $@ main.o libpack.a\n\n%.o: %.c\n\t$(CC) -c -o $@ $<\n")
+    files, inventory = _inventory({"tool/Makefile": make}, "tool/main.c", "tool/pack.c", "tool/pack.h", "tool/tool.h")
+    points = _points(_unit(inventory, "tool", "make"))
+    assert points["libpack.a"]["headers"] == ["tool/pack.h"], "a header nothing names, beside the sources the rule compiles"
+    assert points["packer"]["headers"] == ["tool/tool.h"], "a header prerequisite is named by its rule (§2.1 item 6)"
+    assignment = assign_paths(files, inventory)
+    assert assignment["tool/pack.h"] == "evidence_of:tool|make#libpack.a"
+    assert assignment["tool/tool.h"] == "evidence_of:tool|make#packer"
+
+
+def test_meson_include_directories_and_a_bare_cmake_source_dir_bind_headers() -> None:
+    meson = ("project('z', 'c')\ninc = include_directories('include')\n"
+             "zlib = static_library('zlib', 'src/z.c', include_directories: inc)\n"
+             "executable('ztool', 'src/tool.c', include_directories: include_directories('include', 'extra'))\n")
+    files, inventory = _inventory({"meson.build": meson}, "src/z.c", "src/tool.c", "include/z.h", "extra/e.h")
+    points = _points(_unit(inventory, ".", "meson"))
+    assert points["zlib"]["sources"] == ["src/z.c"] and points["zlib"]["headers"] == ["include/z.h"]
+    assert points["ztool"]["headers"] == ["extra/e.h", "include/z.h"]
+    assert assign_paths(files, inventory)["include/z.h"] == "evidence_of:.|meson#zlib", "the first point in order"
+    cmake = "project(zlite C)\nadd_library(zlite STATIC zlite.c)\ntarget_include_directories(zlite PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})\n"
+    files, inventory = _inventory({"lib/CMakeLists.txt": cmake}, "lib/zlite.c", "lib/zlite.h")
+    assert _points(_unit(inventory, "lib", "cmake"))["zlite"]["headers"] == ["lib/zlite.h"]
+
+
+def test_a_cargo_bin_naming_src_main_rs_replaces_the_default_binary() -> None:
+    cargo = '[package]\nname = "imgtool"\nversion = "0.1.0"\n\n[[bin]]\nname = "imgcli"\npath = "src/main.rs"\n'
+    files, inventory = _inventory({"Cargo.toml": cargo}, "src/main.rs", "src/lib.rs")
+    points = {(p["name"], p["kind"]) for p in _unit(inventory, ".", "cargo")["build_points"]}
+    assert ("imgtool", "package") in points and ("imgtool", "lib") in points
+    assert [kind_name for kind_name in points if kind_name[1] == "bin"] == [("imgcli", "bin")]
+    assert assign_paths(files, inventory)["src/main.rs"] == "evidence_of:.|cargo#imgcli"
+
+
+def test_an_android_application_descriptor_selects_the_android_profile_at_discovery() -> None:
+    from appsec_review.jobs.build_discovery import required_image_profile
+    gradle = "plugins {\n    id 'com.android.application'\n}\nandroid {\n    compileSdk 34\n}\n"
+    files, inventory = _inventory({"settings.gradle": "include ':app'\n", "build.gradle": "// root\n", "app/build.gradle": gradle},
+                                  "app/src/main/AndroidManifest.xml", "app/src/main/java/a/Main.java")
+    unit = _unit(inventory, ".", "gradle")
+    assert unit["descriptor_facts"]["kind"] == "android-gradle-application"
+    assert required_image_profile(unit) == "android"
+    assert assign_paths(files, inventory)["app/src/main/AndroidManifest.xml"] == "context:.|gradle"
+
+
+def test_source_only_scopes_cover_every_interpreted_language_outside_a_unit() -> None:
+    from appsec_review.jobs.build_discovery import source_only_scopes
+    files, inventory = _inventory({"svc/pyproject.toml": "[project]\nname = 'svc'\n"},
+                                  "svc/svc/app.py", "scripts/release.js", "scripts/lib/util.ts", "ops/deploy.sh", "db/schema.sql")
+    scopes = sorted((s["root"], s["language"]) for s in source_only_scopes(files, inventory["units"]))
+    assert scopes == [("db", "sql"), ("ops", "shell"), ("scripts", "javascript"), ("scripts/lib", "typescript")]
+    assignment = assign_paths(files, inventory, source_only_scopes=source_only_scopes(files, inventory["units"]))
+    assert assignment["ops/deploy.sh"] == "source_only:shell" and assignment["svc/svc/app.py"] == "evidence_of:svc|python"

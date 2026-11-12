@@ -86,11 +86,6 @@
       "note": "Package.swift is not a marker today; a Swift package is a unit of the swift family (plan section 4, A12)"
     },
     {
-      "check": "assignment:ios/App.xcworkspace/contents.xcworkspacedata",
-      "ref": "T-056.4",
-      "note": "the workspace that wraps the project at the same root is its descriptor, not mere context"
-    },
-    {
       "check": "assignment:ios/App/AppDelegate.swift",
       "ref": "T-056.2",
       "note": "PBXSourcesBuildPhase files bind to their target"

@@ -69,10 +69,6 @@
     {
       "check": "unit:libs/sibling|cmake.facts",
       "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:libs/sibling/sibling.h",
-      "ref": "T-056.2"
     }
   ]
 }
