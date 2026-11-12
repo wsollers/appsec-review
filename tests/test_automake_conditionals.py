@@ -125,3 +125,27 @@ def test_a_plain_makefile_am_reads_as_before() -> None:
         {"name": "x", "kind": "program", "evidence": "Makefile.am:2", "sources": ["cli.c", "gtk.c"],
          "include_dirs": []}]
     assert result["unresolved"] == []
+
+
+AI_MODULE_AM = """aimoduledir = $(libdir)/game/ai
+if AI_MOD_STATIC_CLASSIC
+noinst_LTLIBRARIES = libclassicai.la
+else
+aimodule_LTLIBRARIES = fc_ai_classic.la
+endif
+
+libclassicai_la_SOURCES = classic.c
+fc_ai_classic_la_SOURCES = classic.c
+"""
+
+
+def test_custom_prefix_primaries_are_build_points() -> None:
+    # Automake product lists are ``<where>_<PRIMARY>`` for any install directory ``<where>dir``
+    # (Automake manual, "Uniform Naming Scheme"); the prefix is not a fixed set.
+    result = autotools_build_points(".", {"ai/classic/Makefile.am": AI_MODULE_AM}, ("ai/classic/Makefile.am", "ai/classic/classic.c"))
+    points = [(p["name"], p["kind"], p.get("condition"), p["sources"]) for p in result["build_points"] if p["kind"] == "libtool_library"]
+    assert points == [
+        ("libclassicai.la", "libtool_library", "AI_MOD_STATIC_CLASSIC", ["ai/classic/classic.c"]),
+        ("fc_ai_classic.la", "libtool_library", "!AI_MOD_STATIC_CLASSIC", ["ai/classic/classic.c"]),
+    ]
+    assert result["unresolved"] == []
