@@ -92,6 +92,24 @@ agents that inspect or change the repository. It is not a prompt for review work
   old coverage counts.
 - Preserve unrelated new work. Commit coherent changes on the assigned branch and integrate
   completed work into local `main` through its designated owner; do not push unless the user asks.
+- Pushing to the remote (`origin/main`, `https://github.com/wsollers/appsec-review.git`) is done
+  from the WSL checkout on host `WSOLLERS1`, as user `wsollers`, from `~/projects/appsec-review`
+  on `main`, with a plain `git push` (the branch tracks `origin/main`; no `-u`, no force):
+
+  ```
+  wsollers@WSOLLERS1:~/projects/appsec-review$ git push
+  Enumerating objects: 234, done.
+  ...
+  remote: GitHub found 54 vulnerabilities on wsollers/appsec-review's default branch (...). To find out more, visit:
+  remote:      https://github.com/wsollers/appsec-review/security/dependabot
+  To https://github.com/wsollers/appsec-review.git
+     60e562e0c..c342dc2e8  main -> main
+  ```
+
+  The `remote: GitHub found N vulnerabilities` lines are the Dependabot summary for the default
+  branch; they are informational, not a push failure, and are not permission to land Dependabot
+  pull requests. Agents on other machines (for example a Windows checkout under `F:\repos`) hand
+  ready commits to that WSL checkout rather than pushing from their own clone.
 - Do not leave completed work stranded in a worktree. Immediately hand the integration owner
   the exact ready commit, focused unit-test results, and any remaining blocker. Prefer
   completion-triggered, serialized local integration over periodic merge polling. Conflicts,
