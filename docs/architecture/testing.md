@@ -131,6 +131,10 @@ content check -> explicit acceptance**.
 ### 1. Establish scope and the criterion
 
 Record the owning checkout, exact commit, integration owner and authorized test/live scope.
+A session on a Windows host works in the WSL checkout over SSH, not through `wsl -e bash -c`:
+its first step is the connectivity check in [`ssh.md`](../operations/ssh.md#4-verify-before-a-session-relies-on-it)
+(`ssh wsl-<hostname> "cd <checkout> && git rev-parse --short HEAD"`). If it fails, stop and ask
+the user to complete that page's setup; do not drive WSL through the Windows shell instead.
 Use that checkout's own environment; verify
 `.venv/bin/python -c "import appsec_review; print(appsec_review.__file__)"` resolves inside it.
 Keep unit tests free of production profile, overlay, native, Dagster-home and acceptance bindings.
@@ -295,7 +299,9 @@ the exact bounded command and retain attribution/repair decisions with the ownin
 
 A walk applies step 4 to every job of one review of one pinned target, in graph order, and stops
 for the user whenever something is not already decided. Its standing rules are the
-[walk charter](../processes/walk-charter.md). In short:
+[walk charter](../processes/walk-charter.md). The walker runs inside the Linux checkout; on a
+Windows host that means an SSH session into WSL, verified first as step 1 above says
+([`ssh.md`](../operations/ssh.md)). In short:
 
 - **Four checks before every accept**, written in the job's record: the job consumed what its
   contract declares from this run's accepted handoffs; its output agrees with a source of truth
