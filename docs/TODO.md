@@ -88,6 +88,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-093 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-093-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-094 | [Let stepwise accept a target by commit instead of a tag](#t-094-let-stepwise-accept-a-target-by-commit-instead-of-a-tag) | testing | open |
 | T-095 | [Report an intake coverage gap once, not once per unit](#t-095-report-an-intake-coverage-gap-once-not-once-per-unit) | pipeline | open |
+| T-096 | [Stop inferring run artifacts from a data/ path prefix](#t-096-stop-inferring-run-artifacts-from-a-data-path-prefix) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1410,6 +1411,24 @@ until each is rewritten into the entry format when it is next touched.
   gap record for it, and the published intake document still names the file.
 - **Refs:** `src/appsec_review/jobs/job_review_intake/job.py` (`validate_target`, `publish`),
   `docs/tasks/2026-11-11-freeciv-walk-04-review-intake.md`, T-057.
+
+### T-096 — Stop inferring run artifacts from a data/ path prefix
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `runtime.handoff.collect_artifacts` treats any `path`/`sha256` record whose path starts
+  with `data/` as a file of the run, unless it sits under a field named in `_SOURCE_DATA_FIELDS`.
+  Freeciv owns a top-level `data/` folder, so the catalog's build markers for `data/Makefile.am`
+  failed `job_target_catalog` at publication (`shared artifact missing`, run `2026-11-11-0009`).
+  `markers` and `descriptor_package` are now exempt, but any other field that carries a
+  target-relative record under `data/` fails the same way in whichever job publishes it.
+- **Scope:** an artifact reference is declared by its field or by an explicit `run_path`, not
+  guessed from the path; list the producers that rely on the prefix guess and convert them, then
+  remove the guess. No missing declared artifact may become silently acceptable.
+- **Done when:** a runner-driven test publishes a target-relative `data/...` record under an
+  arbitrary field without error, and the existing missing-artifact refusals still hold.
+- **Refs:** `src/appsec_review/runtime/handoff.py`, `tests/test_handoff_interchange.py`,
+  `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-057.
 
 ## Legacy backlog
 
