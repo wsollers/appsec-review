@@ -14,7 +14,8 @@ from .shared import (SharedArtifacts, current, immutable_bytes, put_bytes, refer
 SCHEMA = "appsec-review/public-feed-publication/1"
 PROOF_SCHEMA = "appsec-review/public-feed-use/1"
 STEPS = {"nvd": "nvd_sync", "osv": "osv_sync", "mitre": "mitre_sync",
-         "cve-bin-tool": "cve_bin_tool_db_build", "kev": "kev_sync", "epss": "epss_sync"}
+         "cve-bin-tool": "cve_bin_tool_db_build", "kev": "kev_sync", "epss": "epss_sync",
+         "grype": "grype_db_sync"}
 
 
 def _digest(value: Any) -> str:
@@ -28,14 +29,16 @@ def _public_actor(actor: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _configured_root(run_root: Path, claim: Mapping[str, Any], feed: str) -> tuple[Path, dict[str, Any]]:
-    if feed not in STEPS and feed != "grype":
+    if feed not in STEPS:
         raise ValueError("unregistered public feed")
     config = reference(run_root, run_root / "data/configuration/resolved.json")
     if config["sha256"] != claim.get("resolved_config_sha256"):
         raise ValueError("feed provenance configuration differs from the attempt claim")
     document = json.loads(verify_reference(run_root, config).read_bytes())
-    configured = ("data/feeds/grype" if feed == "grype" else
-                  document["jobs"]["job_third_party_data_sync"]["steps"][STEPS[feed]]["settings"]["feed_root"])
+    steps = document["jobs"]["job_third_party_data_sync"]["steps"]
+    # Frozen runs predating the Grype publisher used this fixed path; never rewrite their inputs.
+    configured = ("data/feeds/grype" if feed == "grype" and "grype_db_sync" not in steps else
+                  steps[STEPS[feed]]["settings"]["feed_root"])
     repository = Path(claim["repository_root"])
     path = Path(configured)
     path = path if path.is_absolute() else repository / path

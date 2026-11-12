@@ -38,6 +38,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed as grype_feed
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 from appsec_review.jobs.job_evidence_collection.datasets import CONTRACT, DATASETS
 from appsec_review.applicability import ReasonCode
@@ -347,7 +348,8 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         environment[OSV_DB_ENVIRONMENT] = OSV_DATABASE_ROOT
     if adapter.tool_id == "tool-grype":
         try:
-            identity = verify_current(unit.job.repository_root / "data" / "feeds" / "grype", "grype")
+            settings = grype_feed.consumer_settings(unit.job.repository_root, unit.job.run_root)
+            identity = grype_feed.verify(settings)
             mounts.append(Mount(Path(identity["directory"]), "/database", True))
             environment["GRYPE_DB_CACHE_DIR"] = "/database"
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
@@ -926,6 +928,10 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
     tool = executor.catalog.tool(adapter.tool_id)
     try:
         image_id = executor.resolve_image(tool)
+        if adapter.tool_id == "tool-grype":
+            database = next(mount.source for mount in mounts if mount.target == "/database")
+            grype_settings = grype_feed.consumer_settings(unit.job.repository_root, unit.job.run_root)
+            grype_feed.require_consumer_tool(grype_settings, database, tool.version, image_id)
     except RuntimeError as exc:
         invocation_id = hashlib.sha256(
             f"{unit.job.run_id}:{unit.job.attempt_id}:{unit.unit_id}:resolve".encode()).hexdigest()

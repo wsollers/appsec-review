@@ -1,5 +1,12 @@
 # grype tool image
 
+The independent `job_third_party_data_sync.grype_db_sync` step imports and validates the mirrored
+v6 database with this exact tool release and an observed immutable image ID. Its host-side fetch
+may reach the network; this image stays `network = "none"` for both database validation and
+scanning. Consumers require the validated `grype-snapshot/2` cache and a fresh upstream build.
+See [database synchronization](../../../docs/operations/third-party-data-sync.md#grype-database-cache).
+This does not enable the currently disabled Grype scanner.
+
 `appsec-review/tool-grype:0.119.0` is the tool image declared by `tool-grype` in
 [`containers/catalog.toml`](../../catalog.toml). It builds `FROM` `appsec-review/base-ubuntu:24.04`,
 which must exist locally first. Its external artifacts are pinned by exact byte size and SHA-256 in

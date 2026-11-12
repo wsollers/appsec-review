@@ -81,7 +81,7 @@ Everything below is declared in the file named in the last column; nothing else 
 
 | Requirement | Needed for | Where declared |
 | --- | --- | --- |
-| Python >= 3.11 and `jsonschema>=4.20` (`tzdata` on Windows), installed by `pip install -e .` | The package and the `appsec-review` and `appsec-review-mcp` commands | `pyproject.toml` (`requires-python`, `dependencies`) |
+| Python >= 3.11 and declared runtime dependencies (including `zstandard==0.25.0` for Grype), installed by `pip install -e .` | The package and the `appsec-review` and `appsec-review-mcp` commands | `pyproject.toml` (`requires-python`, `dependencies`) |
 | Docker with `docker buildx` (`--load`, `--network none`) | Operator tool/build-environment provisioning and container execution; review-time derived images use the bounded builder below | `containers/build.py`, `src/appsec_review/container_runtime/` |
 | Claude Code CLI `claude` on `PATH`, signed in | Model calls; `provider = "claude-cli"` | `appsec-review.toml`, `src/appsec_review/inference/claude_cli.py` |
 | Tool images (below), built locally | Every analysis job that is not a coverage gap | `containers/catalog.toml` |
@@ -563,24 +563,20 @@ When the Dagster stack is running, the same job runs nightly at `00:00 UTC` (con
 `jobs.job_third_party_data_sync.schedule` in `appsec-review.toml`). To launch it by hand there, see
 [Run the Dagster deployment](#run-the-dagster-deployment).
 
-### Optional: Grype database
+### Grype database and optional scanning
 
 Grype is disabled by default (`[tools].disable_grype = true`), and its unit is recorded as a
-`CONFIGURED_DISABLED` gap. To enable it, set that value to `false`, build `tool-grype`, import a
-Grype v6 database into a staging directory, and publish it as an immutable snapshot:
+`CONFIGURED_DISABLED` gap. The independent `grype_db_sync` branch of the nightly metadata job
+nevertheless prepares the database: bounded verified-HTTPS download, supported offline import and
+validation using preinstalled `tool-grype`, and immutable publication under `data/feeds/grype`.
+This replaces the manual snapshot publisher. Missing provenance, stale builds or failed validation
+leave the last-known-good pointer unchanged.
 
-```bash
-python tools/publish_grype_snapshot.py --staging <grype-staging-dir>
-```
-
-The staging directory must contain `latest.json`, `vulnerability-db.tar.zst`, and the imported
-`6/vulnerability.db` and `6/import.json`; the archive must match the listing's SHA-256 and the
-listing must be `active`. The snapshot is written under `--destination` (default
-`data/feeds/grype`). `--image` names the Grype tool image recorded in the manifest (default
-`appsec-review/tool-grype:0.119.0`); it must already exist locally, because the script reads its
-immutable image id with `docker image inspect`. Every snapshot manifest carries a fixed
-`acquisition_gaps` entry stating that the container updater's TLS verification failed and that the
-host fetched the official listing and archive and verified the published SHA-256.
+To opt into scanning, set `disable_grype = false` only after provisioning the pinned image and a
+validated, fresh `grype-snapshot/2` cache. Scanners remain networkless and require the same
+validator image/release. The new `zstandard` runtime dependency requires an authorized Dagster
+image rebuild before deployment; adding the step is not evidence that nightly execution is active.
+See [Grype database synchronization](docs/operations/third-party-data-sync.md#grype-database-cache).
 
 ## Run a review
 
@@ -1062,7 +1058,7 @@ After a batch of merged pull requests, reconcile the docs with the code delta re
 | `src/appsec_review/` | The package: CLI, runtime, jobs, retrieval, MCP server, Dagster adapter. |
 | `containers/` | Tool and base image definitions, pinned asset locks, build launchers. |
 | `deploy/dagster/` | Compose stack, bootstrap, lifecycle, and verification scripts. |
-| `tools/` | cve-bin-tool database builder and the Grype snapshot publisher. |
+| `tools/` | cve-bin-tool database builder and repository utilities. |
 | `rules/` | Checked-in rules: SEI CERT and Semgrep packs, C++ CERT CodeQL mappings, PMD, and the CodeQL graph-export query pack (`codeql-graph-export/`); mounted read-only in Dagster. |
 | `pipeline/` | Review-worker guidance: governing rules, personas, stacks, roles, tasks, the guidance registry, and registered runtime skills (`pipeline/skills/`). |
 | `.claude/skills/` | Canonical development skills for agents working on this repository; never loaded by jobs or shipped in runtime images. |

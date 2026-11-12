@@ -110,7 +110,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-006 | [Add Windows and large native-build coverage after the Linux acceptance gate](#t-006-add-windows-and-large-native-build-coverage-after-the-linux-acceptance-gate) | windows | open |
 | T-007 | [Add Android, iOS, and Unity application coverage](#t-007-add-android-ios-and-unity-application-coverage) | mobile | open |
 | T-008 | [Close the SEI CERT rule-pack execution and coverage gaps](#t-008-close-the-sei-cert-rule-pack-execution-and-coverage-gaps) | scanners | open |
-| T-009 | [Add `grype_db_sync` to `job_third_party_data_sync`](#t-009-add-grype_db_sync-to-job_third_party_data_sync) | data | open |
+| T-009 | [Add `grype_db_sync` to `job_third_party_data_sync`](#t-009-add-grype_db_sync-to-job_third_party_data_sync) | data | done (2026-11-12, docs/operations/third-party-data-sync.md) |
 | T-010 | [Optimize produced-artifact Grype without reducing coverage](#t-010-optimize-produced-artifact-grype-without-reducing-coverage) | scanners | open |
 | T-011 | [Summarize installed dependencies for the remaining ecosystems](#t-011-summarize-installed-dependencies-for-the-remaining-ecosystems) | data | open |
 | T-012 | [Follow-ups from the scanner launch reduction](#t-012-follow-ups-from-the-scanner-launch-reduction) | scanners | open |
@@ -577,6 +577,13 @@ until each is rewritten into the entry format when it is next touched.
   build single-job graphs or hand-written run trees in `tests/test_language_build.py`,
   `tests/test_project_build.py`, `tests/test_tool_input_support.py` and
   `tests/test_native_sbom_job.py`. Unclassified judge and budget-clock failures are T-083.
+  T-009 validation on 2026-11-12 also reproduced two stale release-insertion fixtures against
+  clean base `60e562e0`: `test_configured_disabled_grype_never_calls_runner_and_publishes_gap`
+  in `tests/test_artifact_security_analysis.py` and
+  `test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints` in
+  `tests/test_evidence_collection_job.py` duplicate existing TOML release keys (lines 113 and 148).
+  They fail before scanner behavior and remain unfixed; focused Grype consumer units cover the
+  changed cache boundary separately.
 - **Done when:** the differential against `fe328d76`'s baseline shows no failures attributable to
   the merge.
 - **Refs:** `docs/tasks/2026-11-07-job-control-schema-standardization.md` (differential method).
@@ -1912,22 +1919,27 @@ The pack (`rules/sei-cert/`) validates and evaluates cleanly under Semgrep 1.178
 
 ### T-009 — Add `grype_db_sync` to `job_third_party_data_sync`
 
-The archived pre-refactor tree was inspected for a reusable Grype database. It contains a Grype
-executable archive and image/build records, but no database snapshot with a verifiable database
-schema version, listing metadata, content hashes, source provenance, or freshness identity. Those
-bytes are therefore not a usable database snapshot and were not copied.
+- **State:** done (2026-11-12, docs/operations/third-party-data-sync.md)
+- **Area:** data
+- **Blocks:** T-105
+- **Why:** the manual publisher did not perform pinned Grype validation or provide a bounded,
+  provenance-checked nightly database refresh. Archived bytes lacked usable database provenance.
+- **Scope:** independent `grype_db_sync` fetch/import/publish branch, typed limits, verified HTTPS
+  acquisition, bounded zstd/tar extraction, supported offline Grype import/status, immutable
+  `grype-snapshot/2` publication and existing bounded scanner consumers. Replace the manual
+  publisher without enabling scanning or redesigning matching.
+- **Done when:** focused offline units establish branch/config/registry parity, resource and
+  freshness rejection, pinned-tool validation, file hashes, last-known-good preservation,
+  publication provenance and consumer gaps. Actual upstream/Docker/native validation and
+  activation remain explicitly unrun; nightly restart is T-106.
+- **Refs:** [operations](operations/third-party-data-sync.md#grype-database-cache);
+  `src/appsec_review/jobs/job_third_party_data_sync/steps/grype_db_sync/`;
+  `tests/test_grype_db_sync.py`; T-105; T-106.
 
-Future work should add an independent `grype_db_sync` step to `job_third_party_data_sync`, alongside
-the NVD, OSV, and MITRE branches. It must use Grype's supported database update mechanism, record the
-Grype tool/image identity and upstream database schema/build identity, enforce download and
-extraction bounds, hash every published file, validate the database with the pinned Grype version,
-publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
-The step must fail truthfully when provenance, validation, or freshness cannot be established.
-
-Update 2026-11-12 (user decision on the dependency plan): the step runs in the nightly sync and replaces the
-manual `publish_grype_snapshot.py`; the sync job may reach the network to fetch the database, while scanners
-stay `network = "none"`. It is a prerequisite of the matching stage T-105 and is worked after the Freeciv walk
-is through the build and topology jobs.
+User decision 2026-11-12: the nightly sync may reach the network for database bytes; scanners stay
+`network = "none"`. The implementation adds the runtime `zstandard` dependency; deployment requires
+a separately authorized Dagster image rebuild, not just source reload. No images, host pins,
+deployment, nightly run, acceptance or live review are changed by the implementation task.
 
 ### T-010 — Optimize produced-artifact Grype without reducing coverage
 
