@@ -33,7 +33,7 @@ def test_actual_catalog_offline_feedback_replay(tmp_path, request):
     from appsec_review.runtime.datasets import artifact_only
     from appsec_review.storage import atomic_bytes, canonical_json, file_sha256
     from appsec_review.storage.shared import safe_path
-    from tests.test_project_build import FakeBuildExecutor, FakeImageResolver
+    from tests.integration.job_project_build.test_project_build_graph import FakeBuildExecutor, FakeImageResolver
 
     baseline = "acf973f8a0d7ca78548ad619ba4b5691c5b93678"
     expected = os.environ.get("APPSEC_TOPOLOGY_R8_SOURCE")

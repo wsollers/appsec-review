@@ -582,7 +582,7 @@ def test_iterative_receipts_reach_accepted_artifact_index(
 
 
 def test_unsupported_and_unresolved_iteration_receipts_survive_publication(tmp_path: Path) -> None:
-    from tests.test_project_build_capture import CASE, _run
+    from tests.integration.job_project_build.test_project_build_capture import CASE, _run
     from appsec_review.jobs.job_artifact_indexing.job import _validate_receipts
     run, _, document, calls, _ = _run(tmp_path, "multiple", consume=True)
     accepted = json.loads((run / "data/jobs/job_language_build/attempts/attempt_0001/"

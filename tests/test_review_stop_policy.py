@@ -301,7 +301,8 @@ def test_retry_consumer_stops_after_first_attempt(tmp_path, monkeypatch, consume
                 finally:
                     assert len(calls) == 1
             else:
-                from tests.test_project_build import test_failed_default_build_repairs_image_and_reuses_winning_definition
+                from tests.integration.job_project_build.test_project_build_graph import (
+                    test_failed_default_build_repairs_image_and_reuses_winning_definition)
                 test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_path)
         assert guardian.state["first_error"]["action"] != "fixture"
 

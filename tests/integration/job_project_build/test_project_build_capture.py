@@ -34,7 +34,7 @@ from tests.test_compiler_profiles import CPP, _executables
 from tests.test_native_target_enforcement import _elf_header
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 CASE = "projects/native/case-094"
 
 

@@ -239,11 +239,18 @@
     },
     "job_project_build": {
       "unit": [
-        "tests/test_project_build.py::test_android_expected_output_requires_a_structurally_valid_apk",
-        "tests/test_project_build.py::test_build_capture_mode_changes_project_probe_checkpoint_identity",
-        "tests/test_project_build.py::test_build_outputs_policy_changes_project_probe_checkpoint_identity"
+        "tests/unit/job_project_build/test_job_graph.py",
+        "tests/unit/job_project_build/test_contract.py",
+        "tests/unit/job_project_build/test_project_build_helpers.py",
+        "tests/unit/job_project_build/test_repair.py",
+        "tests/unit/job_project_build/test_enforcement.py",
+        "tests/unit/job_project_build/test_build_recovery.py"
       ],
-      "integration": ["tests/integration/test_build_topology_catalog_planner_publication.py"],
+      "integration": [
+        "tests/integration/test_build_topology_catalog_planner_publication.py",
+        "tests/integration/job_project_build/test_project_build_graph.py",
+        "tests/integration/job_project_build/test_project_build_capture.py"
+      ],
       "acceptance": [],
       "live": []
     },

@@ -81,7 +81,7 @@ def test_normalized_no_op_has_terminal_reason_and_duplicate_identity_ignores_exp
     {"schema": REPAIR_SCHEMA, "outcome": "NOT_IMAGE_REPAIRABLE", "reason": "missing prerequisite"},
 ])
 def test_repair_schema_preserves_bounded_compatibility_and_explicit_refusal(proposal):
-    schema = json.loads((Path(__file__).parents[1] / "docs/schemas/build-image-repair.schema.json").read_bytes())
+    schema = json.loads((Path(__file__).resolve().parents[3] / "docs/schemas/build-image-repair.schema.json").read_bytes())
     jsonschema.Draft202012Validator.check_schema(schema)
     jsonschema.validate(proposal, schema)
     assert not validate_repair_proposal(proposal, recipe=_recipe(), build_system="cmake")
