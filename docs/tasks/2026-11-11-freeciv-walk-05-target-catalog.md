@@ -3,10 +3,10 @@
 This record advances T-057 and bears on T-091. Walk terms, overlay and the expected-gaps list are
 in [walk 01](2026-11-11-freeciv-walk-01-model-connectivity.md).
 
-**Result: stopped for decisions** (run `2026-11-12-0001`, overlay
-`freeciv-b1b0768b/capacity-overlay.toml`, corpus tag `freeciv-b1b0768b-v3`). After three pipeline
-fixes the catalog's output agrees with the target on everything checked. It is not accepted: four
-gap causes are not on the expected list, and the fragment build units of T-091 are the user's call.
+**Result: accepted** (run `2026-11-12-0001`, overlay `freeciv-b1b0768b/capacity-overlay.toml`,
+corpus tag `freeciv-b1b0768b-v3`), after three pipeline fixes, the user's decisions on the gap
+causes, and the T-091 discovery fix. The sections below are in the order things happened; the
+accepted result is under "T-091 fixed, catalog accepted".
 
 ## Runs
 
@@ -118,6 +118,68 @@ The walk stays on hold at this job: nothing is launched, fixed or accepted until
    documents the target supplies; `job_document_issue_analysis` analyses supplied documents. The
    producer is deferred work (the F07 threat-model item in the legacy backlog; T-070 slices
    findings by a game threat model and is not that producer).
+
+## T-091 fixed, catalog accepted (2026-11-12)
+
+The user gave the go-ahead ("Yes, fix T-091"; and through the coordinating session: fix, replay,
+accept job 5 if it comes back with two units; the unit-test gap is accepted as expected with the
+detection limit noted).
+
+**Fix** `051d1842`: in `build_points.autotools_build_points` a `Makefile.am` variable is the union
+of every `=` and `+=` assignment across all `if`/`else` branches, and `$(VAR)` of a variable
+assigned in the same file is expanded to a bounded depth, for `SUBDIRS` and for the program,
+library and source lists. The enclosing conditions are recorded on each drive and build point; a
+reference with no in-file assignment is an `unresolved` record of kind `unassigned_variable`.
+Regressions `tests/test_automake_conditionals.py` (4 of 5 failed before), discovery case
+`121-autotools-conditional-subdirs` with no pending entry; no existing pending entry started
+passing. 1,792 passed, 162 xfailed over the discovery matrix, build points, build discovery and
+the catalog job (174 s).
+
+**Replay.** `recover`, merge, reload, `plan-repair` (admissible, no refusals, plan `09d64afe...`:
+jobs 1-4 re-run, the rest invalidated), `admit-repair`, `recover --plan`. The first replay of job
+1 failed: the mounted Claude login had expired (`401 OAuth access token has expired`), which the
+job reported as a blocked review. The login was refreshed on the host as the operator notes
+prescribe and job 1 re-run. Jobs 1-4 then replayed with 0 preserved-key differences and their
+independent checks holding, and were re-accepted.
+
+**Accepted attempt:** dispatch `f66ee316-e9e1-4c73-86ff-c2d7d3c254e3`, `attempt_0002`,
+`SUCCEEDED`, 51.4 s job time (`next` wall time 1 min 43 s).
+
+- **A. Inputs.** The claim pins `job_review_intake` at `5be31dccd7f5...`, the run's accepted
+  intake pointer.
+- **B. Independent comparison.**
+
+  | Quantity | Job | Independent source |
+  | --- | --- | --- |
+  | build units | 2: `.`/meson (primary, 23 targets) and `.`/autotools (secondary, 93 build points), each naming the other as parallel | the target has one project with two build systems at the root |
+  | fragment units, demoted markers, orphaned sources | 0, 0, 0 | - |
+  | folded member directories | 131 | - |
+  | `Makefile.am` directories driven through `SUBDIRS` | 128 of 128 | 129 tracked `Makefile.am` less the root; none undriven |
+  | build marker files | 134 accounted for, none twice | 129 `Makefile.am` + 4 `meson.build` + `configure.ac` |
+  | automake libtool libraries | 41 | 41 distinct literal names in `lib_LTLIBRARIES`/`noinst_LTLIBRARIES` across all `Makefile.am`, read by a separate script that does not expand variables; none missing, none extra |
+  | automake programs | 15 | 13 literal names in `bin_`/`noinst_`/`check_PROGRAMS`, plus `freeciv-server` and `freeciv-web`, which `server/Makefile.am` names through `$(srvbin)` |
+  | conditional drives | 53 of 131 carry a condition (`data` under `MAKE_DATA`, `ai` and `server` under `SRV_LIB`, `client/gui-sdl2` under `CLIENT && CLIENT_GUI_SDL2`, ...) | the `if` blocks of the `Makefile.am` files quoted earlier in this record |
+  | `unassigned_variable` records | 0 | every `SUBDIRS` variable is assigned in its own file (sizing above) |
+  | meson targets, files, census | unchanged from the earlier check | as above |
+
+  Three driven directories have no `Makefile.am` (`translations/core`, `nations`, `ruledit`):
+  `translations/Makefile.am` names them and they carry `meson.build` only.
+- **C. Gaps.** 28 canonical records, 5 causes, every one on the confirmed list:
+
+  | Cause | Records | Classification |
+  | --- | ---: | --- |
+  | `.git` excluded | 7 | expected (original list) |
+  | no target-supplied design, DFD, OpenAPI, Postman or threat-model document | 15 | expected for this walk (user, 2026-11-11). No job generates a DFD or threat model; T-107 is reserved for that design |
+  | no `unit_test` document | 3 | expected for this walk (user, 2026-11-12). Detection limit: the name rule sees only `test_*.c`-style files; Freeciv's checks are 18 shell scripts under `tests/` run from `tests/Makefile.am` and CI |
+  | `compile_commands.json` not present | 1 | expected for this walk: none exists before a build |
+  | no package manifest; no manifest for dependency extraction | 2 | expected for this walk. Vendored dependencies are not identified and the dependency catalog is empty (T-098, under T-099) |
+
+- **D. Baseline.** `test/acceptance/freeciv-b1b0768b-v3/job_target_catalog.json` and provenance;
+  seed `after-job_target_catalog`.
+
+The remaining `unresolved` records of the autotools unit (34) are make-rule variables such as
+`$(AM_V_at)`, `$(TOLUA)` and `$(WINDRES)` in recipes; they predate this change and do not affect
+which directories or targets are found.
 
 ## Not verified
 
