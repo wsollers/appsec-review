@@ -347,6 +347,36 @@ workers = 1
 [jobs.job_third_party_data_sync.steps.osv_sync.tasks.publish]
 workers = 1
 
+[jobs.job_third_party_data_sync.steps.grype_db_sync]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.grype_db_sync.settings]
+feed_root = "data/feeds/grype"
+listing_url = "https://grype.anchore.io/databases/v6/latest.json"
+allowed_hosts = ["grype.anchore.io"]
+tool_version = "0.119.0"
+schema_major = 6
+max_listing_bytes = 65536
+max_archive_bytes = 1073741824
+max_uncompressed_bytes = 4294967296
+max_database_bytes = 4294967296
+max_archive_members = 8
+max_zstd_window_bytes = 134217728
+max_age_seconds = 432000
+max_future_seconds = 300
+download_timeout_seconds = 300
+run_timeout_seconds = 900
+memory = "6g"
+
+[jobs.job_third_party_data_sync.steps.grype_db_sync.tasks.fetch]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.grype_db_sync.tasks.import]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.grype_db_sync.tasks.publish]
+workers = 1
+
 [jobs.job_third_party_data_sync.steps.mitre_sync]
 workers = 1
 

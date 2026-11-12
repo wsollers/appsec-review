@@ -139,10 +139,12 @@ selected file's package directory, never a `.go` file. Trivy runs with `--skip-c
 uses the checks embedded in the pinned binary; a checks-bundle download fallback on stderr is a
 named gap. BLint is invoked with `--reports /scratch` and its report files are assembled as in
 [`artifact-security-analysis.md`](artifact-security-analysis.md). A tool that exits outside its
-accepted codes reports the last bounded stderr line in its gap. The data-sync pipeline publishes OSV. `tools/publish_grype_snapshot.py` separately imports
-an already-downloaded Grype v6 database only after verifying the upstream archive checksum, then
-publishes it through the same immutable feed manifest/current-pointer contract. Neither path permits
-a scanner to update its database at scan time.
+accepted codes reports the last bounded stderr line in its gap. The data-sync pipeline publishes
+OSV and Grype. Its independent `grype_db_sync` branch verifies the upstream listing/archive,
+performs a bounded offline import and validation with the pinned Grype image, and publishes the
+immutable `grype-snapshot/2` cache. Consumers reject stale, unvalidated or mismatched-image caches.
+Neither path permits a scanner to update its database at scan time; see
+[Grype database synchronization](third-party-data-sync.md#grype-database-cache).
 
 Run the direct CLI graph and inspect planned applicability with:
 

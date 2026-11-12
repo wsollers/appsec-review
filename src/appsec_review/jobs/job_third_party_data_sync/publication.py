@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import ssl
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 import urllib.parse
 import urllib.request
 import uuid
@@ -29,9 +29,11 @@ def require_beneath(root: Path, path: Path, label: str) -> Path:
 
 
 class HttpDownloader:
-    def __init__(self, *, timeout_seconds: float = 300, user_agent: str = "appsec-review-feed-sync/1"):
+    def __init__(self, *, timeout_seconds: float = 300, user_agent: str = "appsec-review-feed-sync/1",
+                 allow_redirects: bool = True):
         self.timeout_seconds = timeout_seconds
         self.user_agent = user_agent
+        self.allow_redirects = allow_redirects
 
     def download(self, url: str, destination: Path, *, max_bytes: int, allowed_hosts: tuple[str, ...]) -> dict[str, Any]:
         parsed = urllib.parse.urlsplit(url)
@@ -42,7 +44,16 @@ class HttpDownloader:
         total = 0
         destination.parent.mkdir(parents=True, exist_ok=True)
         context = ssl.create_default_context()
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds, context=context) as response, destination.open("xb") as output:
+        if self.allow_redirects:
+            response = urllib.request.urlopen(request, timeout=self.timeout_seconds, context=context)
+        else:
+            class NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, request, file, code, message, headers, newurl):
+                    raise ValueError("feed download redirects are disabled")
+
+            opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), NoRedirect())
+            response = opener.open(request, timeout=self.timeout_seconds)
+        with response, destination.open("xb") as output:
             status = getattr(response, "status", 200)
             if status != 200:
                 raise RuntimeError(f"download returned HTTP {status}: {url}")
@@ -79,6 +90,7 @@ def publish_snapshot(
     schema: str,
     files: Mapping[str, Path],
     manifest_fields: Mapping[str, Any],
+    max_manifest_bytes: int | None = None,
 ) -> dict[str, Any]:
     from appsec_review.storage.feed_provenance import check_root
     from appsec_review.storage.shared import current, safe_path
@@ -103,6 +115,8 @@ def publish_snapshot(
         unsigned["publication_provenance"] = "required-v1"
     snapshot_id = "sha256-" + hashlib.sha256(canonical_json(unsigned)).hexdigest()[:24]
     manifest = {**unsigned, "snapshot_id": snapshot_id}
+    if max_manifest_bytes is not None and len(canonical_json(manifest)) > max_manifest_bytes:
+        raise ValueError(f"{feed_id} manifest exceeds its byte bound")
     with FileLock(root / "locks" / "writer.lock"):
         stage = safe_path(root, "staging/" + snapshot_id + "-" + uuid.uuid4().hex[:8])
         stage.mkdir(parents=True, exist_ok=False)
@@ -159,21 +173,30 @@ def verify_snapshot_directory(directory: Path, manifest: Mapping[str, Any]) -> d
 POINTER_SCHEMAS = ("appsec-review/feed-pointer/1", "appsec-review/nvd-current-pointer/1")
 
 
-def verify_current(root: Path, expected_feed: str) -> dict[str, Any]:
+def verify_current(root: Path, expected_feed: str, *,
+                   manifest_validator: Callable[[Mapping[str, Any]], None] | None = None,
+                   max_manifest_bytes: int | None = None) -> dict[str, Any]:
     """Verify the snapshot; claimed jobs also pin immutable consumption provenance."""
     from appsec_review.storage.feed_provenance import check_root, record_snapshot
     from appsec_review.storage.shared import safe_path
     check_root(root, expected_feed)
-    pointer = json.loads(safe_path(root, "current.json").read_text(encoding="utf-8"))
+    pointer_path = safe_path(root, "current.json")
+    if max_manifest_bytes is not None and pointer_path.stat().st_size > max_manifest_bytes:
+        raise ValueError(f"{expected_feed} pointer exceeds its byte bound")
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     if pointer.get("schema") not in POINTER_SCHEMAS or pointer.get("feed_id") != expected_feed:
         raise ValueError(f"invalid {expected_feed} current pointer")
     directory = safe_path(root, f"snapshots/{pointer['snapshot_id']}")
     manifest_path = safe_path(root, f"snapshots/{pointer['snapshot_id']}/manifest.json")
+    if max_manifest_bytes is not None and manifest_path.stat().st_size > max_manifest_bytes:
+        raise ValueError(f"{expected_feed} manifest exceeds its byte bound")
     if file_sha256(manifest_path) != pointer["manifest_sha256"]:
         raise ValueError(f"{expected_feed} manifest hash mismatch")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("snapshot_id") != pointer["snapshot_id"] or manifest.get("feed_id") != expected_feed:
         raise ValueError(f"{expected_feed} snapshot identity mismatch")
+    if manifest_validator is not None:
+        manifest_validator(manifest)
     verified = verify_snapshot_directory(directory, manifest)
     provenance = record_snapshot(root, expected_feed, pointer["snapshot_id"], computed=False)
     from appsec_review.storage.feed_provenance import observe_snapshot

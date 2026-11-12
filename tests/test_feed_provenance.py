@@ -482,18 +482,29 @@ def test_reference_reader_records_consumer_and_names_missing_global_record(tmp_p
     assert reference.source == "fallback" and "provenance" in reference.gap
 
 
-def test_scanner_identity_records_feed_use_without_running_a_container(tmp_path):
+def test_scanner_identity_records_feed_use_without_running_a_container(tmp_path, monkeypatch):
     from appsec_review.jobs.job_artifact_security_analysis.scanners import ContainerScannerRunner
-    snapshot(tmp_path, "grype")
+    from appsec_review.config.grype import GrypeSettings
+    from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed
+    from tests.fixtures.grype import Downloader, IMAGE_ID, NOW, executor
+    settings = GrypeSettings.from_mapping(tmp_path, {})
+    producer = owner(tmp_path, "producer")
+    work = producer.attempt_root / "work"
+    with provenance_scope(producer):
+        fetched = feed.fetch(settings, work / "fetch", Downloader(), now=NOW)
+        imported = feed.import_database(settings, fetched, work / "import", executor(producer.run_root), now=NOW)
+        feed.publish(settings, fetched, imported, now=NOW)
+    monkeypatch.setattr(feed, "_now", lambda: NOW)
     consumer = owner(tmp_path, "consumer", job="job_artifact_security_analysis")
     manifest = tmp_path / "scanner-manifest"
     manifest.write_bytes(b"fixture")
     runner = ContainerScannerRunner.__new__(ContainerScannerRunner)
     runner.repository_root = tmp_path
+    runner.run_root = consumer.run_root
     runner._identities, runner._feeds = {}, {}
-    runner.catalog = SimpleNamespace(tool=lambda tool: SimpleNamespace(version="fixture", manifest_path=manifest))
-    runner.executor = SimpleNamespace(resolve_image=lambda tool: "sha256:fixture")
+    runner.catalog = SimpleNamespace(tool=lambda tool: SimpleNamespace(version="0.119.0", manifest_path=manifest))
+    runner.executor = SimpleNamespace(resolve_image=lambda tool: IMAGE_ID)
     with provenance_scope(consumer):
         identity = runner.identity("grype", {})
     assert "unavailable" not in identity
-    assert receipts(consumer, "feed-snapshot")[0]["legacy"] == "unknown-original-producer"
+    assert receipts(consumer, "feed-snapshot")[0]["legacy"] is None

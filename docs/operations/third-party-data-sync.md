@@ -12,6 +12,7 @@ The unit graph is:
 ```text
 nvd_sync:                  fetch -> process -> publish
 osv_sync:                  fetch -> index -> publish
+grype_db_sync:             fetch -> import -> publish
 mitre_sync:                fetch -> normalize -> publish
 kev_sync:                  fetch -> normalize -> publish
 epss_sync:                 fetch -> normalize -> publish
@@ -21,10 +22,11 @@ cve_bin_tool_db_build:     resolve_nvd_snapshot -> build -> publish
                               nvd_sync.publish
 ```
 
-NVD, OSV, MITRE, KEV, and EPSS are independent branches. The executor attempts every runnable unit even when
-another branch fails. Only units whose own dependency failed are marked `SKIPPED`; the job result
-and process status are `FAILED` when any unit failed or was skipped. Every task writes `status.json`
-and, on success, `result.json` beneath the execution attempt. These receipts contain stable unit,
+NVD, OSV, Grype, MITRE, KEV, and EPSS are independent branches. The executor attempts every runnable unit even when
+another branch fails. Only units whose own dependency failed are skipped; the attempt and process
+status are `FAILED` when a branch fails. The direct claimed-unit launcher does not write task
+receipts for unstarted dependents or publish an accepted handoff for that failed attempt. Every
+started task writes `status.json` and, on success, `result.json` beneath the execution attempt. These receipts contain stable unit,
 step, dependency, timing, status, error, and output identities suitable for later Dagster display.
 
 The cve-bin-tool builder resolves and re-hashes the exact NVD snapshot published by this execution,
@@ -67,7 +69,9 @@ global records. The consumer's hash-pinned configuration allowlists the exact fe
 repository `data/`. Snapshot selection is pinned permanently, independently of `current.json`.
 Acceptance and resume verify records, manifests and files again, including NVD parent/blob
 chains. A new manifest requiring provenance cannot be treated as legacy when a record is missing.
-Legacy snapshots and imported Grype databases retain explicit unknown-original-producer labels.
+Legacy snapshots retain explicit unknown-original-producer labels. The Grype consumer requires the
+new validated `grype-snapshot/2` contract; old manually imported `/1` databases are not promoted
+into validated snapshots.
 
 The existing nonblocking writer lock continues to reject concurrent snapshot publishers.
 Record writes use atomic no-replace publication. NVD publishes a complete private directory
@@ -160,6 +164,54 @@ last-known-good pointer unchanged.
 
 ## Per-run pinning and freshness
 
+### Grype database cache
+
+`grype_db_sync` replaces `tools/publish_grype_snapshot.py`. Only the maintenance job downloads
+database bytes. It fetches the official v6 `latest.json` and the relative `.tar.zst` archive over
+verified HTTPS, refuses redirects, and checks the archive against the listing's SHA-256. An
+inactive listing, unsupported schema, missing timestamp, stale build, or excessive future build
+fails the branch without advancing `current.json`.
+
+The publisher incrementally decompresses one complete zstd frame with a bounded window and
+total expanded bytes. Tar headers (including bounded PAX metadata) count toward the member limit;
+only one regular `vulnerability.db` is extracted. Links, sparse files, devices, duplicate files,
+unexpected paths, oversized members, truncated frames and trailing compressed data are refused.
+The pinned Grype image then runs its supported `db import /target/vulnerability.db` to hydrate
+the raw database, followed by `db status -o json` against a read-only cache mount. All Grype
+invocations use `network = "none"`, a read-only root, CPU/memory/time/output bounds, and a kernel
+file-size limit. No missing image is built or pulled. The observed image ID is pinned across
+version, import and status invocations and the existing signature policy still applies.
+
+The central `grype_db_sync.settings` table configures listing/host selection, exact tool release,
+schema major (6), listing/archive/expanded/database byte limits, tar-member and zstd-window limits,
+download/run timeouts, memory, and age limits. Defaults are a 64 KiB listing, 1 GiB archive,
+4 GiB expanded tar and hydrated database, eight tar headers, 128 MiB zstd window, 300-second
+download socket timeout, 900-second tool timeout, 6 GiB container memory, a five-day maximum
+database build age, and five minutes of future-clock tolerance. These are configured bounds,
+not claims that the current live database fits them.
+
+The immutable manifest retains upstream schema/build identity, both download receipts (URL,
+retrieval time, byte size and SHA-256), and the validating image/tag/tool release. It hashes every
+published file: `6/vulnerability.db`, `6/import.json`, `source/latest.json`,
+`validation/version.json`, and `validation/status.json`. The downloaded archive and container
+execution receipts remain under the producing attempt's protected `work/` dataset. Import and
+status must agree with the upstream listing, including schema and build time. Publication rechecks
+the imported hashes before the shared atomic snapshot publisher advances the last-known-good
+pointer; failed fetch/import/validation leaves it unchanged.
+
+`steps.grype_db_sync.feed.verify` resolves exactly one hash-verified cache with bounded manifest
+and file sizes and rechecks freshness from the **upstream build**, not pointer publication time.
+Both existing scanner consumers use their run's frozen Grype settings and require the same tool
+release/image; missing, stale or unvalidated caches are named gaps. This is a cache-consumer
+interface, not a new vulnerability matcher. `tools.disable_grype = true` is unchanged; T-105
+matching-stage work and T-106 nightly activation remain separate.
+
+The Python runtime now requires `zstandard==0.25.0` in both the package and Dagster requirements.
+Deploying this dependency change requires an explicitly authorized Dagster tooling-image rebuild,
+then the normal source reload/signing procedure. It does not require rebuilding the Grype image.
+
+### Indexed reference feeds
+
 `job_review_data_indexing` pins each feed's verified current snapshot into the run
 (`feed_pins`, recorded in its `load.accepted_inputs` artifact). A feed is pinned only when its
 pointer, manifest, and every manifest-hashed file verify and the manifest hashes the feed's index
@@ -183,6 +235,15 @@ fixture feed files (valid, malformed, oversize, hash mismatch, tampered index, s
 NVD index determinism and override order. Real downloads from CISA, FIRST/Empirical Security, NVD,
 OSV, and MITRE are not exercised by tests; the configured URLs and the live formats (in particular
 the EPSS host and comment-line format, and the KEV field names) are unverified until a live run.
+Grype units use small real zstd/tar fixtures and fake HTTP/Docker boundaries to exercise bounds,
+validation, immutable publication, provenance and offline consumer failure behavior. Actual
+Grype import/hydration, upstream archive compatibility, native-engine commissioning, deployment
+and nightly execution have **not** been validated by these units.
+For the next separately authorized Grype validation, retain the exact image/release, upstream
+listing/archive identity, import/status receipts and published file hashes; establish that the
+real hydrated cache fits the configured limits and mounts read-only for that same networkless
+tool. A failed refresh must leave the prior pointer and snapshot bytes unchanged. This scenario
+is not an automatic unit-test or deployment gate.
 
 ## Metadata placement
 
@@ -213,6 +274,7 @@ python -m appsec_review run job_third_party_data_sync --trigger manual
 ```
 
 Set `NVD_API_KEY` to use the NVD authenticated rate. Without it, the configured unauthenticated
-delay is enforced. Docker must be available for the cve-bin-tool build. A nonzero exit means at
+delay is enforced. Docker must be available for the cve-bin-tool build and the preinstalled Grype
+validator image. A nonzero exit means at
 least one source branch failed; inspect the attempt's unit receipts rather than treating an
 unavailable source as successful.
