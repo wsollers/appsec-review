@@ -121,6 +121,6 @@ validators with a fake external model boundary, not a full pipeline/review.
 Integration, acceptance, live-model, real-image and Dagster review validation are separate,
 manual user-owned checks; the inference extension has not run them.
 
-When explicitly requested, `tests/test_native_sbom_image.py` performs real offline Syft-to-SPDX conversion through the executor and then
+When explicitly requested, `tests/integration/test_native_sbom_image.py` performs real offline Syft-to-SPDX conversion through the executor and then
 validates enrichment against the pinned official SPDX schema. Missing Docker/image produces
 an explicit skip, not a passed image claim.

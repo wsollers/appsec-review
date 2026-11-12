@@ -1,3 +1,4 @@
+"""Real offline Syft-to-SPDX conversion in the pinned tool image (skipped without Docker or the image)."""
 from __future__ import annotations
 
 import json
@@ -15,7 +16,7 @@ from appsec_review.storage import atomic_json
 from appsec_review.storage.shared import reference
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 
 
 def test_existing_syft_image_converts_and_enriches_spdx(tmp_path: Path) -> None:

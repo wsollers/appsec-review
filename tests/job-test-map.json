@@ -141,7 +141,7 @@
       ],
       "integration": [],
       "acceptance": [],
-      "live": ["tests/test_dossier_live.py"]
+      "live": ["tests/integration/test_dossier_live.py"]
     },
     "job_evidence_collection": {
       "unit": ["tests/test_evidence_collection_job.py"],
@@ -219,7 +219,7 @@
       "unit": ["tests/test_poc_generation_units.py"],
       "integration": ["tests/integration/test_authentic_poc_contract.py"],
       "acceptance": [],
-      "live": ["tests/test_poc_live_compile.py"]
+      "live": ["tests/integration/test_poc_live_compile.py"]
     },
     "job_post_build_security_assessment": {
       "unit": [

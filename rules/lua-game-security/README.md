@@ -137,6 +137,7 @@ From a checkout with its own test environment and the locally built tool images:
 
 ```powershell
 .\.venv\Scripts\python -m pytest tests\test_lua_game_rules.py --basetemp=test/tmp/lua-game-security -q
+.\.venv\Scripts\python -m pytest tests\integration\test_lua_game_rules_engines.py --basetemp=test/tmp/lua-game-security -q
 .\.venv\Scripts\python containers\build.py query-packs lua-game-security
 ```
 

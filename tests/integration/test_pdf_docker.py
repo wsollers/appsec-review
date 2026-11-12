@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from .fixture import RUN_ID, build_fixture
+from tests.reporting.fixture import RUN_ID, build_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 IMAGE = "appsec-review/tool-report-latex:1.0.0"

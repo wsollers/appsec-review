@@ -655,7 +655,7 @@ Own only:
 - `observability\telemetry.py`;
 - `appsec-review.toml` and `pyproject.toml` for settings/schema packaging;
 - new `tests\test_native_sbom_job.py`, `test_native_sbom_metrics.py`, and
-  `test_native_sbom_image.py`;
+  `testsintegration	est_native_sbom_image.py`;
 - narrowly related assertions in existing `tests\test_dependency_intelligence.py` and
   evidence-normalization tests, preserving their original regression coverage.
 

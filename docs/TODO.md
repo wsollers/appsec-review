@@ -47,7 +47,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-049 | [Supersede the Windows native-analysis VM design for builds](#t-049-supersede-the-windows-native-analysis-vm-design-for-builds) | windows | open |
 | T-050 | [Container catalog: deferred acceptance work](#t-050-container-catalog-deferred-acceptance-work) | images | open |
 | T-051 | [Host-local image pins: bind the observed image ID into the run](#t-051-host-local-image-pins-bind-the-observed-image-id-into-the-run) | images | done (2026-11-10, docs/tasks/2026-11-10-t051-host-local-pins.md) |
-| T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | open |
+| T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | done (2026-11-12, branch t052-docker-engine-tests; moved to tests/integration and tests/live, see Refs) |
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | done (2026-11-11, 962ed773) |
 | T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
@@ -664,7 +664,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-052 — Decide the home of Docker-engine-touching unit tests
 
-- **State:** open
+- **State:** done (2026-11-12, branch t052-docker-engine-tests; moved to tests/integration and tests/live, see Refs)
 - **Area:** testing
 - **Blocks:** T-048
 - **Why:** several unit-collected tests invoke a real Docker engine and skip when it or an image
@@ -680,6 +680,16 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** move them to an explicit integration path or replace the engine with a fake at the
   subprocess boundary. Not a merge or test gate.
 - **Done when:** the unit path has no test whose result depends on a running engine.
+- **Refs:** `tests/integration/test_banned_functions_engines.py`,
+  `tests/integration/test_cpp_cert_rules_engines.py`,
+  `tests/integration/test_cpp_memory_safety_rules_engines.py`,
+  `tests/integration/test_lua_game_rules_engines.py`,
+  `tests/integration/test_syntax_retrieval_live.py`, `tests/integration/test_tree_sitter_ast_live.py`,
+  `tests/integration/test_dossier_live.py`, `tests/integration/test_poc_live_compile.py`,
+  `tests/integration/test_native_sbom_image.py`, `tests/integration/test_pdf_docker.py`,
+  `tests/live/test_dagster_wave1_live.py`; the tests skip there, naming the gap, without the engine
+  or an image, because faking the engine would prove nothing about the rule packs and images they
+  exist to check. `docs/architecture/testing.md` (unit harness, item 7).
 
 ### T-053 — Decide whether review_intake keeps its own model gate
 
