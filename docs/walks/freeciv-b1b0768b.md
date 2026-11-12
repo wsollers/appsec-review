@@ -62,6 +62,7 @@ here is changed to fit a result.
 | 2026-11-12 | Time rules: a job-watch rule and a replay budget ("Proceed"), a ten-minute timer on fixes and a ceiling on test runs | charter section 10; T-109 |
 | 2026-11-12 | Job 6 gap causes: "Take your recommendation" (accept the timing gaps, the symbol and parse gaps and the size bound as detection limits; size the change-log binding before accepting) | rows 11 to 13 below; the change-log gaps and `timestamp_anomaly:1` stay open; record 06 |
 | 2026-11-12 | "Yes, accept job 6" (the change-log gaps and `timestamp_anomaly:1` join the expected list, then job 6 is accepted) | row 14; record 06 |
+| 2026-11-12 | Accepted-job baselines stay out of Git: "everyone should keep and maintian their own local metadata" | `.gitignore` entry for `test/acceptance/freeciv-b1b0768b-v*/`; no baseline is shared between hosts |
 | 2026-11-12 | "This is for you and the other machine. if you guys need to keep local state you can add an untracked file." | optional per-host notes at `docs/walks/freeciv-b1b0768b.local.md`, ignored by Git; charter section 2 |
 
 Decisions reported to this file by the coordinating session rather than read from the user's own

@@ -54,7 +54,9 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
   `freeciv-walk` in `~/projects/appsec-review-freeciv-walk`.
 - Accepted key directories `test/acceptance/freeciv-b1b0768b-v1`, `-v2`, `-v3` and
   `test/acceptance/AcceptanceTest/` are untracked in the main checkout. Only `-v3` is this walk's
-  baseline. None is committed; whether to commit `-v3` is the user's call.
+  baseline. User, 2026-11-12: they stay out of Git and each host keeps and maintains its own
+  baselines and metadata; `.gitignore` now ignores `test/acceptance/freeciv-b1b0768b-v*/`. Another
+  host starts its own walk and accepts its own jobs; it does not copy these.
 
 ## Waiting on the user
 
