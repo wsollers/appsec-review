@@ -14,7 +14,7 @@ from appsec_review.jobs.cataloging import (
 )
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
 from appsec_review.jobs.build_discovery import (
-    discover_build_inventory,
+    discover_build_inventory, is_build_descriptor,
     android_descriptor_facts, descriptor_package, discover_build_units, required_image_profile,
     source_only_scopes, unsupported_build_gaps,
 )
@@ -77,6 +77,54 @@ def _gap_text(value: Any) -> str:
         if path is not None and reason is not None:
             return f"{path}: {reason}"
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+# Largest build descriptor build discovery reads to find build points. The root meson.build of a
+# real project is well over 64 KiB (Freeciv's is 124 KiB), which was the bound until 2026-11-11.
+BUILD_DESCRIPTOR_READ_BYTES = 1024 * 1024
+
+
+def descriptor_reader(target: Path, accepted: Mapping[str, Mapping[str, Any]], *,
+                      limit: int = BUILD_DESCRIPTOR_READ_BYTES):
+    """A bounded reader of accepted target files for build discovery.
+
+    Returns ``(read_text, changed, unread)``. ``read_text`` answers ``None`` for a path the catalog
+    did not accept, a file that cannot be read as UTF-8, and a file over ``limit``; the last is
+    recorded in ``unread`` with its size, because a descriptor that was not read is unknown, not a
+    descriptor that declares no build. ``changed`` lists files that differ from the accepted bytes.
+    """
+    changed: list[str] = []
+    unread: dict[str, int] = {}
+
+    def read_text(relative: str) -> str | None:
+        # Bounded build-script read for routing only; the bytes never become instructions.
+        identity = accepted.get(relative)
+        if identity is None:
+            return None
+        if int(identity["size_bytes"]) > limit:
+            unread[relative] = int(identity["size_bytes"])
+            return None
+        path = safe_path(target, relative)
+        if not path.is_file():
+            return None
+        try:
+            raw = path.read_bytes()
+            if (len(raw) != identity["size_bytes"] or
+                    hashlib.sha256(raw).hexdigest() != identity["sha256"]):
+                changed.append(relative)
+                raise ValueError("engine/build descriptor differs from the accepted catalog")
+            return raw.decode("utf-8")
+        except (OSError, UnicodeError):
+            return None
+
+    return read_text, changed, unread
+
+
+def unread_descriptor_gaps(unread: Mapping[str, int], *, limit: int = BUILD_DESCRIPTOR_READ_BYTES) -> list[str]:
+    """One named gap per build descriptor that build discovery could not read for its size."""
+    return [f"build descriptor not read: {path}: {size} bytes exceeds the {limit}-byte read bound; "
+            "its build points and driven directories are unknown"
+            for path, size in sorted(unread.items()) if is_build_descriptor(PurePosixPath(path))]
 
 
 def _validate_config(context, result) -> None:
@@ -177,25 +225,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         files = unit.output("repository_discovery.partition_repository")["files"]
         target = _target(unit).resolve()
         accepted = {str(item["path"]): item for item in files}
-        changed_descriptors = []
-
-        def read_text(relative: str) -> str | None:
-            # Bounded build-script read for routing only; the bytes never become instructions.
-            identity = accepted.get(relative)
-            if identity is None or int(identity["size_bytes"]) > 64 * 1024:
-                return None
-            path = safe_path(target, relative)
-            if not path.is_file():
-                return None
-            try:
-                raw = path.read_bytes()
-                if (len(raw) != identity["size_bytes"] or
-                        hashlib.sha256(raw).hexdigest() != identity["sha256"]):
-                    changed_descriptors.append(relative)
-                    raise ValueError("engine/build descriptor differs from the accepted catalog")
-                return raw.decode("utf-8")
-            except (OSError, UnicodeError):
-                return None
+        read_text, changed_descriptors, unread_descriptors = descriptor_reader(target, accepted)
 
         from appsec_review.jobs.engine_discovery import discover_unity
         engines = discover_unity(files, read_text=lambda descriptor, _limit: read_text(descriptor["path"]))
@@ -205,7 +235,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
         inventory = discover_build_inventory(files, read_text=read_text, engine_discovery=engines)
         units = inventory["units"]
         orphans = inventory["orphaned_sources"]
-        gaps = [*unsupported_build_gaps(files, units), *engines["gaps"]]
+        gaps = [*unsupported_build_gaps(files, units), *engines["gaps"],
+                *unread_descriptor_gaps(unread_descriptors)]
         # Orphaned sources are knowledge the review reports (dead code, build drift, an abandoned
         # port, or a build we did not understand); they are a coverage fact here, never a build.
         if orphans:
