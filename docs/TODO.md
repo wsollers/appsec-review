@@ -90,7 +90,15 @@ until each is rewritten into the entry format when it is next touched.
 | T-095 | [Report an intake coverage gap once, not once per unit](#t-095-report-an-intake-coverage-gap-once-not-once-per-unit) | pipeline | open |
 | T-096 | [Stop inferring run artifacts from a data/ path prefix](#t-096-stop-inferring-run-artifacts-from-a-data-path-prefix) | pipeline | open |
 | T-097 | [Use ChangeLog files as a source-history signal](#t-097-use-changelog-files-as-a-source-history-signal) | history | in-progress |
-| T-098 | [Identify vendored third-party code in a target](#t-098-identify-vendored-third-party-code-in-a-target) | topology | open |
+| T-098 | [Identify vendored third-party code in a target](#t-098-identify-vendored-third-party-code-in-a-target) | topology | blocked |
+| T-099 | [Build one dependency finder with a common observation record](#t-099-build-one-dependency-finder-with-a-common-observation-record) | topology | open |
+| T-100 | [Find dependencies declared in native build systems](#t-100-find-dependencies-declared-in-native-build-systems) | topology | blocked |
+| T-101 | [Find dependencies in manifests and lockfiles of every recognised ecosystem](#t-101-find-dependencies-in-manifests-and-lockfiles-of-every-recognised-ecosystem) | data | blocked |
+| T-102 | [Find components in built binaries with a cve-bin-tool scan adapter](#t-102-find-components-in-built-binaries-with-a-cve-bin-tool-scan-adapter) | binary | blocked |
+| T-103 | [Sync the Trivy databases nightly and add a Trivy SBOM vulnerability adapter](#t-103-sync-the-trivy-databases-nightly-and-add-a-trivy-sbom-vulnerability-adapter) | data | open |
+| T-104 | [Look up CPE candidates in the pinned NVD snapshot](#t-104-look-up-cpe-candidates-in-the-pinned-nvd-snapshot) | data | open |
+| T-105 | [Match vulnerabilities in one stage over the merged dependency inventory](#t-105-match-vulnerabilities-in-one-stage-over-the-merged-dependency-inventory) | scanners | blocked |
+| T-106 | [Restart the nightly data sync and refuse stale feeds at run readiness](#t-106-restart-the-nightly-data-sync-and-refuse-stale-feeds-at-run-readiness) | data | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1475,8 +1483,9 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-098 — Identify vendored third-party code in a target
 
-- **State:** open
+- **State:** blocked
 - **Area:** topology
+- **Blocked by:** T-099
 - **Why:** the Freeciv walk (run `2026-11-12-0001`) catalogued the copies of Lua 5.4, tolua 5.2,
   tinycthread, cvercmp and luasql under `dependencies/` as build units like the project's own
   code, while the dependency catalog was empty because the target has no package manifest. Nothing
@@ -1498,6 +1507,85 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** `src/appsec_review/jobs/cataloging.py`, `src/appsec_review/jobs/job_target_catalog/job.py`,
   `src/appsec_review/jobs/delivery_scope.py`,
   `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091.
+
+### T-099 — Build one dependency finder with a common observation record
+
+- **State:** open
+- **Area:** topology
+- **Blocks:** T-098, T-100, T-101, T-102, T-105
+- **Why:** dependencies are found in eight places with different record shapes, three of which never reach the merged inventory; the Freeciv catalog's dependency list was empty (walk 05). There is no one place that says what a dependency observation is or who may produce one.
+- **Scope:** define `dependency-observation/1` (name, version, how the version is known, ecosystem, purl, CPE candidates, component root, vendored flag, scope, finder id, resolving evidence); a registry of finders, each a pure function over accepted inputs returning observations and named gaps; move the existing producers behind it without changing behaviour (catalog `package.json`, Syft observations, native discovery); `normalize_dependencies` consumes only the registry's output and `job_dependency_intelligence` stays the single merge and SPDX publisher. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first. The user also asked (same date) that as many tools as possible feed the SBOM and review data.
+- **Done when:** catalog, Syft and native observations reach `normalize_dependencies` only through the registry, with unchanged output on the accepted cpp-multivuln baseline.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `src/appsec_review/jobs/job_target_catalog/job.py`, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091, T-011.
+
+### T-100 — Find dependencies declared in native build systems
+
+- **State:** blocked
+- **Area:** topology
+- **Blocked by:** T-099
+- **Why:** a native project declares what it links against in its build files, not in a package manifest: CMake `find_package`, `pkg_check_modules`, `FetchContent`, `ExternalProject_Add` and CPM; Conan; vcpkg; Meson `dependency()` and wraps; autotools `PKG_CHECK_MODULES` and `AC_CHECK_LIB`; Make link lines. None of these is read as a dependency today, although the build-point parsers already see most of the calls.
+- **Scope:** one finder per build system behind the T-099 registry, each publishing declared dependencies with their evidence; a `FetchContent` URL or tag yields a version. Declared constraints are not resolved versions and are labelled so. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+- **Done when:** a fixture per build system publishes its declared dependencies with evidence, and Freeciv's meson and autotools declarations appear in its dependency catalog.
+- **Refs:** `src/appsec_review/jobs/build_points.py`, T-099, T-098.
+
+### T-101 — Find dependencies in manifests and lockfiles of every recognised ecosystem
+
+- **State:** blocked
+- **Area:** data
+- **Blocked by:** T-099
+- **Why:** the catalog recognises Maven, Gradle, NuGet, Cargo, Go, Python, Composer and RubyGems manifests but reports a deferred parser for most of them.
+- **Scope:** take manifest and lockfile contents from Syft and osv-scanner extraction rather than writing parsers, as registry finders. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): package-manager tools that need network egress to resolve (Maven, npm and the like) are pre-authorized by the user; each use is still declared in typed configuration and recorded in the run. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+- **Done when:** no catalog gap reads that the dependency parser is deferred for a manifest type the catalog recognises.
+- **Refs:** `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/jobs/job_evidence_collection/`, T-099, T-011.
+
+### T-102 — Find components in built binaries with a cve-bin-tool scan adapter
+
+- **State:** blocked
+- **Area:** binary
+- **Blocked by:** T-099
+- **Why:** a statically linked or bundled library leaves no manifest; its version is only in the binary. cve-bin-tool is built nightly but its scanner is still catalogued as deferred.
+- **Scope:** a built-binary component finder (cve-bin-tool version-string checkers, Syft binary classifiers, ELF `NEEDED`/SONAME, Go build info) behind the registry, and a cve-bin-tool scan adapter. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): (2) the scan adapter runs cve-bin-tool as a separate executable (execute only), and the nightly builder `tools/cve-bin-tool/build_db.py` importing the package in-process inside its own container is accepted as internal use. The catalog entry moves from `deferred` to `enabled` with that decision recorded. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+- **Done when:** a fixture binary with a statically linked library of known version yields the component and its CVEs offline.
+- **Refs:** `tools/cve-bin-tool/build_db.py`, `containers/catalog.toml`, T-099.
+
+### T-103 — Sync the Trivy databases nightly and add a Trivy SBOM vulnerability adapter
+
+- **State:** open
+- **Area:** data
+- **Blocks:** T-105
+- **Why:** one matcher's database is one view; Trivy's database is not fetched or used.
+- **Scope:** a `trivy_db_sync` step in `job_third_party_data_sync` that fetches `trivy-db` and `trivy-java-db`, verifies and publishes them immutably, and a Trivy adapter in SBOM mode. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): (1) the nightly sync job may reach the network to fetch the Grype and Trivy databases; scanners stay `network = "none"`. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+- **Done when:** the sync publishes a verified Trivy snapshot with a last-known-good pointer, and the adapter matches a fixture SBOM offline against it.
+- **Refs:** `src/appsec_review/jobs/job_third_party_data_sync/`, T-009, T-106.
+
+### T-104 — Look up CPE candidates in the pinned NVD snapshot
+
+- **State:** open
+- **Area:** data
+- **Blocks:** T-105
+- **Why:** vendored C and C++ libraries have no package record, so package-based matchers find nothing for them; their vulnerabilities are published against CPE names in NVD.
+- **Scope:** a bounded CPE lookup against the NVD snapshot the nightly already publishes, taking CPE candidates from dependency observations. Matches are leads unless the version is resolved or installed. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+- **Done when:** a fixture observation with a known vendor, product and version returns its NVD entries from a pinned snapshot, within stated bounds, offline.
+- **Refs:** `data/feeds/nvd`, `src/appsec_review/jobs/job_third_party_data_sync/`, T-099, T-098.
+
+### T-105 — Match vulnerabilities in one stage over the merged dependency inventory
+
+- **State:** blocked
+- **Area:** scanners
+- **Blocked by:** T-009, T-099, T-103, T-104
+- **Why:** each matcher scans its own private view (Grype over a Syft SBOM, osv-scanner per project, nothing for native or vendored code), so coverage depends on which tool happened to see a dependency. Grype is off by `tools.disable_grype` and has no database snapshot on this host.
+- **Scope:** Grype and Trivy in SBOM mode over the published SPDX, OSV by purl through the index matcher, the CPE lookup, and cve-bin-tool per built binary, all over the merged inventory; every match records the matcher, the database snapshot id and how the version was known. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): (3) native-SBOM design decision 2 is lifted: discovered native versions may be matched against vulnerability data, labelled as leads; vendored copies stay leads because they are often patched. Then `disable_grype = false`, and T-010's dedupe becomes a property of the stage. (4) Order agreed: fix the stale nightly (T-106), then the registry with the vendored and native-declaration finders (T-099, T-098, T-100), then the databases into the nightly (T-009, T-103), then this stage. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+- **Done when:** one run publishes matches from every enabled matcher over the same inventory with snapshot ids, a declared-version match is labelled a lead, and Grype coverage is no longer a configured-disabled gap.
+- **Refs:** `src/appsec_review/jobs/job_evidence_collection/`, `src/appsec_review/jobs/job_artifact_security_analysis/`, `appsec-review.toml` (`[tools]`), T-010, T-013.
+
+### T-106 — Restart the nightly data sync and refuse stale feeds at run readiness
+
+- **State:** open
+- **Area:** data
+- **Why:** every feed pointer under `data/feeds` is dated 2026-10-16 or 2026-10-18. Dagster shows the schedule `third_party_data_sync_schedule` (cron `0 0 * * *` UTC, default status RUNNING) in instance state STOPPED; its last tick was 2026-10-19 00:00 UTC. Its last two runs failed: 2026-10-19 in step `cve_bin_tool_db_build__build`, 2026-10-18 in `begin`; the last scheduled success was 2026-10-17. So the schedule was stopped explicitly after two failed nights and nothing has synced for 24 days. A review reading these snapshots matches against vulnerability data of mid-October without saying so.
+- **Scope:** find and fix the two failures, turn the schedule back on (an operator action on the shared stack), and add a staleness check to run readiness so a review cannot start on feeds older than a configured bound without a named gap. This is the first item of the dependency plan (phase 0).
+- **Done when:** the schedule ticks and publishes on this host, and a readiness test with a feed pointer older than the bound yields the named gap.
+- **Refs:** `src/appsec_review/jobs/job_third_party_data_sync/`, `src/appsec_review/orchestration/dagster/adapter.py`, `deploy/dagster/bin/ops_readiness.py`, T-057.
 
 ## Legacy backlog
 
@@ -1806,6 +1894,11 @@ extraction bounds, hash every published file, validate the database with the pin
 publish immutably with a last-known-good pointer, and expose a bounded lookup/consumer interface.
 The step must fail truthfully when provenance, validation, or freshness cannot be established.
 
+Update 2026-11-12 (user decision on the dependency plan): the step runs in the nightly sync and replaces the
+manual `publish_grype_snapshot.py`; the sync job may reach the network to fetch the database, while scanners
+stay `network = "none"`. It is a prerequisite of the matching stage T-105 and is worked after the Freeciv walk
+is through the build and topology jobs.
+
 ### T-010 — Optimize produced-artifact Grype without reducing coverage
 
 Future artifact Grype work must deduplicate accepted artifacts by content hash and cache only by
@@ -1842,6 +1935,10 @@ Until then, an operator can name such a tree in a `[[build_outputs.exclusions]]`
 [native build-output discovery](architecture/native-build-output-discovery.md#configuration)). The
 walk then counts its files under `configured_exclusions` instead of listing them, so the tree gets
 no per-file review and no supply-chain rows.
+
+Update 2026-11-12 (dependency plan): the installed and resolved dependency summaries become finders behind the
+registry of T-099, in the order above. Package-manager tools that need network egress to resolve are
+pre-authorized by the user (2026-11-12).
 
 ### T-012 — Follow-ups from the scanner launch reduction
 
@@ -1880,6 +1977,9 @@ default off) exists on branch `wave2-osv` (`5bf3475a`) and is not merged: it bum
 output schema `osv-index/1` to `/2`, so its effect on reuse of an accepted third-party sync output
 must be checked first. Still open after that merge: wiring the matcher into evidence collection in
 place of the per-project osv-scanner launch, and measuring memory against the 2.2 GB baseline.
+
+Update 2026-11-12 (dependency plan): after the merge, the matcher consumes the merged inventory as one matcher of
+the stage T-105, and gains non-SemVer orderings and `GIT` ranges.
 
 ### T-014 — Measure and extend seeded CodeQL neighborhoods
 
