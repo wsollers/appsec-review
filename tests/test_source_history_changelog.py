@@ -9,6 +9,7 @@ from copy import deepcopy
 from dataclasses import replace
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -188,7 +189,42 @@ def test_message_text_bound_marks_the_classification_incomplete() -> None:
     data = b"commit " + b"8" * 40 + b"\n\n" + body * 17 + b"    fix CVE-2024-33333\n"
     result = changelog.parse(data, LIMITS, classify_text)
     assert result["entries"][0]["message_complete"] is False and result["entries"][0]["fix"] is None
-    assert result["counts"]["messages_truncated"] == 1
+    assert result["counts"]["messages_truncated"] == 1 and result["status"] == "partial"
+    assert changelog.file_gaps("ChangeLog", result) == [
+        {"gap": "changelog_message_truncated", "path": "ChangeLog", "count": 1, "unit": "entries"}]
+
+
+def test_non_ascii_digits_never_reach_int_and_never_raise() -> None:
+    # str.isdigit accepts superscript and other Unicode digits that int() rejects.
+    assert changelog._svn_header("r1 | a | 2020-01-01 | ² lines") == ("r1", "2020-01-01", None)
+    assert changelog._svn_header("r² | a | 2020-01-01 | 1 line") is None
+    assert changelog._stated_date("Date: ²²²² Jan 1") is None
+    assert changelog._stated_date("٣ Jan ٢٠٢٤") is None
+    assert changelog._git_path("²\t²\tsrc/a.c") is None
+    # Whole files with such tokens parse without raising; an invalid count or date is simply absent.
+    for text, dates in (
+            ("r1 | a | 2020-01-01 | ² lines\n\nmessage\n", ["2020-01-01"]),
+            ("commit " + "a" * 40 + "\nDate: ²²²² Jan 1\n\n    subject\n\nR²²\told\tnew\n", [None]),
+            ("Mon Jan ² 10:00:00 ²²²²  A  <a@example.test>\n\n\t* a.c: x\n", [])):
+        result = changelog.parse(text.encode(), LIMITS, classify_text)
+        assert [item["date"] for item in result["entries"]] == dates
+
+
+def test_svn_header_claiming_more_lines_than_exist_is_reported_not_trusted() -> None:
+    separator = b"-" * 72 + b"\n"
+    data = (separator + b"r2 | a | 2024-03-10 00:00:00 +0000 (x) | 999999 lines\n\nfirst\n" + separator
+            + b"r1 | a | 2024-02-01 00:00:00 +0000 (x) | 1 line\n\nswallowed\n" + separator)
+    result = changelog.parse(data, LIMITS, classify_text)
+    assert [item["id"] for item in result["entries"]] == ["r2"] and result["status"] == "partial"
+    assert changelog.file_gaps("ChangeLog", result) == [
+        {"gap": "changelog_unparsed_lines", "path": "ChangeLog", "count": 6, "unit": "lines"}]
+
+
+def test_gnu_symbols_need_a_closed_group_and_scan_once() -> None:
+    data = ("2024-01-02  A  <a@example.test>\n\n\t* a.c (Closes: #12\n\t(Unfinished\n\t* b.c " + "()" * 1500
+            + " (done): x\n").encode()
+    result = changelog.parse(data, LIMITS, classify_text)
+    assert result["entries"][0]["paths"] == [("a.c", ()), ("b.c", ("done",))]
 
 
 # --- Path binding ----------------------------------------------------------------------------------
@@ -198,7 +234,8 @@ def test_message_text_bound_marks_the_classification_incomplete() -> None:
     ("./src/auth.c", ("exact", "src/auth.c")),
     (".../deep/guide.txt", ("suffix", "manual/deep/guide.txt")),
     (".../docs/guide.txt", ("unmatched", None)),
-    ("/branches/stable/docs/guide.txt", ("repository_prefix", "docs/guide.txt")),
+    ("/branches/stable/docs/guide.txt", ("unmatched", None)),
+    ("/trunk/project/src/auth.c", ("unmatched", None)),
     ("/tags/v1/src/auth.c", ("unmatched", None)),
     ("/trunk/src/auth.c", ("repository_prefix", "src/auth.c")),
     ("auth.c", ("suffix", "src/auth.c")),
@@ -378,7 +415,7 @@ def test_unit_parses_every_format_and_reports_each_gap_as_a_record(tmp_path: Pat
     assert output["gap_codes"] == ["changelog_format_unrecognized", "changelog_paths_unbound"]
     assert sorted((gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]) == [
         ("location_unresolved", "source:.",
-         "changelog_paths_unbound: source:.: 6 path mentions (ambiguous 1, unmatched 5, invalid 0)"),
+         "changelog_paths_unbound: source:.: 7 path mentions (ambiguous 1, unmatched 6, invalid 0)"),
         ("parser_error", "NEWS", "changelog_format_unrecognized: NEWS: 4 lines"),
     ]
     document = artifact(unit, output)
@@ -449,6 +486,78 @@ def test_changed_or_escaping_change_log_bytes_fail_the_unit(tmp_path: Path) -> N
     (unit.job.target_root / "ChangeLog").symlink_to(outside)
     with pytest.raises(ValueError, match="accepted target file is unavailable"):
         handler(unit)
+
+
+def test_hostile_digits_in_a_change_log_do_not_fail_the_unit(tmp_path: Path) -> None:
+    hostile = ("r1 | a | 2020-01-01 | ² lines\nDate: ²²²² Jan 1\n\nmessage\n").encode()
+    unit, handler = lane(tmp_path, {**SOURCES, "ChangeLog": hostile, "doc/ChangeLog": fixture("gnu/ChangeLog")})
+    output = handler(unit)
+    validate_unit_output(output, unit_id=UNIT, strict_gaps=True)
+    assert output["terminal_status"] == "PARTIAL" and output["entry_count"] == 4
+    assert "²" not in json.dumps(output, ensure_ascii=False)
+
+
+def test_a_failure_inside_the_unit_is_a_named_gap_without_target_text(tmp_path: Path, monkeypatch) -> None:
+    def explode(*args, **kwargs):
+        raise RuntimeError("secret target text jane.roe@example.test")
+
+    logs = {"ChangeLog": fixture("gnu/ChangeLog"), "doc/ChangeLog": fixture("svn/ChangeLog")}
+    unit, handler = lane(tmp_path / "parser", {**SOURCES, **logs})
+    real = changelog.parse
+    monkeypatch.setattr(changelog, "parse", lambda data, *rest: explode() if data.startswith(b"2024") else
+                        real(data, *rest))
+    output = handler(unit)
+    validate_unit_output(output, unit_id=UNIT, strict_gaps=True)
+    assert ("producer_failed", "ChangeLog", "changelog_parser_failed: ChangeLog: 1 files (RuntimeError)") in [
+        (gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]]
+    assert output["formats"] == ["svn-log"], "the other change log is still parsed"
+    monkeypatch.setattr(changelog, "parse", real)
+    monkeypatch.setattr(changelog, "summarize", explode)
+    for sources in (None, {"api": "src", "docs": "docs"}):
+        unit, handler = lane(tmp_path / f"unit-{bool(sources)}", {**SOURCES, "src/ChangeLog": fixture("gnu/ChangeLog")},
+                             sources=sources)
+        output = handler(unit)
+        validate_unit_output(output, unit_id=UNIT, strict_gaps=True)
+        assert output["terminal_status"] == "PARTIAL"
+        assert [(gap["code"], gap["reason"]) for gap in output["gaps"]] == [(
+            "producer_failed",
+            f"changelog_unit_failed: source:{'api' if sources else '.'}: 1 sources (RuntimeError)")]
+        if sources:
+            assert output["by_source"]["docs"]["terminal_status"] == "SKIPPED_NA", "one lane never kills another"
+        failed = output["by_source"]["api"] if sources else output
+        section = history_module.changelog_section(unit.job.run_root, failed, git_ranked=True, git_gaps=[],
+                                                   source_id=".", top_n=5)
+        assert (section["decision"], section["role"], section["gaps"]) == ("PARTIAL", None, ["changelog_unit_failed"])
+        assert_private(output)
+        assert "secret" not in json.dumps(output)
+        assert "secret" not in (unit.job.run_root / "events.jsonl").read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads files regardless of their mode")
+def test_an_unreadable_change_log_is_a_gap_and_the_others_are_still_read(tmp_path: Path) -> None:
+    unit, handler = lane(tmp_path, {**SOURCES, "ChangeLog": fixture("gnu/ChangeLog"),
+                                    "doc/ChangeLog": fixture("svn/ChangeLog")})
+    blocked = unit.job.target_root / "ChangeLog"
+    blocked.chmod(0)
+    try:
+        output = handler(unit)
+    finally:
+        blocked.chmod(0o644)
+    validate_unit_output(output, unit_id=UNIT, strict_gaps=True)
+    assert ("input_unavailable", "ChangeLog", "changelog_unreadable: ChangeLog: 1 files (PermissionError)") in [
+        (gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]]
+    assert output["formats"] == ["svn-log"] and output["entry_count"] == 2
+
+
+def test_a_change_log_that_ranks_no_file_gets_no_role(tmp_path: Path) -> None:
+    dump = b"commit " + b"a" * 40 + b"\nDate:   2024-03-10\n\n    fix: overflow\n"
+    unit, handler = lane(tmp_path, {**SOURCES, "ChangeLog": dump})
+    output = handler(unit)
+    assert (output["terminal_status"], output["entry_count"], output["ranked_file_count"]) == ("SUCCEEDED", 1, 0)
+    section = history_module.changelog_section(unit.job.run_root, output, git_ranked=False, git_gaps=[],
+                                               source_id=".", top_n=5)
+    # Entry counts are published, but nothing here can order files, so a Git-less job stays SKIPPED_NA.
+    assert (section["decision"], section["entry_count"], section["role"], section["files"]) == ("SUCCEEDED", 1, None, [])
 
 
 def test_source_lanes_stay_separate_and_bind_under_their_own_root(tmp_path: Path) -> None:
@@ -531,7 +640,7 @@ def test_index_gets_location_free_change_log_signals_and_a_coverage_row(tmp_path
                                    source={"source_id": ".", "root": "."}, top_n=2)
     assert [(item.native_id, item.name, item.payload["source"], item.payload["change_count"], item.location)
             for item in builder.entities] == [("changelog:src/auth.c", "src/auth.c", "changelog", 5, None),
-                                              ("changelog:docs/guide.txt", "docs/guide.txt", "changelog", 4, None)]
+                                              ("changelog:docs/guide.txt", "docs/guide.txt", "changelog", 3, None)]
     assert builder.entities[0].payload["evidence"][0].keys() == {"changelog", "line", "date"}
     assert builder.coverage == [
         ("changelog-history", "partial", "changelog_format_unrecognized; changelog_paths_unbound")]

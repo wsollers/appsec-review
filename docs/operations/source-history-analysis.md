@@ -140,7 +140,8 @@ How to read the result:
 - The accepted document's `changelog` section and the plan's `history_priority.changelog` list
   carry the change-log file ranks. Every entry says `source: changelog`. They are counts of
   change-log entries naming a file, not commits, and are never added to the Git ranking.
-- `role` is `supplement` when Git history is complete: order review by the SII ranking, and use
+- `role` is set only when the change log ranks at least one file. It is `supplement` when Git
+  history is complete: order review by the SII ranking, and use
   the change log as extra context. It is `primary` when there is no Git ranking or Git history is
   shallow, truncated or unrelated to the snapshot: the change-log list is then the history to
   order review by, and it is weaker (author-stated dates, possibly partial file lists, no content
@@ -315,8 +316,11 @@ publishing an apparently complete aggregate.
 The job's terminal status is `PARTIAL` whenever any named Git-lane gap exists. Change-log gaps are
 `producer-gap/1` records on the `acquire.changelog_history` unit and in the `changelog` section;
 they make that unit `PARTIAL` and count toward the handoff's coverage, but they are not copied
-into the Git gap list. A source without Git whose change log yielded entries is published as
-`SUCCEEDED` or `PARTIAL`, not `SKIPPED_NA`.
+into the Git gap list. A source without Git whose change log ranks at least one file is published
+as `SUCCEEDED` or `PARTIAL`, not `SKIPPED_NA`. A change-log failure never fails the job:
+`changelog_unreadable`, `changelog_parser_failed` and `changelog_unit_failed` name the error type
+and leave the Git output intact. The exception is an accepted change log that changed or was
+replaced after the catalog accepted it, which fails the unit like any other changed target file.
 
 ### Bounded symbol parsing
 

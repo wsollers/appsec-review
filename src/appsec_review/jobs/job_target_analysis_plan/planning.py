@@ -855,7 +855,7 @@ def validate_plan(plan: Mapping[str, Any], catalog: Mapping[str, Any]) -> None:
     if any(paths.get(str(item.get("path"))) != item.get("sha256") or item.get("source") != "changelog"
            for item in priority.get("changelog", {}).get("files", [])):
         raise ValueError("analysis plan change-log priority is not an exact accepted catalog identity")
-    systems =plan.get("build_topology", {}).get("build_systems", [])
+    systems = plan.get("build_topology", {}).get("build_systems", [])
     if any(item.get("build_system") not in BUILD_SYSTEMS for item in systems):
         raise ValueError("analysis plan contains an unregistered build system")
     if any(item.get("executable") is not False for item in plan.get("build_topology", {}).get("build_actions", [])):

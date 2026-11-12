@@ -85,6 +85,11 @@ def is_changelog_name(path: str) -> bool:
     return False
 
 
+def _digits(token: str) -> bool:
+    """ASCII digits only: ``str.isdigit`` alone accepts characters such as ``²`` that ``int`` rejects."""
+    return token.isascii() and token.isdigit()
+
+
 def _iso_date(text: str) -> str | None:
     if len(text) != 10 or text[4] != "-" or text[7] != "-":
         return None
@@ -106,9 +111,9 @@ def _stated_date(text: str) -> str | None:
         lower = token.lower()
         if month is None and lower.isalpha() and len(lower) <= 9 and lower[:3] in _MONTHS:
             month = _MONTHS[lower[:3]]
-        elif token.isdigit() and len(token) == 4 and year is None:
+        elif _digits(token) and len(token) == 4 and year is None:
             year = int(token)
-        elif token.isdigit() and len(token) <= 2 and day is None:
+        elif _digits(token) and len(token) <= 2 and day is None:
             day = int(token)
     if year is None or month is None or day is None or not 1970 <= year <= 2100:
         return None
@@ -151,10 +156,10 @@ def _svn_header(line: str) -> tuple[str, str | None, int | None] | None:
     if not line.startswith("r") or " | " not in line:
         return None
     parts = line.split(" | ")
-    if len(parts) != 4 or not parts[0][1:].isdigit() or len(parts[0]) > 12:
+    if len(parts) != 4 or not _digits(parts[0][1:]) or len(parts[0]) > 12:
         return None
     count = parts[3].split(" ")
-    lines = (int(count[0]) if len(count) == 2 and count[0].isdigit() and len(count[0]) <= 6
+    lines = (int(count[0]) if len(count) == 2 and _digits(count[0]) and len(count[0]) <= 6
              and count[1] in ("line", "lines") else None)
     return parts[0], _iso_date(parts[2][:10]), lines
 
@@ -265,12 +270,12 @@ def _git_path(line: str) -> Any:
         left, separator, _ = body.rpartition(" | ")
         if separator and left.strip():
             return _rename_target(left.strip())
-        return _SKIP if body[:1].isdigit() and " changed" in body else None
+        return _SKIP if _digits(body[:1]) and " changed" in body else None
     fields = line.split("\t")
     if len(fields) in (2, 3) and fields[0][:1] in _STATUS_LETTERS and (
-            len(fields[0]) == 1 or (len(fields[0]) <= 4 and fields[0][1:].isdigit())) and fields[-1]:
+            len(fields[0]) == 1 or (len(fields[0]) <= 4 and _digits(fields[0][1:]))) and fields[-1]:
         return fields[-1]
-    if len(fields) == 3 and all(item == "-" or (item.isdigit() and len(item) <= 9) for item in fields[:2]) \
+    if len(fields) == 3 and all(item == "-" or (_digits(item) and len(item) <= 9) for item in fields[:2]) \
             and fields[2]:
         return _rename_target(fields[2])
     return line if len(fields) == 1 and _PATH_TOKEN.fullmatch(line) else None
@@ -351,6 +356,10 @@ def _parse_svn(lines: Sequence[str | None], stats: dict[str, Any], classify: Cla
         if header[2] is not None:
             message = lines[index:index + header[2]]
             index += len(message)
+            if len(message) < header[2]:
+                # The header claims more message lines than the file holds: whatever it swallowed
+                # may hide later entries, so those lines are reported, not trusted as one message.
+                stats["unparsed_lines"] += len(message)
         else:
             start = index
             while index < total and not (lines[index] is not None and _separator(lines[index])):
@@ -368,10 +377,14 @@ def _gnu_head(head: str) -> tuple[list[str], list[str]]:
     if not all(_PATH_TOKEN.fullmatch(item) for item in names):
         names = []
     symbols: list[str] = []
-    rest = head
-    while "(" in rest and len(symbols) < MAX_SYMBOLS_PER_PATH:
-        group, _, rest = rest.split("(", 1)[1].partition(")")
-        symbols.extend(item.strip() for item in group.split(",") if _SYMBOL.fullmatch(item.strip()))
+    start = head.find("(")
+    # One forward scan; only a closed group counts, so ``(Closes: ...`` names nothing.
+    while start != -1 and len(symbols) < MAX_SYMBOLS_PER_PATH:
+        end = head.find(")", start + 1)
+        if end == -1:
+            break
+        symbols.extend(item.strip() for item in head[start + 1:end].split(",") if _SYMBOL.fullmatch(item.strip()))
+        start = head.find("(", end + 1)
     return names, symbols[:MAX_SYMBOLS_PER_PATH]
 
 
@@ -495,7 +508,8 @@ def parse(data: bytes, limits: ChangelogLimits, classify: Classifier) -> dict[st
               "undecodable_lines": undecodable, "messages_truncated": stats["messages_truncated"],
               "entries_paths_truncated": stats["entries_paths_truncated"], "prose_lines": stats["prose_lines"],
               "lines_beyond_entry_bound": beyond}
-    incomplete = (stats["unparsed_lines"] or beyond or overlong or stats["entries_paths_truncated"])
+    incomplete = (stats["unparsed_lines"] or beyond or overlong or stats["entries_paths_truncated"]
+                  or stats["messages_truncated"])
     return {"format": detected if entries else None, "detected_format": detected,
             "status": "unrecognized" if not entries else "partial" if incomplete else "parsed",
             "entries": entries, "counts": counts}
@@ -519,6 +533,8 @@ def file_gaps(path: str, parsed: Mapping[str, Any], unparsed_bytes: int = 0) -> 
         gaps.append(("changelog_line_too_long", counts["overlong_lines"], "lines"))
     if counts["entries_paths_truncated"]:
         gaps.append(("changelog_entry_paths_truncated", counts["entries_paths_truncated"], "entries"))
+    if counts["messages_truncated"]:
+        gaps.append(("changelog_message_truncated", counts["messages_truncated"], "entries"))
     return [{"gap": gap, "path": path, "count": count, "unit": unit} for gap, count, unit in gaps]
 
 
@@ -527,7 +543,7 @@ class PathBinder:
 
     ``exact``: the text is a catalog path (also tried under the source root).  ``suffix``: exactly
     one catalog path ends with ``/<text>``.  ``repository_prefix``: the text is a catalog path after
-    removing a Subversion ``trunk/`` or ``branches/<name>/`` prefix.  Several suffix matches are
+    removing a Subversion ``trunk/`` prefix; branch and tag paths never bind.  Several suffix matches are
     ``ambiguous``; nothing else is tried, so a name is never guessed.
     """
 
@@ -566,11 +582,11 @@ class PathBinder:
             return "suffix", matches[0]
         if matches:
             return "ambiguous", None
-        if not abbreviated:
-            parts = text.split("/")
-            tail = (parts[1:] if parts[0] == "trunk" else parts[2:] if parts[0] == "branches" else [])
+        if not abbreviated and text.startswith("trunk/"):
+            # Branch and tag paths are other lines of development and are not counted for this file.
+            tail = text[len("trunk/"):]
             if tail:
-                for candidate in self._rooted("/".join(tail)):
+                for candidate in self._rooted(tail):
                     if candidate in self.paths:
                         return "repository_prefix", candidate
         return "unmatched", None
@@ -662,7 +678,7 @@ def summarize(parsed_files: Sequence[Mapping[str, Any]], *, catalog: Mapping[str
         # Per-path binding kinds are summed per entry and per file; the published record stays compact.
         del entry["bindings"]
     for record in files.values():
-        record["security_references"] =sorted(record["security_references"])[:MAX_FILE_REFERENCES]
+        record["security_references"] = sorted(record["security_references"])[:MAX_FILE_REFERENCES]
         record["symbols"] = sorted(record["symbols"])[:MAX_FILE_SYMBOLS]
         record["evidence"] = sorted(record["evidence"], key=lambda item: (
             item["date"] is None, tuple(-ord(char) for char in item["date"] or ""), item["changelog"],

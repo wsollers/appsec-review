@@ -249,7 +249,16 @@ change-log files as a second history source (`appsec-review/history-changelog/1`
   paths per entry. A line over the bound is never interpreted. Invalid UTF-8 is decoded with
   replacement and counted. Structure is recognised with string operations and two single
   character-class patterns, so no input can cause backtracking. A stated date that is not a real
-  calendar date between 1970 and 2100 is undated, never repaired.
+  calendar date between 1970 and 2100 is undated, never repaired. Only ASCII digits are numbers.
+  An `svn log` header that claims more message lines than the file holds is reported as unparsed
+  lines, not trusted.
+- **Containment.** The change log supplements the history and must never cost the Git output. A
+  file that cannot be read (`OSError`) is `changelog_unreadable`; a parser failure on one file is
+  `changelog_parser_failed`; any other failure in a source lane is `changelog_unit_failed` for
+  that lane only. The record and the event name the exception type, never its message, which could
+  quote target text. One case stays a hard failure, as everywhere else in the job: an accepted
+  change log that became a symlink, left the target, vanished, or no longer matches its catalog
+  SHA-256.
 - **Privacy and injection.** Author names, e-mail addresses, user ids and message text are consumed
   while parsing and are never returned, stored, indexed or logged. The gitleaks redaction pass that
   T-029 requires before commit subjects may be indexed does not exist, so the same rule applies
@@ -260,12 +269,16 @@ change-log files as a second history source (`appsec-review/history-changelog/1`
 - **Classification.** Each entry's text is classified by the same rules as commit messages
   (`appsec-review/history-change-rules/2`, `signals.classify_text`) with basis `heuristic`, and then
   discarded. A Keep a Changelog `### Security` or `### Fixed` section gives basis
-  `changelog_section`. Message text beyond 65,536 characters is not classified and the entry is
-  marked `message_complete: false`.
+  `changelog_section`. Message text beyond 65,536 characters is not classified; the entry is
+  marked `message_complete: false` and the file gets the `changelog_message_truncated` gap.
+  Symbols are read only from closed parenthesis groups and must be identifier-shaped; a single
+  word such as a user id in parentheses can still pass as a symbol.
 - **Path binding.** A path in a change log is whatever the author typed. It binds to an accepted
   catalog path only when it is `exact` (also tried under the source root), an unambiguous `suffix`
   (exactly one catalog path ends with `/<text>`), or a `repository_prefix` match (exact after
-  removing a Subversion `trunk/` or `branches/<name>/` prefix). A `git log --stat` name abbreviated
+  removing a Subversion `trunk/` prefix, the one addition to "exact or unambiguous suffix").
+  `branches/` and `tags/` paths are other lines of development and never bind, and a
+  `trunk/<project>/…` layout binds nothing. A `git log --stat` name abbreviated
   to `.../tail` binds by suffix only. Several suffix matches are ambiguous. Ambiguous, unmatched and
   invalid names are counted in the `changelog_paths_unbound` gap. Deleted files are the usual
   cause, so this gap is common and does not by itself question the bound files.
@@ -287,7 +300,8 @@ Change-log numbers are never commit-derived and are never added to a Git count:
 - Every record, file and plan entry is marked `source: changelog`. They live in their own artifact
   (`changelog.json`), their own section of the accepted document (`changelog`), and their own plan
   list (`history_priority.changelog`). `ranking.files` and the SII are computed from Git only.
-- `role` states precedence. With a Git ranking and none of `shallow_history`,
+- `role` states precedence between file rankings, so it is set only when the change log ranks at
+  least one file; otherwise it is `null` and only the entry counts are published. With a Git ranking and none of `shallow_history`,
   `history_window_truncated` or `history_not_of_snapshot`, the change log is a `supplement`: Git is
   authoritative. Without a Git ranking, or with one of those gaps, the change log is `primary`:
   the Git signals that exist are still published and the change-log list is the one to order
@@ -295,8 +309,9 @@ Change-log numbers are never commit-derived and are never added to a Git count:
 - The signals are weaker and say so (`authority`, `semantics`): dates are author-stated, file
   lists may be partial, an entry is not bound to content by any hash, and there is no line count,
   author count or SII.
-- A source without Git whose change log yielded entries publishes `SUCCEEDED` or `PARTIAL` instead
-  of `SKIPPED_NA`. `sources.git.decision` still says why Git does not apply.
+- A source without Git whose change log ranks at least one file publishes `SUCCEEDED` or `PARTIAL`
+  instead of `SKIPPED_NA`. `sources.git.decision` still says why Git does not apply. A change log
+  that ranks nothing leaves the job's status as Git decided it.
 
 A source with no change-log file gets `SKIPPED_NA: no_changelog_files`, not a gap.
 `changelog.enabled = false` is `SKIPPED_POLICY`. The unit's gaps are `producer-gap/1` records
@@ -308,7 +323,9 @@ additive; the new artifact has its own id, `appsec-review/source-history-changel
 
 - Entry-level classification is all a change log without file lists provides (a plain `git log`
   dump, for example): it ranks no file.
-- Subversion branch paths count toward the same file as trunk paths. `tags/` paths do not bind.
+- Subversion `branches/` and `tags/` paths and `trunk/<project>/` layouts do not bind; they are
+  counted as unbound.
+- `changelog.json` holds every entry record and can reach tens of megabytes for a long history.
 - Review prioritization and the `history_context` product read SII scores and location-bound
   signals, so they do not consume change-log signals yet (T-097).
 
@@ -884,7 +901,9 @@ The runtime identity covers the catalog entries for `tool-git` and `tool-tree-si
 | `no_changelog_files` | `SKIPPED_NA` | the source's accepted inventory lists no change-log file |
 | `changelog_history_disabled` | `SKIPPED_POLICY` | `changelog.enabled = false` |
 | `changelog_excluded_from_inventory` | `GAP` (`input_unavailable`) | the catalog left a change-log file out of the inventory; the reason is in the record |
-| `changelog_file_bound_reached`, `changelog_bytes_truncated`, `changelog_entry_bound_reached`, `changelog_entry_paths_truncated`, `changelog_line_too_long` | `GAP` (`truncated`) | a `changelog` bound was reached; the record counts the files, bytes, lines or entries not parsed |
+| `changelog_file_bound_reached`, `changelog_bytes_truncated`, `changelog_entry_bound_reached`, `changelog_entry_paths_truncated`, `changelog_line_too_long`, `changelog_message_truncated` | `GAP` (`truncated`) | a `changelog` bound was reached; the record counts the files, bytes, lines or entries not parsed or not fully classified |
+| `changelog_unreadable` | `GAP` (`input_unavailable`) | an accepted change log could not be read; the record names the error type |
+| `changelog_parser_failed`, `changelog_unit_failed` | `GAP` (`producer_failed`) | a failure contained to one file or one source lane; the record names the exception type only |
 | `changelog_format_unrecognized`, `changelog_mixed_format`, `changelog_unparsed_lines` | `GAP` (`parser_error`) | no recognised entry, or lines the detected format cannot place; the record counts the lines |
 | `changelog_paths_unbound` | `GAP` (`location_unresolved`) | named paths that are ambiguous, unmatched or invalid against the accepted catalog |
 | `pr_timing_not_acquired`, `deployment_timing_not_acquired` | unavailable signal | never inferred from commit timestamps |

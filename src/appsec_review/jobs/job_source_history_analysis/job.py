@@ -82,6 +82,10 @@ CHANGELOG_GAP_CODES: Mapping[str, GapCode] = {
     "changelog_entry_bound_reached": GapCode.TRUNCATED,
     "changelog_entry_paths_truncated": GapCode.TRUNCATED,
     "changelog_line_too_long": GapCode.TRUNCATED,
+    "changelog_message_truncated": GapCode.TRUNCATED,
+    "changelog_unreadable": GapCode.INPUT_UNAVAILABLE,
+    "changelog_parser_failed": GapCode.PRODUCER_FAILED,
+    "changelog_unit_failed": GapCode.PRODUCER_FAILED,
     "changelog_format_unrecognized": GapCode.PARSER_ERROR,
     "changelog_mixed_format": GapCode.PARSER_ERROR,
     "changelog_unparsed_lines": GapCode.PARSER_ERROR,
@@ -206,7 +210,7 @@ def _load_inputs(run_root: Path) -> dict[str, Any]:
                                      for item in partition.get("gaps", ())
                                      if isinstance(item, Mapping) and item.get("path")
                                      and history_changelog.is_changelog_name(str(item["path"]))],
-            "files":[{**{key: item[key] for key in ("path", "sha256", "size_bytes")}, "language": item.get("language")}
+            "files": [{**{key: item[key] for key in ("path", "sha256", "size_bytes")}, "language": item.get("language")}
                       for item in partition.get("files", ())],
             "components": [{"component_id": item["component_id"], "root": item.get("root") or "."}
                            for item in components.get("components", ())]}
@@ -322,12 +326,21 @@ def _reason(status: str) -> str:
     return status.split(":", 1)[1] if ":" in status else status
 
 
+class ChangelogIntegrityError(ValueError):
+    """An accepted change log is no longer the file the catalog accepted; never contained as a gap."""
+
+
 def _read_bounded(target: Path, item: Mapping[str, Any], limit: int) -> tuple[bytes, int]:
-    """Read at most ``limit`` leading bytes of an accepted target file, verifying its catalog SHA-256 over all of it."""
+    """Read at most ``limit`` leading bytes of an accepted target file, verifying its catalog SHA-256 over all of it.
+
+    A file that became a symlink, left the target, vanished or changed is an integrity refusal
+    (:class:`ChangelogIntegrityError`), like changed bytes anywhere else in the job.  An ``OSError``
+    while reading propagates for the caller to report as a gap.
+    """
     candidate = target / str(item["path"])
     path = candidate.resolve()
     if candidate.is_symlink() or target.resolve() not in path.parents or not path.is_file():
-        raise ValueError(f"accepted target file is unavailable: {item['path']}")
+        raise ChangelogIntegrityError(f"accepted target file is unavailable: {item['path']}")
     digest, kept, size = hashlib.sha256(), bytearray(), 0
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(CHUNK_BYTES), b""):
@@ -336,7 +349,7 @@ def _read_bounded(target: Path, item: Mapping[str, Any], limit: int) -> tuple[by
             if len(kept) < limit:
                 kept += chunk[:limit - len(kept)]
     if digest.hexdigest() != item["sha256"]:
-        raise ValueError(f"accepted target bytes changed: {item['path']}")
+        raise ChangelogIntegrityError(f"accepted target bytes changed: {item['path']}")
     return bytes(kept), size
 
 
@@ -357,7 +370,9 @@ def changelog_section(run_root: Path, output: Mapping[str, Any] | None, *, git_r
         "formats": list(output.get("formats", ())), "entry_count": output.get("entry_count", 0),
         "bound_file_count": output.get("bound_file_count", 0), "files": [],
         "gaps": list(output.get("gap_codes", ()))}
-    if "artifact" not in output or not output.get("entry_count"):
+    # A role is a statement about a file ranking: a change log that ranks no file (no file lists,
+    # or nothing bound) is reported with its entry counts but neither leads nor supplements.
+    if "artifact" not in output or not output.get("ranked_file_count"):
         return section
     section["role"] = changelog_role(git_ranked, git_gaps)
     document = _read(run_root, output["artifact"])
@@ -1103,12 +1118,24 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                          "count": len(candidates) - limits.max_files, "unit": "files"})
         read, parsed_files = [], []
         for path in candidates[:limits.max_files]:
-            data, size = _read_bounded(target, {"path": path, "sha256": catalog[path]}, limits.max_file_bytes)
+            # One unreadable or unparseable file is a named gap; the other files and the Git lane go on.
+            # Only the exception type is recorded: its message may quote target text.
+            try:
+                data, size = _read_bounded(target, {"path": path, "sha256": catalog[path]}, limits.max_file_bytes)
+            except OSError as exc:
+                gaps.append({"gap": "changelog_unreadable", "path": path, "count": 1, "unit": "files",
+                             "detail": type(exc).__name__})
+                continue
             unparsed_bytes = 0
             if size > limits.max_file_bytes:
                 data = data[:data.rfind(b"\n") + 1]
                 unparsed_bytes = size - len(data)
-            parsed = history_changelog.parse(data, limits, history_signals.classify_text)
+            try:
+                parsed = history_changelog.parse(data, limits, history_signals.classify_text)
+            except Exception as exc:  # noqa: BLE001 - untrusted input must not fail the history job
+                gaps.append({"gap": "changelog_parser_failed", "path": path, "count": 1, "unit": "files",
+                             "detail": type(exc).__name__})
+                continue
             found = history_changelog.file_gaps(path, parsed, unparsed_bytes)
             gaps.extend(found)
             read.append({"path": path, "sha256": catalog[path], "size_bytes": size, "parsed_bytes": len(data),
@@ -1145,10 +1172,27 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
 
     def changelog_history(unit: UnitContext) -> Mapping[str, Any]:
         """One bounded unit for every source lane; its gaps stay ``producer-gap/1`` records."""
+        def contained(lane: UnitContext) -> Mapping[str, Any]:
+            # The change log supplements the history; nothing it does may fail the Git lanes. Only a
+            # change log that is no longer the accepted file stays a hard integrity refusal.
+            try:
+                return changelog_lane(lane)
+            except ChangelogIntegrityError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                source_id = str(lane_source(lane).get("source_id", "."))
+                unit.job.events.write("SOURCE_HISTORY_CHANGELOG_FAILED", source_id=source_id,
+                                      error_type=type(exc).__name__)
+                gap = {"gap": "changelog_unit_failed", "path": None, "count": 1, "unit": "sources",
+                       "detail": type(exc).__name__}
+                return {"terminal_status": "PARTIAL", "reason": "changelog_unit_failed",
+                        "source": history_changelog.SOURCE, "gap_codes": [gap["gap"]],
+                        "gaps": [_changelog_gap(unit.unit_id, source_id, gap)]}
+
         first = unit.output("resolve_sources.resolve_history_source")
         if "by_source" not in first:
-            return changelog_lane(unit)
-        results = {key: dict(changelog_lane(lane_context(unit, key))) for key in first["by_source"]}
+            return contained(unit)
+        results = {key: dict(contained(lane_context(unit, key))) for key in first["by_source"]}
         gaps = [gap for value in results.values() for gap in value["gaps"]]
         statuses = {value["terminal_status"] for value in results.values()}
         terminal = ("PARTIAL" if gaps else "SUCCEEDED" if statuses - SKIPPED else
