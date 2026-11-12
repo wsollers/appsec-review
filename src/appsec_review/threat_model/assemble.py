@@ -15,7 +15,11 @@ Rules, in the order they are applied:
 - An interaction fact is owned through the first of three rules that matches any process or library:
   equal ``build_unit_id``, its ``path`` among the ``source_paths``, the longest ``source_roots``
   prefix of its ``path``. Every process or library matching at that rule owns it, and a library
-  stands for the processes it folds into. A fact that reaches no process this way is unowned;
+  stands for the processes it folds into. A build unit often holds several artifacts, so a
+  build-unit match is narrowed to the matched candidates that list the ``path`` among their
+  ``source_paths`` when any does. Each flow records the weakest rule among its sites in
+  ``attributes["ownership"]`` (``source_path``, then ``build_unit``, then ``source_root``), so a
+  reader sees when a flow rests on unit-wide attribution. A fact that reaches no process this way is unowned;
   unowned facts are counted per interaction and first path segment in ``flow_endpoint_unresolved``
   unknowns.
 - An owned interaction with a boundary rule yields an external entity per process and external key,
@@ -43,6 +47,10 @@ from appsec_review.threat_model.view import truncated_gap
 FLOW_BOUND = "assembly.max_flows"
 ENTRY_POINT_BOUND = "assembly.max_entry_points"
 INBOUND, OUTBOUND = "inbound", "outbound"
+# How an interaction site was attributed to its processes, strongest first. A flow records the
+# weakest rule among its sites in ``attributes["ownership"]``.
+SOURCE_PATH, BUILD_UNIT, SOURCE_ROOT = "source_path", "build_unit", "source_root"
+OWNERSHIP = (SOURCE_PATH, BUILD_UNIT, SOURCE_ROOT)
 
 RESOLVE_LINKS = ("job_artifact_indexing/artifact_relationships", "job_cpp_compiled_analysis/cpp_build_graph")
 RESOLVE_FIRST_ELEMENT = ("job_target_catalog/build_units", "job_artifact_indexing/artifact_catalog")
@@ -105,6 +113,7 @@ class _Crossing:
     direction: str
     boundary_kind: BoundaryKind | None
     sites: list[_Site] = field(default_factory=list)
+    ownership: list[str] = field(default_factory=list)
 
 
 def bounded_evidence(references: Iterable[EvidenceRef], limit: int) -> tuple[EvidenceRef, ...]:
@@ -179,29 +188,39 @@ class _Owners:
 
     def __init__(self, processes: Mapping[bytes, _Thing], libraries: Mapping[bytes, _Thing],
                  folds: Mapping[bytes, frozenset[bytes]]) -> None:
-        self._by_unit: dict[str, set[bytes]] = {}
-        self._by_path: dict[str, set[bytes]] = {}
-        self._by_root: dict[str, set[bytes]] = {}
+        # Candidates are (kind, key) pairs: a process and a library may share an identity.
+        self._reach: dict[tuple[str, bytes], frozenset[bytes]] = {}
+        self._by_unit: dict[str, set[tuple[str, bytes]]] = {}
+        self._by_path: dict[str, set[tuple[str, bytes]]] = {}
+        self._by_root: dict[str, set[tuple[str, bytes]]] = {}
         for things in (processes, libraries):
             for key, thing in things.items():
-                reached = folds[key] if thing.kind is FactKind.LIBRARY else frozenset((key,))
+                candidate = (thing.kind.value, key)
+                self._reach[candidate] = folds[key] if thing.kind is FactKind.LIBRARY else frozenset((key,))
                 for index, values in ((self._by_unit, thing.units), (self._by_path, thing.paths),
                                       (self._by_root, thing.roots)):
                     for value in values:
-                        index.setdefault(value, set()).update(reached)
+                        index.setdefault(value, set()).add(candidate)
         self._roots = sorted(self._by_root, key=lambda root: (-len(root), root))
 
-    def of(self, site: _Site) -> frozenset[bytes]:
+    def _processes(self, candidates: Iterable[tuple[str, bytes]]) -> frozenset[bytes]:
+        return frozenset().union(*(self._reach[candidate] for candidate in candidates))
+
+    def of(self, site: _Site) -> tuple[frozenset[bytes], str]:
+        """The owning process keys and the rule that found them (an ``OWNERSHIP`` value)."""
+        listing = self._by_path.get(site.path, set()) if site.path is not None else set()
         if site.build_unit_id is not None and site.build_unit_id in self._by_unit:
-            return frozenset(self._by_unit[site.build_unit_id])
-        if site.path is None:
-            return frozenset()
-        if site.path in self._by_path:
-            return frozenset(self._by_path[site.path])
-        for root in self._roots:  # longest first; "" matches every path and is last
+            matched = self._by_unit[site.build_unit_id]
+            narrowed = matched & listing  # a unit with several artifacts: prefer those that list the file
+            if narrowed:
+                return self._processes(narrowed), SOURCE_PATH
+            return self._processes(matched), BUILD_UNIT
+        if listing:
+            return self._processes(listing), SOURCE_PATH
+        for root in self._roots if site.path is not None else ():  # longest first; "" matches every path, last
             if site.path.startswith(root):
-                return frozenset(self._by_root[root])
-        return frozenset()
+                return self._processes(self._by_root[root]), SOURCE_ROOT
+        return frozenset(), SOURCE_ROOT
 
 
 def _process(thing: _Thing, libraries: Sequence[str], limits: Limits) -> Element:
@@ -234,7 +253,8 @@ def _flow(crossing: _Crossing, limits: Limits) -> Flow:
                 crossing.interaction, strongest(*(site.basis for site in crossing.sites)),
                 bounded_evidence((item for site in crossing.sites for item in site.evidence),
                                  limits.max_evidence_refs_per_element),
-                crosses, None, {"direction": crossing.direction, "site_count": len(crossing.sites)})
+                crosses, None, {"direction": crossing.direction, "site_count": len(crossing.sites),
+                                "ownership": max(crossing.ownership, key=OWNERSHIP.index)})
 
 
 def _boundary_id(process: str, kind: BoundaryKind) -> str:
@@ -279,7 +299,8 @@ def assemble(lane_results: Sequence[LaneResult], reference: Reference, limits: L
     entry_points: list[EntryPoint] = []
     unowned: dict[tuple[str, str], int] = {}
     for site in _sites(facts, limit):
-        owning = sorted(elements[key].id for key in owners.of(site))
+        keys, ownership = owners.of(site)
+        owning = sorted(elements[key].id for key in keys)
         if not owning:
             segment = site.path.split("/", 1)[0] if site.path else "an unstated path"
             unowned[(site.interaction.value, segment)] = unowned.get((site.interaction.value, segment), 0) + 1
@@ -301,7 +322,9 @@ def assemble(lane_results: Sequence[LaneResult], reference: Reference, limits: L
                 made = _Crossing(process, peer, ElementKind.DATA_STORE, name.format(name=names[process]),
                                  {"interaction": site.interaction.value, "process": process}, site.interaction,
                                  OUTBOUND, None)
-            crossings.setdefault((process, peer, site.interaction.value), made).sites.append(site)
+            crossing = crossings.setdefault((process, peer, site.interaction.value), made)
+            crossing.sites.append(site)
+            crossing.ownership.append(ownership)
 
     for (interaction, segment), count in sorted(unowned.items()):
         unknowns.append(unknown(

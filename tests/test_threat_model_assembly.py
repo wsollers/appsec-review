@@ -94,7 +94,7 @@ def test_external_entity_and_boundary_are_derived_from_an_evidenced_crossing() -
     (flow,), (boundary,) = assembly.flows, assembly.boundaries
     assert (flow.source, flow.target, flow.interaction) == (peer.id, proc.id, Interaction.NETWORK_RECEIVE)
     assert flow.basis is Basis.VERIFIED_SEMANTIC and flow.evidence == receive.evidence
-    assert dict(flow.attributes) == {"direction": "inbound", "site_count": 1}
+    assert dict(flow.attributes) == {"direction": "inbound", "site_count": 1, "ownership": "source_root"}
     assert flow.crosses == (boundary.id,)
     assert (boundary.kind, boundary.inside, boundary.basis) == (BoundaryKind.NETWORK, (proc.id,), Basis.DERIVED)
     assert boundary.evidence == flow.evidence
@@ -185,6 +185,50 @@ def test_interaction_is_owned_by_build_unit_then_source_path_then_longest_root()
     assert len(assembly.entry_points) == 6
 
 
+def _one_unit() -> list[Fact]:
+    """One build unit that holds three executables and a library two of them link."""
+    server, client = process("server", paths=("src/net.c",), roots=("",)), process("client", paths=("src/ui.c",))
+    proto = library("proto", unit="unit-a", paths=("src/proto.c",))
+    return [server, client, process("tool"), proto, link(proto, server), link(proto, client)]
+
+
+def _flows_of(assembly: Assembly, fact: Fact) -> list[tuple[int, str]]:
+    return [(flow.attributes["site_count"], flow.attributes["ownership"]) for flow in assembly.flows
+            if pid(fact) in (flow.source, flow.target)]
+
+
+def test_build_unit_match_is_narrowed_by_source_path_when_one_candidate_lists_it() -> None:
+    server, client, tool, *rest = _one_unit()
+    listed = site(Interaction.NETWORK_RECEIVE, "src/net.c", 10, unit="unit-a")
+    in_library = site(Interaction.NETWORK_RECEIVE, "src/proto.c", 20, unit="unit-a")
+    assembly = built(server, client, tool, *rest, listed, in_library)
+
+    candidates = [server, client, tool]
+    assert _owners(assembly, listed, candidates) == ["server"]  # not every executable of the unit
+    assert _owners(assembly, in_library, candidates) == ["server", "client"]  # the listing library's processes
+    assert _flows_of(assembly, server) == [(2, "source_path")]
+    assert _flows_of(assembly, client) == [(1, "source_path")]
+    assert _flows_of(assembly, tool) == []
+    assert UnknownKind.BOUNDARY_NOT_ESTABLISHED in kinds_about(assembly, pid(tool))
+
+
+def test_build_unit_match_without_any_listing_candidate_reaches_all_and_says_so() -> None:
+    server, client, tool, *rest = _one_unit()
+    unlisted = site(Interaction.NETWORK_RECEIVE, "src/shared.c", 5, unit="unit-a")
+    listed = site(Interaction.NETWORK_RECEIVE, "src/net.c", 10, unit="unit-a")
+    by_root = site(Interaction.FILE_READ, "src/other.c", 7)
+    assembly = built(server, client, tool, *rest, unlisted, listed, by_root)
+
+    candidates = [server, client, tool]
+    assert _owners(assembly, unlisted, candidates) == ["server", "client", "tool"]
+    assert _owners(assembly, listed, candidates) == ["server"]
+    # A flow says the weakest rule among its sites: the server's receive flow rests on the unit too.
+    assert sorted(_flows_of(assembly, server)) == [(1, "source_root"), (2, "build_unit")]
+    assert sorted(_flows_of(assembly, client)) == [(1, "build_unit"), (1, "source_root")]
+    assert sorted(_flows_of(assembly, tool)) == [(1, "build_unit"), (1, "source_root")]
+    assert _flows_of(built(server, listed), server) == [(1, "source_path")]
+
+
 def test_unowned_interactions_aggregate_into_unknowns() -> None:
     server = process("server", roots=("src/",))
     orphans = [site(Interaction.NETWORK_RECEIVE, "vendor/a.c", 1), site(Interaction.NETWORK_RECEIVE, "vendor/b.c", 2),
@@ -245,11 +289,13 @@ def test_datastore_interaction_yields_a_store_without_a_boundary_and_an_unknown(
 
 
 def _rich_facts() -> list[Fact]:
-    server, client = process("server", roots=("server/",)), process("client", unit="unit-b", roots=("client/",))
+    server = process("server", paths=("server/main.c",), roots=("server/",))
+    client = process("client", unit="unit-b", roots=("client/",))
     common, loose = library("common", roots=("common/",)), library("loose")
     weak = site(Interaction.NETWORK_RECEIVE, "server/net.c", 40, basis=Basis.OBSERVED_SYNTAX)
     return [server, client, process("server", roots=("server/",), entity="ent:second-reading"), common, loose,
             link(common, server), link(common, client), weak,
+            site(Interaction.NETWORK_LISTEN, "server/accept.c", 6, unit="unit-a"),
             site(Interaction.NETWORK_RECEIVE, "server/net.c", 40), site(Interaction.NETWORK_LISTEN, "server/main.c", 5),
             site(Interaction.NETWORK_CONNECT, "client/http.c", 9), site(Interaction.FILE_READ, "common/config.c", 3),
             site(Interaction.DATASTORE_QUERY, "server/db.c", 7), site(Interaction.PROCESS_SPAWN, "client/run.c", 2),
@@ -261,6 +307,10 @@ def test_assembly_is_independent_of_lane_and_fact_order() -> None:
     facts = _rich_facts()
     expected = canonical(built(*facts))
     assert len(built(*facts).flows) == 9 and len(built(*facts).elements) == 2 + 7
+    ownership = _ownership(built(*facts), pid(facts[0]))
+    # listen: a listed source and a unit-wide site, so the weaker rule; the rest by source root
+    assert ownership == {"network_listen": "build_unit", "network_receive": "source_root",
+                         "file_read": "source_root", "datastore_query": "source_root"}
     for seed in range(6):
         shuffled = list(facts)
         random.Random(seed).shuffle(shuffled)
@@ -268,7 +318,14 @@ def test_assembly_is_independent_of_lane_and_fact_order() -> None:
         lanes = [LaneResult(tuple(shuffled[:cut])), LaneResult(tuple(shuffled[cut:]))]
         if seed % 2:
             lanes.reverse()
-        assert canonical(assemble(lanes, reference(), LIMITS)) == expected
+        shuffled_assembly = assemble(lanes, reference(), LIMITS)
+        assert canonical(shuffled_assembly) == expected
+        assert _ownership(shuffled_assembly, pid(facts[0])) == ownership
+
+
+def _ownership(assembly: Assembly, process_id: str) -> dict[str, str]:
+    return {flow.interaction.value: flow.attributes["ownership"] for flow in assembly.flows
+            if process_id in (flow.source, flow.target)}
 
 
 def test_facts_of_one_identity_merge_with_the_strongest_basis() -> None:

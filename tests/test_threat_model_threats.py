@@ -82,7 +82,7 @@ def test_attacker_position_is_offered_as_candidates_only() -> None:
         assert "attacker_position" not in published and "attacker_positions" not in published
         assert "attacker_position" not in published.get("attributes", {})
     for flow in assembly.flows:
-        assert set(flow.attributes) == {"direction", "site_count"}
+        assert set(flow.attributes) == {"direction", "site_count", "ownership"}
 
 
 def test_flows_without_a_crossing_yield_no_threat() -> None:
