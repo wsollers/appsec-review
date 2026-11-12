@@ -34,7 +34,7 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
 
 - Several gap causes are not on the expected list: `untracked_path`, `working_tree_divergent`,
   `head_differs_from_mainline`, `timestamp_anomaly`, `fix_on_fix_undetermined`, parse and symbol
-  gaps, change-log gaps (0 of 24,204 paths bound), deployment and pull-request timing.
+  gaps, change-log gaps (24,204 path mentions unmatched, 32,071 bound; see record 06), deployment and pull-request timing.
 - `bind_snapshot` reports 1,429 divergent and 189 untracked files on a clean target; blob ids it
   records differ from git at the pin (example `ci.yml`: `34cbd111...` against `b4137ec5...`), which
   suggests the history is bound to a revision other than the pin. The clone holds branches and

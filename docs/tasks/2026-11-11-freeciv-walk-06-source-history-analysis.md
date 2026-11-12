@@ -28,7 +28,7 @@ repaired, saved as a baseline or accepted.
 | `untracked_path`, `working_tree_divergent`, `head_differs_from_mainline`, `timestamp_anomaly:1` | git-history, bind_snapshot, index_history, publish_handoff | **no** |
 | `fix_on_fix_undetermined` | fix-on-fix and downstream | **no** |
 | `parse_errors_present`, `parse_errors_in_span`, `preprocessor_branches_not_counted`, `symbol_language_unsupported` | symbol-spans and downstream | **no** |
-| `changelog_format_unrecognized` (NEWS 4,993 lines, NEWS-3.2 749 lines), `changelog_mixed_format` (ChangeLog 3,796 lines, ChangeLog-1.0-S3_0 75,924 lines), `changelog_paths_unbound` (24,204 path mentions, 0 matched) | acquire.changelog_history | **no** (T-097's author expected unbound paths; not on the walk list) |
+| `changelog_format_unrecognized` (NEWS 4,993 lines, NEWS-3.2 749 lines), `changelog_mixed_format` (ChangeLog 3,796 lines, ChangeLog-1.0-S3_0 75,924 lines), `changelog_paths_unbound` (24,204 path mentions unmatched; "0 matched" was my reading of the gap text and is wrong, see the change-log sizing section) | acquire.changelog_history | **no** (T-097's author expected unbound paths; not on the walk list) |
 | `deployment_timing_not_acquired`, `pr_timing_not_acquired` | deployment-timing, pull-request-timing | **no** |
 | configured history or change-context bounds reached (row 6) | - | not observed |
 
@@ -170,7 +170,7 @@ to getting it launched, not to the job:
   | `line_history_file_too_large` | a size bound; row 6 is about history bounds, so ask |
   | `timestamp_anomaly:1` | no |
   | `parse_errors_present`, `parse_errors_in_span`, `preprocessor_branches_not_counted`, `symbol_language_unsupported` (symbol spans) | no |
-  | `changelog_format_unrecognized` (`NEWS` 4,993 lines, `NEWS-3.2` 749), `changelog_mixed_format` (`ChangeLog` 3,796, `ChangeLog-1.0-S3_0` 75,924), `changelog_paths_unbound` (24,204 mentions, 0 matched) | no |
+  | `changelog_format_unrecognized` (`NEWS` 4,993 lines, `NEWS-3.2` 749), `changelog_mixed_format` (`ChangeLog` 3,796, `ChangeLog-1.0-S3_0` 75,924), `changelog_paths_unbound` (24,204 mentions unmatched; 32,071 bound, see the sizing section) | no |
   | `deployment_timing_not_acquired`, `pr_timing_not_acquired` | no |
 
   The charter stops the walk on any cause not on the list.
@@ -179,8 +179,7 @@ to getting it launched, not to the job:
 **Decisions for the user (replaces decision 1, now answered).** Which of the following join the
 expected list for this walk: the symbol and parse gaps (C code with preprocessor branches);
 `line_history_file_too_large`; the change-log gaps (`NEWS` is not a change log; both ChangeLog files
-are mixed format and bind 0 of 24,204 paths, which may be a defect worth its own look since entries
-are 20,924); `timestamp_anomaly:1`; the two timing gaps. Recommendation: accept the timing gaps (no
+are mixed format, 24,204 path mentions are unmatched; sized below, not a binding defect); `timestamp_anomaly:1`; the two timing gaps. Recommendation: accept the timing gaps (no
 network source for a local clone), the symbol and parse gaps and the size bound as detection
 limits, and fix or size the change-log binding before accepting.
 
@@ -196,3 +195,42 @@ docker exec appsec-review-dagster-wsl-code-location-1 python -m appsec_review ad
 ```
 
 No unit tests were run in this part.
+
+## Change-log and timestamp sizing (2026-11-12, after "Take your recommendation")
+
+The user accepted rows 11 to 13 of the expected list (timing gaps, symbol and parse gaps, the
+line-history size bound) and asked that the change-log binding be sized before acceptance. Read
+only; nothing was changed.
+
+**What the change-log artifact says** (`changelog.json`, attempt_0002): 4 files; `ChangeLog` is
+git-log format with 8,654 entries and no file lists (plain `git log` text, so those entries name no
+paths), `ChangeLog-1.0-S3_0` is svn-log format with 12,270 entries, `NEWS` and `NEWS-3.2` are prose
+(0 entries, "unrecognized"). Path mentions: 32,071 bound (`repository_prefix`), 24,204 unmatched,
+0 ambiguous, 0 invalid. 2,389 files bound, 2,361 ranked; 96 entries in the window. My earlier
+statement that 0 paths matched was wrong: I inferred it from the gap text.
+
+**Independent check on the host** (svn `/trunk/` paths of `ChangeLog-1.0-S3_0` against
+`git ls-files` at the pin, 6,726 tracked): 45,311 mentions name a path that is tracked, 18,219 name
+a path that is not (505 of them deleted files, 1,077 added, 16,629 modified, so files gone or
+renamed since 2016), and about 3,340 are under `branches/`. Of the 45,311 tracked mentions, 38,056
+are in the job's file set and 7,255 are not (the examples are icon `.png` files, which the user's
+asset-class exclusion keeps out of the catalog). The job reports 32,071 bound against my 38,056;
+the difference is not reconciled (per-entry de-duplication, the 2,000-path cap and rename handling
+are candidates; not checked). The job's 24,204 unmatched is of the same size as my 18,219 absent
+plus about 3,340 branch paths plus the 7,255 excluded assets, within what per-entry counting could
+change; not exactly reconciled either.
+
+**Reading.** The binding works. "Unmatched" is mostly paths that no longer exist at the pin or that
+the catalog excludes. It is not the defect the first reading suggested. Remaining limits, not
+defects of this walk: `ChangeLog` entries carry no paths, so the 8,654 recent entries contribute no
+file signal, and the in-window change-log entries (96) are a sparse signal beside Git's 113.
+
+**`timestamp_anomaly:1`.** It is an observation, not a failure: a commit whose commit time is later
+than the commit that follows it in the first-parent walk; the job clamps the effective time
+(`signals.py`). Independent count on the host over the same 20,000 first-parent commits: 1.
+
+**Left for the user.** Whether the three change-log causes (`changelog_format_unrecognized` for the
+two prose NEWS files, `changelog_mixed_format`, `changelog_paths_unbound`) and `timestamp_anomaly:1`
+join the expected list. Recommendation: accept all four as the above shows them (prose files are not
+change logs; unmatched paths are gone or excluded files; one clock-skew observation), then accept
+job 6. The 38,056 against 32,071 difference is a non-blocking question for T-097's author.
