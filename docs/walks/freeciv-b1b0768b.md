@@ -53,12 +53,17 @@ here is changed to fit a result.
 | 2026-11-11 | "include PDF. They may just upload a doc instead of having the doc build." | `.pdf` is refused as an excluded suffix |
 | 2026-11-11 | "as for the .po translation files i agree that they should be looked at so we will have to raise the limit" | `[inventory] max_file_bytes = 12582912` |
 | 2026-11-11 | "change logs SHOULD be used in the history job" | T-097, merged; change logs stay in the inventory |
-| 2026-11-11 | Fix build discovery before accepting the catalog (T-091) | done at `051d1842`; the catalog is replayed and checked again |
+| 2026-11-11 | Fix build discovery before accepting the catalog (T-091); go-ahead 2026-11-12: "Yes, fix T-091" | done at `051d1842`; the catalog came back with the two parallel root units and was accepted |
 | 2026-11-11 | Vendored dependencies stay in scope as code | known gap below; T-098 |
 | 2026-11-11 | Three catalog gap causes accepted for this walk | rows 7 to 9 of the table below |
+| 2026-11-12 | The `unit_test` document-kind gap is accepted as expected, with the detection limit noted | row 10 of the table below |
+| 2026-11-12 | Dependency plan: "1 Yes. 2. yes it is fine. 3. 3 yes. 4. Agree." and "The full redesign for deps will come in after we get through compiling. because right now build / topology is the most important." | T-099 to T-106 registered; none of it is worked during the build and topology jobs |
+| 2026-11-12 | "some of these package tools we will be adding will need network egress. I am preauthorizing that now. (Think maven and node etc...)" | recorded on T-101; applies to package-manager tools when that work is done, not to scanners |
+| 2026-11-12 | Time rules: a job-watch rule and a replay budget ("Proceed"), a ten-minute timer on fixes and a ceiling on test runs | charter section 10; T-109 |
 
 Decisions reported to this file by the coordinating session rather than read from the user's own
-message are those dated 2026-11-11 for T-091, vendored dependencies and the catalog gap causes;
+message are those dated 2026-11-11 for T-091, vendored dependencies and the catalog gap causes, and
+those dated 2026-11-12 for the `unit_test` gap and the dependency plan;
 their wording is in [walk record 05](../tasks/2026-11-11-freeciv-walk-05-target-catalog.md).
 
 ## Expected gaps
@@ -70,28 +75,33 @@ A gap cause on this list does not stop the walk. Anything else does.
 | 1 | No Unity or other engine project | Freeciv is a C codebase | nothing |
 | 2 | `.git` excluded from catalog and source inventory | repository metadata is not target source | nothing |
 | 3 | PowerShell environment scripts not supported | the environment job does not parse PowerShell | any such script is unanalysed |
-| 4 | Grype artifact coverage disabled by configuration | the configuration turns it off | **no artifact vulnerability scanning in this walk** |
+| 4 | Grype coverage disabled by configuration, in evidence collection and in artifact security analysis | `[tools].disable_grype = true` is the repository default, and this host has no Grype database snapshot | **no Grype vulnerability matching in this walk**, of the source SBOM or of built artifacts (T-105) |
 | 5 | No execution-profile artifacts | the target produces none | **prioritization has no hotness signal for this target** |
 | 6 | Configured source-history and change-context bounds reached | a long history against the configured bound | history beyond the bound is not attributed |
 | 7 | `compile_commands.json` not present, before a build | none is tracked; none can exist before the build jobs | nothing at the catalog; a build job that produces none is a different cause and stops the walk |
 | 8 | No recognized package manifest; no manifest for dependency extraction | no ecosystem manifest is tracked | **the dependency catalog is empty** although code is vendored under `dependencies/` |
 | 9 | No target-supplied design, DFD, OpenAPI, Postman or threat-model document | the target ships none | document-based review has nothing to read; no job produces a DFD or threat model |
+| 10 | No `unit_test` document | Freeciv has no unit-test source of the recognised name shape (`test_*.c` and the like), no `check_PROGRAMS`, no `TESTS`, no meson `test(` | the 18 script-level checks under `tests/` (lint scripts and ruleset load, save and upgrade checks, run from `tests/Makefile.am` and CI) are not seen by the name rule: a detection limit |
 
 **Not on the list, named in advance:** GUI clients or tools that cannot be built for lack of a
-toolkit; oversized files (resolved by exclusion and the bound, not by acceptance); the `unit_test`
-document kind (Freeciv has no unit-test source of the recognised shape but does have script-level
-checks under `tests/` that the rule does not see: not yet accepted by the user).
+toolkit; oversized files (resolved by exclusion and the bound, not by acceptance); fragment build
+units (resolved by the T-091 fix, not by acceptance).
 
 ## Known gaps of this walk
 
 - Vendored third-party code (`dependencies/`: Lua 5.4, tolua 5.2, tinycthread, cvercmp, luasql) is
   not identified as vendored and is reviewed as the project's own code (T-098).
 - One cause can be reported once per unit of a job, inflating record counts (T-095).
-- Whether any job extracts text from a kept `.pdf` has not been established.
+- No job reads text from a `.pdf`: the document index reads `.md`, `.markdown`, `.rst`, `.adoc`,
+  `.asciidoc`, `.org` and `.txt` only. Freeciv has no PDF, so this costs nothing here.
+- Vulnerability feeds are stale: every pointer under `data/feeds` is dated 2026-10-16 or
+  2026-10-18. The nightly sync schedule is in state STOPPED since its 2026-10-19 tick and its last
+  two runs failed (T-106). A job that matches against these snapshots matches against mid-October
+  data; that is named in its record. Restarting the schedule is an operator action for the user.
 
-## Fixes the walk is waiting for from elsewhere
+## Fixes taken from elsewhere
 
-- `origin/main` `8aed1992` (other host, job pass 20): Infer observations with project-relative
-  paths were dropped. The Freeciv walk reaches the same code at `job_cpp_compiled_analysis`; the
-  merge is requested by the user (2026-11-12: "pull remote and compare what changes they have
-  made") and is the walker's to do at an idle point. A trial merge was clean at `051d1842`.
+- `origin/main` `983dc25a` (other host: job passes 11, 14 and 20, including the Infer path fix
+  `8aed1992`) was merged on 2026-11-12 as `b63ef2df` at the user's request ("pull remote and
+  compare what changes they have made"). The four test files it touches have the same 22 failing
+  tests on `main` before the merge, on the remote alone and on the merge; the merge adds none.

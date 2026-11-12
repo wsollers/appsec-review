@@ -155,3 +155,33 @@ selections with counts and times. Application run ids and Dagster dispatch ids a
 When the walk completes or stops for good, the user receives: the run id; the list of job
 records; the gaps accepted and what each costs; the defects fixed and the ids deferred; the
 published findings; and the plain statement that the findings have not been graded.
+
+## 10. Time: watching a job, fixing, replaying
+
+Added at the user's direction (2026-11-12) after the first day of the Freeciv walk, where replays
+and unbounded test runs cost more time than the fixes did.
+
+1. **Watch a job against a stated duration.** Before launching a job, write its expected duration
+   in the record: the job time of its last run on this target and overlay, or "unknown" for a
+   first run. Look at it at that mark. At twice that mark, or after 30 minutes for an "unknown",
+   stop waiting and look: the Dagster step in flight, the container's log, memory. Report what is
+   seen. A slow job is reported with its time; a bound is never raised to make it finish, and a
+   job is not cancelled without the user unless it is provably stuck.
+2. **Budget replays.** A replay through job N re-runs every always-execute job before it. When a
+   job's check turns up a defect, finish checking that job's output before fixing: independent
+   defects found in the same job go into one merge, one reload and one replay. Merges from
+   elsewhere (the other host, a finished side branch) are taken at the same point, not each with
+   its own replay. The record states how many replays a job cost.
+3. **A fix has a ten-minute tripwire.** Note the time when a fix is started. If it is not written
+   and passing its own regression within about ten minutes, stop editing: write down the cause as
+   far as it is known, then either size the fix for the user (section 6) or hand it to a separate
+   session. Do not abandon a half-applied change on a branch to meet the mark; finish the edit in
+   hand or revert it. A fix that was sized and approved beforehand runs to its stated size.
+4. **Tests go through the bounded wrapper.** Anything beyond a single test file runs through
+   `scripts/run-tests.sh`, which enforces the collection count and the time limits; a plain
+   `pytest` run of several files has no limit and is not used for comparisons. A comparison
+   against `main` uses the wrapper's `--write-baseline` and `--baseline`. T-109 registers a hard
+   ceiling on a wrapper run and the enforcement of the ten-second unit limit.
+5. **Say when time is being lost.** A session that has spent more than the job's expected
+   duration on anything other than the job (tests, replays, a side investigation) says so in its
+   next report, with the cause.

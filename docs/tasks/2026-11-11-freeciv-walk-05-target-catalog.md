@@ -181,6 +181,18 @@ The remaining `unresolved` records of the autotools unit (34) are make-rule vari
 `$(AM_V_at)`, `$(TOLUA)` and `$(WINDRES)` in recipes; they predate this change and do not affect
 which directories or targets are found.
 
+## After the merge of `origin/main` (2026-11-12)
+
+`origin/main` `983dc25a` was merged as `b63ef2df` at the user's request. Its source changes are
+the Infer path fix in `job_cpp_compiled_analysis` and repair-planning context in
+`runtime/repair.py`. The four test files it touches fail the same 22 tests on `main` before the
+merge, on the remote alone and on the merge. Because `runtime/repair.py` is in every job's import
+closure, the repair plan (`2714a489...`, admissible, no refusals) re-ran jobs 1 to 4 and
+invalidated the rest. Jobs 1 to 5 were replayed, each compared equal to its preserved key (0
+differences), their independent checks held, and all five were re-accepted; the catalog's
+accepted attempt is now `attempt_0003`. This job cost five replays in all: three for the defects
+found one after another, one for T-091 and one for this merge.
+
 ## Not verified
 
 - The symbol index (15,647 items) and component index were not compared with an independent

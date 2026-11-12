@@ -99,6 +99,9 @@ until each is rewritten into the entry format when it is next touched.
 | T-104 | [Look up CPE candidates in the pinned NVD snapshot](#t-104-look-up-cpe-candidates-in-the-pinned-nvd-snapshot) | data | open |
 | T-105 | [Match vulnerabilities in one stage over the merged dependency inventory](#t-105-match-vulnerabilities-in-one-stage-over-the-merged-dependency-inventory) | scanners | blocked |
 | T-106 | [Restart the nightly data sync and refuse stale feeds at run readiness](#t-106-restart-the-nightly-data-sync-and-refuse-stale-feeds-at-run-readiness) | data | open |
+| T-107 | [Generate a data-flow diagram and threat model from accepted run evidence](#t-107-generate-a-data-flow-diagram-and-threat-model-from-accepted-run-evidence) | review | open |
+| T-108 | [Publish the static deployment inventory as a job](#t-108-publish-the-static-deployment-inventory-as-a-job) | evidence | open |
+| T-109 | [Put a hard ceiling on test runs and enforce the ten-second unit limit](#t-109-put-a-hard-ceiling-on-test-runs-and-enforce-the-ten-second-unit-limit) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1586,6 +1589,33 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** find and fix the two failures, turn the schedule back on (an operator action on the shared stack), and add a staleness check to run readiness so a review cannot start on feeds older than a configured bound without a named gap. This is the first item of the dependency plan (phase 0).
 - **Done when:** the schedule ticks and publishes on this host, and a readiness test with a feed pointer older than the bound yields the named gap.
 - **Refs:** `src/appsec_review/jobs/job_third_party_data_sync/`, `src/appsec_review/orchestration/dagster/adapter.py`, `deploy/dagster/bin/ops_readiness.py`, T-057.
+
+### T-107 — Generate a data-flow diagram and threat model from accepted run evidence
+
+- **State:** open
+- **Area:** review
+- **Why:** no job in the graph produces a data-flow diagram or a threat model; the catalog only classifies documents the target supplies, and Freeciv supplies none (walk 05). The user asked on 2026-11-11 whether the jobs that should create them exist; they do not. This is the F07 row of T-059 re-cut as one job.
+- **Scope:** a design for one job, `job_threat_model_generation`, is being written by a separate session on branch `dfd-threat-model` (not merged). This entry holds the id; its scope and done-when are replaced by the design's proposed text when the user approves the design. Nothing is implemented before that.
+- **Done when:** the user has approved a design, this entry carries its scope and acceptance, and the job publishes a data-flow diagram and threat model with resolving evidence on a real run.
+- **Refs:** T-059 (F07), T-070, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, branch `dfd-threat-model`.
+
+### T-108 — Publish the static deployment inventory as a job
+
+- **State:** open
+- **Area:** evidence
+- **Why:** the `appsec_review.deployment` library extracts listeners, services and relationships from deployment documents, but no job publishes them as an accepted dataset, so a threat model has no deployment facts to build on. This is the static half of the F06 row of T-059.
+- **Scope:** proposed by the same design session as T-107 on branch `dfd-threat-model` (not merged): wire the existing library into a job whose output is an accepted dataset. This entry holds the id; its scope and done-when are replaced by the design's proposed text when the user approves it.
+- **Done when:** the user has approved the design, and a run publishes the static deployment inventory as an accepted, consumable dataset.
+- **Refs:** `src/appsec_review/deployment/`, T-059 (F06), T-107, branch `dfd-threat-model`.
+
+### T-109 — Put a hard ceiling on test runs and enforce the ten-second unit limit
+
+- **State:** open
+- **Area:** testing
+- **Why:** on 2026-11-11 and 12 two comparison runs of unit files took 26 to 28 minutes and one did not finish in 1,700 s. They were plain `pytest` runs, which have no limit; `scripts/run-tests.sh` has a 300 s total limit but it can be raised by option and is not the only route. The underlying cost is tests filed as unit tests that drive whole job graphs: 17 tests in one affected set took 19 to 98 s each against the 10 s rule of `AGENTS.md`, which nothing enforces. The user asked on 2026-11-12 for the harness to fault when a run exceeds about fifteen minutes.
+- **Scope:** (1) a ceiling on a wrapper run that no option can raise past fifteen minutes, ending the run as a failure with the tests still running named; (2) plain multi-file `pytest` refused or warned in favour of the wrapper; (3) the 10 s unit limit enforced: a test over it fails unless it carries an explicit, reasoned time budget, with the current offenders listed and either narrowed or moved to the integration tier. No assertion is weakened to meet a limit.
+- **Done when:** a wrapper run over the ceiling exits non-zero naming the unfinished tests; a unit test over 10 s without a declared budget fails; the list of tests over 10 s at the time of the change is empty or each has a recorded disposition.
+- **Refs:** `scripts/run-tests.sh`, `deploy/dagster/bin/ops_tests.py`, `tests/conftest.py`, `docs/architecture/testing.md`, `docs/processes/walk-charter.md` (section 10), T-047.
 
 ## Legacy backlog
 
