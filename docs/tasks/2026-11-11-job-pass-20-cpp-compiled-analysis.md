@@ -94,3 +94,28 @@ The nineteen current acceptances remain intact; no rewind or another prerequisit
 has been started. Restoring validated frozen orchestration context is a separate recovery
 tooling correction, not permission to ignore identity differences. That next change is
 being brought to the user before altering recovery behavior.
+
+## Recovery correction checkpoint
+
+The user approved the correction, then requested committing and merging current work
+for their own push. `plan_repair` now restores only the verified planning claim's
+workflow/environment-selection fields. Publication, claim identity and original launch
+contract checks remain mandatory; ordinary resume behavior is unchanged.
+
+The focused command uses the guarded runner with `--parallel --test-workers 2`,
+`--shuffle-seed 11121 --strict`, selecting
+`tests/test_repair_admission.py::test_repair_preserves_verified_planning_launch_context`
+and `tests/test_repair_admission.py::test_repair_context_does_not_authorize_changed_claim_or_environment`.
+
+| Report under `test/tmp/reports/` | Result | Elapsed |
+| --- | --- | ---: |
+| `tests-custom-20261112-011820-093922-90871.json` | Single-job baseline reproduced unnecessary planner `RUN` | 11.72 s |
+| `tests-custom-20261112-012224-874467-90954.json` | Six failures exposed an incorrect handoff-reference reader; replaced it with the existing verified reader | 28.76 s |
+| `tests-custom-20261112-012413-850595-91022.json` | Four passed; optional-prior setup was rejected before repair and the changed-environment assertion incorrectly expected an exception instead of invalidation | 33.31 s |
+| `tests-custom-20261112-012839-320019-91216.json` | Five passed: three workflow modes, changed-claim refusal and changed-environment invalidation | 35.70 s |
+
+The retained five cases still take **11.12-12.57 s each**, above the ten-second unit
+budget. Their fixture narrowing is unfinished; passing assertions do not satisfy that
+timing requirement. Optional-prior restoration was not added, and its setup rejection
+was not hidden with a skip or xfail. This checkpoint is not live repair acceptance.
+The run remains paused with nineteen acceptances, and nothing was pushed or restarted.

@@ -343,6 +343,44 @@ def check_successor(config: AppConfig, run_root: Path, envelope: Mapping[str, An
         raise ValueError("successor requires a fresh authorized first-error execution-safety envelope")
 
 
+def _planning_repair_context(config: AppConfig, run_root: Path, jobs: Sequence[Job]) -> dict[str, str]:
+    from appsec_review.jobs.job_build_environment_analysis.job import environment_contract
+    from appsec_review.retrieval.core import _accepted_handoff
+
+    planner = "job_target_analysis_plan"
+    if not any(job.job_id == planner for job in jobs):
+        return {}
+    pointer_path = safe_path(run_root, f"data/jobs/{planner}/latest.json")
+    if not pointer_path.exists():
+        return {}
+    pointer = read_document(pointer_path)
+    handoff, handoff_path = _accepted_handoff(run_root, planner, pointer["handoff_sha256"])
+    if handoff_path != safe_path(run_root, pointer["handoff_path"]):
+        raise ValueError("published planning handoff pointer changed")
+    verify_publication(run_root, handoff, pointer["handoff_sha256"])
+    claim_path = handoff["resolving_paths"]["attempt"] + "/claim.json"
+    references = [item for item in handoff["artifacts"] if item["path"] == claim_path]
+    if handoff["status"] != "ACCEPTED" or len(references) != 1:
+        raise ValueError("repair planning context requires a published, hash-pinned claim")
+    claim = read_document(verify_reference(run_root, references[0]))
+    if any(claim[key] != handoff[key] for key in
+           ("run_id", "job_id", "attempt_id", "source_fingerprint", "resolved_config_sha256")):
+        raise ValueError("repair planning claim identity differs from its handoff")
+    orchestration = claim.get("orchestration")
+    if (not isinstance(orchestration, Mapping)
+            or not isinstance(orchestration.get("build_environment_contract"), str)):
+        raise ValueError("published planning claim has no frozen environment context")
+    launch = json.loads(orchestration["build_environment_contract"])
+    if not isinstance(launch, dict):
+        raise ValueError("published planning environment context is invalid")
+    context = {key: orchestration[key] for key in
+               ("workflow", "environment_mode", "environment_reference") if key in orchestration}
+    if (any(not isinstance(value, str) for value in context.values())
+            or environment_contract(config, context, claim["upstream_handoffs"]) != launch):
+        raise ValueError("published planning environment context does not reproduce from its claim")
+    return context
+
+
 def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str, *,
                 target_root: Path | None = None, force_from: str | None = None,
                 historical_rerun: bool = False, dependencies: Mapping[str, Sequence[str]] | None = None,
@@ -366,9 +404,10 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
     if historical and not historical_rerun:
         reasons.append("historical implementation is unverified; explicit historical-rerun is required")
     dependencies = graph_dependencies(jobs, dependencies)
+    orchestration = (None if historical or successor else _planning_repair_context(config, run_root, jobs))
     decisions = ResumePlanner(config, run_root, jobs, source_fingerprint, target_root=target_root,
-                              dependencies=dependencies).plan(force_from=force_from, emit_event=False,
-                                                              invalidated=historical or successor)
+                              orchestration=orchestration, dependencies=dependencies).plan(
+                                  force_from=force_from, emit_event=False, invalidated=historical or successor)
     snapshots, unit_decisions = {}, {}
     for job in jobs:
         if release is not None and job.job_id not in release["jobs"]:

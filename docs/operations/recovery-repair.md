@@ -109,6 +109,12 @@ decisions and refusal reasons. Review it before admission. `admit-repair` rederi
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command
 only records admission. It does not execute the restart.
 
+For a previously accepted planning job, repair planning restores the environment-selection
+context from its published, hash-pinned claim instead of substituting a `standalone`
+workflow. The original launch contract must reproduce from that claim, and the current
+environment handoff is still checked normally. Changed claims or environment inputs do
+not become reusable merely because their workflow label matches.
+
 ### Serial recovery of an existing stepwise walk
 
 Keep the job-driven loop serial. These are manual operator actions, not automatic repair gates:
