@@ -61,6 +61,7 @@ here is changed to fit a result.
 | 2026-11-12 | "some of these package tools we will be adding will need network egress. I am preauthorizing that now. (Think maven and node etc...)" | recorded on T-101; applies to package-manager tools when that work is done, not to scanners |
 | 2026-11-12 | Time rules: a job-watch rule and a replay budget ("Proceed"), a ten-minute timer on fixes and a ceiling on test runs | charter section 10; T-109 |
 | 2026-11-12 | Job 6 gap causes: "Take your recommendation" (accept the timing gaps, the symbol and parse gaps and the size bound as detection limits; size the change-log binding before accepting) | rows 11 to 13 below; the change-log gaps and `timestamp_anomaly:1` stay open; record 06 |
+| 2026-11-12 | "Yes, accept job 6" (the change-log gaps and `timestamp_anomaly:1` join the expected list, then job 6 is accepted) | row 14; record 06 |
 | 2026-11-12 | "This is for you and the other machine. if you guys need to keep local state you can add an untracked file." | optional per-host notes at `docs/walks/freeciv-b1b0768b.local.md`, ignored by Git; charter section 2 |
 
 Decisions reported to this file by the coordinating session rather than read from the user's own
@@ -87,6 +88,7 @@ A gap cause on this list does not stop the walk. Anything else does.
 | 11 | `deployment_timing_not_acquired`, `pr_timing_not_acquired` | a local clone has no deployment or pull-request source | no deployment or pull-request timing signal |
 | 12 | Symbol-span gaps: `parse_errors_present`, `parse_errors_in_span`, `preprocessor_branches_not_counted`, `symbol_language_unsupported` | C with preprocessor branches; some files are in a language the span step does not support | hotspot spans are partial; branches under `#if` are not counted |
 | 13 | `line_history_file_too_large` | a configured size bound on per-file line history | line history is missing for the oversized files |
+| 14 | Change-log gaps: `changelog_format_unrecognized` (`NEWS`, `NEWS-3.2` are prose), `changelog_mixed_format`, `changelog_paths_unbound`; and the observation `timestamp_anomaly:1` | prose files are not change logs; unmatched paths are gone or excluded files; one clock-skew commit | the git-log `ChangeLog` entries name no files, so contribute no file signal; unmatched mentions are not attributed |
 
 **Not on the list, named in advance:** GUI clients or tools that cannot be built for lack of a
 toolkit; oversized files (resolved by exclusion and the bound, not by acceptance); fragment build

@@ -2,7 +2,13 @@
 
 This record advances T-057 and bears on T-097. Terms: [walk terms](../walks/freeciv-b1b0768b.md).
 
-**Result: stopped for decisions, not accepted** (run `2026-11-12-0001`, overlay
+**Result: accepted** on `attempt_0002` (user, 2026-11-12: "Yes, accept job 6"; the first attempt
+stopped for decisions and its text is kept below). `stepwise.py accept` saved
+`test/acceptance/freeciv-b1b0768b-v3/job_source_history_analysis.json` (25 s). No replay
+comparison was run for this job (the check report's `replay_comparison` is empty), so unlike jobs
+1 to 5 the baseline is not confirmed against a second run. Gap causes accepted: expected-list rows
+2, 6, 7, 9, 10 and the new rows 11 to 14. The text below the next paragraph is the history of the
+stop. Original first-attempt result: stopped for decisions, not accepted (run `2026-11-12-0001`, overlay
 `freeciv-b1b0768b/capacity-overlay.toml`, corpus tag `freeciv-b1b0768b-v3`). The job completed
 (`SUCCEEDED`, `COMPLETED_WITH_GAPS`, 0 findings, audit clean, check report passed), but gap causes
 outside the expected list appeared and one of them points at a possible defect. Nothing was
