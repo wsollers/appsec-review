@@ -3,7 +3,7 @@
 This record advances T-057 under the
 [walk terms](../walks/multivuln-bd69bfe8.md).
 
-**Result: not launched; the user authorized a Dagster-runtime-only rebuild.** No new application
+**Result: paused by the user before launch; the authorized runtime rebuild is in flight.** No new application
 run, Dagster dispatch, attempt or corpus namespace has been allocated.
 
 ## Expected duration and criterion
@@ -72,6 +72,11 @@ baseline only after the other checks hold.
   and are available. No key was read into the conversation, created or changed.
   The runtime rebuild and guarded startup are authorized; scanner-image
   rebuilds and unrelated validation suites are not.
+- The runtime rebuild started at `2026-11-12T12:49:27Z`, shell
+  `multivuln-runtime-rebuild`, with output in
+  `runs/metadata/walks/multivuln-bd69bfe8/runtime-image-build.log`.
+  The user then said "stop before starting the run. i want to stream line some
+  things". No review launch will follow the build without a new user instruction.
 
 ## Commands and timing
 

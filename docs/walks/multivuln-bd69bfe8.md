@@ -41,6 +41,7 @@ The [state](multivuln-bd69bfe8-state.md) records progress; records use
 | 2026-11-12 | "stop all those other threads and monitors. only you should be running and monitoring the code. Those others were supposed to go away a long time ago but keep getting resurr3ected" | This walker is the sole active repository owner. Stop the legacy coordinator and integration monitor; withdraw their pending update and documentation handoff. Do not revive dormant threads or legacy monitors |
 | 2026-11-12 | "Docker started—continue the walk" | Resume preflight against the existing native Docker Engine started by the operator |
 | 2026-11-12 | "Authorize rebuilding only the Dagster runtime image" | Rebuild and sign the `runtime-copilot` stage through the supported lifecycle using existing keys; no scanner/tool-image rebuilds or signing-policy changes |
+| 2026-11-12 | "stop before starting the run. i want to stream line some things" | Pause before any review launch. The already-started runtime rebuild may finish; do not launch the walk on its completion without a new user instruction |
 
 ## Expected gaps
 
