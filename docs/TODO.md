@@ -1701,7 +1701,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   far: job_third_party_data_sync (the 88 s whole-job run replaced by graph, publication,
   cve-bin-tool and OSV feed tests); job_project_build (17 code-level tests kept, 25 graph cases
   moved to `tests/integration/job_project_build/`, new graph, contract, repair and enforcement
-  tests). Next: job_language_build.
+  tests); job_language_build (27 unit files, 628 cases: 14 whole code-level files moved in, the
+  nine family files split with their graph cases parked under
+  `tests/integration/job_language_build/`, the live toolchain and Gradle checks under
+  `tests/acceptance/job_language_build/`, new contract, graph, handler-wiring and receipt/path
+  tests). Next: job_build_iteration.
 - **Done when:** `tests/` has no `test_*.py` outside `tests/unit`, `tests/integration`,
   `tests/acceptance` and `tests/shared`; `scripts/run-tests.sh fast` collects only `tests/unit`
   and finishes in under ten minutes with zero tests over 10 s; every job in the registry has a

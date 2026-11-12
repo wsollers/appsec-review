@@ -167,7 +167,7 @@ def test_real_sqlite_helper_detects_changed_record_count_read_only() -> None:
 
 def test_live_build_toolchain_definitions_cannot_silently_shadow_go_coverage() -> None:
     with _timed_lane("toolchain-definitions"):
-        path = ROOT / "tests" / "test_live_build_toolchains.py"
+        path = ROOT / "tests" / "acceptance" / "job_language_build" / "test_live_build_toolchains.py"
         module = ast.parse(path.read_text(encoding="utf-8"))
         names = Counter(node.name for node in module.body
                         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)))

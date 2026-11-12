@@ -37,7 +37,7 @@ from appsec_review.storage import canonical_json, file_sha256
 from tests.sanitizer_support import (
     ET_REL, DockerFake, elf_with_symbols, instrumented_elf,
 )
-from tests.test_language_build import (
+from tests.integration.job_language_build.test_language_build_graph import (
     ImageResolver, NativeExecutor, NativeRecipeModel, _fixture, native_language_executor,
 )
 from appsec_review.jobs.job_project_build import build_job as build_projects

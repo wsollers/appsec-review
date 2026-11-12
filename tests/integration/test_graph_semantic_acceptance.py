@@ -28,7 +28,7 @@ from appsec_review.storage import file_sha256
 from tests.fixtures.graph.expectations import SCHEMA, unmet
 from tests.graph.test_normalize import _exports as _cpp_exports, _normalize as _normalize_cpp
 from tests.graph.test_python_export import SCOPE, SOURCE, SOURCE_BYTES, TARGET_PATH, _exports
-from tests.test_build_output_mapping import Capture, _exec
+from tests.unit.job_language_build.test_build_output_mapping import Capture, _exec
 from tests.test_codeql_seeded_export import NEIGHBORHOOD_COLUMNS, SEED_FUNCTION_COLUMNS, _extract, _observation
 
 

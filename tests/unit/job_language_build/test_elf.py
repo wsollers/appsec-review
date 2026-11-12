@@ -137,7 +137,9 @@ def test_catalog_reports_an_out_of_table_dependency_as_unparsed_not_resolved(tmp
     artifacts, gaps = _catalog(tmp_path, tmp_path, {}, 100, "build-unit-fixture")
     assert artifacts[0]["loader_dependency_status"] == "unparsed"
     assert artifacts[0]["loader_dependencies"] == [] and "libplanted" not in str(artifacts)
-    assert len(gaps) == 1 and "loader dependencies were not parseable" in gaps[0]
+    parse_gaps = [gap for gap in gaps if "loader dependencies were not parseable" in gap]
+    assert len(parse_gaps) == 1 and parse_gaps[0].startswith("app: ")
+    assert all("delivery_fact_unavailable" in gap for gap in gaps if gap not in parse_gaps)
 
 
 def test_loader_facts_bounds_the_program_header_table(tmp_path: Path) -> None:
@@ -188,7 +190,9 @@ def test_catalog_resolves_loader_dependencies_and_names_unparseable_outputs(tmp_
     assert by_path["app"]["loader_dependency_status"] == "resolved"
     assert by_path["app"]["loader_parser"] == elf.PARSER_IDENTITY
     assert by_path["broken"]["loader_dependency_status"] == "unparsed"
-    assert len(gaps) == 1 and gaps[0].startswith("broken: loader dependencies were not parseable")
+    parse_gaps = [gap for gap in gaps if "loader dependencies were not parseable" in gap]
+    assert len(parse_gaps) == 1 and parse_gaps[0].startswith("broken: loader dependencies were not parseable")
+    assert all("delivery_fact_unavailable" in gap for gap in gaps if gap not in parse_gaps)
 
 
 # Layout of `minimal_elf(("libc.so.6",))`: ELF header, PT_LOAD and PT_DYNAMIC program headers,

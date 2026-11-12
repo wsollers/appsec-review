@@ -45,7 +45,7 @@ from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import RunStore, atomic_json, file_sha256
 from tests.handoff_fixture import write_fixture_handoff
-from tests.test_node_dependency_output_filtering import _shipped_dispositions, _workspace
+from tests.unit.job_language_build.test_node_dependency_output_filtering import _shipped_dispositions, _workspace
 
 
 ROOT = Path(__file__).resolve().parents[2]

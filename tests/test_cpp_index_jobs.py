@@ -28,7 +28,7 @@ from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.registry import builtin_registry
-from tests.test_language_build import (
+from tests.integration.job_language_build.test_language_build_graph import (
     AnalysisExecutor, _accepted_project, _fixture, native_language_executor,
 )
 
@@ -375,7 +375,6 @@ import resource
 import subprocess
 import sys
 
-from appsec_review.config import load_config
 from appsec_review.container_runtime.executor import FILE_SIZE_SIGNAL_EXIT
 from appsec_review.jobs.cpp_index_scopes import CheckpointIntegrityError
 from appsec_review.storage import file_sha256

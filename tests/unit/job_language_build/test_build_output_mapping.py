@@ -428,12 +428,13 @@ def test_jvm_wrapper_records_argfile_contents_beside_the_invocation(tmp_path: Pa
     workspace = tmp_path / "workspace"
     _javac_tree(workspace)
     settings = {"tool_paths": {tool: shutil.which("true") or "/bin/true" for tool in jvm._TOOLS}}
-    trace, _logical = jvm._instrumentation(workspace, "module", settings)
+    instrumentation = tmp_path / "instrumentation"
+    trace, _logical = jvm._instrumentation(instrumentation, tmp_path / "evidence", settings)
     argfile = workspace / "module" / "target" / "javac.args"
     argfile.write_text('-d "target/classes"\nsrc/main/java/com/example/app/Main.java\n', encoding="utf-8")
     records = trace.with_name("invocations.d")
     environment = {**os.environ, "APPSEC_JVM_TRACE_DIR": str(records), "APPSEC_JVM_PARENT_COMMAND": "cmd-1"}
-    wrapper = trace.parent / "bin" / "javac"
+    wrapper = instrumentation / "bin" / "javac"
     subprocess.run([str(wrapper), f"@{argfile}"], cwd=workspace / "module", env=environment, check=True)
     # Each exec writes its own record file, so parallel compilations never interleave.
     (record,) = records.iterdir()

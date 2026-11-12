@@ -1,3 +1,10 @@
+"""job_language_build (php): the pre-walk whole-graph suite, moved out of the unit path by T-113.
+
+Every case runs the upstream jobs and the language-build job through GraphRunner with fake
+executors and image resolvers. They are integration tests pending replacement by the code-level
+tests in tests/unit/job_language_build/ and run only when named explicitly
+(``scripts/run-tests.sh --allow-heavy -- <file>``).
+"""
 from __future__ import annotations
 
 import json
@@ -8,7 +15,6 @@ from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
-from appsec_review.jobs.job_language_build import php
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.inference import ModelResult
@@ -21,7 +27,7 @@ from appsec_review.runtime import GraphRunner, plan_jobs
 from tests.capture_fakes import capturing_fake
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 
 
 class ComposerRecipeModel:
@@ -168,12 +174,3 @@ def test_php_sibling_failure_isolated_checkpoint_reuse_and_dag_family_lane(tmp_p
     assert resumed["bad"]["checkpoint_reused"] is False
     graph = plan_jobs((build_language(executor_factory=lambda unit, profile: capturing_fake(profile, ComposerExecutor([]))),), config)
     assert graph.node("job_language_build.execute.php").dependencies == ("job_language_build.load.php",)
-
-
-def test_php_policy_allows_manifest_only_dependency_resolution(tmp_path: Path) -> None:
-    assert php.policy_argv(("composer", "archive"), {
-        "composer_plugins": "disabled", "composer_scripts": "disabled"})[-3:] == (
-            "--no-plugins", "--no-scripts", "--no-interaction")
-    dispatch = {"build_system": "composer", "recipe": {
-        "dependency_files": ["composer.json"], "network_required": True}}
-    assert php.validate_php_dispatch(dispatch) == []

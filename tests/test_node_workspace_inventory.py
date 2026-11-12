@@ -29,7 +29,7 @@ from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
 from tests.capture_fakes import capturing_fake
-from tests.test_language_build_node import _ImageResolver, _NodeExecutor
+from tests.integration.job_language_build.test_node_graph import _ImageResolver, _NodeExecutor
 
 
 ROOT = Path(__file__).parents[1]

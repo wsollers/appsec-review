@@ -1,6 +1,12 @@
+"""job_language_build (python): the pre-walk whole-graph suite, moved out of the unit path by T-113.
+
+Every case runs the upstream jobs and the language-build job through GraphRunner with fake
+executors and image resolvers. They are integration tests pending replacement by the code-level
+tests in tests/unit/job_language_build/ and run only when named explicitly
+(``scripts/run-tests.sh --allow-heavy -- <file>``).
+"""
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 from pathlib import Path
@@ -14,7 +20,6 @@ from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
-from appsec_review.jobs.job_language_build import python as python_adapter
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.inference import ModelResult
@@ -26,7 +31,7 @@ from appsec_review.runtime import GraphRunner, plan_jobs
 from tests.capture_fakes import capturing_fake
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 
 
 class PythonRecipeModel:
@@ -151,20 +156,6 @@ def test_python_build_catalogs_packages_provenance_streams_and_mcp(tmp_path: Pat
     assert response["results"] and "SENSITIVE-RAW-OUTPUT" not in encoded and "--no-isolation" not in encoded
     graph = plan_jobs((build_language(executor_factory=lambda unit, profile: capturing_fake(profile, executor)),), config)
     assert graph.node("job_language_build.execute.python").dependencies == ("job_language_build.load.python",)
-
-
-def test_python_recipe_validation_is_package_only_and_allows_dependency_download(tmp_path: Path) -> None:
-    setup = tmp_path / "setup.py"
-    setup.write_text("from setuptools import setup\nsetup(name='sample')\n", encoding="utf-8")
-    base = {"family": "python", "recipe": {"dependency_files": ["setup.py"],
-        "network_required": False, "configure_commands": [],
-        "build_commands": [["python", "setup.py", "sdist", "bdist_wheel"]]}}
-    assert python_adapter.validate_dispatch(base, tmp_path) == []
-    unsafe = {"family": "python", "recipe": {**base["recipe"],
-        "build_commands": [["python", "-m", "pytest"]]}}
-    assert any("allowlist" in gap for gap in python_adapter.validate_dispatch(unsafe, tmp_path))
-    unlocked = {"family": "python", "recipe": {**base["recipe"], "network_required": True}}
-    assert python_adapter.validate_dispatch(unlocked, tmp_path) == []
 
 
 def test_python_failure_is_gap_and_checkpoint_tamper_stops_reuse(tmp_path: Path) -> None:

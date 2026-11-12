@@ -18,7 +18,7 @@ from appsec_review.jobs.job_language_build import node
 from appsec_review.storage import file_sha256
 
 
-REPOSITORY = Path(__file__).resolve().parents[1]
+REPOSITORY = Path(__file__).resolve().parents[3]
 SUMMARY = "dependency-content-summarized: "
 MISSING = ("node_modules: npm installer record unavailable (missing); "
            "dependency files cataloged per-file in the target lane")

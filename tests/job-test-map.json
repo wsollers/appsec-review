@@ -189,13 +189,51 @@
     },
     "job_language_build": {
       "unit": [
-        "tests/test_language_build.py::test_coverage_exchange_artifacts_are_preserved_for_every_build_family",
-        "tests/test_language_build.py::test_profile_exchange_artifacts_are_preserved_for_every_build_family",
-        "tests/test_language_build.py::test_generic_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_inputs"
+        "tests/unit/job_language_build/test_contract.py",
+        "tests/unit/job_language_build/test_job_graph.py",
+        "tests/unit/job_language_build/test_job_helpers.py",
+        "tests/unit/job_language_build/test_receipts_and_paths.py",
+        "tests/unit/job_language_build/test_build_output_mapping.py",
+        "tests/unit/job_language_build/test_build_output_scope.py",
+        "tests/unit/job_language_build/test_captured_build_reconciliation.py",
+        "tests/unit/job_language_build/test_elf.py",
+        "tests/unit/job_language_build/test_go.py",
+        "tests/unit/job_language_build/test_go_build_facts.py",
+        "tests/unit/job_language_build/test_go_dependency_output_filtering.py",
+        "tests/unit/job_language_build/test_go_vendored.py",
+        "tests/unit/job_language_build/test_gradle_provenance.py",
+        "tests/unit/job_language_build/test_jvm.py",
+        "tests/unit/job_language_build/test_native_layout.py",
+        "tests/unit/job_language_build/test_native_outputs.py",
+        "tests/unit/job_language_build/test_node.py",
+        "tests/unit/job_language_build/test_node_dependency_output_filtering.py",
+        "tests/unit/job_language_build/test_node_installed.py",
+        "tests/unit/job_language_build/test_node_scripts.py",
+        "tests/unit/job_language_build/test_output_attribution.py",
+        "tests/unit/job_language_build/test_php.py",
+        "tests/unit/job_language_build/test_php_dependency_output_filtering.py",
+        "tests/unit/job_language_build/test_php_installed.py",
+        "tests/unit/job_language_build/test_python.py",
+        "tests/unit/job_language_build/test_rust.py",
+        "tests/unit/job_language_build/test_wasm.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_language_build/test_language_build_graph.py",
+        "tests/integration/job_language_build/test_native_outputs_graph.py",
+        "tests/integration/job_language_build/test_go_graph.py",
+        "tests/integration/job_language_build/test_jvm_graph.py",
+        "tests/integration/job_language_build/test_node_graph.py",
+        "tests/integration/job_language_build/test_php_graph.py",
+        "tests/integration/job_language_build/test_python_graph.py",
+        "tests/integration/job_language_build/test_rust_graph.py",
+        "tests/integration/job_language_build/test_wasm_graph.py"
+      ],
       "acceptance": [],
-      "live": ["tests/integration/test_family_project_builds.py", "tests/test_live_build_toolchains.py"]
+      "live": [
+        "tests/acceptance/job_language_build/test_live_build_toolchains.py",
+        "tests/acceptance/job_language_build/test_live_gradle_provenance.py",
+        "tests/integration/test_family_project_builds.py"
+      ]
     },
     "job_model_connectivity": {
       "unit": ["tests/test_model_preflight.py::test_registry_wires_the_real_check_into_the_first_job_of_a_review"],

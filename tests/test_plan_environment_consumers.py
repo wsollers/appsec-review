@@ -32,7 +32,7 @@ from appsec_review.runtime.inputs import input_read_scope, read_input_observatio
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from tests import test_evidence_collection_job as evidence_tests
-from tests import test_language_build as language_tests
+from tests.integration.job_language_build import test_language_build_graph as language_tests
 from tests.capture_fakes import capturing_fake
 
 

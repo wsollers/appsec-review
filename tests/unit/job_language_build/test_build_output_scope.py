@@ -14,7 +14,7 @@ from appsec_review.jobs.build_output_scope import (
 )
 from appsec_review.jobs.job_language_build import job as language_build_job
 from appsec_review.jobs.job_language_build.job import _catalog, _snapshot
-from tests.test_build_output_mapping import _cmake_project, _elf, _write
+from tests.unit.job_language_build.test_build_output_mapping import _cmake_project, _elf, _write
 
 FETCHCONTENT = parse_build_outputs({"exclusions": [{
     "name": "cmake-fetchcontent-subbuild", "reason": "FetchContent download sub-builds",

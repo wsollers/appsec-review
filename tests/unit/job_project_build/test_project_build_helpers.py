@@ -82,7 +82,7 @@ def test_build_outputs_policy_changes_project_probe_checkpoint_identity(tmp_path
 def test_probe_outputs_prune_native_dependency_trees_and_configured_exclusions(tmp_path: Path) -> None:
     from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
     from appsec_review.jobs.job_project_build.job import _classify_probe_outputs, _outputs
-    from tests.test_native_build_output_classification import POLICY, _before, _fetchcontent_build, _write
+    from tests.unit.job_language_build.test_native_outputs import POLICY, _before, _fetchcontent_build, _write
     workspace = tmp_path / "workspace"
     _write(workspace, "CMakeLists.txt", "project(app)\n")
     _write(workspace, "main.cpp", "int main() { return 0; }\n")
