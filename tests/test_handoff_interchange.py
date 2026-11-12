@@ -566,6 +566,35 @@ def test_build_descriptors_under_a_target_data_folder_are_source_metadata_not_ru
         collect_artifacts(root, {"artifact": marker})
 
 
+def test_analysis_plan_scopes_facts_and_documents_under_a_target_data_folder_are_source_metadata(tmp_path):
+    """The analysis plan carries target-relative path and hash records in its scanner scopes, topology
+    facts, evidence-bundle documents, build-file lists and prefix samples. For a target with a
+    top-level ``data/`` folder (Freeciv, job 9 of the 2026-11-12 walk) they are not run files."""
+    record = {"path": "data/Makefile.am", "sha256": "b" * 64}
+    document = {**record, "content": "SUBDIRS = themes\n"}
+    fact = {**record, "fact_id": "f" * 60, "predicate": "condition", "line": "24", "value": "endif"}
+
+    def produce(unit):
+        return {"plan": {
+            "scanner_selections": [{"scanner_id": "tool-x", "scope": [record]}],
+            "components": [{"component_id": "data", "scope": [record]}],
+            "build_topology": {"executable_graph": {"facts": [fact]},
+                               "evidence_bundle": {"documents": [document],
+                                                   "units": [{"documents": [document]}]}},
+            "history_priority": {"files": [record]}},
+            "catalog": {"build_files": [record]},
+            "summary": {"recognized_build_files": [record],
+                        "prefixes": [{"prefix": "data", "file_count": 1, "sample": [record]}]}}
+
+    _, _, _, outcome, root = publish(tmp_path, produce)
+    assert outcome["handoff"]["coverage"]["disposition"] == "complete"
+    assert all(ref["path"] != "data/Makefile.am" for ref in outcome["handoff"]["artifacts"])
+    assert outcome["result"]["outputs"]["work.only"]["plan"]["build_topology"]["executable_graph"]["facts"] == [fact]
+    # The same record under an artifact field is still a run file that must exist.
+    with pytest.raises(ValueError, match="shared artifact missing: data/Makefile.am"):
+        collect_artifacts(root, {"artifact": record})
+
+
 def test_graph_export_artifact_survives_common_handoff_projection(tmp_path):
     def produce(unit):
         path = unit.unit_root / "graph-export.json"

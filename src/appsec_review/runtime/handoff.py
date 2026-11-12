@@ -44,6 +44,9 @@ _SOURCE_DATA_FIELDS = {
     # Build-unit descriptors: target-relative markers and descriptor documents with their hashes.
     # A target that owns a top-level ``data/`` folder would otherwise have them read as run files.
     "markers", "descriptor_package",
+    # Analysis-plan records of target files: scanner and component scopes, topology facts,
+    # evidence-bundle documents, build-file lists and prefix samples (same collision; T-096).
+    "scope", "facts", "documents", "build_files", "recognized_build_files", "sample",
 }
 
 
