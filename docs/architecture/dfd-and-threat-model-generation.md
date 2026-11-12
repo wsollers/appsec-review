@@ -1,8 +1,8 @@
 # Generated data-flow diagram and threat model
 
 Status: **design only, awaiting the user's approval. Nothing here is implemented.** Registry items:
-T-NNN-A (this job) and T-NNN-B (the deployment inventory job it depends on for deployment facts);
-the ids are allocated by the registry owner when the entries are added. The implementation plan is
+T-107 (this job) and T-108 (the deployment inventory job it depends on for deployment facts);
+the ids are reserved by the registry owner, which adds the entries on approval. The implementation plan is
 [`../tasks/2026-11-12-dfd-threat-model-plan.md`](../tasks/2026-11-12-dfd-threat-model-plan.md).
 This design is the re-cut of the "F07 threat model" row of T-059 as one job with typed inputs and
 gap records. It is a different thing from T-070, which slices *findings* by a game threat model
@@ -55,9 +55,9 @@ How good the result can be:
   citation-checked.
 - **(b) A web service with IaC.** Better on declared interfaces: OpenAPI operations give routes
   with security state, CodeQL threat-model source kinds are exported for Java, Go and Python, and
-  route handlers are detected for web languages. Worse on deployment until T-NNN-B lands: compose
+  route handlers are detected for web languages. Worse on deployment until T-108 lands: compose
   and Kubernetes services, published ports and `depends_on`/proxy relationships are exactly the
-  facts a web DFD needs, and they are parsed by a library no job publishes. With T-NNN-B the
+  facts a web DFD needs, and they are parsed by a library no job publishes. With T-108 the
   result is a level-0 and level-1 DFD with real network boundaries (published listener against
   internal service) and data stores identified by product for redis and postgres. Terraform, Helm
   and Dockerfile content stays a named gap; Trivy, Checkov and Hadolint findings attach to
@@ -105,7 +105,7 @@ job_target_catalog ─┬─ job_tree_sitter_ast ──────────�
                     ├─ job_ci_configuration_analysis ───┤
                     ├─ job_evidence_collection ─────────┤
                     ├─ job_owasp_control_assessment ────┤
-                    └─ job_deployment_inventory (T-NNN-B, when registered) ┘
+                    └─ job_deployment_inventory (T-108, when registered) ┘
 ```
 
 `schedule_after` names the last producers in each chain (`job_owasp_control_assessment`,
@@ -135,7 +135,7 @@ through `runtime.consume.accepted_upstream`, `indexing.store.open_shard` and
 | `job_owasp_control_assessment` | `owasp_workbench` | optional | producer_evidence |
 | `job_ci_configuration_analysis` | `ci_findings` | optional | producer_evidence |
 | `job_evidence_collection` | `static_tool_observations` | optional | producer_evidence |
-| `job_deployment_inventory` (T-NNN-B) | `deployment_inventory` | optional, `when_producer_enabled` once registered | producer_evidence |
+| `job_deployment_inventory` (T-108) | `deployment_inventory` | optional, `when_producer_enabled` once registered | producer_evidence |
 
 Every optional input uses `MissingPolicy.GAP` and `CoveragePolicy.ALLOW_PARTIAL`. The catalog
 envelope is the one required input because an accepted-evidence job takes its target snapshot from
@@ -143,7 +143,7 @@ its upstream handoffs, and the catalog is already in `WAVE1_REQUIRED`: a run wit
 exist. `job_source_history_analysis`, `job_change_context_analysis`, `job_codeql_analysis`
 observations and the build receipts are deliberately not inputs (section 13).
 
-### 3.2 The deployment inventory is a separate job (T-NNN-B)
+### 3.2 The deployment inventory is a separate job (T-108)
 
 `appsec_review.deployment.extract_inventory` is a pure function over caller-supplied bytes. It is
 the only source of listeners, services and service relationships, and for a web service those are
@@ -436,7 +436,7 @@ The job sets `strict_gaps=True`. Every gap is built with `interchange.producer_g
 | --- | --- | --- | --- |
 | Declared producer has no accepted handoff in the claim | `input_unavailable` | `<producer>` | yes |
 | Producer is disabled in configuration | `input_unavailable` | `<producer>` | no |
-| Producer not registered (deployment inventory before T-NNN-B) | `input_unavailable` | `job_deployment_inventory` | no |
+| Producer not registered (deployment inventory before T-108) | `input_unavailable` | `job_deployment_inventory` | no |
 | Upstream accepted with gaps or partial coverage | `producer_reported_gap` | `<producer>/<output_kind>` | yes |
 | Output kind declared but no shard or artifact published | `output_missing` | `<producer>/<output_kind>` | yes |
 | Lane read its input and established nothing | `empty_result` | `<lane>` | no |
@@ -606,7 +606,7 @@ in `governing-rules.md`, and the role text repeats none of it.
   facts, uses typed missing-evidence requests, and treats target-owned exclusions as untrusted
   context. F07's "document-candidate routing into independent review" (generated threats becoming
   hunts) is deferred to a follow-up.
-- **F06** (T-059): T-NNN-B is the static half only (publish the existing inventory). Imported
+- **F06** (T-059): T-108 is the static half only (publish the existing inventory). Imported
   service observations, freshness and drift, and live collectors stay in F06.
 - **T-070** slices findings by attacker position for a game team. This job does not slice
   findings and does not fill finding fields. It offers attacker-position candidates per entry
@@ -674,7 +674,7 @@ the output is worth the model step, the deployment job and the consumers.
    in `trust_boundary_id`.
 3. **Default enablement.** Recommendation: merge with `enabled = false` and the model off, and
    enable the deterministic job after the walk's first Freeciv run of it has been read.
-4. **Deployment job in scope.** Is T-NNN-B (publishing the existing deployment inventory)
+4. **Deployment job in scope.** Is T-108 (publishing the existing deployment inventory)
    approved as part of this work? Without it the web-service answer in section 1 stays "no
    deployment facts".
 5. **Report form.** Should the final report carry the generated model as an appendix, and if so

@@ -1,8 +1,8 @@
 # PLAN - GENERATE A DFD AND THREAT MODEL FROM ACCEPTED RUN EVIDENCE
 
-This plan works T-NNN-A (generate a data-flow diagram and threat model from accepted run evidence)
-and T-NNN-B (publish the static deployment inventory as a job); the registry owner allocates the
-ids when the entries in section 8 are added to `docs/TODO.md`. The design is
+This plan works T-107 (generate a data-flow diagram and threat model from accepted run evidence)
+and T-108 (publish the static deployment inventory as a job); the registry owner has reserved both
+ids and adds the entries of section 8 to `docs/TODO.md` on approval. The design is
 [`../architecture/dfd-and-threat-model-generation.md`](../architecture/dfd-and-threat-model-generation.md).
 
 **Status: plan only. No chunk starts, and no sub-agent is dispatched, until the user approves the
@@ -256,7 +256,7 @@ budget-clock tests); neither is in these files.
   `tests/test_downstream_input_contracts.py`, `tests/test_review_data_indexing.py` (the
   input-matrix cases), `tests/test_documentation.py`.
 
-**C10 deployment inventory job** (T-NNN-B; only if approved; after C9 because it shares the
+**C10 deployment inventory job** (T-108; only if approved; after C9 because it shares the
 hotspots)
 - New: `src/appsec_review/jobs/job_deployment_inventory/{__init__,datasets,job}.py`,
   `tests/test_deployment_inventory_job.py`; the same registration surfaces as C9; removal of the
@@ -338,10 +338,10 @@ review hunts; Graphviz output; reading `entry_points[]` in the coverage adapter 
 
 ## 8. Proposed `docs/TODO.md` entries
 
-For the registry owner to add (index rows and entries), with the ids it allocates.
+For the registry owner to add (index rows and entries) under the reserved ids.
 
 ```
-### T-NNN-A — Generate a data-flow diagram and threat model from accepted run evidence
+### T-107 — Generate a data-flow diagram and threat model from accepted run evidence
 - **State:** open
 - **Area:** review
 - **Blocked by:** T-057
@@ -361,10 +361,10 @@ For the registry owner to add (index rows and entries), with the ids it allocate
 - **Refs:** `docs/architecture/dfd-and-threat-model-generation.md`,
   `docs/tasks/2026-11-12-dfd-threat-model-plan.md`, T-059 (F07), T-070, T-076, T-086, T-091.
 
-### T-NNN-B — Publish the static deployment inventory as a job
+### T-108 — Publish the static deployment inventory as a job
 - **State:** open
 - **Area:** evidence
-- **Blocked by:** T-057 · **Blocks:** T-NNN-A (deployment facts only)
+- **Blocked by:** T-057 · **Blocks:** T-107 (deployment facts only)
 - **Why:** `appsec_review.deployment` parses compose, Kubernetes, nginx, redis and postgresql
   descriptors into services, listeners and relationships, but no job calls it, so no dataset
   carries a listener, a published port or a service relationship.
@@ -375,12 +375,12 @@ For the registry owner to add (index rows and entries), with the ids it allocate
 - **Done when:** the unit tests of the plan pass and a run on a target with a compose or
   Kubernetes descriptor publishes services and listeners that `job_threat_model_generation` reads.
 - **Refs:** `docs/deployment-inventory.md`, `docs/architecture/dfd-and-threat-model-generation.md`
-  section 3.2, T-059 (F06), T-NNN-A.
+  section 3.2, T-059 (F06), T-107.
 ```
 
-Relation to existing items: T-NNN-A is the producer T-059's F07 row describes, re-cut as a job
+Relation to existing items: T-107 is the producer T-059's F07 row describes, re-cut as a job
 pass; when it is added, the F07 row gains a pointer to it. T-070 is unchanged: it slices findings
-and records attacker position on findings, which this job never does. T-NNN-A offers
+and records attacker position on findings, which this job never does. T-107 offers
 attacker-position candidates per entry point that T-076 may surface to the reviewer.
 
 `Blocked by: T-057` follows T-059's rule that every fleet row waits for the first scored run. If
