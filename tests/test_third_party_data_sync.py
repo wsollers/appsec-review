@@ -11,10 +11,12 @@ import sqlite3
 import urllib.parse
 import zipfile
 
+import pytest
 from appsec_review.config import load_config
 from appsec_review.jobs.job_third_party_data_sync import build_job
 from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync.feed import OsvSettings, lookup_package
 from appsec_review.runtime import JobRunner
+from tests.fixtures.grype import Downloader as GrypeDownloader, executor as grype_executor
 
 
 ROOT = Path(__file__).parents[1]
@@ -95,25 +97,48 @@ def cve_runner(settings, input_dir, output_dir):
     return {"image": settings.image, "image_id": "sha256:fixture", "tool_version": settings.tool_version}
 
 
-def test_complete_job_runs_all_units_and_places_global_and_run_metadata(tmp_path: Path) -> None:
+@pytest.mark.parametrize("grype_fails", [False, True], ids=["complete", "grype-failure"])
+def test_complete_job_runs_all_units_and_places_global_and_run_metadata(tmp_path: Path, grype_fails: bool) -> None:
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace("first_year = 2002", "first_year = 2026")
     text = re.sub(r'\nsha256 = "[0-9a-f]{64}"', "", text)
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
-    shutil.copytree(ROOT / "tools", tmp_path / "tools")
+    builder = tmp_path / "tools/cve-bin-tool"
+    builder.mkdir(parents=True)
+    for name in ("Dockerfile", "build_db.py"):
+        shutil.copyfile(ROOT / "tools/cve-bin-tool" / name, builder / name)
     instant = datetime(2026, 10, 8, tzinfo=timezone.utc)
-    outcome = JobRunner(load_config(tmp_path / "appsec-review.toml")).run(
-        build_job(client=NvdClient(), clock=lambda: instant, pause=lambda _: None,
-                  osv_downloader=FeedDownloader(), mitre_downloader=FeedDownloader(), cve_runner=cve_runner,
-                  kev_downloader=FeedDownloader(), epss_downloader=FeedDownloader()),
-        now=instant,
-    )
 
+    def run_job():
+        return JobRunner(load_config(tmp_path / "appsec-review.toml")).run(
+            build_job(client=NvdClient(), clock=lambda: instant, pause=lambda _: None,
+                      osv_downloader=FeedDownloader(), mitre_downloader=FeedDownloader(), cve_runner=cve_runner,
+                      kev_downloader=FeedDownloader(), epss_downloader=FeedDownloader(),
+                      grype_downloader=GrypeDownloader(status="deprecated" if grype_fails else "active"),
+                      grype_executor_factory=lambda unit: grype_executor(unit.job.run_root)),
+            now=instant,
+        )
+
+    if grype_fails:
+        with pytest.raises(RuntimeError, match="job reported partial failure: grype_db_sync.fetch"):
+            run_job()
+        attempt = next((tmp_path / "runs").glob("*/data/jobs/job_third_party_data_sync/attempts/attempt_0001"))
+        states = {f"{path.parents[2].name}.{path.parent.name}": json.loads(path.read_bytes())["status"]
+                  for path in (attempt / "steps").glob("*/tasks/*/status.json")}
+        assert states["grype_db_sync.fetch"] == "FAILED"
+        assert "grype_db_sync.import" not in states and "grype_db_sync.publish" not in states
+        assert len(states) == 19
+        assert json.loads((attempt / "status.json").read_bytes())["status"] == "FAILED"
+        assert not (attempt / "handoff.json").exists()
+        assert {status for unit, status in states.items() if not unit.startswith("grype_db_sync.")} == {"SUCCEEDED"}
+        assert not (tmp_path / "data/feeds/grype/current.json").exists()
+        return
+    outcome = run_job()
     assert outcome["status"]["status"] == "SUCCEEDED"
     assert set(outcome["result"]["steps"].values()) == {"SUCCEEDED"}
-    assert len(outcome["result"]["units"]) == 18
+    assert len(outcome["result"]["units"]) == 21
     metadata = tmp_path / "runs" / "metadata"
     assert {path.name for path in (metadata / "feeds").glob("*.json")} == {
-        "nvd.json", "osv.json", "mitre.json", "cve-bin-tool.json", "kev.json", "epss.json"
+        "nvd.json", "osv.json", "mitre.json", "cve-bin-tool.json", "kev.json", "epss.json", "grype.json"
     }
     assert (metadata / "jobs" / "job_third_party_data_sync.json").is_file()
     attempt = Path(outcome["attempt_root"])
@@ -122,11 +147,11 @@ def test_complete_job_runs_all_units_and_places_global_and_run_metadata(tmp_path
     run_root = attempt.parents[4]
     receipts = [verify_receipt(run_root, reference(run_root, path))
                 for path in (attempt / "shared/feed-snapshot").glob("*.json")]
-    expected_feeds = {"nvd", "osv", "mitre", "cve-bin-tool", "kev", "epss"}
+    expected_feeds = {"nvd", "osv", "mitre", "cve-bin-tool", "kev", "epss", "grype"}
     for mode in ("computed", "reused"):
         assert {item["computation"]["feed_id"] for item in receipts if item["mode"] == mode} == expected_feeds
     verify_handoff(run_root, outcome["handoff"])
-    assert len(list((attempt / "steps").glob("*/tasks/*/status.json"))) == 18
+    assert len(list((attempt / "steps").glob("*/tasks/*/status.json"))) == 21
     settings = OsvSettings.from_mapping(tmp_path, load_config(tmp_path / "appsec-review.toml").job(
         "job_third_party_data_sync").step("osv_sync").settings)
     lookup = lookup_package(settings, "PyPI", "fixture", limit=1)

@@ -94,7 +94,7 @@ input, output, tool, and acceptance contracts.
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
-| `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
+| `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, Grype, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
 | `job_image_pin_verification` | Mandatory check that every enabled catalog image and configured image-ID pin resolves locally to exactly its pinned image; any mismatch fails the run. Builds nothing | [image-pin-verification](../operations/image-pin-verification.md) |
 | `job_target_acquisition` | Acquires (or re-verifies) every component of the review system named by `start --system`, in parallel, into `targets/<system>/` before intake; a failed component is a named gap; a no-op without a requested system | [target-acquisition](../operations/target-acquisition.md) |
@@ -174,6 +174,7 @@ src/appsec_review/
       steps/
         nvd_sync/        fetch -> process -> publish
         osv_sync/        fetch -> index -> publish
+        grype_db_sync/   fetch -> import -> publish
         mitre_sync/      fetch -> normalize -> publish
         kev_sync/        fetch -> normalize -> publish
         epss_sync/       fetch -> normalize -> publish

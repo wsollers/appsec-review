@@ -1133,6 +1133,10 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             tasks_value = step_value.get("tasks", {})
             if not isinstance(step_settings, dict) or not isinstance(tasks_value, dict):
                 raise ValueError(f"jobs.{job_id}.steps.{step_id} settings/tasks must be tables")
+            if job_id == "job_third_party_data_sync" and step_id == "grype_db_sync":
+                from .grype import GrypeSettings
+                step_settings = GrypeSettings.from_mapping(repository_root, step_settings).view(repository_root)
+                resolved_document["jobs"][job_id]["steps"][step_id]["settings"] = dict(step_settings)
             tasks: dict[str, TaskConfig] = {}
             for task_id, task_value in tasks_value.items():
                 if not isinstance(task_value, dict):

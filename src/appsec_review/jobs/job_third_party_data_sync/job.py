@@ -6,9 +6,12 @@ import os
 from pathlib import Path
 from typing import Any
 
+from appsec_review.config.grype import GrypeSettings
+from appsec_review.container_runtime import ContainerExecutor, load_catalog
 from appsec_review.jobs.job_third_party_data_sync.publication import HttpDownloader, publish_metadata, stamp
 from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build import database as cve_db
 from appsec_review.jobs.job_third_party_data_sync.steps.epss_sync import feed as epss_feed
+from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed as grype_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.kev_sync import feed as kev_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.mitre_sync import feed as mitre_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdClient, NvdPublisher
@@ -21,6 +24,7 @@ from appsec_review.jobs.job_third_party_data_sync.datasets import CONTRACT, DATA
 TOPOLOGY = {
     "nvd_sync": ("fetch", "process", "publish"),
     "osv_sync": ("fetch", "index", "publish"),
+    "grype_db_sync": ("fetch", "import", "publish"),
     "mitre_sync": ("fetch", "normalize", "publish"),
     "cve_bin_tool_db_build": ("resolve_nvd_snapshot", "build", "publish"),
     "kev_sync": ("fetch", "normalize", "publish"),
@@ -54,6 +58,10 @@ def _cve(context: JobContext) -> cve_db.CveBinToolSettings:
     )
 
 
+def _grype(context: JobContext) -> GrypeSettings:
+    return GrypeSettings.from_mapping(context.repository_root, context.config.step("grype_db_sync").settings)
+
+
 def _inside(root: Path, path: Path, label: str) -> None:
     resolved_root = root.resolve()
     resolved = path.resolve()
@@ -72,6 +80,7 @@ def validate_input(context: JobContext, result: Mapping[str, Any] | None) -> Non
     for label, path in (("NVD feed_root", _nvd(context).feed_root), ("OSV feed_root", _osv(context).feed_root),
                         ("MITRE feed_root", _mitre(context).feed_root),
                         ("cve-bin-tool feed_root", _cve(context).feed_root),
+                        ("Grype feed_root", _grype(context).feed_root),
                         ("KEV feed_root", _kev(context).feed_root), ("EPSS feed_root", _epss(context).feed_root)):
         _inside(data_root, path, label)
     _inside(context.run_root.parent, context.metadata_root, "metadata_root")
@@ -103,6 +112,8 @@ def build_job(
     mitre_downloader: HttpDownloader | None = None,
     kev_downloader: HttpDownloader | None = None,
     epss_downloader: HttpDownloader | None = None,
+    grype_downloader: HttpDownloader | None = None,
+    grype_executor_factory: Callable[[UnitContext], ContainerExecutor] | None = None,
     cve_runner: Callable[[cve_db.CveBinToolSettings, Path, Path], Mapping[str, str]] | None = None,
 ) -> Job:
     def nvd_fetch(unit: UnitContext) -> Mapping[str, Any]:
@@ -186,6 +197,35 @@ def build_job(
     kev_fetch, kev_normalize, kev_publish = reference_feed("kev", kev_feed, _kev, kev_downloader)
     epss_fetch, epss_normalize, epss_publish = reference_feed("epss", epss_feed, _epss, epss_downloader)
 
+    def grype_fetch(unit: UnitContext) -> Mapping[str, Any]:
+        return grype_feed.fetch(_grype(unit.job), unit.unit_root / "work", grype_downloader,
+                                now=clock() if clock else None)
+
+    def grype_import(unit: UnitContext) -> Mapping[str, Any]:
+        if grype_executor_factory is not None:
+            executor = grype_executor_factory(unit)
+        else:
+            import json
+            document = json.loads((unit.job.run_root / "data/configuration/resolved.json").read_bytes())
+            executor = ContainerExecutor(load_catalog(unit.job.repository_root, resolved_config=document),
+                                         unit.job.run_root)
+        return grype_feed.import_database(_grype(unit.job), unit.output("grype_db_sync.fetch"),
+                                          unit.unit_root / "work", executor, now=clock() if clock else None)
+
+    def grype_publish(unit: UnitContext) -> Mapping[str, Any]:
+        settings = _grype(unit.job)
+        pointer = grype_feed.publish(settings, unit.output("grype_db_sync.fetch"),
+                                     unit.output("grype_db_sync.import"), now=clock() if clock else None)
+        identity = grype_feed.verify(settings, now=clock() if clock else None)
+        if pointer["snapshot_id"] != identity["snapshot_id"]:
+            raise ValueError("Grype current snapshot changed during publication")
+        path = publish_metadata(unit.job.metadata_root, "feeds", "grype", {
+            "schema": "appsec-review/global-feed-metadata/1", "feed_id": "grype", "updated_at": stamp(),
+            "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id, "pointer": pointer, "identity": identity,
+        })
+        return {"schema": "appsec-review/grype-publication/1", "pointer": pointer, "identity": identity,
+                "metadata_path": str(path)}
+
     def cve_resolve(unit: UnitContext) -> Mapping[str, Any]:
         nvd_identity = unit.output("nvd_sync.publish")["identity"]
         return cve_db.resolve_nvd_snapshot(_nvd(unit.job).feed_root, nvd_identity)
@@ -209,6 +249,7 @@ def build_job(
     units = (
         Unit("nvd_sync.fetch", nvd_fetch, output_validators=(_schema("appsec-review/nvd-current-pointer/1"),)),
         Unit("osv_sync.fetch", osv_fetch, output_validators=(_schema("appsec-review/osv-fetch/1"),)),
+        Unit("grype_db_sync.fetch", grype_fetch, output_validators=(_schema("appsec-review/grype-fetch/1"),)),
         Unit("mitre_sync.fetch", mitre_fetch, output_validators=(_schema("appsec-review/mitre-fetch/1"),)),
         Unit("kev_sync.fetch", kev_fetch, output_validators=(_schema("appsec-review/kev-fetch/1"),)),
         Unit("epss_sync.fetch", epss_fetch, output_validators=(_schema("appsec-review/epss-fetch/1"),)),
@@ -216,6 +257,8 @@ def build_job(
              output_validators=(_schema("appsec-review/nvd-process/1"),)),
         Unit("osv_sync.index", osv_index, ("osv_sync.fetch",),
              output_validators=(_schema("appsec-review/osv-index/1"),)),
+        Unit("grype_db_sync.import", grype_import, ("grype_db_sync.fetch",),
+             output_validators=(_schema("appsec-review/grype-import/1"),)),
         Unit("mitre_sync.normalize", mitre_normalize, ("mitre_sync.fetch",),
              output_validators=(_schema("appsec-review/mitre-normalize/2"),)),
         Unit("kev_sync.normalize", kev_normalize, ("kev_sync.fetch",),
@@ -226,6 +269,8 @@ def build_job(
              output_validators=(_schema("appsec-review/nvd-publication/1"),)),
         Unit("osv_sync.publish", osv_publish, ("osv_sync.index",),
              output_validators=(_schema("appsec-review/osv-publication/1"),)),
+        Unit("grype_db_sync.publish", grype_publish, ("grype_db_sync.import",),
+             output_validators=(_schema("appsec-review/grype-publication/1"),)),
         Unit("mitre_sync.publish", mitre_publish, ("mitre_sync.normalize",),
              output_validators=(_schema("appsec-review/mitre-publication/1"),)),
         Unit("kev_sync.publish", kev_publish, ("kev_sync.normalize",),

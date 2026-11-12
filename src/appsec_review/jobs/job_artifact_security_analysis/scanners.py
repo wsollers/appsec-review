@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
 from appsec_review import blint_report
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed as grype_feed
 from appsec_review.osv_offline import (
     DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, offline_database_mounts,
     snapshot_ecosystems,
@@ -213,7 +214,13 @@ class ContainerScannerRunner:
         if capability in {"grype", "osv"}:
             feed = "grype" if capability == "grype" else "osv"
             try:
-                current = verify_current(self.repository_root / "data" / "feeds" / feed, feed)
+                if capability == "grype":
+                    settings = grype_feed.consumer_settings(self.repository_root, self.run_root)
+                    current = grype_feed.verify(settings, expected_image_id=image_id)
+                    if current["tool"]["tool_version"] != tool.version:
+                        raise ValueError("Grype consumer release differs from the database validator")
+                else:
+                    current = verify_current(self.repository_root / "data" / "feeds" / feed, feed)
                 self._feeds[capability] = current
                 if capability == "osv":
                     self._osv_ecosystems = snapshot_ecosystems(Path(str(current["directory"])))
