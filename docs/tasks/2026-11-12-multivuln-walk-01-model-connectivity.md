@@ -3,7 +3,7 @@
 This record advances T-057 under the
 [walk terms](../walks/multivuln-bd69bfe8.md).
 
-**Result: stopped before launch; the recorded runtime image is absent from native Docker.** No new application
+**Result: not launched; the user authorized a Dagster-runtime-only rebuild.** No new application
 run, Dagster dispatch, attempt or corpus namespace has been allocated.
 
 ## Expected duration and criterion
@@ -67,6 +67,11 @@ baseline only after the other checks hold.
   which `docker image inspect` reports missing. No image was loaded, built,
   re-tagged or selected in its place. The pending startup-plan command did not
   execute because the preceding image inspection failed.
+- The user selected "Authorize rebuilding only the Dagster runtime image".
+  Existing signing prerequisites were checked by file existence/access only
+  and are available. No key was read into the conversation, created or changed.
+  The runtime rebuild and guarded startup are authorized; scanner-image
+  rebuilds and unrelated validation suites are not.
 
 ## Commands and timing
 

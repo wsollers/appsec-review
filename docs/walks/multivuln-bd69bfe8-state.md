@@ -35,7 +35,7 @@ and `ad6284e503b77a70b7dfa2fa77a198858e75381b`. The `.gitignore` cherry-pick con
 was resolved by retaining the main file and adding only this walk's baseline
 rule. No pending runtime-code update was integrated.
 
-## Waiting on the user
+## Runtime image preparation
 
 The user confirmed "Docker started—continue the walk". Verified native engine:
 `WSOLLERS1`, systemd cgroups v2, `/var/lib/docker`. The restored stack has five
@@ -50,9 +50,17 @@ containers resolve to
 `sha256:29682648dd80ac803efe7cde0ce362098782312b7f44a1a658873823ac522d2b`;
 `docker image inspect` reports that image absent from this daemon.
 
-Stop for the operator's image decision. Do not silently replace the recorded
-identity with the restored older image, rebuild, re-pin, change a key, or bypass
-verification. No stack-start or review-launch command has executed.
+The user then selected "Authorize rebuilding only the Dagster runtime image".
+The existing private-key readability, trust-directory readability,
+signature-directory writability and OpenSSL executable were checked without
+reading or changing key contents; all prerequisites are present.
+
+Next action: supported `stack-rebuild` for `copilot-prod`, target
+`appsec-multi-vuln-c094`, overlay `prod-capacity-overlay.toml`, recording `record`.
+This rebuilds only the Dagster runtime, verifies it, signs the mounted modules,
+and replaces the idle deployment. Image-build duration is unknown and separate
+from job 1's expected 39.233 seconds. Keep the log under
+`runs/metadata/walks/multivuln-bd69bfe8/`. No review launch has executed.
 
 ## In flight
 

@@ -21,8 +21,10 @@ The [state](multivuln-bd69bfe8-state.md) records progress; records use
 - Selected profile: `copilot-prod`. Overlay:
   `test/acceptance/prod-capacity-overlay.toml`, which sets four I/O slots and
   four scanner pool slots without changing the configured CPU or memory budgets.
-- Image identities, signing policy and keys remain unchanged. No image build,
-  rebuild, re-pin, host commissioning or push is authorized.
+- Signing policy and keys remain unchanged. The later decision below authorizes
+  rebuilding only the Dagster runtime image to replace the missing recorded
+  image. Scanner/tool-image rebuilds, unrelated re-pins, host commissioning and
+  pushes remain unauthorized.
 
 ## Decisions
 
@@ -37,6 +39,8 @@ The [state](multivuln-bd69bfe8-state.md) records progress; records use
 | 2026-11-12 | "This is my explicit request for this live run. It doesn't authorize integration or acceptance suites, image rebuilds, pushing, or changes to the target." | Live walk only; preserve those limits |
 | 2026-11-12 | "Commit the records and state on main; don't push. Keep each machine's baselines local and out of Git." | Serialize integration into local `main`; use a fresh, ignored host-local corpus namespace |
 | 2026-11-12 | "stop all those other threads and monitors. only you should be running and monitoring the code. Those others were supposed to go away a long time ago but keep getting resurr3ected" | This walker is the sole active repository owner. Stop the legacy coordinator and integration monitor; withdraw their pending update and documentation handoff. Do not revive dormant threads or legacy monitors |
+| 2026-11-12 | "Docker started—continue the walk" | Resume preflight against the existing native Docker Engine started by the operator |
+| 2026-11-12 | "Authorize rebuilding only the Dagster runtime image" | Rebuild and sign the `runtime-copilot` stage through the supported lifecycle using existing keys; no scanner/tool-image rebuilds or signing-policy changes |
 
 ## Expected gaps
 
