@@ -27,8 +27,9 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import (actual_platform, dagster_url, deployment_profile, image_tag as host_image_tag, project_name,
+from host import (IMAGE_VARIABLE, actual_platform, dagster_url, deployment_profile, image_tag as host_image_tag, project_name,
                   provider_overlay, read_environment, reject_native_environment)
+from image_signing import IMAGE_ID
 
 
 DEPLOYMENT = Path(__file__).resolve().parents[1]
@@ -478,12 +479,21 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
         say(PROFILE_NOTICE.format(profile=profile))
     for key, value in settings.items():
         say(f"setting {key}={value or '(empty)'}{'' if key in requested else '  (carried over from the running stack)'}")
-    image_missing = docker("image", "inspect", image_tag(profile), "--format", "{{.Id}}").returncode != 0
+    recorded = read_environment(DEPLOYMENT / ".env")
+    pinned = IMAGE_VARIABLE in os.environ or IMAGE_VARIABLE in recorded
+    image_missing = (not pinned and not build
+                     and docker("image", "inspect", image_tag(profile), "--format", "{{.Id}}").returncode != 0)
     if build or image_missing:
         reason = "--build" if build else f"image {image_tag(profile)} is missing"
         say(f"building, signing and verifying the image ({reason})")
         if lifecycle("build", settings, args.dry_run) != 0:
             raise OpsError("lifecycle build failed")
+        if not args.dry_run:
+            # The explicit rebuild selects its result, not a stale image exported by the caller.
+            built_image = read_environment(DEPLOYMENT / ".env").get(IMAGE_VARIABLE, "")
+            if not IMAGE_ID.fullmatch(built_image):
+                raise OpsError("lifecycle build did not record a verified image ID; refusing to start")
+            settings[IMAGE_VARIABLE] = built_image
     if lifecycle("start", settings, args.dry_run) != 0:
         raise OpsError("lifecycle start failed")
     if args.dry_run:

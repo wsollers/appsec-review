@@ -181,15 +181,44 @@ def test_stack_start_runs_lifecycle_start_and_checks_health_overlay_and_probe(bo
     assert "hunter2-secret" not in result.stdout + result.stderr
 
 
-def test_stack_start_builds_when_asked_or_when_the_image_is_missing(box: Sandbox) -> None:
+@pytest.mark.parametrize("requested", [True, False], ids=["explicit", "first-image-missing"])
+def test_stack_start_builds_when_asked_or_when_the_image_is_missing(box: Sandbox, requested: bool) -> None:
     box.dagster.runs()
-    assert box.run("stack-start", "--build", "--no-probe").returncode == 0
+    if not requested:
+        del box.state["images"][ops.image_tag()]
+        box.save()
+    arguments = ["--no-probe", *(["--build"] if requested else [])]
+    result = box.run("stack-start", *arguments)
+    assert result.returncode == 0, result.stdout + result.stderr
     assert [call["argv"] for call in box.lifecycle_calls()] == [["build"], ["start"]]
-    box.lifecycle_log.unlink()
+    assert box.lifecycle_calls()[-1]["env"]["APPSEC_REVIEW_DAGSTER_IMAGE"] == "sha256:" + "c" * 64
+
+
+def test_stack_rebuild_selects_its_new_image_over_an_exported_old_pin(box: Sandbox) -> None:
+    box.dagster.runs()
+    result = box.run("stack-rebuild", "--no-probe", extra={"APPSEC_REVIEW_DAGSTER_IMAGE": "sha256:" + "a" * 64})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [call["argv"] for call in box.lifecycle_calls()] == [["build"], ["start"]]
+    assert box.lifecycle_calls()[0]["env"]["APPSEC_REVIEW_DAGSTER_IMAGE"] == "sha256:" + "a" * 64
+    assert box.lifecycle_calls()[1]["env"]["APPSEC_REVIEW_DAGSTER_IMAGE"] == "sha256:" + "c" * 64
+
+
+@pytest.mark.parametrize("source", ["shell", "file"])
+def test_stack_start_never_autobuilds_when_an_image_is_pinned(box: Sandbox, source: str) -> None:
+    box.dagster.runs()
     del box.state["images"][ops.image_tag()]
     box.save()
-    assert box.run("stack-start", "--no-probe").returncode == 0
-    assert [call["argv"] for call in box.lifecycle_calls()] == [["build"], ["start"]]
+    pin = "sha256:" + "a" * 64
+    extra = {"FAKE_LIFECYCLE_RC": "3"}
+    if source == "shell":
+        extra["APPSEC_REVIEW_DAGSTER_IMAGE"] = pin
+    else:
+        with (box.deploy / ".env").open("a", encoding="utf-8") as stream:
+            stream.write(f"APPSEC_REVIEW_DAGSTER_IMAGE={pin}\n")
+    result = box.run("stack-start", "--no-probe", extra=extra)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert [call["argv"] for call in box.lifecycle_calls()] == [["start"]]
+    assert not [call for call in box.docker_calls() if call[:2] == ["image", "inspect"]]
 
 
 def test_stack_start_dry_run_changes_nothing(box: Sandbox) -> None:

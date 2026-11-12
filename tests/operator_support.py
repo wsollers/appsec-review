@@ -63,9 +63,15 @@ sys.exit(0)
 '''
 
 FAKE_LIFECYCLE = '''import json, os, sys
+from pathlib import Path
 with open(os.environ["LIFECYCLE_LOG"], "a") as log:
     log.write(json.dumps({"argv": sys.argv[1:], "env": {k: v for k, v in os.environ.items() if k.startswith("APPSEC_REVIEW_")}}) + "\\n")
-sys.exit(int(os.environ.get("FAKE_LIFECYCLE_RC", "0")))
+code = int(os.environ.get("FAKE_LIFECYCLE_RC", "0"))
+if sys.argv[1:] == ["build"] and code == 0:
+    path = Path(__file__).resolve().parents[1] / ".env"
+    lines = [line for line in path.read_text().splitlines() if not line.startswith("APPSEC_REVIEW_DAGSTER_IMAGE=")]
+    path.write_text("\\n".join(lines + ["APPSEC_REVIEW_DAGSTER_IMAGE=sha256:" + "c" * 64]) + "\\n")
+sys.exit(code)
 '''
 
 FAKE_PYTHON = '''#!{python}

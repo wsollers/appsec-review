@@ -36,9 +36,10 @@ class FakeRunner:
     """Stands in for the signing CLI, docker build and docker compose; records every command."""
 
     def __init__(self, *, verified: str | None = SIGNED, verify_rc: int = 0, verify_stdout: str | None = None,
-                 build_rc: int = 0) -> None:
+                 build_rc: int = 0, compose_rc: int = 0) -> None:
         self.calls: list[tuple[list[str], dict]] = []
         self.verified, self.verify_rc, self.verify_stdout, self.build_rc = verified, verify_rc, verify_stdout, build_rc
+        self.compose_rc = compose_rc
 
     def __call__(self, command, **kwargs):
         self.calls.append((list(command), kwargs))
@@ -58,6 +59,8 @@ class FakeRunner:
                 return self.reply({"images": [row]}, self.verify_rc)
         if command[:2] == ["docker", "build"]:
             return subprocess.CompletedProcess(command, self.build_rc, "", "")
+        if command[:2] == ["docker", "compose"]:
+            return subprocess.CompletedProcess(command, self.compose_rc, "", "")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     @staticmethod
@@ -86,7 +89,7 @@ def _no_gh_login_lookup(monkeypatch) -> None:
 @pytest.fixture
 def env_file(tmp_path: Path, monkeypatch) -> Path:
     path = tmp_path / ".env"
-    path.write_text("APPSEC_COMPOSE_PROJECT=appsec-review-dagster-wsl\nAPPSEC_REVIEW_DAGSTER_IMAGE=" + OTHER
+    path.write_text("APPSEC_COMPOSE_PROJECT=appsec-review-dagster-wsl\nAPPSEC_REVIEW_DAGSTER_IMAGE=" + SIGNED
                     + "\nDAGSTER_POSTGRES_PASSWORD=secret\n", encoding="utf-8")
     monkeypatch.setattr(lifecycle, "environment_file", path)
     monkeypatch.setattr(lifecycle, "ENVELOPE_DIRECTORY", tmp_path / "signing")
@@ -94,6 +97,7 @@ def env_file(tmp_path: Path, monkeypatch) -> Path:
 
 
 def test_build_builds_signs_and_verifies_the_tooling_image_without_signing_sources(env_file: Path) -> None:
+    env_file.write_text(env_file.read_text(encoding="utf-8").replace(SIGNED, OTHER), encoding="utf-8")
     runner = FakeRunner()
     assert lifecycle.run_action("build", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.OK
     # The image holds no application sources, so nothing is signed into it; the envelope is per launch.
@@ -106,12 +110,35 @@ def test_build_builds_signs_and_verifies_the_tooling_image_without_signing_sourc
     assert commands[1][commands[1].index("sign-image") + 1] == "appsec-review-dagster:wsl"
     assert commands[2][commands[2].index("verify-image") + 1] == SIGNED
     assert runner.compose_calls() == []
+    assert host.read_environment(env_file)[host.IMAGE_VARIABLE] == SIGNED
+    assert host.read_environment(env_file)["DAGSTER_POSTGRES_PASSWORD"] == "secret"
 
 
 def test_build_stops_when_the_image_build_fails(env_file: Path) -> None:
+    before = env_file.read_bytes()
     runner = FakeRunner(build_rc=1)
     assert lifecycle.run_action("build", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.FAILED
     assert runner.steps() == ["docker build"]
+    assert env_file.read_bytes() == before
+
+
+def test_build_preserves_the_recorded_image_when_verification_fails(env_file: Path) -> None:
+    env_file.write_text(env_file.read_text(encoding="utf-8").replace(SIGNED, OTHER), encoding="utf-8")
+    before = env_file.read_bytes()
+    runner = FakeRunner(verify_rc=1)
+    assert lifecycle.run_action("build", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.FAILED
+    assert runner.steps() == ["docker build", "sign-image", "verify-image"]
+    assert env_file.read_bytes() == before
+
+
+def test_build_then_reload_selects_the_new_verified_image(env_file: Path) -> None:
+    env_file.write_text(env_file.read_text(encoding="utf-8").replace(SIGNED, OTHER), encoding="utf-8")
+    runner = FakeRunner()
+    assert lifecycle.run_action("build", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.OK
+    assert lifecycle.run_action("reload", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.OK
+    verify = runner.calls[3][0]
+    assert verify[verify.index("verify-image") + 1] == SIGNED
+    assert runner.compose_calls()[0][1]["env"][host.IMAGE_VARIABLE] == SIGNED
 
 
 def test_launch_signs_the_mounted_sources_after_verifying_the_image(env_file: Path, monkeypatch) -> None:
@@ -144,10 +171,13 @@ def test_launch_refuses_when_the_mounted_sources_cannot_be_signed(env_file: Path
                 return self.reply({"status": "failed", "error": "tampered"}, 1)
             return super().__call__(command, **kwargs)
 
-    runner = Unsignable()
-    assert lifecycle.run_action("reload", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.REFUSED
+    before = env_file.read_bytes()
+    runner = Unsignable(verified=OTHER)
+    environ = {**ENVIRONMENT, host.IMAGE_VARIABLE: OTHER}
+    assert lifecycle.run_action("reload", "wsl", "dev", environ, runner=runner) == lifecycle.REFUSED
     assert runner.steps() == ["verify-image", "sign-modules", "verify-modules"]
     assert runner.compose_calls() == []
+    assert env_file.read_bytes() == before
 
 
 def test_unsigned_development_launch_turns_enforcement_off_and_never_signs(env_file: Path, monkeypatch, capsys) -> None:
@@ -209,7 +239,7 @@ def test_start_verifies_then_launches_exactly_the_verified_id(env_file: Path) ->
     assert lifecycle.run_action("start", "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.OK
     assert runner.steps() == ["verify-image", "sign-modules", "verify-modules", "docker compose"]
     verify = runner.calls[0][0]
-    assert verify[verify.index("verify-image") + 1] == "appsec-review-dagster:wsl"
+    assert verify[verify.index("verify-image") + 1] == SIGNED
     assert verify[verify.index("--signatures-dir") + 1] == str(Path("/sigs"))
     assert verify[verify.index("--trusted-keys-dir") + 1] == str(Path("/trust"))
     (command, kwargs), = runner.compose_calls()
@@ -226,14 +256,62 @@ def test_start_verifies_then_launches_exactly_the_verified_id(env_file: Path) ->
 
 
 def test_explicit_image_is_verified_by_id(env_file: Path) -> None:
-    runner = FakeRunner()
-    environ = {**ENVIRONMENT, host.IMAGE_VARIABLE: SIGNED}
+    runner = FakeRunner(verified=OTHER)
+    environ = {**ENVIRONMENT, host.IMAGE_VARIABLE: OTHER}
     assert lifecycle.run_action("reload", "wsl", "copilot-dev", environ, runner=runner) == lifecycle.OK
-    assert runner.calls[0][0][runner.calls[0][0].index("verify-image") + 1] == SIGNED
+    assert runner.calls[0][0][runner.calls[0][0].index("verify-image") + 1] == OTHER
     (command, kwargs), = runner.compose_calls()
     assert command[-len(host.IMAGE_SERVICES):] == list(host.IMAGE_SERVICES) and "--force-recreate" in command
     assert command[command.index("-f", command.index("-f") + 1) + 1].endswith("compose.copilot.yaml")
-    assert kwargs["env"][host.IMAGE_VARIABLE] == SIGNED
+    assert kwargs["env"][host.IMAGE_VARIABLE] == OTHER
+    assert host.read_environment(env_file)[host.IMAGE_VARIABLE] == OTHER
+
+
+@pytest.mark.parametrize("action", ["start", "reload"])
+def test_missing_recorded_image_never_falls_back_to_the_tag(env_file: Path, action: str) -> None:
+    before = env_file.read_bytes()
+    runner = FakeRunner(verify_rc=1)
+    assert lifecycle.run_action(action, "wsl", "dev", ENVIRONMENT, runner=runner) == lifecycle.REFUSED
+    assert runner.steps() == ["verify-image"]
+    verify = runner.calls[0][0]
+    assert verify[verify.index("verify-image") + 1] == SIGNED
+    assert env_file.read_bytes() == before
+
+
+@pytest.mark.parametrize("source", ["shell", "file"])
+@pytest.mark.parametrize("value", ["", "appsec-review-dagster:wsl", "sha256:short"],
+                         ids=["empty", "tag", "malformed"])
+def test_invalid_image_pin_refuses_without_resolving_a_tag(env_file: Path, source: str, value: str,
+                                                         capsys) -> None:
+    environ = dict(ENVIRONMENT)
+    if source == "shell":
+        environ[host.IMAGE_VARIABLE] = value
+    else:
+        env_file.write_text(env_file.read_text(encoding="utf-8").replace(SIGNED, value), encoding="utf-8")
+    before = env_file.read_bytes()
+    runner = FakeRunner()
+    assert lifecycle.run_action("start", "wsl", "dev", environ, runner=runner) == lifecycle.REFUSED
+    assert runner.calls == []
+    assert env_file.read_bytes() == before
+    assert "exact sha256 image ID" in capsys.readouterr().err
+
+
+def test_first_launch_without_a_pin_verifies_then_records_the_build_tag(env_file: Path) -> None:
+    env_file.write_text("APPSEC_COMPOSE_PROJECT=appsec-review-dagster-wsl\n", encoding="utf-8")
+    runner = FakeRunner()
+    assert lifecycle.run_action("start", "wsl", "copilot-prod", ENVIRONMENT, runner=runner) == lifecycle.OK
+    verify = runner.calls[0][0]
+    assert verify[verify.index("verify-image") + 1] == "appsec-review-dagster:wsl-copilot"
+    assert host.read_environment(env_file)[host.IMAGE_VARIABLE] == SIGNED
+
+
+def test_failed_compose_launch_preserves_the_previous_image_record(env_file: Path) -> None:
+    before = env_file.read_bytes()
+    runner = FakeRunner(verified=OTHER, compose_rc=1)
+    environ = {**ENVIRONMENT, host.IMAGE_VARIABLE: OTHER}
+    assert lifecycle.run_action("reload", "wsl", "dev", environ, runner=runner) == lifecycle.FAILED
+    assert runner.compose_calls()[0][1]["env"][host.IMAGE_VARIABLE] == OTHER
+    assert env_file.read_bytes() == before
 
 
 def test_non_launching_actions_never_verify_and_use_a_placeholder_only_without_a_record(env_file: Path) -> None:
