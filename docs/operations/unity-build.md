@@ -131,8 +131,8 @@ Manual commands below are **not unit checks**. They require an explicit executio
 provisioned exact-version Linux64/Mono Unity capability and the reviewed default build bridge:
 
 ```bash
-.venv/bin/python -m pytest -q tests/integration/test_unity_project_builds.py \
-  --basetemp=test/tmp/unity-integration
+.venv/bin/python -m pytest -q tests/acceptance/job_project_build/test_unity_project_builds.py \
+  --basetemp=test/tmp/unity-project-acceptance
 .venv/bin/python -m pytest -q tests/acceptance/test_unity_workflow.py \
   --basetemp=test/tmp/unity-acceptance
 ```

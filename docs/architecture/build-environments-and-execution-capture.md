@@ -589,10 +589,11 @@ lifecycle, and Node native-addon fixtures. It does not claim Kotlin compilation,
 Composer lifecycle execution, or a phpize build because those specialized toolchains were absent
 on the validation host. Those absences remain named fixture-validation gaps, not evidence that the
 expected applicability is wrong or that the projects are clean. Since then the real-image
-integration tests `tests/integration/test_family_project_builds.py` (native, Go, Python, PHP
+acceptance tests `tests/acceptance/job_project_build/test_family_project_builds.py` (native, Go, Python, PHP
 Composer and phpize, Rust, WebAssembly families), `test_jvm_dotnet_project_builds.py` (direct
 `javac`, Kotlin `case-084`, Android `case-092`, .NET) and `test_node_project_builds.py` exercise
-those rows through `job_project_build` and `job_language_build`; they run only where the pinned
+those rows through `job_project_build` and `job_language_build`; all three suites now live in
+`tests/acceptance/job_project_build/` after the T-113 integration inventory. They run only where the pinned
 images exist, and a pass on one host is not a Dagster acceptance. The matrix deliberately keeps
 the corpus view: several rows quote the corpus's own command (`javac src/Main.java`, `./build.sh`, `npm ci && npm run
 build` for `case-088`) and output path, while the pipeline derives its own deterministic recipe

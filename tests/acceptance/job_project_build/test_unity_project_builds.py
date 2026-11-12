@@ -1,4 +1,4 @@
-"""Manual provisioned-Editor checks. Never part of unit validation.
+"""T-113: manual provisioned-Editor acceptance. Not run by the integration-tier walk.
 
 APPSEC_UNITY_INTEGRATION_CONFIG must name an operator-prepared central TOML configuration
 with Unity enabled and a licensed, immutable Linux64/Mono capability matching the fixture.
@@ -24,7 +24,7 @@ from appsec_review.runtime import GraphRunner
 from appsec_review.storage import atomic_json
 
 
-FIXTURE = Path(__file__).parents[1] / "fixtures" / "unity_workflow"
+FIXTURE = Path(__file__).parents[2] / "fixtures" / "unity_workflow"
 
 
 def run_provisioned_unity(tmp_path: Path):

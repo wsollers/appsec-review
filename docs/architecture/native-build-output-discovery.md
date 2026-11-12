@@ -375,7 +375,7 @@ C can start in parallel with A against the interface signatures above.
 | **D. Native classification integration** | A, B, C, `RUNTIME_DEPENDENCY` | `job_language_build/job.py` `_execute_one`: write the file API query before configure, run discovery and conflict resolution after the commands, `classify_tree` before `_catalog`, gaps, the event, and `operation_phase` once available | new `tests/test_native_build_output_classification.py` (below) |
 | **E. Other cataloguers** | A | `job_sanitizer_build/job.py` `_catalog`; `job_project_build/job.py` `_outputs` | extend `tests/test_sanitizer_build.py` and `tests/test_project_build.py`: a configured exclusion is recorded and a dependency root is pruned |
 | **F. Docs** | A–E | `docs/operations/language-build.md` (bookkeeping paragraph at about 127-132), `docs/operations/project-build.md`, `docs/operations/sanitizer-build.md`, `docs/architecture/jobs-and-runtime.md`, `docs/architecture/dossier-data-inventory.md`; mark this design implemented | documentation checks only |
-| **G. Integration and acceptance tests (written, not run)** | D | new `tests/integration/test_native_build_output_layout.py`: a real CMake build using `FetchContent` from a local `file://` git fixture (no network), and a real Meson build with a wrap subproject from a local `packagecache` | none run. The user owns their execution |
+| **G. Integration and acceptance tests (written, not run)** | D | `tests/acceptance/job_project_build/test_native_build_output_layout.py` (moved by T-113): a real CMake build using `FetchContent` from a local `file://` git fixture (no network), and a real Meson build with a wrap subproject from a local `packagecache` | none run by the integration-tier walk. The user owns their execution |
 
 ### Required regressions for chunk D
 
@@ -573,12 +573,13 @@ Recorded by the implementation where the code refined or deviated from the desig
   `[build_outputs]` policy identity joins the probe checkpoint identity. The project
   `EXECUTOR_IDENTITY` is unchanged.
 
-### Chunk G (integration tests)
+### Chunk G (retained graph acceptance)
 
-- `tests/integration/test_native_build_output_layout.py` runs real CMake FetchContent and a real
+- `tests/acceptance/job_project_build/test_native_build_output_layout.py` runs real CMake FetchContent and a real
   Meson wrap through intake, catalog, plan, project build and language build. The pinned native
   image ships neither `git` nor `meson`. FetchContent is therefore parametrised over a local
   tarball `URL`, which runs in the pinned image, and a `file://` `GIT_REPOSITORY` inside the
   target. The git case and the Meson case skip until the image provides those tools.
-- No acceptance test is added. The acceptance suite evaluates review findings against answer
-  keys and trace parity. Build-output classification has no answer-key defect to score.
+- T-113 relocated this existing multi-job suite into acceptance without running it. Its historical
+  tool-availability assumptions above have not been revalidated by that move. Bounded executor,
+  artifact-parser and capture checks live separately in `tests/integration/job_project_build/`.

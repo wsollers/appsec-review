@@ -1,4 +1,6 @@
-"""Real-image native build-output classification for CMake FetchContent and Meson wraps.
+"""T-113: retained multi-job acceptance; not run by the integration-tier walk.
+
+Real-image native build-output classification for CMake FetchContent and Meson wraps.
 
 Each case writes a small synthetic native project into a run-owned target and drives the review
 pipeline exactly as a run does: intake, catalog, analysis plan, ``job_project_build`` (real probe
@@ -18,13 +20,13 @@ Cases:
   committed in-house subproject that stays ``target``. The pinned native image ships no ``meson``,
   so the case skips until the image provides it.
 
-Gating mirrors ``tests/integration/test_family_project_builds.py``: a missing Docker daemon or
+Gating mirrors ``test_family_project_builds.py``: a missing Docker daemon or
 build image skips; a local image id that differs from the pin fails unless
 ``APPSEC_REVIEW_BUILDENV_PINS=local``.
 
 Run explicitly:
 
-    python -m pytest tests/integration/test_native_build_output_layout.py --basetemp=test/tmp/<name>
+    python -m pytest tests/acceptance/job_project_build/test_native_build_output_layout.py --basetemp=test/tmp/<name>
 """
 
 from __future__ import annotations
@@ -56,7 +58,7 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = "appsec-review/build-output-dispositions/1"
 SUMMARIZED = "dependency-content-summarized:"
 

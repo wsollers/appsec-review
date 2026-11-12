@@ -6,10 +6,12 @@ planning-side narrative is in [`target-analysis-planning.md`](target-analysis-pl
 consumer is [`language-build.md`](language-build.md). Capture semantics are in
 [`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md).
 
-**Source-integrated:** non-Unity project probes no longer compile the target before
-language-build. The accepted executable graph replaces shortest-root component
-projection; language-build runs registered per-node iterations in a complete shared target/install
-workspace. The [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
+**Source-integrated:** isolated native units execute once in `probe.native`, through the
+language-build executor, and downstream language-build consumes that captured receipt rather
+than compiling again. Product-connected native units retain the shared-workspace iteration
+owner; other non-Unity families are prepared for downstream execution. The accepted executable
+graph replaces shortest-root component projection. The
+[topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
 records the initial Windows/canonical WSL source publication, tested code and evidence limits.
 Image preparation is not compiler success, deployment, or a completed target review.
 
@@ -36,9 +38,9 @@ The configured topology must be exactly `plan`, `image`, `static_dispatch`, `pro
 | `plan` | `load_recipes` | verify the accepted executable graph and validated recipes |
 | `image` | one per family | resolve or build the derived project image |
 | `static_dispatch` | `global` plus one per family | publish `lang_jobflow_static` dispatches; depends only on `plan` |
-| `probe` | one per family | compatibility no-op for non-Unity units; retain Unity's one engine execution |
+| `probe` | one per family | execute isolated native units once; retain Unity's one engine execution; other families are preparation-only |
 | `build_dispatch` | one per family | publish `lang_jobflow_build` dispatches from successful image preparation, not successful probes |
-| `acceptance` | `publish_handoff` | write `accepted-project-build-dispatch.json` (`appsec-review/project-build-dispatch/2`) |
+| `acceptance` | `publish_handoff` | write `accepted-project-build-dispatch.json` (`appsec-review/project-build-dispatch/3`) |
 
 Families are `native`, `rust`, `go`, `java`, `node`, `dotnet`, `python`, `php`, and `wasm`; each
 needs a `settings.profiles.<family>` entry with a pinned `tag`, `image_id`, and non-root `user`.
@@ -49,6 +51,52 @@ inference, project-image construction/repair and the second language build. The 
 task performs the configured Unity build once, publishes its real execution receipt, and the
 language-build lane forwards that receipt to artifact and dependency consumers. The static C#
 lane continues independently. See [Unity configuration and coverage](unity-build.md).
+
+## Bounded integration tier (T-113)
+
+`tests/integration/job_project_build/` contains four boundary test files, 19 cases:
+base-image resolution and container isolation for ten profiles, timeout cleanup, four real
+native artifact kinds, three real capture/verification outcomes, and one compiler-diagnostic
+provenance check. Each case has the integration tier's 300 s cap; compiler commands use a
+60 s limit and the timeout case deliberately uses 2 s. Tests use exact host pins and explicit
+signature verification, `--pull never`, offline containers and private run-root fixtures.
+They never acquire images or change signing policy. Select the four files explicitly through
+`scripts/run-tests.sh --allow-heavy --timeout-seconds 1800 -- ...`; the wrapper rejects a
+bare directory selector.
+
+The artifact checks exercise the job's parser and publication handler with real compiler
+products. The capture checks exercise the real command/capture boundary used by the native
+lane, then verify its hashes and publish a scoped diagnostic. They do **not** establish
+full-job admission, native enforcement closure, checkpoint/resume, or accepted-handoff parity.
+
+The graph, capture-graph, family, JVM/.NET, Node, native-layout and Unity suites now live under
+`tests/acceptance/job_project_build/`. Case bodies are retained; moved target suites keep
+named target prerequisites as fixtures. Shared graph helpers remain at their original
+integration import paths because unit tests and other jobs import them; those helper modules
+contain no test cases. One redundant graph-shape case was deleted, covered by
+`tests/unit/job_project_build/test_job_graph.py::test_graph_fans_out_per_family_and_lane_and_joins_at_publication`.
+The family suite's existing language-build map reference follows its move; no unit tests changed.
+
+Inventory boundaries: the shared `test_build_topology_catalog_planner_publication.py` suite
+tests the planner and its publication, not this job's execution, and is no longer selected by
+this job's integration map. Shared topology consumer/recovery and R8 replay suites remain
+with their cross-job owners, as do the whole-review `test_nothing_review.py` and downstream
+language-build, CodeQL, installer-scan, PoC and sanitizer suites. None was executed here.
+The current `build_job` handlers do not call a model: `_infer_repair` is reachable only from
+retained, uncalled probe-repair helpers. A paid model smoke test would not prove this job's
+current contract.
+
+The WSL walk found all ten profile bindings different from their local tags (nine distinct
+images: Rust and WebAssembly share one). The expected build identities have valid signature
+envelopes. The required capture scanner additionally has a mismatched `tool-gitleaks` pin and
+no signature envelope for its expected identity. These are prerequisites, not passing builds.
+No verified tool-output fixture provenance is claimed: the unit tier uses synthetic binary,
+APK, CMake-layout and diagnostic examples. The diagnostic drift check additionally requires
+`tests/unit/job_project_build/test_repair.py.provenance.json`, recording tool id, image id,
+catalog version and exact input/normalized-output hashes; that sidecar belongs to the unit
+fixture owner and was not fabricated or edited here. The synthetic layout/binary examples
+still lack recording provenance. Pin reconciliation alone does not close those evidence gaps.
+T-113 in [`../TODO.md`](../TODO.md) records the execution result and remaining coverage.
 
 ## Settings
 

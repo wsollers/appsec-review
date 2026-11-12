@@ -1725,6 +1725,39 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   this bounded folder.
   The wrapper currently requires file selectors, so the integration folder is selected with
   `tests/integration/job_third_party_data_sync/test_*.py`, not a directory argument.
+  job_project_build now has four bounded integration test files / 19 cases, separate from
+  seven retained graph/target acceptance suites. The three old modules imported by unit tests
+  keep only shared helpers at their existing paths; no unit test or unit fixture was edited.
+  One redundant graph-shape case was deleted in favor of the published unit graph test.
+  At base `bc511ce9cede09ab793a29ff62f12dec8220580f`, the exact four-file selection, guarded
+  with `--expect-tests 19`, four workers and shuffle seed `111213`, reported **0 passed,
+  19 skipped** in 3.18 s (wrapper total 7.88 s; slowest prerequisite skip 0.765 s; no case
+  above 300 s). This is authored coverage, not verified real-tool integration.
+  Distinct skip prerequisites: native/C++ pin mismatch (10 cases), shared Rust/WebAssembly
+  pin mismatch (2), and Android, .NET, Go, Java, Node, PHP and Python mismatches (1 each):
+  nine distinct image identities, ten profiles. Additional prerequisites masked by those
+  skips are the capture scanner's `tool-gitleaks` pin mismatch and missing expected-image
+  signature (the same three capture cases, not six extra skips), plus missing verified
+  compiler-diagnostic provenance (one already-skipped case). Build-image signature envelopes
+  themselves verified; no pin, image or signing setting changed.
+  No tool-output fixture has verified provenance; synthetic binary/APK/layout inputs remain
+  synthetic. Real native enforcement/accepted-handoff parity, shared topology recovery,
+  full-family builds and provisioned Unity acceptance remain unrun, and the retained
+  acceptance suites' historical assumptions are not revalidated by moving them.
+  No model call is required by the current reachable job handlers; the old repair-model
+  helper is uncalled. Inventory and scope are in `docs/operations/project-build.md`.
+  Integration command:
+  `scripts/run-tests.sh --allow-heavy --timeout-seconds 1800 --expect-tests 19 --parallel --test-workers 4 --shuffle-seed 111213 -- tests/integration/job_project_build/test_executor.py tests/integration/job_project_build/test_native_artifacts.py tests/integration/job_project_build/test_capture_boundary.py tests/integration/job_project_build/test_fixture_provenance.py`.
+  Report: `test/tmp/reports/tests-custom-20261112-160740-911797-89546.json`
+  (matching log, JUnit and timing database retained under `test/tmp/`).
+  Required bookkeeping:
+  `scripts/run-tests.sh --expect-tests 118 --parallel --test-workers 4 --shuffle-seed 111214 -- tests/test_todo_registry.py tests/test_job_test_selection.py tests/test_pytest_default_collection.py`
+  passed all 118 cases in 7.49 s (wrapper total 12.54 s), with no slow tests or skips;
+  report `test/tmp/reports/tests-custom-20261112-160859-476787-93832.json`.
+  `.venv/bin/ruff check tests/integration/job_project_build tests/integration/test_node_project_builds.py tests/acceptance/job_project_build tests/acceptance/test_unity_workflow.py`
+  and `git diff --check` passed. No job unit suite, acceptance, live or Dagster execution
+  was run. The only completed gap closure here is tier separation; real-tool validation
+  remains blocked by the named prerequisites.
 - **Done when:** `tests/` has no `test_*.py` outside `tests/unit`, `tests/integration`,
   `tests/acceptance` and `tests/shared`; `scripts/run-tests.sh fast` collects only `tests/unit`
   and finishes in under ten minutes with zero tests over 10 s; every job in the registry has a

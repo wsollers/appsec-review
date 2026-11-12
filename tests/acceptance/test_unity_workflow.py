@@ -1,6 +1,6 @@
 """Manual Unity capability -> build -> artifact -> telemetry acceptance.
 
-This requires the same explicit provisioning as integration/test_unity_project_builds.py.
+This requires the same explicit provisioning as job_project_build/test_unity_project_builds.py.
 It is not a unit test and must not be executed by a unit-only command.
 """
 
@@ -17,7 +17,7 @@ from appsec_review.jobs.job_dependency_intelligence.sbom import build_spdx, vali
 from appsec_review.jobs.job_dependency_intelligence.unity import enrich_unity_spdx
 from appsec_review.observability import aggregate_run_metrics
 from appsec_review.storage import file_sha256
-from tests.integration.test_unity_project_builds import run_provisioned_unity
+from tests.acceptance.job_project_build.test_unity_project_builds import run_provisioned_unity
 
 
 def test_unity_outputs_reach_review_artifact_inventory_and_engine_metrics(tmp_path: Path) -> None:

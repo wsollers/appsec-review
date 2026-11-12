@@ -1,4 +1,6 @@
-"""Real-image project and language builds of the multivuln native, rust, wasm, go, python and
+"""T-113: retained manual acceptance; not run by the integration-tier walk.
+
+Real-image project and language builds of the multivuln native, rust, wasm, go, python and
 php projects.
 
 Each case copies one project of ``targets/appsec-multi-vuln`` (at its own relative path) into a
@@ -15,7 +17,7 @@ A moved tag still fails; update host bindings explicitly before starting a new t
 
 Run explicitly, one family at a time on a host with little disk:
 
-    python -m pytest tests/integration/test_family_project_builds.py --basetemp=test/tmp/<name> -k go
+    python -m pytest tests/acceptance/job_project_build/test_family_project_builds.py --basetemp=test/tmp/<name> -k go
 """
 
 from __future__ import annotations
@@ -47,9 +49,14 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.runtime import GraphRunner
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 TARGET = ROOT / "targets" / "appsec-multi-vuln"
-pytestmark = pytest.mark.requires_target("appsec-multi-vuln")
+
+
+@pytest.fixture(autouse=True)
+def require_target():
+    if not TARGET.is_dir():
+        pytest.skip("missing target checkout: targets/appsec-multi-vuln")
 
 # Interpreted projects with no build descriptor: positively not applicable for build processing.
 SOURCE_ONLY = [

@@ -1,4 +1,6 @@
-"""Real-image project and language builds for the JVM and .NET multivuln projects.
+"""T-113: retained manual acceptance; not run by the integration-tier walk.
+
+Real-image project and language builds for the JVM and .NET multivuln projects.
 
 One module-scoped pipeline run drives the same jobs a review runs: intake, catalog and planning
 (with a fixed recipe model standing in for inference), job_project_build (derived project images,
@@ -43,10 +45,14 @@ from appsec_review.runtime import GraphRunner
 from appsec_review.storage import file_sha256
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 TARGET = ROOT / "targets" / "appsec-multi-vuln"
 
-pytestmark = [pytest.mark.requires_target("appsec-multi-vuln")]
+
+@pytest.fixture(scope="module", autouse=True)
+def require_target():
+    if not TARGET.is_dir():
+        pytest.skip("missing target checkout: targets/appsec-multi-vuln")
 
 
 @dataclass(frozen=True)
