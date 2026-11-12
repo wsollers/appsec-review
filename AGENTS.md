@@ -154,12 +154,14 @@ agents that inspect or change the repository. It is not a prompt for review work
   acceptance and safe recovery. The same document defines the test tiers and harness; the
   [recovery runbook](docs/operations/recovery-repair.md) supplies the detailed admission procedure.
 - A job-by-job walk of a review follows the [walk charter](docs/processes/walk-charter.md) and
-  that walk's terms and state under `docs/walks/`. Accept a job only with the charter's four
-  checks recorded; stop for the user on any gap cause that is not on the walk's confirmed
-  expected-gaps list; never read an answer key to steer a job. Start each job in a fresh session
-  that reads `AGENTS.md`, the charter, the walk's terms, its state and the last job record, and
-  commit the record and state before a session ends. A rule or decision that is not in those
-  documents is not decided; a summarised conversation is never its source.
+  that walk's terms and state under `docs/walks/`, which are per-host local files: walk terms,
+  state, job records, overlays and baselines are host data, ignored by Git and never committed.
+  Accept a job only with the charter's four checks recorded; stop for the user on any gap cause
+  that is not on the walk's confirmed expected-gaps list; never read an answer key to steer a
+  job. Start each job in a fresh session that reads `AGENTS.md`, the charter, the walk's terms,
+  its state and the last job record, and write the record and state before a session ends. A
+  rule or decision that is not in those documents is not decided; a summarised conversation is
+  never its source.
 - Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
   default. Apply the same scope after merging changes from another branch.
 - Required collection behavior: exclude known integration/live paths from implicit default
@@ -220,6 +222,10 @@ agents that inspect or change the repository. It is not a prompt for review work
 
 - Do development, builds, and tests on Linux or inside WSL. Native Windows work requires the
   user's explicit permission for that session; Windows support is not permission to use it.
+- From a Windows host, the preferred way to do WSL work is an SSH session into the WSL distro
+  (`ssh wsl-<hostname>`, set up and verified per [`docs/operations/ssh.md`](docs/operations/ssh.md)),
+  which runs plain bash in the Linux checkout. Do not drive WSL through `wsl -e bash -c` from the
+  Windows shell: it is slow, loses background processes with the shell, and breaks on quoting.
   In WSL, use a Linux-filesystem checkout and its own Linux virtual environment, not a checkout
   under `/mnt/c` or another Windows drive. NTFS mounts do not provide the private POSIX path
   custody required by the native builder tests.

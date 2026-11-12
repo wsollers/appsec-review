@@ -1508,6 +1508,30 @@ def test_run_tests_fixed_report_names_counts_slow_tests_and_every_failure_verbat
         "tests/test_a.py::TestGroup::test_method", "tests/test_b.py::test_param[2]"] and missing["slow"] == []
 
 
+def test_run_tests_report_groups_failures_that_end_in_the_same_error_text() -> None:
+    def failure(node: str, *lines: str) -> dict:
+        return {"node": node, "status": "FAILED", "lines": list(lines), "duration_s": 0.1}
+
+    report = {"counts": {"failed": 5}, "elapsed_s": 1.0, "slow": [], "ran": [], "junit": "x.xml", "junit_present": True,
+              "failures": [
+                  failure("tests/a.py::t1", "E   AttributeError: 'NoneType' object has no attribute 'encode'"),
+                  failure("tests/a.py::t2", "E   some earlier line", "E     AttributeError:  'NoneType' object has no attribute 'encode'"),
+                  failure("tests/b.py::t3", "E   Failed at <object at 0x7f0000000001>"),
+                  failure("tests/b.py::t4", "E   Failed at <object at 0x7f0000000abc>"),
+                  failure("tests/c.py::t5", "E   assert 1 == 2"),
+                  {"node": "tests/c.py::t6", "status": "ERROR", "lines": [], "duration_s": None}]}
+    groups = ops_tests.shared_error_groups(report)
+    assert groups == [
+        {"signature": "AttributeError: 'NoneType' object has no attribute 'encode'", "count": 2,
+         "nodes": ["tests/a.py::t1", "tests/a.py::t2"]},
+        {"signature": "Failed at <object at 0x…>", "count": 2, "nodes": ["tests/b.py::t3", "tests/b.py::t4"]}]
+    rendered = ops_tests.render_report(report, log=Path("run.log"), timings=Path("run.sqlite"), diff=None, baseline=None)
+    assert "shared error text: 2 group(s)" in rendered
+    assert "  2 failures end in: AttributeError: 'NoneType' object has no attribute 'encode'\n    tests/a.py::t1" in rendered
+    assert "assert 1 == 2" in rendered and "end in: assert 1 == 2" not in rendered, "a group of one is not reported"
+    assert ops_tests.shared_error_groups({"failures": []}) == []
+
+
 def test_run_tests_baseline_differential_is_the_verdict_and_writes_a_report(box: Sandbox) -> None:
     box.pytest_output.write_text("FAILED tests/a.py::test_old - assert 0\nFAILED tests/b.py::test_new - boom\n"
                                  "2 failed, 5 passed in 1.20s\n", encoding="utf-8")

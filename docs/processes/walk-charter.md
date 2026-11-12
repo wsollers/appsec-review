@@ -21,17 +21,27 @@ that reaches the report has shown the run completes; it has not graded the findi
 
 ## 2. Documents of a walk
 
+**Every document of a walk except this charter is per-host local state: untracked, ignored by
+Git, never committed or pushed** (user, 2026-11-12: "all that meta data must be local. we will
+be having 7 different trees running this. Anything in the repo is an anti-pattern. Code yes.
+Default config sure. host and local repo data no."). The same holds for a walk's capacity
+overlay under `test/acceptance/<walk-id>/` and its acceptance baselines. The repository holds
+rules (this charter, the testing architecture), code, default configuration and `docs/TODO.md`
+ids; a walk's terms, decisions, state and records live on the host that walks it. A fix found on
+a walk reaches the repository as code, a regression test and a TODO id, never as a walk record.
+
 | Document | Holds | Changes |
 | --- | --- | --- |
 | This charter | the rules common to every walk | by the user's decision only |
-| `docs/walks/<walk-id>.md`, the walk's **terms** | target and pin, host and stack, overlay, the user's decisions with date and wording, the expected-gaps list, the known gaps | when the user decides something; never to fit a result |
-| `docs/walks/<walk-id>-state.md`, the walk's **state** | current run, corpus namespace, last accepted job, the job in hand, what is waiting on the user, the `main` commit | at every acceptance, stop and restart |
-| `docs/tasks/<date>-<walk>-NN-<job>.md`, one **record** per job | what the job did, the four checks, defects and fixes, what was not verified, commands and timings | once per job; later corrections are dated notes |
-| `docs/walks/<walk-id>.local.md`, optional **local notes** of one host | working state of that host only: the run in hand, dispatch ids, what is in flight, host notes | freely; untracked, ignored by Git, never pushed |
+| `docs/walks/<walk-id>.md`, the walk's **terms** (local) | target and pin, host and stack, overlay, the user's decisions with date and wording, the expected-gaps list, the known gaps | when the user decides something; never to fit a result |
+| `docs/walks/<walk-id>-state.md`, the walk's **state** (local) | current run, corpus namespace, last accepted job, the job in hand, what is waiting on the user, the `main` commit | at every acceptance, stop and restart |
+| `docs/tasks/<date>-<walk>-NN-<job>.md`, one **record** per job (local) | what the job did, the four checks, defects and fixes, what was not verified, commands and timings | once per job; later corrections are dated notes |
+| `docs/walks/<walk-id>.local.md`, optional **local notes** of one host | working state of that host only: the run in hand, dispatch ids, what is in flight, host notes | freely |
 
 `<walk-id>` names the target and its pin, for example `freeciv-b1b0768b`. Deferred work found on a
 walk goes to [`docs/TODO.md`](../TODO.md) with an id; the walk documents cite the id and keep no
-backlog of their own. The state file lists only what is waiting on the user for the job in hand.
+backlog of their own. A TODO entry that cites a walk record names a file that exists only on the
+host that wrote it. The state file lists only what is waiting on the user for the job in hand.
 
 Local notes are not a source of rules or decisions. A rule or a user's decision is written in the
 charter or the walk's terms; a job's result is written in its record. If the local notes disagree
@@ -138,8 +148,9 @@ session that lost it. So a walk is carried by short sessions that start from the
 3. **Verify the state before acting.** Compare the state file with the host: `main` and its
    cleanliness, the stack, the run list, the target's commit and status. A mismatch is reported,
    not repaired by guesswork.
-4. **Hand over in the documents.** Before a session ends it commits the job record and the state
-   file, including anything in flight (a dispatch id, an unmerged branch, a question asked). The
+4. **Hand over in the documents.** Before a session ends it writes the job record and the state
+   file on the host, including anything in flight (a dispatch id, an unmerged branch, a question
+   asked); they are not committed. The
    brief for the next session is short: the walk id, the job number, and this reading order.
 5. **The coordinator rotates too,** on the same documents, when its own context has been
    summarised or at the user's request.

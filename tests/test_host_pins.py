@@ -105,3 +105,17 @@ def test_host_change_changes_identity_without_rewriting_frozen_run(tmp_path):
         GraphRunner(changed, [build_job(runner=runner(images))]).run(
             run_id=result["run_id"], target_root=target, source_fingerprint=source_fingerprint(target))
     assert frozen.read_bytes() == before
+
+
+def test_tracked_catalog_carries_no_observed_image_ids() -> None:
+    """Observed Docker ids are host-local (T-051): the tracked recipes declare none.
+
+    A test that needs an id must take it from the bound configuration or make one up; reading it
+    from the raw catalog returns None on every host, which is how a stale fake went unnoticed.
+    """
+    from appsec_review.container_runtime.catalog import load_catalog
+    catalog = load_catalog(ROOT)
+    assert catalog.tools, "the catalog declares tools"
+    with_ids = sorted(name for name in catalog.tools if catalog.tool(name).expected_image_id is not None)
+    assert with_ids == [], f"tracked recipes must not carry observed image ids: {with_ids}"
+    assert "image_id" not in (ROOT / "containers/catalog.toml").read_text(encoding="utf-8")

@@ -7,6 +7,8 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+
+from tests.container_fixture import copy_containers
 from typing import Any
 
 import pytest
@@ -406,8 +408,7 @@ def configured(tmp_path: Path, *, max_nodes: int | None = None, file_top_count: 
         text = text.replace("file_top_count = 0", f"file_top_count = {file_top_count}")
     text += extra
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
-    shutil.copytree(ROOT / "containers", tmp_path / "containers",
-                    ignore=shutil.ignore_patterns("downloads"))
+    copy_containers(ROOT, tmp_path)
     shutil.copytree(ROOT / "rules" / "semgrep", tmp_path / "rules" / "semgrep")
     base = load_config(tmp_path / "appsec-review.toml")
     return replace(base, runtime=replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",

@@ -1081,6 +1081,29 @@ def _automake_values(values: Mapping[str, list[tuple[list[str], int, str | None]
         resolved.append((token, line, condition))
     return resolved, unresolved
 
+_AUTOMAKE_PRIMARY_KINDS = {"PROGRAMS": "program", "LTLIBRARIES": "libtool_library", "LIBRARIES": "static_library"}
+_AUTOMAKE_PRODUCT_LIST = re.compile(r"^([A-Za-z0-9_]+)_(PROGRAMS|LTLIBRARIES|LIBRARIES)$")
+
+
+def _automake_product_lists(assigns: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """Every product-list variable assigned in a Makefile.am, with the build-point kind it declares.
+
+    Automake's uniform naming scheme makes ``<where>_<PRIMARY>`` a product list for any install
+    directory ``<where>dir`` the file defines (``aimodule_LTLIBRARIES`` beside ``lib_LTLIBRARIES``),
+    so the prefix is not a fixed set; the primary decides the kind and ``check_PROGRAMS`` are test
+    programs. Standard prefixes come first in their customary order, then the rest sorted, so the
+    output order is stable across files that use only the standard names.
+    """
+    standard = ("bin_PROGRAMS", "noinst_PROGRAMS", "lib_LTLIBRARIES", "lib_LIBRARIES", "noinst_LTLIBRARIES", "check_PROGRAMS")
+    names = [name for name in standard if name in assigns]
+    names.extend(sorted(name for name in assigns if name not in standard and _AUTOMAKE_PRODUCT_LIST.match(name)))
+    result = []
+    for name in names:
+        prefix, primary = _AUTOMAKE_PRODUCT_LIST.match(name).groups()
+        kind = "test_program" if (prefix == "check" and primary == "PROGRAMS") else _AUTOMAKE_PRIMARY_KINDS[primary]
+        result.append((name, kind))
+    return result
+
 
 def autotools_build_points(root: str, descriptors: Mapping[str, str], inventory: Sequence[str]) -> dict[str, Any]:
     points: list[dict[str, Any]] = []
@@ -1099,8 +1122,7 @@ def autotools_build_points(root: str, descriptors: Mapping[str, str], inventory:
                     unresolved.append({"evidence": f"{path}:{line}", "kind": "unassigned_variable",
                                        "reason": f"{variable} references $({name}), which has no assignment in this file"})
 
-            for variable, kind in (("bin_PROGRAMS", "program"), ("noinst_PROGRAMS", "program"), ("lib_LTLIBRARIES", "libtool_library"),
-                                   ("lib_LIBRARIES", "static_library"), ("noinst_LTLIBRARIES", "libtool_library"), ("check_PROGRAMS", "test_program")):
+            for variable, kind in _automake_product_lists(assigns):
                 targets, references = _automake_values(assigns, variable)
                 missing(variable, references)
                 for target_name, line, condition in targets:
