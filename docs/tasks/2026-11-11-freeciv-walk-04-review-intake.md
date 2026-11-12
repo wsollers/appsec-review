@@ -6,6 +6,11 @@ This record advances T-057. Walk terms, overlay, runs and the expected-gaps list
 **Result: accepted** (run `2026-11-11-0009`, overlay `freeciv-b1b0768b/capacity-overlay.toml`,
 corpus tag `freeciv-b1b0768b-v2`), after one stop and a user decision.
 
+> Update 2026-11-12: merging the change-log history feature changed the frozen configuration, so the
+> walk restarted as run `2026-11-12-0001` with corpus tag `freeciv-b1b0768b-v3`. This job was run,
+> verified with the same independent checks and accepted there with the same numbers as recorded
+> below for `2026-11-11-0009`; `0009` and its `-v2` keys are retained and are not the baseline.
+
 ## What the job did
 
 Froze the configuration, repeated the model preflight, validated and fingerprinted the target.

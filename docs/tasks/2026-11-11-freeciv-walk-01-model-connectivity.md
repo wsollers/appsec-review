@@ -7,6 +7,11 @@ four checks and the confirmed expected-gaps list.
 
 **Result: accepted** (run `2026-11-11-0009`, corpus tag `freeciv-b1b0768b-v2`).
 
+> Update 2026-11-12: merging the change-log history feature changed the frozen configuration, so the
+> walk restarted as run `2026-11-12-0001` with corpus tag `freeciv-b1b0768b-v3`. This job was run,
+> verified with the same independent checks and accepted there with the same numbers as recorded
+> below for `2026-11-11-0009`; `0009` and its `-v2` keys are retained and are not the baseline.
+
 ## Walk terms
 
 - **Target.** `targets/freeciv`, detached at `b1b0768bfaca9b2fae68f9466defe1e80636e9fa`, whole
