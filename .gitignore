@@ -99,7 +99,9 @@ images/audit-buildenv-java/jdtls.tar.gz
 # (user, 2026-11-12: "all that meta data must be local ... host and local repo data no").
 /docs/walks/
 /docs/tasks/*-walk-*.md
-# Per-host accepted-job baselines of a walk (user, 2026-11-12: each host keeps and maintains its own); never committed.
-/test/acceptance/freeciv-b1b0768b*/
-# This host's multivuln walk baselines and seed manifests are local, never shared.
-/test/acceptance/multivuln-bd69bfe8-wsollers1-v*/
+# Per-host walk overlays (test/acceptance/<walk-id>/) and accepted-job baselines
+# (test/acceptance/<walk-id>-vN/) of any walk (user, 2026-11-12: each host keeps and maintains
+# its own); never committed. Corpora tracked before this rule stay tracked; the repository's own
+# acceptance material is listed below.
+/test/acceptance/*/
+!/test/acceptance/fix-pairs-candidates/

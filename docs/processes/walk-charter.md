@@ -45,7 +45,8 @@ host that wrote it. The state file lists only what is waiting on the user for th
 
 Local notes are not a source of rules or decisions. A rule or a user's decision is written in the
 charter or the walk's terms; a job's result is written in its record. If the local notes disagree
-with a committed document, the committed document stands and the mismatch is reported.
+with the charter, the terms, the state or a record, that document stands and the mismatch is
+reported.
 
 ## 3. Roles
 
@@ -137,9 +138,9 @@ Long sessions lose detail when their context is summarised, and a lost rule is n
 session that lost it. So a walk is carried by short sessions that start from the documents.
 
 1. **Rotate at acceptance.** When a job is accepted and its record and the state file are
-   committed, the walker's session ends. The next job is started by a fresh session. A job that is
+   written on the host, the walker's session ends. The next job is started by a fresh session. A job that is
    stopped for a decision or is mid-repair stays with its session until it is accepted, unless
-   that session's context has been summarised, in which case it finishes the step in hand, commits
+   that session's context has been summarised, in which case it finishes the step in hand, writes
    the record and state, and hands over.
 2. **Start from the documents, in this order:** root `AGENTS.md`; this charter; the walk's terms;
    the walk's state; then this host's local notes, if the file exists; the record of the last
