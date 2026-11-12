@@ -3,7 +3,7 @@
 This record advances T-057 under the
 [walk terms](../walks/multivuln-bd69bfe8.md).
 
-**Result: not launched; startup preflight in progress.** No new application
+**Result: stopped before launch; native Docker startup needs operator authentication.** No new application
 run, Dagster dispatch, attempt or corpus namespace has been allocated.
 
 ## Expected duration and criterion
@@ -50,6 +50,12 @@ baseline only after the other checks hold.
   sessions. This walker owns subsequent Linux-main operations.
 - The user approved an initially empty expected-gaps list and selected
   `copilot-prod` with the existing production capacity overlay.
+- Walk documentation landed on Linux `main` as `2b06514eb` and `ad6284e50`;
+  the runtime source remains the existing `b21c90b0` base. An ignore-rule
+  conflict was resolved without importing the unrelated main update.
+- `sudo -n systemctl start docker` refused with `sudo: a password is required`.
+  The service was not started. The walker stopped at the privilege boundary
+  rather than trying another privileged execution route.
 
 ## Commands and timing
 
@@ -60,6 +66,11 @@ Individual command elapsed times were not captured; no job time is claimed.
 The historical duration above is calculated from the retained handoff timestamps.
 
 No tests ran. Replays: zero.
+
+Preflight has exceeded the 39.233-second historical job duration. That time is
+not live-job time: it went to correcting the target/checkout, obtaining the
+missing walk decisions, stopping legacy coordination, integrating documentation,
+and discovering the Docker-start privilege requirement.
 
 ## Not verified
 
