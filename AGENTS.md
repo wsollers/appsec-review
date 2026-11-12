@@ -222,6 +222,10 @@ agents that inspect or change the repository. It is not a prompt for review work
 
 - Do development, builds, and tests on Linux or inside WSL. Native Windows work requires the
   user's explicit permission for that session; Windows support is not permission to use it.
+- From a Windows host, the preferred way to do WSL work is an SSH session into the WSL distro
+  (`ssh wsl-<hostname>`, set up and verified per [`docs/operations/ssh.md`](docs/operations/ssh.md)),
+  which runs plain bash in the Linux checkout. Do not drive WSL through `wsl -e bash -c` from the
+  Windows shell: it is slow, loses background processes with the shell, and breaks on quoting.
   In WSL, use a Linux-filesystem checkout and its own Linux virtual environment, not a checkout
   under `/mnt/c` or another Windows drive. NTFS mounts do not provide the private POSIX path
   custody required by the native builder tests.
