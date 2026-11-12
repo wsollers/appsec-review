@@ -61,8 +61,8 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
 
 ## Waiting on the user
 
-- Record 06, decision 1: is the history read at the pin? Option (a) the walker sizes the fix
-  read-only, (b) a separate session, (c) intended, accept. Recommendation (a).
+- Record 06, decision 1 is answered: the anchor bug was fixed and pushed (`38777f90`, origin/main
+  `d901bac4`). Job 6 needs a reload and a rerun (record 06, last section).
 - Record 06, decision 2: which job 6 gap causes join the expected list (recommended after 1).
 - Blindness note in record 06: one commit subject of the target clone was seen incidentally.
 

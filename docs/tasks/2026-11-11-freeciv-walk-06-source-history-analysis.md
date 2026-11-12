@@ -94,3 +94,33 @@ names, addresses or message text (T-097 done-when), and bound-file ranks.
 ```
 
 No unit tests were run.
+
+## Defect found and fixed (2026-11-12, after the stop)
+
+**Root cause.** `resolve_git_source` (`sources.py`) took `refs/heads/main` as the snapshot when it
+existed and only fell back to `HEAD` otherwise. The target clone is detached at the pin with a
+local `main` far ahead. The job bound the working tree to the `main` tip (1,429 divergent, 189
+untracked on a clean tree) and `git.py` wrote that commit as the synthetic `HEAD` every history
+command starts from, so first-parent history, blame and line history were read from `main`, past
+the pin. Pinned revisions did not apply because a direct checkout carries no acquisition pin.
+
+**Fix** `38777f90` (pushed with `251e9345` and `d901bac4`; origin/main at `d901bac4`): `HEAD` is the
+snapshot; `main` or `master` only when `HEAD` cannot be resolved (observation
+`head_unresolved_using_mainline`); `head_differs_from_mainline` is no longer emitted. Regressions
+`test_pinned_detached_head_is_the_snapshot_not_a_newer_main` and
+`test_unreadable_head_falls_back_to_the_mainline_tip_and_says_so` failed before. Documented in
+`docs/architecture/source-history-analysis.md`.
+
+**Tests.** 3 focused tests, then 11 symbol tests and 8 graph tests passed (the graph tests take 2
+to 15 minutes each, far over the 10 s limit; the slowest,
+`test_large_message_and_path_bounds_never_yield_complete_history`, 919 s). Before the fixture fixes
+the history tests failed for host reasons unrelated to this change: the fixture copied 5.2 GB of
+untracked `containers/` per test and patched duplicate release keys, and 19 tests read an image id
+the tracked catalog no longer carries (T-051). The history files were not run as one complete set;
+the 19 failing tests were rerun in groups and passed. The four other test files that use the new
+copy helper did not finish a run; the helper was checked by reading the code only.
+
+**Still to do for this walk.** The mounted source changed: job 6 has not been rerun. It needs
+`lifecycle.py reload`, then a rerun, and the four checks again, including the commit history
+actually read (31,479 commits expected at the pin). The gap causes that remain on the rerun are
+still for the user to decide.
