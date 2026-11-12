@@ -95,6 +95,9 @@ images/audit-buildenv-java/jdtls.tar.gz
 # test/acceptance/<tag>/seeds/.
 /data/acceptance-seeds/
 # Per-host working notes of a job-by-job walk (walk charter, section 2); never committed.
-/docs/walks/*.local.md
+# Walk documents (terms, state, job records, local notes) and walk overlays are per-host state
+# (user, 2026-11-12: "all that meta data must be local ... host and local repo data no").
+/docs/walks/
+/docs/tasks/*-walk-*.md
 # Per-host accepted-job baselines of a walk (user, 2026-11-12: each host keeps and maintains its own); never committed.
-/test/acceptance/freeciv-b1b0768b-v*/
+/test/acceptance/freeciv-b1b0768b*/

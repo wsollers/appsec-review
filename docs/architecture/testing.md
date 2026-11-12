@@ -310,8 +310,9 @@ for the user whenever something is not already decided. Its standing rules are t
   accepted jobs are verified again there.
 - **The walk lives in documents, not in a conversation.** `docs/walks/<walk-id>.md` holds the
   walk's terms and the user's decisions; `docs/walks/<walk-id>-state.md` holds the current
-  position; `docs/tasks/` holds one record per job. A fresh session starts each job from those
-  documents, so a long session's summarised context is never the source of a rule.
+  position; `docs/tasks/` holds one record per job. All of them are per-host local files, ignored
+  by Git. A fresh session starts each job from those documents, so a long session's summarised
+  context is never the source of a rule.
 - **The target is blind and belongs to the user.** No session edits it or reads an answer key to
   steer a job. Grading comes after the walk and is the user's step.
 
