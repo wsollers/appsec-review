@@ -23,14 +23,12 @@ ROOT = Path(__file__).parents[1]
 
 
 def _fixture(tmp_path: Path):
-    from tests.release_support import write_release
+    from tests.release_support import declare_releases, write_release
     write_release(tmp_path, ("job_review_intake", "job_target_catalog"))
     config = tmp_path / "appsec-review.toml"
     source = (ROOT / "appsec-review.toml").read_text()
-    config.write_text(source.replace(
-        "[review_policy.releases]\n",
-        '[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n'
-        'build_toolchain = "fixture/1"\n'))
+    config.write_text(declare_releases(source, platform="fixture/1", validation="fixture/1",
+                                       build_toolchain="fixture/1"))
     target = tmp_path / "target"
     (target / "src").mkdir(parents=True)
     (target / "src" / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")

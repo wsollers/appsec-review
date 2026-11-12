@@ -25,6 +25,7 @@ from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import file_sha256
 from tests.accepted_topology_fixture import accept_isolated_dispatch, rebind_dispatch
 from tests.capture_fakes import capturing_fake
+from tests.release_support import declare_releases
 
 
 ROOT = Path(__file__).parents[1]
@@ -238,9 +239,8 @@ class WasmExecutor:
 def _fixture(tmp_path: Path):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    text = text.replace("[review_policy.releases]\n", "[review_policy.releases]\n" +
-        "".join(f'{key} = "fixture/1"\n' for key in
-                ("platform", "validation", "build_toolchain", "wasm_instrumentation")))
+    text = declare_releases(text, **{key: "fixture/1" for key in
+                                     ("platform", "validation", "build_toolchain", "wasm_instrumentation")})
     text += """
 [jobs.job_project_build.settings.variants.rust]
 configuration = "release"

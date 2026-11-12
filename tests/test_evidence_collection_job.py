@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 
 from tests.container_fixture import copy_containers
+from tests.release_support import declare_releases
 from types import SimpleNamespace
 
 import pytest
@@ -78,8 +79,7 @@ def fixture(tmp_path: Path):
     releases = ["platform", "validation", *adapter_registry(),
                 *(f"rules_{tool}" for tool in adapter_registry())]
     text = config_path.read_text()
-    config_path.write_text(text.replace("[review_policy.releases]",
-        "[review_policy.releases]\n" + "\n".join(f'{key} = "fixture-1"' for key in releases), 1))
+    config_path.write_text(declare_releases(text, **{key: "fixture-1" for key in releases}))
     copy_containers(ROOT, tmp_path)
     shutil.copytree(ROOT / "rules", tmp_path / "rules")
     if (ROOT / "data" / "feeds" / "osv").exists():

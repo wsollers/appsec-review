@@ -9,6 +9,7 @@ import pytest
 from appsec_review import cli
 
 from appsec_review.config import TargetDocumentSettings, load_config
+from tests.release_support import declare_releases
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
@@ -40,10 +41,7 @@ def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = F
         config_text = config_text.replace('fts_image_validation = "optional"',
                                           'fts_image_validation = "disabled"')
     if releases is not None:
-        marker = "[review_policy.releases]\n"
-        assert config_text.count(marker) == 1
-        declarations = "".join(f"{key} = {json.dumps(value)}\n" for key, value in sorted(releases.items()))
-        config_text = config_text.replace(marker, marker + declarations, 1)
+        config_text = declare_releases(config_text, **{key: releases[key] for key in sorted(releases)})
     if assurance_mode == "first_party_managed":
         start = config_text.index("[review_policy]\n")
         end = config_text.index("\n[review_policy.releases]", start)

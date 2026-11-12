@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
+from appsec_review.config.exclusions import INVENTORY_FILE_BYTES_DEFAULT
 from appsec_review.jobs.delivery_scope import (
     POLICY_IDENTITY, analysis_scope, apply_scope, delivery_gap, scope_fields,
 )
@@ -263,7 +264,9 @@ def test_generated_source_catalog_reaches_path_symbols_and_ast(tmp_path, monkeyp
     run = tmp_path / "run"
     outputs = {}
     job = SimpleNamespace(target_root=target, run_root=run, attempt_root=run / "attempt",
-                          source_fingerprint="a" * 64, config=SimpleNamespace(exclusions=None))
+                          source_fingerprint="a" * 64,
+                          config=SimpleNamespace(exclusions=None,
+                                                 inventory_max_file_bytes=INVENTORY_FILE_BYTES_DEFAULT))
     units = {item.unit_id: item for item in catalog.build_job().units}
 
     def context(name):

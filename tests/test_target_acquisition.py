@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 
 from appsec_review.config import load_config, parse_target_acquisition
+from tests.release_support import declare_releases
 from appsec_review.config.target_acquisition import TargetAcquisitionSettings
 from appsec_review.jobs.cataloging import raw_snapshot, source_fingerprint
 from appsec_review.jobs.job_change_context_analysis.settings import ExportSource
@@ -726,10 +727,10 @@ def test_review_intake_publishes_the_acquisition_record(tmp_path: Path) -> None:
 
 def system_config(tmp_path: Path, components: str) -> Path:
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
-        "allow_local_sources = false", "allow_local_sources = true").replace(
-        "[review_policy.releases]\n",
-        '[review_policy.releases]\nplatform = "fixture-platform/1"\nvalidation = "fixture-validation/1"\n', 1)
+    config_path.write_text(declare_releases(
+        (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
+            "allow_local_sources = false", "allow_local_sources = true"),
+        platform="fixture-platform/1", validation="fixture-validation/1")
         + textwrap.dedent(f"""
         [[target_acquisition.systems]]
         id = "{SYSTEM}"

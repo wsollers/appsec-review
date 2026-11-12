@@ -10,6 +10,7 @@ import zipfile
 import pytest
 
 from appsec_review.config import ProcessingMode, load_config
+from tests.release_support import declare_releases
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage, ProjectImageResolver
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
@@ -798,9 +799,8 @@ def _fixture(tmp_path: Path, *, declared_releases: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
-        text = text.replace("[review_policy.releases]", '[review_policy.releases]\n'
-                            'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\n'
-                            'validation = "fixture-validation"', 1)
+        text = declare_releases(text, platform="fixture-platform", build_toolchain="fixture-build",
+                                validation="fixture-validation")
     config_path.write_text(text, encoding="utf-8")
     target = tmp_path / "target"
     (target / "native").mkdir(parents=True)

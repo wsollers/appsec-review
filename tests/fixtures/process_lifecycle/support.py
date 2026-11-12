@@ -17,6 +17,7 @@ import time
 from appsec_review.acceptance.lanes import LaneWorkspace
 from appsec_review.observability import write_run_metrics
 from appsec_review.storage import atomic_json
+from tests.release_support import declare_releases
 
 
 CHECKOUT = Path(__file__).resolve().parents[3]
@@ -104,7 +105,7 @@ def prepare(workspace, name="checkout"):
     source = source.replace('metadata_dir = "runs/metadata"',
                             f"metadata_dir = {json.dumps(str(workspace.runs_dir / 'metadata'))}", 1)
     # Opaque operator release IDs permit genuine runner reuse without scanning installed payloads.
-    source = source.replace("[review_policy.releases]", '[review_policy.releases]\nplatform = "acceptance-v1"\nvalidation = "acceptance-v1"', 1)
+    source = declare_releases(source, platform="acceptance-v1", validation="acceptance-v1")
     source = source.replace("max_concurrent = 8", "max_concurrent = 2", 1)
     source += """
 [jobs.job_fixture]

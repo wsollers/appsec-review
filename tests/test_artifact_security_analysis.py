@@ -20,6 +20,7 @@ from appsec_review.retrieval.index import INDEX_SCHEMA
 from appsec_review.runtime import JobRunner, plan_jobs
 from appsec_review.storage import RunStore, atomic_json, file_sha256
 from tests.artifact_input_support import recorded_graph, recorded_job
+from tests.release_support import declare_releases
 
 
 ROOT = Path(__file__).parents[1]
@@ -136,8 +137,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
         components = ("platform", "validation", *(adapter.tool_id for adapter in ADAPTERS.values()))
-        text = text.replace("[review_policy.releases]", "[review_policy.releases]\n" +
-                            "\n".join(f'"{key}" = "fixture/1"' for key in components))
+        text = declare_releases(text, **{key: "fixture/1" for key in components})
     if not disable_grype:
         text = text.replace("disable_grype = true", "disable_grype = false")
     config_path.write_text(text, encoding="utf-8")

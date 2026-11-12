@@ -11,6 +11,7 @@ import zipfile
 import pytest
 
 from appsec_review.config import JvmBuildSettings, LanguageBuildSettings, load_config
+from tests.release_support import declare_releases
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
@@ -47,9 +48,8 @@ linkage = "managed"
 toolchain = "fixture/1"
 abi = "jvm-fixture/1"
 """
-    return text.replace("[review_policy.releases]\n", "[review_policy.releases]\n" +
-        "".join(f'{key} = "fixture/1"\n' for key in
-                ("platform", "validation", "build_toolchain", "jvm_instrumentation")))
+    return declare_releases(text, **{key: "fixture/1" for key in
+                                     ("platform", "validation", "build_toolchain", "jvm_instrumentation")})
 
 
 class JvmRecipeModel:

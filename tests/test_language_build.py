@@ -39,7 +39,7 @@ from tests.capture_fakes import (
     SYNTHETIC_SECRET, capturing_fake, fixture_compiler_profiles, minimal_elf, simulated_executor,
 )
 from tests.test_native_target_enforcement import _elf_header
-from tests.release_support import write_release
+from tests.release_support import declare_releases, write_release
 
 
 ROOT = Path(__file__).parents[1]
@@ -465,9 +465,8 @@ def _fixture(tmp_path: Path, *, declared_releases: bool = True):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
-        text = text.replace("[review_policy.releases]", '[review_policy.releases]\n'
-                            'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\n'
-                            'validation = "fixture-validation"', 1)
+        text = declare_releases(text, platform="fixture-platform", build_toolchain="fixture-build",
+                                validation="fixture-validation")
     text += """
 [jobs.job_project_build.settings.variants.native]
 configuration = "release"
@@ -904,9 +903,9 @@ def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path:
 
 def _dotnet_fixture(tmp_path: Path, *, framework: str = "net8.0"):
     config_path = tmp_path / "appsec-review.toml"
-    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
-        "[review_policy.releases]", '[review_policy.releases]\n'
-        'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\nvalidation = "fixture-validation"', 1)
+    text = declare_releases((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+                            platform="fixture-platform", build_toolchain="fixture-build",
+                            validation="fixture-validation")
     config_path.write_text(text, encoding="utf-8")
     target = tmp_path / "target"
     project = target / "dotnet"
