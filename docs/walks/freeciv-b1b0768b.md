@@ -60,6 +60,7 @@ here is changed to fit a result.
 | 2026-11-12 | Dependency plan: "1 Yes. 2. yes it is fine. 3. 3 yes. 4. Agree." and "The full redesign for deps will come in after we get through compiling. because right now build / topology is the most important." | T-099 to T-106 registered; none of it is worked during the build and topology jobs |
 | 2026-11-12 | "some of these package tools we will be adding will need network egress. I am preauthorizing that now. (Think maven and node etc...)" | recorded on T-101; applies to package-manager tools when that work is done, not to scanners |
 | 2026-11-12 | Time rules: a job-watch rule and a replay budget ("Proceed"), a ten-minute timer on fixes and a ceiling on test runs | charter section 10; T-109 |
+| 2026-11-12 | "This is for you and the other machine. if you guys need to keep local state you can add an untracked file." | optional per-host notes at `docs/walks/freeciv-b1b0768b.local.md`, ignored by Git; charter section 2 |
 
 Decisions reported to this file by the coordinating session rather than read from the user's own
 message are those dated 2026-11-11 for T-091, vendored dependencies and the catalog gap causes, and

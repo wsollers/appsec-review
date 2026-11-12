@@ -64,9 +64,6 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
 ## Waiting on the user
 
 - The go-ahead to launch job 6 in a fresh session.
-- Wording for an optional untracked per-host notes file (the user, 2026-11-12: "if you guys need
-  to keep local state you can add an untracked file"); the charter text is put to the user before
-  it is committed.
 
 ## In flight
 

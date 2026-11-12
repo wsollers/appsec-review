@@ -27,10 +27,15 @@ that reaches the report has shown the run completes; it has not graded the findi
 | `docs/walks/<walk-id>.md`, the walk's **terms** | target and pin, host and stack, overlay, the user's decisions with date and wording, the expected-gaps list, the known gaps | when the user decides something; never to fit a result |
 | `docs/walks/<walk-id>-state.md`, the walk's **state** | current run, corpus namespace, last accepted job, the job in hand, what is waiting on the user, the `main` commit | at every acceptance, stop and restart |
 | `docs/tasks/<date>-<walk>-NN-<job>.md`, one **record** per job | what the job did, the four checks, defects and fixes, what was not verified, commands and timings | once per job; later corrections are dated notes |
+| `docs/walks/<walk-id>.local.md`, optional **local notes** of one host | working state of that host only: the run in hand, dispatch ids, what is in flight, host notes | freely; untracked, ignored by Git, never pushed |
 
 `<walk-id>` names the target and its pin, for example `freeciv-b1b0768b`. Deferred work found on a
 walk goes to [`docs/TODO.md`](../TODO.md) with an id; the walk documents cite the id and keep no
 backlog of their own. The state file lists only what is waiting on the user for the job in hand.
+
+Local notes are not a source of rules or decisions. A rule or a user's decision is written in the
+charter or the walk's terms; a job's result is written in its record. If the local notes disagree
+with a committed document, the committed document stands and the mismatch is reported.
 
 ## 3. Roles
 
@@ -127,8 +132,8 @@ session that lost it. So a walk is carried by short sessions that start from the
    that session's context has been summarised, in which case it finishes the step in hand, commits
    the record and state, and hands over.
 2. **Start from the documents, in this order:** root `AGENTS.md`; this charter; the walk's terms;
-   the walk's state; the record of the last accepted job; then the record of the job in hand if
-   one exists. A fresh session does not rely on a summary of an earlier conversation for a rule or
+   the walk's state; then this host's local notes, if the file exists; the record of the last
+   accepted job; then the record of the job in hand if one exists. A fresh session does not rely on a summary of an earlier conversation for a rule or
    a decision; if the documents do not say it, it is not decided.
 3. **Verify the state before acting.** Compare the state file with the host: `main` and its
    cleanliness, the stack, the run list, the target's commit and status. A mismatch is reported,
