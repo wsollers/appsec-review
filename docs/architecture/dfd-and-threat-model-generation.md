@@ -1,6 +1,7 @@
 # Generated data-flow diagram and threat model
 
-Status: **design only, awaiting the user's approval. Nothing here is implemented.** Registry items:
+Status: **design approved for the first slice (section 15); see section 17 for what is implemented
+on branch `dfd-threat-model` and what is not. Nothing is merged into `main`.** Registry items:
 T-107 (this job) and T-108 (the deployment inventory job it depends on for deployment facts);
 the ids are reserved by the registry owner, which adds the entries on approval. The implementation plan is
 [`../tasks/2026-11-12-dfd-threat-model-plan.md`](../tasks/2026-11-12-dfd-threat-model-plan.md).
@@ -229,8 +230,8 @@ Maps evidence to a closed interaction vocabulary:
 
 | Interaction | Examples of what maps to it |
 | --- | --- |
-| `network_listen` | graph `entry_point` with `source_class` remote; callee names `listen`, `accept`, `bind`; deployment listener |
-| `network_receive` | callee names `recv`, `recvfrom`, `recvmsg`; prioritization `ingress` on a route handler; declared operation |
+| `network_listen` | callee names `listen`, `accept`, `bind`; a `public_api` route signal; deployment listener |
+| `network_receive` | graph `entry_point` with `source_class` remote; callee names `recv`, `recvfrom`, `recvmsg`; declared operation |
 | `network_connect` | callee names `connect`, `getaddrinfo`, HTTP client calls; deployment relationship |
 | `file_read` / `file_write` | graph `file` sources, `path_access` sinks; prioritization `state.fs_write` |
 | `datastore_query` | graph `sql_query` sinks and `database` sources; prioritization `state.db_write` |
@@ -329,7 +330,8 @@ An evidence reference:
 ```json
 {"ref": "E12", "kind": "index_entity",
  "entity_id": "...", "entity_kind": "entry_point",
- "publication": {"job": "job_code_graph_index", "index": "graph", "shard_id": "...", "sha256": "..."},
+ "publication": {"job": "job_code_graph_index", "output_kind": "code_graph_facts", "index": "graph",
+                 "shard_id": "...", "sha256": "..."},
  "locator": "server/example.c:120-131#b4100-4420@<file_sha256>",
  "content_sha256": "...", "basis": "verified_semantic", "rule": "graph.entry_point.remote"}
 ```
@@ -344,10 +346,14 @@ format is the review's (`path:start-end#bstart-end@file_sha256`).
   with `kind` one of `process`, `data_store`, `external_entity`. `evidence` has at least one
   entry; the schema enforces it. `name_basis` is `artifact_name`, `declared_name`, `derived` or
   `model_label`.
-- `flows[]`: `{id, source, target, interaction, direction, data, basis, evidence[],
-  crosses[]}`. `source` and `target` are element ids; `crosses` lists boundary ids. `data` is a
+- `flows[]`: `{id, source, target, interaction, data, basis, evidence[], crosses[],
+  attributes}`. `source` and `target` are element ids; `crosses` lists boundary ids. `data` is a
   short description only when evidence names it (a declared operation, a store product),
-  otherwise `null`.
+  otherwise `null`. There is one flow per process, peer and interaction, not one per call site:
+  `attributes` carries `direction` (`inbound` or `outbound`), `site_count`, and `ownership`, the
+  weakest rule that tied its sites to the process (`source_path`, `build_unit` or `source_root`),
+  so a reader can see when a flow rests on unit-wide attribution. The call sites themselves are
+  the `entry_points[]` of the threat model.
 - `boundaries[]`: `{id, kind, inside[], evidence[], basis}` with `kind` one of `network`,
   `file_content`, `local_user`, `launch_environment`, `process`, `deployment_exposure`,
   `privilege`, `loaded_code`. A boundary exists only where an evidenced flow crosses it: it is
@@ -400,7 +406,7 @@ How elements are established:
 `runtime_role_unknown`, `peer_unidentified`, `flow_endpoint_unresolved`, `protocol_unknown`,
 `datastore_unidentified`, `boundary_not_established`, `deployment_not_described`,
 `authentication_not_located`, `asset_sensitivity_unknown`, `uncited_model_inference`,
-`evidence_request_unserved`. `would_resolve` names the input or evidence that would turn the
+`evidence_request_unserved`, `no_element_established`, `citation_unresolved`. `would_resolve` names the input or evidence that would turn the
 unknown into an element (for example `job_deployment_inventory/deployment_inventory`), which is
 what makes the unknown list a work list.
 
@@ -685,3 +691,33 @@ the output is worth the model step, the deployment job and the consumers.
    wanted after the first slice, or should the generated model stay a reading aid?
 8. **Gate from T-059.** T-059 gates every fleet row on T-057's first scored run. Does this
    request lift that gate for F07 and the static half of F06?
+
+## 17. Implementation status (first slice)
+
+On branch `dfd-threat-model`, not merged. Unit tests only; integration, acceptance and live
+validation have not been run.
+
+Implemented: the contract and closed schemas; the three reference data files; the structure and
+interaction lanes; assembly; template threats; citation validation; the Mermaid and Markdown
+views; the evidence view over admitted index shards; the job itself, disabled by default.
+
+Not implemented, each a named limit of what a run publishes today:
+
+- **Model elaboration** (section 4.2) and its guidance. `origin.model` is always `null`.
+- **Declarations lane** (declared operations, dependencies, OWASP roles and results, tags, tool
+  observations) and the crosswalk's `related_controls`. The crosswalk data exists and is carried
+  on each threat.
+- **Deployment inventory** (T-108). Every run records the not-registered gap, so every run
+  completes with gaps.
+- **Mitigation evidence.** Every threat's mitigation state is `not_examined`.
+- **Assets.** The list is empty; each data store has an `asset_sensitivity_unknown`.
+- **Threats on data stores.** `datastore_query` and `file_write` flows get a data-store element
+  and a `datastore_unidentified` unknown but no boundary and no candidate threat, because a
+  boundary rule needs a derived external entity.
+- **Consumers.** None reads the outputs.
+
+Two properties of real index data shape the result. Payloads are stored after secret redaction,
+so a name or path containing a secret-like word arrives as `<redacted>`; such a process is
+identified by its record, not its name, and the lane reports a gap. And tree-sitter call sites
+are matched by exact written name against a C and C++ callee list, so a target that wraps the
+system calls shows its wrappers, not its handlers.
