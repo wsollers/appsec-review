@@ -272,7 +272,7 @@ def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], acc
 def test_iteration_terminal_receipts_cross_accepted_artifact_index(tmp_path: Path, scenario: str) -> None:
     from appsec_review.jobs.build_iterations import BuildIterations, IterationOutcome, selected_graph
     from appsec_review.jobs.job_language_build.job import upstream_build_failure_receipt
-    from tests.test_build_iterations import RELEASES, fixture
+    from tests.unit.job_build_iteration.support import RELEASES, fixture
 
     _, documents, _, _, dispatches = fixture(tmp_path / "scheduler", ambiguous=True)
     config, target, snapshot, run, _, accepted_path, handoff_path, latest = _seed(

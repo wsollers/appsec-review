@@ -1,3 +1,12 @@
+"""Build-iteration CLI: the pre-walk suite, moved out of the unit path by T-113 with job_build_iteration.
+
+Each case runs one bounded ``cli.main`` command (replay, promote, build-failure-context) or
+``failure_context`` directly over two run trees, each published through JobRunner by the replay
+fixture; setup costs 14 to 20 s at four workers. Integration tests pending replacement, run only
+when named explicitly (``scripts/run-tests.sh --allow-heavy -- <file>``). At the walk's HEAD
+(52b3daab) the seven failure-context cases already errored in their ``accepted_plan`` fixture
+(KeyError: 'size_bytes' on the latest.json pointer).
+"""
 from __future__ import annotations
 
 from dataclasses import asdict, replace
@@ -14,13 +23,13 @@ from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.storage import atomic_json
 from appsec_review.storage.shared import immutable_bytes, reference, verify_reference
-from tests.test_build_recipe_replay import (
+from tests.integration.job_build_iteration.test_build_recipe_replay import (
     NATIVE_AXES, _accepted_dispatch, _compiler_metadata, _executor, _publish_source_plan, build as replay_build,
 )
 
 
 @pytest.fixture
-def build(replay_build, tmp_path):
+def build(replay_build, tmp_path):  # noqa: F811
     original = replay_build
     run = tmp_path / "cli-runs/2026-10-12-0001"
     run.mkdir(parents=True)

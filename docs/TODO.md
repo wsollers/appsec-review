@@ -1705,7 +1705,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   nine family files split with their graph cases parked under
   `tests/integration/job_language_build/`, the live toolchain and Gradle checks under
   `tests/acceptance/job_language_build/`, new contract, graph, handler-wiring and receipt/path
-  tests). Next: job_build_iteration.
+  tests); job_build_iteration (6 unit files, 46 cases: new contract and job-wiring tests, the
+  controller's code-level cases, the four self-contained executor-capture cases and the two
+  workspace-resume cases moved in; the replay, CLI, replay-executor and controller-recovery
+  suites, whose fixtures publish through JobRunner at 8 to 20 s of setup, parked under
+  `tests/integration/job_build_iteration/` with their pre-existing failures named). Next:
+  job_artifact_indexing.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,

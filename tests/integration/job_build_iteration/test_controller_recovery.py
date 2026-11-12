@@ -1,3 +1,13 @@
+"""job_build_iteration: the pre-walk controller suite, moved out of the unit path by T-113.
+
+These cases drive BuildIterations.run through failure, restart, invalidation and recovery with a
+fake worker and invoker, and one case runs a real Dagster execute_in_process. They are integration
+tests pending replacement by code-level tests in tests/unit/job_build_iteration/ and run only when
+named explicitly (``scripts/run-tests.sh --allow-heavy -- <file>``). At the walk's HEAD (52b3daab)
+nine of the ten cases already failed: the fixture's selected graph has no admitted selected inputs,
+so the controller now answers BLOCKED ("shared workspace recovery withheld until selected inputs
+are admitted") where the cases expect FAILED/SUCCEEDED, restart and invalidation paths.
+"""
 from __future__ import annotations
 
 import copy
@@ -7,72 +17,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
 from appsec_review.jobs.build_iterations import (
     BuildIterations, IterationOutcome, digest, prepare_recipe_command, selected_graph,
 )
 from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec
-
-
-VARIANT = {"configuration": "release", "target_arch": "x86_64", "execution_role": "target",
-           "linkage": "static", "toolchain": "fixture/1", "abi": "fixture-abi/1"}
-RELEASES = {"platform": "fixture/1", "build_toolchain": "fixture/1", "validation": "fixture/1"}
-
-
-def fixture(tmp_path, *, independent=False, ambiguous=False):
-    source = tmp_path / "source"
-    documents = {
-        "a/CMakeLists.txt": "project(a)\nadd_library(A STATIC a.c)\n",
-        "a/a.c": "int a(void) { return 1; }\n",
-        "b/CMakeLists.txt": "project(b)\nadd_executable(B b.c)\ntarget_link_libraries(B PRIVATE A)\n",
-        "b/b.c": "int main(void) { return 0; }\n",
-        "build/checked-in.txt": "keep build inputs\n",
-        "bin/checked-in.txt": "keep bin inputs\n",
-        "obj/checked-in.txt": "keep obj inputs\n",
-        "target/checked-in.txt": "keep target inputs\n",
-        "shared.conf": "original\n",
-    }
-    if independent:
-        documents.update({
-            "later-independent/CMakeLists.txt": "project(C)\nadd_executable(C c.c)\n",
-            "later-independent/c.c": "int main(void) { return 0; }\n",
-        })
-    if ambiguous:
-        documents.update({
-            "unsupported/legacy.vcproj": '<VisualStudioProject ProjectType="Visual C++"/>\n',
-            "unresolved/CMakeLists.txt": "add_library(C STATIC c.c)\n",
-            "unresolved/c.c": "int c(void) { return 0; }\n",
-        })
-    files = []
-    for relative, content in documents.items():
-        path = source / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
-        files.append({"path": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                      "size_bytes": path.stat().st_size})
-    units = discover_build_units(files)
-    for unit in units:
-        unit["descriptor_package"] = descriptor_package(source, unit, files)
-        unit["build_variant"] = dict(VARIANT)
-        unit["recipe"] = {
-            "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
-            "image_profile": "native", "source_dir": unit["root"], "build_dir": unit["root"] + "/build",
-            "environment": {}, "system_packages": [],
-            "dependency_files": [item["path"] for item in unit["markers"]],
-            "configure_commands": [], "build_commands": [["cmake", "--build", "build"]],
-            "expected_outputs": [unit["root"] + "/build"], "network_required": False, "reason": "fixture",
-        }
-    run = tmp_path / "runs" / "fixture"
-    run.mkdir(parents=True)
-    graph = selected_graph(units, source_fingerprint=digest(files), relationships=[], variants={})
-    dispatches = [{**unit, "image": {"image_id": "sha256:" + "a" * 64}} for unit in units]
-    return source, documents, run, graph, dispatches
-
-
-def controller(source, run, graph, dispatches, releases=RELEASES):
-    return BuildIterations(run, source, graph, dispatches, configuration={"fixture": 1},
-                           releases=releases, execution_identity="fixture-executor/1",
-                           output_policy_identity=digest("outputs"))
+from tests.unit.job_build_iteration.support import RELEASES, VARIANT, controller, fixture
 
 
 def test_failed_destructive_consumer_restart_and_revision_preserves_producer(tmp_path):
@@ -133,26 +82,6 @@ def test_failed_destructive_consumer_restart_and_revision_preserves_producer(tmp
         assert (workspace.paths.target / relative).is_file()
 
 
-def test_a_refused_dispatch_reports_a_producer_status(tmp_path):
-    """A dispatch whose inputs are refused is a unit output, so its status is a ProducerStatus.
-
-    Review 2026-11-11-0003 failed at ``language_build`` publication because this result said
-    ``BLOCKED_BY_DEPENDENCY``, which is not in the closed vocabulary. Why it is blocked is a fact.
-    """
-    from appsec_review.interchange import ProducerStatus
-
-    source, _documents, run, graph, dispatches = fixture(tmp_path)
-    worker = Mock()
-    result = controller(source, run, graph, dispatches, releases={}).run(worker, invoke=Mock())
-    worker.assert_not_called()
-    statuses = {status.value for status in ProducerStatus}
-    assert result["terminal_status"] == ProducerStatus.BLOCKED.value
-    assert result["availability"] == "blocked_by_dependency"
-    assert result["gaps"], "a blocked dispatch names why"
-    assert set(result["states"].values()) <= statuses
-    assert {item["terminal_status"] for item in result["receipts"]} <= statuses
-
-
 def test_missing_release_evidence_never_dispatches_or_reuses(tmp_path):
     source, _documents, run, graph, dispatches = fixture(tmp_path)
     worker = Mock()
@@ -160,22 +89,6 @@ def test_missing_release_evidence_never_dispatches_or_reuses(tmp_path):
     worker.assert_not_called()
     assert all(item["terminal_status"] == "BLOCKED" for item in result["receipts"])
     assert any("missing release evidence" in gap for gap in result["gaps"])
-
-
-@pytest.mark.parametrize("family", ["native", "dotnet", "go", "java", "node", "php", "python", "ruby"])
-@pytest.mark.parametrize("failed", [False, True])
-def test_gap_receipt_preserves_language_contract_and_negative_evidence(tmp_path, family, failed):
-    source, _documents, run, graph, dispatches = fixture(tmp_path)
-    dispatches[0]["family"] = family
-    scheduler = controller(source, run, graph, dispatches)
-    receipt = scheduler._gap(dispatches[0]["build_unit_id"], "unavailable prerequisite", failed=failed)
-    assert receipt == {
-        "schema": "appsec-review/language-build-receipt/1",
-        "source_fingerprint": graph["source_fingerprint"],
-        "build_unit_id": dispatches[0]["build_unit_id"], "family": family,
-        "root": dispatches[0]["root"], "terminal_status": "FAILED" if failed else "BLOCKED",
-        "artifacts": [], "commands": [], "gaps": ["unavailable prerequisite"],
-    }
 
 
 @pytest.mark.parametrize("terminal", ["BLOCKED", "SKIPPED_POLICY"])
@@ -275,63 +188,6 @@ def test_actual_dagster_invocations_have_distinct_ids_and_immutable_inputs(tmp_p
         assert invoke_iteration(ref, label, worker) == {"completion": ref}
     assert len({run_id for _, run_id in observed}) == 2
     assert all(value == ref for value, _ in observed)
-
-
-def test_phase_cwd_binds_cmake_source_and_build_and_preserves_target_operands(tmp_path):
-    source, _documents, run, graph, dispatches = fixture(tmp_path)
-    workspace = BuildWorkspace(run)
-    workspace.materialize(source, graph["source_fingerprint"])
-    accepted = next(item for item in dispatches if item["root"] == "b")
-    recipe = {**accepted["recipe"], "execution_cwd": {"configure": "b/build", "build": "b/build"}}
-    configure = ("cmake", "-S", "..", "-B", ".")
-    assert prepare_recipe_command(workspace.paths.target, accepted, recipe, "configure", configure) == (
-        configure, "b/build")
-    build = ("cmake", "--build", ".", "--target", "b", "--", "b/target")
-    assert prepare_recipe_command(workspace.paths.target, accepted, recipe, "build", build) == (build, "b/build")
-    with pytest.raises(ValueError, match="wrong accepted source"):
-        prepare_recipe_command(workspace.paths.target, accepted, recipe, "configure",
-                               ("cmake", "-S", ".", "-B", "."))
-    assert prepare_recipe_command(
-        workspace.paths.target, accepted, recipe, "configure", ("cmake", "-Sb", "-Bb/build")) == (
-            configure[:1] + ("-S..", "-B."), "b/build")
-    assert not (source / "b/build").exists()
-
-
-def test_make_applies_all_directory_operands_before_explicit_driver_without_rebasing_targets(tmp_path):
-    source, _documents, run, graph, dispatches = fixture(tmp_path)
-    makefile = source / "b/Makefile"
-    makefile.write_bytes(b"b/target:\n\tcc b.c -o build/B\n")
-    workspace = BuildWorkspace(run)
-    workspace.materialize(source, graph["source_fingerprint"])
-    accepted = next(item for item in dispatches if item["root"] == "b")
-    accepted["descriptor_package"]["documents"].append({
-        "path": "b/Makefile", "sha256": hashlib.sha256(makefile.read_bytes()).hexdigest()})
-    recipe = {**accepted["recipe"], "execution_cwd": {"build": "b/build"}}
-    command = ("make", "-f", "Makefile", "-C", "..", "b/target")
-    assert prepare_recipe_command(workspace.paths.target, accepted, recipe, "build", command) == (
-        command, "b/build")
-    wrong = ("make", "-C", ".", "b/target")
-    with pytest.raises(ValueError, match="default driver is absent"):
-        prepare_recipe_command(workspace.paths.target, accepted, recipe, "build", wrong)
-    (workspace.paths.target / "b/Makefile").write_bytes(b"replaced\n")
-    with pytest.raises(ValueError, match="unchanged accepted source descriptor"):
-        prepare_recipe_command(workspace.paths.target, accepted, recipe, "build", command)
-
-
-def test_each_phase_rechecks_cwd_after_configure_and_refuses_symlinked_build(tmp_path):
-    source, _documents, run, graph, dispatches = fixture(tmp_path)
-    workspace = BuildWorkspace(run)
-    workspace.materialize(source, graph["source_fingerprint"])
-    accepted = next(item for item in dispatches if item["root"] == "b")
-    recipe = {**accepted["recipe"], "execution_cwd": {"build": "b/build"}}
-    assert prepare_recipe_command(
-        workspace.paths.target, accepted, recipe, "configure",
-        ("cmake", "-S", ".", "-B", "build"))[1] == "b"
-    (workspace.paths.target / "b/build").rmdir()
-    (workspace.paths.target / "b/build").symlink_to(workspace.paths.target / "a", target_is_directory=True)
-    with pytest.raises(ValueError, match="symlink"):
-        prepare_recipe_command(workspace.paths.target, accepted, recipe, "build",
-                               ("cmake", "--build", "."))
 
 
 @pytest.mark.parametrize("interrupt_after_recomposition", [False, True])

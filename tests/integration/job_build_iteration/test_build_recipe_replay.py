@@ -1,3 +1,13 @@
+"""Build-recipe replay: the pre-walk suite, moved out of the unit path by T-113 with job_build_iteration.
+
+Every case builds the ``build`` fixture: a discovered native source tree, a materialized workspace
+with one committed and one failed production attempt, and a synthetic accepted plan published
+through JobRunner. That setup costs 8 to 10 s at four workers, over the unit budget, so the file is
+an integration suite pending replacement by narrower code-level tests and runs only when named
+explicitly (``scripts/run-tests.sh --allow-heavy -- <file>``). At the walk's HEAD (52b3daab) five
+cases already failed (network_required refusal, wrong accepted source/build directory, and
+unadmitted image or compiler closure reconstruction).
+"""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -26,32 +36,14 @@ from appsec_review.jobs.build_workspace import (
 from appsec_review.storage.atomic import canonical_json, canonical_json_sha256
 from appsec_review.storage.lock import FileLock, LockUnavailable
 from appsec_review.storage.shared import immutable_bytes, reference, verify_reference
-from tests.test_native_target_enforcement import _archive_member, _profile
+from tests.test_native_target_enforcement import _archive_member
+from tests.unit.job_build_iteration.support import (
+    NATIVE_AXES, NATIVE_OBJECT, NATIVE_OUTPUT, TARGET, _compiler_metadata,
+)
 
 
 VARIANT = {"configuration": "release", "target_arch": "x86_64", "execution_role": "target",
            "linkage": "static", "toolchain": "fixture-toolchain/1", "abi": "gnu"}
-TARGET = "--target=x86_64-unknown-linux-gnu"
-_ELF_IDENT = b"\x7fELF\x02\x01\x01" + bytes(9)
-_EXIT_CODE = b"\xb8\x3c\0\0\0\x31\xff\x0f\x05"
-NATIVE_OUTPUT = (
-    struct.pack("<16sHHIQQQIHHHHHH", _ELF_IDENT, 2, 62, 1, 0x400078, 64, 0, 0, 64, 56, 1, 0, 0, 0)
-    + struct.pack("<IIQQQQQQ", 1, 5, 0, 0x400000, 0x400000, 120 + len(_EXIT_CODE), 120 + len(_EXIT_CODE), 4096)
-    + _EXIT_CODE)
-NATIVE_OBJECT = (
-    struct.pack("<16sHHIQQQIHHHHHH", _ELF_IDENT, 1, 62, 1, 0, 0, 64, 0, 64, 0, 0, 64, 1, 0)
-    + bytes(64))
-NATIVE_AXES = {"os": "linux", "isa": "x86_64", "abi": "gnu", "sdk": None,
-               "deployment": None, "device_kind": None, "hardware_generation": None}
-
-
-def _compiler_metadata(image_identity, recipe=None):
-    profile = {**_profile(), "image_digest": image_identity}
-    if recipe is not None:
-        profile["image_recipe_digest"] = canonical_json_sha256(recipe)
-    return profile
-
-
 def _publish_source_plan(run, units, releases, *, config=None, legacy=False):
     from appsec_review.config import load_config
     from appsec_review.config.assurance import ComponentReleases

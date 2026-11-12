@@ -180,8 +180,8 @@ def test_a_derived_build_toolchain_dispatches_a_build_iteration(tmp_path: Path) 
     from appsec_review.jobs.build_workspace import ProductSpec
     from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
     from tests.accepted_topology_fixture import accept_isolated_dispatch
-    from tests.test_build_iterations import fixture
-    from tests.test_build_recipe_replay import NATIVE_AXES, NATIVE_OBJECT
+    from tests.unit.job_build_iteration.support import fixture
+    from tests.unit.job_build_iteration.support import NATIVE_AXES, NATIVE_OBJECT
 
     releases, sources = _releases(_load(tmp_path / "configuration"))
     assert sources["build_toolchain"]["source"] == "derived"
@@ -213,7 +213,8 @@ def test_a_derived_build_toolchain_dispatches_a_build_iteration(tmp_path: Path) 
                                  releases=releases, execution_identity="fixture-executor/1",
                                  output_policy_identity=digest("outputs"))
     # The refusal this replaces ("missing release evidence: build_toolchain, ...") is raised by the
-    # same binding step; test_build_iterations covers it with no releases at all.
+    # same binding step; tests/integration/job_build_iteration/test_controller_recovery.py covers it with no
+    # releases at all.
     assert controller._binding(node["build_unit_id"], ()).toolchain_identity == releases["build_toolchain"]
     result = controller.run(worker, invoke=lambda request, label, execute: execute(request, "dagster-0"))
     assert calls == [node["build_unit_id"]]

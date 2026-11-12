@@ -33,11 +33,18 @@
     },
     "job_build_iteration": {
       "unit": [
-        "tests/test_build_iterations.py",
-        "tests/test_build_topology_refinement.py::test_workspace_resume_after_failed_iteration_rollback_needs_no_ledger",
-        "tests/test_build_topology_refinement.py::test_workspace_resume_without_ledger_refuses_non_pristine_state"
+        "tests/unit/job_build_iteration/test_contract.py",
+        "tests/unit/job_build_iteration/test_job_graph.py",
+        "tests/unit/job_build_iteration/test_controller.py",
+        "tests/unit/job_build_iteration/test_executor_capture.py",
+        "tests/unit/job_build_iteration/test_workspace_resume.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_build_iteration/test_controller_recovery.py",
+        "tests/integration/job_build_iteration/test_build_recipe_replay.py",
+        "tests/integration/job_build_iteration/test_build_iteration_executor.py",
+        "tests/integration/job_build_iteration/test_build_iteration_cli.py"
+      ],
       "acceptance": [],
       "live": []
     },
