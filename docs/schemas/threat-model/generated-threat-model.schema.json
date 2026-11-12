@@ -144,7 +144,8 @@
         "asset_sensitivity_unknown",
         "uncited_model_inference",
         "evidence_request_unserved",
-        "no_element_established"
+        "no_element_established",
+        "citation_unresolved"
       ]
     },
     "Origin": {

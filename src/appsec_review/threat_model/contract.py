@@ -107,6 +107,7 @@ class UnknownKind(StrEnum):
     UNCITED_MODEL_INFERENCE = "uncited_model_inference"
     EVIDENCE_REQUEST_UNSERVED = "evidence_request_unserved"
     NO_ELEMENT_ESTABLISHED = "no_element_established"
+    CITATION_UNRESOLVED = "citation_unresolved"
 
 
 class InputState(StrEnum):
