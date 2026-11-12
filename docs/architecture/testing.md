@@ -66,6 +66,25 @@ Everything below is implemented in `tests/conftest.py` and applies to every test
 
 ## Unit-test standards
 
+### The `tests/unit/` tier
+
+`tests/unit/<job_id>/` holds the code-level tests of one job (`tests/unit/<package>/` for shared
+code, `tests/shared/` for helpers every tier may use). Everything under `tests/unit/` runs under
+`tests/unit/conftest.py`, which enforces the tier instead of relying on review:
+
+- the `unit` time budget (`unit_time_budget_seconds`, 10 s for setup, call and teardown together)
+  fails the test that crosses it, through the same `PhaseClock` as the integration and live tiers;
+- starting `docker`, `podman`, `claude`, `codex`, `gh` or a Dagster process is refused before it
+  runs, unless the executable is a fake the test wrote under the pytest base temp;
+- a socket may connect to loopback only;
+- `execute_job`, `materialize` and `execute_in_process` are refused once `dagster` is imported;
+- `os.fsync` is a no-op, because durability is not what a unit test checks.
+
+A refusal raises `UnitTierViolation`; the fix is a fake at the boundary, a canned fixture, or a
+move to `tests/integration/` or `tests/acceptance/`. Tests still at the root of `tests/` are the
+pre-walk suite: T-113 moves each job's tests into its folder, replacing those that ran whole job
+graphs or engines with code-level tests, and carries no budget until then.
+
 1. **Independent.** No shared mutable state, ordering assumptions or reliance on another test's
    files, fixtures or side effects. Each test passes alone, in any order and in parallel.
 2. **Under 10 seconds** per test (setup, call and teardown together) unless the user has approved

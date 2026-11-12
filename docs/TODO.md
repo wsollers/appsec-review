@@ -105,6 +105,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-110 | [Decide what the walk does with shell environment scripts the bounded reader cannot read](#t-110-decide-what-the-walk-does-with-shell-environment-scripts-the-bounded-reader-cannot-read) | build | open |
 | T-111 | [Surface build-descriptor bounds as gap records and size them against real targets](#t-111-surface-build-descriptor-bounds-as-gap-records-and-size-them-against-real-targets) | build | open |
 | T-112 | [Record what the analysis-summary trim removed, and do not report truncation under the bounds](#t-112-record-what-the-analysis-summary-trim-removed-and-do-not-report-truncation-under-the-bounds) | build | open |
+| T-113 | [Walk every job into tests/unit with code-level tests under the enforced tier](#t-113-walk-every-job-into-testsunit-with-code-level-tests-under-the-enforced-tier) | testing | in-progress |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1675,6 +1676,34 @@ until each is rewritten into the entry format when it is next touched.
 
 Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   Remaining work: T-075.
+
+### T-113 — Walk every job into tests/unit with code-level tests under the enforced tier
+
+- **State:** in-progress
+- **Area:** testing
+- **Blocks:** T-048, T-109
+- **Why:** the unit path held 18,458 tests in 509 files, among them tests that drive whole job
+  graphs in-process (10 to 14 minutes each), launch Docker engines, or depend on host tools; two
+  comparison runs took 26 to 28 minutes and a full run did not finish. The tier contract decided on
+  2026-11-12: unit tests are code-level with canned fixtures and finish in under ten seconds each,
+  the whole unit suite in under ten minutes; integration tests may run Docker, tools and models
+  against fixtures; acceptance tests run jobs live on Dagster, one job at a time with per-job
+  validation (the stepwise process); the former live tier folds into acceptance.
+- **Scope:** per job, in registry order: create `tests/unit/<job_id>/`, move the job's genuine
+  code-level tests there (the `tests/unit/conftest.py` guard and the 10 s budget then apply),
+  replace every test that ran a job graph, an engine, a model or the network with tests of the
+  job's own functions (graph shape, validators, handler wiring, parsers, normalizers, bounds), and
+  send the removed graph-level tests to `tests/integration/<job_id>/` or delete them when the
+  replacement covers the same claims. Shared packages get `tests/unit/<package>/`; cross-tier
+  helpers move to `tests/shared/`. Each job lands as one commit that updates
+  `tests/job-test-map.json`. Done so far: job_third_party_data_sync (the 88 s whole-job run
+  replaced by graph, publication, cve-bin-tool and OSV feed tests).
+- **Done when:** `tests/` has no `test_*.py` outside `tests/unit`, `tests/integration`,
+  `tests/acceptance` and `tests/shared`; `scripts/run-tests.sh fast` collects only `tests/unit`
+  and finishes in under ten minutes with zero tests over 10 s; every job in the registry has a
+  `tests/unit/<job_id>/` folder named in the job-test map.
+- **Refs:** `tests/unit/conftest.py`, `tests/unit/test_tier_guard.py`, `tests/time_budgets.py`,
+  `docs/architecture/testing.md` ("The tests/unit/ tier"), `tests/job-test-map.json`.
 
 ### T-001 — Finish OWASP acceptance beyond bounded static assessment
 

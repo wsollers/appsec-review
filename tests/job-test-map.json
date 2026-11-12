@@ -365,7 +365,16 @@
       "live": []
     },
     "job_third_party_data_sync": {
-      "unit": ["tests/test_third_party_data_sync.py"],
+      "unit": [
+        "tests/unit/job_third_party_data_sync/test_job_graph.py",
+        "tests/unit/job_third_party_data_sync/test_publication.py",
+        "tests/unit/job_third_party_data_sync/test_cve_bin_tool_database.py",
+        "tests/unit/job_third_party_data_sync/test_osv_feed.py",
+        "tests/unit/job_third_party_data_sync/test_nvd_sync_job.py",
+        "tests/unit/job_third_party_data_sync/test_nvd_http.py",
+        "tests/unit/job_third_party_data_sync/test_reference_feed_sync.py",
+        "tests/unit/job_third_party_data_sync/test_grype_db_sync.py"
+      ],
       "integration": ["tests/integration/test_feed_transport_acceptance.py"],
       "acceptance": [],
       "live": []

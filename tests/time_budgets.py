@@ -1,6 +1,6 @@
-"""Declared per-test time budgets for the integration and live tiers.
+"""Declared per-test time budgets for the unit, integration and live tiers.
 
-Each integration or live test has a budget: the tier default from the pytest ini option, or a
+Each unit, integration or live test has a budget: the tier default from the pytest ini option, or a
 reviewed exception declared with ``@pytest.mark.time_budget(seconds, reason=...)``. A test whose
 own setup and call, or setup, call and teardown, exceed it fails with the measured and declared
 times. The check is made after the phase ends; commands inside a test keep their own hard
@@ -20,10 +20,11 @@ import pytest
 # ``-o <name>=<seconds>``. Integration: a Docker probe plus one bounded build or tool command,
 # whose own timeouts are 60-180 s. Live: one CodeQL database (900 s cap) plus its query run.
 TIER_INI_OPTIONS: Mapping[str, str] = {
+    "unit": "unit_time_budget_seconds",
     "integration": "integration_time_budget_seconds",
     "live": "live_time_budget_seconds",
 }
-DEFAULT_TIER_BUDGETS: Mapping[str, float] = {"integration": 300.0, "live": 1800.0}
+DEFAULT_TIER_BUDGETS: Mapping[str, float] = {"unit": 10.0, "integration": 300.0, "live": 1800.0}
 MARKER = "time_budget"
 MARKER_HELP = (f"{MARKER}(seconds, reason): a reviewed per-test time budget that replaces the tier default; "
                "the reason is required")
@@ -36,13 +37,18 @@ class TimeBudget:
 
 
 def tier_of(path: Path, tests_root: Path) -> str | None:
-    """``integration`` or ``live`` for a test file in those tiers, else ``None``."""
+    """``unit``, ``integration`` or ``live`` for a test file in those tiers, else ``None``.
+
+    Unit tests outside ``tests/unit/`` carry no budget until their job walk moves them in.
+    """
     try:
         relative = Path(path).resolve().relative_to(tests_root.resolve())
     except ValueError:
         return None
     if not relative.parts:
         return None
+    if relative.parts[0] == "unit":
+        return "unit"
     if relative.parts[0] == "integration":
         return "integration"
     if relative.parts[0] == "live" or (len(relative.parts) == 1 and relative.name.startswith("test_live_")):
