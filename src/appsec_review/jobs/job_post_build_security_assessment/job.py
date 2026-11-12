@@ -325,7 +325,12 @@ def build_job(*, infer: Infer | None = None) -> Job:
                         "terminal_status": "NOT_APPLICABLE"}
             if catalog.get("terminal_status") != "SUCCEEDED":
                 gaps = list(catalog.get("gaps", ())) or ["accepted build catalog is unavailable"]
-                return {"case_id": _display(case_id), "actions": [], "artifacts": [], "gaps": gaps,
+                # A build that did not succeed upstream still publishes its (empty) provenance
+                # document: later stages bind every stage output by its artifact hash.
+                document = {"schema": PROVENANCE_SCHEMA, "case_id": _display(case_id),
+                            "actions": [], "artifacts": [], "relationships_exact": False, "gaps": gaps}
+                return {**document, "artifact": _artifact(unit.job.run_root,
+                        unit.unit_root / "build-command-provenance.json", document),
                         "terminal_status": "COMPLETED_WITH_GAPS"}
             root = _case_root(unit, case_id)
             rows, gaps, generic_protected = [], [], None
@@ -607,7 +612,14 @@ def build_job(*, infer: Infer | None = None) -> Job:
                            *deterministic_value.get("gaps", ())]))}
             encoded = canonical_json(request)
             gaps: list[str] = []
-            if len(encoded) > int(settings["max_input_tokens"]) * 4:
+            if not actions and not records:
+                # Nothing was built for this case (the upstream gaps are already in the request's
+                # coverage_gaps and in the earlier stages): there is no evidence a model could cite.
+                gaps.append("no build actions or binary artifacts are available; build-security inference was not run")
+                result = {"observations": [], "rejections": [], "confirmed_count": 0,
+                          "refuted_count": 0, "unvalidated_count": 0}
+                calls = 0
+            elif len(encoded) > int(settings["max_input_tokens"]) * 4:
                 gaps.append("structured build-security inference request exceeded its configured input budget")
                 result = {"observations": [], "rejections": [], "confirmed_count": 0,
                           "refuted_count": 0, "unvalidated_count": 0}

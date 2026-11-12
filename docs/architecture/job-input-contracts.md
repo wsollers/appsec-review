@@ -149,6 +149,17 @@ rejected at admission rather than labelled optional and discovered by an uncondi
 Single-consumer test graphs must include real fixture producers or use explicit standalone supply;
 an existing `latest.json` never grants an input to an explicitly empty graph projection.
 
+A shared loader's transitive reads belong to the calling job's contract. `load_accepted_plan`
+re-reads the environment publication an accepted plan is bound to (`EXPECTED_CURRENT` or
+`OPTIONAL_PRIOR`), so `job_evidence_collection`, `job_language_build` and, by inheritance,
+`job_build_iteration` declare `job_build_environment_analysis` as an optional input, as
+`job_project_build` does. `job_binary_evidence_indexing` requires the `job_target_catalog` envelope
+because it composes its shards onto that producer's pinned retrieval manifest. A job that does not
+use what a loader can read asks for less instead: `job_artifact_indexing` and
+`job_ci_configuration_analysis` call `load_target_catalog(..., intake_target_root=False)`.
+`tests/test_plan_environment_consumers.py` and `tests/test_binary_evidence_indexing.py` run these
+paths through the real runner.
+
 The inference-review fixture pins the complete original producers' declarations and artifacts,
 publishes current input-summary metadata, and supplies verified package publication where the
 scanner-correlation prerequisite exists. Required but unpopulated fixture datasets publish explicit

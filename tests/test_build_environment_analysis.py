@@ -141,9 +141,6 @@ def _published(tmp_path, *, reusable=False, mode="strict"):
             f'[review_policy]\nmode = "{mode}"\nproject_id = "synthetic-environment"\n'
             'approved_first_party_projects = ["synthetic-environment"]\n'
             f'target_root = {json.dumps(str(target))}\ncustody = "application_private_v1"')
-        text = text.replace("[review_policy.releases]\n",
-            '[review_policy.releases]\nplatform = "synthetic-environment-platform/1"\n'
-            'validation = "synthetic-environment-validation/1"\n')
     config_path.write_bytes(text.encode("utf-8"))
     config = load_config(config_path)
     (target / "setup.sh").write_bytes(b"SDK_ROOT=tools/sdk\n")

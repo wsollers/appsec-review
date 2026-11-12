@@ -14,8 +14,9 @@ What a run records and what it does not:
 * Lane A findings are scanner-backed by construction. A lane B finding is scanner-backed when a
   scanner observation overlaps one of its locations, and unknown (``None``) when the run has no
   observation index: unknown is never counted as scanner-independent.
-* A run does not record which source files a review covered, so ``reviewed_units`` is supplied by
-  the caller or stays ``None`` with the named gap ``reviewed_units_not_supplied``.
+* ``reviewed_units`` is the caller's: an operator file, or the files ``coverage_adapter`` derives
+  from the run's review packages, cell records and accepted source catalog. Without either it stays
+  ``None`` with the named gap ``reviewed_units_not_supplied``, or with the derivation's own gap.
 * Enclosing functions, owners, attacker position and remediation are not recorded by the review
   today; they stay ``None`` (not established) unless the caller's slice rules establish them.
 """
@@ -234,19 +235,25 @@ def snapshot_from_run(run_root: Path, *, target_id: str, source_revision: str,
                       reviewed_units: Mapping[str, str | None] | None = None,
                       unreviewed_units: Mapping[str, str] | None = None, stage: str = "published",
                       annotate: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
-                      loader: Callable[[Path], RunDocuments] = load_run) -> dict[str, Any]:
+                      loader: Callable[[Path], RunDocuments] = load_run,
+                      unit_gaps: Iterable[str] = ()) -> dict[str, Any]:
     """The ``finding-snapshot/1`` of ``run_root``.
 
     ``target_id`` and ``source_revision`` are the caller's: a run names its target by path and
     fingerprint, neither of which is stable across revisions. ``annotate`` (for example
     ``slices.annotate`` bound to the operator's rules) runs on each record before fingerprinting;
     the dimensions it sets are not part of a finding's identity. ``loader`` is the read boundary.
+    ``unit_gaps`` are the named gaps of a derivation of the units (``coverage_adapter``): they are
+    recorded with the units, and when the units are ``None`` they replace the generic
+    ``reviewed_units_not_supplied`` with the specific reason.
     """
     documents = loader(Path(run_root))
     records, gaps = findings_from_documents(documents)
     if annotate is not None:
         records = [annotate(record) for record in records]
-    if reviewed_units is None:
+    derivation = sorted(set(unit_gaps))
+    gaps = sorted({*gaps, *derivation})
+    if reviewed_units is None and not derivation:
         gaps = sorted({*gaps, GAP_NO_UNITS})
     identities = documents.identities
     return build_snapshot(

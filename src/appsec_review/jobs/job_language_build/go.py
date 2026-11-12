@@ -3,21 +3,25 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import struct
 from typing import Any
 
 from appsec_review.config import GoBuildSettings
+from appsec_review.config.assurance import ScopeRole
 from appsec_review.container_runtime import VerifiedCapture
 from appsec_review.jobs.build_discovery import GO_MOD_SUBCOMMANDS, GO_SUBCOMMANDS, go_recipe_errors
+from appsec_review.jobs.build_output_scope import BuildOutputDispositions, Decision, summarized_content_gap
 from appsec_review.storage import canonical_json, file_sha256
 
-from . import elf
+from . import elf, go_vendored
 from .capture import image_owned
 
 
-CAPTURE_IDENTITY = "appsec-review/go-build-capture/3"
+CAPTURE_IDENTITY = "appsec-review/go-build-capture/4"
+_MAX_UNVERIFIED_GAPS = 50
 BUILD_FACTS_PARSER = "appsec-review/go-elf-build-facts/1"
 PACKAGE_CATALOG_SCHEMA = "appsec-review/go-package-catalog/1"
 _LIST_VALUE_OPTIONS = {"-tags", "-mod"}
@@ -607,3 +611,166 @@ def build_facts(path: Path) -> dict[str, Any]:
                                                        item.flags & _SHF_COMPRESSED for item in dwarf),
                                "symbol_table": ".symtab" in named,
                                "pc_line_table": ".gopclntab" in named}}
+
+
+VENDORED_MODULE_ROLE = ScopeRole.RUNTIME_DEPENDENCY.value
+
+
+def _new_file_below(workspace: Path, root: str, before: Mapping[str, str]) -> bool:
+    for raw_root, directories, names in os.walk(workspace / Path(*PurePosixPath(root).parts), followlinks=False):
+        directories.sort()
+        directory = Path(raw_root)
+        relative = directory.relative_to(workspace).as_posix()
+        if any(f"{relative}/{name}" not in before and not (directory / name).is_symlink() for name in names):
+            return True
+    return False
+
+
+def _vendor_written(workspace: Path, before: Mapping[str, str], record: go_vendored.VendorRecord) -> bool:
+    """Whether the build wrote this vendor tree's record (or, without one, any file in the tree)."""
+    path = go_vendored.record_path(record.prefix)
+    if record.record is not None:
+        return before.get(path) != record.record.sha256
+    if record.reason == "missing":
+        return _new_file_below(workspace, go_vendored.vendor_root(record.prefix), before)
+    try:
+        return before.get(path) != file_sha256(workspace / Path(*PurePosixPath(path).parts))
+    except OSError:
+        return True
+
+
+class VendoredCatalog:
+    """Installer-record coverage of the Go vendor trees a build wrote, for the generic catalog walk.
+
+    A ``vendor/modules.txt`` equal to the pre-build snapshot is committed target content, not a
+    recipe-run ``go mod vendor``: its tree is not classified and gets no record row and no gap,
+    so its files keep the generic per-file behaviour. For a written record, each verified module
+    is registered with the shared build-output recorder before its walk, which prunes the
+    module's tree to its anchor and linked binaries. The record names no build-only module, so
+    every verified module is a ``runtime_dependency``.
+    """
+
+    def __init__(self, workspace: Path, before: Mapping[str, str], dispositions: BuildOutputDispositions) -> None:
+        prefixes, discovery_gaps = go_vendored.discover_prefixes(workspace)
+        self.records = [record for record in (go_vendored.parse_vendor_record(workspace, prefix)
+                                              for prefix in prefixes)
+                        if _vendor_written(workspace, before, record)]
+        self.gaps = list(discovery_gaps)
+        self.record_paths = {record.record.workspace_path for record in self.records if record.record is not None}
+        self.modules: dict[str, tuple[go_vendored.VendorRecord, go_vendored.VendoredModule]] = {}
+        self.domains: dict[str, str] = {}
+        self.registered: set[str] = set()
+        self.uncovered: dict[str, int] = {}
+        # install path -> [retained rows, retained bytes]
+        self.retained: dict[str, list[int]] = {}
+        self.rows: dict[str, dict[str, Any]] = {}
+        unverified: list[go_vendored.UnverifiedModule] = []
+        for record in self.records:
+            root = go_vendored.vendor_root(record.prefix)
+            if not record.available:
+                self.gaps.append(f"{root}: Go installer record unavailable ({record.reason}); "
+                                 "dependency files cataloged per-file in the target lane")
+                continue
+            self.domains[root] = record.prefix
+            unverified.extend(record.unverified)
+            for module in record.modules:
+                self.modules[module.install_path] = (record, module)
+        self.gaps.extend(f"{item.install_path}: vendored module is not verified against the Go installer "
+                         f"record ({item.reason}); cataloged per-file"
+                         for item in unverified[:_MAX_UNVERIFIED_GAPS])
+        if len(unverified) > _MAX_UNVERIFIED_GAPS:
+            self.gaps.append(f"{len(unverified) - _MAX_UNVERIFIED_GAPS} further unverified Go modules "
+                             "cataloged per-file")
+        for install_path, (record, module) in sorted(self.modules.items()):
+            assert record.record is not None
+            if dispositions.classify_tree(
+                    install_path, disposition="supply_chain", basis="installer-record",
+                    name="go-vendored-module", reason="verified against vendored packages",
+                    evidence_ref=f"{record.record.workspace_path}#{module.entry}", confidence="fact",
+                    scope_role=VENDORED_MODULE_ROLE, keep=(module.anchor.workspace_path,), keep_linked=True,
+                    bound_group=go_vendored.vendor_root(record.prefix)):
+                self.registered.add(install_path)
+        for item in unverified:
+            # Deepest registered root wins: an unverified module nested in a verified one stays per-file.
+            if any(parent.as_posix() in self.modules for parent in PurePosixPath(item.install_path).parents):
+                dispositions.classify_tree(
+                    item.install_path, disposition="per_file", basis="installer-record",
+                    name="go-unverified-module", reason=item.reason, confidence="fact")
+
+    def _owner(self, decision: Decision) -> tuple[go_vendored.VendorRecord, go_vendored.VendoredModule] | None:
+        return self.modules.get(decision.root) if decision.kept and decision.root is not None else None
+
+    def visit(self, relative: str, decision: Decision) -> str | None:
+        """Count a walked file no record covers; return the kind of a record or anchor row."""
+        if relative in self.record_paths:
+            return "resolved-dependency-metadata"
+        owner = self._owner(decision)
+        if owner is not None:
+            return "package-metadata" if relative == owner[1].anchor.workspace_path else None
+        for root, prefix in self.domains.items():
+            if relative.startswith(root + "/"):
+                self.uncovered[prefix] = self.uncovered.get(prefix, 0) + 1
+                break
+        return None
+
+    def describe(self, artifact: dict[str, Any], decision: Decision) -> None:
+        """Add the installer-record facts of a record, anchor or retained row."""
+        relative = str(artifact["workspace_path"])
+        if relative in self.record_paths:
+            artifact["dependency_metadata"] = {"format": go_vendored.RECORD_NAME, "manager": "go",
+                                               "role": "installed-dependency-record"}
+            return
+        owner = self._owner(decision)
+        if owner is None:
+            return
+        record, module = owner
+        assert record.record is not None
+        artifact["delivery_evidence"] = {
+            "kind": "go-vendor-modules-record", "workspace_path": record.record.workspace_path,
+            "sha256": record.record.sha256, "entry": module.entry}
+        if relative != module.anchor.workspace_path:
+            total = self.retained.setdefault(module.install_path, [0, 0])
+            total[0] += 1
+            total[1] += int(artifact["size_bytes"])
+            return
+        if artifact["sha256"] != module.anchor.sha256:
+            raise ValueError("vendored Go module anchor changed during cataloging")
+        artifact["package_metadata"] = {
+            "format": "go-source-file", "role": "installed-dependency-package",
+            "ecosystem": "go", "manager": "go", "name": module.name, "version": module.version,
+            "replacement": ({"path": module.replacement_path, "version": module.replacement_version}
+                            if module.replacement_path is not None else None),
+            "explicit": module.explicit, "go_version": module.go_version,
+            "packages": len(module.packages), "install_path": module.install_path,
+            "files": 0, "bytes": 0, "retained_files": 0}
+        self.rows[module.install_path] = artifact
+
+    def summary(self, dispositions: BuildOutputDispositions) -> list[str]:
+        """One summary gap per written record from the walk's root counts; retained rows excluded."""
+        counted = {str(root["root"]): root for root in dispositions.roots()}
+        gaps = []
+        for record in self.records:
+            if not record.available or record.record is None:
+                continue
+            owned = [module for module in record.modules if module.install_path in self.registered]
+            uncovered = self.uncovered.get(record.prefix, 0)
+            if not owned:
+                if uncovered:
+                    gaps.append(f"{go_vendored.vendor_root(record.prefix)}: Go installer record covers no "
+                                f"vendored module; {uncovered} files under vendor remain per-file")
+                continue
+            files = size = 0
+            for module in owned:
+                root = counted[module.install_path]
+                retained, retained_bytes = self.retained.get(module.install_path, (0, 0))
+                files += int(root["files"]) - retained
+                size += int(root["bytes"]) - retained_bytes
+                if (row := self.rows.get(module.install_path)) is not None:
+                    row["package_metadata"].update(files=int(root["files"]), bytes=int(root["bytes"]),
+                                                   retained_files=retained)
+            gap = summarized_content_gap(len(owned), "modules", files, size, record.record.workspace_path,
+                                         "supply_chain")
+            if uncovered:
+                gap += f"; {uncovered} files under vendor not covered by the installer record remain per-file"
+            gaps.append(gap)
+        return gaps

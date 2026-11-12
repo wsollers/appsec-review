@@ -37,6 +37,8 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        # load_accepted_plan re-reads the environment publication the accepted plan is bound to
+        # (EXPECTED_CURRENT / OPTIONAL_PRIOR), so that producer is a declared, optional input.
         InputRequirement("job_build_environment_analysis", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.OPERATIONAL),
         InputRequirement("job_build_environment_analysis", "build_environment",

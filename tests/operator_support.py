@@ -235,10 +235,11 @@ class Sandbox:
                 **(extra or {})}
 
     def run(self, script: str, *arguments: str, extra: dict[str, str] | None = None,
-            cwd: Path | None = None) -> subprocess.CompletedProcess:
+            cwd: Path | None = None, stdin: str | None = None) -> subprocess.CompletedProcess:
+        """``stdin`` is what the operator types (``""`` is an immediate end of input); default: inherited."""
         return subprocess.run(["bash", str(self.repo / "scripts" / f"{script}.sh"), *arguments], text=True,
                               capture_output=True, env=self.environment(extra), cwd=cwd or self.base, timeout=120,
-                              check=False)
+                              check=False, input=stdin)
 
     def install_fake_python(self) -> str:
         (self.repo / "tests").mkdir(exist_ok=True)

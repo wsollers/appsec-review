@@ -7,6 +7,8 @@ import sys
 
 import pytest
 
+from appsec_review.config.host_pins import HOST_PINS_ENV
+
 
 @pytest.mark.parametrize(("arguments", "imported", "passed"), [
     ((), (), 1),
@@ -25,9 +27,15 @@ def test_collection_scope(tmp_path: Path, arguments, imported, passed):
     root = tmp_path / "p"
     tests = root / "tests"
     tests.mkdir(parents=True)
-    for harness in ("conftest.py", "time_budgets.py"):
+    for harness in ("conftest.py", "time_budgets.py", "host_pins_support.py"):
         (tests / harness).write_text(
             Path(__file__).with_name(harness).read_text(encoding="utf-8"), encoding="utf-8")
+    # The harness writes inert unit-test host pins from the project's own configuration and image
+    # catalog, so the isolated project carries the real ones.
+    repository = Path(__file__).resolve().parents[1]
+    for document in ("appsec-review.toml", "containers/catalog.toml"):
+        (root / document).parent.mkdir(parents=True, exist_ok=True)
+        (root / document).write_bytes((repository / document).read_bytes())
     (root / "pyproject.toml").write_text(
         '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n'
         'addopts = "--basetemp=test/tmp"\ncache_dir = "test/tmp/.pytest_cache"\n',
@@ -41,9 +49,12 @@ def test_collection_scope(tmp_path: Path, arguments, imported, passed):
             "from pathlib import Path\n"
             "Path(__file__).with_suffix('.imported').write_text('imported', encoding='utf-8')\n"
             "def test_selected(): assert True\n", encoding="utf-8")
+    # The outer session's fixture host pins live under the outer scratch root; the isolated project
+    # is its own session and its harness refuses a binding from outside its own test/tmp.
+    environment = {key: value for key, value in os.environ.items() if key != HOST_PINS_ENV}
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", *arguments],
-        cwd=root, env={**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+        cwd=root, env={**environment, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTHONDONTWRITEBYTECODE": "1"},
         capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"{passed} passed" in result.stdout, result.stdout

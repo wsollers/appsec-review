@@ -17,8 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from appsec_review.observability.findings import history, lifecycle, run_adapter, scorecard
+from appsec_review.observability.findings import (
+    coverage, coverage_adapter, history, lead_adapter, lifecycle, run_adapter, scorecard, triage)
 from appsec_review.observability.findings.contracts import check_snapshot, digest
+from appsec_review.observability.triage_reduction import triage_reduction_metrics
 from tests.final_report_support import run_review_chain
 
 pytestmark = pytest.mark.time_budget(900, reason="one scripted review, gate and report chain per test")
@@ -72,6 +74,35 @@ def test_a_real_accepted_run_yields_a_valid_snapshot_and_scorecard(tmp_path):
     lines = scorecard.render_lines(document)
     assert lines[1] == "1. For the team" and any(line.startswith("   not measured: ") for line in lines)
     json.dumps(document)
+
+    # T-073: the units derived from the same run are either a valid unit set or a named reason.
+    # Whether this fixture chain yields a non-null set has not been observed (this suite is not run
+    # by the implementing session); either way the generic not-supplied gap must be gone.
+    derived = coverage_adapter.coverage_from_run(chain.run_root)
+    underived = [gap for gap in derived["unit_gaps"] if gap.startswith("reviewed_units_not_derived:")]
+    assert (derived["reviewed"] is None) == bool(underived)
+    with_units = run_adapter.snapshot_from_run(
+        chain.run_root, target_id="fixture", source_revision=REVISION_ONE, reviewed_units=derived["reviewed"],
+        unreviewed_units=derived["unreviewed"], unit_gaps=derived["unit_gaps"])
+    assert check_snapshot(with_units) == with_units
+    assert "reviewed_units_not_supplied" not in with_units["gaps"]
+    if derived["reviewed"] is not None:
+        assert not set(derived["reviewed"]) & set(derived["unreviewed"])
+        assert set(derived["unreviewed"].values()) <= set(coverage_adapter.UNREVIEWED_REASONS)
+        assert coverage.unit_coverage(with_units)["available"] is True
+    assert (derived["entry_points"] is None) == any(
+        gap.startswith("entry_points_not_derived:") for gap in derived["entry_gaps"])
+
+    # T-077: the derived lead records are what the labelled triage metric validates, and their
+    # dispositions are the run's own triage_reduction partition.
+    leads = lead_adapter.leads_from_run(chain.run_root)
+    section = triage_reduction_metrics(chain.run_root)
+    assert (leads["leads"] is None) == (section["available"] is False)
+    if leads["leads"] is not None:
+        admitted = [row for row in leads["leads"] if row["admitted"]]
+        assert triage.effectiveness(leads["leads"], {})["admitted"] == section["leads"]["admitted"]
+        assert {name: sum(1 for row in admitted if row["disposition"] == name)
+                for name in section["admitted_dispositions"]} == section["admitted_dispositions"]
 
 
 def test_the_same_review_at_two_revisions_persists_and_is_stored_once(tmp_path):

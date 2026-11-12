@@ -124,6 +124,7 @@ def _target_artifacts(unit: UnitContext) -> tuple[list[dict[str, Any]], list[str
     from appsec_review.runtime.consume import has_accepted_upstream
     if not has_accepted_upstream(unit.job.run_root, "job_target_catalog"):
         return [], ["accepted target artifact intake is unavailable"], None
+    # ScanCatalog.target_root is unused here, so the intake handoff (an undeclared input) is not read.
     catalog = load_target_catalog(unit.job.run_root, intake_target_root=False)
     if catalog.source_fingerprint != unit.job.source_fingerprint:
         raise ArtifactIndexIntegrityError("target artifact intake belongs to a different target")

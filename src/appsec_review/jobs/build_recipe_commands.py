@@ -201,6 +201,13 @@ def prepare_recipe_command(workspace: Path, validation_unit: Mapping[str, Any],
         if driver is None:
             raise ValueError("Make default driver is absent")
         drivers = (driver,)
+        if (driver not in documents and phase == "build" and plan.make_directory == source
+                and validation_unit.get("build_system") == "phpize" and recipe.get("configure_commands")):
+            # phpize and its ./configure generate this Makefile in the recipe's own configure
+            # phase (build_discovery accepts that generated driver for the same reason). It is a
+            # product of the accepted config.m4, so that descriptor is the source authority to
+            # recheck. A Makefile that is itself an accepted document is still checked as one.
+            drivers = ((PurePosixPath(source) / "config.m4").as_posix(),)
     for relative in drivers:
         document, path = documents.get(relative), contained(relative)
         if (document is None or not path.is_file()

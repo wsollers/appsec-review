@@ -57,6 +57,7 @@ class Inputs:
     reviewed_kloc: float | None = None
     cost: Mapping[str, Any] | None = None
     slice_rules_sha256: str | None = None
+    input_gaps: Sequence[str] = ()                         # named gaps of inputs derived from a run
     budget: int = DEFAULT_BUDGET
 
 
@@ -97,6 +98,12 @@ def _labels(snapshot: Mapping[str, Any], inputs: Inputs) -> dict[str, Any] | Non
         if extra is not None:
             maps.append(extra)
     return label_rules.merge(*maps) if maps else None
+
+
+def _gap(value: Any) -> str:
+    if not isinstance(value, str) or not value or len(value) > 512 or "\n" in value or "\r" in value:
+        raise ValueError("an input gap must be a short single-line string")
+    return value
 
 
 def _blind_spots(document: Mapping[str, Any], prefix: str = "") -> list[str]:
@@ -179,6 +186,7 @@ def build(snapshot: Mapping[str, Any], inputs: Inputs = Inputs()) -> dict[str, A
              "ownership": item["ownership"], "path": item["locations"][0]["path"]}
             for item in findings if is_actionable(item)],
         "snapshot_gaps": list(snapshot["gaps"]),
+        "input_gaps": sorted({_gap(item) for item in inputs.input_gaps}),
         "interpretation": ("reported, never asserted; no figure here is evidence that a target is clean, "
                            "and an unavailable family is not a zero"),
     }
@@ -297,6 +305,8 @@ def render_lines(document: Mapping[str, Any]) -> list[str]:
         lines.append(f"   memory-safety crash buckets with no finding: {crash.get('memory_safety_buckets_without_finding')}")
     for gap in document["snapshot_gaps"]:
         lines.append(f"   gap: {gap}")
+    for gap in document.get("input_gaps", ()):
+        lines.append(f"   gap (derived input): {gap}")
     for spot in document["blind_spots"]:
         lines.append(f"   not measured: {spot}")
     return lines

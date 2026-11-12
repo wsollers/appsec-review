@@ -243,8 +243,13 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
     return path
 
 
+BLOCKED_GAP = ("unit-blocked (projects/native/blocked): C/C++ analysis unavailable because the native "
+               "build failed upstream in job_language_build (BLOCKED)")
+
+
 def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = False,
-                          worker_config: AppConfig | None = None) -> tuple[Path, Path]:
+                          worker_config: AppConfig | None = None,
+                          blocked_case: bool = False) -> tuple[Path, Path]:
     runs, run_root = tmp_path / "runs", tmp_path / "runs" / RUN_ID
     target = tmp_path / "target"
     target.mkdir()
@@ -290,6 +295,10 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
                         {"path": "build/libapp.a", "kind": "library", "sha256": file_sha256(archive),
                          "size_bytes": archive.stat().st_size}], "image_id": "sha256:" + "1" * 64,
         }}}}
+    if blocked_case:
+        # What job_cpp_compiled_analysis catalogs for a unit whose native build was refused upstream.
+        outputs["catalog.projects"]["projects"]["unit-blocked"] = {
+            "terminal_status": "COMPLETED_WITH_GAPS", "gaps": [BLOCKED_GAP]}
     from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS
     from appsec_review.runtime.datasets import dataset_contract
     fixture_config = worker_config or load_config(tmp_path / "appsec-review.toml")
@@ -423,6 +432,29 @@ def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
     assert receipt["error"]["message"] == "claimed upstream handoff belongs to a different target"
     assert not (runs / RUN_ID / "data" / "jobs" / "job_post_build_security_assessment" /
                 "attempts" / "attempt_0001" / "steps").exists()
+
+
+def test_a_case_whose_build_was_blocked_upstream_completes_with_gaps_and_no_model_call(tmp_path: Path) -> None:
+    """Review 2026-11-11-0004: a blocked native build failed the inference stage with KeyError 'artifact'."""
+    config = load_config(_post_build_config(tmp_path, model_enabled=True))
+    runs, target = _accepted_cpp_fixture(tmp_path, blocked_case=True)
+    outcome = JobRunner(config).run(build_job(infer=_context_inference),
+        run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
+        upstream_handoffs=_cpp_handoffs(runs))
+    assert outcome["status"]["status"] == "COMPLETED_WITH_GAPS"
+    outputs = outcome["result"]["outputs"]
+    run_root = runs / RUN_ID
+    for stage in ("provenance", "inspection", "deterministic", "inference"):
+        blocked = outputs[f"{stage}.native_units"]["projects"]["unit-blocked"]
+        assert blocked["terminal_status"] == "COMPLETED_WITH_GAPS", stage
+        assert file_sha256(run_root / blocked["artifact"]["path"]) == blocked["artifact"]["sha256"], stage
+    provenance = outputs["provenance.native_units"]["projects"]["unit-blocked"]
+    assert provenance["actions"] == [] and provenance["artifacts"] == [] and provenance["gaps"] == [BLOCKED_GAP]
+    inference = outputs["inference.native_units"]["projects"]["unit-blocked"]
+    assert inference["model_calls"] == 0 and inference["observations"] == []
+    assert any("inference was not run" in gap for gap in inference["gaps"])
+    # The built sibling is still assessed by the model.
+    assert outputs["inference.native_units"]["projects"]["unit-a"]["model_calls"] == 1
 
 
 def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:

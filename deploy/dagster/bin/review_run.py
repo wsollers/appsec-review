@@ -239,12 +239,13 @@ def show_run(run: dict) -> None:
 
 
 def submit(run_id: str, url: str, *,
-           stop_on_first_error: bool = False) -> None:
+           stop_on_first_error: bool = False, no_probe: bool = False) -> None:
     import ops
 
     args = ops.build_parser().parse_args(["review-start", "--url", url, "--id-wait", "0"])
     args.dagster_run_id = run_id
     args.stop_on_first_error = stop_on_first_error
+    args.no_probe = no_probe  # default: the same model login probe review-start runs before the intent
     ops.cmd_review_start(args)
     print(f"submitted_dagster_run_id={run_id}", flush=True)
 
@@ -257,6 +258,8 @@ def main() -> int:
                         "<APPSEC_DAGSTER_WEB_PORT, default 3000>/graphql)")
     parser.add_argument("--interval-seconds", type=int, default=30)
     parser.add_argument("--stop-on-first-error", action="store_true")
+    parser.add_argument("--no-probe", action="store_true",
+                        help="submit only: skip the model login probe that runs before the submission is recorded")
     args = parser.parse_args()
     from host import url_or_default
 
@@ -273,7 +276,7 @@ def main() -> int:
             if args.action == "reconcile":
                 reconcile_submission(run_id, args.url)
                 return 0
-            submit(run_id, args.url, stop_on_first_error=args.stop_on_first_error)
+            submit(run_id, args.url, stop_on_first_error=args.stop_on_first_error, no_probe=args.no_probe)
         except ops.OpsError as error:
             print(f"error: {error}", file=sys.stderr, flush=True)
             return error.code

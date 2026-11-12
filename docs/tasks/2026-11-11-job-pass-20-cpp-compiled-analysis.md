@@ -119,3 +119,18 @@ budget. Their fixture narrowing is unfinished; passing assertions do not satisfy
 timing requirement. Optional-prior restoration was not added, and its setup rejection
 was not hidden with a skip or xfail. This checkpoint is not live repair acceptance.
 The run remains paused with nineteen acceptances, and nothing was pushed or restarted.
+
+The subsequent requested merge imports `origin/main` at `5ffc78e42`. Three code conflicts
+were the same already-implemented input-boundary fixes plus upstream explanatory comments;
+the shared fixes and comments were retained. The recovery documentation keeps both the
+verified-context paragraph and the new upstream `review-recover` instructions.
+The environment test fixture now uses the newly declared central release IDs rather than
+inserting duplicate TOML keys.
+
+Merged configuration/registry parity, the three overlapping job contracts, documentation
+links and `git diff --check` passed. The required registry command
+`.venv/bin/python deploy/dagster/bin/ops.py run-tests --expect-tests 5 --parallel --test-workers 2 --shuffle-seed 11122 --strict -- tests/test_todo_registry.py`
+passed five cases in 2.03 s, none over ten seconds; report:
+`test/tmp/reports/tests-custom-20261112-013926-168366-93340.json`.
+The broader incoming changes and the known-slow recovery cases were not rerun as a merge
+gate. The merged configuration and code have not been deployed into the paused review.

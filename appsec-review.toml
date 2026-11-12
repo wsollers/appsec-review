@@ -53,6 +53,12 @@ codeql = "codeql-2.27.0-cert-v2.62.0"
 codeql_runner = "appsec-codeql-runner-89568569"
 job_openvex_export = "openvex-export-2"
 job_debug_symbol_indexing = "debug-symbol-readers-3"
+# Build iterations dispatch and reuse nothing unless these three are declared
+# (jobs/build_iterations.py). Declared by the deployment owner on 2026-11-11; bump when the
+# application implementation, the native build image or the validation contracts change.
+platform = "appsec-review-2026-11-11"
+build_toolchain = "noble-gcc13.3-clang18.1"
+validation = "validation-2026-11-11"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.

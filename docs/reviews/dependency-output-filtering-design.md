@@ -71,7 +71,7 @@ ecosystem.
 | **npm** | **In scope.** Only this ecosystem was observed inflating the catalog. | Section 1; `node.py:325-329` keeps every `node_modules` file |
 | pnpm, yarn classic, yarn berry | Deferred. A `[build_outputs]` rule handles them meanwhile. | `LOCKFILES` (`node.py:21-24`) knows their project lockfiles, but no installer record is parsed. pnpm's real files sit under `node_modules/.pnpm`. |
 | C/C++ (FetchContent `_deps`, ExternalProject, vcpkg, Conan, Meson subprojects) | **Owned by Native build output design**, including the configurable exclusion (direction item 4). | Only bookkeeping is excluded today (`build_bookkeeping.py`); the generic `_kind` turns a new `.c`/`.h` file into `generated-source` (`job.py:270`). |
-| Go | Deferred. This is the next candidate. Installer record: `vendor/modules.txt`. | `GOMODCACHE` is outside the workspace (`project_images.py:349`; `job_project_build/job.py:315`). A recipe step running `go mod vendor` (`go.py:84-87`) writes `vendor/**.go`, which `_kind` labels `generated-source`. `module_metadata` already locates `modules.txt` (`go.py:200-209`). |
+| Go | Deferred here; **implemented later** (T-011 step 1, see [section 7](#7-implementation-status)). Installer record: `vendor/modules.txt`. | `GOMODCACHE` is outside the workspace (`project_images.py:349`; `job_project_build/job.py:315`). A recipe step running `go mod vendor` (`go.py:84-87`) writes `vendor/**.go`, which `_kind` labels `generated-source`. `module_metadata` already locates `modules.txt` (`go.py:200-209`). |
 | PHP (Composer) | Deferred. Installer record: `vendor/composer/installed.json`. | Image dependencies use `COMPOSER_VENDOR_DIR` outside the workspace (`project_images.py:358-359`), but a recipe-run `composer install` writes `vendor/`. Every changed `.php` file becomes `generated-source` (`php.py:136-137`). `composer_metadata` already marks prod packages unknown with a gap each (`php.py:91-97`); the follow-up should move them to `RUNTIME_DEPENDENCY` (D4). |
 | Rust | Deferred. Installer record: the receipt's `cargo_metadata`, where a package source is a registry or a path. | `CARGO_HOME` is outside (`project_images.py:348`). Committed `vendor/` source is unchanged and skipped (`job.py:316-319`). Registry crates' `target/<profile>/deps` libraries are still cataloged (`rust.py:413-424`). Volume has not been measured. |
 | .NET | Deferred. Installer record: `obj/project.assets.json`. | `NUGET_PACKAGES` is outside (`project_images.py:352`). Package assemblies copied into `bin/` are cataloged as `managed-assembly` (`dotnet.py:98-102`). The assets file is already recognized (`dotnet.py:123-124`). |
@@ -423,7 +423,7 @@ The current behavior is documented in
 
 | Decision | Status |
 |---|---|
-| D1 (npm only) | Implemented. The other ecosystems are deferred in [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems). |
+| D1 (npm only) | Implemented. Go followed (below). The other ecosystems are deferred in [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems). |
 | D2 (parser) | Implemented in `node_installed.py`, with the deviations below. |
 | D3 (package and record rows) | Implemented. |
 | D4 (roles and lanes) | Implemented: `runtime_dependency` and `build_dependency` in the supply_chain lane, with the `blint` exception below. |
@@ -486,7 +486,39 @@ The current behavior is documented in
   identities. In the count regression `blint` now selects exactly the verified production addon;
   a variant marking that package `dev` selects nothing.
 
-**Tests.** The unit tests below belong to the implementation. The docs session ran only
+**Go vendor trees (T-011 step 1).** The first deferred ecosystem follows D2–D7 with
+`vendor/modules.txt` as the installer record; the current behavior is documented under vendored Go
+modules in [language build](../operations/language-build.md). The parser is
+`job_language_build/go_vendored.py`; `go.VendoredCatalog` registers the D5 roots, and the generic
+`job.py` `_catalog` calls it for the `go` family. Differences from the npm contract, each forced by
+what the record carries:
+
+- **Verification is structural (D2).** `modules.txt` has no digests and vendored modules have no
+  manifest, so an entry is verified by the vendored tree's shape: real directories for the module
+  and each listed package, a regular `.go` file in each, and no unlisted directory holding `.go`
+  files. A module replaced by a directory is never verified (`local-replacement`): its content is
+  local code under a registry name and version.
+- **Anchor (D3).** The row is anchored on the first `.go` file of the module's first package, with
+  kind `package-metadata` so that it is not source-bearing (D8). `delivery_evidence.kind` is
+  `go-vendor-modules-record`.
+- **Roles (D4).** The record marks no build-only module, so every verified module is
+  `runtime_dependency`. No scope or policy identity changes; `go.CAPTURE_IDENTITY` becomes
+  `go-build-capture/4`.
+- **Only a build-written record (D2).** A record equal to the pre-build snapshot is committed
+  target content and is left alone, because the generic Go catalog (unlike the Node one) lists only
+  changed files.
+- **Retained rows (D3).** Linked binaries are kept through `keep_linked`, not a per-kind list.
+- **Gaps (D6).** The texts say `modules`, `vendor` and `Go installer record`; (c) reads
+  `vendored module is not verified against the Go installer record`, and one added gap names an
+  available record that verifies nothing while files exist.
+- **Not done.** No scan-once presentation in artifact security analysis (D8): Go anchors and the
+  record row are scanned, or skipped by format, per row.
+
+Unit tests: `tests/test_go_vendored_dependencies.py` and
+`tests/test_go_dependency_output_filtering.py`. No Go toolchain was run and no real `go mod vendor`
+tree was cataloged; integration and live validation remain the user's to run.
+
+**Tests.** The unit tests below belong to the npm implementation. The docs session ran only
 documentation checks.
 
 - `tests/test_node_installed_dependencies.py`: 11 tests.

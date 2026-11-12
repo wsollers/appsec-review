@@ -26,7 +26,8 @@ import review_run  # noqa: E402
 
 SCRIPTS = REPOSITORY / "scripts"
 NAMES = ("stack-start", "stack-stop", "stack-restart", "stack-rebuild", "stack-status", "stack-logs", "review-start",
-         "review-watch", "review-status", "review-stop", "review-stop-id", "clean-temp", "run-tests", "run-readiness")
+         "review-watch", "review-status", "review-stop", "review-stop-id", "review-recover", "clean-temp", "run-tests",
+         "run-readiness")
 APP_ID = "2026-10-21-0007"
 UUID_ONE = "11111111-1111-4111-8111-111111111111"
 UUID_TWO = "22222222-2222-4222-8222-222222222222"
@@ -152,7 +153,8 @@ def test_help_lists_usage_and_the_powershell_twin(name: str) -> None:
 
 @pytest.mark.parametrize("name,arguments", [
     ("stack-start", ["--bogus"]), ("stack-logs", ["nosuchservice"]), ("review-stop-id", []),
-    ("review-stop-id", ["not-an-id"]), ("run-tests", ["nosuchsuite", "--dry-run"]),
+    ("review-stop-id", ["not-an-id"]), ("review-recover", []), ("review-recover", ["not-an-id", "--dry-run"]),
+    ("run-tests", ["nosuchsuite", "--dry-run"]),
     ("clean-temp", ["--yes", "--dry-run"]), ("clean-temp", ["--older-than", "soon"]), ("review-watch", ["--interval"]),
 ])
 def test_bad_arguments_exit_with_usage_status(name: str, arguments: list[str]) -> None:
@@ -501,6 +503,109 @@ def test_review_start_stops_on_a_moved_image_pin(box: Sandbox) -> None:
     assert not [call for call in box.docker_calls() if "launch" in call]
 
 
+# -- review start: the model login is probed before anything is recorded (T-078) --------------------
+EXPIRED_LOGIN = {"match": "claude -p", "rc": 1,
+                 "stderr": "API Error: 401 OAuth access token has expired sk-ant-oat01-ABCDEFGH_secret"}
+
+
+def exec_calls(box: Sandbox) -> list[list[str]]:
+    return [call for call in box.docker_calls() if call[:1] == ["exec"]]
+
+
+def test_review_start_probes_the_model_login_and_then_launches_as_before(box: Sandbox) -> None:
+    box.dagster.runs()
+    result = box.run("review-start", "--id-wait", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    probe, launch = exec_calls(box)  # exactly the probe stack-start uses, then the one launch
+    assert probe[1:4] == [CODE_ID, "claude", "-p"]
+    assert launch[1:5] == [WEBSERVER_ID, "dagster", "job", "launch"]
+    assert "model probe    ok" in result.stdout
+    assert result.stdout.index("model probe") < result.stdout.index("submission intent:")
+    assert review_run.read_submission(box.repo)["state"] == "SUBMITTED"
+
+
+@pytest.mark.parametrize("probe,reason", [
+    (EXPIRED_LOGIN, "the Claude OAuth token looks expired or missing"),
+    ({"match": "claude -p", "rc": 2, "stderr": "boom Bearer abc.def-ghi sk-ant-api03-ABCDEFGH_secret"}, "exit 2: boom"),
+    ({"match": "claude -p", "rc": 0, "stdout": ""}, "exit 0"),
+], ids=["expired-login", "other-failure", "empty-reply"])
+def test_review_start_refuses_an_unanswered_model_probe_and_records_nothing(box: Sandbox, probe: dict,
+                                                                             reason: str) -> None:
+    box.stack(probe=probe)
+    box.dagster.runs()
+    result = box.run("review-start", "--id-wait", "0")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "did not answer the probe" in result.stderr and reason in result.stderr
+    assert 'claude -p "ok"' in result.stderr and "--no-probe" in result.stderr  # the documented remedy
+    assert review_run.read_submission(box.repo) is None
+    assert not (review_run.submission_directory(box.repo) / "active.json").exists()
+    assert [call[2] for call in exec_calls(box)] == ["claude"]  # the probe only: Dagster was never called
+    shown = result.stdout + result.stderr
+    assert "sk-ant" not in shown and "abc.def-ghi" not in shown and "ABCDEFGH" not in shown
+
+
+def test_review_start_probes_only_after_the_other_guards_passed(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs(run(UUID_ONE, "STARTED", app=APP_ID))
+    active = box.run("review-start")
+    assert active.returncode == 3 and UUID_ONE in active.stderr
+    box.dagster.runs()
+    box.state["images"]["img:p1"]["id"] = "sha256:moved"
+    box.save()
+    moved = box.run("review-start")
+    assert moved.returncode == 3 and "preflight failed" in moved.stderr
+    assert exec_calls(box) == []  # a launch another guard refuses never calls the model
+
+
+def test_review_start_no_probe_skips_the_model_probe(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs()
+    result = box.run("review-start", "--no-probe", "--id-wait", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert [call[2] for call in exec_calls(box)] == ["dagster"]
+    assert "not probed (--no-probe)" in result.stdout
+    assert "[switch]$NoProbe" in (REPOSITORY / "scripts/review-start.ps1").read_text(encoding="utf-8")
+
+
+def test_review_start_dry_run_never_calls_the_model(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs()
+    result = box.run("review-start", "--dry-run")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "not probed in a dry run" in result.stdout and "dry run: nothing launched" in result.stdout
+    assert exec_calls(box) == []
+    assert not review_run.submission_directory(box.repo).exists()
+
+
+def test_review_start_probes_the_selected_profiles_provider(box: Sandbox) -> None:
+    box.stack(settings={ops.PROFILE_VARIABLE: "copilot-dev"},
+              probe={"match": "copilot_sdk", "rc": 1, "stderr": "CopilotAuthError: not signed in"})
+    box.dagster.runs()
+    result = box.run("review-start", "--profile", "copilot-prod", "--id-wait", "0")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "profile copilot-prod did not answer the probe" in result.stderr and "CopilotAuthError" in result.stderr
+    assert "model-profiles.md" in result.stderr
+    assert [call[2] for call in exec_calls(box)] == ["python"]  # the Copilot catalog check, never `claude`
+    assert review_run.read_submission(box.repo) is None
+
+
+def test_review_run_submit_runs_the_same_probe_and_honours_no_probe(box: Sandbox) -> None:
+    box.stack(probe=EXPIRED_LOGIN)
+    box.dagster.runs()
+    box.dagster.script("ReviewRun", run_data(run(UUID_ONE, "STARTED")))
+    command = [sys.executable, str(box.deploy / "bin" / "review_run.py"), "submit", "--run-id", UUID_ONE,
+               "--url", box.dagster.url]
+    refused = subprocess.run(command, env=box.environment(), capture_output=True, text=True, timeout=30, check=False)
+    assert refused.returncode == 3 and "did not answer the probe" in refused.stderr
+    assert review_run.read_submission(box.repo) is None
+    assert [call[2] for call in exec_calls(box)] == ["claude"]
+    skipped = subprocess.run([*command, "--no-probe"], env=box.environment(), capture_output=True, text=True,
+                             timeout=30, check=False)
+    assert skipped.returncode == 0, skipped.stdout + skipped.stderr
+    assert review_run.read_submission(box.repo)["dagster_run_id"] == UUID_ONE
+    assert [call[2] for call in exec_calls(box)] == ["claude", "dagster"]
+
+
 @pytest.mark.parametrize("stop_policy", [False, True])
 def test_single_submission_concurrent_invocations_launch_once(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
@@ -520,6 +625,8 @@ def test_single_submission_concurrent_invocations_launch_once(box: Sandbox, stop
 def test_single_submission_lost_response_retains_intent(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
     box.stack(probe={"match": "dagster job launch", "rc": 1, "stderr": "connection lost after submission"})
+    box.state["exec"].insert(0, {"match": "claude -p", "stdout": "ok\n"})  # the model answers; the launch is lost
+    box.save()
     flags = ["--stop-on-first-error"] if stop_policy else []
     result = box.run("review-start", "--id-wait", "0", *flags)
     assert result.returncode == 1 and "UNCERTAIN" in result.stderr
@@ -795,6 +902,303 @@ def test_review_stop_id_needs_yes_when_an_application_run_has_several_active_run
     assert box.run("review-stop-id", APP_ID).returncode == 3
     assert box.run("review-stop-id", APP_ID, "--yes").returncode == 0
     assert len(box.dagster.calls("RecoverRun")) == 2
+
+
+# -- review recover: the existing steps in order, stopping at the first refusal (T-079) -------------
+RECOVER_ID = "2026-11-11-0001"
+PLAN_SHA = "5" * 64
+PLAN_FILE = f"runs/metadata/review-recover/{RECOVER_ID}/repair-plan-{PLAN_SHA}.json"
+STEP_MARKS = (("verify-stops", "verify-stops"), ("plan-repair", "plan-repair"), ("admit-repair", "admit-repair"),
+              ("model-probe", "claude -p"), ("launch", "dagster job launch"))
+
+
+def recover_plan(**changes) -> dict:
+    return {"schema": "appsec-review/repair-plan/1", "run_id": RECOVER_ID, "plan_sha256": PLAN_SHA,
+            "release_sha256": "9" * 64, "admissible": True, "refusals": [], "decisions": [
+                {"job_id": "job_model_connectivity", "action": "RUN", "reasons": ["live gate always executes"],
+                 "handoff_sha256": None},
+                {"job_id": "job_review_intake", "action": "REUSE", "reasons": [], "handoff_sha256": "a" * 64},
+                {"job_id": "job_target_catalog", "action": "INVALIDATE", "reasons": ["previous attempt failed"],
+                 "handoff_sha256": None}], **changes}
+
+
+def exec_rule(box: Sandbox, match: str, **rule) -> None:
+    box.state["exec"] = [{"match": match, **rule} if item["match"] == match else item for item in box.state["exec"]]
+    box.save()
+
+
+def recoverable(box: Sandbox, *, status: str = "FAILURE", state: str | None = "SUBMITTED", accepted: bool = True,
+                submitted: str = UUID_ONE) -> dict:
+    """A failed application run as review-start leaves it: one Dagster dispatch, its claim and its intent."""
+    jobs = box.repo / "runs" / RECOVER_ID / "data" / "jobs"
+    claim = jobs / "job_target_catalog" / "attempts" / "attempt_0001" / "claim.json"
+    claim.parent.mkdir(parents=True)
+    claim.write_text(json.dumps({"run_id": RECOVER_ID, "orchestration": {"system": "dagster", "run_id": UUID_ONE}}),
+                     encoding="utf-8")
+    if accepted:
+        (jobs / "job_review_intake").mkdir()
+        (jobs / "job_review_intake" / "latest.json").write_text(json.dumps({"handoff_sha256": "a" * 64}),
+                                                                 encoding="utf-8")
+    identity = {"url": box.dagster.url, "application_run_id": None}
+    record = {"schema": review_run.SUBMISSION_SCHEMA, "dagster_run_id": submitted, "identity": identity,
+              "identity_sha256": review_run.submission_identity_sha256(identity), "state": state,
+              "created_at": "2026-11-11T00:00:00+00:00"}
+    if state:
+        review_run.write_submission(box.repo, record)
+    item = run(UUID_ONE, status, app=RECOVER_ID)
+    item["tags"].append({"key": "appsec/submission_identity", "value": record["identity_sha256"]})
+    box.dagster.runs(item)
+    box.dagster.script("ReviewRun", run_data(item))
+    box.state["exec"] = [
+        {"match": "verify-stops", "stdout": json.dumps({"run_id": RECOVER_ID, "refusals": [],
+                                                        "verified_dispatches": [UUID_ONE]})},
+        {"match": "plan-repair", "stdout": json.dumps(recover_plan(), indent=2) + "\n"},
+        {"match": "admit-repair", "stdout": "{}\n"}, *box.state["exec"]]
+    box.save()
+    return record
+
+
+def recover_steps(box: Sandbox) -> list[str]:
+    """The container boundary calls a recovery made, in order."""
+    return [next(name for name, mark in STEP_MARKS if mark in " ".join(call)) for call in exec_calls(box)]
+
+
+def intent_state(box: Sandbox) -> str:
+    return review_run.read_submission(box.repo)["state"]
+
+
+def test_review_recover_runs_the_existing_steps_in_their_documented_order(box: Sandbox) -> None:
+    import stepwise_rewind
+
+    recoverable(box)
+    result = box.run("review-recover", RECOVER_ID, "--yes", "--id-wait", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert recover_steps(box) == ["verify-stops", "plan-repair", "admit-repair", "model-probe", "launch"]
+    # Dagster: this run's dispatches, the active-run guard, the reconcile, then the resume's own guard.
+    assert [name for name, _ in box.dagster.requests] == ["OpsRuns", "OpsRuns", "ReviewRun", "OpsRuns"]
+    assert box.dagster.calls("ReviewRun") == [{"runId": UUID_ONE}]
+    verify, plan, admit, _probe, launch = exec_calls(box)
+    # Exactly the probe `stepwise.py recover` sends, for every recorded dispatch, inside the code location.
+    assert verify == ["exec", CODE_ID, "python", "-c", stepwise_rewind.RUNTIME_PROBE, RECOVER_ID,
+                      json.dumps([UUID_ONE]), "verify-stops"]
+    assert plan == ["exec", CODE_ID, "python", "-m", "appsec_review", "plan-repair", "--run-id", RECOVER_ID,
+                    "--target", "/opt/app/targets/appsec-multi-vuln"]
+    assert admit == ["exec", CODE_ID, "python", "-m", "appsec_review", "admit-repair", "--run-id", RECOVER_ID,
+                     "--target", "/opt/app/targets/appsec-multi-vuln", "--plan", f"/opt/app/{PLAN_FILE}"]
+    # Admission is handed exactly the plan that was printed.
+    assert (box.repo / PLAN_FILE).read_text(encoding="utf-8") == json.dumps(recover_plan(), indent=2) + "\n"
+    tags = json.loads(launch[launch.index("--tags") + 1])
+    assert launch[1] == WEBSERVER_ID and tags["appsec/application_run_id"] == RECOVER_ID
+    archived = json.loads((review_run.submission_directory(box.repo) / f"{UUID_ONE}.json").read_text(encoding="utf-8"))
+    assert archived["state"] == "RECONCILED" and archived["terminal_status"] == "FAILURE"
+    assert intent_state(box) == "SUBMITTED" and review_run.read_submission(box.repo)["dagster_run_id"] != UUID_ONE
+    order = [result.stdout.index(text) for text in (
+        "step 1/5", "step 2/5", "reconciled_dagster_run_id", "step 3/5", f"verified stopped: {UUID_ONE}", "step 4/5",
+        f"repair plan {PLAN_SHA}", "reused (1): job_review_intake", "re-run (2):",
+        "job_model_connectivity  RUN  live gate always executes",
+        "job_target_catalog  INVALIDATE  previous attempt failed", "refusals (0): none", "step 5/5",
+        "confirmed by --yes", f"admitted repair plan {PLAN_SHA}", "dagster run id:")]
+    assert order == sorted(order)
+    assert box.lifecycle_calls() == []  # recovery never rebuilds, restarts or reloads the stack
+
+
+@pytest.mark.parametrize("answer,flags", [("n\n", []), ("", []), ("", ["--force"])],
+                         ids=["answered-no", "no-answer", "force-is-not-yes"])
+def test_review_recover_declined_confirmation_admits_and_resumes_nothing(box: Sandbox, answer: str,
+                                                                          flags: list[str]) -> None:
+    recoverable(box)
+    result = box.run("review-recover", RECOVER_ID, *flags, stdin=answer)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "declined: nothing was admitted and nothing was resumed" in result.stderr
+    assert f"Admit repair plan {PLAN_SHA[:12]} and resume {RECOVER_ID}? [y/N]" in result.stdout
+    assert recover_steps(box) == ["verify-stops", "plan-repair"]
+    assert (box.repo / PLAN_FILE).is_file()  # kept for inspection
+    assert review_run.read_submission(box.repo)["dagster_run_id"] == UUID_ONE  # no new submission
+
+
+def test_review_recover_asks_once_and_proceeds_on_yes(box: Sandbox) -> None:
+    recoverable(box)
+    result = box.run("review-recover", RECOVER_ID, "--id-wait", "0", stdin="y\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.count("[y/N]") == 1
+    assert recover_steps(box) == ["verify-stops", "plan-repair", "admit-repair", "model-probe", "launch"]
+
+
+def test_review_recover_refuses_a_non_terminal_dispatch_even_with_force(box: Sandbox) -> None:
+    recoverable(box, status="STARTED")
+    for flags in ([], ["--force", "--yes"]):
+        result = box.run("review-recover", RECOVER_ID, *flags)
+        assert result.returncode == 3, result.stdout + result.stderr
+        assert f"{UUID_ONE} STARTED" in result.stderr and "--force does not override this" in result.stderr
+    assert exec_calls(box) == [] and box.dagster.calls("ReviewRun") == []
+    assert intent_state(box) == "SUBMITTED"
+
+
+def test_review_recover_respects_the_active_run_guard_for_other_reviews(box: Sandbox) -> None:
+    recoverable(box)
+    box.dagster.runs(*box.dagster.routes["OpsRuns"][0]["runsOrError"]["results"],
+                     run(UUID_TWO, "STARTED", app="2026-11-11-0002"))
+    refused = box.run("review-recover", RECOVER_ID, "--yes")
+    assert refused.returncode == 3 and UUID_TWO in refused.stderr and "recover a review" in refused.stderr
+    assert exec_calls(box) == [] and box.dagster.calls("ReviewRun") == [] and intent_state(box) == "SUBMITTED"
+    forced = box.run("review-recover", RECOVER_ID, "--yes", "--force", "--id-wait", "0")
+    assert forced.returncode == 0, forced.stdout + forced.stderr
+    assert recover_steps(box)[-1] == "launch" and "warning" in forced.stdout
+
+
+@pytest.mark.parametrize("case,reason", [
+    ("identity", "reconcile refused: submission is not a confirmed terminal run with matching identity; intent retained"),
+    ("uncertain", "is UNCERTAIN"),
+    ("foreign", f"submission {UUID_TWO} remains SUBMITTED and is not a dispatch of {RECOVER_ID}"),
+], ids=["identity-mismatch", "uncertain-intent", "another-runs-intent"])
+def test_review_recover_stops_at_an_unreconcilable_submission(box: Sandbox, case: str, reason: str) -> None:
+    record = recoverable(box, state="UNCERTAIN" if case == "uncertain" else "SUBMITTED",
+                         submitted=UUID_TWO if case == "foreign" else UUID_ONE)
+    if case == "identity":
+        box.dagster.script("ReviewRun", run_data(run(UUID_ONE, "FAILURE", app=RECOVER_ID)))
+    result = box.run("review-recover", RECOVER_ID, "--yes", "--force")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert reason in result.stderr
+    assert exec_calls(box) == []  # no stop verification, plan, admission or launch after the refusal
+    assert review_run.read_submission(box.repo) == record  # an unreconciled submission still blocks a launch
+    assert len(box.dagster.calls("ReviewRun")) == (1 if case == "identity" else 0)
+
+
+@pytest.mark.parametrize("rule,reason", [
+    ({"stdout": json.dumps({"run_id": RECOVER_ID, "verified_dispatches": [],
+                            "refusals": [f"dispatch {UUID_ONE} worker stop is uncertain: RUNNING"]})},
+     f"recovery requires verified stopped execution: dispatch {UUID_ONE} worker stop is uncertain: RUNNING"),
+    ({"rc": 1, "stderr": "ValueError: Dagster code server did not answer; worker stop cannot be verified"},
+     "stop verification refused (exit 1): ValueError: Dagster code server did not answer"),
+    ({"stdout": json.dumps({"run_id": RECOVER_ID, "verified_dispatches": [], "refusals": []})},
+     f"stop verification did not cover dispatch(es) {UUID_ONE}"),
+    ({"stdout": json.dumps({"run_id": "2026-11-11-0009", "verified_dispatches": [UUID_ONE], "refusals": []})},
+     "returned no usable result"),
+], ids=["live-worker", "probe-error", "dispatch-not-covered", "another-run"])
+def test_review_recover_stops_when_a_worker_stop_is_not_verified(box: Sandbox, rule: dict, reason: str) -> None:
+    recoverable(box)
+    exec_rule(box, "verify-stops", **rule)
+    result = box.run("review-recover", RECOVER_ID, "--yes")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert reason in result.stderr
+    assert recover_steps(box) == ["verify-stops"]  # a failed step is not proof: no plan, admission or launch
+    assert not (box.repo / PLAN_FILE).exists()
+
+
+@pytest.mark.parametrize("rule,reason", [
+    ({"rc": 2, "stdout": json.dumps(recover_plan(
+        admissible=False, refusals=["Dagster dispatch stop requires verify-repair-stop, not just a failed step"]))},
+     "the repair plan is not admissible"),
+    ({"rc": 1, "stderr": "ValueError: unsupported implementation binding"},
+     "plan-repair refused (exit 1): ValueError: unsupported implementation binding"),
+    ({"stdout": json.dumps(recover_plan(run_id="2026-11-11-0009"))}, "plan-repair refused (exit 0)"),
+], ids=["plan-refusals", "plan-error", "another-runs-plan"])
+def test_review_recover_stops_at_a_plan_that_cannot_be_admitted(box: Sandbox, rule: dict, reason: str) -> None:
+    recoverable(box)
+    exec_rule(box, "plan-repair", **rule)
+    result = box.run("review-recover", RECOVER_ID, "--yes")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert reason in result.stderr and "[y/N]" not in result.stdout
+    assert recover_steps(box) == ["verify-stops", "plan-repair"]
+    if "refusals" in reason or "admissible" in reason:
+        assert "refusals (1):" in result.stdout
+        assert "Dagster dispatch stop requires verify-repair-stop, not just a failed step" in result.stdout
+
+
+def test_review_recover_stops_when_admission_refuses_the_plan(box: Sandbox) -> None:
+    recoverable(box)
+    exec_rule(box, "admit-repair", rc=1, stderr="ValueError: repair plan changed; inspect a fresh plan before admission")
+    result = box.run("review-recover", RECOVER_ID, "--yes")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "admit-repair refused (exit 1)" in result.stderr and "repair plan changed" in result.stderr
+    assert "nothing was resumed" in result.stderr
+    assert recover_steps(box) == ["verify-stops", "plan-repair", "admit-repair"]
+
+
+def test_review_recover_resume_keeps_every_launch_guard(box: Sandbox) -> None:
+    recoverable(box)
+    exec_rule(box, "claude -p", **{key: value for key, value in EXPIRED_LOGIN.items() if key != "match"})
+    result = box.run("review-recover", RECOVER_ID, "--yes")
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "did not answer the probe" in result.stderr
+    assert recover_steps(box) == ["verify-stops", "plan-repair", "admit-repair", "model-probe"]
+    assert intent_state(box) == "RECONCILED"  # no new submission was recorded
+
+
+def test_review_recover_dry_run_prints_the_ordered_commands_and_executes_none(box: Sandbox) -> None:
+    record = recoverable(box)
+    result = box.run("review-recover", RECOVER_ID, "--dry-run", "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    order = [result.stdout.index(text) for text in (
+        f"review_run.py reconcile --run-id {UUID_ONE} --url {box.dagster.url}", "verify-stops",
+        f"plan-repair --run-id {RECOVER_ID}", "one confirmation (pre-confirmed by --yes)",
+        f"admit-repair --run-id {RECOVER_ID}", f"scripts/review-start.sh --url {box.dagster.url} --run-id {RECOVER_ID}",
+        "dry run: nothing executed")]
+    assert order == sorted(order)
+    assert exec_calls(box) == [] and box.lifecycle_calls() == []
+    assert [name for name, _ in box.dagster.requests] == ["OpsRuns", "OpsRuns"]  # read-only listing only
+    assert review_run.read_submission(box.repo) == record
+    assert not (box.repo / "runs" / "metadata" / "review-recover").exists()
+    # A dry run still reports what the real run would refuse.
+    box.dagster.runs(run(UUID_ONE, "STARTED", app=RECOVER_ID))
+    assert box.run("review-recover", RECOVER_ID, "--dry-run").returncode == 3
+
+
+def test_review_recover_offers_a_fresh_review_when_nothing_was_accepted(box: Sandbox) -> None:
+    recoverable(box, accepted=False)
+    planned = box.run("review-recover", RECOVER_ID, "--dry-run")
+    assert planned.returncode == 0 and "no job of" in planned.stdout and intent_state(box) == "SUBMITTED"
+    result = box.run("review-recover", RECOVER_ID, "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"no job of {RECOVER_ID} has an accepted handoff" in result.stdout
+    assert "start a fresh review instead (not launched here" in result.stdout
+    assert "\n  scripts/review-start.sh\n" in result.stdout
+    assert exec_calls(box) == []  # no repair is planned and the fresh review is not launched
+    assert intent_state(box) == "RECONCILED"  # the terminal submission no longer blocks that fresh launch
+
+
+def test_review_recover_plans_and_admits_under_the_runs_recorded_selection(box: Sandbox) -> None:
+    recoverable(box)
+    manifest = box.repo / "runs" / RECOVER_ID / "data" / "configuration" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({"selection": {"profile": "prod", "overlay": None}}), encoding="utf-8")
+    result = box.run("review-recover", RECOVER_ID, "--yes", "--id-wait", "0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    selected = ["exec", "-e", f"{ops.PROFILE_VARIABLE}=prod", "-e", f"{ops.OVERLAY_VARIABLE}=", CODE_ID, "python", "-m",
+                "appsec_review"]
+    _verify, plan, admit, _probe, launch = exec_calls(box)
+    assert plan[:len(selected)] == selected and admit[:len(selected)] == selected
+    assert json.loads(launch[launch.index("--tags") + 1])["appsec/profile"] == "prod"
+
+
+def test_review_recover_finds_a_dispatch_recorded_only_by_an_attempt_claim(box: Sandbox) -> None:
+    recoverable(box, state=None)
+    box.dagster.runs()  # no run carries the application tag: the claim is the only record
+    box.dagster.script("OpsRun", run_data(run(UUID_ONE, "FAILURE", app=RECOVER_ID)))
+    found = box.run("review-recover", RECOVER_ID, "--dry-run")
+    assert found.returncode == 0 and f"{UUID_ONE} FAILURE" in found.stdout and "(nothing to reconcile)" in found.stdout
+    box.dagster.script("OpsRun", {"runOrError": {"__typename": "RunNotFoundError", "message": "Run does not exist"}})
+    unknown = box.run("review-recover", RECOVER_ID, "--yes")
+    assert unknown.returncode == 3 and "its state is unknown" in unknown.stderr
+    assert exec_calls(box) == []
+
+
+def test_review_recover_refuses_runs_it_cannot_recover(box: Sandbox) -> None:
+    box.dagster.runs()
+    assert box.run("review-recover", RECOVER_ID).returncode == 4  # no such application run
+    (box.repo / "runs" / RECOVER_ID).mkdir()
+    local = box.run("review-recover", RECOVER_ID)
+    assert local.returncode == 4 and "no Dagster dispatch is recorded" in local.stderr
+    walk = box.repo / "runs" / "metadata" / "stepwise" / RECOVER_ID / "state.json"
+    walk.parent.mkdir(parents=True)
+    walk.write_text("{}", encoding="utf-8")
+    stepwise = box.run("review-recover", RECOVER_ID, "--yes")
+    assert stepwise.returncode == 3 and f"stepwise.py recover --app-run {RECOVER_ID}" in stepwise.stderr
+    walk.unlink()
+    box.stack(running=False)
+    down = box.run("review-recover", RECOVER_ID, "--yes")
+    assert down.returncode == 3 and "stack-start" in down.stderr
+    assert exec_calls(box) == []
 
 
 # -- clean-temp -----------------------------------------------------------------------------------

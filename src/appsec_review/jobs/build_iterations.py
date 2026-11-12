@@ -321,7 +321,9 @@ class BuildIterations:
                     "states": {receipt["build_unit_id"]: receipt["terminal_status"] for receipt in receipts},
                     "receipts": receipts,
                     "gaps": [f"{uid}: {reason}" for uid, reason in sorted(refusals.items())],
-                    "terminal_status": "BLOCKED_BY_DEPENDENCY"}
+                    # ``terminal_status`` is the closed ProducerStatus vocabulary; that the block comes
+                    # from refused inputs rather than a failed build is a payload fact.
+                    "terminal_status": "BLOCKED", "availability": "blocked_by_dependency"}
         if invoke is None:
             from appsec_review.jobs.job_build_iteration.job import invoke_iteration
             invoke = invoke_iteration
