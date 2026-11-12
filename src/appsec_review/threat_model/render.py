@@ -3,8 +3,9 @@
 The views are pure functions of the published JSON documents (the plain forms
 ``json.loads(contract.canonical(document))`` gives), so an output validator can re-render and
 compare bytes. Nothing here is hand-edited, nothing carries a timestamp, everything is iterated in
-id order, and every piece of target-derived text passes through ``sanitize_label``: node ids and
-file names are built from identities only. See docs/architecture/dfd-and-threat-model-generation.md
+id order, and every piece of target-derived text passes through ``sanitize_label`` (names) or, for
+the sentences of the Markdown view, ``sanitize_text``: node ids and file names are built from
+identities only. See docs/architecture/dfd-and-threat-model-generation.md
 sections 6.5 and 9.
 """
 from __future__ import annotations
@@ -29,7 +30,9 @@ THREATS_ARE_QUESTIONS = (
     "should look and what would have to be established; it does not say that a weakness exists."
 )
 
+MAX_TEXT_LENGTH = 300
 _UNSAFE = re.compile(r"[^A-Za-z0-9 _./:#-]")
+_UNSAFE_TEXT = re.compile(r"[^A-Za-z0-9 _./:#?,()-]")
 _SPACE = re.compile(r"\s+")
 _SHAPES = {"process": ('(("', '"))'), "data_store": ('[("', '")]'), "external_entity": ('["', '"]')}
 
@@ -38,6 +41,20 @@ def sanitize_label(text: str) -> str:
     """Target text as it may appear in a view: a closed character set, one line, at most 80 characters."""
     cleaned = _SPACE.sub(" ", _UNSAFE.sub(" ", text if isinstance(text, str) else "")).strip()
     return cleaned[:MAX_LABEL_LENGTH].strip() or "unnamed"
+
+
+def sanitize_text(text: str, limit: int = MAX_TEXT_LENGTH) -> str:
+    """A sentence as it may appear in the Markdown view: the label rule plus ``? , ( )``, at most ``limit``.
+
+    For threat titles and questions, unknown statements and gap reasons, which are sentences and may
+    embed a target name. Quotes, backticks, pipes, brackets and angle brackets are still removed.
+    """
+    cleaned = _SPACE.sub(" ", _UNSAFE_TEXT.sub(" ", text if isinstance(text, str) else "")).strip()
+    return cleaned[:limit].strip() or "unnamed"
+
+
+class _Prose(str):
+    """A Markdown cell that is a sentence: rendered with ``sanitize_text`` instead of ``sanitize_label``."""
 
 
 def node_id(identity: Any) -> str:
@@ -185,6 +202,8 @@ def _cell(value: Any) -> str:
         return str(value)
     if isinstance(value, (list, tuple)):
         return ", ".join(sanitize_label(_text(item)) for item in value) or "-"
+    if isinstance(value, _Prose):
+        return sanitize_text(value)
     return sanitize_label(_text(value))
 
 
@@ -206,7 +225,7 @@ def _table(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> list[str]:
 
 
 def _threat_rows(threats: Iterable[Mapping[str, Any]]) -> list[list[Any]]:
-    return [[item.get("id"), item.get("stride"), item.get("title"), item.get("question"),
+    return [[item.get("id"), item.get("stride"), _Prose(_text(item.get("title"))), _Prose(_text(item.get("question"))),
              (item.get("mitigation") or {}).get("state") if isinstance(item.get("mitigation"), Mapping) else None,
              _locator(item)] for item in threats]
 
@@ -278,7 +297,8 @@ def render_markdown(dfd: Mapping[str, Any], threat_model: Mapping[str, Any], res
                                                          *_records(threat_model, "unknowns"))}
     lines += ["## Unknowns", ""]
     lines += _table(("Id", "Kind", "Statement", "Would resolve"),
-                    ([item.get("id"), item.get("kind"), item.get("statement"), list(item.get("would_resolve") or ())]
+                    ([item.get("id"), item.get("kind"), _Prose(_text(item.get("statement"))),
+                      list(item.get("would_resolve") or ())]
                      for _, item in sorted(unknowns.items())))
 
     gaps = sorted((gap for gap in result.get("gaps") or () if isinstance(gap, Mapping)),
@@ -286,6 +306,6 @@ def render_markdown(dfd: Mapping[str, Any], threat_model: Mapping[str, Any], res
                                    _text(gap.get("gap_id"))))
     lines += ["## Gaps", ""]
     lines += _table(("Code", "Scope", "Reason", "Retryable"),
-                    ([gap.get("code"), gap.get("scope_id"), gap.get("reason"), bool(gap.get("retryable"))]
+                    ([gap.get("code"), gap.get("scope_id"), _Prose(_text(gap.get("reason"))), bool(gap.get("retryable"))]
                      for gap in gaps))
     return "\n".join(lines).rstrip("\n") + "\n"

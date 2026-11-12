@@ -65,6 +65,14 @@ Decisions:
   assembly's.
 - Past ``max_processes`` the first processes in canonical identity order are kept, links into a
   dropped process are dropped with it, and the bound is a ``truncated`` gap.
+- Index payloads are stored after ``retrieval.model.sanitize_producer_data``: a string holding a
+  secret-like word arrives as ``"<redacted>"`` and deep nesting as ``"<truncated>"``. A build point
+  or artifact whose name is such a marker is named ``redacted-name`` and identified by
+  ``{"build_unit_id" | "project_id", "record"}``, where ``record`` is the entity id of the record
+  that named it (``<entity id>#<index>`` for a build point, its position among the unit's build
+  points), so two redacted names never become one process. Marker entries are dropped from the
+  source paths. When any of this happened the lane reports one ``provenance_unavailable`` gap with
+  scope ``structure.redacted`` and the number of names and paths affected.
 """
 from __future__ import annotations
 
@@ -72,6 +80,7 @@ from dataclasses import dataclass, field
 import re
 from typing import Any, Mapping
 
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.retrieval.model import EntityKind, RelationKind
 from appsec_review.threat_model.contract import (
     Basis, EvidenceRecord, EvidenceRef, Fact, FactKind, InputLedgerRow, LaneResult, Limits, canonical, cite,
@@ -96,6 +105,10 @@ LIBRARY_POINT_KINDS = frozenset({"static_library", "shared_library", "module_lib
 RULE_DECLARED = "structure.declared_build_point"
 RULE_BUILT = "structure.built_artifact"
 RULE_LINK = "structure.link_relation"
+# What ``retrieval.model.sanitize_producer_data`` leaves in place of a withheld string.
+INDEX_MARKERS = frozenset({"<redacted>", "<truncated>"})
+REDACTED_NAME = "redacted-name"
+REDACTED_SCOPE = "structure.redacted"
 
 _ARTIFACT_KINDS = ((EntityKind.EXECUTABLE.value, FactKind.PROCESS), (EntityKind.LIBRARY.value, FactKind.LIBRARY))
 _LIBRARY_SUFFIX = re.compile(r"(?:\.(?:a|la|lib|rlib|dll|dylib)|\.so(?:\.\d+)*)$", re.IGNORECASE)
@@ -113,13 +126,26 @@ class _Thing:
     sources: set[str] = field(default_factory=set)
     built: bool = False
     test_only: bool = False
+    record: str | None = None  # set when the index withheld the name: the identity uses it instead
 
     @property
     def identity(self) -> dict[str, str]:
+        if self.record is not None:
+            return {self.scope: self.scope_id, "record": self.record}
         return {self.scope: self.scope_id, "name": self.name}
 
 
 _Key = tuple[str, str, str, str]
+
+
+@dataclass(slots=True)
+class _Withheld:
+    """How many names and paths the index had redacted or truncated."""
+    count: int = 0
+
+
+def _marked(value: str | None) -> bool:
+    return value is not None and (value in INDEX_MARKERS or _file_name(value) in INDEX_MARKERS)
 
 
 class _Reader:
@@ -203,11 +229,16 @@ def _root_prefix(value: Any) -> str | None:
     return None if path is None else path + "/"
 
 
-def _thing(things: dict[_Key, _Thing], kind: FactKind, scope: str, scope_id: str, name: str) -> _Thing:
-    return things.setdefault((kind.value, scope, scope_id, name), _Thing(kind, scope, scope_id, name))
+def _thing(things: dict[_Key, _Thing], kind: FactKind, scope: str, scope_id: str, name: str,
+           record: str | None = None) -> _Thing:
+    if record is None:
+        return things.setdefault((kind.value, scope, scope_id, name), _Thing(kind, scope, scope_id, name))
+    # A name cannot hold a NUL (``_text``), so a record key never meets a named thing's key.
+    return things.setdefault((kind.value, scope, scope_id, "\x00" + record),
+                             _Thing(kind, scope, scope_id, REDACTED_NAME, record=record))
 
 
-def _declared(reader: _Reader, things: dict[_Key, _Thing], roots: dict[str, str]) -> None:
+def _declared(reader: _Reader, things: dict[_Key, _Thing], roots: dict[str, str], withheld: _Withheld) -> None:
     for record in reader.query(BUILD_UNITS, EntityKind.BUILD_ACTION.value):
         unit = _text(record.payload.get("build_unit_id"))
         if unit is None:
@@ -216,22 +247,28 @@ def _declared(reader: _Reader, things: dict[_Key, _Thing], roots: dict[str, str]
         if root is not None:
             roots[unit] = root
         points = record.payload.get("build_points")
-        for point in points if isinstance(points, (list, tuple)) else ():
+        for index, point in enumerate(points if isinstance(points, (list, tuple)) else ()):
             if not isinstance(point, Mapping):
                 continue
             kind, raw = _point_kind(point), _text(point.get("name"))
+            marked = _marked(raw)
             name = _native_name(kind, raw) if kind is not None and raw is not None else None
             if kind is None or name is None:
                 continue
-            thing = _thing(things, kind, "build_unit_id", unit, name)
+            withheld.count += marked
+            thing = _thing(things, kind, "build_unit_id", unit, name,
+                           f"{record.entity_id}#{index}" if marked else None)
             thing.evidence.append(cite(record, Basis.DECLARED, RULE_DECLARED))
             thing.test_only = thing.test_only or point.get("kind") in TEST_POINT_KINDS
             sources = point.get("sources")
-            thing.sources.update(path for path in map(_relative, sources if isinstance(sources, (list, tuple)) else ())
-                                 if path is not None)
+            for source in sources if isinstance(sources, (list, tuple)) else ():
+                if source in INDEX_MARKERS:
+                    withheld.count += 1
+                elif (path := _relative(source)) is not None:
+                    thing.sources.add(path)
 
 
-def _built(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, _Key]) -> None:
+def _built(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, _Key], withheld: _Withheld) -> None:
     for key in (ARTIFACT_CATALOG, BUILD_ACTIONS):
         for entity_kind, kind in _ARTIFACT_KINDS:
             for record in reader.query(key, entity_kind):
@@ -239,17 +276,22 @@ def _built(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, _Ke
                 name = _native_name(kind, path) if path is not None else None
                 if unit is None or name is None or record.payload.get("artifact_origin") == "target-intake":
                     continue
-                _observe(_thing(things, kind, "build_unit_id", unit, name), record, path, by_entity)
+                marked = _marked(path)
+                withheld.count += marked
+                _observe(_thing(things, kind, "build_unit_id", unit, name, record.entity_id if marked else None),
+                         record, None if marked else path, by_entity)
 
 
-def _observe(thing: _Thing, record: EvidenceRecord, path: str, by_entity: dict[str, _Key]) -> None:
+def _observe(thing: _Thing, record: EvidenceRecord, path: str | None, by_entity: dict[str, _Key]) -> None:
     thing.built = True
-    thing.artifact_paths.add(path)
+    if path is not None:
+        thing.artifact_paths.add(path)
     thing.evidence.append(cite(record, Basis.DECLARED, RULE_BUILT))
-    by_entity[record.entity_id] = (thing.kind.value, thing.scope, thing.scope_id, thing.name)
+    by_entity[record.entity_id] = (thing.kind.value, thing.scope, thing.scope_id,
+                                   thing.name if thing.record is None else "\x00" + thing.record)
 
 
-def _compiled(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, _Key]) -> None:
+def _compiled(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, _Key], withheld: _Withheld) -> None:
     """``cpp_build_graph`` artifacts: joined by unique name, else scoped to the producer's project."""
     established: dict[tuple[str, str], list[_Key]] = {}
     for key in sorted(things):
@@ -261,16 +303,19 @@ def _compiled(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, 
             if name is None:
                 continue
             unit, project = _text(record.payload.get("build_unit_id")), _text(record.payload.get("project_id"))
-            matches = established.get((kind.value, name), [])
+            marked = _marked(path)
+            identified = record.entity_id if marked else None  # a withheld name joins nothing by name
+            matches = [] if marked else established.get((kind.value, name), [])
             if unit is not None:
-                thing = _thing(things, kind, "build_unit_id", unit, name)
+                thing = _thing(things, kind, "build_unit_id", unit, name, identified)
             elif len(matches) == 1:
                 thing = things[matches[0]]
             elif project is not None:
-                thing = _thing(things, kind, "project_id", project, name)
+                thing = _thing(things, kind, "project_id", project, name, identified)
             else:
                 continue
-            _observe(thing, record, path, by_entity)
+            withheld.count += marked
+            _observe(thing, record, None if marked else path, by_entity)
 
 
 def _endpoints(record: EvidenceRecord) -> tuple[str, str] | None:
@@ -279,10 +324,15 @@ def _endpoints(record: EvidenceRecord) -> tuple[str, str] | None:
 
 
 def _compiled_sources(reader: _Reader, things: dict[_Key, _Thing], by_entity: dict[str, _Key],
-                      links: tuple[EvidenceRecord, ...]) -> None:
+                      links: tuple[EvidenceRecord, ...], withheld: _Withheld) -> None:
     """Sources of the compile units whose objects link into an established artifact."""
-    unit_paths = {record.entity_id: path for record in reader.query(CPP_BUILD_GRAPH, EntityKind.COMPILE_UNIT.value)
-                  if (path := _relative(record.payload.get("target_path"))) is not None}
+    unit_paths: dict[str, str] = {}
+    for record in reader.query(CPP_BUILD_GRAPH, EntityKind.COMPILE_UNIT.value):
+        path = _relative(record.payload.get("target_path"))
+        if path in INDEX_MARKERS:
+            withheld.count += 1
+        elif path is not None:
+            unit_paths[record.entity_id] = path
     compiled: dict[str, set[str]] = {}
     for record in reader.query(CPP_BUILD_GRAPH, RelationKind.COMPILES_TO.value):
         ends = _endpoints(record)
@@ -327,12 +377,13 @@ def structure(view: EvidenceView, limits: Limits, *, unit_id: str = "facts.struc
     things: dict[_Key, _Thing] = {}
     roots: dict[str, str] = {}
     by_entity: dict[str, _Key] = {}
-    _declared(reader, things, roots)
-    _built(reader, things, by_entity)
-    _compiled(reader, things, by_entity)
+    withheld = _Withheld()
+    _declared(reader, things, roots, withheld)
+    _built(reader, things, by_entity, withheld)
+    _compiled(reader, things, by_entity, withheld)
     relations = (reader.query(ARTIFACT_RELATIONSHIPS, RelationKind.LINKS_INTO.value),
                  reader.query(CPP_BUILD_GRAPH, RelationKind.LINKS_INTO.value))
-    _compiled_sources(reader, things, by_entity, relations[1])
+    _compiled_sources(reader, things, by_entity, relations[1], withheld)
     components = _component_ids(reader)
 
     link_evidence: dict[tuple[_Key, _Key], list[EvidenceRef]] = {}
@@ -345,6 +396,11 @@ def structure(view: EvidenceView, limits: Limits, *, unit_id: str = "facts.struc
             link_evidence.setdefault((source, target), []).append(cite(record, Basis.DECLARED, RULE_LINK))
 
     gaps = [*reader.input_gaps, *reader.truncated]
+    if withheld.count:
+        gaps.append(producer_gap(
+            GapCode.PROVENANCE_UNAVAILABLE,
+            f"{withheld.count} names or paths were redacted or truncated by the index; affected processes are "
+            "identified by record, not by name", unit_id=unit_id, scope_id=REDACTED_SCOPE))
     processes = sorted((key for key in things if key[0] == FactKind.PROCESS.value),
                        key=lambda key: canonical(things[key].identity))
     dropped = set(processes[limits.max_processes:])

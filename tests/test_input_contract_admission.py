@@ -139,15 +139,15 @@ def test_contract_change_refuses_reuse_but_historical_bytes_remain(tmp_path):
     assert file_sha256(path) == digest
 
 
-def test_all_46_contract_config_output_and_dispatch_invariants():
+def test_all_47_contract_config_output_and_dispatch_invariants():
     registry = builtin_registry()
     config = load_config(ROOT / "appsec-review.toml")
     rows = job_contract_matrix(config, registry)
-    assert len(rows) == 46
+    assert len(rows) == 47
     classes = {row["job_id"]: row["contract"]["dispatch"] for row in rows}
     assert classes["job_build_iteration"] == "internal_transaction"
     assert classes["job_third_party_data_sync"] == "maintenance"
-    assert sum(value == "review_graph" for value in classes.values()) == 44
+    assert sum(value == "review_graph" for value in classes.values()) == 45
     from appsec_review.orchestration.topology import wave1_dependencies, enabled_wave1_dependencies
     enabled = {row["job_id"] for row in rows if row["enabled"]}
     graph = enabled_wave1_dependencies(enabled, set(registry.job_ids()))

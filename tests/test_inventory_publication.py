@@ -149,7 +149,7 @@ def test_default_registry_contract_and_internal_eligibility(tmp_path, internal_a
     assert "job_third_party_data_sync" not in document["registry_jobs"]
     assert document["dispatch_classes"]["job_third_party_data_sync"] == "maintenance"
     assert document["dispatch_classes"]["job_build_iteration"] == "internal_transaction"
-    assert len(document["registered_jobs"]) == 46
+    assert len(document["registered_jobs"]) == 47
     assert document["file_job_steps"]["job_build_iteration"] == ["execute"]
     assert document["registry_configuration_mismatch"] == []
     assert "job_build_environment_analysis" in document["registry_jobs"]

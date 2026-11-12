@@ -533,6 +533,67 @@ def parse_bounded_settings(value, kind):
     return kind(**values)
 
 
+THREAT_MODEL_BOUNDS = ("max_processes", "max_entry_points", "max_flows", "max_threats", "max_query_rows",
+                       "max_evidence_refs_per_element", "max_render_nodes")
+# Admission-ledger reservation of the two index-reading lanes: (minimum, maximum) per key.
+THREAT_MODEL_RESERVATION = {"cpu": (1, 256), "memory_mb": (1, 1024 * 1024), "io_slots": (0, 256),
+                            "admission_timeout_seconds": (1, 7 * 24 * 3600)}
+
+
+@dataclass(frozen=True, slots=True)
+class ThreatModelReservation:
+    cpu: int
+    memory_mb: int
+    io_slots: int
+    admission_timeout_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class ThreatModelSettings:
+    """``[jobs.job_threat_model_generation.settings]``: a closed key set, every bound range-checked."""
+    enabled: bool
+    max_processes: int
+    max_entry_points: int
+    max_flows: int
+    max_threats: int
+    max_query_rows: int
+    max_evidence_refs_per_element: int
+    max_render_nodes: int
+    reservation: ThreatModelReservation
+
+    @property
+    def limits(self):
+        from appsec_review.threat_model.contract import Limits
+        return Limits(**{name: getattr(self, name) for name in THREAT_MODEL_BOUNDS})
+
+
+def parse_threat_model_settings(value) -> ThreatModelSettings:
+    """Parse the threat-model job settings; an unknown, missing, mistyped or out-of-range key is refused."""
+    label = "jobs.job_threat_model_generation.settings"
+    expected = {"enabled", "reservation", *THREAT_MODEL_BOUNDS}
+    if not isinstance(value, Mapping) or set(value) != expected:
+        found = set(value) if isinstance(value, Mapping) else set()
+        raise ValueError(f"{label} must define exactly {sorted(expected)}: "
+                         f"unknown={sorted(map(str, found - expected))}, missing={sorted(expected - found)}")
+    if type(value["enabled"]) is not bool:
+        raise ValueError(f"{label}.enabled must be a boolean")
+    bounds = {name: value[name] for name in THREAT_MODEL_BOUNDS}
+    from appsec_review.threat_model.contract import Limits
+    try:
+        Limits(**bounds)
+    except ValueError as error:
+        raise ValueError(f"{label}: {error}") from None
+    reservation = value["reservation"]
+    if not isinstance(reservation, Mapping) or set(reservation) != set(THREAT_MODEL_RESERVATION):
+        raise ValueError(f"{label}.reservation must define exactly {sorted(THREAT_MODEL_RESERVATION)}")
+    for key, (low, high) in THREAT_MODEL_RESERVATION.items():
+        if type(reservation[key]) is not int or not low <= reservation[key] <= high:
+            raise ValueError(f"{label}.reservation.{key} must be an integer from {low} to {high}")
+    return ThreatModelSettings(enabled=value["enabled"], **bounds,
+                               reservation=ThreatModelReservation(**{key: reservation[key]
+                                                                    for key in THREAT_MODEL_RESERVATION}))
+
+
 @dataclass(frozen=True, slots=True)
 class JobConfig:
     job_id: str
@@ -1355,6 +1416,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_openvex_export":
             from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
             typed_settings = OpenVexExportSettings.from_mapping(settings)
+        elif job_id == "job_threat_model_generation":
+            typed_settings = parse_threat_model_settings(settings)
         elif job_id == "job_remediation_planning":
             from .remediation import RemediationPlanningSettings
             typed_settings = RemediationPlanningSettings.from_mapping(settings)
