@@ -12,6 +12,7 @@ from fractions import Fraction
 import re
 from typing import Any
 
+from .changelog import ChangelogLimits
 from .github import GitHubSettings
 from .git import GitLimits
 
@@ -25,7 +26,11 @@ _INTEGERS = {
     "co_change_top_k": (1, 100), "co_change_min_support": (1, 10_000), "blame_max_files": (0, 10_000),
     "blame_max_file_bytes": (1, 16 * 1024 * 1024), "ranking_top_n": (1, 10_000),
 }
-_TABLES = {"fix_on_fix", "line_history", "symbols", "sii", "filters", "git", "github"}
+_TABLES = {"fix_on_fix", "line_history", "symbols", "sii", "filters", "git", "github", "changelog"}
+_CHANGELOG_BOUNDS = {
+    "max_files": (1, 256), "max_file_bytes": (1024, 64 * 1024 * 1024), "max_entries": (1, 1_000_000),
+    "max_line_bytes": (64, 65_536), "max_paths_per_entry": (1, 100_000),
+}
 _LISTS = {"fix_labels", "security_labels"}
 _SCALARS = {"minor_author_share"}
 _GLOB = re.compile(r"[A-Za-z0-9_.*?/@+-]{1,256}")
@@ -83,6 +88,8 @@ class HistorySettings:
     git_enabled: bool
     git: Mapping[str, Any]
     github: Mapping[str, Any]
+    changelog_enabled: bool
+    changelog: ChangelogLimits
 
 
 def _table(settings: Mapping[str, Any], name: str, keys: set[str]) -> Mapping[str, Any]:
@@ -168,7 +175,13 @@ def parse_settings(settings: Mapping[str, Any]) -> HistorySettings:
                        github["per_page"], github["max_pages"], github["max_records"])
         if not isinstance(github["token_env"], str) or not github["token_env"].isidentifier():
             raise ValueError("source history github token_env must name an environment variable")
+    changelog = _table(settings, "changelog", {"enabled", *_CHANGELOG_BOUNDS})
+    if type(changelog["enabled"]) is not bool:
+        raise ValueError("source history setting is invalid: changelog.enabled")
+    changelog_limits = ChangelogLimits(**{key: _integer(changelog[key], f"changelog.{key}", *bounds)
+                                          for key, bounds in _CHANGELOG_BOUNDS.items()})
     return HistorySettings(
+        changelog_enabled=changelog["enabled"], changelog=changelog_limits,
         **integers, minor_author_share=share, fix_labels=labels["fix_labels"],
         security_labels=labels["security_labels"], fix_on_fix_interval_days=interval,
         line_history_max_files=_integer(lines["max_files"], "line_history.max_files", 0, 10_000),

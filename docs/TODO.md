@@ -89,6 +89,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-094 | [Let stepwise accept a target by commit instead of a tag](#t-094-let-stepwise-accept-a-target-by-commit-instead-of-a-tag) | testing | open |
 | T-095 | [Report an intake coverage gap once, not once per unit](#t-095-report-an-intake-coverage-gap-once-not-once-per-unit) | pipeline | open |
 | T-096 | [Stop inferring run artifacts from a data/ path prefix](#t-096-stop-inferring-run-artifacts-from-a-data-path-prefix) | pipeline | open |
+| T-097 | [Use ChangeLog files as a source-history signal](#t-097-use-changelog-files-as-a-source-history-signal) | history | in-progress |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1432,6 +1433,44 @@ until each is rewritten into the entry format when it is next touched.
   arbitrary field without error, and the existing missing-artifact refusals still hold.
 - **Refs:** `src/appsec_review/runtime/handoff.py`, `tests/test_handoff_interchange.py`,
   `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-057.
+
+### T-097 — Use ChangeLog files as a source-history signal
+
+- **State:** in-progress
+- **Area:** history
+- **Why:** a target is not always delivered with Git history (source drop, tarball, shallow or
+  squashed clone, Perforce export), and then `job_source_history_analysis` has little or nothing.
+  The Freeciv walk on 2026-11-11 found `ChangeLog` and `ChangeLog-1.0-S3_0` left out of the
+  inventory for size; the user decided change logs should feed the history job, since a change log
+  is weaker than commits but better than nothing.
+- **Scope:** built on branch `changelog-history`: the `acquire.changelog_history` unit parses the
+  change-log files the accepted catalog lists (GNU ChangeLog, `git log` dumps, `svn log -v`, Keep
+  a Changelog), bounded by the typed `changelog` settings; binds named paths to catalog paths only
+  exactly or by an unambiguous suffix; drops names, e-mail addresses and message text while
+  parsing (the T-029 redaction pass does not exist); publishes `changelog.json`, the accepted
+  document's `changelog` section, `history_priority.changelog` in the plan, location-free
+  `history_signal` entities and the `changelog-history` coverage row, all marked
+  `source: changelog` with a `primary`/`supplement` role and never merged into Git counts; and
+  reports every bound, unparsed part and unbound path as a `producer-gap/1` record. Not built,
+  and remaining under this id: (1) review prioritization and the `history_context` product do not
+  consume change-log signals, because they read SII scores and location-bound signals; (2) a
+  change log without file lists ranks no file, and subject-based file or component attribution
+  waits for the T-029 redaction pass; (3) change-log entries are not compared with Git commits
+  when both exist (a `git log` dump's hashes could be matched to walked commits); (4) per-symbol
+  change-log signals stop at the symbol tokens GNU entries name, with no span binding; (5) the
+  job stays on the legacy free-text gap list, only this unit emits records; (6) the acceptance
+  fixtures under `test/acceptance/*/job_source_history_analysis*` predate the new task and
+  settings table and need re-baselining by their owner.
+- **Done when:** a real run of the history job on Freeciv (pinned at `b1b0768b`), after the
+  inventory bound admits both change logs, publishes a `changelog` section whose format detection,
+  entry counts, bound-file ranks and gaps are checked against the two files, with no author name,
+  address or message text in any output; and items (1) to (6) are each built or split into their
+  own entries.
+- **Refs:** `src/appsec_review/jobs/job_source_history_analysis/changelog.py`,
+  `src/appsec_review/jobs/job_source_history_analysis/job.py`,
+  `tests/test_source_history_changelog.py`, `tests/fixtures/changelog_history/`,
+  [`architecture/source-history-analysis.md`](architecture/source-history-analysis.md)
+  ("Change-log history"), T-027, T-029, T-047, T-048.
 
 ## Legacy backlog
 

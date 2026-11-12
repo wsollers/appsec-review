@@ -14,11 +14,13 @@ RAW = "raw tool streams and receipts may contain unredacted target content and h
 _A = "data/jobs/job_source_history_analysis/attempts/*"
 DATASETS = (
     indexed("history_signals", "publish", "history", "appsec-review/retrieval-index/2",
-            "Change, file, symbol and component history signals and SII hotspots with pseudonymous authors.",
+            "Change, file, symbol and component history signals and SII hotspots with pseudonymous authors, "
+            "and separately labelled change-log file signals.",
             indexes=("history",), prefixes=("git-history",),
             route="find/search/trace index=history; query_precomputed query_set=history_context", authority=EvidenceAuthority.ROUTING_CONTEXT),
     artifact_only("history_documents", "publish", "history", "appsec-review/source-history-analysis/2",
-                  "Normalized changes, classification, signals, line history, symbol spans and hotspots.",
+                  "Normalized changes, classification, signals, line history, symbol spans, hotspots and "
+                  "change-log signals (source: changelog, no names, addresses or message text).",
                   artifacts=(_A + "/steps/*/tasks/*/artifacts/*.json",
                              _A + "/steps/*/tasks/*/sources/*/artifacts/*.json",),
                   reason="normalized inputs of the history shard; full per-change lists exceed retrieval bounds", authority=EvidenceAuthority.ROUTING_CONTEXT),

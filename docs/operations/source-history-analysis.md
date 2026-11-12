@@ -8,6 +8,9 @@ the eligible local Git sources discovered for the target and can enrich them fro
 - assigns review tiers; and
 - publishes a bounded hotspot index.
 
+It also reads the change-log files the accepted catalog lists (`ChangeLog`, `CHANGELOG.md`, `NEWS`,
+…) as a second, weaker history source; see [Change-log history](#change-log-history).
+
 Its output only orders review attention; it is never vulnerability evidence. Missing history or
 coverage is an explicit skip or a named gap, never a clean result. The design, every metric's
 definition, and the index schema are in
@@ -98,6 +101,10 @@ Unknown keys and out-of-range values fail validation before the job runs.
 | `co_change_top_k`, `co_change_min_support` | `10`, `3` | Co-change partners kept per file (1–100), and the shared changes needed to report a pair (1–10000). |
 | `fix_labels`, `security_labels` | `bug`, `fix`, `regression`; `security`, `vulnerability` | GitHub pull-request labels, matched case-insensitively, that mark a change as a fix or security fix (basis `github_label`); without a label match, commit-message heuristics apply. Each entry is 1–64 characters. |
 | `[...settings.git] enabled` | `true` | Set to `false` to skip the lane by policy. |
+| `[...settings.changelog] enabled` | `true` | Set to `false` to skip change-log history by policy (`changelog_history_disabled`). |
+| `[...settings.changelog] max_files` | `16` | Change-log files parsed per source (1–256), shallowest first, then by path. More is `changelog_file_bound_reached`. |
+| `[...settings.changelog] max_file_bytes` | 16 MiB | Bytes parsed per file (1024–64 MiB). A larger file is parsed up to the last line end inside the bound; the remainder is `changelog_bytes_truncated`. |
+| `[...settings.changelog] max_entries`, `max_line_bytes`, `max_paths_per_entry` | `100000`, `4096`, `2000` | Entries per file (1–1000000), bytes per line (64–65536), and paths per entry (1–100000). Reaching one is `changelog_entry_bound_reached`, `changelog_line_too_long`, or `changelog_entry_paths_truncated`. |
 | `[...settings.github] enabled` | `"auto"` | Discover eligible GitHub identities automatically. `true` also permits discovery; explicit `false` denies enrichment. |
 | `[...settings.github] repository` | empty | Optional `owner/name` override for a single source, not a required mapping for every acquired component. |
 | `[...settings.github] api_base`, `max_requests`, `timeout_seconds` | `https://api.github.com`, `2000`, `30` | GitHub enrichment endpoint (an `https` URL without query or fragment), request budget (1–100000), and per-request timeout in seconds (1–300). |
@@ -118,6 +125,41 @@ The automatic GitHub default does not rewrite historical configurations. An exis
 frozen setting is `github.enabled = false` still denies enrichment, even when forced to rerun.
 Start a new run with the updated central settings to adopt `"auto"`; do not edit run-owned
 configuration or accepted pointers.
+
+### Change-log history
+
+A target delivered without Git history (a source drop, a tarball, a squashed or shallow clone)
+still gets history signals when it carries a change log. The `acquire.changelog_history` task
+needs no image, network or credential: it parses, in the application process, the change-log files
+that the accepted inventory lists. Recognised formats are GNU ChangeLog, `git log` dumps (with or
+without `--stat`, `--numstat`, `--name-status` or `--name-only` rows), `svn log -v`, and Keep a
+Changelog Markdown.
+
+How to read the result:
+
+- The accepted document's `changelog` section and the plan's `history_priority.changelog` list
+  carry the change-log file ranks. Every entry says `source: changelog`. They are counts of
+  change-log entries naming a file, not commits, and are never added to the Git ranking.
+- `role` is set only when the change log ranks at least one file. It is `supplement` when Git
+  history is complete: order review by the SII ranking, and use
+  the change log as extra context. It is `primary` when there is no Git ranking or Git history is
+  shallow, truncated or unrelated to the snapshot: the change-log list is then the history to
+  order review by, and it is weaker (author-stated dates, possibly partial file lists, no content
+  hash).
+- A change log without file lists, such as a plain `git log` dump, yields entry dates and fix and
+  security-fix counts but ranks no file.
+- Author names, e-mail addresses and message text are dropped while parsing. They are not in
+  `changelog.json`, the accepted document, the index or the events.
+
+Check the inventory bound before relying on it. The catalog excludes files over its per-file
+bound; a change log among them appears as `changelog_excluded_from_inventory` with the catalog's
+reason, and is not read. Raise the catalog bound, or accept the gap. Likewise raise
+`changelog.max_file_bytes` when `changelog_bytes_truncated` reports a large remainder.
+
+`changelog_paths_unbound` is common and usually benign: change logs name files that have since
+been deleted or moved. The record gives the ambiguous, unmatched and invalid counts.
+`changelog_format_unrecognized` on a prose `NEWS` or `HISTORY` file is also expected; the file is
+not parsed and nothing is inferred from it.
 
 ### GitHub identity, credentials, and network access
 
@@ -268,9 +310,17 @@ publishing an apparently complete aggregate.
 | `symbol-spans` | every selected file parsed cleanly | unsupported languages, bounds, parse errors, or Tree-sitter failures | no history |
 | `fix-on-fix` | every candidate fix pair was decided | some pairs are undetermined | no history |
 | `history-hotspots` | the index was built with no gap | built, but some gap affects entries | no history |
+| `changelog-history` | every change log parsed and every named path bound | some change-log gap; the row lists the gap codes | no change-log file (`no_changelog_files`), disabled, or no target |
 | `pull-request-timing`, `deployment-timing` | — | — | always |
 
-The job's terminal status is `PARTIAL` whenever any named gap exists.
+The job's terminal status is `PARTIAL` whenever any named Git-lane gap exists. Change-log gaps are
+`producer-gap/1` records on the `acquire.changelog_history` unit and in the `changelog` section;
+they make that unit `PARTIAL` and count toward the handoff's coverage, but they are not copied
+into the Git gap list. A source without Git whose change log ranks at least one file is published
+as `SUCCEEDED` or `PARTIAL`, not `SKIPPED_NA`. A change-log failure never fails the job:
+`changelog_unreadable`, `changelog_parser_failed` and `changelog_unit_failed` name the error type
+and leave the Git output intact. The exception is an accepted change log that changed or was
+replaced after the catalog accepted it, which fails the unit like any other changed target file.
 
 ### Bounded symbol parsing
 
@@ -324,7 +374,9 @@ visible through incomplete-accounting fields.
   - source decisions and binding status;
   - the window and revision semantics;
   - the SII file ranking and component priorities;
-  - the hotspot summary and the `hotspots.json` identity; and
+  - the hotspot summary and the `hotspots.json` identity;
+  - the `changelog` section (decision, role, window, gap codes, ranked files) and the
+    `changelog.json` identity; and
   - gaps and observations.
 - For composed/multi-source output, `sources.repositories[]` lists source descriptors, decisions,
   and hash-pinned source-document references; `ranking.scope = "per-source"`. Read those referenced
@@ -336,7 +388,11 @@ visible through incomplete-accounting fields.
   entities, `change` entities, `hotspot` entities, and their coverage rows. All accepted source
   shards are composed into the run's manifest.
 - The analysis plan's `history_priority` section preserves the source identity and per-source
-  ranks of accepted components and files.
+  ranks of accepted components and files. Its `changelog` member holds the change-log file ranks
+  separately.
+- A change log is an inventory file, so editing one changes the target fingerprint and reruns the
+  job like any other source change; it needs no separate identity probe. The history shard
+  fingerprint also binds `changelog.json` when one was produced.
 
 Resume planning and source-history handoff publication re-probe the discovered sources, including
 nested accepted catalog roots. A changed selected commit, source metadata/configuration, object

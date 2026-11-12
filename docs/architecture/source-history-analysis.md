@@ -2,7 +2,8 @@
 
 Status: automatic local Git source discovery, credential-gated GitHub enrichment, line-level
 fix-on-fix matching, Tree-sitter function-level signals and complexity, the Security Instability
-Index (SII), and the bounded hotspot index are implemented in
+Index (SII), the bounded hotspot index, and change-log files as a second, weaker history source
+(T-097) are implemented in
 `src/appsec_review/jobs/job_source_history_analysis/`. Perforce is designed below but not built;
 see [`../TODO.md`](../TODO.md). Operator guidance is in
 [`../operations/source-history-analysis.md`](../operations/source-history-analysis.md).
@@ -31,6 +32,7 @@ The lane is a prioritization producer, not a vulnerability producer:
 |---|---|---|---|
 | Local Git (`.git` inside the target, any host) | fixed read-only argv in `tool-git` | none | implemented, enabled |
 | GitHub enrichment | bounded REST reads of PR and review facts for known commits | configured API host, credential required | implemented, automatic identity discovery by default; explicit `false` denies |
+| Change-log files (`ChangeLog`, `CHANGELOG.md`, `NEWS`, …) | bounded in-process parse of accepted inventory files | none | implemented, enabled; see [Change-log history](#change-log-history) |
 | Perforce export bundle | operator-supplied, hash-pinned `p4 -ztag -Mj` export | none | planned |
 | Perforce server | read-only `p4` queries in `tool-p4` | configured `P4PORT` only | planned |
 
@@ -207,6 +209,125 @@ stored. Rate limiting is a retriable
 `github_rate_limited` gap, so resume reruns the job. An exhausted budget, missing pulls, or
 permission errors are named gaps. Enrichment runs in the application process over HTTPS, like NVD
 sync, not in the network-disabled Git container. Redirects are refused.
+
+## Change-log history
+
+A target is not always delivered with version-control history: a source drop, a tarball, a shallow
+or squashed clone, or a Perforce export has little or none. A maintained change log is weaker
+evidence than commits but far better than nothing, so the `acquire.changelog_history` unit reads
+change-log files as a second history source (`appsec-review/history-changelog/1`, implemented in
+`changelog.py`; T-097). It runs for every source lane, with or without Git.
+
+### Decisions
+
+- **Which files count.** Only files that the accepted catalog inventory lists and whose file name is
+  a conventional change-log name at any depth: `ChangeLog`, `CHANGELOG`, `CHANGES`, `NEWS`,
+  `HISTORY`, `RELEASE-NOTES`/`RELEASE_NOTES`/`RELEASENOTES`, case-insensitively, optionally followed
+  by `-`, `.` or `_` and a suffix (`ChangeLog-1.0-S3_0`, `NEWS-3.2`, `CHANGELOG.md`, `CHANGES.txt`).
+  A suffix whose last extension is alphabetic must be a document extension (`md`, `markdown`, `txt`,
+  `rst`, `adoc`, `old`), so `history.c` and `news.py` are not candidates. The target tree is never
+  scanned for them, and a file outside the inventory is never opened. Candidates are taken
+  shallowest first, then by path.
+- **A change log the inventory left out is a gap.** The catalog's partition records the files it
+  excluded (`file_too_large`, `inventory_bound_reached`, …). A change-log name among them is the
+  `changelog_excluded_from_inventory` gap, never a silent miss.
+- **Formats.** Four, detected per file from the first entry header among the first 200 non-blank
+  lines:
+  - `gnu-changelog`: a column-zero `YYYY-MM-DD  Name  <email>` (or ctime-style) header, then
+    indented `* path[, path] (symbol, …): text` items and `(symbol): text` continuations;
+  - `git-log`: `commit <40 or 64 hex>`, header lines, an indented message, then optional
+    `--stat`, `--numstat`, `--name-status` or `--name-only` rows;
+  - `svn-log`: `rN | user | date | N lines`, an optional `Changed paths:` block, then exactly `N`
+    message lines, so message text cannot forge an entry header; and
+  - `keep-a-changelog`: `## [version] - date` headings, `### Section` headings and bullet items,
+    whose back-quoted path-like tokens are the files named.
+- **Never a guess.** A file with no recognised entry is `changelog_format_unrecognized`. Lines the
+  detected grammar cannot place are counted: `changelog_mixed_format` when one of them is another
+  format's entry header, `changelog_unparsed_lines` otherwise. The entries of the detected format
+  are kept; nothing is inferred from the rest.
+- **Untrusted input.** Parsing is bounded in bytes per file, line length, entries per file and
+  paths per entry. A line over the bound is never interpreted. Invalid UTF-8 is decoded with
+  replacement and counted. Structure is recognised with string operations and two single
+  character-class patterns, so no input can cause backtracking. A stated date that is not a real
+  calendar date between 1970 and 2100 is undated, never repaired. Only ASCII digits are numbers.
+  An `svn log` header that claims more message lines than the file holds is reported as unparsed
+  lines, not trusted.
+- **Containment.** The change log supplements the history and must never cost the Git output. A
+  file that cannot be read (`OSError`) is `changelog_unreadable`; a parser failure on one file is
+  `changelog_parser_failed`; any other failure in a source lane is `changelog_unit_failed` for
+  that lane only. The record and the event name the exception type, never its message, which could
+  quote target text. One case stays a hard failure, as everywhere else in the job: an accepted
+  change log that became a symlink, left the target, vanished, or no longer matches its catalog
+  SHA-256.
+- **Privacy and injection.** Author names, e-mail addresses, user ids and message text are consumed
+  while parsing and are never returned, stored, indexed or logged. The gitleaks redaction pass that
+  T-029 requires before commit subjects may be indexed does not exist, so the same rule applies
+  here. What survives is structured: dates, entry ids (commit hash or `rN`), bound catalog paths,
+  identifier-shaped symbol tokens (`[A-Za-z_~][A-Za-z0-9_:.~-]{0,127}`), the closed-vocabulary
+  classification, and CVE/GHSA/CWE identifiers. An unbound path is author-typed text and is only
+  counted. Message text therefore cannot reach a prompt or become a label.
+- **Classification.** Each entry's text is classified by the same rules as commit messages
+  (`appsec-review/history-change-rules/2`, `signals.classify_text`) with basis `heuristic`, and then
+  discarded. A Keep a Changelog `### Security` or `### Fixed` section gives basis
+  `changelog_section`. Message text beyond 65,536 characters is not classified; the entry is
+  marked `message_complete: false` and the file gets the `changelog_message_truncated` gap.
+  Symbols are read only from closed parenthesis groups and must be identifier-shaped; a single
+  word such as a user id in parentheses can still pass as a symbol.
+- **Path binding.** A path in a change log is whatever the author typed. It binds to an accepted
+  catalog path only when it is `exact` (also tried under the source root), an unambiguous `suffix`
+  (exactly one catalog path ends with `/<text>`), or a `repository_prefix` match (exact after
+  removing a Subversion `trunk/` prefix, the one addition to "exact or unambiguous suffix").
+  `branches/` and `tags/` paths are other lines of development and never bind, and a
+  `trunk/<project>/…` layout binds nothing. A `git log --stat` name abbreviated
+  to `.../tail` binds by suffix only. Several suffix matches are ambiguous. Ambiguous, unmatched and
+  invalid names are counted in the `changelog_paths_unbound` gap. Deleted files are the usual
+  cause, so this gap is common and does not by itself question the bound files.
+
+### Signals and precedence
+
+Each entry record holds its change log and line, id, date, bound paths, binding-kind counts,
+symbols, classification, `bulk` flag and unbound-path count. Each bound file gets `change_count`
+(entries inside the window), `lifetime_change_count`, `fix_change_count`,
+`security_fix_change_count` and their lifetime forms, first and last change date, referenced
+security identifiers, symbols, and up to five change-log lines as resolving evidence. Entries that
+name more than `bulk_change_file_threshold` paths are bulk and are not counted. An entry id that
+repeats across files counts once. The window is `history_window_months` calendar months ending at
+the newest dated entry of the source, never wall-clock time. Files are ranked by window count, then
+lifetime count, then last change date, then path.
+
+Change-log numbers are never commit-derived and are never added to a Git count:
+
+- Every record, file and plan entry is marked `source: changelog`. They live in their own artifact
+  (`changelog.json`), their own section of the accepted document (`changelog`), and their own plan
+  list (`history_priority.changelog`). `ranking.files` and the SII are computed from Git only.
+- `role` states precedence between file rankings, so it is set only when the change log ranks at
+  least one file; otherwise it is `null` and only the entry counts are published. With a Git ranking and none of `shallow_history`,
+  `history_window_truncated` or `history_not_of_snapshot`, the change log is a `supplement`: Git is
+  authoritative. Without a Git ranking, or with one of those gaps, the change log is `primary`:
+  the Git signals that exist are still published and the change-log list is the one to order
+  review by.
+- The signals are weaker and say so (`authority`, `semantics`): dates are author-stated, file
+  lists may be partial, an entry is not bound to content by any hash, and there is no line count,
+  author count or SII.
+- A source without Git whose change log ranks at least one file publishes `SUCCEEDED` or `PARTIAL`
+  instead of `SKIPPED_NA`. `sources.git.decision` still says why Git does not apply. A change log
+  that ranks nothing leaves the job's status as Git decided it.
+
+A source with no change-log file gets `SKIPPED_NA: no_changelog_files`, not a gap.
+`changelog.enabled = false` is `SKIPPED_POLICY`. The unit's gaps are `producer-gap/1` records
+(`interchange.producer_gap`), scoped to the file or the source; the rest of the job still reports
+legacy text gaps. The accepted document's schema id is unchanged because the `changelog` key is
+additive; the new artifact has its own id, `appsec-review/source-history-changelog/1`.
+
+### Limits
+
+- Entry-level classification is all a change log without file lists provides (a plain `git log`
+  dump, for example): it ranks no file.
+- Subversion `branches/` and `tags/` paths and `trunk/<project>/` layouts do not bind; they are
+  counted as unbound.
+- `changelog.json` holds every entry record and can reach tens of megabytes for a long history.
+- Review prioritization and the `history_context` product read SII scores and location-bound
+  signals, so they do not consume change-log signals yet (T-097).
 
 ## Signals
 
@@ -538,11 +659,16 @@ These are written per attempt, under the unit directories:
   plus the population metadata (weights, transforms, normalization bounds, constant metrics, and
   tier bounds).
 - `hotspots.json`: the hotspot index (below).
+- `changelog.json` (`appsec-review/source-history-changelog/1`): the change logs read with their
+  format, status and counts, inventory exclusions, the window, entry records, per-file signals,
+  the ranking, totals and gaps. It contains no names, addresses or message text.
 - `source-history.json`: the accepted document. It holds:
   - source decisions and binding status;
   - the window and revision semantics;
   - the SII file ranking (`ranking_top_n`) and the component priorities;
   - the hotspot summary and the artifact identity;
+  - the `changelog` section: decision, `role`, window, gap codes, and the top `ranking_top_n`
+    change-log file ranks, each marked `source: changelog`;
   - unavailable signals, gaps, and observations; and
   - the index manifest.
 
@@ -600,7 +726,10 @@ history shard holds:
   `symbol_id`;
 - `change` entities for each file's recent changes; and
 - `hotspot` entities, one per hotspot entry, named by path or symbol id, whose payload is the full
-  entry and whose location is the entry's span.
+  entry and whose location is the entry's span; and
+- a `history_signal` entity per ranked change-log file (native id `changelog:<path>`, payload
+  `source: changelog`). It has no location, because the path is bound by name only; consumers that
+  join file signals by location therefore never mix it with a commit-derived signal.
 
 Relations are:
 
@@ -612,7 +741,9 @@ Coverage rows are:
 - `git-history`: history gaps only;
 - `github-enrichment`;
 - `line-history`, `symbol-spans`, and `fix-on-fix`;
-- `history-hotspots`; and
+- `history-hotspots`;
+- `changelog-history`: `complete`, `partial` with its gap codes, or `unavailable` with the reason;
+  and
 - `pull-request-timing` and `deployment-timing`, always `unavailable`.
 
 The shard is composed into the accepted manifest and is queryable through `find`, `search`, `trace`,
@@ -625,7 +756,9 @@ hotspots; each source contributes at most 2N entries.
   status, history handoff hash, history identity, ranking identity (now the SII identity), and
   accepted components and files in SII rank order. Validation rejects any component or file that is
   not an exact accepted catalog identity. Without history the section is `UNAVAILABLE` with a
-  reason.
+  reason. `history_priority.changelog` carries the change-log file ranks separately (`status`,
+  `role`, `source: changelog`, `files`), under the same catalog-identity validation; a plan
+  without Git history can therefore still be `AVAILABLE` there with `role: primary`.
 - **Inference security review (design).** The bounded hotspot index, history coverage, and ranks
   feed the evidence map and hunt-package lead menus as context, never as message text or a search
   limit.
@@ -696,6 +829,14 @@ formatting_balance_tolerance = 0.1
 [jobs.job_source_history_analysis.settings.git]
 enabled = true
 
+[jobs.job_source_history_analysis.settings.changelog]
+enabled = true
+max_files = 16               # 1-256 change logs per source
+max_file_bytes = 16777216    # 1024-67108864; the rest of a larger file is a gap
+max_entries = 100000         # 1-1000000 per file
+max_line_bytes = 4096        # 64-65536; a longer line is never interpreted
+max_paths_per_entry = 2000   # 1-100000
+
 [jobs.job_source_history_analysis.settings.github]
 enabled = "auto"             # false denies enrichment
 api_base = "https://api.github.com"
@@ -710,7 +851,7 @@ Topology:
 | Step | Tasks |
 |---|---|
 | `resolve_sources` | `resolve_history_source`, `bind_snapshot` |
-| `acquire` | `git_history`, `normalize_changes`, `github_enrichment` |
+| `acquire` | `git_history`, `normalize_changes`, `github_enrichment`, `changelog_history` |
 | `analyze` | `classify_changes`, `compute_signals`, `blame_age`, `co_change`, `line_history`, `symbol_spans`, `fix_on_fix`, `symbol_signals`, `rank` |
 | `publish` | `index_history`, `publish_handoff` |
 
@@ -722,7 +863,9 @@ Validation rejects:
 - an unknown complexity metric;
 - tier shares that leave no Tier 3;
 - filter patterns that are absolute or contain empty or dot segments;
-- malformed label lists; and
+- malformed label lists;
+- a `changelog` table with a missing or unknown key, a non-boolean `enabled`, or a bound outside
+  its range; and
 - for GitHub `"auto"` or `true`, a non-HTTPS API base, user information in that URL, a malformed
   nonempty `owner/name` override, or a `token_env` that is not an environment-variable name.
 
@@ -755,6 +898,14 @@ The runtime identity covers the catalog entries for `tool-git` and `tool-tree-si
 | `parse_errors_present`, `parse_errors_in_span`, `node_limit_reached`, `preprocessor_branches_not_counted` | `GAP` | complexity counts are incomplete |
 | `fix_on_fix_undetermined` | `GAP` | at least one candidate fix pair could not be matched or ruled out |
 | `symbol_attribution_incomplete` | `GAP` | some changes could not be mapped to snapshot symbols |
+| `no_changelog_files` | `SKIPPED_NA` | the source's accepted inventory lists no change-log file |
+| `changelog_history_disabled` | `SKIPPED_POLICY` | `changelog.enabled = false` |
+| `changelog_excluded_from_inventory` | `GAP` (`input_unavailable`) | the catalog left a change-log file out of the inventory; the reason is in the record |
+| `changelog_file_bound_reached`, `changelog_bytes_truncated`, `changelog_entry_bound_reached`, `changelog_entry_paths_truncated`, `changelog_line_too_long`, `changelog_message_truncated` | `GAP` (`truncated`) | a `changelog` bound was reached; the record counts the files, bytes, lines or entries not parsed or not fully classified |
+| `changelog_unreadable` | `GAP` (`input_unavailable`) | an accepted change log could not be read; the record names the error type |
+| `changelog_parser_failed`, `changelog_unit_failed` | `GAP` (`producer_failed`) | a failure contained to one file or one source lane; the record names the exception type only |
+| `changelog_format_unrecognized`, `changelog_mixed_format`, `changelog_unparsed_lines` | `GAP` (`parser_error`) | no recognised entry, or lines the detected format cannot place; the record counts the lines |
+| `changelog_paths_unbound` | `GAP` (`location_unresolved`) | named paths that are ambiguous, unmatched or invalid against the accepted catalog |
 | `pr_timing_not_acquired`, `deployment_timing_not_acquired` | unavailable signal | never inferred from commit timestamps |
 | `replace_refs_ignored`, `grafts_ignored`, `config_includes_ignored`, `mainline_not_found_using_head`, `head_differs_from_mainline`, `timestamp_anomaly:<n>` | observation | recorded, never honoured |
 
@@ -798,7 +949,8 @@ Perforce will be a second source behind the same signals, ranking, shard, and pl
    - Tree-sitter function-level signals and cyclomatic and cognitive complexity;
    - the SII with tiers, and the bounded hotspot index;
    - the `history` shard, the plan's `history_priority`, the runtime input-identity probe, and
-     GitHub enrichment.
+     GitHub enrichment;
+   - change-log files as a separately labelled history source (T-097).
 2. **TODO:** Perforce export mode, then server mode.
 3. **TODO:** submodules as independent sources.
 4. **TODO:**
