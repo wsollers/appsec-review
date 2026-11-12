@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/threat-model/threat-model-generation.schema.json",
+  "title": "Threat-model generation result",
+  "$comment": "Closed schema of a document job_threat_model_generation publishes (design: docs/architecture/dfd-and-threat-model-generation.md, section 6). The record shapes are the dataclasses of src/appsec_review/threat_model/contract.py; tests/test_threat_model_schemas.py fails when they drift. Arrays are sorted by id in the canonical bytes, which a schema cannot express. The ledger is sorted by (producer, output_kind).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "origin",
+    "input_ledger",
+    "counts",
+    "gaps",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/threat-model-generation/1"
+    },
+    "origin": {
+      "$ref": "#/$defs/Origin"
+    },
+    "input_ledger": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InputLedgerRow"
+      }
+    },
+    "counts": {
+      "description": "Open object by design: the counted names are chosen by the publication step; every value is a non-negative integer.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/producerGap"
+      }
+    },
+    "artifacts": {
+      "description": "Published artifacts by name. The names are the publication step's; each value is a closed artifact reference.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/artifactReference"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "not": {
+        "pattern": "\\u0000"
+      }
+    },
+    "InputState": {
+      "description": "contract.InputState (closed vocabulary).",
+      "enum": [
+        "read",
+        "absent",
+        "disabled",
+        "not_registered",
+        "partial",
+        "empty"
+      ]
+    },
+    "Origin": {
+      "description": "contract.Origin: a generated model is never target-supplied and never more than routing context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "attempt_id",
+        "target_snapshot",
+        "reference_data",
+        "model",
+        "kind",
+        "target_supplied",
+        "producer",
+        "authority"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/$defs/text"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/text"
+        },
+        "target_snapshot": {
+          "$ref": "#/$defs/text"
+        },
+        "reference_data": {
+          "description": "SHA-256 of each reference data file the attempt read.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "interaction_catalog_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "threat_templates_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "crosswalk_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "model": {
+          "description": "null, or the model identity when elaboration ran.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "model",
+            "guidance_bundle_sha256"
+          ],
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/text"
+            },
+            "model": {
+              "$ref": "#/$defs/text"
+            },
+            "guidance_bundle_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "kind": {
+          "const": "generated"
+        },
+        "target_supplied": {
+          "const": false
+        },
+        "producer": {
+          "const": "job_threat_model_generation"
+        },
+        "authority": {
+          "const": "routing_context"
+        }
+      }
+    },
+    "InputLedgerRow": {
+      "description": "contract.InputLedgerRow: one declared input and what was read from it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producer",
+        "output_kind",
+        "state",
+        "handoff_sha256",
+        "coverage_disposition",
+        "upstream_gap_count",
+        "records_read"
+      ],
+      "properties": {
+        "producer": {
+          "$ref": "#/$defs/text"
+        },
+        "output_kind": {
+          "$ref": "#/$defs/text"
+        },
+        "state": {
+          "$ref": "#/$defs/InputState"
+        },
+        "handoff_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "coverage_disposition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "upstream_gap_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "records_read": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "artifactReference": {
+      "description": "interchange.ArtifactReference: a run-owned artifact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/text"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "producerGap": {
+      "description": "A producer-gap/1 record (interchange.producer_gap). Mirrors producerGap in docs/schemas/job-control.schema.json; repeated here so this file is self-contained.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "gap_id",
+        "code",
+        "unit_id",
+        "scope_id",
+        "reason",
+        "retryable",
+        "evidence_refs"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/producer-gap/1"
+        },
+        "gap_id": {
+          "$ref": "#/$defs/sha256"
+        },
+        "code": {
+          "enum": [
+            "producer_failed",
+            "producer_blocked",
+            "input_unavailable",
+            "output_missing",
+            "parser_error",
+            "truncated",
+            "location_unresolved",
+            "empty_result",
+            "provenance_unavailable",
+            "unknown_producer_status",
+            "producer_reported_gap"
+          ]
+        },
+        "unit_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+        },
+        "scope_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifactReference"
+          },
+          "maxItems": 64
+        }
+      }
+    }
+  }
+}
