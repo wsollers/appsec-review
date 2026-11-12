@@ -103,6 +103,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-108 | [Publish the static deployment inventory as a job](#t-108-publish-the-static-deployment-inventory-as-a-job) | evidence | open |
 | T-109 | [Put a hard ceiling on test runs and enforce the ten-second unit limit](#t-109-put-a-hard-ceiling-on-test-runs-and-enforce-the-ten-second-unit-limit) | testing | open |
 | T-110 | [Decide what the walk does with shell environment scripts the bounded reader cannot read](#t-110-decide-what-the-walk-does-with-shell-environment-scripts-the-bounded-reader-cannot-read) | build | open |
+| T-111 | [Surface build-descriptor bounds as gap records and size them against real targets](#t-111-surface-build-descriptor-bounds-as-gap-records-and-size-them-against-real-targets) | build | open |
+| T-112 | [Record what the analysis-summary trim removed, and do not report truncation under the bounds](#t-112-record-what-the-analysis-summary-trim-removed-and-do-not-report-truncation-under-the-bounds) | build | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1626,6 +1628,24 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** decide and implement one of: (1) keep the reader as is and make the three causes a standing expected gap with the cost stated once (no known environment value for any script with control flow); (2) narrow uncertainty to the lines under control flow so unconditional literals such as `EMSDK_VER=5.0.4` are published as `declared`; (3) tighten or widen selection (the stem rule admits non-build scripts; `platforms/emscripten/setups/cross-ems.tmpl` and `scripts/ci-build.sh` are not selected). Any change keeps the byte and count bounds, the secret redaction and the "advisory, not retryable" classification; a contract change follows `.claude/skills/add-a-job-contract/SKILL.md`.
 - **Done when:** a written decision names which option applies and why; for (2) or (3) a focused regression in `tests/` shows the Freeciv shapes (an unconditional literal before an `if`, a non-literal `$(...)` value, a non-build `*setup*.sh`) producing the intended declarations and gaps, and the walk charter's expected-gaps guidance says whether the causes are expected by default.
 - **Refs:** `src/appsec_review/jobs/job_build_environment_analysis/job.py` (`analyze_environment`, `gap_records`), `docs/processes/walk-charter.md` (sections 5 and 6), the Freeciv walk record `docs/tasks/2026-11-12-freeciv-walk-08-build-environment-analysis.md` (host-local, HAL5000), T-057.
+
+### T-111 — Surface build-descriptor bounds as gap records and size them against real targets
+
+- **State:** open
+- **Area:** build
+- **Why:** on the Freeciv walk (run `2026-11-12-0002`, job 9, 2026-11-12) the plan's evidence bundle held 24 of 130 autotools descriptors and neither `configure.ac` (66,520 B) nor the root `meson.build` (124,522 B, the primary build system's only descriptor, 23 targets), because `build_discovery.descriptor_package` bounds descriptors at 24 files, 65,536 B per file and 262,144 B in all. The strings `descriptor content omitted by byte bound` and `descriptor file-count bound reached` are written only inside `build-targets.json` (job 5) and `build_actions[].descriptor_package.gaps` (job 9); neither job emits a `producer-gap/1` record for them, so the walk's canonical gap check never sees that the model and the topology planned without the main build descriptors. The user accepted this for the Freeciv walk as a detection limit (walk terms row 17).
+- **Scope:** (1) emit a producer-gap record per omitted descriptor and per file-count bound reached, in the job that applies the bound, with the path, size and bound as scope; (2) make the three bounds typed configuration of the catalog job rather than function defaults, and size them against the known targets (Freeciv needs at least 128 KiB per file for `meson.build`; the file-count bound should admit a root `configure.ac` and `meson.build` ahead of subdirectory descriptors, which the ordering already does for markers); (3) a focused unit regression with an over-bound root descriptor showing the record and the ordering.
+- **Done when:** a catalog run on a target with an over-bound root descriptor shows that descriptor in `outcomes.json` as a gap record; the bounds are in the resolved configuration; the regression passes.
+- **Refs:** `src/appsec_review/jobs/build_discovery.py` (`descriptor_package`), `src/appsec_review/jobs/job_target_analysis_plan/planning.py`, walk record `docs/tasks/2026-11-12-freeciv-walk-09-target-analysis-plan.md` (host-local, HAL5000), T-095, T-110.
+
+### T-112 — Record what the analysis-summary trim removed, and do not report truncation under the bounds
+
+- **State:** open
+- **Area:** build
+- **Why:** job 9 of the Freeciv walk reported `analysis summary was truncated by configured bounds` while the published summary was under both bounds (334 sample items of 2,000; 359,844 of 524,288 bytes). `planning.summarize_catalog` trims by popping build-unit descriptor documents first, then catalog lists, then prefix samples, until the item count and the canonical byte size fit, and records only `truncated: true`; the summary read by the model is smaller than the one the bounds allow, and nothing says what was dropped. The user accepted the gap for the Freeciv walk (walk terms row 19).
+- **Scope:** record the trimmed items by kind and count in `bounds`; trim samples before descriptor documents (the documents are the planning evidence, the samples are illustration); report truncation only when the final size or count is at a bound; a focused regression with a summary that needs trimming.
+- **Done when:** a trimmed summary names what was removed; a summary that fits is not marked truncated; the regression passes.
+- **Refs:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py` (`summarize_catalog`, `trim_one`), walk record 09 (host-local), T-111.
 
 ## Legacy backlog
 
