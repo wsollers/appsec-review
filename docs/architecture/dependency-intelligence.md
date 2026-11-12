@@ -33,9 +33,14 @@ Every normalized dependency is also consumed by review-data indexing's bounded
 `dependency_advisories` lookup. PURLs map to configured OSV ecosystem/package identities; records
 without a supported purl receive a bounded name-only lookup across the pinned ecosystems. These
 matches retain the dependency identity, resolution basis, maximal exposure, and lookup ambiguity.
-They are CVE/SBOM review leads only: the OSV package-name index does not evaluate affected version
-ranges, so inventory-only matches always publish `applicability_verified: false` until corroborated
-by a scanner or future version-range evaluator.
+They are CVE/SBOM review leads only. By default the lookup does not evaluate affected version
+ranges, so inventory-only matches publish `applicability_verified: false` until a scanner
+corroborates them. With `jobs.job_review_data_indexing.settings.osv_version_matching = "index"`,
+`appsec_review.osv_matching` decides each listed advisory for the purl's version: an affected
+version is a verified match that carries the matched range, an unaffected one is not published,
+and one it cannot decide stays unverified with a named gap. See
+[OSV version matching](../operations/third-party-data-sync.md#osv-version-matching-against-the-index)
+for the ecosystems and range types it decides.
 
 ## Maximal exposure
 

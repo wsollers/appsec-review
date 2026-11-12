@@ -48,6 +48,8 @@ class ProductContext:
     owasp: Mapping[str, Any]
     max_facts: int
     rule_version: str = ""
+    # "index" decides inventory OSV matches against affected versions and ranges (osv_matching).
+    osv_version_matching: str = "disabled"
 
     @property
     def link_context(self) -> LinkContext:
@@ -338,13 +340,60 @@ def _purl_osv_identity(purl: object, fallback_name: object) -> tuple[str | None,
     return _PURL_OSV_ECOSYSTEM[kind], name[:512], "purl-ecosystem-and-name"
 
 
+RANGE_MATCH_BASIS = "dependency-inventory-osv-range-match"
+
+
+def _resolved_version(payload: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    """``(version, gap)``: the version a dependency's purl resolves, for OSV version matching.
+
+    The inventory's ``version`` field may hold a declared constraint, so only the purl's version
+    component counts as resolved, and a different inventory version is a conflict, not a choice.
+    """
+    purl = payload.get("purl")
+    body = purl[4:].split("?", 1)[0].split("#", 1)[0] if isinstance(purl, str) else ""
+    path, separator, tail = body.rpartition("@")
+    resolved = unquote(tail).strip() if separator and path and "/" not in tail else ""
+    if not resolved:
+        return None, "version_not_resolved"
+    declared = payload.get("version")
+    if isinstance(declared, str) and declared.strip() and declared.strip() != resolved:
+        return None, "version_identity_conflict"
+    return resolved, None
+
+
+def _range_match(database: sqlite3.Connection, advisory: str, ecosystem: str, name: str,
+                 version: str | None, version_gap: str | None) -> dict[str, Any]:
+    """One candidate advisory decided for the resolved version by ``appsec_review.osv_matching``."""
+    from appsec_review import osv_matching
+    if version is None:
+        return {"matcher": osv_matching.SCHEMA, "status": "undetermined", "version": None, "gaps": [version_gap]}
+    record = database.execute("SELECT withdrawn, raw_json FROM advisory WHERE id = ?", (advisory,)).fetchone()
+    verdict = ({"status": "undetermined", "gaps": ["advisory_record_missing"], "evidence": None} if record is None
+               else osv_matching.evaluate_record(record[1], record[0], ecosystem, name, version))
+    return {"matcher": osv_matching.SCHEMA, "status": verdict["status"], "version": version,
+            **({"evidence": verdict["evidence"]} if verdict["evidence"] else {}),
+            **({"gaps": verdict["gaps"]} if verdict["gaps"] else {})}
+
+
 def _inventory_advisory_pairs(database: sqlite3.Connection, dependencies: Sequence[Mapping[str, Any]], *,
-                              max_pairs: int) -> tuple[list[dict[str, Any]], list[tuple[str, str, str | None]],
-                                                       list[str]]:
-    """Attempt bounded OSV package lookup for every heuristic/normalized dependency entity."""
+                              max_pairs: int, version_matching: bool = False,
+                              ) -> tuple[list[dict[str, Any]], list[tuple[str, str, str | None]], list[str]]:
+    """Attempt bounded OSV package lookup for every heuristic/normalized dependency entity.
+
+    With ``version_matching`` every candidate of a purl-identified dependency is decided against the
+    advisory's affected versions and ranges: an affected version is a verified match carrying the
+    matched range, an unaffected or withdrawn one is counted and dropped, and an undecided one stays
+    the unverified lead it is without version matching, with its named gap.
+    """
     pairs: list[dict[str, Any]] = []
     coverage: list[tuple[str, str, str | None]] = []
     gaps: list[str] = []
+    indexed: Sequence[str] | None = None
+    ecosystem_gaps: dict[str, int] = {}
+    if version_matching:
+        from appsec_review import osv_matching
+        osv_matching.require_index(database)
+        indexed = osv_matching.indexed_ecosystems(database)
     for row in dependencies:
         identity = str(row.get("identity", ""))
         payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
@@ -374,24 +423,55 @@ def _inventory_advisory_pairs(database: sqlite3.Connection, dependencies: Sequen
             ).fetchall()
         truncated = len(records) > remaining
         records = records[:remaining]
-        uncertainty = ("version applicability is not evaluated by the feed index" if ecosystem else
-                       "ecosystem and version applicability are unresolved for name-only lookup")
-        coverage.append((area, "partial" if records or not ecosystem else "complete",
-                         uncertainty if records or not ecosystem else None))
         if truncated:
             gaps.append(f"truncated: {identity}: OSV package matches exceeded remaining pair bound {remaining}")
+        decided: dict[str, dict[str, Any]] = {}
+        if version_matching and ecosystem:
+            version, version_gap = _resolved_version(payload)
+            undecided: dict[str, int] = {}
+            for advisory, matched_ecosystem, matched_name in records:
+                match = _range_match(database, str(advisory), str(matched_ecosystem), str(matched_name),
+                                     version, version_gap)
+                decided[str(advisory)] = match
+                for gap in match.get("gaps", ()):
+                    undecided[gap] = undecided.get(gap, 0) + 1
+            for gap, count in sorted(undecided.items()):
+                gaps.append(f"{gap}: {identity}: {count} OSV advisory(ies) were not decided for version "
+                            f"{version!r} and remain unverified leads")
+            from appsec_review import osv_matching
+            incomplete = osv_matching.ecosystem_gap(ecosystem, indexed)
+            if incomplete is not None:
+                ecosystem_gaps[incomplete] = ecosystem_gaps.get(incomplete, 0) + 1
+            reasons = sorted({*undecided, *([incomplete] if incomplete else ()),
+                              *(["truncated"] if truncated else ())})
+            coverage.append((area, "partial" if reasons else "complete",
+                             ("OSV version matching is incomplete: " + ", ".join(reasons))[:300] if reasons else None))
+        else:
+            uncertainty = ("version applicability is not evaluated by the feed index" if ecosystem else
+                           "ecosystem and version applicability are unresolved for name-only lookup")
+            coverage.append((area, "partial" if records or not ecosystem else "complete",
+                             uncertainty if records or not ecosystem else None))
         for advisory, matched_ecosystem, matched_name in records:
+            match = decided.get(str(advisory))
+            if match is not None and match["status"] in {"not_affected", "withdrawn"}:
+                continue
+            verified = match is not None and match["status"] == "affected"
             pairs.append({
+                **({"version_match": match} if match is not None else {}),
                 "package": str(payload.get("name") or matched_name),
                 "version": _text(payload.get("version")), "purl": _text(payload.get("purl")),
                 "advisory": str(advisory), "severity": None,
                 "scanner": "dependency-intelligence-osv-lookup", "observation": identity,
-                "dependency_identity": identity, "lookup_basis": "dependency-inventory-osv-lookup",
+                "dependency_identity": identity,
+                "lookup_basis": RANGE_MATCH_BASIS if verified else "dependency-inventory-osv-lookup",
                 "osv_ecosystem": str(matched_ecosystem), "osv_package_name": str(matched_name),
-                "identity_basis": identity_basis, "applicability_verified": False,
+                "identity_basis": identity_basis, "applicability_verified": verified,
                 "maximal_exposure": payload.get("maximal_exposure"),
                 "resolution_basis": payload.get("resolution_basis"),
             })
+    for gap, count in sorted(ecosystem_gaps.items()):
+        gaps.append(f"{gap}: {count} dependency(ies) were matched against an OSV index that does not record "
+                    "that ecosystem's whole advisory archive; an empty result is not a clean result")
     return pairs, coverage, gaps
 
 
@@ -528,7 +608,8 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
     dependency_rows = list(shards.entities(dependencies, kinds=("dependency_package",)))
     if database is not None:
         inventory_pairs, lookup_coverage, lookup_gaps = _inventory_advisory_pairs(
-            database, dependency_rows, max_pairs=context.max_facts)
+            database, dependency_rows, max_pairs=context.max_facts,
+            version_matching=context.osv_version_matching == "index")
         derived.coverage.extend(lookup_coverage)
         derived.gaps.extend(lookup_gaps)
         for pair in inventory_pairs:
@@ -543,6 +624,14 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
             entry["inventory_context"].append({key_name: pair.get(key_name) for key_name in (
                 "dependency_identity", "identity_basis", "osv_ecosystem", "osv_package_name",
                 "applicability_verified", "maximal_exposure", "resolution_basis")})
+            if "version_match" in pair:
+                # Flat, so the matched range stays within the shard payload depth bound.
+                match = pair["version_match"]
+                entry.setdefault("version_matches", []).append({
+                    "dependency_identity": pair["dependency_identity"], "matcher": match["matcher"],
+                    "index_sha256": (context.feeds.get("osv") or {}).get("files", {}).get(REFERENCE_FEED_FILES["osv"]),
+                    "status": match["status"], "version": match["version"], **(match.get("evidence") or {}),
+                    **({"gaps": match["gaps"]} if match.get("gaps") else {})})
     elif dependency_rows:
         derived.gap(f"feed_unavailable: {feed_gap}; {len(dependency_rows)} dependency inventory row(s) "
                     "could not be checked against OSV")
@@ -554,7 +643,13 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
             versioned = bool(version or purl) and scanner_reported
             gaps = [] if versioned else (["missing_version: the scanner reported a package name only"]
                                          if scanner_reported else [])
-            if "dependency-inventory-osv-lookup" in entry["lookup_bases"] and not scanner_reported:
+            range_matched = RANGE_MATCH_BASIS in entry["lookup_bases"]
+            undecided = sorted({gap for match in entry.get("version_matches", ()) for gap in match.get("gaps", ())})
+            if undecided and not scanner_reported and not range_matched:
+                gaps.append("applicability_unverified: dependency identity matched an OSV package, but OSV version "
+                            "matching could not decide the observed version: " + ", ".join(undecided)[:200])
+            elif ("dependency-inventory-osv-lookup" in entry["lookup_bases"] and not scanner_reported
+                  and not range_matched):
                 gaps.append("applicability_unverified: dependency identity matched an OSV package, but this "
                             "index does not evaluate whether the observed version is in an affected range")
             intelligence: dict[str, Any] = {"feed": feed, "advisory_known": None, "aliases": []}
@@ -601,15 +696,23 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
                 subject_identity=subject, location=entry["location"], status="partial" if gaps else "complete",
                 gaps=gaps, basis="accepted scanner match and/or dependency-inventory package identity joined to "
                                  "the pinned OSV snapshot and, by CVE id from the advisory id or its OSV aliases, "
-                                 "to pinned NVD, KEV and EPSS snapshots; inventory lookup does not evaluate version "
-                                 "applicability and every joined record is reference context, never target evidence",
+                                 "to pinned NVD, KEV and EPSS snapshots; " + (
+                                     "inventory lookup decides version applicability against the advisory's "
+                                     "affected versions and ranges where the ordering is implemented"
+                                     if context.osv_version_matching == "index" else
+                                     "inventory lookup does not evaluate version applicability") +
+                                 " and every joined record is reference context, never target evidence",
                 upstream=_upstream((*scanners, *dependencies, *_link_shard(context, "package_advisory"))),
                 result={"package": package, "version": version, "purl": purl, "advisory": advisory,
                         "advisory_identity": advisory_identity(context.snapshot, advisory).value,
                         "severity": entry["severity"], "scanners": sorted(str(item) for item in entry["scanners"]),
                         "match_exact": versioned, "lookup_bases": lookup_bases,
-                        "applicability_verified": scanner_reported,
+                        "applicability_verified": scanner_reported or range_matched,
                         "dependency_inventory": entry["inventory_context"][:8],
+                        **({"version_matches": sorted(
+                            entry["version_matches"],
+                            key=lambda item: (item["status"], item["dependency_identity"]))[:8]}
+                           if entry.get("version_matches") else {}),
                         "observations": sorted(set(entry["observations"]))[:8],
                         "observation_count": len(set(entry["observations"])), "intelligence": intelligence,
                         **reference})

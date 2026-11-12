@@ -55,9 +55,13 @@ observations when a conservative default is too broad; do not manually weaken th
 After acceptance, review-data indexing offers every `dependency_package` entity to the bounded
 `dependency_advisories` route. A supported purl selects one OSV ecosystem and package name;
 otherwise a name-only lookup is bounded across the pinned ecosystems. Model-inferred native
-identities take the same route. Inventory-only matches always remain
+identities take the same route. Inventory-only matches remain
 `applicability_verified = false` and carry an `applicability_unverified` gap until accepted scanner
-or version-range evidence corroborates applicability. A package-name match, inferred repository,
+or version-range evidence corroborates applicability. Version-range evidence comes only from
+`osv_version_matching = "index"` (default `"disabled"`; see
+[OSV version matching](third-party-data-sync.md#osv-version-matching-against-the-index)), which
+verifies a match when the purl's version is in an affected range and names a gap when it cannot
+decide. A package-name match, inferred repository,
 maximal-exposure value, Scorecard response, or absence of any of them is not a vulnerability
 finding.
 

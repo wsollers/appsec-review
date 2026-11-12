@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from appsec_review import osv_matching
 from appsec_review.indexing import input_matrix, matrix, products
 from appsec_review.indexing import fts_worker
 from appsec_review.indexing.derive import Derived, publish_derived
@@ -345,11 +346,14 @@ def build_job(*, providers: Providers = registry_providers,
             max_facts = int(settings["max_facts_per_product"])
             link_identities = {item["rule"]: item["index_identity"] for item in unit.output("links.cross_domain")["links"]}
             store = ShardSet(run_root, [*view.shards, *link_identities.values()])
+            osv_version_matching = osv_matching.parse_mode(
+                settings.get("osv_version_matching", "disabled"), f"jobs.{JOB_ID}.settings.osv_version_matching")
             context = products.ProductContext(
                 run_root, snapshot, store, {family: link_identities[family] for family in rule.links
                                             if family in link_identities},
                 {feed: document["feeds"].get(feed, {"status": "unavailable", "reason": "feed is not configured"})
-                 for feed in rule.feeds}, document["owasp"] if rule.owasp else {}, max_facts, version)
+                 for feed in rule.feeds}, document["owasp"] if rule.owasp else {}, max_facts, version,
+                osv_version_matching)
             selected = rule.select(store)
             inputs: dict[str, Any] = {
                 "shards": ShardSet.identities(selected), "max_facts": max_facts,
@@ -358,6 +362,9 @@ def build_job(*, providers: Providers = registry_providers,
                                                                                            "stale")}
                           for feed in rule.feeds},
                 "owasp": document["owasp"].get("manifest_sha256") if rule.owasp else None}
+            if query_set == "dependency_advisories" and osv_version_matching != "disabled":
+                # Only a non-default mode enters the reuse identity, so default checkpoints keep theirs.
+                inputs["osv_version_matching"] = {"mode": osv_version_matching, "matcher": osv_matching.SCHEMA}
             build: Callable[[], Derived]
             if query_set == "scanner_correlation":
                 syntax, syntax_reference = None, None

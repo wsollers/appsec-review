@@ -256,7 +256,7 @@ def build_job(
         Unit("nvd_sync.process", nvd_process, ("nvd_sync.fetch",),
              output_validators=(_schema("appsec-review/nvd-process/1"),)),
         Unit("osv_sync.index", osv_index, ("osv_sync.fetch",),
-             output_validators=(_schema("appsec-review/osv-index/1"),)),
+             output_validators=(_schema("appsec-review/osv-index/2"),)),
         Unit("grype_db_sync.import", grype_import, ("grype_db_sync.fetch",),
              output_validators=(_schema("appsec-review/grype-import/1"),)),
         Unit("mitre_sync.normalize", mitre_normalize, ("mitre_sync.fetch",),

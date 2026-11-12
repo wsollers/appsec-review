@@ -1088,6 +1088,11 @@ feed_max_age_days = 14
 # Per-feed freshness bounds that override feed_max_age_days; a pinned snapshot older than its bound
 # is pinned as stale and every product joining it records a stale_feed gap.
 feed_max_age_days_overrides = { kev = 7, epss = 3 }
+# How dependency_advisories treats an inventory dependency whose package the pinned OSV index lists:
+# "disabled" publishes every listed advisory as an unverified lead; "index" decides each one against
+# the advisory's affected versions and ranges (appsec_review.osv_matching), keeping undecided ones
+# as unverified leads with a named gap. osv-scanner in evidence collection runs either way.
+osv_version_matching = "disabled"
 # Offline cross-check of this job's published shard text with the pinned tool-sqlite-fts image:
 # "disabled", "optional" (record a named gap when the image is unavailable) or "required" (fail).
 # The image output is a validation receipt only; MCP reads only accepted in-process shards.
