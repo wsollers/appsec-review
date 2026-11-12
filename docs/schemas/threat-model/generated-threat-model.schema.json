@@ -1,0 +1,627 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/threat-model/generated-threat-model.schema.json",
+  "title": "Generated threat model",
+  "$comment": "Closed schema of a document job_threat_model_generation publishes (design: docs/architecture/dfd-and-threat-model-generation.md, section 6). The record shapes are the dataclasses of src/appsec_review/threat_model/contract.py; tests/test_threat_model_schemas.py fails when they drift. Arrays are sorted by id in the canonical bytes, which a schema cannot express. Every asset, actor, entry point and threat cites at least one evidence reference.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "origin",
+    "assets",
+    "actors",
+    "entry_points",
+    "threats",
+    "supplied_documents",
+    "unknowns"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/generated-threat-model/1"
+    },
+    "origin": {
+      "$ref": "#/$defs/Origin"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Asset"
+      }
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Actor"
+      }
+    },
+    "entry_points": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EntryPoint"
+      }
+    },
+    "threats": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Threat"
+      }
+    },
+    "supplied_documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text"
+      },
+      "description": "Ids of target-supplied dfd or threat_model records, listed for a reader and never merged into the generated model."
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Unknown"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "description": "contract.element_id: <prefix>:<first 16 hex of the SHA-256 of the canonical native identity>.",
+      "type": "string",
+      "pattern": "^[a-z]+:[0-9a-f]{16}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "not": {
+        "pattern": "\\u0000"
+      }
+    },
+    "Basis": {
+      "description": "contract.Basis (closed vocabulary).",
+      "enum": [
+        "verified_semantic",
+        "declared",
+        "observed_syntax",
+        "derived"
+      ]
+    },
+    "Interaction": {
+      "description": "contract.Interaction (closed vocabulary).",
+      "enum": [
+        "network_listen",
+        "network_receive",
+        "network_connect",
+        "file_read",
+        "file_write",
+        "datastore_query",
+        "code_load",
+        "process_spawn",
+        "environment_read",
+        "argument_read",
+        "local_ipc",
+        "privilege_change"
+      ]
+    },
+    "Stride": {
+      "description": "contract.Stride (closed vocabulary).",
+      "enum": [
+        "spoofing",
+        "tampering",
+        "repudiation",
+        "information_disclosure",
+        "denial_of_service",
+        "elevation_of_privilege"
+      ]
+    },
+    "ThreatState": {
+      "description": "contract.ThreatState (closed vocabulary).",
+      "enum": [
+        "candidate",
+        "elaborated"
+      ]
+    },
+    "MitigationState": {
+      "description": "contract.MitigationState (closed vocabulary).",
+      "enum": [
+        "evidence_found",
+        "not_found_in_evidence",
+        "not_examined"
+      ]
+    },
+    "UnknownKind": {
+      "description": "contract.UnknownKind (closed vocabulary).",
+      "enum": [
+        "runtime_role_unknown",
+        "peer_unidentified",
+        "flow_endpoint_unresolved",
+        "protocol_unknown",
+        "datastore_unidentified",
+        "boundary_not_established",
+        "deployment_not_described",
+        "authentication_not_located",
+        "asset_sensitivity_unknown",
+        "uncited_model_inference",
+        "evidence_request_unserved",
+        "no_element_established",
+        "citation_unresolved"
+      ]
+    },
+    "Origin": {
+      "description": "contract.Origin: a generated model is never target-supplied and never more than routing context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "attempt_id",
+        "target_snapshot",
+        "reference_data",
+        "model",
+        "kind",
+        "target_supplied",
+        "producer",
+        "authority"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/$defs/text"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/text"
+        },
+        "target_snapshot": {
+          "$ref": "#/$defs/text"
+        },
+        "reference_data": {
+          "description": "SHA-256 of each reference data file the attempt read.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "interaction_catalog_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "threat_templates_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "crosswalk_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "model": {
+          "description": "null, or the model identity when elaboration ran.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "model",
+            "guidance_bundle_sha256"
+          ],
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/text"
+            },
+            "model": {
+              "$ref": "#/$defs/text"
+            },
+            "guidance_bundle_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "kind": {
+          "const": "generated"
+        },
+        "target_supplied": {
+          "const": false
+        },
+        "producer": {
+          "const": "job_threat_model_generation"
+        },
+        "authority": {
+          "const": "routing_context"
+        }
+      }
+    },
+    "Publication": {
+      "description": "contract.Publication: the accepted shard or artifact a record was read from.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job",
+        "output_kind",
+        "index",
+        "shard_id",
+        "sha256"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/text"
+        },
+        "output_kind": {
+          "$ref": "#/$defs/text"
+        },
+        "index": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shard_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "EvidenceRef": {
+      "description": "contract.EvidenceRef: one citation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "kind",
+        "entity_id",
+        "entity_kind",
+        "publication",
+        "locator",
+        "content_sha256",
+        "basis",
+        "rule"
+      ],
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "index_entity",
+            "run_artifact"
+          ]
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "entity_kind": {
+          "type": "string"
+        },
+        "publication": {
+          "$ref": "#/$defs/Publication"
+        },
+        "locator": {
+          "description": "path:start-end#bstart-end@file_sha256, or null when the record has no source span.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis"
+        },
+        "rule": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "Unknown": {
+      "description": "contract.Unknown: a statement about the model, not about an input.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "subject_ids",
+        "statement",
+        "would_resolve"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "$ref": "#/$defs/UnknownKind"
+        },
+        "subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "statement": {
+          "$ref": "#/$defs/text"
+        },
+        "would_resolve": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "EntryPoint": {
+      "description": "contract.EntryPoint",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "process",
+        "interaction",
+        "source_class",
+        "enclosing_symbol",
+        "basis",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "process": {
+          "$ref": "#/$defs/id"
+        },
+        "interaction": {
+          "$ref": "#/$defs/Interaction"
+        },
+        "source_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enclosing_symbol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "minItems": 1,
+          "description": "At least one evidence reference: a record without evidence cannot be published."
+        }
+      }
+    },
+    "Actor": {
+      "description": "contract.Actor",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "external_entity",
+        "attacker_position_candidates",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "external_entity": {
+          "$ref": "#/$defs/id"
+        },
+        "attacker_position_candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "minItems": 1,
+          "description": "At least one evidence reference: a record without evidence cannot be published."
+        }
+      }
+    },
+    "Asset": {
+      "description": "contract.Asset",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "held_by",
+        "basis",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/text"
+        },
+        "held_by": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "minItems": 1,
+          "description": "At least one evidence reference: a record without evidence cannot be published."
+        }
+      }
+    },
+    "Mitigation": {
+      "description": "contract.Mitigation: evidence is present exactly when the state is evidence_found.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "evidence"
+      ],
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/MitigationState"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "evidence_found"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "evidence": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    "Threat": {
+      "description": "contract.Threat: a candidate threat names its template.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "state",
+        "stride",
+        "template_id",
+        "title",
+        "question",
+        "element_ids",
+        "flow_ids",
+        "boundary_ids",
+        "evidence",
+        "obligations",
+        "mitigation",
+        "related_controls",
+        "crosswalk"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "state": {
+          "$ref": "#/$defs/ThreatState"
+        },
+        "stride": {
+          "$ref": "#/$defs/Stride"
+        },
+        "template_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/text"
+        },
+        "question": {
+          "$ref": "#/$defs/text"
+        },
+        "element_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "flow_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "boundary_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "minItems": 1,
+          "description": "At least one evidence reference: a record without evidence cannot be published."
+        },
+        "obligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mitigation": {
+          "$ref": "#/$defs/Mitigation"
+        },
+        "related_controls": {
+          "type": "array",
+          "items": {
+            "description": "Open object by design: a related control is a crosswalk reference record whose fields belong to the reference data.",
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "crosswalk": {
+          "description": "Open object by design: crosswalk context comes from the reference data and is not fixed here.",
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "candidate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "template_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

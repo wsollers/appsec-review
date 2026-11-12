@@ -582,7 +582,7 @@
       "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build",
       "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis",
       "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync",
-      "job_tree_sitter_ast"
+      "job_threat_model_generation", "job_tree_sitter_ast"
     ],
     "mcp_tools": [
       "coverage", "find", "list_codeql_databases", "query_artifacts", "query_build_security",

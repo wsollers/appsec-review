@@ -37,7 +37,7 @@ reader boundaries; this contract is not an operating-system filesystem sandbox.
 
 ## Current dispatch and projections
 
-All 46 registered factories attach the contract declared in their `datasets.py` module. Forty-four
+All 47 registered factories attach the contract declared in their `datasets.py` module. Forty-five
 are review-graph jobs (including disabled jobs); `job_build_iteration` is an internal transaction,
 and `job_third_party_data_sync` is external maintenance. `Job.consumes` and module `CONSUMES` are
 compatibility projections, not independent input declarations. Registry/config parity and exact

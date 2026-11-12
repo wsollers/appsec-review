@@ -98,6 +98,8 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("scanner_correlation", "ci_trust", "deployment_exposure"), ("query_observations", "query_precomputed")),
     ("binary_scan", ("job_evidence_collection",), "current", ("scanner_correlation", "artifact_inventory"),
      ("query_artifacts", "query_observations")),
+    # Generated DFD and threat model: routing context, artifact-only, never the target's own documents.
+    ("generated_threat_model", ("job_threat_model_generation",), "artifact_only", (), ("coverage",)),
     ("owasp_controls", ("job_owasp_control_assessment",), "current", ("control_evidence", "review_package"),
      ("query_owasp_workbench", "query_precomputed")),
     ("security_tags", ("job_security_tagging",), "current", ("scanner_correlation", "hotspot_context"),

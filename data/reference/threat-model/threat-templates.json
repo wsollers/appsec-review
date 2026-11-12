@@ -1,0 +1,785 @@
+{
+  "schema": "appsec-review/threat-templates/1",
+  "version": 1,
+  "templates": [
+    {
+      "template_id": "argument-privileged-context",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "argument_read",
+        "boundary_kind": "local_user",
+        "direction": "inbound"
+      },
+      "title": "Operator input to a process with more authority",
+      "question": "Does the process run with more authority than the operator who supplies its input?",
+      "obligations": [
+        "Determine the identity the process runs as and which accounts can start it or supply input.",
+        "Show which operations use operator-supplied values while the higher authority is in effect."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "declared_security_state",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "argument-secret-exposure",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "argument_read",
+        "boundary_kind": "local_user",
+        "direction": "inbound"
+      },
+      "title": "Secrets on the command line",
+      "question": "Are secrets accepted on the command line, where other local accounts can read the process listing?",
+      "obligations": [
+        "Identify arguments that carry credentials or keys.",
+        "Show whether an alternative that keeps the value out of the process listing is offered."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "argument-value-validation",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "argument_read",
+        "boundary_kind": "local_user",
+        "direction": "inbound"
+      },
+      "title": "Values supplied by the operator",
+      "question": "Is each operator-supplied value validated before it is used as a path, size, address or option?",
+      "obligations": [
+        "List the arguments and interactive inputs read and what each value is used for.",
+        "For each, locate the validation applied before use."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "code-load-capabilities",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "code_load",
+        "boundary_kind": "loaded_code",
+        "direction": "inbound"
+      },
+      "title": "What loaded code can do",
+      "question": "Which host functions, files and network operations are reachable from loaded code or script once it runs?",
+      "obligations": [
+        "List the host functions and libraries exposed to the loaded code or script engine.",
+        "Show whether file, process and network operations are among them and how they are restricted."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "declared_security_state",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "code-load-location-control",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "code_load",
+        "boundary_kind": "loaded_code",
+        "direction": "inbound"
+      },
+      "title": "Choice of what is loaded",
+      "question": "Can input from outside the process, or a writable search path, choose what is loaded?",
+      "obligations": [
+        "Trace the name or path argument of the load call to its origin.",
+        "Show how a relative name is resolved and which directories are searched."
+      ],
+      "mitigation_evidence": [
+        "graph_sanitizer",
+        "graph_guard",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "code-load-origin",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "code_load",
+        "boundary_kind": "loaded_code",
+        "direction": "inbound"
+      },
+      "title": "Origin of loaded code",
+      "question": "How is the origin of loaded code or script established before it runs?",
+      "obligations": [
+        "Identify where the loaded module or script comes from and who can write to that location.",
+        "Locate any signature or digest verification made before loading."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "owasp_control_result",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "code-load-runaway",
+      "stride": "denial_of_service",
+      "applies_to": {
+        "interaction": "code_load",
+        "boundary_kind": "loaded_code",
+        "direction": "inbound"
+      },
+      "title": "Run time of loaded script",
+      "question": "Is execution of loaded script bounded in time and memory?",
+      "obligations": [
+        "Locate any instruction count, time or memory limit set on the script engine.",
+        "Show what happens when a script does not return."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "connect-data-sent",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "network_connect",
+        "boundary_kind": "network",
+        "direction": "outbound"
+      },
+      "title": "Data sent to a remote service",
+      "question": "What data is sent on this connection, and is the transport protected against reading in transit?",
+      "obligations": [
+        "Identify the data written to this connection and whether it includes credentials or personal data.",
+        "Determine whether the connection uses an encrypted transport."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "owasp_control_result",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "connect-destination-control",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "network_connect",
+        "boundary_kind": "network",
+        "direction": "outbound"
+      },
+      "title": "Choice of connection destination",
+      "question": "Can input from outside the process choose the destination of this connection?",
+      "obligations": [
+        "Trace the host, port and address arguments of this connection to their origin.",
+        "Locate any allow list or address check applied to an externally supplied destination."
+      ],
+      "mitigation_evidence": [
+        "graph_sanitizer",
+        "graph_guard",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "connect-response-validation",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "network_connect",
+        "boundary_kind": "network",
+        "direction": "outbound"
+      },
+      "title": "Data returned by a remote service",
+      "question": "Is data returned by the remote service validated before use, as input from any network peer would be?",
+      "obligations": [
+        "Trace the response of this connection to its uses.",
+        "Locate the structural and bounds checks applied to the response before those uses."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "connect-server-identity",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "network_connect",
+        "boundary_kind": "network",
+        "direction": "outbound"
+      },
+      "title": "Identity of a remote service",
+      "question": "How does the process verify the identity of the service it connects to?",
+      "obligations": [
+        "Locate certificate or key verification for this connection and the settings that control it.",
+        "Show whether verification can be switched off by configuration or input."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "owasp_control_result",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "connect-unbounded-wait",
+      "stride": "denial_of_service",
+      "applies_to": {
+        "interaction": "network_connect",
+        "boundary_kind": "network",
+        "direction": "outbound"
+      },
+      "title": "Waiting on a remote service",
+      "question": "Is there a timeout and a response size bound on this connection?",
+      "obligations": [
+        "Locate the connect and read timeouts that apply to this connection.",
+        "Show the bound on the amount of response data the process will accept."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "environment-privileged-context",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "environment_read",
+        "boundary_kind": "launch_environment",
+        "direction": "inbound"
+      },
+      "title": "Environment of a process with more authority",
+      "question": "Does the process run with more authority than whoever sets its environment, and are environment values still trusted then?",
+      "obligations": [
+        "Determine the identity the process runs as and who can set its environment.",
+        "Show which environment values are ignored or cleared when the two differ."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "declared_security_state",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "environment-secret-exposure",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "environment_read",
+        "boundary_kind": "launch_environment",
+        "direction": "inbound"
+      },
+      "title": "Secrets in the environment",
+      "question": "Are secrets passed through the environment, and are they kept out of logs, child processes and error output?",
+      "obligations": [
+        "Identify environment variables that carry credentials or keys.",
+        "Show whether their values are logged, echoed or inherited by spawned programs."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "owasp_control_result",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "environment-value-validation",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "environment_read",
+        "boundary_kind": "launch_environment",
+        "direction": "inbound"
+      },
+      "title": "Values read from the environment",
+      "question": "Is each value read from the environment validated before it is used as a path, size, address or option?",
+      "obligations": [
+        "List the environment variables read and what each value is used for.",
+        "For each, locate the validation applied before use."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "file-read-content-validation",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "file_read",
+        "boundary_kind": "file_content",
+        "direction": "inbound"
+      },
+      "title": "Structure of file content",
+      "question": "Is the structure of file content checked (lengths, counts, offsets, nesting) before it is used?",
+      "obligations": [
+        "List the fields of the file format that are used as a size, count, offset or index.",
+        "For each, locate the check that bounds it before use."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "file-read-origin",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "file_read",
+        "boundary_kind": "file_content",
+        "direction": "inbound"
+      },
+      "title": "Origin of a file",
+      "question": "Is the origin or integrity of the file established before its content is trusted?",
+      "obligations": [
+        "Determine who can create or replace the file at the location it is read from.",
+        "Locate any signature, digest, ownership or permission check made before the content is used."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "owasp_control_result",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "file-read-path-control",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "file_read",
+        "boundary_kind": "file_content",
+        "direction": "inbound"
+      },
+      "title": "Choice of the path that is opened",
+      "question": "Can input from outside the process choose which path is opened, and is the path kept inside an intended directory?",
+      "obligations": [
+        "Trace the path argument of this file access to its origin.",
+        "Locate the normalization and directory check applied to an externally supplied path."
+      ],
+      "mitigation_evidence": [
+        "graph_sanitizer",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "file-read-resource-exhaustion",
+      "stride": "denial_of_service",
+      "applies_to": {
+        "interaction": "file_read",
+        "boundary_kind": "file_content",
+        "direction": "inbound"
+      },
+      "title": "Resource use driven by file content",
+      "question": "Can a file cause unbounded allocation, recursion or decompression?",
+      "obligations": [
+        "Find allocations, recursion and decompression whose size depends on file content.",
+        "Show the upper bound applied to each."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "ipc-channel-access",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "local_ipc",
+        "boundary_kind": "process",
+        "direction": "inbound"
+      },
+      "title": "Access to a local channel",
+      "question": "Which local accounts can open, read or write this channel?",
+      "obligations": [
+        "Identify the name, location and permissions the channel is created with.",
+        "Show which accounts those permissions admit."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "ipc-message-validation",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "local_ipc",
+        "boundary_kind": "process",
+        "direction": "inbound"
+      },
+      "title": "Messages from a local peer",
+      "question": "Is every length, count and index in a message from the channel checked before use?",
+      "obligations": [
+        "List the fields of a channel message that are used as a size, count, offset or index.",
+        "For each, locate the check that bounds it before use."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "ipc-peer-identity",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "local_ipc",
+        "boundary_kind": "process",
+        "direction": "inbound"
+      },
+      "title": "Identity of a local peer",
+      "question": "How is the process at the other end of the channel identified?",
+      "obligations": [
+        "Identify the channel type and the permissions or credentials check applied to its peer.",
+        "Show that messages are not acted on before that check."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "configuration_observation",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "listen-action-attribution",
+      "stride": "repudiation",
+      "applies_to": {
+        "interaction": "network_listen",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Attribution of requests from the network",
+      "question": "Are accepted connections and the actions requested over them recorded with enough detail to attribute them?",
+      "obligations": [
+        "Locate the logging performed when a connection is accepted and when a request changes state.",
+        "Show which peer attributes each record carries."
+      ],
+      "mitigation_evidence": [
+        "owasp_control_result",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "listen-connection-exhaustion",
+      "stride": "denial_of_service",
+      "applies_to": {
+        "interaction": "network_listen",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Connection exhaustion at a listener",
+      "question": "What bounds the number of connections and the time a connection may stay idle or half open?",
+      "obligations": [
+        "Find the connection limit, backlog and timeout settings that apply to this listener.",
+        "Show what happens to new connections once the limit is reached."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "listen-exposure-scope",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "network_listen",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Reach of a listener",
+      "question": "Which addresses and interfaces does the listener bind to, and is that reach the intended one?",
+      "obligations": [
+        "Identify the bind address and port and where they are configured.",
+        "Compare the configured reach with what the documentation or deployment description intends."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "listen-peer-identity",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "network_listen",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Identity of a connecting peer",
+      "question": "How is a connecting peer identified before its requests are acted on?",
+      "obligations": [
+        "Locate the step that establishes the identity of a new connection.",
+        "Show that every request path reachable from the listener passes that step first."
+      ],
+      "mitigation_evidence": [
+        "owasp_control_result",
+        "graph_guard",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "listen-transport-protection",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "network_listen",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Transport protection at a listener",
+      "question": "Is traffic accepted on this listener protected against reading and modification in transit?",
+      "obligations": [
+        "Determine whether the listener negotiates an encrypted transport and which protocol versions it accepts.",
+        "Show whether an unprotected fallback path to the same service exists."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "owasp_control_result",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "privilege-change-completeness",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "privilege_change",
+        "boundary_kind": "privilege",
+        "direction": "inbound"
+      },
+      "title": "Completeness of a privilege change",
+      "question": "Is the result of each privilege change checked, and are all identities changed together and in a safe order?",
+      "obligations": [
+        "List the privilege change calls and show that the result of each is checked.",
+        "Show that user, group and supplementary group identities are all changed and cannot be regained."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "privilege-change-record",
+      "stride": "repudiation",
+      "applies_to": {
+        "interaction": "privilege_change",
+        "boundary_kind": "privilege",
+        "direction": "inbound"
+      },
+      "title": "Record of a privilege change",
+      "question": "Is each change of identity or privilege recorded, with the identity before and after?",
+      "obligations": [
+        "Locate the logging performed at each privilege change call.",
+        "Show that a failed change is recorded as well as a successful one."
+      ],
+      "mitigation_evidence": [
+        "owasp_control_result",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "privilege-input-before-change",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "privilege_change",
+        "boundary_kind": "privilege",
+        "direction": "inbound"
+      },
+      "title": "Input handled before a privilege change",
+      "question": "Which outside input is processed while the higher authority is still in effect?",
+      "obligations": [
+        "Identify the inputs read and the operations performed before the privilege change.",
+        "Show whether any of them could be deferred until after the change."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "receive-error-detail",
+      "stride": "information_disclosure",
+      "applies_to": {
+        "interaction": "network_receive",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Replies to malformed input",
+      "question": "What does the process send back when received data is malformed, and does the reply reveal internal state?",
+      "obligations": [
+        "Locate the error paths of the receiving handler and the content of each reply.",
+        "Show whether a reply includes memory content, paths, stack traces or configuration."
+      ],
+      "mitigation_evidence": [
+        "owasp_control_result",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "receive-interpreter-reach",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "network_receive",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Received data reaching an interpreter",
+      "question": "Does received data reach a query, command, path or format interpreter without being neutralized?",
+      "obligations": [
+        "Trace received data to the query, command, path and format sinks it can reach.",
+        "For each reached sink, locate the encoding, parameter binding or validation applied on the way."
+      ],
+      "mitigation_evidence": [
+        "graph_sanitizer",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "receive-length-and-index-checks",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "network_receive",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Lengths and indexes in received data",
+      "question": "Is every length, count, offset and index taken from received data checked against its destination before use?",
+      "obligations": [
+        "List the fields of received data that are used as a size, count, offset or index.",
+        "For each, locate the check that bounds it and show the check runs before the use on every path."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "receive-operation-permission",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "network_receive",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Operations a sender can trigger",
+      "question": "Which operations can received data trigger, and is the sender's permission checked for each?",
+      "obligations": [
+        "List the state changing or privileged operations reachable from the receiving handler.",
+        "For each, locate the permission check and show it uses the established sender identity."
+      ],
+      "mitigation_evidence": [
+        "owasp_control_result",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "receive-peer-identity",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "network_receive",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Identity of the sender of received data",
+      "question": "How is the sender of this data identified, and is that identity checked before the data is acted on?",
+      "obligations": [
+        "Locate where the sender identity is established for the handler that receives this data.",
+        "Show that the handler cannot be reached before that identity is established."
+      ],
+      "mitigation_evidence": [
+        "owasp_control_result",
+        "graph_guard",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "receive-resource-exhaustion",
+      "stride": "denial_of_service",
+      "applies_to": {
+        "interaction": "network_receive",
+        "boundary_kind": "network",
+        "direction": "inbound"
+      },
+      "title": "Resource use driven by received data",
+      "question": "Can a peer make the process allocate, loop or wait without a bound that the receiver sets?",
+      "obligations": [
+        "Find allocations, loops and waits whose size or duration depends on received data.",
+        "Show the upper bound applied to each and where that bound is set."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "configuration_observation"
+      ]
+    },
+    {
+      "template_id": "spawn-command-construction",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "process_spawn",
+        "boundary_kind": "process",
+        "direction": "outbound"
+      },
+      "title": "Construction of a command line",
+      "question": "Is the command built from fixed arguments, or can outside input add arguments or shell syntax?",
+      "obligations": [
+        "Trace each part of the command line to its origin.",
+        "Show whether a shell interprets the command and what quoting or argument vector is used."
+      ],
+      "mitigation_evidence": [
+        "graph_sanitizer",
+        "graph_guard"
+      ]
+    },
+    {
+      "template_id": "spawn-inherited-authority",
+      "stride": "elevation_of_privilege",
+      "applies_to": {
+        "interaction": "process_spawn",
+        "boundary_kind": "process",
+        "direction": "outbound"
+      },
+      "title": "Authority given to a spawned program",
+      "question": "Which privileges, environment variables and open descriptors does the spawned program inherit?",
+      "obligations": [
+        "List the identity, environment and descriptors in effect at the spawn call.",
+        "Show which of them are cleared or closed before the program runs."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "graph_guard",
+        "declared_security_state"
+      ]
+    },
+    {
+      "template_id": "spawn-output-handling",
+      "stride": "tampering",
+      "applies_to": {
+        "interaction": "process_spawn",
+        "boundary_kind": "process",
+        "direction": "outbound"
+      },
+      "title": "Output read back from a spawned program",
+      "question": "Is output read back from the spawned program validated before use?",
+      "obligations": [
+        "Trace the output of the spawned program to its uses.",
+        "Locate the bounds and format checks applied before those uses."
+      ],
+      "mitigation_evidence": [
+        "graph_guard",
+        "graph_sanitizer"
+      ]
+    },
+    {
+      "template_id": "spawn-program-resolution",
+      "stride": "spoofing",
+      "applies_to": {
+        "interaction": "process_spawn",
+        "boundary_kind": "process",
+        "direction": "outbound"
+      },
+      "title": "Resolution of the spawned program",
+      "question": "Is the program named by absolute path, or resolved through a search path an outside party can influence?",
+      "obligations": [
+        "Identify how the program name is resolved to a file.",
+        "Show who can write to the directories searched."
+      ],
+      "mitigation_evidence": [
+        "configuration_observation",
+        "graph_guard"
+      ]
+    }
+  ],
+  "untemplated": [
+    "datastore_query",
+    "file_write"
+  ]
+}

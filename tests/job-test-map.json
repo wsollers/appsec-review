@@ -370,6 +370,12 @@
       "acceptance": [],
       "live": []
     },
+    "job_threat_model_generation": {
+      "unit": ["tests/test_threat_model_generation_job.py"],
+      "integration": ["tests/integration/test_threat_model_generation.py"],
+      "acceptance": ["tests/acceptance/test_threat_model_generation.py"],
+      "live": []
+    },
     "job_tree_sitter_ast": {
       "unit": [
         "tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific",
@@ -447,6 +453,7 @@
         "job_target_catalog",
         "job_test_coverage",
         "job_third_party_data_sync",
+        "job_threat_model_generation",
         "job_tree_sitter_ast"
       ],
       "unit": [
@@ -507,6 +514,7 @@
         "job_target_catalog",
         "job_test_coverage",
         "job_third_party_data_sync",
+        "job_threat_model_generation",
         "job_tree_sitter_ast"
       ],
       "unit": [
