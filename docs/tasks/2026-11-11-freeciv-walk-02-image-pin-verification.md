@@ -1,15 +1,16 @@
 # Freeciv walk 02 - `job_image_pin_verification`
 
-This record advances T-057. Walk terms, overlay and the expected-gaps list are in
+This record advances T-057. Walk terms, overlay, runs and the expected-gaps list are in
 [walk 01](2026-11-11-freeciv-walk-01-model-connectivity.md).
 
-**Result: accepted** (run `2026-11-11-0008`, overlay `freeciv-b1b0768b/capacity-overlay.toml`).
+**Result: accepted** (run `2026-11-11-0009`, overlay `freeciv-b1b0768b/capacity-overlay.toml`,
+corpus tag `freeciv-b1b0768b-v2`).
 
 ## What the job did
 
-Resolved the frozen image pins of the run's configuration and inspected each local image.
-Dispatch `3a0991f0-4dc0-485f-a05e-a36128df1592`, `attempt_0001`, `SUCCEEDED`, job duration
-37.5 s (`next` wall time 1 min 51 s).
+Resolved the frozen image pins of the run's configuration and inspected each local image. First
+dispatch `4d157b38-a5c5-45fe-ac4f-fbb002b15153` (`attempt_0001`, 20.8 s job time, `next` wall time
+1 min 17 s); replayed after each admitted repair with 0 preserved-key differences.
 
 ## Checks
 
@@ -19,7 +20,7 @@ Dispatch `3a0991f0-4dc0-485f-a05e-a36128df1592`, `attempt_0001`, `SUCCEEDED`, jo
   host returned the pinned id: 47 of 47 agree, 0 mismatches. `deploy/dagster/host-pins.toml`
   holds 47 `sha256:` bindings.
 - **C. Gaps.** 0 canonical gaps.
-- **D. Baseline.** `test/acceptance/freeciv-b1b0768b-v1/job_image_pin_verification.json`.
+- **D. Baseline.** `test/acceptance/freeciv-b1b0768b-v2/job_image_pin_verification.json`.
 
 ## Not verified
 

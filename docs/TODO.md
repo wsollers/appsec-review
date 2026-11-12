@@ -1340,7 +1340,10 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** follow automake variables assigned in the same file, including `+=` and both branches
   of `if`/`else`, when resolving `SUBDIRS`, recording the condition as a fact on the driven member;
   a directory with no build point that is only driven stays a member, not a unit. Cases added to
-  the discovery matrix under conditional systems.
+  the discovery matrix under conditional systems. The same reading is needed for targets and
+  sources: in the Freeciv walk (`docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`)
+  `bin_PROGRAMS +=` inside `if` blocks keeps only the last program, and `_SOURCES = $(da_sources)`
+  names no source, so nine sources were unowned by any automake build point.
 - **Done when:** discovery cases for variable, appended and conditional `SUBDIRS` have no
   `pending` entry, and the Freeciv tree yields the two parallel root units with the conditional
   directories folded as members.

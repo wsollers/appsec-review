@@ -1,58 +1,74 @@
 # Freeciv walk 04 - `job_review_intake`
 
-This record advances T-057. Walk terms, overlay and the expected-gaps list are in
+This record advances T-057. Walk terms, overlay, runs and the expected-gaps list are in
 [walk 01](2026-11-11-freeciv-walk-01-model-connectivity.md).
 
-**Result: stopped for a decision** (run `2026-11-11-0008`, overlay
-`freeciv-b1b0768b/capacity-overlay.toml`). The output is correct against the target; one gap
-cause, `file_too_large`, is not on the expected list.
+**Result: accepted** (run `2026-11-11-0009`, overlay `freeciv-b1b0768b/capacity-overlay.toml`,
+corpus tag `freeciv-b1b0768b-v2`), after one stop and a user decision.
 
 ## What the job did
 
 Froze the configuration, repeated the model preflight, validated and fingerprinted the target.
-Dispatch `d14806e4-6fae-4175-8f06-c5b0f8ca7fc0`, `attempt_0001`, `COMPLETED_WITH_GAPS`
-(`next` wall time 2 min 56 s).
+Accepted attempt: dispatch `d50d1037-ee20-4c4f-9cdc-7be8e987d433`, `attempt_0002`, `SUCCEEDED`,
+29.3 s job time (`next` wall time 1 min 22 s). `attempt_0001` (dispatch `652ec6c9-...`) was
+identical in content and was replayed because a later fix changed a module in this job's import
+closure; the preserved-key comparison found 0 differences.
 
-## Checks
+## The stop on run 0008 and the user's decision
 
-- **A. Inputs.** No upstream in the contract; `upstream_handoffs` is `{}`. The frozen
-  configuration layer hash is `c168f8c0...` for `appsec-review.toml`, profile `dev`.
-- **B. Independent comparison** against `git -C targets/freeciv ls-files` and the files on disk:
+On run `2026-11-11-0008` the job completed with 76 canonical gap records, one cause:
+`file_too_large` for 38 files over the then hard-coded 2 MiB inventory bound, each reported by two
+units of the job (T-095). The 38 were 16 `.blend`, 6 `.ttf`, 13 `.po`, `ChangeLog`,
+`ChangeLog-1.0-S3_0` and one `.sav`; no source file or build descriptor. Not on the expected
+list, so the walk stopped. The user decided (2026-11-11), instead of accepting the gap:
+
+1. Non-code assets are excluded by type, as configuration, counted and named, never a gap: art
+   sources, raster and icon images, video, audio, fonts, game saves. PDFs stay in ("They may just
+   upload a doc instead of having the doc build").
+2. The per-file bound is raised so translation catalogues are read.
+3. Change logs stay in the inventory, for the source-history job (T-097, built separately).
+
+Implemented in `85b3e061` and `740ea4f8`: `[[exclusions.asset_classes]]` (suffix match on the file
+name, case-insensitive, compound suffixes; code-carrying suffixes and `.pdf` refused at load) and
+the typed `[inventory] max_file_bytes = 12582912` (was 2,097,152), sized for the largest kept
+file, `ChangeLog-1.0-S3_0` at 9,470,234 bytes. Tests: `tests/test_asset_exclusions.py`,
+`tests/test_path_exclusions.py`. Documented in `docs/architecture/jobs-and-runtime.md`.
+
+## Checks (run 0009)
+
+- **A. Inputs.** No upstream in the contract; `upstream_handoffs` is `{}`.
+- **B. Independent comparison** against `git -C targets/freeciv ls-files` and the files on disk,
+  recomputed by a separate script from the resolved configuration's suffix lists and bound:
 
   | Quantity | Job | Independent |
   | --- | ---: | ---: |
   | file paths examined | 6,726 | 6,726 tracked files |
-  | excluded by configuration (`.gitignore` pattern) | 137 | 137 |
-  | over the 2 MiB inventory bound | 38 | 38 (every tracked file >= 2,101,463 bytes; largest file under the bound is 2,083,972) |
-  | fingerprinted text files | 3,493 | 3,493 (no NUL in the first 8,192 bytes) |
-  | fingerprinted bytes | 119,195,017 | 119,195,017 |
-  | binary content (artifact candidates) | 6,551 - 3,493 = 3,058 | 3,058 |
-  | build descriptors matched / retained | 142 / 142 | not recounted here; walk 05 checks them |
+  | excluded by path pattern (`.gitignore`) | 137 | 137 |
+  | excluded assets: `art-source` | 87 files, 163,019,325 bytes | same |
+  | excluded assets: `raster-image` | 2,955 files, 25,509,268 bytes | same |
+  | excluded assets: `audio` | 22 files, 1,472,394 bytes | same |
+  | excluded assets: `font` | 8 files, 51,825,724 bytes | same |
+  | excluded assets: `game-save` | 13 files, 11,745,970 bytes | same |
+  | excluded assets: `video` | 0 | 0 |
+  | over the 12 MiB bound | 0 | 0 |
+  | fingerprinted text files / bytes | 3,496 / 161,577,309 | 3,496 / 161,577,309 |
+  | binary content kept (artifact candidates) | 8 | 8 (7 `.ac.bz2`, 1 `.bmp.bz2`) |
+  | build descriptors matched / retained | 142 / 142 | checked in walk 05 |
 
-  No symlinks, no untracked or ignored files on disk. None of the 137 excluded or 38 oversized
-  files is source or a build descriptor.
-- **C. Gaps.** 76 canonical records, one cause:
+  137 + 3,085 + 0 + 8 + 3,496 = 6,726: every tracked file is accounted for. The 15 files the higher
+  bound admits are the 13 `.po` catalogues and the two change logs (44 MB); nothing else in the
+  target is over 2 MiB once assets are excluded. The target has no PDF.
+- **C. Gaps.** 0 canonical gaps. `.git` appears in the fingerprint's coverage notes as an excluded
+  directory (expected list); it is not a canonical gap record of this job.
+- **D. Baseline.** `test/acceptance/freeciv-b1b0768b-v2/job_review_intake.json`.
 
-  | Cause | Records | Classification |
-  | --- | ---: | --- |
-  | `file_too_large` (38 files, each reported by `prepare_target.validate_target` and again by `publish_intake.publish_handoff`) | 76 | **not on the expected list: decision needed** |
+## What the exclusions cost
 
-  The 38 files: 16 Blender art files (`data/graphics/**/*.blend`), 13 translation catalogues
-  (`translations/**/*.po`), 6 fonts (`data/themes/gui-sdl2|gui-sdl3/human/*.ttf`), `ChangeLog`,
-  `ChangeLog-1.0-S3_0`, and one scenario savegame, `data/scenarios/europe_1900_WWI.sav`
-  (9,960,830 bytes). The cause is the inventory bound of 2,097,152 bytes per file
-  (`appsec_review.jobs.cataloging.Bounds`), not a failure. The effect: these files are outside
-  the target fingerprint and the source inventory, so no later job reads them. `.git` is listed
-  in the fingerprint's coverage notes as an excluded directory and is on the expected list.
-- **D. Baseline.** Not saved; the job is checked, not accepted.
-
-## The question
-
-Is "data file over the configured 2 MiB inventory bound, when it is not source code or a build
-descriptor" an expected gap? Recommendation: yes, with that condition, so that an oversized
-source file or build descriptor still stops the walk. Cost: the fonts, art, translations,
-changelogs and the one bundled scenario savegame are not inventoried or scanned.
+3,085 files (254 MB) are outside the inventory: no job reads them. That includes the 13 bundled
+scenario and savegame files and all image and sound data. Kept and named: 630 `.svg` files and
+the 8 compressed files, because they can carry code or packed content.
 
 ## Not verified
 
-The per-file SHA-256 values of the fingerprint were not recomputed; counts and total bytes were.
+The per-file SHA-256 values of the fingerprint were not recomputed; counts and bytes were. Whether
+any excluded asset is referenced as a build input is not checked by the exclusion.

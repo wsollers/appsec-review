@@ -972,15 +972,30 @@ def meson_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     for path in sorted(p for p in descriptors if posixpath.basename(p) == "meson.build"):
         text = descriptors[path]
         base = posixpath.dirname(path) or "."
-        for match in re.finditer(r"(executable|library|shared_library|static_library|both_libraries|shared_module)\s*\(\s*'([^']+)'\s*,([^)]*)\)", text, re.S):
+        # A target function is called by its bare name. ``compiler.find_library('z')`` and other
+        # ``*_library(`` lookups are dependency probes, not something this build produces.
+        for match in re.finditer(r"(?<![A-Za-z0-9_.])(executable|library|shared_library|static_library|both_libraries|shared_module)"
+                                 r"\s*\(\s*(?:'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*,([^)]*)\)", text, re.S):
             kind = {"executable": "executable", "library": "library", "shared_library": "shared_library",
                     "static_library": "static_library", "both_libraries": "library", "shared_module": "module_library"}[match.group(1)]
             sources = []
-            for token in re.findall(r"'([^']+)'", match.group(3)):
+            for token in re.findall(r"'([^']+)'", match.group(4)):
                 target = _norm(base, token)
                 if target and target in inventory:
                     sources.append(target)
-            points.append(_point(match.group(2), kind, f"{path}:{_line_at(text, match.start())}", sources=sources))
+            evidence = f"{path}:{_line_at(text, match.start())}"
+            name = match.group(2)
+            if name is None:
+                # The target is named by a variable (``executable(server_binary_name, ...)``): it is
+                # still a build point with its sources; the point carries the variable's name and
+                # the literal values assigned to it in this file are recorded, never guessed among.
+                name = match.group(3)
+                values = sorted(set(re.findall(rf"^\s*{re.escape(name)}\s*=\s*'([^']+)'\s*$", text, re.M)))
+                unresolved.append({"evidence": evidence, "kind": "variable_target_name",
+                                   "reason": f"target name is the variable {name}" + (
+                                       f" (literal values in this file: {', '.join(values)})" if values else
+                                       " (no literal value in this file)")})
+            points.append(_point(name, kind, evidence, sources=sources))
         for match in re.finditer(r"subdir\s*\(\s*'([^']+)'\s*\)", text):
             target = _norm(base, match.group(1))
             drives.append(_drive(target or match.group(1), "subdir", f"{path}:{_line_at(text, match.start())}", unresolved=target is None))
