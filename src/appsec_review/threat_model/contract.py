@@ -547,7 +547,10 @@ class LaneResult:
 
 def merge_evidence(*groups: tuple[EvidenceRef, ...], limit: int) -> tuple[EvidenceRef, ...]:
     """Deduplicate citations, strongest basis first, then by reference id, bounded by ``limit``."""
-    unique = {item.ref: item for group in groups for item in group}
+    unique: dict[str, EvidenceRef] = {}
+    for item in sorted((item for group in groups for item in group),
+                       key=lambda item: (BASIS_PRECEDENCE.index(item.basis), item.rule), reverse=True):
+        unique[item.ref] = item  # the strongest reading of one reference wins, whatever the arrival order
     ordered = sorted(unique.values(), key=lambda item: (BASIS_PRECEDENCE.index(item.basis), item.ref))
     return tuple(ordered[:limit])
 

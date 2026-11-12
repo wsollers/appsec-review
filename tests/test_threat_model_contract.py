@@ -148,3 +148,10 @@ def test_producer_payloads_may_carry_finite_floats_but_nothing_else_exotic() -> 
     for value in (float("nan"), float("inf"), object(), b"bytes"):
         with pytest.raises(ValueError):
             record("job_artifact_indexing", "artifact_catalog", "executable", "a1", {"value": value})
+
+
+def test_one_reference_read_two_ways_keeps_its_strongest_reading_in_any_order() -> None:
+    source = record("job_code_graph_index", "code_graph_facts", "entry_point", "e1", at=span("net.c", 4))
+    strong, weak = cite(source, Basis.VERIFIED_SEMANTIC, "graph.entry_point.remote"), cite(source, Basis.OBSERVED_SYNTAX, "syntax.call.recv")
+    assert strong.ref == weak.ref
+    assert merge_evidence((strong, weak), limit=8) == merge_evidence((weak, strong), limit=8) == (strong,)
