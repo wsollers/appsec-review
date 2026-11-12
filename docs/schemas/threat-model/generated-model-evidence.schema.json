@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/threat-model/generated-model-evidence.schema.json",
+  "title": "Evidence cited by the generated data-flow diagram and threat model",
+  "$comment": "Closed schema of a document job_threat_model_generation publishes (design: docs/architecture/dfd-and-threat-model-generation.md, section 6). The record shapes are the dataclasses of src/appsec_review/threat_model/contract.py; tests/test_threat_model_schemas.py fails when they drift. Arrays are sorted by id in the canonical bytes, which a schema cannot express. Every reference either document cites appears here once, sorted by ref.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "origin",
+    "references"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/generated-model-evidence/1"
+    },
+    "origin": {
+      "$ref": "#/$defs/Origin"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceRef"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "description": "contract.element_id: <prefix>:<first 16 hex of the SHA-256 of the canonical native identity>.",
+      "type": "string",
+      "pattern": "^[a-z]+:[0-9a-f]{16}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "not": {
+        "pattern": "\\u0000"
+      }
+    },
+    "Basis": {
+      "description": "contract.Basis (closed vocabulary).",
+      "enum": [
+        "verified_semantic",
+        "declared",
+        "observed_syntax",
+        "derived"
+      ]
+    },
+    "Origin": {
+      "description": "contract.Origin: a generated model is never target-supplied and never more than routing context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "attempt_id",
+        "target_snapshot",
+        "reference_data",
+        "model",
+        "kind",
+        "target_supplied",
+        "producer",
+        "authority"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/$defs/text"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/text"
+        },
+        "target_snapshot": {
+          "$ref": "#/$defs/text"
+        },
+        "reference_data": {
+          "description": "SHA-256 of each reference data file the attempt read.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "interaction_catalog_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "threat_templates_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "crosswalk_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "model": {
+          "description": "null, or the model identity when elaboration ran.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "model",
+            "guidance_bundle_sha256"
+          ],
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/text"
+            },
+            "model": {
+              "$ref": "#/$defs/text"
+            },
+            "guidance_bundle_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "kind": {
+          "const": "generated"
+        },
+        "target_supplied": {
+          "const": false
+        },
+        "producer": {
+          "const": "job_threat_model_generation"
+        },
+        "authority": {
+          "const": "routing_context"
+        }
+      }
+    },
+    "Publication": {
+      "description": "contract.Publication: the accepted shard or artifact a record was read from.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job",
+        "output_kind",
+        "index",
+        "shard_id",
+        "sha256"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/text"
+        },
+        "output_kind": {
+          "$ref": "#/$defs/text"
+        },
+        "index": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shard_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "EvidenceRef": {
+      "description": "contract.EvidenceRef: one citation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "kind",
+        "entity_id",
+        "entity_kind",
+        "publication",
+        "locator",
+        "content_sha256",
+        "basis",
+        "rule"
+      ],
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "index_entity",
+            "run_artifact"
+          ]
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "entity_kind": {
+          "type": "string"
+        },
+        "publication": {
+          "$ref": "#/$defs/Publication"
+        },
+        "locator": {
+          "description": "path:start-end#bstart-end@file_sha256, or null when the record has no source span.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis"
+        },
+        "rule": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    }
+  }
+}
