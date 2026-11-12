@@ -364,7 +364,10 @@ def test_native_version_dry_run_and_bootstrap_are_not_compilation(system, comman
 
 
 def test_autotools_fragment_is_not_a_standalone_make_project() -> None:
-    unit = discover_build_units([_file("native/include/Makefile.am")])[0]
+    # A Makefile.am under a configure.ac is a marker (plan §2.1 item 8); the fragment's own directory is
+    # still not a standalone build the recipe may run ``make`` in.
+    units = discover_build_units([_file("native/configure.ac"), _file("native/include/Makefile.am")])
+    unit = next(u for u in units if u["root"] == "native/include")
     recipe = {**_recipe(unit), "source_dir": unit["root"], "build_dir": unit["root"],
               "configure_commands": [], "build_commands": [["make"]], "expected_outputs": []}
     assert any("nonstandalone_autotools_fragment" in error for error in validate_build_recipe(recipe, unit))

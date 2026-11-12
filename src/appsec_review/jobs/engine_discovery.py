@@ -329,7 +329,10 @@ def discover_unity(
             local_gaps.append(f"incomplete_unity_root: {root}: valid editor version and settings/manifest required")
         if conflicts:
             local_gaps.append(f"competing_engine_descriptors: {root}: Unity and Unreal; execution ambiguous")
-        markers = [catalog[path] for path in sorted(catalog) if _root(path) == root]
+        # The package lock is read (``lock_inspected``) but is context the editor regenerates, never a
+        # marker of the project (plan §2.1 item 5).
+        markers = [catalog[path] for path in sorted(catalog)
+                   if _root(path) == root and not path.endswith("Packages/packages-lock.json")]
         observation = {"root": root, "kind": "unity", "root_state": state,
                        "engine_conflict": bool(conflicts), "markers": markers,
                        "competing_markers": conflicts, "gaps": sorted(set(local_gaps))}

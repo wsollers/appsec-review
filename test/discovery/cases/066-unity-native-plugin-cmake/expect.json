@@ -70,11 +70,6 @@
       "check": "unit:Assets/Plugins/NativePlugin|cmake.facts",
       "ref": "T-056.5",
       "note": "hosted by the Unity project: the product lands in the project's plugin folder; Unity does not run CMake"
-    },
-    {
-      "check": "assignment:Assets/Plugins/NativePlugin/x86_64/libnativeplugin.so.meta",
-      "ref": "T-056.5",
-      "note": "a Unity import setting is the Unity unit's context even when it sits under a nested native root"
     }
   ]
 }

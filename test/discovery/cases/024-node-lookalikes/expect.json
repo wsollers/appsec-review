@@ -63,11 +63,6 @@
   ],
   "pending": [
     {
-      "check": "not_unit:tooling|node",
-      "ref": "T-056.4",
-      "note": "unit-ness needs a build point: a script or an entry point"
-    },
-    {
       "check": "assignment:app/src/index.js",
       "ref": "T-056.2",
       "note": "the package main binds to the package build point"
@@ -76,15 +71,6 @@
       "check": "assignment:app/scripts/bundle.js",
       "ref": "T-056.2",
       "note": "the file the build script runs binds to that script"
-    },
-    {
-      "check": "assignment:tooling/package.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "source_only_scopes",
-      "ref": "T-056.4",
-      "note": "source-only scopes are computed for .py and .php only; JavaScript without a package build has a scope too (plan section 2.2)"
     }
   ]
 }

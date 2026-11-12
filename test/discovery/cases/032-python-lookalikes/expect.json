@@ -38,33 +38,5 @@
       "language": "python"
     }
   ],
-  "pending": [
-    {
-      "check": "not_unit:.|python",
-      "ref": "T-056.4",
-      "note": "setup.cfg alone manufactures a python unit over the whole tree today"
-    },
-    {
-      "check": "assignment:setup.cfg",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:scripts/requirements.txt",
-      "ref": "T-056.4",
-      "note": "context of nothing: there is no unit to be context of"
-    },
-    {
-      "check": "assignment:scripts/deploy.py",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:tools/lint.py",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "source_only_scopes",
-      "ref": "T-056.4",
-      "note": "the phantom unit owns the scripts, so no source-only scope is named"
-    }
-  ]
+  "pending": []
 }

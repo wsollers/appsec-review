@@ -63,17 +63,8 @@
       "ref": "T-056.2"
     },
     {
-      "check": "assignment:app/App.xcworkspace/contents.xcworkspacedata",
-      "ref": "T-056.4"
-    },
-    {
       "check": "assignment:app/App/main.swift",
       "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:app/Podfile",
-      "ref": "T-056.4",
-      "note": "the Podfile is read by pod install for this app: context, not inert"
     }
   ]
 }

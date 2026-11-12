@@ -48,11 +48,6 @@
       "note": "Import Project=\"..\\props\\...\" reaches outside the project directory; the minimum materialization root is the tree root"
     },
     {
-      "check": "assignment:native/renderer.vcxproj.filters",
-      "ref": "T-056.4",
-      "note": "MSBuild never reads .filters; it is Visual Studio's folder view"
-    },
-    {
       "check": "assignment:props/warnings.props",
       "ref": "T-056.5",
       "note": "an imported property sheet outside the unit root is that unit's context, not inert"

@@ -94,10 +94,6 @@
     {
       "check": "unit:third_party/zlite|cmake.facts",
       "ref": "T-056.5"
-    },
-    {
-      "check": "assignment:third_party/zlite/zlite.h",
-      "ref": "T-056.2"
     }
   ]
 }

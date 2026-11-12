@@ -24,7 +24,9 @@ from collections import Counter
 from pathlib import PurePosixPath
 from typing import Any, Iterable, Mapping
 
-ROLES = ("evidence_of", "context", "source_only", "orphaned", "inert", "excluded", "unclaimed")
+from appsec_review.jobs.build_discovery import INTERPRETED_LANGUAGE_SUFFIXES
+
+ROLES =("evidence_of", "context", "source_only", "orphaned", "inert", "excluded", "unclaimed")
 
 # Sources each build family compiles when they sit under one of its unit roots.
 FAMILY_SOURCE_SUFFIXES: dict[str, frozenset[str]] = {
@@ -38,16 +40,15 @@ FAMILY_SOURCE_SUFFIXES: dict[str, frozenset[str]] = {
     "php": frozenset({".php"}),
     "wasm": frozenset({".wat", ".wasm", ".c", ".cc", ".cpp"}),
     "swift": frozenset({".swift", ".m", ".mm", ".h", ".storyboard", ".xib", ".plist", ".xcassets", ".entitlements"}),
-    "unity": frozenset({".cs", ".asmdef", ".asset", ".prefab", ".unity", ".meta", ".shader", ".cginc", ".hlsl", ".compute"}),
+    # Keyed by build system where the system compiles more than its family (Unity: scenes, shaders and
+    # assets are build input; ``.meta`` files are the editor's context, ``.asmdef`` the assembly's descriptor).
+    "unity": frozenset({".cs", ".asset", ".prefab", ".unity", ".shader", ".cginc", ".hlsl", ".compute"}),
 }
 
 # Compiled-language suffixes: a file with one of these and no claiming unit is orphaned.
 COMPILED_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".cu", ".java", ".kt", ".kts", ".rs", ".go", ".wat", ".cs", ".swift", ".m", ".mm"})
 
-SOURCE_ONLY_LANGUAGE_SUFFIXES = {
-    ".php": "php", ".py": "python", ".rb": "ruby", ".pl": "perl", ".sh": "shell", ".bash": "shell", ".ps1": "powershell",
-    ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".ts": "typescript", ".lua": "lua", ".sql": "sql",
-}
+SOURCE_ONLY_LANGUAGE_SUFFIXES = INTERPRETED_LANGUAGE_SUFFIXES
 
 
 def _under(path: PurePosixPath, root: str) -> bool:
@@ -141,16 +142,20 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
             assignment[path] = f"orphaned:{orphans[path].get('reason', 'no_build_point')}"
             continue
         root = _nearest(posix, by_root)
-        if posix.name.lower().startswith("readme") or posix.name.lower() in {"license", "license.md", "license.txt", "changelog.md", "notice"}:
-            assignment[path] = "inert"
+        if _is_inert_name(posix):
+            assignment[path] = "inert"  # prose, and files no build system reads (§2.1 item 5)
             continue
+        # Units whose root contains the path, innermost first: the one that reads a context file is the
+        # unit of the matching build system (Directory.Build.props beside CMakeLists.txt is MSBuild's).
+        containing = sorted((unit for unit in units if _under(posix, str(unit["root"]))),
+                            key=lambda unit: (-len(PurePosixPath(str(unit["root"])).parts), str(unit["root"]), str(unit["build_system"])))
         if root is not None:
             owners = by_root[root]
             if posix.name.lower() in _CONTEXT_FILE_NAMES:
                 # Lockfiles, wrapper properties, presets: context the unit reads, never a source.
-                assignment[path] = f"context:{_unit_label(owners[0])}"
+                assignment[path] = _context_role(posix, containing)
                 continue
-            compiled_by = [unit for unit in owners if suffix in FAMILY_SOURCE_SUFFIXES.get(str(unit["family"]), frozenset())]
+            compiled_by = [unit for unit in owners if suffix in _unit_source_suffixes(unit)]
             if compiled_by:
                 assignment[path] = f"evidence_of:{_unit_label(compiled_by[0])}"
                 continue
@@ -158,8 +163,8 @@ def assign_paths(files: Iterable[Mapping[str, Any]], discovery: Mapping[str, Any
                 # A module nothing includes is inert, not context of whatever unit happens to be above it.
                 assignment[path] = "inert"
                 continue
-            if is_build_descriptor(posix) or posix.name.lower() in _CONTEXT_FILE_NAMES or suffix in _CONTEXT_SUFFIXES:
-                assignment[path] = f"context:{_unit_label(owners[0])}"
+            if is_build_descriptor(posix) or suffix in _CONTEXT_SUFFIXES:
+                assignment[path] = _context_role(posix, containing)
                 continue
         scope = _nearest(posix, [root for root, _language in scopes])
         if scope is not None and suffix in SOURCE_ONLY_LANGUAGE_SUFFIXES:
@@ -181,18 +186,80 @@ def _unit_label(unit: Mapping[str, Any]) -> str:
     return f"{unit['root']}|{unit['build_system']}"
 
 
+def _unit_source_suffixes(unit: Mapping[str, Any]) -> frozenset[str]:
+    """The suffixes a unit compiles by containment: its build system's set when it has one, else its family's."""
+    system = str(unit.get("build_system", ""))
+    if system in FAMILY_SOURCE_SUFFIXES:
+        return FAMILY_SOURCE_SUFFIXES[system]
+    return FAMILY_SOURCE_SUFFIXES.get(str(unit.get("family", "")), frozenset())
+
+
+# Prose and files no build system reads: inert everywhere (plan §2.1 item 5). MSBuild never reads a
+# ``.filters`` file (it is the IDE's folder view of the project).
+_INERT_PREFIXES = ("readme", "license", "licence", "changelog", "notice", "copying")
+_INERT_SUFFIXES = frozenset({".filters"})
+
+
+def _is_inert_name(path: PurePosixPath) -> bool:
+    name = path.name.lower()
+    return (any(name == prefix or name.startswith(prefix + ".") or name.startswith(prefix + "-") for prefix in _INERT_PREFIXES)
+            or path.suffix.lower() in _INERT_SUFFIXES)
+
+
+# Context files are read by one build system's units. Among the units whose root contains the path
+# (innermost first) the first of a reading system is the owner; where none reads it, a file of a system
+# that is not there is inert (a ``Makefile.am`` under a plain Make root), and a file every system may
+# read (a generic ``.json``/``.toml``) is the innermost unit's context.
+_MSBUILD = frozenset({"msbuild", "dotnet", "vcbuild"})
+_CONTEXT_AFFINITY: dict[str, frozenset[str]] = {
+    ".props": _MSBUILD, ".targets": _MSBUILD, ".user": _MSBUILD, ".sln.docstates": _MSBUILD,
+    "directory.build.props": _MSBUILD, "directory.build.targets": _MSBUILD, "directory.packages.props": _MSBUILD,
+    "global.json": _MSBUILD, "nuget.config": _MSBUILD, "packages.lock.json": _MSBUILD,
+    "cmakepresets.json": frozenset({"cmake"}), "cmakeuserpresets.json": frozenset({"cmake"}),
+    "meson_options.txt": frozenset({"meson"}), "meson.options": frozenset({"meson"}),
+    ".am": frozenset({"autotools"}), ".ac": frozenset({"autotools"}), ".m4": frozenset({"autotools"}),
+    ".in": frozenset({"autotools", "cmake", "meson"}),
+    "gradle.properties": frozenset({"gradle"}), "gradle-wrapper.properties": frozenset({"gradle"}),
+    "gradlew": frozenset({"gradle"}), "gradlew.bat": frozenset({"gradle"}), ".gradle": frozenset({"gradle"}),
+    "androidmanifest.xml": frozenset({"gradle"}),
+    "mvnw": frozenset({"maven"}), "mvnw.cmd": frozenset({"maven"}), "maven-wrapper.properties": frozenset({"maven"}),
+    "cargo.lock": frozenset({"cargo"}), "rust-toolchain": frozenset({"cargo"}), "rust-toolchain.toml": frozenset({"cargo"}),
+    "go.sum": frozenset({"go"}), "go.work.sum": frozenset({"go"}),
+    "package-lock.json": frozenset({"node"}), "pnpm-lock.yaml": frozenset({"node"}), "yarn.lock": frozenset({"node"}),
+    ".npmrc": frozenset({"node"}), ".yarnrc": frozenset({"node"}), ".yarnrc.yml": frozenset({"node"}),
+    "tsconfig.json": frozenset({"node"}), "babel.config.js": frozenset({"node"}), ".babelrc": frozenset({"node"}),
+    "composer.lock": frozenset({"composer"}),
+    "poetry.lock": frozenset({"python"}), "requirements.txt": frozenset({"python"}), "setup.cfg": frozenset({"python"}),
+    "tox.ini": frozenset({"python"}),
+    "podfile": frozenset({"xcodebuild"}), "podfile.lock": frozenset({"xcodebuild"}), ".xcscheme": frozenset({"xcodebuild"}),
+    ".xcworkspacedata": frozenset({"xcodebuild"}), ".pbxproj": frozenset({"xcodebuild"}), ".plist": frozenset({"xcodebuild"}),
+    ".meta": frozenset({"unity"}), "packages-lock.json": frozenset({"unity"}),
+}
+
+
+def _context_role(path: PurePosixPath, containing: list[Mapping[str, Any]]) -> str:
+    name, suffix = path.name.lower(), path.suffix.lower()
+    readers = _CONTEXT_AFFINITY.get(name) or _CONTEXT_AFFINITY.get(suffix)
+    if readers is None:
+        return f"context:{_unit_label(containing[0])}" if containing else "inert"
+    owner = next((unit for unit in containing if str(unit["build_system"]) in readers), None)
+    return f"context:{_unit_label(owner)}" if owner is not None else "inert"
+
+
 _CONTEXT_FILE_NAMES = frozenset({
-    "cargo.lock", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "go.sum", "composer.lock", "poetry.lock",
+    "cargo.lock", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "go.sum", "go.work.sum", "composer.lock", "poetry.lock",
     "gradle.properties", "gradle-wrapper.properties", "gradlew", "gradlew.bat", "global.json", "nuget.config",
-    "directory.build.props", "directory.build.targets", "cmakepresets.json", "cmakeuserpresets.json",
+    "directory.build.props", "directory.build.targets", "directory.packages.props", "cmakepresets.json", "cmakeuserpresets.json",
     ".npmrc", ".yarnrc", ".yarnrc.yml", "tsconfig.json", "babel.config.js", ".babelrc", "rust-toolchain.toml",
-    "rust-toolchain", "requirements.txt", "setup.cfg", "tox.ini", "manifest.json", "packages-lock.json",
+    "rust-toolchain", "requirements.txt", "setup.cfg", "tox.ini", "manifest.json", "packages-lock.json", "packages.lock.json",
+    "meson_options.txt", "meson.options", "mvnw", "mvnw.cmd", "maven-wrapper.properties", "podfile", "podfile.lock",
+    "androidmanifest.xml",
 })
 # Modules that are context only when a descriptor includes them (CMake modules, Make fragments).
 _INCLUDED_ONLY_SUFFIXES = frozenset({".cmake", ".mk"})
-_CONTEXT_SUFFIXES = frozenset({".props", ".targets", ".filters", ".user", ".in", ".am", ".ac", ".m4",
+_CONTEXT_SUFFIXES = frozenset({".props", ".targets", ".user", ".in", ".am", ".ac", ".m4",
                                ".lock", ".sln.docstates", ".xcscheme", ".xcworkspacedata", ".pbxproj", ".plist",
-                               ".gradle", ".kts", ".toml", ".yaml", ".yml", ".json", ".ninja"})
+                               ".gradle", ".kts", ".toml", ".yaml", ".yml", ".json", ".ninja", ".meta"})
 
 
 def summarize(assignment: Mapping[str, str]) -> dict[str, Any]:

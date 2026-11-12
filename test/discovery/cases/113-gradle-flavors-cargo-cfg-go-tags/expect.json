@@ -143,18 +143,9 @@
   "orphaned_sources": [],
   "pending": [
     {
-      "check": "unit:android|gradle.profile",
-      "ref": "T-056.6",
-      "note": "an Android application module demands the android profile; the android descriptor facts are attached by the catalog, not by discovery, so the unit alone reads as java"
-    },
-    {
       "check": "unit:android|gradle.facts",
       "ref": "T-056.6",
       "note": "product flavors and which source sets each flavor compiles"
-    },
-    {
-      "check": "unit:crate|cargo.build_point:tool|bin",
-      "ref": "T-056.2"
     },
     {
       "check": "unit:crate|cargo.facts",

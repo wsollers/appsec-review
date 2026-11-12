@@ -59,10 +59,6 @@
       "check": "unit:app|cmake.facts",
       "ref": "T-056.5",
       "note": "add_subdirectory with a ../ source directory is the cross-tree reference; the minimum materialization root follows from it"
-    },
-    {
-      "check": "assignment:libs/sibling/sibling.h",
-      "ref": "T-056.5"
     }
   ]
 }

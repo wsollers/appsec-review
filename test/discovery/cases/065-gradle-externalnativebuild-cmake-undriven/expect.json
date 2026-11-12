@@ -62,30 +62,12 @@
     "build.gradle": "evidence_of:.|gradle",
     "gradle.properties": "context:.|gradle",
     "gradle/wrapper/gradle-wrapper.properties": "context:.|gradle",
-    "app/build.gradle": "evidence_of:.|gradle",
+    "app/build.gradle": "evidence_of:.|gradle#app",
     "app/src/main/AndroidManifest.xml": "context:.|gradle",
     "app/src/main/java/com/example/meter/MainActivity.java": "evidence_of:.|gradle#app",
     "app/src/main/cpp/CMakeLists.txt": "evidence_of:app/src/main/cpp|cmake",
     "app/src/main/cpp/meter.cpp": "evidence_of:app/src/main/cpp|cmake#meter"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "unit:.|gradle.profile",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "unit:.|gradle.facts",
-      "ref": "T-056.5",
-      "note": "no externalNativeBuild: the Gradle unit states that it drives nothing, although a CMakeLists.txt sits under its module"
-    },
-    {
-      "check": "assignment:app/build.gradle",
-      "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:app/src/main/AndroidManifest.xml",
-      "ref": "T-056.4"
-    }
-  ]
+  "pending": []
 }

@@ -57,15 +57,6 @@
   },
   "pending": [
     {
-      "check": "unit:game|unity.markers",
-      "ref": "T-056.4",
-      "note": "packages-lock.json is a lockfile: context, not a marker"
-    },
-    {
-      "check": "unit:game|unity.build_point:Game.Runtime|assembly",
-      "ref": "T-056.2"
-    },
-    {
       "check": "unit:game|unity.build_point:Standalone|player_target",
       "ref": "T-056.2",
       "note": "player targets per platform, from the platform keys of PlayerSettings"
@@ -73,30 +64,6 @@
     {
       "check": "unit:game|unity.build_point:Android|player_target",
       "ref": "T-056.2"
-    },
-    {
-      "check": "assignment:game/Packages/packages-lock.json",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:game/Assets/Scripts/Game.Runtime.asmdef",
-      "ref": "T-056.2",
-      "note": "the asmdef is the descriptor of its assembly build point"
-    },
-    {
-      "check": "assignment:game/Assets/Scripts/Player.cs",
-      "ref": "T-056.2",
-      "note": "scripts under an asmdef's folder compile into that assembly"
-    },
-    {
-      "check": "assignment:game/Assets/Scripts/Player.cs.meta",
-      "ref": "T-056.4",
-      "note": "the editor reads importer settings from .meta files: context, not inert"
-    },
-    {
-      "check": "assignment:game/Assets/Scenes/Main.unity",
-      "ref": "T-056.2",
-      "note": "a scene EditorBuildSettings lists is build input of the player, not an inert asset"
     }
   ]
 }

@@ -77,19 +77,5 @@
     "docs/BUILDING.md": "inert"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "assignment:engine/engine.vcxproj.filters",
-      "ref": "T-056.4",
-      "note": "context of the MSBuild unit, not of the dotnet look-alike"
-    },
-    {
-      "check": "assignment:engine/engine.vcxproj.user",
-      "ref": "T-056.4"
-    },
-    {
-      "check": "assignment:engine/Directory.Build.props",
-      "ref": "T-056.4"
-    }
-  ]
+  "pending": []
 }

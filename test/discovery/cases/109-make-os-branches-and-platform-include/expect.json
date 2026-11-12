@@ -67,10 +67,6 @@
       "check": "unit:tool|make.facts",
       "ref": "T-056.6",
       "note": "conditions per rule; a variable include lists the fragments it can resolve to"
-    },
-    {
-      "check": "assignment:tool/tool.h",
-      "ref": "T-056.2"
     }
   ]
 }

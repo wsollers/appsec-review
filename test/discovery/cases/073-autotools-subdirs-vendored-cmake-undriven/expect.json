@@ -71,10 +71,5 @@
     "third_party/zlite/zlite.h": "evidence_of:third_party/zlite|cmake#zlite"
   },
   "orphaned_sources": [],
-  "pending": [
-    {
-      "check": "assignment:third_party/zlite/zlite.h",
-      "ref": "T-056.2"
-    }
-  ]
+  "pending": []
 }
