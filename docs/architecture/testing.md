@@ -16,12 +16,12 @@ procedure. Where this page and `AGENTS.md` differ, `AGENTS.md` wins and this pag
 
 ## Tiers
 
-| Tier | Location | Collected by bare `pytest` | Who runs it | Needs |
+| Tier | Location | Collected by bare `pytest` | Who runs it | May use |
 | --- | --- | --- | --- | --- |
-| Unit | everything under `tests/` except the paths below | yes | anyone, on every change, smallest relevant selection | the `test` extra (`dagster` extra for `tests/orchestration/dagster`) |
-| Integration | `tests/integration/` | no; only when named explicitly | the user, on explicit request | Docker, tool images, target checkouts, sometimes model access |
-| Bounded acceptance | `tests/acceptance/`, driven by `scripts/run-tests.* --acceptance <profile>` | no | the user, on explicit request | see [`bounded-acceptance.md`](bounded-acceptance.md) and [the operator guide](../operations/bounded-acceptance.md) |
-| Live / system | `tests/live/`, `tests/test_live_*.py`, Dagster review runs, `stepwise.py system` | no | the user, on explicit request | the Dagster stack, Docker, real models, an opt-in `APPSEC_*` variable naming the run or tag |
+| Unit | `tests/unit/<job_id>/`, `tests/unit/<package>/`; helpers in `tests/shared/` | yes | anyone, on every change, smallest relevant selection | the job's own code and canned fixtures only: no Docker, tools, models, network or Dagster (enforced by `tests/unit/conftest.py`); 10 s per test |
+| Pre-walk unit | `tests/test_*.py` and `tests/<area>/` outside the tier directories | yes, until T-113 moves each job | the same, but treat every test as suspect | whatever it used before the walk; no budget until moved |
+| Integration | `tests/integration/<job_id>/` (older files directly under `tests/integration/`) | no; only when named explicitly with `--allow-heavy` | the user, on explicit request | Docker, tool images, target checkouts and models against fixtures; 300 s per test |
+| Acceptance | `tests/acceptance/<job_id>/`, driven by `scripts/run-tests.* --acceptance <profile>`; the former live tier (`tests/live/`, `tests/test_live_*.py`) folds in here as the walk reaches each job | no | the user, on explicit request | the Dagster stack, Docker, real models and targets: one job at a time, validated per job (the stepwise process); 1800 s per test for the former live files |
 
 Per-job correctness, parity and system acceptance (SAT/SIT) are described in
 [`../processes/acceptance-and-regression-testing.md`](../processes/acceptance-and-regression-testing.md).
@@ -84,6 +84,41 @@ A refusal raises `UnitTierViolation`; the fix is a fake at the boundary, a canne
 move to `tests/integration/` or `tests/acceptance/`. Tests still at the root of `tests/` are the
 pre-walk suite: T-113 moves each job's tests into its folder, replacing those that ran whole job
 graphs or engines with code-level tests, and carries no budget until then.
+
+### The test-tier walk (T-113)
+
+The walk moves one job at a time, in `builtin_registry` order, into the three tiers. Each job is
+one fresh agent session with the brief in
+[`../processes/test-tier-walk-prompt.md`](../processes/test-tier-walk-prompt.md), working on
+local `main` of the WSL checkout, and one commit pushed when green. A review host with Docker
+and the pinned images gives the same job its integration tier afterwards with
+[`../processes/integration-tier-walk-prompt.md`](../processes/integration-tier-walk-prompt.md):
+fixture provenance against the pinned tool, the executor and parser boundaries, and the
+contract against real artifacts, 300 s per test, never both walks on one job at once. The job is walked when:
+
+1. **Every existing test is classified** as kept, replaced or moved, after reading it. A test
+   that runs a job graph, an engine, a model, the network, or exceeds 10 s is never kept in the
+   unit tier; it moves to `tests/integration/<job_id>/` (with a module docstring naming it as the
+   pre-walk suite pending replacement) or is deleted once a code-level test covers its claim.
+2. **The inputs and outputs are identified and tested.** `tests/unit/<job_id>/test_contract.py`
+   pins `CONTRACT.inputs` (upstream job, dataset, schema, availability, missing policy),
+   `DATASETS` (output kind, step, schema, artifact globs, disposition), the files the handlers read
+   and write, and that each published document lands inside its declared glob with its declared
+   schema id. A change to a job's contract fails this test before it reaches a consumer.
+3. **The job's own logic has code-level tests:** the unit graph (ids, dependencies, output
+   validators and schemas), `validate_input`/`validate_output`/the result transform, each handler's
+   wiring with the step modules faked at the module boundary, and the step functions (parsers,
+   normalizers, bounds, gap records) against fixtures the test writes. Every test asserts values
+   that a regression would change.
+4. **The folder is green shuffled at four workers** with no test over 10 s, lint is clean, the
+   `tests/job-test-map.json` entry and the T-113 progress line are updated in the same commit, and
+   the registry, map and collection tests pass.
+5. **A status table is posted** in the session's chat: unit files and cases, the slowest unit
+   test, the contract test, what moved to integration, what was deleted and which test now covers
+   it, and the open gaps. The session then starts the next job's session and stops.
+
+Canned fixtures are acceptable: contract drift between a tool version and its recorded output is
+detected by the integration and acceptance tiers, not by the unit tier.
 
 1. **Independent.** No shared mutable state, ordering assumptions or reliance on another test's
    files, fixtures or side effects. Each test passes alone, in any order and in parallel.

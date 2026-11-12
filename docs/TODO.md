@@ -1696,14 +1696,20 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   send the removed graph-level tests to `tests/integration/<job_id>/` or delete them when the
   replacement covers the same claims. Shared packages get `tests/unit/<package>/`; cross-tier
   helpers move to `tests/shared/`. Each job lands as one commit that updates
-  `tests/job-test-map.json`. Done so far: job_third_party_data_sync (the 88 s whole-job run
-  replaced by graph, publication, cve-bin-tool and OSV feed tests).
+  `tests/job-test-map.json`. Each job is one fresh session with the brief in
+  `docs/processes/test-tier-walk-prompt.md`, in `builtin_registry` order, on local `main`. Done so
+  far: job_third_party_data_sync (the 88 s whole-job run replaced by graph, publication,
+  cve-bin-tool and OSV feed tests); job_project_build (17 code-level tests kept, 25 graph cases
+  moved to `tests/integration/job_project_build/`, new graph, contract, repair and enforcement
+  tests). Next: job_language_build.
 - **Done when:** `tests/` has no `test_*.py` outside `tests/unit`, `tests/integration`,
   `tests/acceptance` and `tests/shared`; `scripts/run-tests.sh fast` collects only `tests/unit`
   and finishes in under ten minutes with zero tests over 10 s; every job in the registry has a
   `tests/unit/<job_id>/` folder named in the job-test map.
 - **Refs:** `tests/unit/conftest.py`, `tests/unit/test_tier_guard.py`, `tests/time_budgets.py`,
-  `docs/architecture/testing.md` ("The tests/unit/ tier"), `tests/job-test-map.json`.
+  `docs/architecture/testing.md` ("The tests/unit/ tier", "The test-tier walk"),
+  `docs/processes/test-tier-walk-prompt.md`, `docs/processes/integration-tier-walk-prompt.md`,
+  `tests/job-test-map.json`.
 
 ### T-001 — Finish OWASP acceptance beyond bounded static assessment
 
