@@ -8,12 +8,17 @@ publication are all the production code. No Docker, no model, no network, no tar
 
 The tests assert the published contract, never whether a generated model is right: there is no
 answer key.
+
+The disk flush is the one faked boundary (``_no_disk_flush``): a job run flushes about two hundred
+times, which is most of its wall time on a busy host and no part of what these tests assert. Bytes,
+hashes, atomic replacement and every read stay real.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, replace
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -71,6 +76,12 @@ POINTS = [
     {"name": "echo-client", "kind": "executable", "evidence": "CMakeLists.txt:5", "sources": ["client.c"],
      "include_dirs": []},
 ]
+
+
+@pytest.fixture(autouse=True)
+def _no_disk_flush(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Durability against power loss is not under test here; the runtime's own tests cover it."""
+    monkeypatch.setattr(os, "fsync", lambda descriptor: None)
 
 
 def _config(tmp_path: Path, *, enabled: bool = True, edit: Any = None, profile: str | None = None):

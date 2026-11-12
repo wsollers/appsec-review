@@ -9,6 +9,7 @@ exercised here; that belongs to the job's own tests.
 """
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 import hashlib
@@ -47,6 +48,13 @@ CATALOG, INDEXING, BUILD = "job_target_catalog", "job_artifact_indexing", "job_l
 GRAPH = ("job_code_graph_index", "code_graph_facts")
 SYNTAX = ("job_tree_sitter_ast", "tree_sitter_ast")
 UNIT = "native-cmake-0001"
+
+
+@pytest.fixture(autouse=True)
+def _no_disk_flush(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The disk flush is the one faked boundary: building the fixture shards flushes many times,
+    which dominates these tests on a busy host and is no part of what they assert."""
+    monkeypatch.setattr(os, "fsync", lambda descriptor: None)
 
 
 def _datasets(producer: str) -> tuple[Any, ...]:
