@@ -36,6 +36,7 @@ The [state](multivuln-bd69bfe8-state.md) records progress; records use
 | 2026-11-12 | "copilot-prod with the existing prod-capacity overlay" | Select the profile and overlay above rather than the current `.env`'s `copilot-dev` |
 | 2026-11-12 | "This is my explicit request for this live run. It doesn't authorize integration or acceptance suites, image rebuilds, pushing, or changes to the target." | Live walk only; preserve those limits |
 | 2026-11-12 | "Commit the records and state on main; don't push. Keep each machine's baselines local and out of Git." | Serialize integration into local `main`; use a fresh, ignored host-local corpus namespace |
+| 2026-11-12 | "stop all those other threads and monitors. only you should be running and monitoring the code. Those others were supposed to go away a long time ago but keep getting resurr3ected" | This walker is the sole active repository owner. Stop the legacy coordinator and integration monitor; withdraw their pending update and documentation handoff. Do not revive dormant threads or legacy monitors |
 
 ## Expected gaps
 

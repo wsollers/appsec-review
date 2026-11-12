@@ -3,7 +3,7 @@
 This record advances T-057 under the
 [walk terms](../walks/multivuln-bd69bfe8.md).
 
-**Result: not launched; preflight ownership handoff pending.** No new application
+**Result: not launched; startup preflight in progress.** No new application
 run, Dagster dispatch, attempt or corpus namespace has been allocated.
 
 ## Expected duration and criterion
@@ -42,9 +42,12 @@ baseline only after the other checks hold.
   `appsec-multi-vuln-c094-v1`.
 - Native Docker is installed but inactive. Docker Desktop is stopped and will
   not be substituted for the native daemon.
-- Main is at `b21c90b095b7dc12f0c1a3487f1bf904106c5fca`; an integration session
-  has a pending decision about advancing it. Ownership must be settled before
-  a live source freeze.
+- Main is at `b21c90b095b7dc12f0c1a3487f1bf904106c5fca`. An integration session's
+  pending update initially blocked ownership. The user then ordered the other
+  threads and monitors stopped. Its update was rejected without changing either
+  checkout, and the coordinator's handoff request was withdrawn. The app now
+  reports only this walker running, with no pending questions or other busy
+  sessions. This walker owns subsequent Linux-main operations.
 - The user approved an initially empty expected-gaps list and selected
   `copilot-prod` with the existing production capacity overlay.
 

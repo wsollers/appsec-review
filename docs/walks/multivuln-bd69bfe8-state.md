@@ -15,19 +15,27 @@ Terms: [multivuln-bd69bfe8](multivuln-bd69bfe8.md). Updated 2026-11-12.
 | Stack | Native Docker service is installed but inactive; no launch attempted |
 | Expected gap causes | None |
 
-## Stop before launch
+## Ownership and startup
 
-Another session, Fleet main landing, has a pending user decision about updating
-both host checkouts to `cbd52b0516793c1647a41f4c2690b8fa77b99564`. The walker
-requested an explicit ownership handoff from its coordinating session before
-editing or freezing Linux `main`. That pending decision was not answered on the
-user's behalf. These new documents are prepared in the isolated app worktree
-pending serialized integration; they do not claim a main commit or a live run.
+The user directed this walker to stop the other threads and monitors and become
+the sole active repository owner. Fleet main landing's pending update was
+rejected with instructions to keep both checkouts unchanged and stop; its
+autopilot mode was changed to interactive. The legacy Appsec system review
+coordinator was instructed to stop its work and monitors. The earlier request
+for those sessions to integrate the walk documents was withdrawn.
 
-After ownership is resolved, verify the exact main revision, target, existing
-image and stack state. Use the existing native Docker service and supported
-lifecycle commands without building an image. Stop if startup requires a new
-host capability, a changed image/key, or a guard override.
+The app's subsequent live status reported one running session (this walker),
+zero other busy sessions and zero pending questions. No background task agents
+or shell sessions were present; no matching user timers were found. The
+remaining Linux-main shell is the user's interactive terminal and was untouched.
+Dormant sessions were not contacted.
+
+Integrate only this walk's documentation commits into the unchanged Linux
+runtime base; do not fast-forward the unrelated pending main update. Then
+verify the exact main revision, target, existing image and stack state. Use the
+existing native Docker service and supported lifecycle commands without building
+an image. Stop if startup requires a new host capability, a changed image/key,
+or a guard override.
 
 ## In flight
 
