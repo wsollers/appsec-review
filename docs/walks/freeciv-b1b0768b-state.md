@@ -5,9 +5,7 @@ The walker rewrites this file at every acceptance, stop and restart
 ([walk charter](../processes/walk-charter.md), section 7). A fresh session compares it with the
 host before acting.
 
-**As of:** 2026-11-12 about 04:00 EST, `main` and `origin/main` at `a6c29142` (pushed at the user's
-"Yes, merge and push"; the charter is on `main`). Written by the walker after the replay that followed the
-merge of `origin/main`; no job has run since.
+**As of:** 2026-11-12 about 07:40 UTC, `main` and `origin/main` at `b21c90b0` (record 06 and this file are committed on top, unpushed). Written by the walker after job 6 was run and stopped.
 
 | Item | Value |
 | --- | --- |
@@ -16,7 +14,7 @@ merge of `origin/main`; no job has run since.
 | Overlay | `freeciv-b1b0768b/capacity-overlay.toml` (`cpu = 20`, `io_slots = 4`) |
 | Accepted | jobs 1 to 5: `job_model_connectivity`, `job_image_pin_verification`, `job_target_acquisition`, `job_review_intake` (0 gaps each), `job_target_catalog` (28 gap records, 5 causes, all on the expected list). Records 01 to 05 |
 | Accepted attempts | job 1 `attempt_0004`, jobs 2 to 4 `attempt_0003`, job 5 `attempt_0003`; every replay compared equal to its preserved key (0 differences) |
-| Next job | 6, `job_source_history_analysis`: not launched |
+| Job in hand | 6, `job_source_history_analysis`: **run and stopped for decisions, not accepted**. Dagster run `ad630bf6-36ef-4092-b819-547c0707bba5`, `attempt_0001`, `COMPLETED_WITH_GAPS`, 5 min 49.6 s. Record 06 |
 | Stack | idle, five services healthy, target `/opt/app/targets/freeciv`, profile `dev`, recording `record` |
 | Target | `b1b0768bfaca9b2fae68f9466defe1e80636e9fa`, status clean |
 
@@ -32,19 +30,19 @@ merge of `origin/main`; no job has run since.
 Pass the run id explicitly on every command. Run ids roll to the UTC date; one script of this
 walk addressed the previous day's run after midnight (it wrote nothing; see record 05).
 
-## What job 6 should expect
+## Job 6 as found (record 06)
 
-- Expected duration: unknown (first run on this target). Freeciv has a long history; the
-  configured history bounds being reached is on the expected list, anything else is not.
-- First real run of the change-log unit (T-097). The inventory holds `ChangeLog` (2.8 MB, a plain
-  `git log` dump with no file lists) and `ChangeLog-1.0-S3_0` (9.5 MB, `svn log -v`, paths under
-  `/trunk/`). Its author expects unbound paths, so the unit ends PARTIAL and the job
-  `COMPLETED_WITH_GAPS`; `changelog.json` will be tens of MB. T-097's "done when" asks for the
-  format detection, entry counts, bound-file ranks and gaps to be checked against the two files,
-  and for no author name, address or message text in any output.
-- The source-history GitHub enrichment uses this shell's `gh` login (the stack prints
-  `GITHUB_TOKEN: using this shell's gh login`); whether it reaches the network during the job is
-  to be observed, not assumed.
+- Several gap causes are not on the expected list: `untracked_path`, `working_tree_divergent`,
+  `head_differs_from_mainline`, `timestamp_anomaly`, `fix_on_fix_undetermined`, parse and symbol
+  gaps, change-log gaps (0 of 24,204 paths bound), deployment and pull-request timing.
+- `bind_snapshot` reports 1,429 divergent and 189 untracked files on a clean target; blob ids it
+  records differ from git at the pin (example `ci.yml`: `34cbd111...` against `b4137ec5...`), which
+  suggests the history is bound to a revision other than the pin. The clone holds branches and
+  58,798 commits against 31,479 from the pin. Not established; see record 06.
+- To continue after the decisions: re-launching job 6 is `stepwise.py next --app-run
+  2026-11-12-0001 --relaunch` only after a fix and the repair path (charter sections 6 and 10).
+  The accept command is unchanged. Run the WSL command itself as the background task; a `&` inside
+  `bash -lc` dies with the shell.
 
 ## Host notes a fresh session needs
 
@@ -63,7 +61,10 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
 
 ## Waiting on the user
 
-- The go-ahead to launch job 6 in a fresh session.
+- Record 06, decision 1: is the history read at the pin? Option (a) the walker sizes the fix
+  read-only, (b) a separate session, (c) intended, accept. Recommendation (a).
+- Record 06, decision 2: which job 6 gap causes join the expected list (recommended after 1).
+- Blindness note in record 06: one commit subject of the target clone was seen incidentally.
 
 ## In flight
 
