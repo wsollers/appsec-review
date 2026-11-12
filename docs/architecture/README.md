@@ -176,6 +176,11 @@ Operations pages not listed above:
 - [`../operations/review-data-indexing.md`](../operations/review-data-indexing.md) — dataset inventory and publication audit.
 - [`../operations/retrieval-mcp.md`](../operations/retrieval-mcp.md) — local retrieval MCP gateway.
 - [`../operations/sei-cert-rule-pack.md`](../operations/sei-cert-rule-pack.md) — SEI CERT rule-pack operation.
+- [`dfd-and-threat-model-generation.md`](dfd-and-threat-model-generation.md) — design (not
+  implemented) of `job_threat_model_generation`: a generated, evidence-cited data-flow diagram and
+  STRIDE-per-interaction threat model from accepted run evidence, its gap and unknown model, and
+  the limits on downstream use; plan in
+  [`../tasks/2026-11-12-dfd-threat-model-plan.md`](../tasks/2026-11-12-dfd-threat-model-plan.md).
 
 Other records: decision and migration reviews in [`../reviews/`](../reviews/), implementation task
 prompts in [`../tasks/`](../tasks/), JSON schemas in [`../schemas/`](../schemas/), and the full
