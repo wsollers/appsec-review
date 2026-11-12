@@ -1,0 +1,65 @@
+# Multivuln walk 01 - `job_model_connectivity`
+
+This record advances T-057 under the
+[walk terms](../walks/multivuln-bd69bfe8.md).
+
+**Result: not launched; preflight ownership handoff pending.** No new application
+run, Dagster dispatch, attempt or corpus namespace has been allocated.
+
+## Expected duration and criterion
+
+Expected job time: **39.233 seconds**, from the most recent local matching
+target/profile/overlay run, `2026-11-12-0002`, `job_model_connectivity`,
+`attempt_0001`, Dagster dispatch `c4991d76-020d-417b-8e16-8e55a500e2f5`.
+Its handoff records start `2026-11-12T00:16:51.829420+00:00` and completion
+`2026-11-12T00:17:31.062091+00:00`; its configuration manifest selects
+`copilot-prod` and `/opt/app/test/acceptance/prod-capacity-overlay.toml`.
+This is a historical timing reference, not a copied baseline or acceptance of
+that run's output. Inspect at the expected mark and investigate at twice the
+mark; distinguish startup/dispatch overhead from job time.
+
+The new job must consume no upstream handoffs, resolve the provider/model
+settings from its own immutable configuration, and establish availability for
+each required distinct provider/model pair. Independently count those settings
+from the resolved configuration. Verify the handoff's canonical outcomes by
+hash and size; any canonical gap stops this walk. Save a fresh host-local
+baseline only after the other checks hold.
+
+## Four checks
+
+- **A. Inputs:** not performed; no new claim exists.
+- **B. Independent comparison:** not performed; no new job output exists.
+- **C. Gaps:** not evaluated; absence of a run is not zero-gap evidence.
+- **D. Baseline:** not saved; job not accepted.
+
+## Preflight observations
+
+- The user corrected the initially inferred Freeciv target to multivuln and
+  selected the existing Linux main checkout.
+- The checkout's `.venv` imports `appsec_review` from its own `src/` directory.
+- `git status --short` in `targets/appsec-multi-vuln-c094` is empty;
+  HEAD is `bd69bfe83fec49155366303604475512c98c4ce6`, with existing tag
+  `appsec-multi-vuln-c094-v1`.
+- Native Docker is installed but inactive. Docker Desktop is stopped and will
+  not be substituted for the native daemon.
+- Main is at `b21c90b095b7dc12f0c1a3487f1bf904106c5fca`; an integration session
+  has a pending decision about advancing it. Ownership must be settled before
+  a live source freeze.
+- The user approved an initially empty expected-gaps list and selected
+  `copilot-prod` with the existing production capacity overlay.
+
+## Commands and timing
+
+Read-only preflight used `git status`, `git rev-parse`, `git tag --points-at HEAD`,
+the checkout-local Python import, `systemctl show`, Docker context/status
+inspection, and `stepwise.py init --help` / `ops.py stack-start --help`.
+Individual command elapsed times were not captured; no job time is claimed.
+The historical duration above is calculated from the retained handoff timestamps.
+
+No tests ran. Replays: zero.
+
+## Not verified
+
+Live stack health, active Dagster dispatches, loaded source/image identity,
+model availability, all four checks for the new job, and every later job.
+The findings have not been graded.

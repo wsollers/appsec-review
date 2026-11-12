@@ -96,3 +96,5 @@ images/audit-buildenv-java/jdtls.tar.gz
 /data/acceptance-seeds/
 # Per-host working notes of a job-by-job walk (walk charter, section 2); never committed.
 /docs/walks/*.local.md
+# This host's multivuln walk baselines and seed manifests are local, never shared.
+/test/acceptance/multivuln-bd69bfe8-wsollers1-v*/
