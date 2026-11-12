@@ -5,6 +5,15 @@ page describes how the test tiers are built, collected and run, and the standard
 to. The [working loop](#working-loop) is the practical unit-test, authorized live-test and recovery
 procedure. Where this page and `AGENTS.md` differ, `AGENTS.md` wins and this page is corrected.
 
+| To do this | Read |
+| --- | --- |
+| Run or write unit tests for a change | [the unit harness](#the-unit-harness), [unit-test standards](#unit-test-standards), [working loop](#working-loop) steps 1 to 3 |
+| Bring one job to the standard its tests must meet | [job-pass checklist](../processes/job-pass-checklist.md) |
+| Run one authorized live job and decide whether to accept it | [working loop](#working-loop) step 4 |
+| Walk a whole review job by job on a target | [job-by-job walks](#job-by-job-walks) and the [walk charter](../processes/walk-charter.md) |
+| Recover after a failed or repaired job | [working loop](#working-loop) step 5 and the [recovery runbook](../operations/recovery-repair.md) |
+| Run a named suite or a long run | [operator wrapper](#operator-wrapper) |
+
 ## Tiers
 
 | Tier | Location | Collected by bare `pytest` | Who runs it | Needs |
@@ -74,8 +83,8 @@ Everything below is implemented in `tests/conftest.py` and applies to every test
 6. **Skips name what is missing.** A skip is a coverage gap, never a pass. No `xfail` to hide a
    failure.
 7. **Real Docker is not a unit dependency.** A small set of unit-collected tests still start real
-   containers and skip without the engine or images; they are listed as deferred work in
-   `AGENTS.md`. Tests that only assert `docker` argv through fakes are ordinary unit tests.
+   containers and skip without the engine or images; their home is deferred work
+   ([T-052](../TODO.md)). Tests that only assert `docker` argv through fakes are ordinary unit tests.
 
 ## Standards for integration, acceptance and live tests
 
@@ -231,9 +240,13 @@ When the criterion holds, accept the job individually, then advance:
 .venv/bin/python deploy/dagster/bin/stepwise.py next --app-run RUN
 ```
 
-`--target-tag` defaults to `--tag` when omitted. Use distinct corpus namespaces for independently
-scoped acceptance keys without inventing target tags or overwriting prior keys; the actual Git
-tag must still resolve to target HEAD. See [local Dagster parity](../processes/local-dagster-parity.md).
+`--tag` is the acceptance corpus namespace: the directory under `test/acceptance/` that receives
+the job's baseline and seed. `--target-tag` is a Git tag in the target that must resolve to target
+HEAD, and defaults to `--tag` when omitted. Use distinct corpus namespaces for independently
+scoped acceptance keys, for example one per fresh run of a walk, without inventing target tags or
+overwriting prior keys. The target belongs to the user: a session never creates a tag there
+unless the user instructs it, and accepting by commit is deferred work ([T-094](../TODO.md)).
+See [local Dagster parity](../processes/local-dagster-parity.md).
 An envelope/check success never authorizes skipping the content criterion, automatically accepting
 a whole graph or crossing the user's stop boundary.
 
@@ -277,6 +290,32 @@ Use concrete handoff checkpoints and scope freeze after the required checks pass
 the live-loop interval polishing unrelated infrastructure. Do not start additional agents or
 nested test delegation merely to appear busy. Where mechanical delegation is authorized, give it
 the exact bounded command and retain attribution/repair decisions with the owning agent.
+
+## Job-by-job walks
+
+A walk applies step 4 to every job of one review of one pinned target, in graph order, and stops
+for the user whenever something is not already decided. Its standing rules are the
+[walk charter](../processes/walk-charter.md). In short:
+
+- **Four checks before every accept**, written in the job's record: the job consumed what its
+  contract declares from this run's accepted handoffs; its output agrees with a source of truth
+  the job did not produce; every canonical gap is classified by cause; the job is accepted so its
+  next run is a diff. Anything not compared is listed as not verified.
+- **Expected gaps are decided in advance.** Each walk keeps a list the user confirmed, with what
+  accepting each gap costs. A cause that is not on the list stops the walk; a cause that is false
+  of the target is a defect. A named gap never makes a result acceptable by itself.
+- **Defects are repaired in the loop above.** A fix that changes no contract and no default is
+  made with a regression that failed first and the run is repaired or restarted; anything larger
+  is the user's decision. A change to the frozen configuration starts a fresh run, and the
+  accepted jobs are verified again there.
+- **The walk lives in documents, not in a conversation.** `docs/walks/<walk-id>.md` holds the
+  walk's terms and the user's decisions; `docs/walks/<walk-id>-state.md` holds the current
+  position; `docs/tasks/` holds one record per job. A fresh session starts each job from those
+  documents, so a long session's summarised context is never the source of a rule.
+- **The target is blind and belongs to the user.** No session edits it or reads an answer key to
+  steer a job. Grading comes after the walk and is the user's step.
+
+A walk is live validation and runs only at the user's explicit request.
 
 ## Known failures
 

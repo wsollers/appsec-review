@@ -6,6 +6,7 @@ Relevant bounded procedures and design references:
 
 - [`architecture/README.md`](architecture/README.md) — full architecture navigation.
 - [`architecture/testing.md`](architecture/testing.md) — test tiers, the unit harness, test standards and the working loop.
+- [`processes/walk-charter.md`](processes/walk-charter.md) — standing agreement for a job-by-job walk of a review: roles, the four checks, stops, fresh sessions; each walk's terms and state are under `walks/`.
 - [`operations/review-startup.md`](operations/review-startup.md) — required review inputs, full-review launch examples, startup flags and TOML-only feature gates.
 - [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
 - [`operations/operator-scripts.md`](operations/operator-scripts.md) — `scripts/` for the Dagster stack, starting, watching and ending reviews, cleaning `test/tmp` and running named test suites, with the active-run guard.
