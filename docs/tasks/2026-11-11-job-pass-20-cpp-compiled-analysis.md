@@ -66,3 +66,31 @@ Common command prefix:
 No case exceeded ten seconds. Full compiler-analysis, integration and acceptance suites
 were not run as automatic gates. Live repair acceptance still requires source-only reload,
 inspection/admission of the exact compatible repair and a checked rerun.
+
+## Recovery-context discrepancy
+
+The Infer fix and nineteen accepted scoped-v4 keys were committed as `8aed19924`.
+Source-only reload produced
+`4a2dff8f7422d554e07f4fa36f14f71f317c6d9deaa4322c78959d6bd46ef610`;
+the tooling image and resolved configuration remain unchanged.
+
+The inspected repair plan
+`b9ab8c1eb8527de8fb57d5575d1cca782246514409634c4286b7f8416491581d`
+is admissible, but it was **not admitted**: it incorrectly reruns planning for
+`planning environment availability identity changed`, invalidating its descendants.
+Unlike the earlier artifact-indexing repair, there is no planning implementation or
+validator change in this plan.
+
+The saved planning claim records workflow `target_analysis_plan`, mode `EXPECTED_CURRENT`
+and the exact accepted environment handoff. `plan_repair` constructs `ResumePlanner`
+without orchestration; `environment_contract` therefore substitutes workflow `standalone`.
+A read-only reproduction through the real environment reader confirmed that **only the
+`workflow` field differs**. The producer, mode, reference, artifact and evidence are identical.
+The ordinary CLI exposes no workflow option.
+
+The candidate plan is retained at
+`runs/metadata/stepwise/2026-11-12-0002/checks/infer-repair-plan.json`.
+The nineteen current acceptances remain intact; no rewind or another prerequisite walk
+has been started. Restoring validated frozen orchestration context is a separate recovery
+tooling correction, not permission to ignore identity differences. That next change is
+being brought to the user before altering recovery behavior.
