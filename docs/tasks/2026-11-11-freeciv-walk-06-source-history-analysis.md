@@ -120,7 +120,79 @@ the tracked catalog no longer carries (T-051). The history files were not run as
 the 19 failing tests were rerun in groups and passed. The four other test files that use the new
 copy helper did not finish a run; the helper was checked by reading the code only.
 
-**Still to do for this walk.** The mounted source changed: job 6 has not been rerun. It needs
-`lifecycle.py reload`, then a rerun, and the four checks again, including the commit history
-actually read (31,479 commits expected at the pin). The gap causes that remain on the rerun are
-still for the user to decide.
+## Rerun after the fix (2026-11-12, run `2026-11-12-0001`, `attempt_0002`)
+
+**Result: stopped for decisions, not accepted.** The history now binds to the pin. The gap causes
+that remain are still off the expected list (below).
+
+**Time and what was lost.** Rerun itself: Dagster run `d2474825-8fa7-4183-a77a-48335dcf6ffc`,
+`SUCCESS`, `COMPLETED_WITH_GAPS`, about 2 minutes of steps (history 1 min). About 25 minutes went
+to getting it launched, not to the job:
+
+- `lifecycle.py reload` (3 min 37 s) recreated the services from `deploy/dagster/.env`, whose
+  defaults are the multi-vuln target and overlay. The first relaunch failed in its begin step
+  (`run is already bound to a different configuration ... overlay cpp-multivuln-v1`). The walk's
+  `scripts/stack-restart.sh --code-location-only --target freeciv --overlay
+  freeciv-b1b0768b/capacity-overlay.toml` (3 min) restored them. Use that, not a bare `reload`.
+- The second relaunch failed with `implementation changed: plan-repair and admit-repair are
+  required`. `stepwise.py recover --app-run 2026-11-12-0001` (verifies every recorded dispatch,
+  19 of them), `plan-repair` (admissible; job 6 `RUN`, its downstream jobs `INVALIDATE`,
+  `job_review_intake` and `job_target_catalog` `REUSE`), `admit-repair` with the plan under `runs/` (the container does not mount
+  `test/tmp`), then `next --relaunch` launched. `recover --plan` itself refused ("mismatched
+  current attempt/state") because job 6's attempt was complete rather than failed; `next
+  --relaunch` did not need it.
+
+**Checks.**
+
+- **A. Inputs. Verified.** The run's reads name `job_review_intake` `attempt_0003`
+  (`c88c2cbd...`, complete, 0 gaps) and `job_target_catalog` `attempt_0003` (`7d2e0c7f...`,
+  partial, 28 gaps). `sha256sum` of those two `handoff.json` files in the run equals both hashes,
+  and they are the attempts the state file lists as accepted.
+- **B. Independent comparison. Verified for the items below; not for symbols, blame ranks or
+  change logs.** On the host, target HEAD `b1b0768b`, 0 status lines, 6,726 tracked files,
+  31,479 commits from HEAD. The job: `snapshot_commit` equals HEAD, `mainline_ref` null, no
+  observations; `bind_snapshot` exact, 0 divergent, 0 untracked, 3,496 matched, 6,726 tree entries;
+  `ci.yml` blob `b4137ec5...` now equals git. The window anchor 1788413334 equals HEAD's commit time
+  (`2026-09-03T10:28:54+05:00`); the job reports 113 changes in the 6-month window and git counts 113
+  first-parent commits since the window start. The walk read 20,000 first-parent commits, the
+  configured `max_changes = 20000` (31,468 first-parent commits exist); because the log is
+  newest-first, the 113 in-window commits are inside it. That bound produced no gap record: the
+  history is complete for the window. GitHub enrichment: 114 requests, 113 facts, 0 gaps.
+  Not compared: classification, co-change and fix-on-fix outputs, symbol spans, the 50 blamed files'
+  ranks, change-log binding.
+- **C. Gaps (28 unique, 49 occurrences).** Gone since the stop: `untracked_path`,
+  `working_tree_divergent`, `head_differs_from_mainline`, `fix_on_fix_undetermined`. Now:
+
+  | Cause | On the expected list? |
+  | --- | --- |
+  | `.git` excluded; no target document of six kinds; `compile_commands.json` not present | yes (rows 2, 9, 10, 7) |
+  | `blame_bound_reached` (177 candidates, 50 blamed), `line_history_bound_reached` | yes, row 6 (bounds reached) |
+  | `line_history_file_too_large` | a size bound; row 6 is about history bounds, so ask |
+  | `timestamp_anomaly:1` | no |
+  | `parse_errors_present`, `parse_errors_in_span`, `preprocessor_branches_not_counted`, `symbol_language_unsupported` (symbol spans) | no |
+  | `changelog_format_unrecognized` (`NEWS` 4,993 lines, `NEWS-3.2` 749), `changelog_mixed_format` (`ChangeLog` 3,796, `ChangeLog-1.0-S3_0` 75,924), `changelog_paths_unbound` (24,204 mentions, 0 matched) | no |
+  | `deployment_timing_not_acquired`, `pr_timing_not_acquired` | no |
+
+  The charter stops the walk on any cause not on the list.
+- **D. Baseline.** Not saved; not accepted.
+
+**Decisions for the user (replaces decision 1, now answered).** Which of the following join the
+expected list for this walk: the symbol and parse gaps (C code with preprocessor branches);
+`line_history_file_too_large`; the change-log gaps (`NEWS` is not a change log; both ChangeLog files
+are mixed format and bind 0 of 24,204 paths, which may be a defect worth its own look since entries
+are 20,924); `timestamp_anomaly:1`; the two timing gaps. Recommendation: accept the timing gaps (no
+network source for a local clone), the symbol and parse gaps and the size bound as detection
+limits, and fix or size the change-log binding before accepting.
+
+## Commands (rerun)
+
+```sh
+.venv/bin/python deploy/dagster/bin/lifecycle.py reload                     # 3 min 37 s; resets target and overlay
+scripts/stack-restart.sh --code-location-only --target freeciv --overlay freeciv-b1b0768b/capacity-overlay.toml   # 3 min
+.venv/bin/python deploy/dagster/bin/stepwise.py recover --app-run 2026-11-12-0001
+docker exec appsec-review-dagster-wsl-code-location-1 python -m appsec_review plan-repair --run-id 2026-11-12-0001 --target /opt/app/targets/freeciv
+docker exec appsec-review-dagster-wsl-code-location-1 python -m appsec_review admit-repair --run-id 2026-11-12-0001 --target /opt/app/targets/freeciv --plan /opt/app/runs/walk06-plan.json
+.venv/bin/python deploy/dagster/bin/stepwise.py next --app-run 2026-11-12-0001 --relaunch
+```
+
+No unit tests were run in this part.

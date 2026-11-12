@@ -14,7 +14,7 @@ host before acting.
 | Overlay | `freeciv-b1b0768b/capacity-overlay.toml` (`cpu = 20`, `io_slots = 4`) |
 | Accepted | jobs 1 to 5: `job_model_connectivity`, `job_image_pin_verification`, `job_target_acquisition`, `job_review_intake` (0 gaps each), `job_target_catalog` (28 gap records, 5 causes, all on the expected list). Records 01 to 05 |
 | Accepted attempts | job 1 `attempt_0004`, jobs 2 to 4 `attempt_0003`, job 5 `attempt_0003`; every replay compared equal to its preserved key (0 differences) |
-| Job in hand | 6, `job_source_history_analysis`: **run and stopped for decisions, not accepted**. Dagster run `ad630bf6-36ef-4092-b819-547c0707bba5`, `attempt_0001`, `COMPLETED_WITH_GAPS`, 5 min 49.6 s. Record 06 |
+| Job in hand | 6, `job_source_history_analysis`: **rerun after the anchor fix, stopped for decisions, not accepted**. Dagster run `d2474825-8fa7-4183-a77a-48335dcf6ffc`, `attempt_0002`, `COMPLETED_WITH_GAPS`, check passed; history binds to the pin (exact, 0 divergent). First attempt `attempt_0001` (`ad630bf6...`) is superseded. Record 06 |
 | Stack | idle, five services healthy, target `/opt/app/targets/freeciv`, profile `dev`, recording `record` |
 | Target | `b1b0768bfaca9b2fae68f9466defe1e80636e9fa`, status clean |
 
@@ -62,8 +62,14 @@ walk addressed the previous day's run after midnight (it wrote nothing; see reco
 ## Waiting on the user
 
 - Record 06, decision 1 is answered: the anchor bug was fixed and pushed (`38777f90`, origin/main
-  `d901bac4`). Job 6 needs a reload and a rerun (record 06, last section).
-- Record 06, decision 2: which job 6 gap causes join the expected list (recommended after 1).
+  `d901bac4`) and job 6 was rerun on it (`attempt_0002`).
+- Record 06, rerun section: which of the remaining job 6 gap causes join the expected list
+  (symbol and parse gaps, `line_history_file_too_large`, change-log gaps, `timestamp_anomaly:1`, the
+  two timing gaps). Accept with `stepwise.py accept` (command above) after that decision.
+- Host trap: a bare `lifecycle.py reload` resets target and overlay to the `.env` defaults; follow it
+  with `scripts/stack-restart.sh --code-location-only --target freeciv --overlay
+  freeciv-b1b0768b/capacity-overlay.toml`, and a changed implementation needs `recover`,
+  `plan-repair`, `admit-repair` before `next --relaunch` (record 06).
 - Blindness note in record 06: one commit subject of the target clone was seen incidentally.
 
 ## In flight
