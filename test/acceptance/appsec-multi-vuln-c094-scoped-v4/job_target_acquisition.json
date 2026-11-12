@@ -1,0 +1,238 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/target-acquisition-handoff.json",
+   "sha256": "b2f0a8bbb086c532ffe90d39888cff0a9e476a7db1694d344d40e27fac59b9c7"
+  },
+  {
+   "count": 12,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/result.json",
+   "sha256": "e5d18ae5f6aa91e3a4514748da80c5988fffab74a3f133019b5019f5d023c99e"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/status.json",
+   "sha256": "48ef68555dc6089a4222610a0732d4c4d69365bd2f32605f7479464ae30809ce"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/status.json",
+   "sha256": "1e8651bc8adae11acc70891adf7bd52c1ba9b06e1df3ec4f98812d16069afd20"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/status.json",
+   "sha256": "8481642becfd09f37cacc442f066da291d195f407be311d44540f94596dabd4b"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/claim.json",
+   "sha256": "8182a2fc3cb7e8db2e0d047d402ff21abfc21175ebba4b36f5020ebf83f34af4"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",
+   "sha256": "a97b191e1d88de1daf475956e292f5502ef77de1d1b0c5090e92aa8c8f3040c7"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/result.json",
+   "sha256": "797a91d7de840b052809ee4f36729b99d1af352d640f10f8238aecd844bdfbf2"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/target-acquisition-plan.json",
+   "sha256": "999ff400469bd1573b87642cc231b58bea4f8a5a224c00bbc1b02f08734a2ddf"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/result.json",
+   "sha256": "c5e0a482234b09365cc546189da2aaba08e7a5578795dff7cb583a691e4dea06"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_target_acquisition/attempts/<attempt>/outcomes.json",
+   "sha256": "ee69d3f9d2a809f8a0cbe277dc34d9a1485f773e0227c7046832d8a4f369e5cc"
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/target-acquisition-job/2",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_target_acquisition",
+ "outputs": {
+  "acquisition.acquire_components": {
+   "artifact": {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/target-acquisition-job/2",
+   "status": "NOT_REQUESTED",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "publication.publish_handoff": {
+   "acquisition_id": null,
+   "artifact": {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/target-acquisition-handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "components": null,
+   "manifest": null,
+   "result": {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/target-acquisition-job/2",
+   "status": "NOT_REQUESTED",
+   "system_id": null,
+   "target_path": null,
+   "terminal_status": "SUCCEEDED",
+   "tree_sha256": null
+  },
+  "selection.resolve_system": {
+   "artifact": {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/target-acquisition-plan.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "requested": false,
+   "schema": "appsec-review/target-acquisition-job/2",
+   "system_id": null
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "acquisition": "SUCCEEDED",
+  "publication": "SUCCEEDED",
+  "selection": "SUCCEEDED"
+ },
+ "units": {
+  "acquisition.acquire_components": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "selection.resolve_system": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/claim.json",
+    "sha256": "497aba0656549c746285857be0b06fab075320a16745f6e0578d1c18f50d7bf9",
+    "size_bytes": 4563
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/outcomes.json",
+    "sha256": "95dd59e9c2f315758140278239147982bf3559b0472bf48b47dc5864735715b6",
+    "size_bytes": 2085
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/result.json",
+    "sha256": "7f6efb63ed5207eb673b58c38fdf233bc90d5b196f653cd66f112883d30b20cf",
+    "size_bytes": 366
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/status.json",
+    "sha256": "eacd6d357147eff360c80dd62c72cda00cea7d85f4888111a6622a970c902a5d",
+    "size_bytes": 702
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",
+    "sha256": "0d2dda5424d4513de4772677ec9164d7a4aabb4d309e47cc9e0dd178c93909a1",
+    "size_bytes": 309
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/result.json",
+    "sha256": "d5f9d37ffe686ff7fdc793c877a20258315c622648834270c0ee6fce256a1655",
+    "size_bytes": 712
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/status.json",
+    "sha256": "2a5d4318f2b15611571489d513c96f7b0f3cf2984ac586ce3ce9bdd6a6708166",
+    "size_bytes": 694
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/publication/tasks/publish_handoff/target-acquisition-handoff.json",
+    "sha256": "5c3e13999716a603eed64e95f4f9dab6ecdc19451c5a1d336feec80263c3b1b4",
+    "size_bytes": 442
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/result.json",
+    "sha256": "3215d2072e00a0841a918a58915f919bccf9cb16bfacdb14650ebf0374467a04",
+    "size_bytes": 323
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/status.json",
+    "sha256": "d3fc3c26885450232b43e18ae3aeb05eb2834dd7874077172dee85e235cf908a",
+    "size_bytes": 646
+   },
+   {
+    "path": "data/jobs/job_target_acquisition/attempts/<attempt>/steps/selection/tasks/resolve_system/target-acquisition-plan.json",
+    "sha256": "d42bc72dc4d222473f7d3758a786cd84805dbe8248237e277b132b38eb231400",
+    "size_bytes": 228
+   }
+  ]
+ }
+}

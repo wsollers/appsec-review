@@ -1,0 +1,2509 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "b229863dc71dcbc2f7aba91d1d3946ab8e417ca33fb6bb46e4b120176d3a28fc"
+  },
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "b229863dc71dcbc2f7aba91d1d3946ab8e417ca33fb6bb46e4b120176d3a28fc"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "abef03e3d127c8fa1ce7d3ca1cf551539dbfb0745ed20810c20ccff919765e3e"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "2ac4e5b830f6e12d8b381044cf53cb67e6a158143430a7b2decbeaf431e2eaa0"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "dc0b37d624b465448524f2984d61fb9713f2bfbb17080513d74b426fd62528f6"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "10312f8f4c48a7145ddd5f89d06bb5e2d0ae934d3c2d5adac4fa693b2ad56386"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "11ff401a767028292b21048f6bdc4dbc6faa5c1b2dd1f0da2a25ee217f176bbb"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "1c31d1274c9995e0fd82db64326210658d40e148c8442718b8faad5362bdd72a"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "257742fc883bc1a11f0f60ce3364a68f08ffa230ba3d16d1a876819730361523"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "9c96336219ee6230de6096c5eb2a5975e195884c275611720e42c4ebdf0189b1"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "07148eb83b20842535dfa8a26451bc18db15c88c94eaf0e67e5e519f420318f3"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "35baf980e1cba6732acaf209ccda49f259e33da67d394fd2963e36459069f56f"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "67699fb065c699eb113f45f6afbe1b4320e2f68d1bbc18eeecffd1ef5e4e9991"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "93e5f6b74dfa22570adef94bc58c13082a0457d086283279848a9d045487e437"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "dbf9586397c9f988001752ed819b0267125e770781bee604cee1dd1c4a99e81c"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "ea71093c75848f3e4f10af6d43b2b013639b650151bee52e48d5d96fd8f0e1d0"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "eaa3c388fcc445fb0e74b61b422ac712007829c7eed754a0065e3248ec1b10b9"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "f62eacf1dee5cc7ea82d4f4bf513b3f5e9857070992bdff83a1c885690025e7f"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+   "sha256": "fcdaac78e59404165dbf5852a9153fd5e6a631ec4d5e7779643738580e41e5a0"
+  },
+  {
+   "count": 12,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+   "sha256": "c4046b24631ce9f4d2935e9e3b32f50d167e5e88490977bfc20c4f39953da46b"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/status.json",
+   "sha256": "dbfa5679dd4395ac58eca03d8e957a762669e17cdd473360a34e9b4faa538c85"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/load/tasks/accepted_inputs/status.json",
+   "sha256": "0e2e8b5883a5d93088850216287151cbded01335b069997a61dee18e53ac5057"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/parse/tasks/dynamic_scopes/status.json",
+   "sha256": "73c3dccd17055de9c7ec6c5ac7a8d13d3afdcbf9b3c6060ca9bfa44930eaf398"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/plan/tasks/route_scopes/status.json",
+   "sha256": "d600ae88ce23a67123f3309afdd680d3b5ae16db42b971bd935107637b17a6ca"
+  },
+  {
+   "count": 17,
+   "kind": "json",
+   "path": "data/configuration/resolved.json",
+   "sha256": "9afd8d0e497ebd4f974f3c9ee1d53a90ae71514547daa721d782fdaada1b39ba"
+  },
+  {
+   "count": 29,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+   "sha256": "29f2fd21d99bcc9d48b9ab8882f997b582a71ba357332f264d9a1bcc642b7973"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "0c7a81bf1405a05fc96076e97f2a1e49a30424f0eeb04091eb1dcddc18d60a78"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "16bfe16a69079698b64b52ef8b98daee9840fd3c263e6203b70b6908e2a67ed7"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "1d77b4edfe95add78365d725442b51294ba5f3f2bf3f31c9e81b37dd49a0d890"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "22c1107c00cec99be7b81c33746663a5d61370ed480f0d754a6cc322670d7182"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "38fe01d6eac61eb938396169d5a7ed5cdb93f21e958571c758dfa06b5865d04e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "4d39743869e1190d49839800a774d5ec37608c74a870ae59eb05c409b119619e"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "7155d9f5fa4892f94cdb9741803f3c731d127b504c6d2d019d570c4b47b1366a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "ae706e44cc6dacb15097880a2abbbafda77bb1457c3bc6131fbf837b539a7d92"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/shared/named/index-shard/<sha256>.json",
+   "sha256": "cbfa347e12b2e2da677845955f37ea14663a5f0457317609956aa0adfb04b4f8"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/claim.json",
+   "sha256": "9598cd0485872197b9467650259de2cb9da1e9aac66494f997deb0befde00530"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/claim.json",
+   "sha256": "94b06f197cd5085b66be45ae8277d9f4cbbc057dbcd4e6d0a28ba1c8a62e8d7b"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/claim.json",
+   "sha256": "6354f249abcf246884bc306530879afd648d82c883fef7c142622878c5da0e81"
+  },
+  {
+   "count": 31,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/claim.json",
+   "sha256": "97c35d010ac7376251cfaffacbb09830fcffe505592f1838d97b0b35e36512fd"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/load/tasks/accepted_inputs/result.json",
+   "sha256": "22a2c7846526c1d705460cee550362f62cac2af9d8927a5373a6dfaa0d5ac60e"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/parse/tasks/dynamic_scopes/result.json",
+   "sha256": "b6421a2bd64861ddba4961b4510f689a798997fc3302d2029869fdbbf35b490d"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/plan/tasks/route_scopes/result.json",
+   "sha256": "28b3552d5c6488146ef59b5e8d411b7f6cd274da92b3ab52dcac4ebc3d319ef8"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/configuration/manifest.json",
+   "sha256": "2ce447f866693a8d93f9091552ea909bb9c6dc041b6482e23a252573aa4a7b87"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/language-build-<attempt>.json",
+   "sha256": "1ae0e012a406e717f0a7b91c369fb9c7a2238df64feecff4481becca79b9703d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+   "sha256": "73e51b7d688f5c0c47788697518eba48c831bf66d62e3e9ff302e04f3e74b798"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/result.json",
+   "sha256": "ba9acd3a60ec4de79bb14ccb2d47603dbb7942a1f86af093edfae1deaef71ecd"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/outcomes.json",
+   "sha256": "a9c5f21535d5fa0c2bb45413b730e1775f7f7db32eaa9bf3c099b9b07d77ea8d"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "partial": 1
+   },
+   "entity_kinds": {
+    "ast_node": 236,
+    "source_file": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 237,
+    "locations": 237,
+    "metadata": 8,
+    "relations": 236
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1,
+    "unavailable": 1
+   },
+   "entity_kinds": {
+    "build_action": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/<sha256>.sqlite",
+   "rows": {
+    "coverage": 2,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "build_action": 2,
+    "evidence_artifact": 9,
+    "executable": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build/language-build-<attempt>-<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 12,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "component": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/components/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "symbol": 2
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 2,
+    "locations": 2,
+    "metadata": 8,
+    "relations": 2
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 2,
+    "unavailable": 2
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite",
+   "rows": {
+    "coverage": 4,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 3,
+    "partial": 3,
+    "unavailable": 2
+   },
+   "entity_kinds": {
+    "change": 9,
+    "history_signal": 39,
+    "hotspot": 20
+   },
+   "kind": "sqlite",
+   "path": "data/indices/history/git-history/<sha256>.sqlite",
+   "rows": {
+    "coverage": 8,
+    "entities": 68,
+    "locations": 58,
+    "metadata": 8,
+    "relations": 82
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 8,
+    "partial": 8
+   },
+   "entity_kinds": {
+    "ast_node": 2772,
+    "source_file": 8
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 16,
+    "entities": 2780,
+    "locations": 2780,
+    "metadata": 8,
+    "relations": 2772
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1,
+    "unavailable": 6
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/documents/<sha256>.sqlite",
+   "rows": {
+    "coverage": 7,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "build_action": 1,
+    "component": 1,
+    "evidence_artifact": 14
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 16,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 110
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "source_file": 17
+   },
+   "kind": "sqlite",
+   "path": "data/indices/source/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 17,
+    "locations": 17,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/shared/objects/<sha256>"
+  },
+  {
+   "kind": "file",
+   "path": "data/treesitter/shards/<sha256>.jsonl"
+  },
+  {
+   "kind": "file",
+   "path": "data/treesitter/shards/<sha256>.jsonl"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "@generated: generated_source_producer_gap: build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "accepted exclusions outside source scopes",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "generated source coverage gaps",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "analysis-plan",
+    "gap": ".git: excluded_directory; no recognized project manifests; compile_commands.json not present; build topology: no accepted compile database; compiled-unit coverage is unavailable; build topology: logical descriptor targets do not establish compiled link outputs without accepted build artifacts; executable build graph: incomplete_dependency_discovery: only supported direct descriptor declarations are resolved; absence of an edge is not independence",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/analysis/<sha256>-target-analysis-plan.sqlite"
+  },
+  {
+   "count": 9,
+   "gap": {
+    "area": "syntax-projection:asr:source_file:<sha256>",
+    "gap": "bounded syntax subset; names, imports and call targets are unresolved",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/analysis/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "catalog-exclusions",
+    "gap": ".git: excluded_directory",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "generated-source-lane",
+    "gap": "@generated: generated_source_producer_gap: build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "compile-units",
+    "gap": "compile_commands.json not present",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/build/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents",
+    "gap": "design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test: no accepted target document; source inventory .git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:design",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:dfd",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:openapi",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:postman",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:threat_model",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:unit_test",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "deployment-timing",
+    "gap": "deployment_timing_not_acquired",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "git-history",
+    "gap": "working_tree_divergent; head_differs_from_mainline",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "history-hotspots",
+    "gap": "symbol_language_unsupported; working_tree_divergent",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "pull-request-timing",
+    "gap": "pr_timing_not_acquired",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "symbol-spans",
+    "gap": "symbol_language_unsupported",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/history/git-history/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-files",
+    "gap": ".git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/source/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "parse.dynamic_scopes"
+  },
+  {
+   "count": 2,
+   "gap": "@generated: generated_source_producer_gap: build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)",
+   "unit": "parse.dynamic_scopes"
+  },
+  {
+   "count": 1,
+   "gap": "accepted exclusions outside source scopes",
+   "unit": "parse.dynamic_scopes"
+  },
+  {
+   "count": 1,
+   "gap": "generated source coverage gaps",
+   "unit": "parse.dynamic_scopes"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "gaps": [
+     ".git: excluded_directory"
+    ],
+    "language": "n/a",
+    "reason": "accepted exclusions outside source scopes",
+    "scope_id": "catalog-exclusions",
+    "terminal_status": "UNAVAILABLE"
+   },
+   "unit": "plan.route_scopes"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "gaps": [
+     "@generated: generated_source_producer_gap: build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)"
+    ],
+    "language": "n/a",
+    "reason": "generated source coverage gaps",
+    "scope_id": "generated-source-lane",
+    "terminal_status": "PARTIAL"
+   },
+   "unit": "plan.route_scopes"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/tree-sitter-ast/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_language_build",
+   "job_review_intake",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_tree_sitter_ast",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dispositions": [
+    {
+     "language": "n/a",
+     "reason": "generated source coverage gaps",
+     "scope_id": "generated-source-lane",
+     "terminal_status": "PARTIAL"
+    },
+    {
+     "language": "n/a",
+     "reason": "accepted exclusions outside source scopes",
+     "scope_id": "catalog-exclusions",
+     "terminal_status": "UNAVAILABLE"
+    },
+    {
+     "artifact": {
+      "path": "data/treesitter/shards/<sha256>.jsonl",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "bytes_parsed": 7632,
+      "diagnostic_count": 0,
+      "files_parsed": 8,
+      "gap_count": 0,
+      "nodes_parsed": 2772
+     },
+     "execution": {
+      "argv_identity": "<sha256>",
+      "completed_at": "<timestamp>",
+      "environment_sha256": {},
+      "exit_code": 0,
+      "file_size_limit_bytes": null,
+      "file_size_limit_reached": false,
+      "image_digest": "<image_digest>",
+      "image_id": "<image_id>",
+      "image_tag": "appsec-review/tool-tree-sitter:1.0.0",
+      "limits": {
+       "admission_timeout_seconds": "<duration>",
+       "cap_drop": [
+        "ALL"
+       ],
+       "cpus": "2",
+       "file_size_bytes": null,
+       "memory": "1g",
+       "memory_source": "catalog",
+       "network": "none",
+       "no_new_privileges": true,
+       "pids": "<pids>",
+       "root_filesystem": "read-only",
+       "stderr_bytes": 16777216,
+       "stdout_bytes": 16777216,
+       "timeout_seconds": "<duration>",
+       "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=128m"
+       ],
+       "user": "1000:1000"
+      },
+      "mounts": [
+       {
+        "read_only": true,
+        "runtime_source": "<target>",
+        "source": "<target>",
+        "target": "/target"
+       },
+       {
+        "read_only": false,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5",
+        "source": "<run>/data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5",
+        "target": "/scratch"
+       },
+       {
+        "read_only": true,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/telemetry/supervisors/<sha256>.py",
+        "source": "<run>/data/telemetry/supervisors/<sha256>.py",
+        "target": "<repo>sec/measurement.py"
+       }
+      ],
+      "oom_killed": false,
+      "receipt_path": "data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5/execution.json",
+      "schema": "appsec-review/container-execution/1",
+      "started_at": "<timestamp>",
+      "stderr_path": "data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5/raw/stderr.bin",
+      "stderr_truncated": false,
+      "stdout_path": "data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5/raw/stdout.bin",
+      "stdout_truncated": false,
+      "timed_out": false,
+      "tool_id": "tool-tree-sitter"
+     },
+     "fingerprint": "<sha256>",
+     "grammar": {
+      "artifact": "libtree_sitter_cpp.so",
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "grammar": {
+        "artifact": "libtree_sitter_cpp.so",
+        "grammar": "cpp",
+        "language": "C++",
+        "license": "MIT",
+        "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+        "sha256": "<sha256>"
+       },
+       "image_id": "<image_id>",
+       "job": "job_tree_sitter_ast",
+       "language": "C++",
+       "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d",
+       "syntax_projection": "appsec-review/syntax-projection/1"
+      },
+      "relative_path": "data/indices/analysis/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d"
+     },
+     "index_reused": false,
+     "language": "C++",
+     "project_id": "component:0001",
+     "schema": "appsec-review/tree-sitter-ast/1",
+     "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d",
+     "terminal_status": "SUCCEEDED",
+     "translation_scope_id": "build-unit-adf13d8306cb272dea43",
+     "tree_sitter_invocation_id": "869c0e1a998948658f129943b13979cb",
+     "truncated": false
+    },
+    {
+     "artifact": {
+      "path": "data/treesitter/shards/<sha256>.jsonl",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "bytes_parsed": 618,
+      "diagnostic_count": 0,
+      "files_parsed": 1,
+      "gap_count": 0,
+      "nodes_parsed": 236
+     },
+     "execution": {
+      "argv_identity": "<sha256>",
+      "completed_at": "<timestamp>",
+      "environment_sha256": {},
+      "exit_code": 0,
+      "file_size_limit_bytes": null,
+      "file_size_limit_reached": false,
+      "image_digest": "<image_digest>",
+      "image_id": "<image_id>",
+      "image_tag": "appsec-review/tool-tree-sitter:1.0.0",
+      "limits": {
+       "admission_timeout_seconds": "<duration>",
+       "cap_drop": [
+        "ALL"
+       ],
+       "cpus": "2",
+       "file_size_bytes": null,
+       "memory": "1g",
+       "memory_source": "catalog",
+       "network": "none",
+       "no_new_privileges": true,
+       "pids": "<pids>",
+       "root_filesystem": "read-only",
+       "stderr_bytes": 16777216,
+       "stdout_bytes": 16777216,
+       "timeout_seconds": "<duration>",
+       "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=128m"
+       ],
+       "user": "1000:1000"
+      },
+      "mounts": [
+       {
+        "read_only": true,
+        "runtime_source": "<target>",
+        "source": "<target>",
+        "target": "/target"
+       },
+       {
+        "read_only": false,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/treesitter/work/<attempt>/f843fc77265639428bf9",
+        "source": "<run>/data/treesitter/work/<attempt>/f843fc77265639428bf9",
+        "target": "/scratch"
+       },
+       {
+        "read_only": true,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/telemetry/supervisors/<sha256>.py",
+        "source": "<run>/data/telemetry/supervisors/<sha256>.py",
+        "target": "<repo>sec/measurement.py"
+       }
+      ],
+      "oom_killed": false,
+      "receipt_path": "data/treesitter/work/<attempt>/f843fc77265639428bf9/execution.json",
+      "schema": "appsec-review/container-execution/1",
+      "started_at": "<timestamp>",
+      "stderr_path": "data/treesitter/work/<attempt>/f843fc77265639428bf9/raw/stderr.bin",
+      "stderr_truncated": false,
+      "stdout_path": "data/treesitter/work/<attempt>/f843fc77265639428bf9/raw/stdout.bin",
+      "stdout_truncated": false,
+      "timed_out": false,
+      "tool_id": "tool-tree-sitter"
+     },
+     "fingerprint": "<sha256>",
+     "grammar": {
+      "artifact": "libtree_sitter_cpp.so",
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "grammar": {
+        "artifact": "libtree_sitter_cpp.so",
+        "grammar": "cpp",
+        "language": "C++",
+        "license": "MIT",
+        "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+        "sha256": "<sha256>"
+       },
+       "image_id": "<image_id>",
+       "job": "job_tree_sitter_ast",
+       "language": "C/C++",
+       "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97",
+       "syntax_projection": "appsec-review/syntax-projection/1"
+      },
+      "relative_path": "data/indices/analysis/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97"
+     },
+     "index_reused": false,
+     "language": "C/C++",
+     "project_id": "component:0001",
+     "schema": "appsec-review/tree-sitter-ast/1",
+     "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97",
+     "terminal_status": "SUCCEEDED",
+     "translation_scope_id": "build-unit-adf13d8306cb272dea43",
+     "tree_sitter_invocation_id": "a24b0a9da5364486aac87416a8b3e16e",
+     "truncated": false
+    }
+   ],
+   "index_manifest": {
+    "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 3008,
+   "schema": "appsec-review/tree-sitter-ast/1",
+   "terminal_status": "PARTIAL"
+  },
+  "load.accepted_inputs": {
+   "accepted": {
+    "build_units": [
+     {
+      "build_points": [
+       {
+        "evidence": "projects/native/case-094/CMakeLists.txt:7",
+        "headers": [],
+        "include_dirs": [],
+        "kind": "executable",
+        "name": "case094",
+        "sources": [
+         "projects/native/case-094/src/access.cpp",
+         "projects/native/case-094/src/blocks.cpp",
+         "projects/native/case-094/src/console.cpp",
+         "projects/native/case-094/src/directory.cpp",
+         "projects/native/case-094/src/echo.cpp",
+         "projects/native/case-094/src/main.cpp",
+         "projects/native/case-094/src/notes.cpp",
+         "projects/native/case-094/src/title.cpp"
+        ]
+       }
+      ],
+      "build_system": "cmake",
+      "build_unit_id": "build-unit-adf13d8306cb272dea43",
+      "descriptor_facts": {},
+      "descriptor_package": {
+       "bounds": {
+        "actual_bytes": 725,
+        "actual_files": 2,
+        "max_file_bytes": 65536,
+        "max_files": 24,
+        "max_total_bytes": 262144
+       },
+       "build_unit": {
+        "build_points": [
+         {
+          "evidence": "projects/native/case-094/CMakeLists.txt:7",
+          "headers": [],
+          "include_dirs": [],
+          "kind": "executable",
+          "name": "case094",
+          "sources": [
+           "projects/native/case-094/src/access.cpp",
+           "projects/native/case-094/src/blocks.cpp",
+           "projects/native/case-094/src/console.cpp",
+           "projects/native/case-094/src/directory.cpp",
+           "projects/native/case-094/src/echo.cpp",
+           "projects/native/case-094/src/main.cpp",
+           "projects/native/case-094/src/notes.cpp",
+           "projects/native/case-094/src/title.cpp"
+          ]
+         }
+        ],
+        "build_system": "cmake",
+        "build_unit_id": "build-unit-adf13d8306cb272dea43",
+        "family": "native",
+        "markers": [
+         {
+          "path": "projects/native/case-094/CMakeLists.txt",
+          "sha256": "<sha256>",
+          "size_bytes": "<size_bytes>"
+         }
+        ],
+        "provenance": "deterministic-marker",
+        "root": "projects/native/case-094",
+        "source_resolution": "complete"
+       },
+       "documents": [
+        {
+         "content": "cmake_minimum_required(VERSION 3.20)\nproject(case_094 LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nadd_executable(case094\n  src/access.cpp\n  src/blocks.cpp\n  src/console.cpp\n  src/directory.cpp\n  src/echo.cpp\n  src/main.cpp\n  src/notes.cpp\n  src/title.cpp\n)\ntarget_compile_options(case094 PRIVATE -Wall -Wextra -Wpedantic)\n",
+         "path": "projects/native/case-094/CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "content": "# case-094\n\nSmall CMake C++ console program. `src/main.cpp` takes a command name and a\nvalue from its two arguments and passes the value to the matching routine in\n`src/`: text copies and printing, note records, a key table lookup, block\nbuffers, an `echo` call, and an access check.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+         "path": "projects/native/case-094/README.md",
+         "sha256": "<sha256>"
+        }
+       ],
+       "schema": "appsec-review/build-descriptor-package/1"
+      },
+      "family": "native",
+      "markers": [
+       {
+        "path": "projects/native/case-094/CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "project_type": "generic",
+      "provenance": "deterministic-marker",
+      "required_image_profile": "native",
+      "root": "projects/native/case-094",
+      "source_resolution": "complete"
+     }
+    ],
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     {
+      "component_id": "component:0001",
+      "manifest": null,
+      "manifest_sha256": null,
+      "root": "."
+     }
+    ],
+    "files": [
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": ".gitlab-ci.yml",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": "Jenkinsfile",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": "NOTICE",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": "README.md",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": "azure-pipelines.yml",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": "bitbucket-pipelines.yml",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "supply_chain",
+      "analysis_reason": "target-build-chain-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "not_established",
+      "generated": false,
+      "language": null,
+      "path": "projects/native/case-094/CMakeLists.txt",
+      "scope_role": "build_chain",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": null,
+      "path": "projects/native/case-094/README.md",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/access.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/blocks.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/console.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/directory.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/echo.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/main.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/notes.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C++",
+      "path": "projects/native/case-094/src/title.cpp",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "analysis_lane": "target",
+      "analysis_reason": "target-source-review",
+      "artifact_origin": "target-intake",
+      "delivery_status": "unknown",
+      "generated": false,
+      "language": "C/C++",
+      "path": "projects/native/case-094/src/tool.h",
+      "scope_role": "target_source",
+      "scope_version": "appsec-review/delivered-scope/2",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     }
+    ],
+    "generated_source_gaps": [
+     {
+      "path": "@generated",
+      "reason": "generated_source_producer_gap: build-unit-adf13d8306cb272dea43: projects/native/case-094/build/case094: delivery status is unknown (delivery_fact_unavailable)"
+     }
+    ],
+    "generated_sources": [],
+    "intake_handoff_sha256": "<sha256>",
+    "language_build_handoff_sha256": "<sha256>",
+    "source_fingerprint": "<sha256>"
+   },
+   "asset_lock": {
+    "architecture": "linux/amd64",
+    "base": "python:3.12-slim@<image-digest>",
+    "grammars": [
+     {
+      "artifact": "libtree_sitter_c_sharp.so",
+      "bytes": 5851232,
+      "grammar": "csharp",
+      "language": "C#",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-c-sharp",
+      "revision": "af29416d729b7a6603101b513604392d8f675e3b",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_c.so",
+      "bytes": 623280,
+      "grammar": "c",
+      "language": "C",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-c",
+      "revision": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_cpp.so",
+      "bytes": 5587896,
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_go.so",
+      "bytes": 233712,
+      "grammar": "go",
+      "language": "Go",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-go",
+      "revision": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_java.so",
+      "bytes": 433720,
+      "grammar": "java",
+      "language": "Java",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-java",
+      "revision": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_javascript.so",
+      "bytes": 431408,
+      "grammar": "javascript",
+      "language": "JavaScript",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-javascript",
+      "revision": "58404d8cf191d69f2674a8fd507bd5776f46cb11",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_kotlin.so",
+      "bytes": 5764040,
+      "grammar": "kotlin",
+      "language": "Kotlin",
+      "license": "MIT",
+      "repository": "https://github.com/fwcd/tree-sitter-kotlin",
+      "revision": "c8ac3d2627240160b999a2c100de3babbdb8f419",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_php.so",
+      "bytes": 1091920,
+      "grammar": "php",
+      "language": "PHP",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-php",
+      "revision": "38216983c07bf9e1b56e16acde53b25adaeab61c",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_powershell.so",
+      "bytes": 922720,
+      "grammar": "powershell",
+      "language": "PowerShell",
+      "license": "MIT",
+      "repository": "https://github.com/airbus-cert/tree-sitter-powershell",
+      "revision": "d398441825243b00e317e87e1829b9d6a3e54ce0",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_python.so",
+      "bytes": 480184,
+      "grammar": "python",
+      "language": "Python",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-python",
+      "revision": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_ruby.so",
+      "bytes": 2120528,
+      "grammar": "ruby",
+      "language": "Ruby",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-ruby",
+      "revision": "ad907a69da0c8a4f7a943a7fe012712208da6dee",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_rust.so",
+      "bytes": 1128216,
+      "grammar": "rust",
+      "language": "Rust",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-rust",
+      "revision": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_bash.so",
+      "bytes": 1335856,
+      "grammar": "bash",
+      "language": "Shell",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-bash",
+      "revision": "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_tsx.so",
+      "bytes": 1472168,
+      "grammar": "tsx",
+      "language": "TSX",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_typescript.so",
+      "bytes": 1439376,
+      "grammar": "typescript",
+      "language": "TypeScript",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "sha256": "<sha256>"
+     }
+    ],
+    "image_id": "<image_id>",
+    "language_pack": {
+     "artifact": "tree_sitter_language_pack-1.12.5-cp310-abi3-manylinux_2_34_x86_64.whl",
+     "license": "MIT",
+     "project": "https://github.com/xberg-io/tree-sitter-language-pack",
+     "release": "https://github.com/xberg-io/tree-sitter-language-pack/releases/tag/v1.12.5",
+     "source_archive": "https://github.com/xberg-io/tree-sitter-language-pack/archive/refs/tags/v1.12.5.tar.gz",
+     "source_archive_sha256": "<sha256>",
+     "version": "1.12.5",
+     "wheel_bytes": 2299397,
+     "wheel_sha256": "<sha256>"
+    },
+    "license": "MIT",
+    "normalizer_schema": "appsec-review/tree-sitter-normalizer/1",
+    "project": "xberg-io/tree-sitter-language-pack with pinned upstream grammars",
+    "schema": "appsec-review/assets-lock/1",
+    "tool_version": "1.0.0",
+    "tree_sitter": {
+     "artifact": "tree_sitter-0.26.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+     "license": "MIT",
+     "project": "https://github.com/tree-sitter/py-tree-sitter",
+     "version": "0.26.0",
+     "wheel_bytes": 667487,
+     "wheel_sha256": "<sha256>"
+    }
+   },
+   "grammar_locks": {
+    "C": {
+     "artifact": "libtree_sitter_c.so",
+     "grammar": "c",
+     "language": "C",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-c",
+     "revision": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
+     "sha256": "<sha256>"
+    },
+    "C#": {
+     "artifact": "libtree_sitter_c_sharp.so",
+     "grammar": "csharp",
+     "language": "C#",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-c-sharp",
+     "revision": "af29416d729b7a6603101b513604392d8f675e3b",
+     "sha256": "<sha256>"
+    },
+    "C++": {
+     "artifact": "libtree_sitter_cpp.so",
+     "grammar": "cpp",
+     "language": "C++",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+     "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+     "sha256": "<sha256>"
+    },
+    "C/C++": {
+     "artifact": "libtree_sitter_cpp.so",
+     "grammar": "cpp",
+     "language": "C++",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+     "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+     "sha256": "<sha256>"
+    },
+    "Go": {
+     "artifact": "libtree_sitter_go.so",
+     "grammar": "go",
+     "language": "Go",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-go",
+     "revision": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7",
+     "sha256": "<sha256>"
+    },
+    "Java": {
+     "artifact": "libtree_sitter_java.so",
+     "grammar": "java",
+     "language": "Java",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-java",
+     "revision": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11",
+     "sha256": "<sha256>"
+    },
+    "JavaScript": {
+     "artifact": "libtree_sitter_javascript.so",
+     "grammar": "javascript",
+     "language": "JavaScript",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-javascript",
+     "revision": "58404d8cf191d69f2674a8fd507bd5776f46cb11",
+     "sha256": "<sha256>"
+    },
+    "Kotlin": {
+     "artifact": "libtree_sitter_kotlin.so",
+     "grammar": "kotlin",
+     "language": "Kotlin",
+     "license": "MIT",
+     "repository": "https://github.com/fwcd/tree-sitter-kotlin",
+     "revision": "c8ac3d2627240160b999a2c100de3babbdb8f419",
+     "sha256": "<sha256>"
+    },
+    "PHP": {
+     "artifact": "libtree_sitter_php.so",
+     "grammar": "php",
+     "language": "PHP",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-php",
+     "revision": "38216983c07bf9e1b56e16acde53b25adaeab61c",
+     "sha256": "<sha256>"
+    },
+    "PowerShell": {
+     "artifact": "libtree_sitter_powershell.so",
+     "grammar": "powershell",
+     "language": "PowerShell",
+     "license": "MIT",
+     "repository": "https://github.com/airbus-cert/tree-sitter-powershell",
+     "revision": "d398441825243b00e317e87e1829b9d6a3e54ce0",
+     "sha256": "<sha256>"
+    },
+    "Python": {
+     "artifact": "libtree_sitter_python.so",
+     "grammar": "python",
+     "language": "Python",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-python",
+     "revision": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64",
+     "sha256": "<sha256>"
+    },
+    "Ruby": {
+     "artifact": "libtree_sitter_ruby.so",
+     "grammar": "ruby",
+     "language": "Ruby",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-ruby",
+     "revision": "ad907a69da0c8a4f7a943a7fe012712208da6dee",
+     "sha256": "<sha256>"
+    },
+    "Rust": {
+     "artifact": "libtree_sitter_rust.so",
+     "grammar": "rust",
+     "language": "Rust",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-rust",
+     "revision": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+     "sha256": "<sha256>"
+    },
+    "Shell": {
+     "artifact": "libtree_sitter_bash.so",
+     "grammar": "bash",
+     "language": "Shell",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-bash",
+     "revision": "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+     "sha256": "<sha256>"
+    },
+    "TSX": {
+     "artifact": "libtree_sitter_tsx.so",
+     "grammar": "tsx",
+     "language": "TSX",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+     "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+     "sha256": "<sha256>"
+    },
+    "TypeScript": {
+     "artifact": "libtree_sitter_typescript.so",
+     "grammar": "typescript",
+     "language": "TypeScript",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+     "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+     "sha256": "<sha256>"
+    }
+   },
+   "image_id": "<image_id>"
+  },
+  "parse.dynamic_scopes": {
+   "dispositions": [
+    {
+     "language": "n/a",
+     "reason": "generated source coverage gaps",
+     "scope_id": "generated-source-lane",
+     "terminal_status": "PARTIAL"
+    },
+    {
+     "language": "n/a",
+     "reason": "accepted exclusions outside source scopes",
+     "scope_id": "catalog-exclusions",
+     "terminal_status": "UNAVAILABLE"
+    },
+    {
+     "artifact": {
+      "path": "data/treesitter/shards/<sha256>.jsonl",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "bytes_parsed": 7632,
+      "diagnostic_count": 0,
+      "files_parsed": 8,
+      "gap_count": 0,
+      "nodes_parsed": 2772
+     },
+     "execution": {
+      "argv_identity": "<sha256>",
+      "completed_at": "<timestamp>",
+      "environment_sha256": {},
+      "exit_code": 0,
+      "file_size_limit_bytes": null,
+      "file_size_limit_reached": false,
+      "image_digest": "<image_digest>",
+      "image_id": "<image_id>",
+      "image_tag": "appsec-review/tool-tree-sitter:1.0.0",
+      "limits": {
+       "admission_timeout_seconds": "<duration>",
+       "cap_drop": [
+        "ALL"
+       ],
+       "cpus": "2",
+       "file_size_bytes": null,
+       "memory": "1g",
+       "memory_source": "catalog",
+       "network": "none",
+       "no_new_privileges": true,
+       "pids": "<pids>",
+       "root_filesystem": "read-only",
+       "stderr_bytes": 16777216,
+       "stdout_bytes": 16777216,
+       "timeout_seconds": "<duration>",
+       "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=128m"
+       ],
+       "user": "1000:1000"
+      },
+      "mounts": [
+       {
+        "read_only": true,
+        "runtime_source": "<target>",
+        "source": "<target>",
+        "target": "/target"
+       },
+       {
+        "read_only": false,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5",
+        "source": "<run>/data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5",
+        "target": "/scratch"
+       },
+       {
+        "read_only": true,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/telemetry/supervisors/<sha256>.py",
+        "source": "<run>/data/telemetry/supervisors/<sha256>.py",
+        "target": "<repo>sec/measurement.py"
+       }
+      ],
+      "oom_killed": false,
+      "receipt_path": "data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5/execution.json",
+      "schema": "appsec-review/container-execution/1",
+      "started_at": "<timestamp>",
+      "stderr_path": "data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5/raw/stderr.bin",
+      "stderr_truncated": false,
+      "stdout_path": "data/treesitter/work/<attempt>/fe5ed93f6b5ed5a0e7b5/raw/stdout.bin",
+      "stdout_truncated": false,
+      "timed_out": false,
+      "tool_id": "tool-tree-sitter"
+     },
+     "fingerprint": "<sha256>",
+     "grammar": {
+      "artifact": "libtree_sitter_cpp.so",
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "grammar": {
+        "artifact": "libtree_sitter_cpp.so",
+        "grammar": "cpp",
+        "language": "C++",
+        "license": "MIT",
+        "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+        "sha256": "<sha256>"
+       },
+       "image_id": "<image_id>",
+       "job": "job_tree_sitter_ast",
+       "language": "C++",
+       "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d",
+       "syntax_projection": "appsec-review/syntax-projection/1"
+      },
+      "relative_path": "data/indices/analysis/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d"
+     },
+     "index_reused": false,
+     "language": "C++",
+     "project_id": "component:0001",
+     "schema": "appsec-review/tree-sitter-ast/1",
+     "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d",
+     "terminal_status": "SUCCEEDED",
+     "translation_scope_id": "build-unit-adf13d8306cb272dea43",
+     "tree_sitter_invocation_id": "869c0e1a998948658f129943b13979cb",
+     "truncated": false
+    },
+    {
+     "artifact": {
+      "path": "data/treesitter/shards/<sha256>.jsonl",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "bytes_parsed": 618,
+      "diagnostic_count": 0,
+      "files_parsed": 1,
+      "gap_count": 0,
+      "nodes_parsed": 236
+     },
+     "execution": {
+      "argv_identity": "<sha256>",
+      "completed_at": "<timestamp>",
+      "environment_sha256": {},
+      "exit_code": 0,
+      "file_size_limit_bytes": null,
+      "file_size_limit_reached": false,
+      "image_digest": "<image_digest>",
+      "image_id": "<image_id>",
+      "image_tag": "appsec-review/tool-tree-sitter:1.0.0",
+      "limits": {
+       "admission_timeout_seconds": "<duration>",
+       "cap_drop": [
+        "ALL"
+       ],
+       "cpus": "2",
+       "file_size_bytes": null,
+       "memory": "1g",
+       "memory_source": "catalog",
+       "network": "none",
+       "no_new_privileges": true,
+       "pids": "<pids>",
+       "root_filesystem": "read-only",
+       "stderr_bytes": 16777216,
+       "stdout_bytes": 16777216,
+       "timeout_seconds": "<duration>",
+       "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=128m"
+       ],
+       "user": "1000:1000"
+      },
+      "mounts": [
+       {
+        "read_only": true,
+        "runtime_source": "<target>",
+        "source": "<target>",
+        "target": "/target"
+       },
+       {
+        "read_only": false,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/treesitter/work/<attempt>/f843fc77265639428bf9",
+        "source": "<run>/data/treesitter/work/<attempt>/f843fc77265639428bf9",
+        "target": "/scratch"
+       },
+       {
+        "read_only": true,
+        "runtime_source": "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-22.04/<sha256>/<run-id>/data/telemetry/supervisors/<sha256>.py",
+        "source": "<run>/data/telemetry/supervisors/<sha256>.py",
+        "target": "<repo>sec/measurement.py"
+       }
+      ],
+      "oom_killed": false,
+      "receipt_path": "data/treesitter/work/<attempt>/f843fc77265639428bf9/execution.json",
+      "schema": "appsec-review/container-execution/1",
+      "started_at": "<timestamp>",
+      "stderr_path": "data/treesitter/work/<attempt>/f843fc77265639428bf9/raw/stderr.bin",
+      "stderr_truncated": false,
+      "stdout_path": "data/treesitter/work/<attempt>/f843fc77265639428bf9/raw/stdout.bin",
+      "stdout_truncated": false,
+      "timed_out": false,
+      "tool_id": "tool-tree-sitter"
+     },
+     "fingerprint": "<sha256>",
+     "grammar": {
+      "artifact": "libtree_sitter_cpp.so",
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "grammar": {
+        "artifact": "libtree_sitter_cpp.so",
+        "grammar": "cpp",
+        "language": "C++",
+        "license": "MIT",
+        "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+        "sha256": "<sha256>"
+       },
+       "image_id": "<image_id>",
+       "job": "job_tree_sitter_ast",
+       "language": "C/C++",
+       "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97",
+       "syntax_projection": "appsec-review/syntax-projection/1"
+      },
+      "relative_path": "data/indices/analysis/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97"
+     },
+     "index_reused": false,
+     "language": "C/C++",
+     "project_id": "component:0001",
+     "schema": "appsec-review/tree-sitter-ast/1",
+     "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97",
+     "terminal_status": "SUCCEEDED",
+     "translation_scope_id": "build-unit-adf13d8306cb272dea43",
+     "tree_sitter_invocation_id": "a24b0a9da5364486aac87416a8b3e16e",
+     "truncated": false
+    }
+   ],
+   "scope_count": 2,
+   "successful_scope_count": 2,
+   "terminal_status": "PARTIAL"
+  },
+  "plan.route_scopes": {
+   "runnable_scope_count": 2,
+   "scope_count": 2,
+   "scopes": [
+    {
+     "exclusions": [],
+     "files": [
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/access.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/blocks.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/console.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/directory.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/echo.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/main.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/notes.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C++",
+       "path": "projects/native/case-094/src/title.cpp",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "language": "C++",
+     "project_id": "component:0001",
+     "project_root": ".",
+     "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-937a01a81c19ac1ef36d",
+     "translation_root": "projects/native/case-094",
+     "translation_scope_id": "build-unit-adf13d8306cb272dea43"
+    },
+    {
+     "exclusions": [],
+     "files": [
+      {
+       "analysis_lane": "target",
+       "analysis_reason": "target-source-review",
+       "artifact_origin": "target-intake",
+       "delivery_status": "unknown",
+       "generated": false,
+       "language": "C/C++",
+       "path": "projects/native/case-094/src/tool.h",
+       "scope_role": "target_source",
+       "scope_version": "appsec-review/delivered-scope/2",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "language": "C/C++",
+     "project_id": "component:0001",
+     "project_root": ".",
+     "scope_id": "component-0001-build-unit-adf13d8306cb272dea43-C-C-5f3d87a0ba1e7afdea97",
+     "translation_root": "projects/native/case-094",
+     "translation_scope_id": "build-unit-adf13d8306cb272dea43"
+    }
+   ],
+   "terminal_status": "PARTIAL"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "parse": "SUCCEEDED",
+  "plan": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_inputs": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "parse.dynamic_scopes": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan.route_scopes": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "3c9c3c10a93f689a8421cde511643dda30110be064d1dbe4d74c1370f174b52e",
+    "size_bytes": 154975
+   },
+   {
+    "path": "data/configuration/manifest.json",
+    "sha256": "4c7484cdf99a3e57a3c855956986d516f82939fcca19a4183eaf0fe44d745683",
+    "size_bytes": 1135
+   },
+   {
+    "path": "data/configuration/resolved.json",
+    "sha256": "9988548fec8e92de1c0d8ec298b2600814a4adb95b31893e680253a068cbf1d8",
+    "size_bytes": 99467
+   },
+   {
+    "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "sha256": "883c48106d58bc5a501f99fcd863f4af8b16fc54b237979090fa60ab10da7b4d",
+    "size_bytes": 188416
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "1bf5fd3d38e0cc83fbc372360d4402be4ce316712bbb768fce33e65298ada313",
+    "size_bytes": 794624
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "c6dc1ba9cfa392fb499a1d05565f9749d561c20e3503b51730ca82b80ee4d363",
+    "size_bytes": 8642560
+   },
+   {
+    "path": "data/indices/analysis/tree-sitter-coverage-<attempt>.sqlite",
+    "sha256": "240b1b151f8d9c1111e58c40302fb4f2d77461f82dc8ca48308646511d8e1e1c",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/indices/build/<sha256>.sqlite",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/indices/build/language-build-<attempt>-<sha256>.sqlite",
+    "sha256": "cb4801c42c13c92ca8df9f442307416308c3e0799cfbade6ad791e86a6797484",
+    "size_bytes": 77824
+   },
+   {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/history/git-history/<sha256>.sqlite",
+    "sha256": "9c86d6a5cf789a8020e501a70665d7b3df954cde83433a3555b2d3dc188ebe3a",
+    "size_bytes": 466944
+   },
+   {
+    "path": "data/indices/manifests/language-build-<attempt>.json",
+    "sha256": "4a8e8f39bf91f5822647b2a67c6ea73c53e59814f698c1e39a1dc137ed239708",
+    "size_bytes": 4915
+   },
+   {
+    "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+    "sha256": "d79a5e1e93dbf712ab946c8d912939539ce15926217828774c144ea8c58caedb",
+    "size_bytes": 7860
+   },
+   {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/claim.json",
+    "sha256": "77c7c7b670f2d308a3e0b4e72456d2df34ab077cd1b26ebc5f34c06f7200df5c",
+    "size_bytes": 26838
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7447c3ede9b3c5f95673384b1afe84e8bb32751f5a6c2820b2705a5d54b224a9",
+    "size_bytes": 1371
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/claim.json",
+    "sha256": "16c251c431598507d886fc50a61fe585e568902248c49a641c88a2c7e66b4f72",
+    "size_bytes": 17659
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "94fb74fdeea3eefc92cbfbcfc4a9651e3659f6007051556ff2a334070ca38f5c",
+    "size_bytes": 1394
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/claim.json",
+    "sha256": "e3c458128092cdfe3a33dba771c124942cbc040b64cce96a6926ab8e903a327b",
+    "size_bytes": 21667
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7bb4b8320c47c0b4e7ca0321b5dd4cf8f622c89b47a859c738edc9232e966dfa",
+    "size_bytes": 1770
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/claim.json",
+    "sha256": "1add2de3174e83836f10fd3ceb222b7c06365ce7103225969bfc1bb97953d3f5",
+    "size_bytes": 12333
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "002402330bb561a9de814024d21806f86e1cd3422f1e297d1c603e9d9d7fb609",
+    "size_bytes": 1344
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "2de20bbd1e343d2413c9465478b68cded25c830c16cc32d5cca9568b359b0438",
+    "size_bytes": 1336
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "6771ae258695b4ae35af77a2e7dce3e9525893eddd4e9ed463c062054d980d31",
+    "size_bytes": 1346
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7188b95f4bbbeafd4d6980044836d41869488fac38e0e88ef01f2da0c23785ee",
+    "size_bytes": 1342
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "cae0e3180268e6042a5285e384ef9de1b7dd54102ddbce272f3c964c0ef33c4b",
+    "size_bytes": 1340
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/claim.json",
+    "sha256": "a9c7d7e8da8256ff09b1c46313229c2195dc4e236d5ad145baab9dbe2d6e37d1",
+    "size_bytes": 20819
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/outcomes.json",
+    "sha256": "fb3b3a013ea442f719ecfbda7167797be03e8da6f77960497642c3fd31ddb11f",
+    "size_bytes": 12515
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "2d4ee20092a4ca90a18b747784e1c9e1042bfea7b2d19ac22fc5539a6cc33c96",
+    "size_bytes": 1312
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "368a99bd3f75d877c7b53016692dcb54946cc15299c8eeb241effbe33799b0d8",
+    "size_bytes": 1553
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "54b21c1c1f66dd8cd352b5eaf950c7b81c779fe6bdb50d5fbd2180ae1134aa0c",
+    "size_bytes": 1549
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "5e1e6dc86c67f3333c3f20f37a945c3d55479569ffde56d754300c89c674e6c4",
+    "size_bytes": 875
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "6f0d2d9dd0b70380d9cceb0a5d2828bdf60eaa3c4acba0aeee57cc4975cb0415",
+    "size_bytes": 1555
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "774c8d10f36bdf8abb0cfb485bed5eff4b0cc76a018739f71eda4f9ad955aedd",
+    "size_bytes": 1597
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "7b29aba207467d6010b51dac7ee905c6079e39aee3ed51e720034c5e136dba3f",
+    "size_bytes": 1557
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "b1d7244bf2b5aef0f25886d0e4197c6c66b4a6536cecf2878620f2b8015d6364",
+    "size_bytes": 1584
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "c235a8f787dd1b80f423ea6dd92f693ea92d8d64ed9c6358454af059bceec105",
+    "size_bytes": 1559
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "dca33586389f89f29b813674b8b12cf333725b967f3777e05fa6beb80a0fae05",
+    "size_bytes": 876
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/shared/index-shard/<sha256>.json",
+    "sha256": "fe6dcaf70a8b734fff71c8d9815896d84144ee760732351ac1a1dc77a9c48f02",
+    "size_bytes": 1580
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+    "sha256": "055e5a59dc122585685edcd569610bf47b9b4cef8f1120b0cdcf5041efc47853",
+    "size_bytes": 16029
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/result.json",
+    "sha256": "d2fc72b6b5a59c10a6152c54a2fd2c36cb40053c81ddaafeac599cfaaea327ff",
+    "size_bytes": 10000
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/status.json",
+    "sha256": "aa585f2992c2d16a5f6fabc746e147f3bc2ba7c9ec9bdca073a353ffbcf5b716",
+    "size_bytes": 699
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/load/tasks/accepted_inputs/result.json",
+    "sha256": "fe784360906f65f27930341355860e180b2d8b2ad660d3fc01de7a7331707e1a",
+    "size_bytes": 20867
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/load/tasks/accepted_inputs/status.json",
+    "sha256": "816d376ff771a3a60bff63f002964fcf50e6c65138a511c0df308492438725aa",
+    "size_bytes": 1966
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/parse/tasks/dynamic_scopes/result.json",
+    "sha256": "44c356c7989dda1b67ce337d1af1c7d096e826cf094e8e22bf52cb3845b983f0",
+    "size_bytes": 9569
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/parse/tasks/dynamic_scopes/status.json",
+    "sha256": "449af0e03fb9397074eab24983656bc2e97640f5e0f0e9005dfd15ac1c3d7bac",
+    "size_bytes": 678
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/plan/tasks/route_scopes/result.json",
+    "sha256": "1d43996930000d03ecc001b1228e8e92aa141fa7b267f6782e08106d9c5b4862",
+    "size_bytes": 4606
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/plan/tasks/route_scopes/status.json",
+    "sha256": "13c0b56e16c5d7d38b132c268f2b6e41b882e6cce6157ea401e8ac1e06b6bda8",
+    "size_bytes": 649
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "2d24458acbf0cca72670943a99123dc2ba7f330dbab6bc6d16f2a00380ca9ab0",
+    "size_bytes": 278
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "382c191bdc783a8f8e59154f3c89e7715855eb5c8ab560432eee708cee3862e6",
+    "size_bytes": 279
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "40555ffb3fd0f1039eb927826e036fa3425462e9d4397acbaf1a41558f79953c",
+    "size_bytes": 289
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "52dab35acc0df4bd6129ac2b0810be0075536d93cfac8f70f1bb2ae7f201733c",
+    "size_bytes": 299
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "5b1a10dec8778fb6300673a250d32cb0210587a6566e9ddacc02b97c2c5cba5e",
+    "size_bytes": 274
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "69950a4eeb4f949d2449dc078b73eb3e3c5494296d4f949c84aa86ec538416bf",
+    "size_bytes": 302
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "6f6e4238bc7fb24ee8d5336717f334d17aeb7df3fe53628ce2340fbf9a60b9a2",
+    "size_bytes": 246
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7b58f2de7e81ff6229d0ee2e822f5adc4a518c3bfd605d191278b3d8a94c8b7a",
+    "size_bytes": 276
+   },
+   {
+    "path": "data/shared/named/index-shard/<sha256>.json",
+    "sha256": "7e98965d078f7a7ac642f43630c9f45ca005ff66e67021715fb307dc2fe350b2",
+    "size_bytes": 277
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "240b1b151f8d9c1111e58c40302fb4f2d77461f82dc8ca48308646511d8e1e1c",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "2c1b6107a15255384b8e6c25cf07cd8cf5ad7a76d8e29f7503c7b503aadafd21",
+    "size_bytes": 126976
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "6fda0df32f4de0856b5ff7adf9c2a8e97fb30afe5bf57f8c38e1f896b99e7ad3",
+    "size_bytes": 65536
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "795c7cc6436edbb1a5bc10f08ca8ee8c54f1d4a13e1664929d3fcee4bbb5179f",
+    "size_bytes": 61440
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "883c48106d58bc5a501f99fcd863f4af8b16fc54b237979090fa60ab10da7b4d",
+    "size_bytes": 188416
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "9c86d6a5cf789a8020e501a70665d7b3df954cde83433a3555b2d3dc188ebe3a",
+    "size_bytes": 466944
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "b95d9ab78ffe855141b27636d3697dde010800687140f64df61a43189d0b3f36",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "cb4801c42c13c92ca8df9f442307416308c3e0799cfbade6ad791e86a6797484",
+    "size_bytes": 77824
+   },
+   {
+    "path": "data/shared/objects/<sha256>",
+    "sha256": "d7f2d7a05958ce8671ef591a3bbb8599287bdd93c1affbd8c43b676b1b92468a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/treesitter/shards/<sha256>.jsonl",
+    "sha256": "8ac30d1dddf289bba8410d5065837bf84285bb1c1021d60bc4e7802cdb32bc29",
+    "size_bytes": 347143
+   },
+   {
+    "path": "data/treesitter/shards/<sha256>.jsonl",
+    "sha256": "95878d0aaeb50b33014c532d318f38208732501ce932c003645905091bf6c9a0",
+    "size_bytes": 4145727
+   }
+  ]
+ }
+}

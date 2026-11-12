@@ -4,6 +4,8 @@
 artifact consumers. It reads the accepted, hash-verified `job_language_build` handoff, its
 workspace manifests and declared outputs, plus the accepted `job_target_catalog` target-artifact
 intake. It never discovers authority by scanning the target tree.
+The catalog reader uses `intake_target_root=False`: indexing needs the catalog's retained
+artifact references, not the separate review-intake target-path lookup or its authority.
 
 Bounded NUL-containing target files are retained separately from the text inventory as
 `appsec-review/target-artifact-intake/1` records. They share the inventory's file/byte bounds,

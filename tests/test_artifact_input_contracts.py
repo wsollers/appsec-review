@@ -40,6 +40,40 @@ def test_supplied_empty_build_inputs_reach_real_loaders(tmp_path, factory, unit)
         assert output["artifact_count"] == 0
 
 
+def test_artifact_indexing_reads_catalog_without_undeclared_intake(tmp_path):
+    from appsec_review.jobs.job_review_intake import build_job as intake_job
+    from appsec_review.jobs.job_target_catalog import build_job as catalog_job
+    from appsec_review.runtime import GraphRunner
+    from appsec_review.runtime.inputs import read_input_observations
+    from appsec_review.storage import atomic_json, file_sha256
+    from tests.artifact_input_support import recorded_job
+    from tests.test_artifact_indexing import _seed
+
+    config, target, snapshot, root, receipts, document, _, _ = _seed(
+        tmp_path, source_files={"prebuilt.wasm": "\0asm\x01\0\0\0"},
+        build_families=("wasm",), publish=False)
+    manifest = root / "data/indices/manifests/language-build.json"
+    atomic_json(root / "data/inputs/artifact-fixture/job_language_build.json", {
+        "document": json.loads(document.read_bytes()),
+        "manifest": {"path": manifest.relative_to(root).as_posix(),
+                     "sha256": file_sha256(manifest)},
+    })
+    GraphRunner(config, [intake_job(), catalog_job(), recorded_job(root, "job_language_build")]).run(
+        run_id=root.name, target_root=target, source_fingerprint=snapshot)
+    result = JobRunner(config).run(indexing_job(), run_id=root.name,
+                                   target_root=target, source_fingerprint=snapshot)
+    assert "job_review_intake" not in result["handoff"]["upstream_handoff_sha256"]
+    reads = read_input_observations(root, result["handoff"])["reads"]
+    assert {row["producer"] for row in reads} == {"job_target_catalog", "job_language_build"}
+    output = result["handoff"]["outputs"]["acceptance.publish_handoff"]
+    indexed = json.loads((root / output["artifact"]["path"]).read_bytes())
+    assert indexed["artifact_count"] == len(receipts[0]["artifacts"]) + 1 == 2
+    artifact, = indexed["target_artifacts"]
+    assert artifact["target_relative_path"] == "prebuilt.wasm"
+    assert artifact["sha256"] == file_sha256(target / "prebuilt.wasm")
+    assert indexed["target_catalog_handoff_sha256"]
+
+
 @pytest.mark.parametrize("mutation", ("stale", "tampered", "missing-summary"))
 def test_artifact_input_identity_is_checked_before_load(tmp_path, mutation):
     from tests.artifact_input_support import recorded_job

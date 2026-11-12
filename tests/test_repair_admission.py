@@ -106,6 +106,66 @@ def test_branch_selective_force_and_repaired_job_preserve_independent_branch(tmp
     assert len(calls) == 6
 
 
+def _published_planning_context(tmp_path, orchestration):
+    from appsec_review.jobs.job_build_environment_analysis import build_job as environment_job
+    from appsec_review.jobs.job_review_intake import build_job as intake_job
+    from appsec_review.jobs.job_target_analysis_plan import build_job as planning_job
+    from appsec_review.jobs.job_target_catalog import build_job as catalog_job
+    from tests.test_build_environment_analysis import _published
+
+    ids = ("job_review_intake", "job_target_catalog", "job_build_environment_analysis",
+           "job_target_analysis_plan", "job_cpp_compiled_analysis")
+    write_release(tmp_path, ids)
+    config, root, source, _ = _published(tmp_path, reusable=True, mode="first_party_managed")
+    target = tmp_path / "target"
+    planner = planning_job(infer=lambda *_args, **_kwargs: pytest.fail("unexpected model call"))
+    output = JobRunner(config).run(planner, run_id=root.name, target_root=target,
+                                   source_fingerprint=source, orchestration=orchestration)
+    jobs = (intake_job(), catalog_job(), environment_job(), planner)
+    return config, root, target, source, jobs, output, ids
+
+
+@pytest.mark.parametrize("orchestration", [
+    {"workflow": "target_analysis_plan"},
+    {"workflow": "wave1_review"},
+    {"workflow": "standalone"},
+], ids=["single-job", "graph", "standalone"])
+def test_repair_preserves_verified_planning_launch_context(tmp_path, orchestration):
+    config, root, target, source, jobs, output, ids = _published_planning_context(
+        tmp_path, orchestration)
+    claim_path = Path(output["attempt_root"]) / "claim.json"
+    original = claim_path.read_bytes()
+    (tmp_path / "release-src/job_cpp_compiled_analysis/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, ids)
+
+    plan = plan_repair(config, root, jobs, source, target_root=target)
+
+    assert plan["admissible"], plan["refusals"]
+    assert [row["action"] for row in plan["decisions"]] == ["REUSE"] * len(jobs)
+    assert plan["decisions"][-1]["handoff_sha256"] == output["handoff_sha256"]
+    binding = admit_repair(config, root, jobs, plan, target_root=target)
+    assert binding["repair"] and claim_path.read_bytes() == original
+    assert not (claim_path.parent.parent / "attempt_0002").exists()
+
+
+@pytest.mark.parametrize("damage", ["claim", "environment"])
+def test_repair_context_does_not_authorize_changed_claim_or_environment(tmp_path, damage):
+    config, root, target, source, jobs, output, _ = _published_planning_context(
+        tmp_path, {"workflow": "target_analysis_plan"})
+    if damage == "claim":
+        path = Path(output["attempt_root"]) / "claim.json"
+        path.write_bytes(path.read_bytes() + b"\n")
+        with pytest.raises(ValueError, match="identity|changed|mismatch"):
+            plan_repair(config, root, jobs, source, target_root=target)
+    else:
+        changed = JobRunner(config).run(
+            jobs[2], run_id=root.name, target_root=target, source_fingerprint=source)
+        assert changed["handoff_sha256"] != output["handoff"]["upstream_handoff_sha256"][jobs[2].job_id]
+        plan = plan_repair(config, root, jobs, source, target_root=target)
+        assert plan["decisions"][-1]["action"] in {"RUN", "INVALIDATE"}
+    assert current_binding(root)["repair"] is None
+
+
 def test_failed_job_does_not_fall_back_to_older_accepted_attempt(tmp_path):
     config, (job,), _ = fixture(tmp_path)
     runner = JobRunner(config)
