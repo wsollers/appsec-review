@@ -97,6 +97,19 @@ def normalize(commits: list[Mapping[str, Any]], *, current_paths: Iterable[str],
             "walked_change_count": min(len(commits), max_changes), "in_window_change_count": in_window_count}
 
 
+def classify_text(subject: str, text: str) -> dict[str, Any]:
+    """Heuristic fix and security-fix labels for free text that the caller then discards.
+
+    The same vocabulary as :func:`classify` (``RULES_IDENTITY``), for history sources that have no
+    commits, such as change-log entries.  Only the labels and the identifier-shaped references
+    leave this function.
+    """
+    references = sorted({item.upper() for item in _SECURITY_ID.findall(text)})[:20]
+    security = "heuristic" if references or _SECURITY_WORDS.search(text) else None
+    fix = "heuristic" if _FIX_PREFIX.search(subject) or _FIX_WORDS.search(text) else None
+    return {"fix": fix or security, "security_fix": security, "security_references": references}
+
+
 def classify(changes: list[Mapping[str, Any]], messages: Mapping[str, bytes], github: Mapping[str, Mapping[str, Any]],
              *, known_commits: Iterable[str], fix_labels: Iterable[str], security_labels: Iterable[str],
              formatting_tolerance: float, incomplete_messages: Iterable[str] = ()) -> dict[str, dict[str, Any]]:

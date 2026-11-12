@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 import hashlib
@@ -21,8 +21,10 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.source_lanes import (
-    combine_indexes, map_commits, per_source, source_identity, source_key, source_of as lane_source, target_path,
+    combine_indexes, lane_context, map_commits, per_source, source_identity, source_key, source_of as lane_source,
+    target_path,
 )
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.swift_policy import (
@@ -30,6 +32,7 @@ from appsec_review.swift_policy import (
     swift_inventory_count,
 )
 
+from . import changelog as history_changelog
 from . import signals as history_signals
 from .filters import FILTER_IDENTITY, FORMATTING_IDENTITY
 from .git import (
@@ -62,12 +65,28 @@ UNAVAILABLE_SIGNALS = {
 }
 TOPOLOGY: Mapping[str, tuple[str, ...]] = {
     "resolve_sources": ("resolve_history_source", "bind_snapshot"),
-    "acquire": ("git_history", "normalize_changes", "github_enrichment"),
+    "acquire": ("git_history", "normalize_changes", "github_enrichment", "changelog_history"),
     "analyze": ("classify_changes", "compute_signals", "blame_age", "co_change", "line_history", "symbol_spans",
                 "fix_on_fix", "symbol_signals", "rank"),
     "publish": ("index_history", "publish_handoff"),
 }
 SKIPPED = {"SKIPPED_NA", "SKIPPED_POLICY"}
+CHANGELOG_UNIT = "acquire.changelog_history"
+# Git gaps that leave the commit-derived ranking incomplete; with one of them, or with no Git
+# ranking at all, the change log is the primary history source instead of a supplement.
+GIT_INCOMPLETE = frozenset({"shallow_history", "history_window_truncated", "history_not_of_snapshot"})
+CHANGELOG_GAP_CODES: Mapping[str, GapCode] = {
+    "changelog_excluded_from_inventory": GapCode.INPUT_UNAVAILABLE,
+    "changelog_file_bound_reached": GapCode.TRUNCATED,
+    "changelog_bytes_truncated": GapCode.TRUNCATED,
+    "changelog_entry_bound_reached": GapCode.TRUNCATED,
+    "changelog_entry_paths_truncated": GapCode.TRUNCATED,
+    "changelog_line_too_long": GapCode.TRUNCATED,
+    "changelog_format_unrecognized": GapCode.PARSER_ERROR,
+    "changelog_mixed_format": GapCode.PARSER_ERROR,
+    "changelog_unparsed_lines": GapCode.PARSER_ERROR,
+    "changelog_paths_unbound": GapCode.LOCATION_UNRESOLVED,
+}
 ExecutorFactory = Callable[[UnitContext], ContainerExecutor]
 
 
@@ -182,7 +201,12 @@ def _load_inputs(run_root: Path) -> dict[str, Any]:
     return {"source_fingerprint": catalog["source_fingerprint"], "catalog_handoff_sha256": catalog_sha,
             "acquisition": acquisition_document,
             "acquisition_sha256": acquisition.get("manifest_sha256") if acquisition else None,
-            "files": [{**{key: item[key] for key in ("path", "sha256", "size_bytes")}, "language": item.get("language")}
+            # Change logs the inventory left out (too large, bound reached): a named gap, never a silent miss.
+            "changelog_exclusions": [{"path": str(item["path"]), "reason": str(item.get("reason") or "excluded")}
+                                     for item in partition.get("gaps", ())
+                                     if isinstance(item, Mapping) and item.get("path")
+                                     and history_changelog.is_changelog_name(str(item["path"]))],
+            "files":[{**{key: item[key] for key in ("path", "sha256", "size_bytes")}, "language": item.get("language")}
                       for item in partition.get("files", ())],
             "components": [{"component_id": item["component_id"], "root": item.get("root") or "."}
                            for item in components.get("components", ())]}
@@ -263,10 +287,11 @@ def _limits(unit: UnitContext) -> GitLimits:
 def _history_index_fingerprint(
     *, snapshot: str, source_identity: str, settings: Mapping[str, Any],
     ranked: Mapping[str, Any], normalized: Mapping[str, Any],
-    acquired: Mapping[str, Any], github: Mapping[str, Any],
+    acquired: Mapping[str, Any], github: Mapping[str, Any], changelog: Mapping[str, Any] | None = None,
 ) -> str:
     artifacts = [value[key] for value, key in (
         (ranked, "artifact"), (ranked, "hotspots"), (normalized, "artifact"), (github, "artifact"),
+        (changelog or {}, "artifact"),
     ) if key in value]
     artifacts.extend(
         {key: acquired[name][key] for key in ("path", "sha256", "size_bytes")}
@@ -295,6 +320,90 @@ def _ranking_candidates(files: Mapping[str, Mapping[str, Any]]) -> list[str]:
 
 def _reason(status: str) -> str:
     return status.split(":", 1)[1] if ":" in status else status
+
+
+def _read_bounded(target: Path, item: Mapping[str, Any], limit: int) -> tuple[bytes, int]:
+    """Read at most ``limit`` leading bytes of an accepted target file, verifying its catalog SHA-256 over all of it."""
+    candidate = target / str(item["path"])
+    path = candidate.resolve()
+    if candidate.is_symlink() or target.resolve() not in path.parents or not path.is_file():
+        raise ValueError(f"accepted target file is unavailable: {item['path']}")
+    digest, kept, size = hashlib.sha256(), bytearray(), 0
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(CHUNK_BYTES), b""):
+            digest.update(chunk)
+            size += len(chunk)
+            if len(kept) < limit:
+                kept += chunk[:limit - len(kept)]
+    if digest.hexdigest() != item["sha256"]:
+        raise ValueError(f"accepted target bytes changed: {item['path']}")
+    return bytes(kept), size
+
+
+def changelog_role(git_ranked: bool, git_gaps: Iterable[str]) -> str:
+    """Git signals are authoritative while they are complete; otherwise the change log leads."""
+    return "supplement" if git_ranked and not GIT_INCOMPLETE & set(git_gaps) else "primary"
+
+
+def changelog_section(run_root: Path, output: Mapping[str, Any] | None, *, git_ranked: bool,
+                      git_gaps: Iterable[str], source_id: str, top_n: int) -> dict[str, Any]:
+    """The accepted document's change-log section: its own provenance, never merged into the Git ranking."""
+    output = output or {"terminal_status": "SKIPPED_NA", "reason": "changelog_unit_not_run"}
+    section: dict[str, Any] = {
+        "source": history_changelog.SOURCE, "identity": history_changelog.IDENTITY,
+        "decision": output["terminal_status"], "reason": output.get("reason"), "role": None,
+        "authority": history_changelog.AUTHORITY, "semantics": history_changelog.SEMANTICS,
+        "artifact": output.get("artifact"), "window": output.get("window"),
+        "formats": list(output.get("formats", ())), "entry_count": output.get("entry_count", 0),
+        "bound_file_count": output.get("bound_file_count", 0), "files": [],
+        "gaps": list(output.get("gap_codes", ()))}
+    if "artifact" not in output or not output.get("entry_count"):
+        return section
+    section["role"] = changelog_role(git_ranked, git_gaps)
+    document = _read(run_root, output["artifact"])
+    section["files"] = [
+        {**{key: document["files"][path][key] for key in (
+            "path", "sha256", "rank", "change_count", "lifetime_change_count", "last_change_date",
+            "fix_change_count", "security_fix_change_count", "source")},
+         "role": section["role"], "source_id": source_id}
+        for path in document["ranking"][:top_n]]
+    return section
+
+
+def index_changelog(builder: IndexBuilder, run_root: Path, output: Mapping[str, Any] | None, *, snapshot: str,
+                    source: Mapping[str, Any], top_n: int) -> None:
+    """Add the change-log file signals and the ``changelog-history`` coverage row to the history shard.
+
+    The entities carry no location: a change-log path is bound by name only, so they never join the
+    commit-derived file signals that consumers match by location.  The payload holds the accepted
+    file identity and the change-log lines that name it.
+    """
+    output = output or {}
+    if "artifact" in output:
+        document = _read(run_root, output["artifact"])
+        for path in document["ranking"][:top_n]:
+            value = document["files"][path]
+            identity = LogicalIdentity.derive(EntityKind.HISTORY_SIGNAL, snapshot, {
+                "scope": "changelog_file", "path": path, **source_identity(source)})
+            builder.add_entity(EntityRecord(
+                identity, f"changelog:{path}", path,
+                f"changelog file {path} rank {value['rank']} entries {value['change_count']} "
+                f"lifetime {value['lifetime_change_count']}",
+                {**value, "repository": dict(source), "window": document["window"],
+                 "authority": history_changelog.AUTHORITY}))
+    builder.add_coverage("changelog-history",
+                         "complete" if output.get("terminal_status") == "SUCCEEDED" else
+                         "partial" if "artifact" in output else "unavailable",
+                         "; ".join(list(output.get("gap_codes", ()))[:20]) or output.get("reason")
+                         or ("changelog_unit_not_run" if not output else None))
+
+
+def _changelog_gap(unit_id: str, source_id: str, gap: Mapping[str, Any]) -> dict[str, Any]:
+    scope = str(gap.get("path") or f"source:{source_id}")
+    detail = f" ({gap['detail']})" if gap.get("detail") else ""
+    return producer_gap(CHANGELOG_GAP_CODES[gap["gap"]],
+                        f"{gap['gap']}: {scope}: {gap['count']} {gap['unit']}{detail}",
+                        unit_id=unit_id, scope_id=scope)
 
 
 def build_job(*, executor_factory: ExecutorFactory | None = None,
@@ -967,6 +1076,85 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         return {"artifact": _write(unit, "symbol-signals.json", document), "symbol_count": len(symbols),
                 "gaps": gaps, "terminal_status": _status(gaps)}
 
+    def changelog_lane(unit: UnitContext) -> Mapping[str, Any]:
+        settings = _settings(unit.job)
+        if not settings.changelog_enabled:
+            return {"terminal_status": "SKIPPED_POLICY", "reason": "changelog_history_disabled", "gaps": []}
+        target = unit.job.target_root
+        if target is None:
+            return {"terminal_status": "SKIPPED_NA", "reason": "no_target", "gaps": []}
+        limits = settings.changelog
+        inputs = unit.output("resolve_sources.resolve_history_source")["inputs"]
+        source = lane_source(unit)
+        root, source_id = str(source.get("root", ".")), str(source.get("source_id", "."))
+        # Candidates come from the accepted inventory only; the target tree is never scanned for them.
+        catalog = {str(item["path"]): str(item["sha256"]) for item in inputs["files"]}
+        candidates = sorted((path for path in catalog if history_changelog.is_changelog_name(path)),
+                            key=lambda path: (path.count("/"), path))
+        excluded = [dict(item) for item in inputs.get("changelog_exclusions", ())
+                    if root == "." or str(item["path"]).startswith(root + "/")]
+        if not candidates and not excluded:
+            return {"terminal_status": "SKIPPED_NA", "reason": "no_changelog_files", "gaps": []}
+        gaps: list[dict[str, Any]] = [
+            {"gap": "changelog_excluded_from_inventory", "path": item["path"], "count": 1, "unit": "files",
+             "detail": item["reason"]} for item in excluded]
+        if len(candidates) > limits.max_files:
+            gaps.append({"gap": "changelog_file_bound_reached", "path": None,
+                         "count": len(candidates) - limits.max_files, "unit": "files"})
+        read, parsed_files = [], []
+        for path in candidates[:limits.max_files]:
+            data, size = _read_bounded(target, {"path": path, "sha256": catalog[path]}, limits.max_file_bytes)
+            unparsed_bytes = 0
+            if size > limits.max_file_bytes:
+                data = data[:data.rfind(b"\n") + 1]
+                unparsed_bytes = size - len(data)
+            parsed = history_changelog.parse(data, limits, history_signals.classify_text)
+            found = history_changelog.file_gaps(path, parsed, unparsed_bytes)
+            gaps.extend(found)
+            read.append({"path": path, "sha256": catalog[path], "size_bytes": size, "parsed_bytes": len(data),
+                         "format": parsed["format"], "detected_format": parsed["detected_format"],
+                         "status": parsed["status"], "counts": parsed["counts"],
+                         "gaps": [item["gap"] for item in found]})
+            parsed_files.append({"path": path, "parsed": parsed})
+        summary = history_changelog.summarize(
+            parsed_files, catalog=catalog, root=root, window_months=settings.history_window_months,
+            bulk_threshold=settings.bulk_change_file_threshold)
+        mentions = summary["totals"]["path_mentions"]
+        unbound = mentions["ambiguous"] + mentions["unmatched"] + mentions["invalid"]
+        if unbound:
+            gaps.append({"gap": "changelog_paths_unbound", "path": None, "count": unbound, "unit": "path mentions",
+                         "detail": f"ambiguous {mentions['ambiguous']}, unmatched {mentions['unmatched']}, "
+                                   f"invalid {mentions['invalid']}"})
+        document = {"schema": history_changelog.SCHEMA, "identity": history_changelog.IDENTITY,
+                    "source": history_changelog.SOURCE, "repository": source,
+                    "target_snapshot": unit.job.source_fingerprint, "authority": history_changelog.AUTHORITY,
+                    "semantics": history_changelog.SEMANTICS, "rules": history_signals.RULES_IDENTITY,
+                    "limits": limits.as_dict(), "bulk_change_file_threshold": settings.bulk_change_file_threshold,
+                    "changelogs": read, "excluded": excluded, **summary, "gaps": gaps}
+        records = [_changelog_gap(unit.unit_id, source_id, gap) for gap in gaps]
+        totals = summary["totals"]
+        unit.job.events.write("SOURCE_HISTORY_CHANGELOG_PARSED", source_id=source_id, file_count=len(read),
+                              entry_count=totals["entry_count"], bound_file_count=totals["bound_file_count"],
+                              gap_count=len(records))
+        return {"artifact": _write(unit, "changelog.json", document), "source": history_changelog.SOURCE,
+                "file_count": len(read), "formats": sorted({item["format"] for item in read if item["format"]}),
+                "entry_count": totals["entry_count"], "bound_file_count": totals["bound_file_count"],
+                "ranked_file_count": totals["ranked_file_count"], "window": summary["window"],
+                "gap_codes": sorted({gap["gap"] for gap in gaps}), "gaps": records,
+                "terminal_status": "PARTIAL" if records else "SUCCEEDED"}
+
+    def changelog_history(unit: UnitContext) -> Mapping[str, Any]:
+        """One bounded unit for every source lane; its gaps stay ``producer-gap/1`` records."""
+        first = unit.output("resolve_sources.resolve_history_source")
+        if "by_source" not in first:
+            return changelog_lane(unit)
+        results = {key: dict(changelog_lane(lane_context(unit, key))) for key in first["by_source"]}
+        gaps = [gap for value in results.values() for gap in value["gaps"]]
+        statuses = {value["terminal_status"] for value in results.values()}
+        terminal = ("PARTIAL" if gaps else "SUCCEEDED" if statuses - SKIPPED else
+                    "SKIPPED_POLICY" if statuses == {"SKIPPED_POLICY"} else "SKIPPED_NA")
+        return {"by_source": results, "gaps": gaps, "terminal_status": terminal}
+
     history_units = ("resolve_sources.resolve_history_source", "resolve_sources.bind_snapshot", "acquire.git_history",
                      "acquire.normalize_changes", "acquire.github_enrichment", "analyze.classify_changes",
                      "analyze.blame_age")
@@ -1160,8 +1348,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         fingerprint = _history_index_fingerprint(
             snapshot=snapshot, source_identity=resolved["identity"], settings=unit.job.config.settings,
             ranked=ranked, normalized=normalized, acquired=unit.output("acquire.git_history"),
-            github=unit.output("acquire.github_enrichment"),
+            github=unit.output("acquire.github_enrichment"), changelog=unit.outputs.get(CHANGELOG_UNIT),
         )
+        changelog_output = unit.outputs.get(CHANGELOG_UNIT, {})
         source = lane_source(unit)
         shard_id = "git-history" + (f"-{source_key(source)}" if source.get("root", ".") != "." else "")
         path = unit.job.run_root / "data" / "indices" / "history" / shard_id / f"{fingerprint}.sqlite"
@@ -1280,6 +1469,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                  resolved["git"]["reason"] if hotspots_doc is None else ("; ".join(gaps[:20]) or None))
             for name, reason in sorted(UNAVAILABLE_SIGNALS.items()):
                 builder.add_coverage(name.replace("_", "-"), "unavailable", reason)
+            index_changelog(builder, unit.job.run_root, changelog_output, snapshot=snapshot, source=source,
+                            top_n=_settings(unit.job).ranking_top_n)
             builder.build()
         identity = IndexIdentity("history", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
                                  _rel(unit.job.run_root, path), {"job": "job_source_history_analysis", "vcs": "git",
@@ -1325,6 +1516,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         git = resolved["git"]
         normalized = unit.output("acquire.normalize_changes")
         decision = git["decision"] if git["decision"] != "SUCCEEDED" or not gaps else "SUCCEEDED"
+        changelog = changelog_section(
+            unit.job.run_root, unit.outputs.get(CHANGELOG_UNIT), git_ranked="artifact" in ranked, git_gaps=gaps,
+            source_id=lane_source(unit).get("source_id", "."), top_n=settings.ranking_top_n)
         document = {
             "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint, "history_identity": resolved["identity"],
             "authority": AUTHORITY, "source": lane_source(unit),
@@ -1346,6 +1540,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                      {"path": item["identity"]["path"], "symbol_id": item["identity"]["symbol_id"]}
                                      for item in (hotspots_doc or {}).get("entries", ())]},
             "unavailable_signals": dict(sorted(UNAVAILABLE_SIGNALS.items())),
+            "changelog": changelog,
             "rules": history_signals.RULES_IDENTITY, "gaps": gaps, "observations": observations,
             "index_manifest": unit.output("publish.index_history")["manifest"], "decision": decision,
         }
@@ -1355,7 +1550,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                               hotspot_entry_count=len(document["hotspots"]["entries"]))
         output = {"schema": SCHEMA, "artifact": artifact, "index_manifest": document["index_manifest"],
                   "item_count": len(files), "gaps": gaps,
-                  "terminal_status": git["decision"] if git["decision"] in SKIPPED else _status(gaps)}
+                  # A change log that yielded entries is history even when Git does not apply.
+                  "terminal_status": (git["decision"] if git["decision"] in SKIPPED and changelog["role"] is None
+                                      else _status(gaps))}
         retriable = [item for unit_id in ("resolve_sources.bind_snapshot", "acquire.git_history", "acquire.github_enrichment",
                                           "analyze.line_history", "analyze.symbol_spans")
                      for item in unit.output(unit_id).get("dispositions", ())]
@@ -1389,6 +1586,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                         "components": [{**item, "source_id": key} for key, value in documents.items()
                                        for item in value["ranking"]["components"]]},
             "hotspots": {"schema": HOTSPOT_SCHEMA, "artifact": _write(unit, "hotspots.json", hotspots)},
+            "changelog": {"source": history_changelog.SOURCE, "identity": history_changelog.IDENTITY,
+                          "scope": "per-source", "role": None, "reason": None,
+                          "authority": history_changelog.AUTHORITY, "semantics": history_changelog.SEMANTICS,
+                          "sources": [{"source_id": key, **{name: value["changelog"][name] for name in (
+                              "decision", "reason", "role", "artifact", "window", "entry_count", "gaps")}}
+                                      for key, value in documents.items()],
+                          "files": [item for value in documents.values() for item in value["changelog"]["files"]]},
             "gaps": output["gaps"], "index_manifest": manifest,
         }
         return {"schema": SCHEMA, "artifact": _write(unit, "source-history.json", document),
@@ -1409,7 +1613,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         Unit("analyze.fix_on_fix", fix_detection, ("analyze.line_history", "analyze.symbol_spans")),
         Unit("analyze.symbol_signals", symbol_signals, ("analyze.fix_on_fix",)),
         Unit("analyze.rank", rank, ("analyze.blame_age", "analyze.co_change", "analyze.symbol_signals")),
-        Unit("publish.index_history", index, ("analyze.rank",)),
+        Unit("publish.index_history", index, ("analyze.rank", CHANGELOG_UNIT)),
         Unit("publish.publish_handoff", publish, ("publish.index_history",)),
     )
     units = tuple(replace(item, handler=per_source(
@@ -1417,6 +1621,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         combine_indexes if item.unit_id == "publish.index_history" else
         publish_sources if item.unit_id == "publish.publish_handoff" else None))
         if item.unit_id != "resolve_sources.resolve_history_source" else item for item in units)
+    # The change-log unit walks the source lanes itself so its gaps stay producer-gap/1 records.
+    units = (*units[:5], Unit(CHANGELOG_UNIT, changelog_history, ("resolve_sources.resolve_history_source",)),
+             *units[5:])
     return Job("job_source_history_analysis", "source_history_analysis", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SCHEMA,
                units=units, input_identity=history_identity,

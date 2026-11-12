@@ -78,7 +78,20 @@
         "history_identity": {"type": ["string", "null"]},
         "ranking": {"type": ["string", "null"]},
         "components": {"type": "array"},
-        "files": {"type": "array"}
+        "files": {"type": "array"},
+        "changelog": {
+          "description": "Change-log-derived file ranks (source: changelog), never merged into files.",
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "source", "role", "identity", "reason", "files"],
+          "properties": {
+            "status": {"enum": ["AVAILABLE", "UNAVAILABLE"]},
+            "source": {"const": "changelog"},
+            "role": {"enum": ["primary", "supplement", null]},
+            "identity": {"type": ["string", "null"]},
+            "reason": {"type": ["string", "null"]},
+            "files": {"type": "array"}
+          }
+        }
       }
     },
     "model": {

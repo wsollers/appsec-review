@@ -313,7 +313,8 @@
     "job_source_history_analysis": {
       "unit": [
         "tests/test_source_history_analysis.py::test_symbols_keep_mixed_languages_and_same_basenames_separate",
-        "tests/test_source_history_analysis.py::test_symbols_keep_exact_node_boundary_and_named_truncation"
+        "tests/test_source_history_analysis.py::test_symbols_keep_exact_node_boundary_and_named_truncation",
+        "tests/test_source_history_changelog.py::test_unit_parses_every_format_and_reports_each_gap_as_a_record"
       ],
       "integration": [],
       "acceptance": [],
