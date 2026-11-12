@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from enum import StrEnum
 import hashlib
 import json
+import math
 import re
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -138,6 +139,9 @@ def _freeze(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(item) for item in value)
     if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        # Producer payloads carry confidences; they are read, never used in an identity.
         return value
     raise ValueError(f"unsupported contract value: {type(value).__name__}")
 
@@ -287,11 +291,13 @@ class Fact:
 
     ``native_identity`` is the stable identity of the thing (JSON-compatible). ``attributes`` keys:
 
-    - process, library: ``build_unit_id``, ``artifact_path``, ``component_ids`` (tuple),
+    - process, library: ``build_unit_id`` (``None`` when only a compiled-graph project identifies the
+      artifact), ``artifact_path``, ``test_only`` (present and ``True`` only when the producer says
+      so), ``component_ids`` (tuple),
       ``source_paths`` (tuple, target-relative, may be empty), ``source_roots`` (tuple of directory
       prefixes ending in ``/`` or ``""`` for the target root), ``built`` (bool).
     - link: ``input`` and ``output`` (native identities of a library and of the process or library
-      it links into).
+      it links into); the link's own ``native_identity`` is ``{"input": ..., "output": ...}``.
     - interaction: ``interaction`` (an ``Interaction`` value), ``path``, ``source_class``,
       ``sink_class``, ``callee``, ``enclosing_symbol``, ``build_unit_id``, ``component_id`` (each
       ``None`` when the evidence does not say).

@@ -140,3 +140,11 @@ def test_a_read_input_has_no_gap_and_a_reached_bound_names_its_query() -> None:
     assert (gap["code"], gap["scope_id"]) == (GapCode.TRUNCATED.value, "graph.entry_point")
     page = view.entities("job_target_catalog", "build_units", "build_unit", limit=1)
     assert len(page.records) == 1 and page.truncated is False
+
+
+def test_producer_payloads_may_carry_finite_floats_but_nothing_else_exotic() -> None:
+    kept = record("job_artifact_indexing", "artifact_catalog", "executable", "a1", {"mapping_confidence": 1.0})
+    assert kept.payload["mapping_confidence"] == 1.0
+    for value in (float("nan"), float("inf"), object(), b"bytes"):
+        with pytest.raises(ValueError):
+            record("job_artifact_indexing", "artifact_catalog", "executable", "a1", {"value": value})
