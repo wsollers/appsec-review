@@ -103,10 +103,12 @@ def _walk_files(root: Path, skip_directory: Callable[[Path], bool] | None = None
 
 def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions | None = None) -> dict[str, Any]:
     """Catalog the target's files. ``exclusions`` (config/exclusions.py) leaves configured paths out;
-    each is listed once under ``configured_exclusions`` with its pattern and scope, not as a gap."""
+    each is listed once under ``configured_exclusions`` with its pattern and scope, not as a gap.
+    Files excluded as a configured asset class are also totalled by class under ``excluded_assets``."""
     root = root.resolve(strict=True)
     exclusions = exclusions or PathExclusions()
     configured: list[dict[str, str]] = []
+    asset_totals: dict[str, dict[str, int]] = {}
     files: list[dict[str, Any]] = []
     artifact_candidates: list[dict[str, Any]] = []
     gaps: list[dict[str, str]] = []
@@ -138,6 +140,10 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
         rule = exclusions.match(relative)
         if rule is not None:
             configured.append({"path": relative, **rule.as_dict()})
+            if rule.asset_class is not None:
+                total = asset_totals.setdefault(rule.asset_class, {"files": 0, "bytes": 0})
+                total["files"] += 1
+                total["bytes"] += path.lstat().st_size if not path.is_symlink() and path.is_file() else 0
             continue
         descriptor = is_build_descriptor(PurePosixPath(relative))
         discovery["descriptors_matched"] += int(descriptor)
@@ -227,6 +233,11 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
             "source_metrics": source_metrics, "source_metric_gaps": source_metric_gaps,
             "file_discovery": file_discovery,
             "configured_exclusions": sorted(configured, key=lambda item: item["path"]),
+            "excluded_assets": {
+                "policy": "configured asset classes are excluded by file-name suffix; not a coverage gap",
+                "classes": {name: asset_totals[name] for name in sorted(asset_totals)},
+                "files": sum(item["files"] for item in asset_totals.values()),
+                "bytes": sum(item["bytes"] for item in asset_totals.values())},
             "snapshot": snapshot}
 
 

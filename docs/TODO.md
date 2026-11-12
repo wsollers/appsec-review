@@ -72,7 +72,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-077 | [Derive lead records with stage attribution from a run](#t-077-derive-lead-records-with-stage-attribution-from-a-run) | review | in-progress |
 | T-078 | [Check the model login before a review is submitted](#t-078-check-the-model-login-before-a-review-is-submitted) | pipeline | done (2026-11-11, 2f6c5ae1) |
 | T-079 | [One guarded command for run recovery](#t-079-one-guarded-command-for-run-recovery) | pipeline | done (2026-11-11, 83c81a60) |
-| T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | open |
+| T-080 | [Derive default release ids and allow an overlay to override them](#t-080-derive-default-release-ids-and-allow-an-overlay-to-override-them) | pipeline | done (2026-11-11, cab4d770) |
 | T-081 | [Fix the stepwise system call to review_run submit](#t-081-fix-the-stepwise-system-call-to-review_run-submit) | pipeline | done (2026-11-11, 49fa3e1a) |
 | T-082 | [Check the guard order in project_build repair reuse](#t-082-check-the-guard-order-in-project_build-repair-reuse) | build | open |
 | T-083 | [Classify the failing judge and budget-clock unit tests](#t-083-classify-the-failing-judge-and-budget-clock-unit-tests) | testing | open |
@@ -87,6 +87,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-092 | [Decide whether a refused build command fails one unit or the whole language build](#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build) | build | open |
 | T-093 | [Bind generated Make drivers of configure-style builds to their accepted inputs](#t-093-bind-generated-make-drivers-of-configure-style-builds-to-their-accepted-inputs) | build | open |
 | T-094 | [Let stepwise accept a target by commit instead of a tag](#t-094-let-stepwise-accept-a-target-by-commit-instead-of-a-tag) | testing | open |
+| T-095 | [Report an intake coverage gap once, not once per unit](#t-095-report-an-intake-coverage-gap-once-not-once-per-unit) | pipeline | open |
+| T-096 | [Stop inferring run artifacts from a data/ path prefix](#t-096-stop-inferring-run-artifacts-from-a-data-path-prefix) | pipeline | open |
 | T-097 | [Use ChangeLog files as a source-history signal](#t-097-use-changelog-files-as-a-source-history-signal) | history | in-progress |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
@@ -1139,7 +1141,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-080 — Derive default release ids and allow an overlay to override them
 
-- **State:** open
+- **State:** done (2026-11-11, cab4d770; `build_toolchain` is derived from the host-pinned native build image and the overlay may set release ids; `platform` is still declared, not derived)
 - **Area:** pipeline
 - **Why:** review `2026-11-11-0003` blocked all 22 build units with "missing release evidence:
   build_toolchain, platform, validation". The three ids are now committed as fixed strings in
@@ -1395,6 +1397,39 @@ until each is rewritten into the entry format when it is next touched.
   unchanged.
 - **Refs:** `deploy/dagster/bin/stepwise.py`, `tests/test_stepwise_target_tag.py`, T-088,
   `docs/tasks/2026-11-11-freeciv-walk-01-model-connectivity.md`.
+
+### T-095 — Report an intake coverage gap once, not once per unit
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** in the Freeciv walk (run `2026-11-11-0008`) `job_review_intake` published 76 canonical
+  gap records for 38 oversized files: `prepare_target.validate_target` reports each inventory gap
+  and `publish_intake.publish_handoff` reports the same gap again from the published document. A
+  tally by record count overstates the job's gaps twofold and every consumer that echoes them.
+- **Scope:** one unit owns each inventory coverage gap in the job's `outcomes.json`; the published
+  document may still list them. No change to what is a gap.
+- **Done when:** a runner-driven intake test with one oversized file shows exactly one canonical
+  gap record for it, and the published intake document still names the file.
+- **Refs:** `src/appsec_review/jobs/job_review_intake/job.py` (`validate_target`, `publish`),
+  `docs/tasks/2026-11-11-freeciv-walk-04-review-intake.md`, T-057.
+
+### T-096 — Stop inferring run artifacts from a data/ path prefix
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `runtime.handoff.collect_artifacts` treats any `path`/`sha256` record whose path starts
+  with `data/` as a file of the run, unless it sits under a field named in `_SOURCE_DATA_FIELDS`.
+  Freeciv owns a top-level `data/` folder, so the catalog's build markers for `data/Makefile.am`
+  failed `job_target_catalog` at publication (`shared artifact missing`, run `2026-11-11-0009`).
+  `markers` and `descriptor_package` are now exempt, but any other field that carries a
+  target-relative record under `data/` fails the same way in whichever job publishes it.
+- **Scope:** an artifact reference is declared by its field or by an explicit `run_path`, not
+  guessed from the path; list the producers that rely on the prefix guess and convert them, then
+  remove the guess. No missing declared artifact may become silently acceptable.
+- **Done when:** a runner-driven test publishes a target-relative `data/...` record under an
+  arbitrary field without error, and the existing missing-artifact refusals still hold.
+- **Refs:** `src/appsec_review/runtime/handoff.py`, `tests/test_handoff_interchange.py`,
+  `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-057.
 
 ### T-097 — Use ChangeLog files as a source-history signal
 

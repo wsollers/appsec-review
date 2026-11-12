@@ -546,6 +546,26 @@ def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artif
         collect_artifacts(root, {"artifact": {"path": str(tmp_path / "not-a-frozen-layer"), "sha256": "a" * 64}})
 
 
+def test_build_descriptors_under_a_target_data_folder_are_source_metadata_not_run_artifacts(tmp_path):
+    """A target may own a top-level ``data/`` folder (Freeciv does): its build markers and descriptor
+    documents carry target-relative path and hash, and are not files of the run's ``data/`` tree."""
+    marker = {"path": "data/Makefile.am", "sha256": "a" * 64, "size_bytes": 4}
+    document = {"path": "data/Makefile.am", "sha256": "a" * 64, "content": "SUBDIRS = themes\n"}
+
+    def produce(unit):
+        return {"build_units": [{"build_unit_id": "build-unit-fixture", "markers": [marker]}],
+                "targets": [{"markers": [marker], "descriptor_package": {
+                    "documents": [document], "build_unit": {"markers": [marker]}}}]}
+
+    _, _, _, outcome, root = publish(tmp_path, produce)
+    assert outcome["handoff"]["coverage"]["disposition"] == "complete"
+    assert all(ref["path"] != "data/Makefile.am" for ref in outcome["handoff"]["artifacts"])
+    assert outcome["result"]["outputs"]["work.only"]["targets"][0]["markers"] == [marker]
+    # The same record under an artifact field is still a run file that must exist.
+    with pytest.raises(ValueError, match="shared artifact missing: data/Makefile.am"):
+        collect_artifacts(root, {"artifact": marker})
+
+
 def test_graph_export_artifact_survives_common_handoff_projection(tmp_path):
     def produce(unit):
         path = unit.unit_root / "graph-export.json"

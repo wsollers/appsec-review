@@ -9,7 +9,9 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
-from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, PROJECT_FILE_SUFFIXES, inventory, write_json
+from appsec_review.jobs.cataloging import (
+    BUILD_FILES, PROJECT_FILES, PROJECT_FILE_SUFFIXES, Bounds, inventory, write_json,
+)
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
 from appsec_review.jobs.build_discovery import (
     discover_build_inventory,
@@ -92,7 +94,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
 
     def partition(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        snapshot = inventory(_target(unit), exclusions=unit.job.config.exclusions)
+        snapshot = inventory(_target(unit), Bounds(max_file_bytes=unit.job.config.inventory_max_file_bytes),
+                             exclusions=unit.job.config.exclusions)
         snapshot["files"] = [{**item, **scope_fields({**item, "artifact_origin": "target-intake"})}
                              for item in snapshot["files"]]
         from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
@@ -129,7 +132,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 "files": snapshot["files"], "gaps": snapshot["gaps"],
                 "file_discovery": snapshot["file_discovery"],
                 "target_artifacts": target_artifacts,
-                "configured_exclusions": snapshot["configured_exclusions"]}
+                "configured_exclusions": snapshot["configured_exclusions"],
+                "excluded_assets": snapshot["excluded_assets"]}
 
     def census(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)

@@ -41,6 +41,9 @@ _SOURCE_DATA_FIELDS = {
     "files", "source_files", "source_metrics", "artifact_candidates", "source_inventory",
     "sources", "input_files", "source_inputs", "native_files", "native_artifacts",
     "file_inventory", "payload", "records", "findings", "raw",
+    # Build-unit descriptors: target-relative markers and descriptor documents with their hashes.
+    # A target that owns a top-level ``data/`` folder would otherwise have them read as run files.
+    "markers", "descriptor_package",
 }
 
 

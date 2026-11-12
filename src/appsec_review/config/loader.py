@@ -19,7 +19,10 @@ from .binary_decompilation import BinaryDecompilationSettings, parse_binary_deco
 from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
-from .exclusions import PathExclusions, global_exclusions, job_exclusions
+from .exclusions import (
+    INVENTORY_FILE_BYTES_DEFAULT, PathExclusions, asset_class_rules, global_exclusions,
+    inventory_max_file_bytes, job_exclusions,
+)
 from .build_outputs import BUILD_OUTPUT_JOBS, BuildOutputPolicy, parse_build_outputs, reject_misplaced
 from .build_workspaces import BuildWorkspacePolicy, parse_build_workspaces
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
@@ -542,6 +545,8 @@ class JobConfig:
     build_capture: BuildCaptureConfig | None = None
     # Global [exclusions] patterns followed by the job's own (config/exclusions.py).
     exclusions: PathExclusions = PathExclusions()
+    # The top-level [inventory] per-file bound of the target inventory (intake and catalog).
+    inventory_max_file_bytes: int = INVENTORY_FILE_BYTES_DEFAULT
     # The top-level [build_outputs] policy; set only on the three build jobs (config/build_outputs.py).
     build_outputs: BuildOutputPolicy | None = None
 
@@ -566,6 +571,16 @@ class JobConfig:
 PENDING_JOBS: frozenset[str] = frozenset()
 OVERLAY_ENVIRONMENT = "APPSEC_REVIEW_CONFIG_OVERLAY"
 OVERLAY_LAYER = "capacity_overlay"
+# Besides the capacity keys, a local overlay may declare component release ids: build images are
+# host-local, so the id that names them is a per-host declaration like the capacity it sits beside.
+OVERLAY_RELEASE_KEY = "review_policy.releases.*"
+# The resolved configuration records, for every release id, whether it was declared (and in which
+# layer) or derived (and from what), and for the three ids build dispatch requires also when
+# they are absent.
+RELEASE_SOURCES_KEY = "configuration_release_sources"
+BASE_LAYER = "base"
+DECLARED_ONLY_RELEASES: tuple[str, ...] = ("platform", "validation")
+NATIVE_BUILD_PROFILE = ("jobs", "job_project_build", "settings", "profiles", "native")
 # ``dev`` is the checked-in file; other profiles are explicit layers in ``profiles/``.
 PROFILE_ENVIRONMENT = "APPSEC_REVIEW_PROFILE"
 PROFILE_LAYER = "runtime_profile"
@@ -787,9 +802,11 @@ def overlay_capacity_keys(document: object) -> tuple[str, ...]:
     """Validate a local capacity overlay and return the dotted keys it sets.
 
     The overlay may set only ``CAPACITY_KEYS``: the inference review's team count and result-cache
-    placement, Dagster pool limits and the host resource budget (``review_policy.resources``). Every
+    placement, Dagster pool limits and the host resource budget (``review_policy.resources``), and
+    the host's component release ids (``OVERLAY_RELEASE_KEY``, ``review_policy.releases``). Every
     other key, and every empty table, is rejected.
     """
+    from .assurance import ComponentReleases
     from .inference_review import JOB_ID
 
     def table(value: object, field: str, allowed: set[str] | None) -> Mapping[str, Any]:
@@ -826,12 +843,24 @@ def overlay_capacity_keys(document: object) -> tuple[str, ...]:
                 raise ValueError(f"configuration overlay pool limit is invalid: {name}")
             keys.append(f"orchestration.dagster.pools.{name}")
     if "review_policy" in root:
-        policy = table(root["review_policy"], "review_policy", {"resources"})
-        resources = table(policy["resources"], "review_policy.resources", set(ResourceBudget().view()))
-        for name, value in sorted(resources.items()):
-            if type(value) is not int:
-                raise ValueError(f"configuration overlay review_policy.resources.{name} must be an integer")
-            keys.append(f"review_policy.resources.{name}")
+        policy = table(root["review_policy"], "review_policy", {"resources", "releases"})
+        if "releases" in policy:
+            # Release names are an open set in the base file too; the same bounded-identifier rule
+            # applies here, and nothing else under review_policy becomes settable.
+            releases = table(policy["releases"], "review_policy.releases", None)
+            for name, value in sorted(releases.items()):
+                try:
+                    ComponentReleases({name: value})
+                except (TypeError, ValueError) as error:
+                    raise ValueError(f"configuration overlay review_policy.releases.{name} must be a "
+                                     "bounded opaque release identifier") from error
+                keys.append(f"review_policy.releases.{name}")
+        if "resources" in policy:
+            resources = table(policy["resources"], "review_policy.resources", set(ResourceBudget().view()))
+            for name, value in sorted(resources.items()):
+                if type(value) is not int:
+                    raise ValueError(f"configuration overlay review_policy.resources.{name} must be an integer")
+                keys.append(f"review_policy.resources.{name}")
     return tuple(keys)
 
 
@@ -862,10 +891,52 @@ def _apply_overlay(document: dict[str, Any], overlay: Mapping[str, Any]) -> None
         pools.update(overlay["orchestration"]["dagster"]["pools"])
     if "review_policy" in overlay:
         policy = document.setdefault("review_policy", {})
-        resources = policy.setdefault("resources", {}) if isinstance(policy, dict) else None
-        if not isinstance(resources, dict):
-            raise ValueError("[review_policy.resources] must be a table")
-        resources.update(overlay["review_policy"]["resources"])
+        for section in ("releases", "resources"):
+            if section not in overlay["review_policy"]:
+                continue
+            values = policy.setdefault(section, {}) if isinstance(policy, dict) else None
+            if not isinstance(values, dict):
+                raise ValueError(f"[review_policy.{section}] must be a table")
+            values.update(overlay["review_policy"][section])
+
+
+def _resolve_release_defaults(document: dict[str, Any], pins: HostPins,
+                              overlay: Mapping[str, Any] | None) -> dict[str, dict[str, Any]]:
+    """Fill release ids that have a load-time default and record where every id came from.
+
+    A value declared in the base file or the overlay always wins and is never replaced.
+    ``build_toolchain`` is the only id with a default: the image id the host pins bind to the
+    native build profile, so it moves when that image is rebuilt and re-pinned. ``platform`` and
+    ``validation`` are declared only. Nothing here reads an installed payload; the image id is the
+    host's own pinned observation, already frozen into the resolved configuration.
+    """
+    policy = document.get("review_policy", {})
+    releases = policy.get("releases", {}) if isinstance(policy, dict) else None
+    if not isinstance(releases, dict):
+        return {}  # parse_review_policy names the malformed table
+    overlaid = set((overlay or {}).get("review_policy", {}).get("releases", {}))
+    sources: dict[str, dict[str, Any]] = {
+        name: {"source": "declared", "layer": OVERLAY_LAYER if name in overlaid else BASE_LAYER}
+        for name in releases}
+    if "build_toolchain" not in releases:
+        profile: object = document
+        for key in NATIVE_BUILD_PROFILE:
+            profile = profile.get(key) if isinstance(profile, dict) else None
+        tag = profile.get("tag") if isinstance(profile, dict) else None
+        image_id = pins.document["images"].get(tag) if isinstance(tag, str) else None
+        if image_id is None:
+            sources["build_toolchain"] = {
+                "source": "undeclared",
+                "reason": "not declared, and no native build profile image is configured to derive it from"}
+        else:
+            document.setdefault("review_policy", {}).setdefault("releases", {})["build_toolchain"] = image_id
+            sources["build_toolchain"] = {
+                "source": "derived", "layer": HOST_PINS_LAYER, "host_pins_sha256": pins.sha256,
+                "setting": ".".join((*NATIVE_BUILD_PROFILE, "image_id")), "image_tag": tag}
+    for name in DECLARED_ONLY_RELEASES:
+        sources.setdefault(name, {"source": "undeclared",
+                                  "reason": "not declared; this id has no derived default"})
+    return dict(sorted(sources.items()))
 
 
 def _path(root: Path, value: object, field: str) -> Path:
@@ -903,9 +974,13 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
 
     The overlay is ``overlay`` when given, otherwise the local path or file URI named by
     ``APPSEC_REVIEW_CONFIG_OVERLAY`` when that variable is set and non-empty; ``overlay=""``
-    explicitly selects no overlay, whatever the variable says. It may set only capacity keys (see
-    ``overlay_capacity_keys``); it is merged before validation and frozen, with its own hash, into
-    the resolved configuration.
+    explicitly selects no overlay, whatever the variable says. It may set only capacity keys and
+    component release ids (see ``overlay_capacity_keys``); it is merged before validation and
+    frozen, with its own hash, into the resolved configuration.
+
+    After the host image bindings, a ``build_toolchain`` release that no layer declared defaults to
+    the native build profile's bound image id; ``configuration_release_sources`` in the resolved
+    configuration records whether each release id was declared or derived and from what.
     """
     source = _config_source(path)
     repository_root = source.parent
@@ -939,7 +1014,10 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                           "keys": list(overlay_keys), "document": overlay_document}
     pins = host_pins if isinstance(host_pins, HostPins) else load_host_pins(repository_root, host_pins)
     apply_host_pins(document, pins)
+    release_sources = _resolve_release_defaults(
+        document, pins, overlay_record["document"] if overlay_record is not None else None)
     resolved_document = copy.deepcopy(document)
+    resolved_document[RELEASE_SOURCES_KEY] = release_sources
     selected_compiler = parse_compiler_target("clang" if compiler_target is None else compiler_target)
     resolved_document["compiler_target"] = selected_compiler.value
     review_policy = parse_review_policy(document.get("review_policy", {}))
@@ -1003,6 +1081,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     if not isinstance(jobs_value, dict) or not jobs_value:
         raise ValueError("[jobs] must contain at least one job")
     excluded_globally = global_exclusions(document)
+    excluded_assets = asset_class_rules(document)
+    inventory_file_bytes = inventory_max_file_bytes(document)
     build_output_policy = parse_build_outputs(document.get("build_outputs"))
     build_workspace_policy = parse_build_workspaces(document.get("build_workspaces"))
     resolved_document.pop("build_workspaces", None)
@@ -1306,7 +1386,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             steps=MappingProxyType(steps),
             typed_settings=typed_settings,
             build_capture=resolved_capture,
-            exclusions=job_exclusions(job_id, value, excluded_globally),
+            exclusions=job_exclusions(job_id, value, excluded_globally, excluded_assets),
+            inventory_max_file_bytes=inventory_file_bytes,
             build_outputs=build_output_policy if job_id in BUILD_OUTPUT_JOBS else None,
         )
     openvex_job = jobs.get("job_openvex_export")

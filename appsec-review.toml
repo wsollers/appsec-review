@@ -5,6 +5,49 @@
 [exclusions]
 patterns = [".gitignore"]
 
+# Non-code asset classes, excluded by file-name suffix (case-insensitive, compound suffixes allowed).
+# A policy exclusion, not a coverage gap: intake and the catalog list every excluded file with its
+# class and total files and bytes per class under excluded_assets. Nothing that can carry code,
+# build logic or packed content belongs here (no archives, .svg, .xpm, .xml, .json, scripts, build
+# files, and never .obj); the loader refuses those suffixes.
+[[exclusions.asset_classes]]
+name = "art-source"
+reason = "3D and image-editor project files are authoring sources for art, not code"
+suffixes = [".blend", ".blend1", ".fbx", ".dae", ".3ds", ".max", ".ma", ".mb", ".psd", ".xcf", ".kra"]
+
+[[exclusions.asset_classes]]
+name = "raster-image"
+reason = "raster and icon images are not code"
+suffixes = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tga", ".tif", ".tiff", ".webp", ".ico", ".icns",
+            ".cur", ".dds", ".ktx", ".pcx", ".ppm", ".pgm", ".exr", ".hdr", ".heic"]
+
+[[exclusions.asset_classes]]
+name = "video"
+reason = "video files are not code"
+suffixes = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", ".flv", ".m4v", ".mpg", ".mpeg", ".ogv"]
+
+[[exclusions.asset_classes]]
+name = "audio"
+reason = "sound and music files are not code"
+suffixes = [".wav", ".mp3", ".ogg", ".oga", ".flac", ".aac", ".m4a", ".opus", ".wma", ".mid", ".midi",
+            ".aiff"]
+
+[[exclusions.asset_classes]]
+name = "font"
+reason = "font files are not code"
+suffixes = [".ttf", ".otf", ".ttc", ".woff", ".woff2", ".eot", ".pfb", ".pfm", ".fon"]
+
+[[exclusions.asset_classes]]
+name = "game-save"
+reason = "game saves and bundled scenarios are data for the program under review, not its code"
+suffixes = [".sav", ".sav.gz", ".sav.bz2", ".sav.xz", ".sav.zst"]
+
+# Largest target file intake and the catalog read into the inventory; a larger file is a named
+# file_too_large gap. 12 MiB admits large translation catalogues and changelogs (the largest seen
+# is a 9.5 MB ChangeLog); it was 2 MiB, hard-coded, until 2026-11-11.
+[inventory]
+max_file_bytes = 12582912
+
 [build_workspaces]
 build_workspace_retention_runs = 3
 
@@ -49,15 +92,18 @@ approved_first_party_projects = []
 [review_policy.releases]
 # Deployment operators declare opaque release IDs here and bump them when supplied software
 # changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
+# A capacity overlay may set any id here for its host; a declared value always wins.
 codeql = "codeql-2.27.0-cert-v2.62.0"
 codeql_runner = "appsec-codeql-runner-89568569"
 job_openvex_export = "openvex-export-2"
 job_debug_symbol_indexing = "debug-symbol-readers-3"
-# Build iterations dispatch and reuse nothing unless these three are declared
-# (jobs/build_iterations.py). Declared by the deployment owner on 2026-11-11; bump when the
-# application implementation, the native build image or the validation contracts change.
+# Build iterations dispatch and reuse nothing unless platform, build_toolchain and validation
+# resolve (jobs/build_iterations.py). platform and validation are declared only (deployment
+# owner, 2026-11-11): bump them when the application implementation or the validation contracts
+# change. build_toolchain is not declared here: it defaults to the image id the host pins bind to
+# [jobs.job_project_build.settings.profiles.native], so it follows a rebuilt and re-pinned build
+# image. Declare build_toolchain here or in an overlay to fix it by hand instead.
 platform = "appsec-review-2026-11-11"
-build_toolchain = "noble-gcc13.3-clang18.1"
 validation = "validation-2026-11-11"
 
 [review_policy.resources]

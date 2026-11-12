@@ -327,6 +327,40 @@ pattern and scope that excluded it. This is a declared scope decision, not a cov
 fingerprint still covers every byte. Both tables are frozen into the run's resolved
 configuration, so changing an exclusion changes the run's configuration identity.
 
+**Asset classes.** The global table also names classes of non-code assets, excluded by file-name
+suffix:
+
+```toml
+[[exclusions.asset_classes]]
+name = "raster-image"
+reason = "raster and icon images are not code"
+suffixes = [".png", ".jpg"]
+```
+
+A suffix matches the end of the file name, case-insensitively; a compound suffix such as
+`.sav.gz` is allowed, and `.png` does not match `sprite.pngx` or a folder. The shipped classes
+are `art-source`, `raster-image`, `video`, `audio`, `font` and `game-save`. Each excluded file is
+listed under `configured_exclusions` with its `asset_class`, and the inventory totals files and
+bytes per class under `excluded_assets`; like a path exclusion it is a declared scope decision,
+not a coverage gap, and an excluded binary is not an artifact candidate. Suffixes that can carry
+code, build logic or packed content (archives, `.svg`, `.xpm`, `.xml`, `.json`, scripts, build
+files, `.obj`) are refused at load. Whether an excluded file is referenced as a build input is
+not checked here.
+
+### The inventory file bound
+
+```toml
+[inventory]
+max_file_bytes = 12582912
+```
+
+Intake and the catalog read a target file into the inventory only up to this size; a larger file
+is a named `file_too_large` gap and no later job sees it. The bound was a hard-coded 2 MiB until
+2026-11-11; 12 MiB admits large translation catalogues and changelogs. Without the table the
+bound is 2 MiB. Jobs that parse files keep their own, smaller per-file bounds (tree-sitter,
+prioritization, source-history line and symbol analysis), so a large admitted file can still be
+a named gap of those jobs.
+
 ### Named build-output exclusions
 
 `[exclusions]` acts on the target's source tree. Build outputs have their own top-level table,
