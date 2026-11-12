@@ -72,7 +72,7 @@ ecosystem.
 | pnpm, yarn classic, yarn berry | Deferred. A `[build_outputs]` rule handles them meanwhile. | `LOCKFILES` (`node.py:21-24`) knows their project lockfiles, but no installer record is parsed. pnpm's real files sit under `node_modules/.pnpm`. |
 | C/C++ (FetchContent `_deps`, ExternalProject, vcpkg, Conan, Meson subprojects) | **Owned by Native build output design**, including the configurable exclusion (direction item 4). | Only bookkeeping is excluded today (`build_bookkeeping.py`); the generic `_kind` turns a new `.c`/`.h` file into `generated-source` (`job.py:270`). |
 | Go | Deferred here; **implemented later** (T-011 step 1, see [section 7](#7-implementation-status)). Installer record: `vendor/modules.txt`. | `GOMODCACHE` is outside the workspace (`project_images.py:349`; `job_project_build/job.py:315`). A recipe step running `go mod vendor` (`go.py:84-87`) writes `vendor/**.go`, which `_kind` labels `generated-source`. `module_metadata` already locates `modules.txt` (`go.py:200-209`). |
-| PHP (Composer) | Deferred. Installer record: `vendor/composer/installed.json`. | Image dependencies use `COMPOSER_VENDOR_DIR` outside the workspace (`project_images.py:358-359`), but a recipe-run `composer install` writes `vendor/`. Every changed `.php` file becomes `generated-source` (`php.py:136-137`). `composer_metadata` already marks prod packages unknown with a gap each (`php.py:91-97`); the follow-up should move them to `RUNTIME_DEPENDENCY` (D4). |
+| PHP (Composer) | Deferred here; **implemented later** (T-011 step 2, see [section 7](#7-implementation-status)). Installer record: `vendor/composer/installed.json`. | Image dependencies use `COMPOSER_VENDOR_DIR` outside the workspace (`project_images.py:358-359`), but a recipe-run `composer install` writes `vendor/`. Every changed `.php` file becomes `generated-source` (`php.py:136-137`). `composer_metadata` already marks prod packages unknown with a gap each (`php.py:91-97`); the follow-up should move them to `RUNTIME_DEPENDENCY` (D4). |
 | Rust | Deferred. Installer record: the receipt's `cargo_metadata`, where a package source is a registry or a path. | `CARGO_HOME` is outside (`project_images.py:348`). Committed `vendor/` source is unchanged and skipped (`job.py:316-319`). Registry crates' `target/<profile>/deps` libraries are still cataloged (`rust.py:413-424`). Volume has not been measured. |
 | .NET | Deferred. Installer record: `obj/project.assets.json`. | `NUGET_PACKAGES` is outside (`project_images.py:352`). Package assemblies copied into `bin/` are cataloged as `managed-assembly` (`dotnet.py:98-102`). The assets file is already recognized (`dotnet.py:123-124`). |
 | Python | Deferred. Installer record: `*.dist-info/RECORD`. | Image dependencies are on `PYTHONPATH=/opt/project-deps` (`project_images.py:360`). An in-workspace `.venv` would add `dist-info` metadata, bytecode and native extensions (`python.py:67-82`). Plain `.py` files are not cataloged. |
@@ -267,7 +267,7 @@ recorded as dispositions, never as gaps. That matches how target-file exclusions
 | `job_artifact_indexing` | **No code change** (D3). Expected effect: row count drops from about 8,500 to about 650 for this run shape, so relationship shards drop by the same factor. |
 | `job_artifact_security_analysis` | **No code change.** It reads roles with `ScopeRole(...)` (`job.py:110`) and gates by `analysis_scope` (`job.py:205,483`), so the new role routes automatically. `_applicable` already enables `packages` for the node family (`job.py:175`). Superseded for Syft, Grype and osv-scanner by the [scanner launch reduction](scanner-launch-reduction-design.md), which scans each installer record once in place of its package anchors. |
 | `job_target_catalog` | **No change.** It still uses declaration-based `unknown`/`build_dependency` for `package.json` sections (`job_target_catalog/job.py:233`). Those are declarations, not installer facts. |
-| `php.composer_metadata` | **No change now.** It moves to `RUNTIME_DEPENDENCY` with the PHP follow-up (D1). |
+| `php.composer_metadata` | **No change now.** It moves to `RUNTIME_DEPENDENCY` with the PHP follow-up (D1). Done in T-011 step 2 ([section 7](#7-implementation-status)). |
 
 ### D9. Version and identity bumps
 
@@ -423,7 +423,7 @@ The current behavior is documented in
 
 | Decision | Status |
 |---|---|
-| D1 (npm only) | Implemented. Go followed (below). The other ecosystems are deferred in [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems). |
+| D1 (npm only) | Implemented. Go and Composer followed (below). The other ecosystems are deferred in [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems). |
 | D2 (parser) | Implemented in `node_installed.py`, with the deviations below. |
 | D3 (package and record rows) | Implemented. |
 | D4 (roles and lanes) | Implemented: `runtime_dependency` and `build_dependency` in the supply_chain lane, with the `blint` exception below. |
@@ -516,6 +516,46 @@ what the record carries:
 
 Unit tests: `tests/test_go_vendored_dependencies.py` and
 `tests/test_go_dependency_output_filtering.py`. No Go toolchain was run and no real `go mod vendor`
+tree was cataloged; integration and live validation remain the user's to run.
+
+**Composer vendor trees (T-011 step 2).** The second deferred ecosystem follows D2–D7 with
+`vendor/composer/installed.json` as the installer record; the current behavior is documented under
+installed Composer packages in [language build](../operations/language-build.md). The parser is
+`job_language_build/php_installed.py`; `php.InstalledCatalog` registers the D5 roots, and
+`php.catalog` now takes its rows from the recorder's `walk()` instead of its own `rglob`, so
+configured `[build_outputs]` exclusions apply to the `php` family. Differences from the npm
+contract:
+
+- **Two record layouts (D2).** Composer 1's list and Composer 2's
+  `{"packages": [...], "dev": ..., "dev-package-names": [...]}` object are both accepted. An
+  `install-path` is resolved lexically from `vendor/composer`; one that leaves the prefix or names
+  the record's own directories makes the record unavailable.
+- **Verification is by name (D2).** The installed `composer.json` must carry the recorded name
+  (without case). Installed manifests rarely carry a version, so the version is not compared, and
+  the record has no digest of the installed files. A path-repository package is never verified
+  (`path-repository`): its content is local code under a registry name. A package installed
+  outside `vendor` by an installer plugin is never verified (`install-path-outside-vendor`).
+- **Anchor (D3).** The row is anchored on the package's `composer.json`, as npm's is on
+  `package.json`. `delivery_evidence.kind` is `composer-installed-record`.
+- **Roles (D4).** `dev-package-names` makes a package `build_dependency`; every other verified
+  package is `runtime_dependency`. The Composer 1 layout has no dev marking, so all of its
+  verified packages are `runtime_dependency`. `php.composer_metadata` now gives `composer.lock`
+  `packages` entries `runtime_dependency` in place of `unknown` and no longer writes a delivery gap
+  for each. No scope or policy identity changes; `php.CAPTURE_IDENTITY` becomes
+  `php-composer-build-capture/3`.
+- **Only a build-written record (D2).** As for Go, a record equal to the pre-build snapshot is
+  committed target content and is left alone.
+- **Retained rows (D3).** Linked binaries are kept through `keep_linked`; a retained `.so`, `.dll`
+  or `.dylib` is `native-extension`, so the `blint` rule above admits a production package's and
+  refuses a dev package's.
+- **Gaps (D6).** The texts say `packages`, `vendor` and `Composer installer record`; (c) reads
+  `installed package is not verified against the Composer installer record`. Composer's own
+  `vendor/autoload.php` and the files directly in `vendor/composer` are not counted as uncovered.
+- **Not done.** No scan-once presentation in artifact security analysis (D8): Composer anchors and
+  the record row are scanned, or skipped by format, per row.
+
+Unit tests: `tests/test_php_installed_dependencies.py` and
+`tests/test_php_dependency_output_filtering.py`. No Composer was run and no real `composer install`
 tree was cataloged; integration and live validation remain the user's to run.
 
 **Tests.** The unit tests below belong to the npm implementation. The docs session ran only

@@ -595,8 +595,9 @@ Files under `node_modules` are kept even when the build did not change them.
 These rows get the default roles: most kinds are `unknown` in the target lane with a
 `delivery_fact_unavailable` gap, while manifests and lockfiles default to `build_chain`. The Node
 capture identity is `appsec-review/node-build-capture/3`. In the Node family only npm is covered;
-pnpm and Yarn trees stay per-file. Go vendor trees are covered (see vendored Go modules above); the
-remaining ecosystems' installed trees stay per-file (see
+pnpm and Yarn trees stay per-file. Go vendor trees are covered (see vendored Go modules above), and
+so are Composer vendor trees (see installed Composer packages below); the remaining ecosystems'
+installed trees stay per-file (see
 [the TODO](../TODO.md#summarize-installed-dependencies-for-the-remaining-ecosystems)).
 
 **Build-output dispositions.** `node.catalog` takes its rows from the shared build-output
@@ -699,7 +700,96 @@ dependency relationships, script definitions as hashes, generated autoload files
 distributable archives, native extensions, and observed top-level build-tool provenance. Exact argv,
 environment values, stdout/stderr, and diagnostic tails remain protected. The sanitized `build`
 retrieval shard exposes only command hashes and outcomes, bounded stream facts, package/artifact
-identities, and dependency relationships.
+identities, and dependency relationships. In the receipt's `composer.packages`, taken from
+`composer.lock`, a `packages` entry is `runtime_dependency` and a `packages-dev` entry is
+`build_dependency`; both are in the supply_chain lane with delivery `not_established`, and no
+per-package delivery gap is written.
+
+**Installed Composer packages.** A recipe that runs `composer install` or `composer update` writes
+a `vendor` tree and Composer's own installer record, `vendor/composer/installed.json`, into the
+workspace. Scope for that tree comes only from that record, never from directory names,
+`composer.json` or `composer.lock`
+(`src/appsec_review/jobs/job_language_build/php_installed.py`; the catalog side is
+`InstalledCatalog` in `php.py`, used by `php.catalog`). The contract is the installed npm
+dependencies contract described above, with the differences named here.
+
+- **Which trees.** The catalog finds at most 32 prefixes: directories holding a real (non-symlink)
+  `vendor` directory with a `vendor/composer/installed.json` entry or a regular `composer.json`
+  beside it. Vendor trees are not descended. A `vendor` directory with neither belongs to another
+  tool and is ignored, and a project that renames its vendor directory (`config.vendor-dir`) is
+  not found. Only a record the build wrote is used: an `installed.json` whose digest equals the
+  pre-build snapshot is committed target content, so its tree is not classified and gets no record
+  row and no gap, and its files keep the per-file rows they had. A `vendor` tree with no record is
+  reported only when the build added a file to it.
+- **Record format.** A regular file of at most 64 MiB holding UTF-8 JSON in one of two layouts:
+  Composer 1's list of package objects, or Composer 2's object with a `packages` list, an optional
+  boolean `dev` and an optional `dev-package-names` list of strings. At most 20,000 packages. Each
+  package needs a `name` in Composer's `vendor/package` grammar and a non-empty `version`;
+  `version_normalized`, `type`, `dist` and `source` are optional, and every retained string is at
+  most 1,024 characters with no control character. `install-path` (Composer 2) is resolved
+  lexically from `vendor/composer`; without it the package is at `vendor/<name>`. A null
+  `install-path`, or a `metapackage` without one, installs no directory and gets no row and no
+  gap. Any other shape, a wrongly typed or over-long field, a duplicate name (compared without
+  case) or install path, or an `install-path` that is absolute, has a backslash or an empty or
+  control-character segment, leaves the prefix, or names the prefix, `vendor` or `vendor/composer`
+  itself makes the whole record unavailable.
+- **Verification.** The record carries a dist reference and sometimes the downloaded archive's
+  checksum, never a digest of the installed files. A package is verified when: it does not come
+  from a path repository (`dist.type` `path`); its install path is below `<prefix>/vendor`; that
+  path and every directory from `vendor` down to it are real directories, not symlinks; and it
+  holds a regular `composer.json` of at most 4 MiB that is a JSON object whose `name` equals the
+  recorded name, compared without case. Installed manifests rarely carry a version, so the version
+  is the record's and is not compared. The bytes of a verified package are not compared with
+  anything.
+- **Rows.** Each verified package becomes one `package-metadata` row anchored on its
+  `composer.json`. `package_metadata` has `format` `composer.json`, `role`
+  `installed-dependency-package`, `ecosystem` and `manager` `composer`, `name`, `version`,
+  `version_normalized`, `package_type`, `dev`, `dist` (`{"type", "reference", "shasum"}` or null),
+  `source` (`{"type", "reference"}` or null), `install_path`, and `files`, `bytes` and
+  `retained_files`. `delivery_evidence` is `{"kind": "composer-installed-record", "workspace_path":
+  "<prefix>/vendor/composer/installed.json", "sha256": "<record sha256>", "entry": "<name>"}`. A
+  package that Composer 2's `dev-package-names` lists is `build_dependency`; every other verified
+  package is `runtime_dependency`. The Composer 1 layout records no dev marking, so all of its
+  verified packages are `runtime_dependency`. The record is a `resolved-dependency-metadata` row
+  with `dependency_metadata`
+  `{"format": "installed.json", "manager": "composer", "role": "installed-dependency-record"}`.
+  Both are in the supply_chain lane. Executables and shared and static libraries under a verified
+  package keep their own rows with the package's role and evidence (`keep_linked`, at most
+  `max_kept_per_root`); a `.so`, `.dll` or `.dylib` is `native-extension`, so a production
+  package's reaches `blint` and a dev package's does not. Every other file under a verified package
+  gets no row. If the anchor's digest changes between verification and cataloging, the catalog
+  fails with `installed Composer package manifest changed during cataloging`.
+- **Dispositions.** `php.catalog` now takes its rows from the shared disposition walk, so
+  configured `[build_outputs]` exclusions for the `php` family apply to it. Each verified package
+  is a `supply_chain` root with basis `installer-record`, confidence `fact`, name
+  `composer-installed-package`, reason `verified against installed manifest`, `evidence_ref`
+  `<record path>#<name>` and `bound_group` `<prefix>/vendor`. An unverified package inside a
+  verified one is a `per_file` root named `composer-unverified-package`.
+- **Gaps.**
+  - `dependency-content-summarized: <N> packages (<F> files, <B> bytes) recorded by <prefix>/vendor/composer/installed.json routed to supply_chain review; per-file target review not performed`,
+    with `; <U> files under vendor not covered by the installer record remain per-file` when such
+    files exist. Composer's own `vendor/autoload.php` and the files directly in `vendor/composer`
+    are not dependency content: they keep their rows and are not counted in `<U>`;
+  - `<prefix>/vendor: Composer installer record unavailable (<reason>); dependency files cataloged per-file in the target lane`,
+    where `<reason>` is `missing`, `unreadable`, `bound-exceeded:record-bytes`,
+    `bound-exceeded:packages`, `invalid-json`, `unsupported-structure`, `dev-flag-invalid`,
+    `dev-package-names-invalid`, `entry-invalid:<name>`, `duplicate-package:<name>` or
+    `duplicate-install-path:<name>` (target text bounded to 200 characters);
+  - for the first 50 unverified packages,
+    `<install_path>: installed package is not verified against the Composer installer record (<reason>); cataloged per-file`,
+    where `<reason>` is `path-repository`, `install-path-outside-vendor`, `install-path-missing`,
+    `manifest-missing`, `manifest-invalid` or `name-mismatch`, then
+    `<n> further unverified Composer packages cataloged per-file`;
+  - `<prefix>/vendor: Composer installer record covers no installed package; <U> files under vendor remain per-file`
+    when an available record verifies nothing and such files exist; and
+  - `Composer installer record discovery bound reached; remaining prefixes cataloged per-file`.
+
+Files that no verified package covers keep the per-file rows (a changed `.php` file is
+`generated-source` in the target lane; a `composer.json` is `package-metadata`). A package that a
+Composer installer plugin placed outside `vendor` is one of them (`install-path-outside-vendor`).
+The PHP capture identity is `appsec-review/php-composer-build-capture/3`. Artifact security
+analysis has no scan-once presentation for this record: its npm rule is keyed on npm's own record
+and evidence kind ([the TODO](../TODO.md#follow-ups-from-the-scanner-launch-reduction)).
 
 ## Bounded iterations and recovery
 
