@@ -238,6 +238,24 @@ def differential(report: dict, baseline: set[str]) -> dict:
             "not_run": sorted(node for node in baseline if node not in ran and node not in failing)}
 
 
+def shared_error_groups(report: dict) -> list[dict]:
+    """Failures that end in the same ``E`` line, largest group first; groups of one are left out.
+
+    This is a literal grouping, not a classification: the signature is the last ``E`` line of each
+    report with whitespace collapsed and memory addresses masked. Many failures with one signature
+    usually share one cause, and naming that cause stays the reader's job.
+    """
+    groups: dict[str, list[str]] = {}
+    for item in report["failures"]:
+        last = next((line for line in reversed(item["lines"]) if line.startswith("E ")), None)
+        if last is None:
+            continue
+        signature = re.sub(r"0x[0-9a-fA-F]+", "0x…", " ".join(last[1:].split()))
+        groups.setdefault(signature, []).append(item["node"])
+    return [{"signature": signature, "count": len(nodes), "nodes": sorted(nodes)}
+            for signature, nodes in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0])) if len(nodes) > 1]
+
+
 def render_report(report: dict, *, log: Path, timings: Path, diff: dict | None, baseline: Path | None) -> str:
     counts = ", ".join(f"{report['counts'].get(key, 0)} {key}" for key in ("passed", "failed", "error", "skipped", "xfailed", "xpassed")
                        if report["counts"].get(key)) or "no summary line found"
@@ -248,6 +266,14 @@ def render_report(report: dict, *, log: Path, timings: Path, diff: dict | None, 
     for item in report["failures"]:
         lines.append(f"  {item['status']} {item['node']}")
         lines.extend(f"    {line}" for line in item["lines"])
+    groups = shared_error_groups(report)
+    if groups:
+        lines.append(f"shared error text: {len(groups)} group(s)")
+        for group in groups:
+            lines.append(f"  {group['count']} failures end in: {group['signature']}")
+            lines.extend(f"    {node}" for node in group["nodes"][:5])
+            if group["count"] > 5:
+                lines.append(f"    ... and {group['count'] - 5} more")
     if diff is not None:
         lines.append(f"baseline: {baseline} — {len(diff['new'])} new, {len(diff['fixed'])} fixed, "
                      f"{len(diff['unchanged'])} unchanged, {len(diff['not_run'])} not run")

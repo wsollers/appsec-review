@@ -530,6 +530,10 @@ Every run also writes pytest's junit file (`test/tmp/tests-<suite>-<timestamp>.j
   base temp);
 - `slower than 10s`: every test over the unit limit with its duration;
 - `failures`: every `FAILED`/`ERROR` node id verbatim, each followed by the `E ` lines of its report;
+- `shared error text`: failures whose last `E ` line is the same (whitespace collapsed, memory
+  addresses masked), with the count and the first five node ids; groups of one are not listed. It is
+  a literal grouping, not a diagnosis: many failures with one signature usually share one cause, and
+  naming it stays with the reader;
 - with `--baseline FILE`: the differential against the node ids in `FILE` (one per line; a `FAILED`/
   `ERROR` prefix, a ` - message` tail and a `| reason` are ignored) — `new` (failing, not in the
   baseline), `fixed` (in the baseline, ran, passed), `unchanged` and `not run`. The verdict is then
