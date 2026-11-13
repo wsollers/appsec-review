@@ -19,7 +19,9 @@ import pytest
 from appsec_review.jobs.job_artifact_indexing import job as job_module
 from appsec_review.jobs.job_artifact_indexing.job import _MAX_LINK_OBSERVATIONS, _artifact_relations, _ReceiptContext, _relationships
 from appsec_review.retrieval import IndexBuilder, RelationKind
-from tests.unit.job_artifact_indexing.support import SNAPSHOT, UNIT, loaded_output, unit_context, validated_receipt
+from tests.unit.job_artifact_indexing.support import (
+    SNAPSHOT, UNIT, assert_published_gaps, loaded_output, unit_context, validated_receipt,
+)
 
 
 def _unit(run_root: Path, receipt: dict):
@@ -60,7 +62,7 @@ def test_receipt_rows_and_captured_parents_attribute_an_object_to_its_compile_ac
     assert receipt_row.payload == {"mapping": "fixture"}
 
 
-def test_captured_invocation_parent_attributes_outputs_and_unproduced_artifacts_stay_ambiguous() -> None:
+def test_captured_invocation_parent_attributes_outputs_and_unproduced_artifacts_stay_ambiguous(tmp_path: Path) -> None:
     receipt = validated_receipt(1)
     obj, executable = receipt["validated_artifacts"]
     receipt["relationships"] = []
@@ -77,9 +79,11 @@ def test_captured_invocation_parent_attributes_outputs_and_unproduced_artifacts_
         (executable["canonical_identity"], context.action_identity(command).value, False, 0.25, ambiguity)
         for command in ("compile", "link")])
     assert _artifact_relations(context, executable).gaps == ["build/app: producing action mapping is ambiguous"]
+    assert_published_gaps(tmp_path, "index.relationships", _artifact_relations(context, executable).gaps,
+                          ["build/app: producing action mapping is ambiguous"])
 
 
-def test_an_unknown_parent_falls_back_to_a_unique_argv_match_and_heuristic_mappings_stay_inexact() -> None:
+def test_an_unknown_parent_falls_back_to_a_unique_argv_match_and_heuristic_mappings_stay_inexact(tmp_path: Path) -> None:
     receipt = validated_receipt(1)
     receipt["relationships"] = []
     obj, executable = receipt["validated_artifacts"]
@@ -96,17 +100,21 @@ def test_an_unknown_parent_falls_back_to_a_unique_argv_match_and_heuristic_mappi
     # no parent and no argv match: the executable fans out to every command
     assert len(_relations(context, executable, RelationKind.GENERATED_FROM)) == 2
     assert _artifact_relations(context, executable).gaps == ["build/app: producing action mapping is ambiguous"]
+    assert_published_gaps(tmp_path, "index.relationships", _artifact_relations(context, executable).gaps,
+                          ["build/app: producing action mapping is ambiguous"])
 
 
-def test_a_receipt_without_commands_yields_no_relations_and_an_unavailable_gap() -> None:
+def test_a_receipt_without_commands_yields_no_relations_and_an_unavailable_gap(tmp_path: Path) -> None:
     receipt = validated_receipt(1)
     receipt["commands"] = []
     context = _ReceiptContext.build(receipt, SNAPSHOT)
     rows = _artifact_relations(context, receipt["validated_artifacts"][0])
     assert rows.relations == [] and rows.gaps == ["build/obj/unit-00000.o: producing action receipt unavailable"]
+    assert_published_gaps(tmp_path, "index.relationships", rows.gaps,
+                          ["build/obj/unit-00000.o: producing action receipt unavailable"])
 
 
-def test_relationship_rows_naming_unknown_commands_are_ignored() -> None:
+def test_relationship_rows_naming_unknown_commands_are_ignored(tmp_path: Path) -> None:
     receipt = validated_receipt(1)
     receipt["relationships"] = [{"artifact_sha256": receipt["validated_artifacts"][0]["sha256"], "command_id": "ghost",
                                  "confidence": 0.9}]
@@ -114,6 +122,8 @@ def test_relationship_rows_naming_unknown_commands_are_ignored() -> None:
     context = _ReceiptContext.build(receipt, SNAPSHOT)
     rows = _artifact_relations(context, receipt["validated_artifacts"][0])
     assert all(relation.confidence == 0.25 for relation in rows.relations) and len(rows.relations) == 2
+    assert_published_gaps(tmp_path, "index.relationships", rows.gaps,
+                          ["build/obj/unit-00000.o: producing action mapping is ambiguous"])
 
 
 # --- link provenance (pure) -----------------------------------------------------------------------------
@@ -136,7 +146,8 @@ def _linked(observation_count: int, *, family: str = "native") -> tuple[dict, di
 
 @pytest.mark.parametrize("family, observation_count", sorted((("rust", 3), ("native", 3), ("native", 501))),
                          ids=["native-3", "native-501", "rust-3"])
-def test_repeated_link_observations_produce_one_relation_with_bounded_provenance(family: str, observation_count: int) -> None:
+def test_repeated_link_observations_produce_one_relation_with_bounded_provenance(
+        tmp_path: Path, family: str, observation_count: int) -> None:
     receipt, source, output, tools = _linked(observation_count, family=family)
     context = _ReceiptContext.build(receipt, SNAPSHOT)
     rows = _artifact_relations(context, output)
@@ -155,9 +166,13 @@ def test_repeated_link_observations_produce_one_relation_with_bounded_provenance
     assert (relation_gap in rows.gaps) == (observation_count > 500)
     assert "build/app: producing action mapping is ambiguous" in rows.gaps, "no invocation named a producing action"
     assert _MAX_LINK_OBSERVATIONS == 500
+    assert_published_gaps(tmp_path, "index.relationships", rows.gaps, [
+        *([relation_gap] if observation_count > 500 else []),
+        "build/app: producing action mapping is ambiguous",
+    ])
 
 
-def test_link_inputs_resolve_by_hash_when_the_path_is_unknown_and_heuristic_links_stay_distinct() -> None:
+def test_link_inputs_resolve_by_hash_when_the_path_is_unknown_and_heuristic_links_stay_distinct(tmp_path: Path) -> None:
     receipt, source, output, _ = _linked(1)
     receipt["tool_invocations"][0]["inputs"] = [{"workspace_path": "elsewhere/renamed.o", "sha256": source["sha256"],
                                                  "mapping_confidence": 0.6}]
@@ -176,13 +191,37 @@ def test_link_inputs_resolve_by_hash_when_the_path_is_unknown_and_heuristic_link
     assert links[0].payload["observations"] == [{"invocation_index": 0, "input_index": 0, "tool": "cc", "confidence": 0.6,
                                                  "origin": "execution-capture:command-001:event-0"}]
     assert links[1].payload["observations"][0]["input_index"] == 1, "the unknown input before it is skipped, not counted"
+    assert_published_gaps(tmp_path, "index.relationships", _artifact_relations(context, output).gaps,
+                          ["build/app: producing action mapping is ambiguous"])
 
 
-def test_non_linker_invocations_never_produce_link_relations() -> None:
+def test_non_linker_invocations_never_produce_link_relations(tmp_path: Path) -> None:
     receipt, source, output, _ = _linked(1)
     receipt["tool_invocations"][0]["tool_kind"] = "compiler"
     context = _ReceiptContext.build(receipt, SNAPSHOT)
     assert [relation for relation in _artifact_relations(context, output).relations if relation.kind is RelationKind.LINKS_INTO] == []
+    assert_published_gaps(tmp_path, "index.relationships", _artifact_relations(context, output).gaps,
+                          ["build/app: producing action mapping is ambiguous"])
+
+
+@pytest.mark.parametrize("confidences", [(0.4, 0.8), (0.8, 0.4)], ids=["stronger-last", "stronger-first"])
+def test_link_deduplication_keeps_the_strongest_observation_and_ignores_non_mapping_inputs(confidences) -> None:
+    receipt, source, output, _ = _linked(2)
+    for invocation, confidence in zip(receipt["tool_invocations"], confidences):
+        invocation["parent_command_id"] = "link"
+        invocation["inputs"] = ["invalid", {"workspace_path": source["workspace_path"],
+                                           "mapping_confidence": confidence}]
+    context = _ReceiptContext.build(receipt, SNAPSHOT)
+    rows = _artifact_relations(context, output)
+    assert rows.gaps == []
+    link, = [relation for relation in rows.relations if relation.kind is RelationKind.LINKS_INTO]
+    assert (link.source_id, link.target_id, link.exact, link.confidence) == (
+        source["canonical_identity"], output["canonical_identity"], False, 0.8,
+    )
+    assert link.ambiguity == "link input mapping was heuristic"
+    assert link.payload["observation_count"] == 2
+    assert [item["confidence"] for item in link.payload["observations"]] == list(confidences)
+    assert [item["input_index"] for item in link.payload["observations"]] == [1, 1]
 
 
 # --- batching through the unit (from the pre-walk throughput suite) ------------------------------------
@@ -274,6 +313,10 @@ def test_written_relation_rows_and_gaps_match_the_pure_builder(tmp_path: Path) -
     (index,) = result["indexes"]
     assert result["gaps"] == list(index["gaps"]) == ["build/app: producing action mapping is ambiguous",
                                                      "build/obj/unit-00000.o: producing action mapping is ambiguous"]
+    assert_published_gaps(tmp_path, "index.relationships", result["gaps"], [
+        "build/app: producing action mapping is ambiguous",
+        "build/obj/unit-00000.o: producing action mapping is ambiguous",
+    ])
     assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
     with sqlite3.connect(tmp_path / index["relative_path"]) as database:
         rows = database.execute("SELECT payload_json FROM relations WHERE kind='LINKS_INTO' AND target_id=?",

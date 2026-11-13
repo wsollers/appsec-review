@@ -3,6 +3,7 @@ batching and the shard fingerprint, all pure functions of the receipt data they 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,11 +13,12 @@ from appsec_review.jobs.job_artifact_indexing import (
 from appsec_review.jobs.job_artifact_indexing import job as job_module
 from appsec_review.jobs.job_artifact_indexing.job import (
     MAX_ARTIFACTS_PER_SHARD, MAX_ROWS_PER_SHARD, SHARD_LAYOUT, ArtifactIndexIntegrityError, _ArtifactRows,
-    _artifact_fields, _batch_shard_id, _manifest_entries, _member_path, _pack, _ReceiptContext, _shard_layout,
+    _artifact, _artifact_fields, _batch_shard_id, _fingerprint_parts, _manifest_entries, _member_path, _pack,
+    _ReceiptContext, _shard_layout, _sorted_artifacts,
     canonical_target_artifact_identity,
 )
 from appsec_review.retrieval import EntityKind, LogicalIdentity
-from tests.unit.job_artifact_indexing.support import SNAPSHOT, validated_artifact, validated_receipt
+from tests.unit.job_artifact_indexing.support import SNAPSHOT, unit_context, validated_artifact, validated_receipt
 
 FAMILIES = sorted({
     "object": EntityKind.OBJECT_FILE, "static-library": EntityKind.LIBRARY, "shared-library": EntityKind.LIBRARY,
@@ -128,6 +130,8 @@ def test_archive_member_identity_rejects_non_canonical_paths_and_weak_fields(mem
 def test_member_path_canonicalizes_separators() -> None:
     assert _member_path("pkg\\sub\\mod.py") == "pkg/sub/mod.py"
     assert _member_path("pkg/mod.py") == "pkg/mod.py"
+    with pytest.raises(ArtifactIndexIntegrityError, match="archive member path is invalid"):
+        _member_path(None)
 
 
 # --- shard ids, layout and packing -----------------------------------------------------------------
@@ -241,3 +245,69 @@ def test_receipt_context_indexes_actions_invocations_rows_and_artifacts_once() -
     assert action.kind is EntityKind.BUILD_ACTION and context.action_identity("compile") is action
     assert action == LogicalIdentity.derive(EntityKind.BUILD_ACTION, SNAPSHOT, {"build_unit_id": receipt["build_unit_id"],
                                                                                  "command_id": "compile"})
+
+
+def test_receipt_context_filters_unusable_rows_and_deduplicates_output_keys() -> None:
+    receipt = validated_receipt(1)
+    output = receipt["tool_invocations"][0]["outputs"][0]
+    invocation = {"outputs": [output, dict(output), "not-a-row", {"workspace_path": 3, "sha256": "a" * 64}]}
+    receipt["commands"] += ["not-a-command", {"command_id": "no-argv"}, {"argv_sha256": "z" * 64}]
+    receipt["tool_invocations"] = ["not-an-invocation", {"outputs": "not-a-list"}, invocation]
+    receipt["relationships"] += ["not-a-relation", {"artifact_sha256": None}]
+    context = _ReceiptContext.build(receipt, SNAPSHOT)
+    assert set(context.actions) == {"compile", "link", "no-argv"}
+    assert context.actions_by_argv == {"1" * 64: ["compile"], "2" * 64: ["link"]}
+    assert context.invocations_by_output == {(output["workspace_path"], output["sha256"]): [(2, invocation)]}
+    assert context.relationship_rows_by_sha == {
+        receipt["validated_artifacts"][0]["sha256"]: [receipt["relationships"][0]],
+    }
+
+
+def test_fingerprint_parts_pin_actions_invocations_dependencies_and_toolchain() -> None:
+    receipt = {
+        "commands": [{"command_id": "z"}, {"command_id": "a", "argv_sha256": "a" * 64}, None],
+        "tool_invocations": [None, {"parent_command_id": "a", "outputs": [None, {
+            "workspace_path": "out", "sha256": "b" * 64, "ignored": True,
+        }], "package_integrity": [{"integrity": "sha512-test"}]}],
+        "fingerprint": "receipt", "recipe_identity": "recipe", "probe_identity": "probe",
+        "upstream_handoff_sha256": "upstream", "upstream_build_fingerprints": {"unit": "build"},
+        "image": {"image_id": "image"}, "executor_identity": "executor", "capture_identity": "capture",
+        "source_family": "wasm", "producer": "fixture",
+    }
+    assert _fingerprint_parts(receipt) == {
+        "producing_actions": [
+            {"command_id": "a", "argv_sha256": "a" * 64, "image_id": None, "role": None, "tool_kind": None},
+            {"command_id": "z", "argv_sha256": None, "image_id": None, "role": None, "tool_kind": None},
+        ],
+        "producing_invocations": [{
+            "parent_command_id": "a", "argv_sha256": None, "tool_kind": None, "mapping_confidence": None,
+            "outputs": [{"workspace_path": "out", "sha256": "b" * 64}],
+            "package_integrity": [{"integrity": "sha512-test"}],
+        }],
+        "dependency_identities": {
+            "receipt": "receipt", "recipe": "recipe", "probe": "probe",
+            "upstream_handoff": "upstream", "upstream_builds": {"unit": "build"},
+        },
+        "image_toolchain": {
+            "image": {"image_id": "image"}, "executor": "executor", "capture": "capture",
+            "family": "wasm", "producer": "fixture",
+        },
+    }
+
+
+def test_sorted_artifacts_break_equal_path_ties_by_hash_without_mutating_the_input() -> None:
+    rows = [{"workspace_path": "z", "sha256": "a"}, {"workspace_path": "a", "sha256": "b"},
+            {"workspace_path": "a", "sha256": "a"}]
+    assert _sorted_artifacts(iter(rows)) == [rows[2], rows[1], rows[0]]
+    assert [row["sha256"] for row in rows] == ["a", "b", "a"]
+
+
+def test_artifact_reference_binds_actual_bytes_size_and_run_relative_path(tmp_path: Path) -> None:
+    import hashlib
+
+    path = tmp_path / "data" / "summary.json"
+    path.parent.mkdir()
+    path.write_bytes(b'{"n":1}\n')
+    assert _artifact(unit_context(tmp_path, "acceptance.publish_handoff"), path) == {
+        "path": "data/summary.json", "sha256": hashlib.sha256(b'{"n":1}\n').hexdigest(), "size_bytes": 8,
+    }

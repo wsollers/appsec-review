@@ -2195,7 +2195,9 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   branches individually explained in the host-local report). The unit manager resumed in
   registry order; job_target_acquisition is blocked on its published `/2` versus declared `/1`
   schema mismatch, and job_target_catalog is blocked on the typed-gap migration in T-055.
-  Next: job_change_context_analysis.
+  Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
+  655/655 job-package lines and 258/258 branches covered, no integration changes.
+  Next: job_debug_symbol_indexing.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,

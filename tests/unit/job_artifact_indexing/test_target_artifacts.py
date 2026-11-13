@@ -20,7 +20,7 @@ from appsec_review.jobs.job_artifact_indexing.job import (
 from appsec_review.jobs.job_evidence_collection import job as evidence
 from appsec_review.runtime import consume
 from appsec_review.storage import shared
-from tests.unit.job_artifact_indexing.support import SNAPSHOT, unit_context
+from tests.unit.job_artifact_indexing.support import SNAPSHOT, assert_published_gaps, unit_context
 
 HANDOFF = "b" * 64
 
@@ -71,20 +71,29 @@ def test_valid_intake_is_returned_with_canonical_identity_producer_and_a_deliver
     assert artifact["producer"] == {"job_id": "job_target_catalog", "handoff_sha256": HANDOFF,
                                     "source_fingerprint": SNAPSHOT}
     assert gaps == ["vendor/blob.bin: inventory_bound_reached", "module.wasm: target artifact delivery status is unknown"]
+    assert_published_gaps(tmp_path, "acceptance.publish_handoff", gaps, [
+        "vendor/blob.bin: inventory_bound_reached", "module.wasm: target artifact delivery status is unknown",
+    ])
 
 
 def test_without_an_accepted_catalog_the_intake_is_a_named_gap_and_nothing_is_read(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(consume, "has_accepted_upstream", lambda root, job_id: False)
     monkeypatch.setattr(evidence, "load_target_catalog",
                         lambda *args, **kwargs: pytest.fail("catalog read without an accepted upstream"))
-    assert _target_artifacts(unit_context(tmp_path, "load.accepted_builds")) == (
+    result = _target_artifacts(unit_context(tmp_path, "load.accepted_builds"))
+    assert result == (
         [], ["accepted target artifact intake is unavailable"], None)
+    assert_published_gaps(tmp_path, "acceptance.publish_handoff", result[1],
+                          ["accepted target artifact intake is unavailable"])
 
 
 def test_a_legacy_catalog_without_an_inventory_is_a_gap_bound_to_its_handoff(tmp_path: Path, accepted) -> None:
     accepted.value = _catalog(available=False)
-    assert _target_artifacts(unit_context(tmp_path, "load.accepted_builds")) == (
+    result = _target_artifacts(unit_context(tmp_path, "load.accepted_builds"))
+    assert result == (
         [], ["legacy target catalog has no target artifact inventory"], HANDOFF)
+    assert_published_gaps(tmp_path, "acceptance.publish_handoff", result[1],
+                          ["legacy target catalog has no target artifact inventory"])
 
 
 def test_a_catalog_of_another_target_is_refused_before_any_entry_is_read(tmp_path: Path, accepted) -> None:

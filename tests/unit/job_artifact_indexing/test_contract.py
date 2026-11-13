@@ -10,25 +10,32 @@ shards land inside their declared claims with the declared schema ids.
 """
 from __future__ import annotations
 
-from fnmatch import fnmatch
+from dataclasses import asdict
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from appsec_review.jobs.job_artifact_indexing.datasets import CONSUMES, CONTRACT, DATASETS
+from appsec_review.jobs.job_artifact_indexing import job as indexing
 from appsec_review.jobs.job_artifact_indexing.job import (
     _TOPOLOGY, SCHEMA, _batch_shard_id, _catalogs, _members, _relationships, build_job,
 )
 from appsec_review.jobs.job_language_build.datasets import DATASETS as LANGUAGE_DATASETS
 from appsec_review.jobs.job_target_catalog.datasets import DATASETS as CATALOG_DATASETS
+from appsec_review.indexing.inventory import compile_glob
 from appsec_review.retrieval import INDEX_SCHEMA, write_manifest
 from appsec_review.runtime.contracts import (
-    Availability, DispatchClass, EvidenceAuthority, InputChannel, MissingPolicy, TargetAccess,
+    Availability, CoveragePolicy, DispatchClass, EvidenceAuthority, InputChannel, MissingPolicy, TargetAccess,
 )
 from appsec_review.runtime.datasets import METADATA_ROUTE
+from appsec_review.runtime import consume
+from appsec_review.storage import file_sha256
+from appsec_review.storage.shared import put_file
 from tests.unit.job_artifact_indexing.support import (
-    RUN_ID, SNAPSHOT, loaded_output, unit_context, validated_artifact, validated_receipt,
+    RUN_ID, SNAPSHOT, assert_published_gaps, loaded_output, recorded_receipt, unit_context,
+    validated_artifact, validated_receipt,
 )
 
 HANDOFF = "appsec-review/job-handoff/2"
@@ -59,7 +66,8 @@ def _declared() -> dict[str, object]:
 
 
 def _claimed(path: str) -> list[str]:
-    return [item.output_kind for item in DATASETS if any(fnmatch(path, pattern) for pattern in item.artifacts)]
+    return [item.output_kind for item in DATASETS
+            if any(compile_glob(pattern).fullmatch(path) for pattern in item.artifacts)]
 
 
 def _shard_claims(shard_id: str) -> list[str]:
@@ -75,6 +83,10 @@ def test_inputs_are_pinned_with_their_producer_dataset_schema_availability_and_m
     for item in CONTRACT.inputs:
         assert item.channel is InputChannel.HANDOFF, item.output_kind
         assert item.authority is EvidenceAuthority.PRODUCER_EVIDENCE, item.output_kind
+        assert item.coverage is CoveragePolicy.ALLOW_PARTIAL, item.output_kind
+        assert set(asdict(item)) == {
+            "producer", "output_kind", "schema", "availability", "missing", "channel", "authority", "coverage",
+        }
     required = [(item.producer, item.output_kind) for item in CONTRACT.inputs
                 if item.availability is Availability.REQUIRED or item.missing is MissingPolicy.REJECT]
     assert required == [("job_language_build", "handoff"), ("job_language_build", "language_build_receipts")]
@@ -131,6 +143,30 @@ def test_outputs_are_three_indexed_artifact_families_and_one_artifact_only_summa
     assert summary.artifacts == ("data/jobs/job_artifact_indexing/attempts/*/artifacts/artifact-indexing/*.json",
                                  "data/indices/artifacts/*.lock")
     assert "already published by the artifacts index" in summary.reason
+    common = {
+        "family": "artifacts", "sensitivity": "internal", "required": False,
+        "store": "retrieval", "authority": EvidenceAuthority.PRODUCER_EVIDENCE,
+        "shard_suffixes": (),
+    }
+    indexed = {**common, "step": "index", "schema": INDEX, "disposition": "indexed",
+               "indexes": ("artifacts",), "artifacts": (), "reason": None}
+    assert [asdict(item) for item in DATASETS] == [
+        {**indexed, "output_kind": "artifact_catalog", "shard_prefixes": ("catalog-",),
+         "description": "Produced artifacts and target-intake artifacts with exact hashes and distinct provenance.",
+         "query_route": "query_artifacts; query_precomputed query_set=artifact_inventory"},
+        {**indexed, "output_kind": "archive_members", "shard_prefixes": ("members-",),
+         "description": "Members of produced package archives.",
+         "query_route": "query_artifacts kind=archive_member"},
+        {**indexed, "output_kind": "artifact_relationships", "shard_prefixes": ("relations-",),
+         "description": "Producing-action and link relationships for produced artifacts.",
+         "query_route": "trace relations=GENERATED_FROM,LINKS_INTO; query_artifacts producing_build_action"},
+        {**common, "output_kind": "artifact_index_summary", "step": "acceptance", "schema": SCHEMA,
+         "disposition": "artifact_only", "description": "Accepted artifact-index summary and shard locks.",
+         "indexes": (), "shard_prefixes": (), "query_route": METADATA_ROUTE,
+         "artifacts": ("data/jobs/job_artifact_indexing/attempts/*/artifacts/artifact-indexing/*.json",
+                       "data/indices/artifacts/*.lock"),
+         "reason": "counts and shard identities already published by the artifacts index"},
+    ]
     steps = {unit.unit_id.split(".")[0] for unit in build_job().units}
     assert {item.step for item in DATASETS} == {"index", "acceptance"} < steps == set(_TOPOLOGY)
 
@@ -141,6 +177,8 @@ def test_summary_and_shard_lock_paths_are_claimed_and_the_attempt_tree_and_shard
     assert _claimed(f"data/indices/artifacts/{'a' * 64}.sqlite.lock") == ["artifact_index_summary"]
     assert _claimed(f"data/indices/artifacts/{'a' * 64}.sqlite") == [], "shards are claimed by index name and prefix"
     assert _claimed("data/jobs/job_artifact_indexing/attempts/attempt_0001/result.json") == []
+    assert _claimed("data/jobs/job_artifact_indexing/attempts/attempt_0001/artifacts/"
+                    "artifact-indexing/nested/accepted-index.json") == []
     assert _claimed("data/indices/manifests/artifact-indexing-attempt_0001.json") == [], \
         "the merged manifest is handed off by reference, not claimed as a dataset"
     for shard_id, kind in (("catalog-build-unit-1-object_file", "artifact_catalog"),
@@ -172,6 +210,41 @@ def test_every_shard_the_index_units_build_is_claimed_by_exactly_one_declared_pr
 
 # --- the files the handlers read and write ---------------------------------------------------------
 
+def test_load_reads_the_admitted_manifest_workspace_manifest_and_workspace_or_retained_payloads(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / RUN_ID
+    receipt = recorded_receipt(root)
+    retained = receipt["artifacts"][1]
+    retained.update(put_file(root, root / retained["path"]))
+    manifest_path = root / "data/indices/manifests/language-build.json"
+    write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=tmp_path, indexes=[])
+    reference = {"path": "data/indices/manifests/language-build.json", "sha256": file_sha256(manifest_path)}
+    handoff = {"outputs": {"acceptance.publish_handoff": {"index_manifest": reference}}, "artifacts": [reference]}
+    monkeypatch.setattr(consume, "accepted_upstream", lambda run, job: SimpleNamespace(handoff=handoff))
+    monkeypatch.setattr(indexing, "load_accepted_language_build", lambda run: {
+        "source_fingerprint": SNAPSHOT, "receipts": [receipt], "gaps": [], "language_build_handoff_sha256": "f" * 64,
+    })
+    monkeypatch.setattr(indexing, "_target_artifacts", lambda unit: ([], [], None))
+    reads = []
+    safe_file = indexing._safe_file
+
+    def tracked(run, identity, label):
+        reads.append((run, identity["path"], label))
+        return safe_file(run, identity, label)
+
+    monkeypatch.setattr(indexing, "_safe_file", tracked)
+    result = build_job().units[0].handler(unit_context(root, "load.accepted_builds"))
+    assert reads == [
+        (root, "data/indices/manifests/language-build.json", "language-build index manifest"),
+        (root, "data/build/native/build-unit-00000000000000000001/workspace-manifest.json", "workspace manifest"),
+        (root, "data/build/native/build-unit-00000000000000000001/workspace/build/main.o", "produced artifact"),
+        (root, f"data/shared/objects/{retained['sha256']}", "produced artifact"),
+    ]
+    assert result["upstream_manifest"] == reference and result["producer_gaps"] == []
+    assert result["receipt_count"] == 1 and len(result["receipts"][0]["validated_artifacts"]) == 2
+    assert not (root / "data/jobs/job_artifact_indexing").exists(), "load does not write job artifacts"
+
+
 def test_publish_writes_the_summary_inside_its_glob_with_the_declared_schema_and_a_merged_manifest(
         tmp_path: Path) -> None:
     run_root = tmp_path / RUN_ID
@@ -179,7 +252,6 @@ def test_publish_writes_the_summary_inside_its_glob_with_the_declared_schema_and
     target.mkdir()
     prior = run_root / "data/indices/manifests/language-build.json"
     prior_document = write_manifest(prior, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target, indexes=[])
-    from appsec_review.storage import file_sha256
     loaded = loaded_output([], producer_gaps=["accepted language-build handoff contained no receipts"],
                            upstream_manifest={"path": "data/indices/manifests/language-build.json",
                                               "sha256": file_sha256(prior)}, catalog_handoff="c" * 64)
@@ -194,6 +266,9 @@ def test_publish_writes_the_summary_inside_its_glob_with_the_declared_schema_and
     assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert result["gaps"] == ["accepted language-build handoff contained no receipts",
                               "build/app: producing action mapping is ambiguous"]
+    assert_published_gaps(tmp_path, unit.unit_id, result["gaps"], [
+        "accepted language-build handoff contained no receipts", "build/app: producing action mapping is ambiguous",
+    ])
     summary_path = result["artifact"]["path"]
     assert summary_path == "data/jobs/job_artifact_indexing/attempts/attempt_0001/artifacts/artifact-indexing/accepted-index.json"
     assert _claimed(summary_path) == ["artifact_index_summary"]
@@ -207,6 +282,7 @@ def test_publish_writes_the_summary_inside_its_glob_with_the_declared_schema_and
     manifest_path = result["index_manifest"]["path"]
     assert manifest_path == "data/indices/manifests/artifact-indexing-attempt_0001.json"
     manifest = json.loads((run_root / manifest_path).read_bytes())
+    assert manifest["schema"] == "appsec-review/index-manifest/1"
     assert manifest["upstream_manifests"] == [loaded["upstream_manifest"]]
     assert manifest["indexes"] == prior_document["indexes"] == []
     assert manifest["target_snapshot"] == SNAPSHOT and manifest["run_id"] == RUN_ID

@@ -4,6 +4,7 @@
     "job_artifact_indexing": {
       "unit": [
         "tests/unit/job_artifact_indexing/test_contract.py",
+        "tests/unit/job_artifact_indexing/test_handler_wiring.py",
         "tests/unit/job_artifact_indexing/test_job_graph.py",
         "tests/unit/job_artifact_indexing/test_identities.py",
         "tests/unit/job_artifact_indexing/test_receipt_validation.py",

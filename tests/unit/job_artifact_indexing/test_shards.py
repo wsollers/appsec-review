@@ -5,16 +5,22 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import sqlite3
 import time
+from types import SimpleNamespace
 
 import pytest
 
+from appsec_review.jobs.job_artifact_indexing import job as job_module
 from appsec_review.jobs.job_artifact_indexing.job import (
     ArtifactIndexIntegrityError, _acquire_shard_lock, _finish_shard, _index_identity, _shard_path, _verify_shard,
+    _member_rows, _ReceiptContext, _write_batches,
 )
 from appsec_review.retrieval import INDEX_SCHEMA, IndexBuilder
 from appsec_review.storage import FileLock, LockUnavailable, file_sha256
-from tests.unit.job_artifact_indexing.support import SNAPSHOT, unit_context
+from tests.unit.job_artifact_indexing.support import (
+    SETTINGS, SNAPSHOT, assert_published_gaps, unit_context, validated_artifact, validated_receipt,
+)
 
 
 def _builder(path: Path, fingerprint: str = "f" * 64, shard_id: str = "catalog-unit-object_file") -> IndexBuilder:
@@ -86,3 +92,83 @@ def test_index_identity_records_the_shard_its_producer_and_deduplicated_gaps(tmp
                         "producer": {"job": "job_artifact_indexing", "unit": "index.members", "family": "members",
                                      "build_unit_id": "unit", "batch": 0},
                         "gaps": ("a: gap", "b: gap"), "shard_id": "members-unit-0000"}
+    assert_published_gaps(tmp_path, unit.unit_id, identity["gaps"], ["a: gap", "b: gap"])
+
+
+def test_verify_shard_rejects_integrity_check_failure_even_with_matching_metadata(tmp_path: Path) -> None:
+    path = tmp_path / "shard.sqlite"
+    _builder(path).build()
+    with sqlite3.connect(path) as database:
+        database.execute("PRAGMA journal_mode=DELETE")
+        database.execute("CREATE TABLE broken (value INTEGER)")
+        database.execute("CREATE INDEX broken_lookup ON broken(value)")
+        database.execute("INSERT INTO broken VALUES (3)")
+        database.execute("PRAGMA writable_schema=ON")
+        database.execute("UPDATE sqlite_master SET sql='CREATE INDEX broken_lookup ON broken(value+1)' "
+                         "WHERE name='broken_lookup'")
+    database.close()
+    with pytest.raises(ArtifactIndexIntegrityError, match="completed artifact shard is corrupt"):
+        _verify_shard(path, name="artifacts", fingerprint="f" * 64,
+                      shard_id="catalog-unit-object_file", target_snapshot=SNAPSHOT)
+
+
+@pytest.mark.parametrize("expired", [False, True], ids=["retry", "deadline"])
+def test_finish_shard_retries_builder_lock_contention_and_releases_its_own_lock(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, expired: bool) -> None:
+    path = tmp_path / "shard.sqlite"
+    calls = []
+
+    def build():
+        calls.append("build")
+        if calls.count("build") == 1:
+            raise LockUnavailable("inner publication lock")
+        return "d" * 64
+
+    clock = iter([0.0, 30.0 if expired else 1.0])
+    monkeypatch.setattr(job_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(job_module.time, "sleep", lambda seconds: calls.append(seconds))
+    builder = SimpleNamespace(build=build)
+    if expired:
+        with pytest.raises(LockUnavailable, match="inner publication lock"):
+            _finish_shard(builder, path)
+        assert calls == ["build"]
+    else:
+        assert _finish_shard(builder, path) == ("d" * 64, False)
+        assert calls == ["build", 0.01, "build"]
+    with FileLock(path.with_suffix(".sqlite.lock")):
+        assert not path.exists()
+
+
+def test_write_batches_persists_entities_relations_coverage_and_reuse_counts(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(job_module, "MAX_ARTIFACTS_PER_SHARD", 1)
+    receipt = validated_receipt(0)
+    receipt["validated_artifacts"] = [validated_artifact(f"{name}.whl", "wheel", name) for name in ("a", "b")]
+    context = _ReceiptContext.build(receipt, SNAPSHOT)
+    unit = unit_context(tmp_path, "index.members")
+    rows = [
+        _member_rows(unit, receipt["validated_artifacts"][0], [{"member": "a.py", "size_bytes": 1}]),
+        _member_rows(unit, receipt["validated_artifacts"][1], []),
+    ]
+    kwargs = {"prefix": "members", "family": "members",
+              "extractor_identity": SETTINGS["member_extractor_identity"],
+              "parser_identity": SETTINGS["member_parser_identity"]}
+    indexes, reused = _write_batches(unit, context, rows=iter(rows), **kwargs)
+    assert reused == 0 and len(indexes) == 2
+    for ordinal, index in enumerate(indexes):
+        assert index["producer"] == {
+            "job": "job_artifact_indexing", "unit": "index.members", "family": "members",
+            "build_unit_id": "build-unit-scale", "batch": ordinal, "batch_count": 2,
+        }
+        with sqlite3.connect(tmp_path / index["relative_path"]) as database:
+            assert database.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1 - ordinal
+            assert database.execute("SELECT COUNT(*) FROM relations").fetchone()[0] == 1 - ordinal
+            assert database.execute("SELECT area, status, gap FROM coverage").fetchall() == [
+                ("a.whl", "complete", None) if ordinal == 0 else
+                ("b.whl", "partial", "b.whl: archive member manifest unavailable"),
+            ]
+    assert indexes[0]["gaps"] == ()
+    assert_published_gaps(tmp_path, unit.unit_id, indexes[1]["gaps"], ["b.whl: archive member manifest unavailable"])
+    again, reused = _write_batches(unit, context, rows=iter(rows), **kwargs)
+    assert reused == 2 and again == indexes
+    assert _write_batches(unit, context, rows=iter(()), **kwargs) == ([], 0)

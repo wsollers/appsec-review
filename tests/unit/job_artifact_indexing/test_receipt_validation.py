@@ -20,7 +20,7 @@ from appsec_review.jobs.job_artifact_indexing.job import (
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.shared import OBJECTS, put_file
 from tests.unit.job_artifact_indexing.support import (
-    RUN_ID, SNAPSHOT, WORKSPACE_MANIFEST_SCHEMA, identity, recorded_receipt, rewrite_manifest,
+    RUN_ID, SNAPSHOT, WORKSPACE_MANIFEST_SCHEMA, assert_published_gaps, identity, recorded_receipt, rewrite_manifest,
 )
 
 
@@ -66,6 +66,10 @@ def test_non_successful_receipts_carry_their_gaps_scoped_by_unit_and_publish_no_
     assert [item["validated_artifacts"] for item in validated] == [[], []]
     assert gaps == ["build-unit-00000000000000000002: image preparation failed",
                     "build-unit-00000000000000000002: worker failure"]
+    assert_published_gaps(run_root, "acceptance.publish_handoff", gaps, [
+        "build-unit-00000000000000000002: image preparation failed",
+        "build-unit-00000000000000000002: worker failure",
+    ])
 
 
 def test_a_successful_receipt_with_no_artifacts_is_a_named_gap_and_gaps_are_deduplicated(run_root: Path) -> None:
@@ -75,6 +79,10 @@ def test_a_successful_receipt_with_no_artifacts_is_a_named_gap_and_gaps_are_dedu
     assert validated[0]["validated_artifacts"] == []
     assert gaps == ["build-unit-00000000000000000001: accepted successful build produced no artifact entries",
                     "build-unit-00000000000000000001: probe skipped"]
+    assert_published_gaps(run_root, "acceptance.publish_handoff", gaps, [
+        "build-unit-00000000000000000001: accepted successful build produced no artifact entries",
+        "build-unit-00000000000000000001: probe skipped",
+    ])
 
 
 def test_an_empty_receipt_list_validates_to_nothing(run_root: Path) -> None:
@@ -185,7 +193,7 @@ REJECTIONS = {
 def test_malformed_or_unbound_retained_receipts_are_rejected_by_name(run_root: Path, tmp_path: Path, mutation: str) -> None:
     receipts = [recorded_receipt(run_root)]
     _mutate(run_root, receipts, mutation, tmp_path)
-    with pytest.raises(ValueError, match=REJECTIONS[mutation]):
+    with pytest.raises(ArtifactIndexIntegrityError, match=REJECTIONS[mutation]):
         _validate_receipts(run_root, SNAPSHOT, receipts)
 
 
@@ -209,15 +217,15 @@ def _node(run_root: Path) -> dict:
 def test_node_artifact_validation_rejects_weakened_origin_mapping_or_workspace_identity(run_root: Path) -> None:
     receipt = _node(run_root)
     receipt["artifacts"][0]["artifact_origin"] = "untrusted-discovery"
-    with pytest.raises(ValueError, match="origin is invalid"):
+    with pytest.raises(ArtifactIndexIntegrityError, match="origin is invalid"):
         _validate_receipts(run_root, SNAPSHOT, [receipt])
     receipt["artifacts"][0]["artifact_origin"] = "accepted-input"
     receipt["artifacts"][0]["build_unit_id"] = "other-unit"
-    with pytest.raises(ValueError, match="build-unit identity changed"):
+    with pytest.raises(ArtifactIndexIntegrityError, match="build-unit identity changed"):
         _validate_receipts(run_root, SNAPSHOT, [receipt])
     receipt["artifacts"][0]["build_unit_id"] = receipt["build_unit_id"]
     receipt["artifacts"][0]["mapping_confidence"] = 0.9
-    with pytest.raises(ValueError, match="workspace mapping is not exact"):
+    with pytest.raises(ArtifactIndexIntegrityError, match="workspace mapping is not exact"):
         _validate_receipts(run_root, SNAPSHOT, [receipt])
     receipt["artifacts"][0]["mapping_confidence"] = 1.0
     validated, _ = _validate_receipts(run_root, SNAPSHOT, [receipt])
@@ -247,10 +255,14 @@ NODE_INTEGRITY = {
     "hash-differs": ({"workspace_path": "build/app", "sha256": "a" * 64, "integrity": "sha512-x"}, "integrity identity changed"),
     "sri-with-space": ({"workspace_path": "build/app", "integrity": "sha512 x"}, "integrity value is invalid"),
     "sri-empty": ({"workspace_path": "build/app", "integrity": ""}, "integrity value is invalid"),
+    "sri-long": ({"workspace_path": "build/app", "integrity": "s" * 1025}, "integrity value is invalid"),
+    "sri-number": ({"workspace_path": "build/app", "integrity": 1}, "integrity value is invalid"),
     "shasum-short": ({"workspace_path": "build/app", "shasum": "abc"}, "shasum is invalid"),
+    "shasum-number": ({"workspace_path": "build/app", "shasum": 1}, "shasum is invalid"),
     "nothing": ({"workspace_path": "build/app"}, "integrity value is unavailable"),
     "size-negative": ({"workspace_path": "build/app", "integrity": "sha512-x", "size": -1}, "integrity size is invalid"),
     "size-bool": ({"workspace_path": "build/app", "integrity": "sha512-x", "totalFiles": True}, "integrity size is invalid"),
+    "size-large": ({"workspace_path": "build/app", "integrity": "sha512-x", "size": 2**63}, "integrity size is invalid"),
 }
 
 
@@ -263,7 +275,7 @@ def test_node_package_integrity_rows_are_rejected_by_name(run_root: Path, case: 
     if isinstance(row, dict) and "sha256" not in row:
         row = {**row, "sha256": artifact["sha256"]}
     receipt["tool_invocations"] = [{"package_integrity": [row]}]
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ArtifactIndexIntegrityError, match=message):
         _validate_receipts(run_root, SNAPSHOT, [receipt])
 
 
@@ -272,7 +284,7 @@ def test_duplicate_node_package_integrity_paths_are_rejected(run_root: Path) -> 
     artifact = receipt["artifacts"][1]
     row = {"workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"], "integrity": "sha512-x"}
     receipt["tool_invocations"] = [{"package_integrity": [row, dict(row)]}]
-    with pytest.raises(ValueError, match="integrity identity changed"):
+    with pytest.raises(ArtifactIndexIntegrityError, match="integrity identity changed"):
         _validate_receipts(run_root, SNAPSHOT, [receipt])
 
 
@@ -283,6 +295,22 @@ def test_package_integrity_only_attaches_to_package_artifacts(run_root: Path) ->
         {"workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"], "integrity": "sha512-x"}]}]
     validated, _ = _validate_receipts(run_root, SNAPSHOT, [receipt])
     assert all("package_integrity" not in item for item in validated[0]["validated_artifacts"])
+
+
+def test_node_integrity_accepts_exact_bounds_and_ignores_non_mapping_invocations(run_root: Path) -> None:
+    receipt = _node(run_root)
+    artifact = receipt["artifacts"][1]
+    artifact["kind"] = "package"
+    receipt["tool_invocations"] = [None, {"package_integrity": [{
+        "workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"],
+        "integrity": "s" * 1024, "size": 0, "unpackedSize": 2**63 - 1, "totalFiles": 0,
+    }]}]
+    validated, gaps = _validate_receipts(run_root, SNAPSHOT, [receipt])
+    assert gaps == []
+    assert validated[0]["validated_artifacts"][1]["package_integrity"] == {
+        "workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"],
+        "integrity": "s" * 1024, "size": 0, "unpackedSize": 2**63 - 1, "totalFiles": 0,
+    }
 
 
 # --- the workspace manifest and the safe file reader --------------------------------------------------

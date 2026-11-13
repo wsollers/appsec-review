@@ -11,7 +11,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from appsec_review.jobs.job_artifact_indexing import canonical_artifact_identity
+from appsec_review.jobs.job_artifact_indexing import build_job, canonical_artifact_identity
+from appsec_review.interchange import GapCode
+from appsec_review.runtime.handoff import build_outcomes
 from appsec_review.storage import atomic_json, file_sha256
 
 SNAPSHOT = "snapshot-unit"
@@ -166,3 +168,36 @@ def loaded_output(receipts: list[dict[str, Any]], *, target_artifacts: list[dict
             "upstream_manifest": upstream_manifest or {"path": "data/indices/manifests/language-build.json",
                                                         "sha256": "0" * 64},
             "terminal_status": "COMPLETED_WITH_GAPS" if producer_gaps else "SUCCEEDED" if receipts else "NOT_APPLICABLE"}
+
+
+def assert_published_gaps(root: Path, unit_id: str, gaps: list[str] | tuple[str, ...],
+                          expected: list[str]) -> None:
+    """Exercise legacy normalization at the real, byte-verifying publication boundary.
+
+    The task receipt is the canned runner boundary, not a fabricated accepted handoff.
+    Legacy gaps have a unit scope, not an invented artifact/build-unit scope.
+    """
+    assert list(gaps) == expected
+    step, task = unit_id.split(".")
+    root = root / "gap-publication"
+    base = root / "data/jobs/job_artifact_indexing/attempts/attempt_0001/steps" / step / "tasks" / task
+    atomic_json(base / "result.json", {"gaps": list(gaps), "terminal_status": "COMPLETED_WITH_GAPS"})
+    atomic_json(base / "status.json", {
+        "status": "SUCCEEDED", "unit_id": unit_id, "step_id": step, "task_id": task,
+        "result_sha256": file_sha256(base / "result.json"),
+    })
+    outcomes = build_outcomes(
+        root, run_id=root.name, job_id="job_artifact_indexing", attempt_id="attempt_0001",
+        target_snapshot=SNAPSHOT, unit_ids=[unit_id], strict_gaps=build_job().strict_gaps,
+    )
+    assert outcomes["coverage"] == {
+        "disposition": "partial", "gap_count": len(set(expected)), "retry_required": False,
+    }
+    assert sorted(gap["reason"] for gap in outcomes["gaps"]) == sorted(set(expected))
+    for gap in outcomes["gaps"]:
+        assert (gap["schema"], gap["code"], gap["unit_id"], gap["scope_id"], gap["retryable"]) == (
+            "appsec-review/producer-gap/1", GapCode.PRODUCER_REPORTED_GAP, unit_id, None, False,
+        )
+        assert {ref["path"] for ref in gap["evidence_refs"]} == {
+            (base / name).relative_to(root).as_posix() for name in ("result.json", "status.json")
+        }
