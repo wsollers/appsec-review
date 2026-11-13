@@ -329,6 +329,29 @@ def test_legacy_terminal_status_is_not_proof_that_workers_stopped(tmp_path, stat
         JobRunner(config).begin_attempt(job, run_id=root.name)
 
 
+def test_claim_of_the_live_dagster_dispatch_needs_no_stop_receipt(tmp_path):
+    """A resumed Dagster dispatch writes its first job's claim before its second job begins; that
+    claim is the live run's own, not a historical dispatch that needs verify-repair-stop. Regression
+    for smoke-cpp run 2026-11-13-0001, whose resume refused at image_pin_verification__begin."""
+    from appsec_review.runtime.repair import WORKER_PROTOCOL
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    live = root / "data/jobs/job_fixture/attempts/attempt_0002"
+    atomic_json(live / "claim.json", {
+        "run_id": root.name, "job_id": job.job_id, "attempt_id": "attempt_0002",
+        "worker_protocol": WORKER_PROTOCOL, "orchestration": {"system": "dagster", "run_id": "dispatch-live"}})
+    atomic_json(live / "status.json", {"status": "SUCCEEDED"})
+    message = "Dagster dispatch stop requires verify-repair-stop, not just a failed step"
+    assert message in stopped_reasons(config, root)
+    assert message not in stopped_reasons(config, root, current_dispatch="dispatch-live")
+    JobRunner(config).begin_attempt(job, run_id=root.name,
+                                    orchestration={"system": "dagster", "run_id": "dispatch-live"})
+    with pytest.raises(ValueError, match="verify-repair-stop"):
+        JobRunner(config).begin_attempt(job, run_id=root.name,
+                                        orchestration={"system": "dagster", "run_id": "dispatch-other"})
+
+
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
     config, (job,), _ = fixture(tmp_path)
     monkeypatch.setenv("MODEL_TOKEN", "do-not-disclose")

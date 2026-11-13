@@ -228,7 +228,7 @@ class JobRunner:
             run_id, run_root = self.runs.create(now or datetime.now(timezone.utc))
         else:
             run_root = self.runs.resolve(run_id)
-        with worker_scope(self.config, run_root, preparing_job=job.job_id):
+        with worker_scope(self.config, run_root, preparing_job=job.job_id, orchestration=orchestration):
             return self._begin_attempt(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
                                        now=now, target_root=target_root, source_fingerprint=source_fingerprint,
                                        upstream_handoffs=upstream_handoffs)

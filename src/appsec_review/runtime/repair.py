@@ -129,8 +129,15 @@ def bind_release(config: AppConfig, run_root: Path) -> dict[str, Any]:
 
 
 @contextmanager
-def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None = None):
-    """Register a worker under the same gate that excludes concurrent repair admission."""
+def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None = None,
+                 orchestration: Mapping[str, str] | None = None):
+    """Register a worker under the same gate that excludes concurrent repair admission.
+
+    ``orchestration`` is the claim correlation of the attempt being prepared; when it names a
+    Dagster dispatch, claims of that same dispatch are the live run's own and need no stop receipt.
+    """
+    current_dispatch = (orchestration.get("run_id") if orchestration is not None
+                        and orchestration.get("system") == "dagster" else None)
     from appsec_review.runtime.resources import process_identity
     from appsec_review.storage import bounded_file_lock
     token = uuid4().hex
@@ -146,7 +153,7 @@ def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None
                 value.get("status") == "ACTIVE" and value.get("preparing_job") == preparing_job
                 for value in (read_document(path) for path in (run_root / "data/recovery/workers").glob("*.json")))
             if prior or simultaneous:
-                reasons = stopped_reasons(config, run_root)
+                reasons = stopped_reasons(config, run_root, current_dispatch=current_dispatch)
                 if reasons:
                     raise ValueError("replacement attempt refused: " + "; ".join(reasons))
         atomic_json(path, record)
@@ -156,8 +163,13 @@ def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None
         atomic_json(path, {**record, "status": "EXITED"})
 
 
-def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
-    """Read-only stop inspection. Retained leases are never silently reconciled or cleared."""
+def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str | None = None) -> tuple[str, ...]:
+    """Read-only stop inspection. Retained leases are never silently reconciled or cleared.
+
+    ``current_dispatch`` names the Dagster dispatch that is executing now; its own claims are not
+    historical and are not asked for a stop receipt (a resumed run writes its first claim before its
+    second job begins). Every other dispatch still needs a verified stop.
+    """
     from appsec_review.config.native_dagster import native_execution_requested
     from appsec_review.runtime.resources import process_identity
     reasons = []
@@ -207,6 +219,8 @@ def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
             dispatch_id = claim["orchestration"].get("run_id", "")
             if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", dispatch_id):
                 reasons.append("Dagster dispatch identity is unavailable")
+                continue
+            if current_dispatch is not None and dispatch_id == current_dispatch:
                 continue
             stopped = run_root / f"data/recovery/dispatches/{dispatch_id}.json"
             if not stopped.exists():
