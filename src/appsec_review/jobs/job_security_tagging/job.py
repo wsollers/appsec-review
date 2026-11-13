@@ -20,7 +20,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from .cloud import build_cloud
 from .crosswalk import Crosswalk, evaluate, load_crosswalk
 from .producers import (
-    TAG_INDEX, AcceptedIndexes, Scope, collect_coverage_gaps, collect_observation_facts,
+    TAG_INDEX, AcceptedIndexes, Scope, collect_coverage_gaps, collect_graph_facts, collect_observation_facts,
     collect_source_facts, component_topology_sha256, ownership_rules, resolve_scope,
 )
 from .taxonomy import (
@@ -42,7 +42,7 @@ TOPOLOGY = {
 }
 COLLECTORS = tuple(f"collection.{task}" for task in TOPOLOGY["collection"])
 STANDING_GAPS = (
-    "invoked capability detection is not implemented; func tags are declared from package inventory only",
+    "invoked capability coverage is limited to resolved, eligible graph entry/sink classes with pinned mappings",
     "upstream CWE->CAPEC->ATT&CK crosswalk is deferred until the MITRE feed is pinned into the run",
     "taint_path, iac_resource, k8s_object, and container_stage crosswalk scopes are not implemented",
 )
@@ -157,7 +157,7 @@ def _subject_location(record: Mapping[str, Any]) -> SourceLocation | None:
                 file_sha256=location["file_sha256"], start_byte=location["start_byte"],
                 end_byte=location["end_byte"], start_line=location["start_line"], end_line=location["end_line"],
                 start_column=location["start_column"], end_column=location["end_column"],
-                producer_location={"assignment_evidence": evidence["ref"]},
+                producer_location={**location.get("producer_location", {}), "assignment_evidence": evidence["ref"]},
                 mapping_method="tag-subject-evidence", confidence=float(location["confidence"]))
     return None
 
@@ -187,6 +187,7 @@ def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: A
             builder = IndexBuilder(path, name=TAG_INDEX, fingerprint=fingerprint, target_snapshot=snapshot,
                                    shard_id=shard_id)
             local_subjects: dict[str, Mapping[str, Any]] = {}
+            local_locations: dict[str, SourceLocation | None] = {}
             for record in members:
                 identity = LogicalIdentity.derive(EntityKind.TAG_ASSIGNMENT, snapshot,
                                                   {"assignment_id": record["assignment_id"]})
@@ -198,6 +199,8 @@ def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: A
                                                 _subject_location(record)))
                 if subject["kind"] == "project" or subject.get("native_address"):
                     local_subjects[subject["logical_id"]] = subject
+                    if subject["kind"] == "source_span":
+                        local_locations[subject["logical_id"]] = _subject_location(record)
                 builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, identity.value,
                                                     subject["logical_id"], True, 1.0))
                 for source in record["derived_from"]:
@@ -212,7 +215,7 @@ def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: A
                                                 subject.get("native_address") or logical_id,
                                                 subject.get("path") or subject["kind"],
                                                 f"{subject['kind']} {subject.get('path', '')}".strip(),
-                                                {"subject": dict(subject)}))
+                                                {"subject": dict(subject)}, local_locations.get(logical_id)))
             builder.add_coverage(f"tags:{family}", "complete")
             sha256 = builder.build()
         shards.append(IndexIdentity(TAG_INDEX, INDEX_SCHEMA, sha256, fingerprint, _rel(unit.job.run_root, path),
@@ -255,10 +258,13 @@ def build_job() -> Job:
     def source_facts(unit: UnitContext) -> Mapping[str, Any]:
         vocabulary, rules, _ = _unit_taxonomy(unit)
         _, limit, _ = _settings(unit.job.config.settings)
+        indexes, scope = _indexes(unit), _scope(unit)
         records, gaps = collect_source_facts(
-            _indexes(unit), _scope(unit), vocabulary, rules, limit,
+            indexes, scope, vocabulary, rules, limit,
             enable_swift=unit.job.tools.enable_swift)
-        return _assignment_set(unit, "source-facts", records, gaps)
+        graph_records, graph_gaps = collect_graph_facts(
+            indexes, scope, vocabulary, rules, limit, enable_swift=unit.job.tools.enable_swift)
+        return _assignment_set(unit, "source-facts", [*records, *graph_records], sorted(set(gaps + graph_gaps)))
 
     def observation_facts(unit: UnitContext) -> Mapping[str, Any]:
         vocabulary, rules, _ = _unit_taxonomy(unit)

@@ -19,14 +19,17 @@ from appsec_review.jobs.cataloging import (
     MANIFEST_ECOSYSTEMS, MANIFEST_SUFFIX_ECOSYSTEMS, SOURCE_ECOSYSTEMS, manifest_ecosystem,
 )
 from appsec_review.jobs.component_ownership import Ownership, resolve_ownership
-from appsec_review.retrieval import EntityKind, LogicalIdentity
+from appsec_review.graph.contract import fact_identity, validate_payload
+from appsec_review.graph.crosscheck import SourceFile
+from appsec_review.retrieval import EntityKind, LogicalIdentity, SourceLocation
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
+from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language, is_swift_path
 
 from .taxonomy import (
-    CapabilityRules, TaxonomyError, Vocabulary, assignment, normalize_cert, normalize_cwe, segment,
+    CapabilityRules, TaxonomyError, Vocabulary, assignment, merge_assignments, normalize_cert, normalize_cwe, segment,
 )
 
 
@@ -86,6 +89,7 @@ class AcceptedIndexes:
                 "SELECT e.identity, e.kind, e.native_id, e.name, e.payload_json, l.path, l.file_sha256, "
                 "l.start_byte, l.end_byte, l.start_line, l.end_line, l.start_column, l.end_column, "
                 "l.target_snapshot, l.mapping_method, l.confidence "
+                ", l.ambiguous, l.producer_location_json "
                 f"FROM entities e LEFT JOIN locations l ON l.entity_id = e.identity "
                 f"WHERE e.kind IN ({placeholders}) ORDER BY e.identity LIMIT ?",
                 (*kinds, limit + 1)).fetchall()
@@ -96,9 +100,19 @@ class AcceptedIndexes:
                 location = {key: value[key] for key in (
                     "path", "file_sha256", "start_byte", "end_byte", "start_line", "end_line",
                     "start_column", "end_column", "target_snapshot", "mapping_method", "confidence")}
+                if identity["name"] == "graph":
+                    location["ambiguous"] = bool(value["ambiguous"])
+                    location["producer_location"] = json.loads(value["producer_location_json"])
             rows.append(Row(value["identity"], value["kind"], value["native_id"], value["name"],
                             json.loads(value["payload_json"]), location))
         return rows, len(values) > limit
+
+    def source_bytes(self, location: Mapping[str, Any]) -> bytes:
+        """Resolve only this accepted location, through the existing bounded custody verifier."""
+        return read_source_bytes(
+            self.run_root, Path(str(self.manifest["target_root"])),
+            target_snapshot=self.target_snapshot, path=location["path"], sha256=location["file_sha256"],
+            native=source_native(location.get("producer_location", {})))
 
     def coverage(self, identity: Mapping[str, Any]) -> list[dict[str, Any]]:
         with self._open(identity) as database:
@@ -245,6 +259,159 @@ def collect_source_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voc
                         producer={"name": "capability-rules", "rule_id": rule_id, "version": rules.sha256},
                         evidence=evidence))
     return records, sorted(set(gaps))
+
+
+def _graph_location(row: Row, snapshot: str) -> SourceLocation:
+    """Recheck the graph contract and identity, never trusting a published eligibility flag alone."""
+    validate_payload(row.payload)
+    if row.kind != row.payload["family"] or row.kind not in {"entry_point", "sink_site"}:
+        raise ValueError("family differs from the accepted entity kind")
+    if not isinstance(row.location, Mapping):
+        raise ValueError("source location is missing")
+    location = SourceLocation(**row.location)
+    numeric = ("start_byte", "end_byte", "start_line", "end_line", "start_column", "end_column")
+    if (any(type(row.location[key]) is not int for key in numeric)
+            or location.target_snapshot != snapshot or location.ambiguous or location.confidence != 1.0
+            or location.end_byte <= location.start_byte):
+        raise ValueError("source location is not exact or belongs to another snapshot")
+    result = row.payload["result"]
+    scope = row.payload["scope"]
+    if (not isinstance(scope["scope_id"], str) or not isinstance(scope["language"], str)
+            or not scope["language"] or any(scope[key] is not None
+            and (not isinstance(scope[key], str) or not scope[key]) for key in ("component_id", "build_unit_id"))):
+        raise ValueError("graph scope identities are malformed")
+    field = "source_class" if row.kind == "entry_point" else "sink_class"
+    if not isinstance(result.get(field), str) or not result[field]:
+        raise ValueError("operation class is missing")
+    native = {"scope_id": row.payload["scope"]["scope_id"], "path": location.path,
+              "start_byte": location.start_byte, "end_byte": location.end_byte, field: result[field]}
+    if row.kind == "sink_site":
+        argument = result.get("argument_index")
+        if type(argument) is not int or argument < -1:
+            raise ValueError("sink argument index is invalid")
+        native["argument_index"] = argument
+    if fact_identity(row.kind, snapshot, native).value != row.identity or row.native_id != row.identity:
+        raise ValueError("graph native identity does not resolve to the accepted site")
+    return location
+
+
+def _resolving_span(location: SourceLocation, source: SourceFile) -> bool:
+    """Check absolute lines/columns against the exact, hash-verified byte range."""
+    start = source.offset(location.start_line, location.start_column)
+    end = source.offset(location.end_line, location.end_column)
+    return (start, end) == (location.start_byte, location.end_byte)
+
+
+def collect_graph_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Vocabulary,
+                        rules: CapabilityRules, limit: int, *,
+                        enable_swift: bool = False) -> tuple[list[dict[str, Any]], list[str]]:
+    """Observed operations only: no vulnerability, control-satisfaction or deployment inference.
+
+    The existing per-shard entity bound also bounds graph reads. Source verification holds only
+    one bounded file at a time; immutable graph references retain their original producer/scope.
+    """
+    records: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    shards = indexes.shards("graph")
+    if not shards:
+        return [], ["graph-capability:missing_graph: accepted graph index is unavailable"]
+    pending: list[tuple[Row, Mapping[str, Any]]] = []
+    contents: dict[str, bytes] = {}
+    conflicts: set[str] = set()
+    for identity in shards:
+        gaps.extend(f"graph-capability:producer_coverage: {identity.get('shard_id', 'default')}: {note}"
+                    for note in identity.get("gaps", ()))
+        rows, truncated = indexes.rows(identity, ("entry_point", "sink_site"), limit)
+        if truncated:
+            gaps.append(f"graph-capability:entity_bound: {identity.get('shard_id', 'default')}: {limit}")
+        for row in rows:
+            content = hashlib.sha256(canonical_json({"kind": row.kind, "native_id": row.native_id,
+                                                     "payload": row.payload, "location": row.location})).digest()
+            previous = contents.setdefault(row.identity, content)
+            if previous != content:
+                conflicts.add(row.identity)
+            pending.append((row, identity))
+    if not pending:
+        gaps.append("graph-capability:missing_site_facts: accepted graph contains no entry_point or sink_site facts")
+    cached_key: bytes | None = None
+    cached_source: SourceFile | None = None
+    cached_error: str | None = None
+    for row, identity in sorted(pending, key=lambda item: (
+            str((item[0].location or {}).get("path", "")), item[0].identity,
+            str(item[1].get("shard_id", "default")))):
+        def gap(reason: str, detail: str) -> None:
+            gaps.append(f"graph-capability:{reason}: {row.identity}: {detail}")
+
+        if row.identity in conflicts:
+            gap("conflicting_fact", "accepted shards disagree on the same logical fact")
+            continue
+        try:
+            location = _graph_location(row, scope.target_snapshot)
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            gap("malformed_fact", str(exc))
+            continue
+        eligibility = row.payload["admissibility"]
+        for note in row.payload["gaps"]:
+            gap("producer_fact_gap", note)
+        if eligibility["direct_eligible"] is not True:
+            gap("ineligible_fact", ",".join(eligibility["ineligibility_reasons"]))
+            continue
+        if not enable_swift and (is_swift_path(location.path)
+                                 or is_swift_language(row.payload["scope"]["language"])):
+            gap("unsupported_language", SWIFT_KNOWN_GAP)
+            continue
+        field = "source_class" if row.kind == "entry_point" else "sink_class"
+        klass = row.payload["result"][field]
+        matched = [rule for rule in rules.graph_rules
+                   if rule["family"] == row.kind and klass in rule["classes"]
+                   and ("languages" not in rule or row.payload["scope"]["language"] in rule["languages"])]
+        if not matched:
+            gap("unmapped_class", f"{row.kind}/{klass}: no semantics-preserving vocabulary mapping")
+            continue
+        try:
+            native = source_native(location.producer_location)
+        except ValueError as exc:
+            gap("source_unresolved", str(exc))
+            continue
+        key = canonical_json({"path": location.path, "sha256": location.file_sha256, "native": native})
+        if key != cached_key:
+            cached_key, cached_source, cached_error = key, None, None
+            try:
+                cached_source = SourceFile(location.file_sha256, indexes.source_bytes(row.location))
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                cached_error = str(exc)
+        if cached_error is not None:
+            gap("source_unresolved", cached_error)
+            continue
+        if cached_source is None or not _resolving_span(location, cached_source):
+            gap("source_span_mismatch", "accepted lines/columns do not resolve to the exact byte span")
+            continue
+        ownership = scope.ownership(location.path)
+        component = row.payload["scope"]["component_id"]
+        if component and ownership.component_ids and component not in ownership.component_ids:
+            gap("component_scope_disagreement", "graph scope and source ownership disagree")
+            continue
+        if ownership.status in {"ambiguous", "unowned"}:
+            gap("component_ownership", ownership.status)
+        site = LogicalIdentity.derive(EntityKind.SOURCE_SPAN, scope.target_snapshot, {
+            "path": location.path, "sha256": location.file_sha256,
+            "start_byte": location.start_byte, "end_byte": location.end_byte})
+        subjects = scope.subjects("source_span", site.value, location.path,
+                                  native_address=f"graph-site:{location.path}:{location.start_byte}:{location.end_byte}")
+        evidence = {**_evidence(row, identity), "graph_family": row.kind,
+                    "graph_producer": dict(row.payload["producer"]), "graph_scope": dict(row.payload["scope"]),
+                    "graph_upstream": list(row.payload["upstream"]),
+                    "index_producer": dict(identity.get("producer", {}))}
+        for rule in matched:
+            for tag in rule["emit"]:
+                records.extend(assignment(
+                    vocabulary=vocabulary, tag=tag, basis="invoked", subject=subject,
+                    producer={"name": row.payload["producer"]["name"], "rule_id": rule["id"],
+                              "version": rules.sha256, "graph_producer": dict(row.payload["producer"])},
+                    evidence=[evidence],
+                    flow_role="sink" if row.kind == "sink_site" and vocabulary.namespace(tag).flow_role else None)
+                    for subject in subjects)
+    return merge_assignments(records), sorted(set(gaps))
 
 
 def producer_key(row: Row, identity: Mapping[str, Any]) -> str:

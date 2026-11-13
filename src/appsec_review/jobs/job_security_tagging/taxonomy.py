@@ -212,6 +212,7 @@ class CapabilityRules:
     package_rules: tuple[Mapping[str, Any], ...]
     observation_rules: tuple[Mapping[str, Any], ...]
     coverage_gaps: Mapping[str, str]
+    graph_rules: tuple[Mapping[str, Any], ...] = ()
 
 
 _EXTRACTORS = {"sarif-rule-cwe-tags", "cert-rule-id", "advisory-severity", "package-capability"}
@@ -228,6 +229,7 @@ def parse_capability_rules(document: Mapping[str, Any], sha256: str, vocabulary:
     def rules(key: str, basis: str) -> tuple[Mapping[str, Any], ...]:
         values = tuple(document.get(key, ()))
         for rule in values:
+            _require(isinstance(rule, Mapping), f"{key} rule must be an object")
             rule_id = rule.get("id")
             _require(isinstance(rule_id, str) and rule_id not in seen, f"duplicate or missing rule id: {rule_id}")
             seen.add(rule_id)
@@ -241,6 +243,34 @@ def parse_capability_rules(document: Mapping[str, Any], sha256: str, vocabulary:
     path_rules = rules("path_rules", "declared")
     package_rules = rules("package_rules", "declared")
     observation_rules = rules("observation_rules", "reported")
+    graph_rules = rules("graph_rules", "invoked")
+    from appsec_review.graph.contract import SinkClass, SourceClass
+    for rule in graph_rules:
+        _require(set(rule) <= {"id", "family", "classes", "languages", "emit", "rationale"},
+                 f"unknown graph rule keys: {rule['id']}")
+        family = rule.get("family")
+        _require(family in {"entry_point", "sink_site"}, f"unsupported graph family: {family}")
+        classes = rule.get("classes")
+        allowed = {item.value for item in (SourceClass if family == "entry_point" else SinkClass)}
+        _require(isinstance(classes, list) and bool(classes)
+                 and all(isinstance(item, str) and item in allowed - {"unclassified"} for item in classes)
+                 and len(set(classes)) == len(classes), f"invalid graph classes: {rule['id']}")
+        if "languages" in rule:
+            _require(isinstance(rule["languages"], list) and bool(rule["languages"])
+                     and all(isinstance(item, str) and item for item in rule["languages"]),
+                     f"invalid graph languages: {rule['id']}")
+        _require(isinstance(rule.get("rationale"), str) and bool(rule["rationale"].strip()),
+                 f"graph rule requires rationale: {rule['id']}")
+        for tag in rule["emit"]:
+            prefix = "surface:entry:" if family == "entry_point" else "func:"
+            _require(tag.startswith(prefix),
+                     f"graph rule must emit an operation, not a finding or control: {rule['id']}")
+            _require(tag not in {"surface:entry:http-public", "surface:entry:http-internal",
+                                 "surface:entry:cloud-public"},
+                     f"graph class cannot establish deployment exposure: {rule['id']}")
+            if family == "entry_point" and "remote" in classes:
+                _require(tag == "surface:entry:remote-input",
+                         f"remote input cannot establish protocol or deployment exposure: {rule['id']}")
     for rule in path_rules:
         _require(any(rule.get(key) for key in ("names", "suffixes", "prefixes")),
                  f"path rule has no matcher: {rule['id']}")
@@ -256,7 +286,7 @@ def parse_capability_rules(document: Mapping[str, Any], sha256: str, vocabulary:
             vocabulary.validate_tag(f"{tag}:probe", "reported")
         else:
             vocabulary.validate_tag(tag, "reported")
-    return CapabilityRules(sha256, languages, path_rules, package_rules, observation_rules, gaps)
+    return CapabilityRules(sha256, languages, path_rules, package_rules, observation_rules, gaps, graph_rules)
 
 
 def load_capability_rules(path: Path, expected_sha256: str, vocabulary: Vocabulary) -> CapabilityRules:

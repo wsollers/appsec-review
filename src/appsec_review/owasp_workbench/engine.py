@@ -26,6 +26,24 @@ APPLICABILITY_OUTCOMES = {
     "unsupported_missing_evidence",
 }
 RESULT_STATUSES = {"satisfied", "not_satisfied", "cannot_verify", "not_assessed"}
+_CAPABILITY_TAG_ROLES = {
+    f"func:{capability}": role
+    for role, capabilities in {
+        "storage": ("data:sql-query", "data:nosql-query", "data:orm", "data:ldap-query"),
+        "authentication_identity": (
+            "authn:password", "authn:mfa", "authn:webauthn", "authn:oauth2-client",
+            "authn:oauth2-server", "authn:oidc", "authn:saml", "authn:jwt", "authn:api-key",
+            "authn:mtls-client", "authn:credential-recovery", "session:cookie",
+            "session:server-store", "session:token-refresh", "session:csrf-token"),
+        "cryptography_data_protection": (
+            "crypto:symmetric", "crypto:asymmetric-sign", "crypto:asymmetric-encrypt",
+            "crypto:hash", "crypto:password-hash", "crypto:mac", "crypto:rng",
+            "crypto:key-mgmt", "crypto:cert-validation"),
+        "network": ("net:http-client", "net:grpc", "net:websocket", "net:tls-server",
+                    "net:tls-client", "net:raw-socket", "net:dns", "net:redirect"),
+    }.items()
+    for capability in capabilities
+}
 
 
 def _hash(value: Any) -> str:
@@ -117,15 +135,15 @@ def characterize_components(
             raise ValueError(f"component {component_id} lacks resolving evidence citations")
         roles, reasons = _deterministic_roles(raw)
         routing = list(raw.get("routing_context", ()))
-        tag_roles = {
-            "func:data:sql-query": "storage", "func:auth:authentication": "authentication_identity",
-            "func:crypto:encryption": "cryptography_data_protection",
-        }
         for tag in routing:
-            mapped = tag_roles.get(tag.get("tag"))
+            if not isinstance(tag, Mapping) or tag.get("basis") not in ("declared", "invoked"):
+                continue
+            name = tag.get("tag")
+            mapped = _CAPABILITY_TAG_ROLES.get(name) if isinstance(name, str) else None
             if mapped:
                 roles.add(mapped)
-                reasons.append(f"accepted tag {tag['tag']} routes context; it is not control proof")
+                reasons.append(f"accepted {tag['basis']} tag {name} routes context; "
+                               "it is not control proof or deployment evidence")
         inference_record = {"status": "not_needed", "proposal_sha256": None}
         ambiguity = []
         if not roles:
