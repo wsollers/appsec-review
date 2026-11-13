@@ -18,9 +18,12 @@ from .support import (
 
 
 @pytest.mark.parametrize("scenario", ("success", "compiler-failure", "tampered-output"))
-def test_real_capture_is_verified_and_failures_remain_evidence(tmp_path, scenario):
+def test_real_capture_is_verified_and_failures_remain_evidence(tmp_path, scenario, record_property):
     executor = executor_for("native")
-    require_capture_scanner()
+    scanner_id = require_capture_scanner()
+    record_property("build_image_id", executor.profile.image_id)
+    record_property("gitleaks_image_id", scanner_id)
+    record_property("image_signatures", "verified")
     run = boundary_run(tmp_path)
     source = "#error integration_compile_failure\n" if scenario == "compiler-failure" else "int value() { return 7; }\n"
     (run.workspace / "main.cpp").write_text(source, encoding="utf-8")
@@ -33,6 +36,7 @@ def test_real_capture_is_verified_and_failures_remain_evidence(tmp_path, scenari
     assert not result.timed_out
     assert verified.gaps == () and identity["complete"] is True
     assert identity["secret_scan"]["exit_code"] == 0
+    assert verified.execution["image_id"] == scanner_id
     events = [json.loads(line) for line in (capture / "events.jsonl").read_text().splitlines()]
     assert any(row["kind"] == "process_exec" and "-c" in row.get("argv", ()) for row in events)
     if scenario == "tampered-output":

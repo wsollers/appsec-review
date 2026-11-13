@@ -14,8 +14,10 @@ from .support import PROFILES, assert_declared_files, boundary_run, executor_for
 
 
 @pytest.mark.parametrize("family", PROFILES)
-def test_profile_enforces_mount_user_network_and_read_only_root(tmp_path, family):
+def test_profile_enforces_mount_user_network_and_read_only_root(tmp_path, family, record_property):
     executor = executor_for(family)
+    record_property("build_image_id", executor.profile.image_id)
+    record_property("image_signature", "verified")
     run = boundary_run(tmp_path)
     resolver = ProjectImageResolver(
         metadata_root=run.workspace.parent / "image-metadata", target_root=run.workspace,

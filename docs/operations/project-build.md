@@ -58,9 +58,14 @@ lane continues independently. See [Unity configuration and coverage](unity-build
 base-image resolution and container isolation for ten profiles, timeout cleanup, four real
 native artifact kinds, three real capture/verification outcomes, and one compiler-diagnostic
 provenance check. Each case has the integration tier's 300 s cap; compiler commands use a
-60 s limit and the timeout case deliberately uses 2 s. Tests use exact host pins and explicit
-signature verification, `--pull never`, offline containers and private run-root fixtures.
-They never acquire images or change signing policy. Select the four files explicitly through
+60 s limit and the timeout case deliberately uses 2 s. Tests resolve configured catalog tags
+through the shared `job_image_pin_verification.pins.inspect_image` lookup, verify the resolved
+image's existing signature, and freeze that immutable identity in the test's build profile.
+They use `--pull never`, offline containers and private run-root fixtures. Production host
+bindings are not rewritten or treated as current test-image observations; production run
+admission still enforces those bindings. The launch and capture cases retain resolved image
+IDs and successful signature verification as JUnit properties.
+Tests never acquire images or change signing policy. Select the four files explicitly through
 `scripts/run-tests.sh --allow-heavy --timeout-seconds 1800 -- ...`; the wrapper rejects a
 bare directory selector.
 
@@ -86,17 +91,29 @@ The current `build_job` handlers do not call a model: `_infer_repair` is reachab
 retained, uncalled probe-repair helpers. A paid model smoke test would not prove this job's
 current contract.
 
-The WSL walk found all ten profile bindings different from their local tags (nine distinct
-images: Rust and WebAssembly share one). The expected build identities have valid signature
-envelopes. The required capture scanner additionally has a mismatched `tool-gitleaks` pin and
-no signature envelope for its expected identity. These are prerequisites, not passing builds.
-No verified tool-output fixture provenance is claimed: the unit tier uses synthetic binary,
-APK, CMake-layout and diagnostic examples. The diagnostic drift check additionally requires
-`tests/unit/job_project_build/test_repair.py.provenance.json`, recording tool id, image id,
-catalog version and exact input/normalized-output hashes; that sidecar belongs to the unit
-fixture owner and was not fabricated or edited here. The synthetic layout/binary examples
-still lack recording provenance. Pin reconciliation alone does not close those evidence gaps.
-T-113 in [`../TODO.md`](../TODO.md) records the execution result and remaining coverage.
+The first WSL run stopped all 19 cases on stale host bindings. After the lookup correction,
+all 19 real integration cases passed, including the three capture cases. The installed
+Gitleaks image was already signed; its historical missing-signature report referred to the
+obsolete configured identity, not to the image the corrected tests use. No signing operation
+or production pin refresh was necessary.
+
+The diagnostic recording and adjacent `.provenance.json` now live under
+`tests/integration/job_project_build/fixtures/`, without modifying unit-owned files.
+The replay checks the original unit diagnostic after the documented driver-name normalization,
+the exact compiler image and measured version, the catalog recipe version, and hashes of the
+input and raw stderr. Changed image, input, version or output fails rather than silently
+regenerating a fixture. To record an explicitly approved compiler update:
+
+```bash
+.venv/bin/python -m tests.integration.job_project_build.fixture_recording --write
+```
+
+The recorder runs the signed compiler on a tiny local input and removes its private scratch.
+It is never invoked by pytest. Deliberately synthetic negative binary/APK/layout examples in
+the unit tier remain synthetic, not retrospectively labeled as tool recordings. Full-job
+enforcement, handoff/resume and family/Unity acceptance are still unverified: the repair is
+limited to integration execution. T-113 in [`../TODO.md`](../TODO.md) preserves the initial
+skipped result, the later successful verification and the remaining coverage boundaries.
 
 ## Settings
 

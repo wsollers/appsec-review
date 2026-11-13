@@ -1758,6 +1758,33 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and `git diff --check` passed. No job unit suite, acceptance, live or Dagster execution
   was run. The only completed gap closure here is tier separation; real-tool validation
   remains blocked by the named prerequisites.
+  Follow-up (2026-11-12, superseding those integration prerequisites, not the historical run):
+  the tests now use the shared `inspect_image` lookup for each configured tag, verify the
+  installed image's existing signature, and freeze its immutable ID for execution. All nine
+  installed build images and installed Gitleaks image were already signed. The historical
+  Gitleaks signing gap referred to its obsolete configured identity; no keys, signatures or
+  production host bindings needed alteration. The existing production pin gate is unchanged.
+  All 19 real cases passed with zero skips in 12.39 s (wrapper total 17.54 s, slowest 3.939 s),
+  using the same four selectors, `--expect-tests 19`, four workers and shuffle seed `111215`.
+  Report: `test/tmp/reports/tests-custom-20261112-185541-501547-7567.json`.
+  The compiler diagnostic now has one genuine raw-stderr recording and adjacent provenance
+  sidecar under `tests/integration/job_project_build/fixtures/`, produced by the signed
+  Clang 18.1.3 image. Replay checks measured image/version, catalog version, input/output
+  hashes and parity with the unchanged unit example. Regeneration is explicit through
+  `python -m tests.integration.job_project_build.fixture_recording --write`, never automatic
+  in tests. No unit-owned test or fixture was edited.
+  Final verification with JUnit image/signature properties: the same 19-case command
+  (`--shuffle-seed 111215`) passed all cases in 11.81 s (wrapper total 16.53 s, slowest
+  3.207 s, no skips); report
+  `test/tmp/reports/tests-custom-20261112-185827-369531-18858.json`.
+  The three required bookkeeping files, selected exactly as above with `--expect-tests 118`,
+  four workers and shuffle seed `111216`, passed all 118 in 6.61 s (wrapper total 11.67 s,
+  no skips or slow tests); report
+  `test/tmp/reports/tests-custom-20261112-185845-488139-22434.json`.
+  Ruff on `tests/integration/job_project_build` and `git diff --check` passed.
+  Full-job enforcement, accepted-handoff/resume parity and family/Unity acceptance remain
+  outside the authorized integration-only repair. Deliberately synthetic negative binary,
+  APK and layout unit inputs remain synthetic; they are not claimed as historical recordings.
 - **Done when:** `tests/` has no `test_*.py` outside `tests/unit`, `tests/integration`,
   `tests/acceptance` and `tests/shared`; `scripts/run-tests.sh fast` collects only `tests/unit`
   and finishes in under ten minutes with zero tests over 10 s; every job in the registry has a

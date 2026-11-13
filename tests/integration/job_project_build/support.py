@@ -1,20 +1,21 @@
-"""Real-boundary helpers; no image acquisition, pin replacement or model transport."""
+"""Resolve signed local test images without rewriting production host bindings."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fnmatch import fnmatch
 import json
 from pathlib import Path
 import shutil
-import subprocess
 from types import SimpleNamespace
 
 import pytest
 
-from appsec_review.config import load_config
+from appsec_review.config import AppConfig, load_config
 from appsec_review.config.host_pins import host_pins_path
 from appsec_review.container_runtime import BuildContainerExecutor, load_catalog, profiles_from_settings
+from appsec_review.container_runtime.build_executor import _run
+from appsec_review.jobs.job_image_pin_verification.pins import inspect_image
 from appsec_review.jobs.job_project_build.datasets import DATASETS
 from appsec_review.jobs.job_project_build.job import BUILD_FAMILIES, STATIC_LANES, build_job
 from appsec_review.signing import EnvelopeImageVerifier, OpenSSL, SignatureVerificationError
@@ -26,45 +27,37 @@ BUILD_UNIT = "build-unit-" + "a" * 20
 PROFILES = ("android", "dotnet", "go", "java", "native", "node", "php", "python", "rust", "wasm")
 
 
-def host_config():
+def host_config() -> AppConfig:
     if not host_pins_path(ROOT).is_file():
         pytest.skip("missing operator-owned deploy/dagster/host-pins.toml")
     return load_config(ROOT / "appsec-review.toml")
 
 
-def require_image(config, tag: str, expected: str | None):
+def require_image(config: AppConfig, tag: str) -> tuple[str, EnvelopeImageVerifier]:
     if shutil.which("docker") is None:
         pytest.skip(f"missing Docker CLI for {tag}")
-    if expected is None:
-        pytest.skip(f"missing operator-owned exact image pin for {tag}")
-    try:
-        inspected = subprocess.run(
-            ["docker", "image", "inspect", tag, "--format", "{{.Id}}"],
-            capture_output=True, text=True, check=False, timeout=10,
-        )
-    except subprocess.TimeoutExpired:
-        pytest.skip(f"Docker image probe timed out for {tag}")
-    if inspected.returncode:
-        pytest.skip(f"pinned build image unavailable: {tag}: {inspected.stderr.strip()}")
-    observed = inspected.stdout.strip()
-    if observed != expected:
-        pytest.skip(f"pinned build image mismatch: {tag}; expected {expected}, observed {observed}")
+    inspected = inspect_image(_run, tag)
+    if inspected["state"] != "present":
+        pytest.skip(f"test image {tag} is {inspected['state']}: {inspected['detail']}")
+    image_id = inspected["resolved_image_id"]
+    assert isinstance(image_id, str)
     signing = config.signing
     verifier = EnvelopeImageVerifier(
         signatures_dir=signing.image_signatures_dir, trusted_keys_dir=signing.trusted_keys_dir,
         openssl=OpenSSL(str(signing.openssl)),
     )
     try:
-        verifier.verify(expected, reference=tag)
+        verifier.verify(image_id, reference=tag)
     except SignatureVerificationError as error:
         pytest.skip(f"missing valid signature for {tag}: {error}")
-    return verifier
+    return image_id, verifier
 
 
-def executor_for(family: str, *, timeout: int = 60):
+def executor_for(family: str, *, timeout: int = 60) -> BuildContainerExecutor:
     config = host_config()
     profile = profiles_from_settings(config.job("job_project_build").settings["profiles"])[family]
-    verifier = require_image(config, profile.tag, profile.image_id)
+    image_id, verifier = require_image(config, profile.tag)
+    profile = replace(profile, image_id=image_id)
     executor = BuildContainerExecutor(
         profile, timeout_seconds=timeout, output_bytes=1024 * 1024,
         network="none", network_offline=True, image_verifier=verifier,
@@ -73,11 +66,12 @@ def executor_for(family: str, *, timeout: int = 60):
     return executor
 
 
-def require_capture_scanner():
+def require_capture_scanner() -> str:
     config = host_config()
     catalog = load_catalog(ROOT, resolved_config={"configuration_host_pins": config.host_pins.record()})
     tool = catalog.tool("tool-gitleaks")
-    require_image(config, tool.tag, tool.expected_image_id)
+    image_id, _verifier = require_image(config, tool.tag)
+    return image_id
 
 
 @dataclass(frozen=True)
