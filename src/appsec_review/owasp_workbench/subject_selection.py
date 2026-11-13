@@ -33,7 +33,7 @@ def parse_subjects(text: str) -> tuple[SourceSubject, ...]:
     recognized: set[ast.AST] = set()
     for node in ast.walk(tree):
         if isinstance(node, _FUNCTIONS) and any(_route(item) for item in node.decorator_list):
-            recognized.add(node)
+            recognized.update((node, tree))
         if _sql_call(node, parents) or _password_comparison(node, parents):
             owner = node
             while owner is not tree and not isinstance(owner, _FUNCTIONS):
@@ -65,8 +65,12 @@ def parse_subjects(text: str) -> tuple[SourceSubject, ...]:
 
 def select_subjects(subjects: Sequence[SourceSubject], text: str, *, max_lines: int,
                     hints: Sequence[Mapping[str, Any]] = ()) -> tuple[list[SourceSubject], list[str]]:
-    """Keep complete relevant subjects, preferring accepted syntax/graph locations."""
+    """Prefer bounded module context for routes, then indexed complete subjects as fallback."""
     lines = text.splitlines()
+    module = next((item for item in subjects if item.kind == "module" and item.recognized), None)
+    if (module is not None and module.last - module.first + 1 <= max_lines
+            and len("\n".join(lines[module.first - 1:module.last])) <= 16000):
+        return [module], []
 
     def indexed(subject: SourceSubject) -> bool:
         return any(subject.first <= hint["start_line"] <= hint["end_line"] <= subject.last

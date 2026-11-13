@@ -296,7 +296,7 @@ class EvidenceResolver:
                 except (SyntaxError, ValueError, RecursionError):
                     complete = []
                 if complete:
-                    subject = min(complete, key=lambda item: (item.kind == "module", item.name))
+                    subject = min(complete, key=lambda item: (item.kind != "module", item.name))
                     source_subject = {**subject.record(), "complete": True,
                                       "outside_lines": len(lines) - (end - start + 1)}
             private = False

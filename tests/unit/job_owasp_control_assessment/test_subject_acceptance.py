@@ -49,8 +49,10 @@ def test_complete_subject_can_be_assessed_without_treating_other_source_as_compl
 
 @pytest.mark.parametrize("control", [2, 3])
 @pytest.mark.parametrize("outcome", ["satisfied", "not_satisfied"])
-def test_complete_route_alone_cannot_decide_external_authorization(accepted, settings, control, outcome):
-    boundary = accepted({"app.py": "# external application policy\n" * 200 + AUTH})
+@pytest.mark.parametrize("outside", ["line-cap", "character-cap"])
+def test_complete_route_alone_cannot_decide_external_authorization(accepted, settings, control, outcome, outside):
+    padding = "# external application policy\n" * 200 if outside == "line-cap" else "#" + "x" * 16000 + "\n"
+    boundary = accepted({"app.py": padding + AUTH})
     [item], _ = component_evidence(boundary.resolver, "api", boundary.files, settings)
     package = package_for(item, PROCEDURES[control])
     results = accept_obligations(package, proposal_for(package, item["reference"], outcome), boundary.resolver)
@@ -59,14 +61,55 @@ def test_complete_route_alone_cannot_decide_external_authorization(accepted, set
     assert not results[0]["hypotheses"]
 
 
-def test_function_equal_to_file_still_cannot_establish_external_auth_policy(accepted, settings):
+def test_complete_single_function_module_preserves_unresolved_prerequisite_gate(accepted, settings):
     boundary = accepted({"app.py": AUTH})
     [item], _ = component_evidence(boundary.resolver, "api", boundary.files, settings)
-    assert item["source_subject"]["kind"] == "function" and not item["truncated"]
+    assert item["source_subject"]["kind"] == "module" and not item["truncated"]
     package = package_for(item, PROCEDURES[2])
-    [result] = accept_obligations(package, proposal_for(package, item["reference"]), boundary.resolver)
+    [result] = accept_obligations(package, proposal_for(package, item["reference"],
+        evidence_requests=["Resolve external middleware and consumer identity."]), boundary.resolver)
     assert result["outcome"] == "cannot_verify"
-    assert any("external authorization policy" in gap for gap in result["gaps"])
+    assert any("prerequisites remain assumed or requested" in gap for gap in result["gaps"])
+
+
+@pytest.mark.parametrize("control", [2, 3])
+@pytest.mark.parametrize("context", ["single-function", "local-policy"])
+def test_complete_short_auth_module_is_not_permanently_unassessable(accepted, settings, control, context):
+    source = AUTH if context == "single-function" else (
+        "def require_permission(actor):\n"
+        "    if not actor.allowed:\n"
+        "        raise PermissionError()\n"
+        "@app.get('/records')\n"
+        "def records(actor):\n"
+        "    require_permission(actor)\n"
+        "    return service.records()\n")
+    boundary = accepted({"app.py": source})
+    [item], gaps = component_evidence(boundary.resolver, "api", boundary.files, settings)
+    assert not gaps and not item["truncated"]
+    assert item["source_subject"]["kind"] == "module"
+    assert item["source_subject"]["outside_lines"] == 0
+    assert item["excerpt"] == source.rstrip("\n")
+    assert item["reference"]["locator"]["lines"] == [1, len(source.splitlines())]
+    rebound = boundary.resolver.resolve(item["reference"], component_id="api")
+    assert rebound["source_subject"] == item["source_subject"]
+    package = package_for(item, PROCEDURES[control])
+    [result] = accept_obligations(package, proposal_for(package, item["reference"]), boundary.resolver)
+    assert result["outcome"] == "satisfied"
+    assert result["citation_checks"][0]["subject_binding"]
+
+
+@pytest.mark.parametrize("control", [2, 3])
+def test_complete_auth_module_cannot_hide_redacted_prerequisite_context(accepted, settings, control):
+    source = "password = 'secret-value'\n" + AUTH
+    boundary = accepted({"app.py": source})
+    [item], _ = component_evidence(boundary.resolver, "api", boundary.files, settings)
+    assert item["source_subject"]["kind"] == "module"
+    assert item["redaction"]["applied"]
+    assert not subjects(PROCEDURES[control], item)
+    forged = {**item, "excerpt": source.rstrip(), "redaction": {"applied": False}}
+    package = package_for(forged, PROCEDURES[control])
+    [result] = accept_obligations(package, proposal_for(package, item["reference"]), boundary.resolver)
+    assert result["outcome"] == "cannot_verify" and not result["supporting"]
 
 
 @pytest.mark.parametrize("field,value", [

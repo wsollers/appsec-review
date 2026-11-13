@@ -62,10 +62,11 @@ def test_decorators_async_and_nested_context_keep_absolute_lines(accepted, setti
               "        async def handler():\n"
               "            return cursor.execute('SELECT 1')\n"
               "        return handler\n")
-    boundary = accepted({"nested.py": source})
+    boundary = accepted({"nested.py": "# outside\n" * 200 + source})
     [item], gaps = select(boundary, settings)
-    assert not gaps and not item["truncated"]
-    assert item["reference"]["locator"]["lines"] == [3, 8]
+    assert any("<module>: complete subject exceeds max_source_lines" in gap for gap in gaps)
+    assert not item["truncated"]
+    assert item["reference"]["locator"]["lines"] == [203, 208]
     assert item["source_subject"]["name"] == "Service.outer.handler"
     assert item["excerpt"].startswith("        @audit(")
     assert subjects(PROCEDURES[0], item)
@@ -182,7 +183,7 @@ def test_subject_cap_deduplicates_sites_and_records_exact_omissions(accepted, se
 def test_all_four_reviewed_procedures_have_complete_selected_context(accepted, settings):
     source = SQL + AUTH + "def register(password):\n    return len(password) >= 8\n"
     values, _ = select(accepted({"app.py": source}), settings)
-    assert len(values) == 3
+    assert len(values) == 1 and values[0]["source_subject"]["kind"] == "module"
     for rule in PROCEDURES[:4]:
         assert any(subjects(rule, item) for item in values)
 
@@ -212,3 +213,26 @@ def test_configured_larger_line_bound_delivers_whole_function(accepted, settings
     [item], gaps = select(boundary, replace(settings, max_source_lines=500))
     assert not gaps and not item["truncated"]
     assert item["reference"]["locator"]["lines"] == [1, 142]
+
+
+@pytest.mark.parametrize("bound", ["lines", "characters"])
+def test_http_module_context_respects_exact_existing_bounds(accepted, settings, bound):
+    source = (AUTH + "# context\n" * 117 if bound == "lines"
+              else AUTH + "#" + "x" * (16000 - len(AUTH) - 1))
+    [item], gaps = select(accepted({"app.py": source}), settings)
+    assert not gaps and item["source_subject"]["kind"] == "module"
+    assert item["source_subject"]["outside_lines"] == 0 and not item["truncated"]
+    exceeded = source + ("# context\n" if bound == "lines" else "x")
+    [fallback], gaps = select(accepted({"app.py": exceeded}), settings)
+    assert fallback["source_subject"]["kind"] == "function" and not fallback["truncated"]
+    assert fallback["excerpt"] == AUTH.rstrip("\n")
+    assert any("<module>: complete subject exceeds" in gap for gap in gaps)
+
+
+def test_module_context_deduplicates_indexed_routes_within_evidence_budget(accepted, settings):
+    source = AUTH + "\n" + AUTH.replace("records", "other") + "\n" + SQL
+    boundary = accepted({"app.py": source}, hints=(("app.py", 5, 7),))
+    [item], gaps = select(boundary, replace(settings, max_evidence_per_component=1))
+    assert not gaps and item["source_subject"]["kind"] == "module"
+    assert len(subjects(PROCEDURES[2], item)) == len(subjects(PROCEDURES[3], item)) == 2
+    assert len(subjects(PROCEDURES[0], item)) == 1
