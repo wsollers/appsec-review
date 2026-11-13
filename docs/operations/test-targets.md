@@ -11,6 +11,16 @@ repository. `targets/` is ignored by Git, so a target never enters this reposito
 | Public C corpus CASTLE-C250, blind tag `castle-c250-v1` | prepared from <https://github.com/CASTLE-Benchmark/CASTLE-Benchmark> at the commit in [`../../data/reference/castle/castle-c250.lock.json`](../../data/reference/castle/castle-c250.lock.json) by `python -m appsec_review.acceptance.castle prepare` | `targets/castle-c250` | Detector-scoring regression against the paper's numbers |
 | Build-topology fixture monorepo | committed at [`../../test/topology/monorepo/`](../../test/topology/monorepo/README.md) (46 small text files, byte-pinned by `MANIFEST.json`); copied out by `python -m appsec_review.acceptance.topology prepare --into targets/topology-monorepo` | `targets/topology-monorepo` | `tests/test_topology_fixture.py` (fast, no Docker) and live `appsec-review start --target targets/topology-monorepo`, scored with `... topology score --run <run>` against `test/topology/monorepo.expectations.json` ([task](../tasks/2026-11-07-topology-fixture-monorepo.md)) |
 | Freeciv at `b1b0768bfaca9b2fae68f9466defe1e80636e9fa` (whole repository; the parent of the fix for CVE-2026-90556, so that defect and CVE-2026-90557 are both present) | <https://github.com/freeciv/freeciv> | `targets/freeciv` | Job-by-job walk on a real game codebase; answers belong in the private `appsec-review-answers` repository, not here |
+| Smoke target `appsec-review-smoke-cpp` (C/C++), tag `v1.0.0` = `bededb650d0c…` | <https://github.com/wsollers/appsec-review-smoke-cpp> | `targets/appsec-review-smoke-cpp`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `native`, planted advisory zlib 1.2.11 (CVE-2018-25032), vendored |
+| Smoke target `appsec-review-smoke-java` (Java), tag `v1.0.0` = `3219d1700d69…` | <https://github.com/wsollers/appsec-review-smoke-java> | `targets/appsec-review-smoke-java`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `java`, planted advisory log4j-core 2.14.1 (CVE-2021-44228) |
+| Smoke target `appsec-review-smoke-javascript` (JavaScript/TypeScript), tag `v1.0.0` = `84e3c01a2b31…` | <https://github.com/wsollers/appsec-review-smoke-javascript> | `targets/appsec-review-smoke-javascript`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `node`, planted advisory lodash 4.17.15 (CVE-2020-8203) |
+| Smoke target `appsec-review-smoke-python` (Python), tag `v1.0.0` = `0821c008da6e…` | <https://github.com/wsollers/appsec-review-smoke-python> | `targets/appsec-review-smoke-python`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `python`, planted advisory urllib3 1.24 (CVE-2018-25091) |
+| Smoke target `appsec-review-smoke-ruby` (Ruby), tag `v1.0.0` = `c82179dbe7a7…` | <https://github.com/wsollers/appsec-review-smoke-ruby> | `targets/appsec-review-smoke-ruby`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `none (no Ruby profile or image; T-139)`, planted advisory rack 2.0.0 (CVE-2018-16471) |
+| Smoke target `appsec-review-smoke-go` (Go), tag `v1.0.0` = `5f83d5062052…` | <https://github.com/wsollers/appsec-review-smoke-go> | `targets/appsec-review-smoke-go`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `go`, planted advisory golang.org/x/text v0.3.0 (GO-2020-0015) |
+| Smoke target `appsec-review-smoke-csharp` (C#), tag `v1.0.0` = `887af65120b0…` | <https://github.com/wsollers/appsec-review-smoke-csharp> | `targets/appsec-review-smoke-csharp`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `dotnet`, planted advisory Newtonsoft.Json 12.0.1 (CVE-2024-21907) |
+| Smoke target `appsec-review-smoke-rust` (Rust), tag `v1.0.0` = `6a11cc967702…` | <https://github.com/wsollers/appsec-review-smoke-rust> | `targets/appsec-review-smoke-rust`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `rust`, planted advisory time 0.1.43 (RUSTSEC-2020-0071) |
+| Smoke target `appsec-review-smoke-php` (PHP), tag `v1.0.0` = `ef0c942de7d2…` | <https://github.com/wsollers/appsec-review-smoke-php> | `targets/appsec-review-smoke-php`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `php`, planted advisory guzzlehttp/guzzle 7.4.0 (CVE-2022-29248); substituted for monolog 1.23.0, which has no OSV record |
+| Smoke answer key `appsec-review-smoke-guide` (per-language `answer-key.json`, fixture facts, verification reports) | <https://github.com/wsollers/appsec-review-smoke-guide> | **outside** this repository, a sibling of the checkout | Evaluation only |
 | Any other target | its own remote | `targets/<name>`, passed with `--target` or `APPSEC_REVIEW_TARGET` | Ad hoc reviews |
 
 ```bash
@@ -32,6 +42,42 @@ git -C targets/freeciv rev-parse 75ecde3e86ddf2fe775768450e9a290a4f4d4387^   # p
 git clone https://github.com/wsollers/appsec-multi-vuln.git targets\appsec-multi-vuln
 ```
 
+```bash
+# Smoke targets (T-134): nine single-build-unit repositories, each checked out at its v1.0.0 tag (detached).
+for lang in cpp java javascript python ruby go csharp rust php; do
+  git clone https://github.com/wsollers/appsec-review-smoke-$lang.git targets/appsec-review-smoke-$lang
+  git -C targets/appsec-review-smoke-$lang checkout --detach v1.0.0
+done
+# The smoke answer key goes beside the checkout, never under targets/ or anywhere a review can see it.
+git clone https://github.com/wsollers/appsec-review-smoke-guide.git ../appsec-review-smoke-guide
+```
+
+```powershell
+foreach ($lang in "cpp","java","javascript","python","ruby","go","csharp","rust","php") {
+  git clone https://github.com/wsollers/appsec-review-smoke-$lang.git targets\appsec-review-smoke-$lang
+  git -C targets\appsec-review-smoke-$lang checkout --detach v1.0.0
+}
+git clone https://github.com/wsollers/appsec-review-smoke-guide.git ..\appsec-review-smoke-guide
+```
+
+- **Smoke tier.** Each `appsec-review-smoke-<language>` target is one build unit of under four hundred
+  own lines, started from the matching synthetic code-graph fixture under
+  `tests/fixtures/graph/codeql_export/` (kept byte-identical, so the fixture's `expected-facts.json`
+  line numbers hold) and built offline in its pinned build image as user 10001 in under twenty
+  seconds. Each plants a labelled inventory (`PLANTED.md` in the target; the key is the guide): code
+  true positives with a source-to-sink path, three vulnerable dependencies visible to Syft from the
+  lockfile (C/C++: vendored, visible only through version strings), two code items and one
+  dependency fixed in history, at least four false positives that a mounted Semgrep rule reports and
+  an exportable fact refutes (Ruby and Rust have no mounted rules, so theirs are recorded as
+  unflagged), one function above cyclomatic 15 in the highest-churn file, and a scripted, backdated
+  history of at least thirty commits (fix commits naming the CWE, a dependency upgrade, a rename, a
+  revert and reapply, `SECURITY.md` and `CHANGELOG.md`) reproducible from the target's own
+  `tools/make-history.sh`. A failure anywhere on a smoke target is a defect of the pipeline, not of
+  the target, and whether the planted false positives are squelched is the measure the tier exists
+  for. The tier proves nothing about recall or scale; Freeciv and `appsec-multi-vuln` keep that role.
+  Known limits are in each `answer-key.json` under `expected_gaps`: no Ruby build image (T-139),
+  `mvn -o` fails in the Java image for lack of Maven plugins, Python is not scored by the
+  complexity pass, and vendored C libraries are invisible to Syft, Grype and OSV-Scanner.
 - The pinned target and guide commits are in
   [`../reviews/native-evaluator-guide.lock.json`](../reviews/native-evaluator-guide.lock.json). Move the
   target only between runs, never while a run or a test suite reads it.
