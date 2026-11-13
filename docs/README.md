@@ -29,3 +29,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 The inventory describes the checked-in dev recipe, not host bindings or a completed run.
 Undeclared task bindings are named under [T-147](TODO.md).
+
+## Intelligence buckets
+
+[Bucket definitions and assignments](intelligence-buckets.json), [tool matrix](generated/matrix-tool-bucket.md), and [availability matrix](generated/matrix-bucket-availability.md).
+These are declaration inventories, not evidence that a review ran or achieved coverage.

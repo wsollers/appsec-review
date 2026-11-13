@@ -129,23 +129,23 @@ until each is rewritten into the entry format when it is next touched.
 | T-126 | [Design the multi-producer plan for code-graph and dataflow facts](#t-126-design-the-multi-producer-plan-for-code-graph-and-dataflow-facts) | graph | blocked |
 | T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | done (2026-11-13, docs/docs-ledger.json) |
 | T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | done (2026-11-13, docs/generated/inventory.json) |
-| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | open |
-| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | blocked |
+| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | done (2026-11-13, docs/intelligence-buckets.json) |
+| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | open |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
 | T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | blocked |
 | T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
-| T-134 | [Smoke targets: one minimal buildable repository per language, plus the guide](#t-134-smoke-targets-one-minimal-buildable-repository-per-language-plus-the-guide) | testing | in-progress |
-| T-135 | [Create the C and C++ smoke target appsec-review-smoke-cpp](#t-135-create-the-c-and-c-smoke-target-appsec-review-smoke-cpp) | testing | open |
-| T-136 | [Create the Java smoke target appsec-review-smoke-java](#t-136-create-the-java-smoke-target-appsec-review-smoke-java) | testing | open |
-| T-137 | [Create the JavaScript smoke target appsec-review-smoke-javascript](#t-137-create-the-javascript-smoke-target-appsec-review-smoke-javascript) | testing | open |
-| T-138 | [Create the Python smoke target appsec-review-smoke-python](#t-138-create-the-python-smoke-target-appsec-review-smoke-python) | testing | open |
-| T-139 | [Create the Ruby smoke target appsec-review-smoke-ruby](#t-139-create-the-ruby-smoke-target-appsec-review-smoke-ruby) | testing | open |
-| T-140 | [Create the Go smoke target appsec-review-smoke-go](#t-140-create-the-go-smoke-target-appsec-review-smoke-go) | testing | open |
-| T-141 | [Create the C# smoke target appsec-review-smoke-csharp](#t-141-create-the-c-smoke-target-appsec-review-smoke-csharp) | testing | open |
-| T-142 | [Create the Rust smoke target appsec-review-smoke-rust](#t-142-create-the-rust-smoke-target-appsec-review-smoke-rust) | testing | open |
-| T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | open |
-| T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | open |
-| T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | open |
+| T-134 | [Smoke targets: one minimal buildable repository per language, plus the guide](#t-134-smoke-targets-one-minimal-buildable-repository-per-language-plus-the-guide) | testing | done (2026-11-13, nine repositories and the guide published at v1.0.0; see T-135 to T-145 and docs/operations/test-targets.md) |
+| T-135 | [Create the C and C++ smoke target appsec-review-smoke-cpp](#t-135-create-the-c-and-c-smoke-target-appsec-review-smoke-cpp) | testing | done (2026-11-13, appsec-review-smoke-cpp v1.0.0 = bededb650d0c; Syft gap recorded in the guide) |
+| T-136 | [Create the Java smoke target appsec-review-smoke-java](#t-136-create-the-java-smoke-target-appsec-review-smoke-java) | testing | done (2026-11-13, appsec-review-smoke-java v1.0.0 = 3219d1700d69; mvn -o fails offline in the image, recorded as a gap) |
+| T-137 | [Create the JavaScript smoke target appsec-review-smoke-javascript](#t-137-create-the-javascript-smoke-target-appsec-review-smoke-javascript) | testing | done (2026-11-13, appsec-review-smoke-javascript v1.0.0 = 84e3c01a2b31) |
+| T-138 | [Create the Python smoke target appsec-review-smoke-python](#t-138-create-the-python-smoke-target-appsec-review-smoke-python) | testing | done (2026-11-13, appsec-review-smoke-python v1.0.0 = 0821c008da6e; complexity pass does not score Python, recorded as a gap) |
+| T-139 | [Create the Ruby smoke target appsec-review-smoke-ruby](#t-139-create-the-ruby-smoke-target-appsec-review-smoke-ruby) | testing | done (2026-11-13, appsec-review-smoke-ruby v1.0.0 = c82179dbe7a7; no build proof, no Ruby image, recorded as a gap) |
+| T-140 | [Create the Go smoke target appsec-review-smoke-go](#t-140-create-the-go-smoke-target-appsec-review-smoke-go) | testing | done (2026-11-13, appsec-review-smoke-go v1.0.0 = 5f83d5062052) |
+| T-141 | [Create the C# smoke target appsec-review-smoke-csharp](#t-141-create-the-c-smoke-target-appsec-review-smoke-csharp) | testing | done (2026-11-13, appsec-review-smoke-csharp v1.0.0 = 887af65120b0) |
+| T-142 | [Create the Rust smoke target appsec-review-smoke-rust](#t-142-create-the-rust-smoke-target-appsec-review-smoke-rust) | testing | done (2026-11-13, appsec-review-smoke-rust v1.0.0 = 6a11cc967702; no Semgrep rules for Rust, false positives recorded as unflagged) |
+| T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | done (2026-11-13, appsec-review-smoke-php v1.0.0 = ef0c942de7d2; guzzle substituted for monolog) |
+| T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | done (2026-11-13, https://github.com/wsollers/appsec-review-smoke-guide, commit dc69349) |
+| T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout) |
 | T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | done (2026-11-13, docs/tasks/2026-11-13-behavior-oriented-review.md) |
 | T-147 | [Declare exact task and dataset publication bindings for documentation](#t-147-declare-exact-task-and-dataset-publication-bindings-for-documentation) | pipeline | open |
 | T-148 | [Resolve historical archive citations without restoring the archive](#t-148-resolve-historical-archive-citations-without-restoring-the-archive) | testing | open |
@@ -157,6 +157,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-154 | [Audit labelled stage loss and dismissals by stratum](#t-154-audit-labelled-stage-loss-and-dismissals-by-stratum) | testing | blocked |
 | T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
 | T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
+| T-157 | [Declare language and applicability metadata for intelligence matrices](#t-157-declare-language-and-applicability-metadata-for-intelligence-matrices) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1974,7 +1975,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-129 — Map tools and datasets to intelligence buckets and availability matrices
 
-- **State:** open
+- **State:** done (2026-11-13, docs/intelligence-buckets.json)
 - **Area:** pipeline
 - **Blocked by:** T-128
 - **Blocks:** T-130
@@ -1988,6 +1989,12 @@ until each is rewritten into the entry format when it is next touched.
   datasets, stages, retrieval indices, MCP tools and role capabilities. Markdown summaries
   have at most seven columns; each empty availability cell names a gap id. Add newly found
   gaps to `docs/TODO.md` in the same commit, linking existing T-115 through T-126 where relevant.
+  Delivered: twelve primary-purpose buckets, all 32 canonical catalog tools and 156 unique
+  output kinds across 158 producer/dataset declarations, plus 204 bucket/language cells over
+  seventeen source-declared language labels. Composite outputs retain their original authority,
+  schema and protection. User decision on 2026-11-13: source-backed not-applicable states are
+  distinct from missing cells; missing or partially declared cells name T-147 or T-157.
+  These are declaration matrices, not proof of run coverage or issued worker capabilities.
 - **Done when:** `tests/docs/test_intelligence_buckets.py` rejects an unmapped tool or dataset,
   a bucket without a definition and an empty matrix cell without a gap id; every tool and
   dataset has exactly one bucket, and generated outputs pass the Stage 2 drift checks.
@@ -2002,7 +2009,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-130 — Author job operations pages around the generated contracts
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Blocked by:** T-129
 - **Blocks:** T-131
@@ -2088,7 +2095,7 @@ until each is rewritten into the entry format when it is next touched.
   `docs/docs-sync.json`, `AGENTS.md`, T-127, T-132.
 ### T-134 — Smoke targets: one minimal buildable repository per language, plus the guide
 
-- **State:** in-progress
+- **State:** done (2026-11-13, nine repositories and the guide published at v1.0.0; see T-135 to T-145 and docs/operations/test-targets.md)
 - **Area:** testing
 - **Blocks:** T-135, T-136, T-137, T-138, T-139, T-140, T-141, T-142, T-143, T-144, T-145
 - **Why:** a review walk needs a target with one correct answer at topology, discovery, build, SBOM, scanning, code intelligence, history and triage, so that a failure anywhere is a defect of the pipeline, not of the target. Freeciv and `appsec-multi-vuln` measure recall and scale but are too large to attribute a miss, and neither plants false positives, so nothing today measures whether code intelligence corroborates and squelches rather than only adds.
@@ -2098,7 +2105,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-135 — Create the C and C++ smoke target appsec-review-smoke-cpp
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-cpp v1.0.0 = bededb650d0c; Syft gap recorded in the guide)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal C and C++ repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history. OSV records CVE-2018-25032 only as a git commit range with no package ecosystem, so Syft's lockfile catalogers cannot list a vendored zlib; the Syft check for this target is expected to fail and the guide must record the detection path actually available (version string in `zlib.h`, cve-bin-tool lead) or substitute the advisory. Also the only target with the banned-function false positive (`rules/semgrep/banned-functions.yml` with a bounded length), format string, integer overflow into an allocation and use after free among its true positives.
@@ -2108,7 +2115,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-136 — Create the Java smoke target appsec-review-smoke-java
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-java v1.0.0 = 3219d1700d69; mvn -o fails offline in the image, recorded as a gap)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal Java repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history.
@@ -2118,7 +2125,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-137 — Create the JavaScript smoke target appsec-review-smoke-javascript
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-javascript v1.0.0 = 84e3c01a2b31)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal JavaScript repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history.
@@ -2128,7 +2135,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-138 — Create the Python smoke target appsec-review-smoke-python
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-python v1.0.0 = 0821c008da6e; complexity pass does not score Python, recorded as a gap)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal Python repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history.
@@ -2138,7 +2145,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-139 — Create the Ruby smoke target appsec-review-smoke-ruby
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-ruby v1.0.0 = c82179dbe7a7; no build proof, no Ruby image, recorded as a gap)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal Ruby repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history. `appsec-review.toml` has no Ruby profile under `[jobs.job_project_build.settings.profiles.*]` and no catalog build image carries a Ruby interpreter (`containers/catalog.toml`, `containers/buildenv/*/Dockerfile`). The brief forbids editing the configuration or an image, so the offline-build proof for this target has no pinned image to run in: record the gap in the guide, run `ruby -c` in whatever Ruby-capable image the host already has only as a syntax check that proves nothing about the pipeline, and keep the Syft, Semgrep, history and complexity checks, which do not need Ruby.
@@ -2148,7 +2155,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-140 — Create the Go smoke target appsec-review-smoke-go
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-go v1.0.0 = 5f83d5062052)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal Go repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history.
@@ -2158,7 +2165,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-141 — Create the C# smoke target appsec-review-smoke-csharp
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-csharp v1.0.0 = 887af65120b0)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal C# repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history.
@@ -2168,7 +2175,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-142 — Create the Rust smoke target appsec-review-smoke-rust
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-rust v1.0.0 = 6a11cc967702; no Semgrep rules for Rust, false positives recorded as unflagged)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal Rust repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history. The guide's `expected_gaps` carries the two Rust `known_gaps` (T-124, T-125).
@@ -2178,7 +2185,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-143 — Create the PHP smoke target appsec-review-smoke-php
 
-- **State:** open
+- **State:** done (2026-11-13, appsec-review-smoke-php v1.0.0 = ef0c942de7d2; guzzle substituted for monolog)
 - **Area:** testing
 - **Blocked by:** T-134 · **Blocks:** T-144, T-145
 - **Why:** T-134 needs one minimal PHP repository whose review has one correct answer at every stage. The matching synthetic CodeQL fixture source already carries the source, sink, sanitizer, guard and dispatch cases; it lacks a build manifest, planted dependencies, fixed items, false positives, a high-complexity function and a history. Substituted on 2026-11-13 for the brief's `monolog/monolog` 1.23.0, which has no record in OSV (`POST /v1/query` for Packagist returns no vulns), so no matcher could be expected to find it.
@@ -2188,7 +2195,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-144 — Create the smoke answer-key repository appsec-review-smoke-guide
 
-- **State:** open
+- **State:** done (2026-11-13, https://github.com/wsollers/appsec-review-smoke-guide, commit dc69349)
 - **Area:** testing
 - **Blocked by:** T-135, T-136, T-137, T-138, T-139, T-140, T-141, T-142, T-143 · **Blocks:** T-145
 - **Why:** the smoke targets exist for attribution, which needs a key that a review never sees: the planted inventory with spans and dispositions, the fixture's expected graph facts, the expected history signals and the expected gaps per language. `PLANTED.md` in each target describes the target; only the guide is the key, as `appsec-multi-vuln-guide` is for the acceptance target.
@@ -2198,7 +2205,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-145 — Clone the smoke targets and document them in test-targets.md
 
-- **State:** open
+- **State:** done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout)
 - **Area:** testing
 - **Blocked by:** T-144
 - **Why:** `docs/operations/test-targets.md` is where a host learns which targets exist, where they come from and where they go; without rows and clone lines the smoke tier is undiscoverable, and without the guide warning a session could clone the key where a review sees it.
@@ -2461,6 +2468,30 @@ until each is rewritten into the entry format when it is next touched.
   [design](architecture/threat-driven-hunting-enhancement.md#from-selection-to-actual-coverage),
   [shared resolution design](architecture/triage-verifier-enhancement.md#25-evidence-obligation-and-resolution),
   `src/appsec_review/review/cells.py`, `src/appsec_review/observability/findings/coverage_adapter.py`.
+
+### T-157 — Declare language and applicability metadata for intelligence matrices
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** dataset declarations do not bind outputs to languages, most producer language
+  selectors are not exposed by the typed inventory, and several tool input selectors use formats
+  or predicates rather than source-language lists. A configured producer language or an accepted file suffix cannot
+  establish per-dataset coverage or a run/package-scoped review capability.
+- **Scope:** make those boundaries explicit in authoritative producer and tool-input contracts,
+  then project them into the documentation matrices without inferring support from names or
+  prose. Retain the distinction between declared input compatibility, configured producer
+  candidates, actual publication, and issued review capabilities. User decision on 2026-11-13:
+  intentional source-backed not-applicable cells are populated states, while missing or
+  unsupported cells require a named TODO gap. Preserve protected payloads and the separate
+  OWASP store; do not grant new access merely to fill a matrix cell. Existing source declarations
+  are not changed by the documentation program.
+- **Done when:** focused tests cover each declared applicability boundary against its owning
+  selector or producer contract, every bucket/language pair is represented without guessed
+  coverage, and remaining unknown cells name an explicit accepted limit or unresolved item.
+- **Refs:** T-129, T-147, `docs/intelligence-buckets.json`,
+  `scripts/docs_matrices.py`, `src/appsec_review/runtime/datasets.py`,
+  `src/appsec_review/tool_inputs.py`, `src/appsec_review/review/capability.py`,
+  `tests/docs/test_intelligence_buckets.py`.
 
 ## Legacy backlog
 
