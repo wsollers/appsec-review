@@ -1,3 +1,11 @@
+---
+title: "Operating CI configuration analysis"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_ci_configuration_analysis", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating CI configuration analysis
 
 Run this job after `job_target_catalog`; the standard Dagster review graph enforces that order. Configuration lives under `[jobs.job_ci_configuration_analysis]` in `appsec-review.toml`, including provider routing, worker counts, bounds, correlation identity, and reviewed ruleset identity.

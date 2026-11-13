@@ -1,3 +1,11 @@
+---
+title: "syft tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # syft tool image
 
 `appsec-review/tool-syft:1.52.0` is the tool image declared by `tool-syft` in

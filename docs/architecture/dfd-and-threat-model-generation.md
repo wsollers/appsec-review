@@ -1,4 +1,15 @@
+---
+title: "Generated data-flow diagram and threat model"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_change_context_analysis", "job_ci_configuration_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpp_compiled_analysis", "job_dependency_intelligence", "job_document_issue_analysis", "job_evidence_collection", "job_final_report_publication", "job_inference_security_review", "job_language_build", "job_owasp_control_assessment", "job_review_data_indexing", "job_review_package_assembly", "job_review_prioritization", "job_security_tagging", "job_source_history_analysis", "job_target_catalog", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Generated data-flow diagram and threat model
+
+This is the historical design record. The current declared contract is generated in
+[the job page](../operations/job_threat_model_generation.md).
 
 Status: **design approved for the first slice (section 15); see section 17 for what is implemented
 on branch `dfd-threat-model` and what is not. Nothing is merged into `main`.** Registry items:

@@ -1,9 +1,17 @@
+---
+title: "Red discovery output contract"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Red discovery output contract
 
 The red pool emits a typed **proposal**, never a finding. Its machine-readable contract is
 [`red-discovery-result.schema.json`](../schemas/inference-security-review/red-discovery-result.schema.json),
 version `appsec-review/red-discovery-result/1`. It is the single output contract of both
-`hypothesis_hunter` and `red_team_analyst` (design decision 10; the earlier `red-result/1` is
+`hypothesis_hunter` and `red_team_analyst` (design decision 10; the earlier <!-- historical:begin -->`red-result/1`<!-- historical:end --> is
 retired). The former may propose a new condition within a hunt package; the latter may develop a
 finding lead into an explicit attack hypothesis. Neither role sets a claim state, severity, CVSS,
 exploitability rating, PoC eligibility, or final attack-chain identity.

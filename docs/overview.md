@@ -1,8 +1,10 @@
 ---
-title: How an appsec-review run works
-kind: architecture
-subsystem: overview
-status: current
+title: "How an appsec-review run works"
+kind: "architecture"
+subsystem: "overview"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 
 # How an appsec-review run works

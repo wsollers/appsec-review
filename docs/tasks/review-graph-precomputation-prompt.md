@@ -1,3 +1,11 @@
+---
+title: "Implementation prompt: source graphs and reusable review queries"
+kind: "task"
+subsystem: "code intelligence"
+status: "historical"
+jobs: ["job_cpg_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Implementation prompt: source graphs and reusable review queries
 
 Status: **superseded, not implemented.** The graph batch is now specified by

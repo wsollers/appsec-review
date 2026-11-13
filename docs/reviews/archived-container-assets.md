@@ -1,3 +1,11 @@
+---
+title: "Archived container assets review"
+kind: "review"
+subsystem: "images and deployment"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Archived container assets review
 
 Date: 2026-10-07

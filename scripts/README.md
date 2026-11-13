@@ -1,4 +1,39 @@
+---
+title: "Scripts"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Scripts
+
+## Documentation generation
+
+`scripts/generate-docs.sh` (or `.venv/bin/python scripts/generate-docs.py`) regenerates the
+job inventory, guidance reference, job-page blocks and documentation indexes. `--check` reports
+drift without writing; `--output-root test/tmp/<name>` writes an isolated reproduction.
+The executive overview and its SVG are authored and are never generator outputs.
+
+The generator loads the checked-in `dev` recipe through the typed loader, with no profile
+overlay or host observations. Its in-memory unbound image sentinels only satisfy loader shape
+validation; they are neither emitted nor usable as execution evidence. It never launches jobs,
+tools or models, reads a target or run, or loads runtime skill text. Missing task bindings remain
+explicit [T-147](../docs/TODO.md) gaps, not claims that a task has no tool or model.
+
+Authored metadata uses one-line YAML scalars (JSON-quoted when needed) and JSON-style string
+arrays. Required fields are `title`, `kind`, `subsystem`, `status` and `last reconciled`; `jobs`
+is a sorted, unique array when relevant. Status is `current` or `historical`; task progress lives
+in the TODO registry. The reconciliation value comes from `docs/docs-sync.json` and does not
+advance merely because generated views changed. Generated Markdown carries its notice as the
+first body line after frontmatter; generated JSON carries it on its first line.
+
+Current prose identifiers are checked against the source inventory. Historical records and
+explicitly marked historical passages retain retired names; the TODO registry is planning data.
+A historical passage uses balanced `<!-- historical:begin -->` and `<!-- historical:end -->`
+markers around the preserved text. Those markers do not exempt its links. Missing historical
+archive citations are separately reported under [T-148](../docs/TODO.md); new broken links are
+not accepted as archive exceptions.
 
 Operator scripts for the review host. Every script exists as a bash script (`<name>.sh`, Linux and
 WSL) and a PowerShell twin (`<name>.ps1`) with the same options (`--kebab-case` in bash,

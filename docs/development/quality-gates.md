@@ -1,3 +1,11 @@
+---
+title: "Incremental offline quality gates"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Incremental offline quality gates
 
 Run development checks from a Linux-filesystem checkout and its own Python 3.12 environment.

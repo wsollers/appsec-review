@@ -1,3 +1,11 @@
+---
+title: "tool-clangd-indexer: pinned clangd static indexer"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_cpp_symbol_index"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # tool-clangd-indexer: pinned clangd static indexer
 
 This directory builds `appsec-review/tool-clangd-indexer:23.1.0`, an offline, non-root image

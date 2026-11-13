@@ -1,3 +1,11 @@
+---
+title: "Repository Agent Guidance"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Repository Agent Guidance
 
 This repository is being rebuilt as an application-security review system. This file governs

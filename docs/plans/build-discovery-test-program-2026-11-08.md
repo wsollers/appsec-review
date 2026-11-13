@@ -1,3 +1,11 @@
+---
+title: "Build discovery: contract and test program"
+kind: "history"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_project_build", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Build discovery: contract and test program
 
 Tracking document for making build discovery the most tested piece of the review. Registry item:

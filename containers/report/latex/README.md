@@ -1,3 +1,11 @@
+---
+title: "LaTeX report renderer (`tool-report-latex`)"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_dossier_publication"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # LaTeX report renderer (`tool-report-latex`)
 
 The image renders the review report's LaTeX to a deterministic PDF. It replaces the archived

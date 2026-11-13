@@ -1,3 +1,11 @@
+---
+title: "Job pass 11: admitted environment inputs and captured-build consumption"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_build_environment_analysis", "job_language_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 11: admitted environment inputs and captured-build consumption
 
 This T-057 continuation follows the accepted c094 project-build pass. It retains the

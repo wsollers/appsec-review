@@ -1,3 +1,11 @@
+---
+title: "Native admission from builder-image compiler profiles"
+kind: "history"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_language_build", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native admission from builder-image compiler profiles
 
 Status: **rollout step 1 implemented** (the `/2` record schema, probe script, transcript parser

@@ -1,3 +1,11 @@
+---
+title: "Integration-tier walk: the per-job session brief for a review host (T-113)"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Integration-tier walk: the per-job session brief for a review host (T-113)
 
 The companion of [`test-tier-walk-prompt.md`](test-tier-walk-prompt.md). That brief gives a job

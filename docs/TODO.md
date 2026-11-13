@@ -1,3 +1,11 @@
+---
+title: "TODO registry"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_image_pin_verification", "job_language_build", "job_model_connectivity", "job_post_build_security_assessment", "job_project_build", "job_remediation_validation", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_third_party_data_sync", "job_threat_model_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # TODO registry
 
 This is the only TODO file in the repository (`AGENTS.md`, "Deferred work and TODOs"). Every
@@ -120,8 +128,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-125 | [Close or confirm the Rust canonicalize sanitizer gap](#t-125-close-or-confirm-the-rust-canonicalize-sanitizer-gap) | graph | open |
 | T-126 | [Design the multi-producer plan for code-graph and dataflow facts](#t-126-design-the-multi-producer-plan-for-code-graph-and-dataflow-facts) | graph | blocked |
 | T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | done (2026-11-13, docs/docs-ledger.json) |
-| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | open |
-| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | blocked |
+| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | done (2026-11-13, docs/generated/inventory.json) |
+| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | open |
 | T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | blocked |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
 | T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | blocked |
@@ -139,6 +147,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | open |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | open |
 | T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | in-progress |
+| T-147 | [Declare exact task and dataset publication bindings for documentation](#t-147-declare-exact-task-and-dataset-publication-bindings-for-documentation) | pipeline | open |
+| T-148 | [Resolve historical archive citations without restoring the archive](#t-148-resolve-historical-archive-citations-without-restoring-the-archive) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1849,7 +1859,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-128 — Generate the documentation inventory and enforce frontmatter and links
 
-- **State:** open
+- **State:** done (2026-11-13, docs/generated/inventory.json)
 - **Area:** pipeline
 - **Blocked by:** T-127
 - **Blocks:** T-129
@@ -1868,6 +1878,16 @@ until each is rewritten into the entry format when it is next touched.
   The link validator must distinguish links from literal Markdown examples in inline or fenced
   code: Stage 1 found the existing `tests/test_documentation.py` regex treating the program
   prompt's inline `relative/path.md#anchor` example as a missing file, unchanged from `145bcceda`.
+  User decisions on 2026-11-13: undeclared task bindings are explicit T-147 gaps rather than
+  inferred launches; historical pages and explicitly marked historical passages retain retired
+  identifiers; current claims remain checked against source; the TODO registry is planning data
+  checked by its own registry tests. The executive overview and its SVG remain authored.
+  Delivered: deterministic inventory for 47 jobs, 448 tasks and 158 dataset declarations;
+  guidance, per-job generated blocks and kind indexes; metadata on the portable document set;
+  drift, metadata, link and identifier regressions. The existing link guard now shares the
+  literal-aware parser. The focused gate passed 97 checks, with one named T-148 archive-source
+  skip and no case over ten seconds; undeclared bindings remain explicit T-147 gaps.
+  The docs-sync watermark is unchanged because this is not a full cumulative code reconciliation.
 - **Done when:** `tests/docs/test_generated_docs.py` detects regeneration differences;
   `tests/docs/test_docs_frontmatter.py` rejects missing or invalid frontmatter;
   `tests/docs/test_docs_links.py` rejects unresolved relative links and anchors; and
@@ -1880,7 +1900,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-129 — Map tools and datasets to intelligence buckets and availability matrices
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Blocked by:** T-128
 - **Blocks:** T-130
@@ -2125,6 +2145,56 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** `docs/tasks/2026-11-13-behavior-oriented-review.md`,
   `src/appsec_review/owasp_workbench/`, `src/appsec_review/review/`,
   `src/appsec_review/jobs/job_security_tagging/`, T-001, T-073, T-076, T-086, T-107.
+
+### T-147 — Declare exact task and dataset publication bindings for documentation
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** the Stage 2 inventory can project the typed job and dataset contracts, but most units
+  do not declare whether they launch an external tool or which model worker they select;
+  inspecting a task name or a job-level model setting is not proof of a launch or selection.
+  An existing artifact-security declaration also claims an aggregate publication with the
+  scanner-result step and schema rather than the step and schema its publisher emits.
+- **Scope:** add authoritative, independently testable task bindings at the execution definition
+  that owns them, including deterministic/internal tasks, conditional tool selection, model
+  profiles, roles, persona/stack routing, task prompts and allowed versus selected runtime skills.
+  Then project those declarations into `scripts/documentation.py` instead of maintaining a
+  parallel documentation mapping. Until then, the user-approved inventory names each missing
+  binding as this gap and links the handler; a missing binding never means no tool or model runs.
+  Do not modify frozen configuration, guidance registry or `DATASETS` as part of the docs program.
+  Observed source mismatch: `job_artifact_security_analysis/datasets.py` declares
+  `artifact_security_results` at `analyze` with `appsec-review/artifact-security-observation/1`;
+  its artifact glob also claims `accepted-analysis.json`, which `acceptance.publish_handoff`
+  writes with `appsec-review/artifact-security-analysis/1`. Separate or narrow the declarations
+  and reconcile affected typed consumers in the implementation repair, preserving actual
+  payload formats; the documentation generator retains the current declarations unchanged.
+- **Done when:** every registered unit's binding is covered by a focused test of the real
+  dispatch definition, and generated task rows distinguish exact, conditional and no-launch
+  bindings with no unknown binding silently converted to an empty success; a focused publisher
+  regression also verifies the artifact-security aggregate's actual schema, step and owning
+  declaration without running the full job or a scanner.
+- **Refs:** T-128, `scripts/documentation.py`, `src/appsec_review/runtime/units.py`,
+  `src/appsec_review/guidance/workers.py`, `docs/generated/inventory.json`,
+  `src/appsec_review/jobs/job_artifact_security_analysis/datasets.py`,
+  `src/appsec_review/jobs/job_artifact_security_analysis/job.py` (`publish`).
+
+### T-148 — Resolve historical archive citations without restoring the archive
+
+- **State:** open
+- **Area:** testing
+- **Why:** the dated container-assets review links to ignored `old/` files that are absent in
+  this checkout; its cited pre-simplification tag is also unavailable locally and on `origin`.
+  Those historical citations cannot be verified as portable relative links.
+- **Scope:** recover immutable citation destinations and provenance from an owner-supplied
+  historical source, without restoring, executing or importing archive instructions. Preserve
+  the dated review's decisions; do not invent URLs or silently exempt new broken links.
+  The docs link checks report this narrowly scoped archive coverage gap separately from
+  current and otherwise resolvable historical links.
+- **Done when:** each historical archive citation has a verified durable destination and the
+  archive-citation documentation check runs without a missing-source skip.
+- **Refs:** T-128, `docs/reviews/archived-container-assets.md`,
+  `docs/reviews/archived-container-assets.json`, `docs/reviews/container-migration.md`,
+  `tests/docs/test_docs_links.py`, `AGENTS.md` (Rebuild boundary).
 
 ## Legacy backlog
 
@@ -2612,6 +2682,8 @@ User decision 2026-11-12: the nightly sync may reach the network for database by
 a separately authorized Dagster image rebuild, not just source reload. No images, host pins,
 deployment, nightly run, acceptance or live review are changed by the implementation task.
 
+<a id="optimize-produced-artifact-grype-without-reducing-coverage"></a>
+
 ### T-010 — Optimize produced-artifact Grype without reducing coverage
 
 Future artifact Grype work must deduplicate accepted artifacts by content hash and cache only by
@@ -2620,6 +2692,8 @@ reuse hash-verified accepted SBOMs, filter unsupported formats before launch, an
 concurrency with partitioned resumability. Telemetry must report artifact/byte throughput, avoided
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
+
+<a id="summarize-installed-dependencies-for-the-remaining-ecosystems"></a>
 
 ### T-011 — Summarize installed dependencies for the remaining ecosystems
 
@@ -2652,6 +2726,8 @@ no per-file review and no supply-chain rows.
 Update 2026-11-12 (dependency plan): the installed and resolved dependency summaries become finders behind the
 registry of T-099, in the order above. Package-manager tools that need network egress to resolve are
 pre-authorized by the user (2026-11-12).
+
+<a id="follow-ups-from-the-scanner-launch-reduction"></a>
 
 ### T-012 — Follow-ups from the scanner launch reduction
 

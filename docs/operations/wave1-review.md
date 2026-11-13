@@ -1,3 +1,11 @@
+---
+title: "Wave 1 review operations"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_image_pin_verification", "job_owasp_control_assessment", "job_target_catalog", "job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Wave 1 review operations
 
 The direct CLI and Dagster share the application-owned job lifecycle, enabled review topology,

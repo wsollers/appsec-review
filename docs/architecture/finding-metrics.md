@@ -1,3 +1,11 @@
+---
+title: "Finding metrics"
+kind: "architecture"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Finding metrics
 
 Status: **implemented 2026-11-11 as an offline operator domain**
@@ -276,8 +284,8 @@ parse what was exported, never fetch, never execute.
 
 ### 7.1 Boundary
 
-- `job_crash_evidence_ingestion` reads a directory the operator exported and registered for the
-  run. It makes no network call and contacts no crash service.
+- The proposed ingestion job ([T-075](../TODO.md)) would read a directory the operator exported
+  and registered for the run, without contacting a crash service.
 - Crash bytes, module names, symbols, annotations and messages are untrusted data. They never
   reach a worker prompt as instructions and never become metric labels.
 - A minidump contains process memory. The job keeps **only** the normalized record below. Raw
@@ -478,7 +486,7 @@ Where the code differs from the text above, the code is authoritative and this s
    inferred; it stays null until the review records it (T-076).
 10. **Crash evidence is an operator facility, not yet a job.** Adapters, binding, corroboration,
     the missed-bucket list and lead candidates are implemented and unit tested.
-    `job_crash_evidence_ingestion`, the `crash_report` lane A lead family, raw minidump walking and
+    The proposed ingestion job, the `crash_report` lane A lead family, raw minidump walking and
     symbolication are not (T-075): registering a job changes the review graph and the lead family
     changes what a model reviews, and neither can be validated without live runs.
 11. **The experiments domain has no `published` stage.** The adapter registers published snapshots

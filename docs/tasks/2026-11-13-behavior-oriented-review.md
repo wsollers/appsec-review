@@ -1,9 +1,10 @@
 ---
 title: "Behavior-oriented review and subject-complete OWASP evidence"
 kind: "task"
-subsystem: "security review"
-status: "in-progress"
-jobs: ["job_security_tagging", "job_owasp_control_assessment", "job_inference_security_review"]
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review", "job_owasp_control_assessment", "job_security_tagging"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Behavior-oriented review
 

@@ -1,3 +1,11 @@
+---
+title: "Target analysis planning operations"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_build_environment_analysis", "job_build_iteration", "job_language_build", "job_project_build", "job_target_analysis_plan", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Target analysis planning operations
 
 The planner runs after `job_target_catalog` and the enabled `job_build_environment_analysis`

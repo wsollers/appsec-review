@@ -1,3 +1,11 @@
+---
+title: "Shared native toolchain"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Shared native toolchain
 
 Every language build environment compiles C and C++ with one toolchain: node-gyp addons, phpize

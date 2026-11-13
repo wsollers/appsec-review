@@ -1,3 +1,11 @@
+---
+title: "CASTLE-style detector scoring, negative controls and the CASTLE regression corpus"
+kind: "review"
+subsystem: "testing and operations"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # CASTLE-style detector scoring, negative controls and the CASTLE regression corpus
 
 Status: implemented 2026-11-02 in chunks A-E below (coordinator session). Changed 2026-11-11 by

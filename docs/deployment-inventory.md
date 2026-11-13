@@ -1,3 +1,11 @@
+---
+title: "Bounded static deployment inventory"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Bounded static deployment inventory
 
 `appsec_review.deployment` is the F05 **leaf domain**, not a job, registry, store,

@@ -1,3 +1,11 @@
+---
+title: "End-of-review telemetry report (LaTeX/PDF)"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # End-of-review telemetry report (LaTeX/PDF)
 
 The telemetry report is **one PDF per review run**: an end-of-review rollup of the run's telemetry,

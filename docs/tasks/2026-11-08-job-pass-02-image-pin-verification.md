@@ -1,3 +1,11 @@
+---
+title: "Job pass 02 — `job_image_pin_verification`"
+kind: "task"
+subsystem: "images and deployment"
+status: "historical"
+jobs: ["job_image_pin_verification", "job_review_intake", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 02 — `job_image_pin_verification`
 
 Second job of the job-by-job pass (fix, audit the unit tests, add tests). Advances T-047 (two

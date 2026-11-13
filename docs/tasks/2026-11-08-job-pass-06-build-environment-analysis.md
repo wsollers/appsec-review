@@ -1,3 +1,11 @@
+---
+title: "Job pass 06 — `job_build_environment_analysis`"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_build_environment_analysis", "job_ci_configuration_analysis", "job_source_history_analysis", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 06 — `job_build_environment_analysis`
 
 Sixth job of the pass (`docs/processes/job-pass-checklist.md`). Converts the job to typed failures

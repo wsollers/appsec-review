@@ -1,3 +1,11 @@
+---
+title: "Lead severity triage"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Lead severity triage
 
 `job_inference_security_review` runs `triage.lead_severity` after accepting the review scope and

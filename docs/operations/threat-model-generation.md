@@ -1,3 +1,11 @@
+---
+title: "Generated DFD and threat model"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_artifact_indexing", "job_code_graph_index", "job_cpp_compiled_analysis", "job_dependency_intelligence", "job_language_build", "job_owasp_control_assessment", "job_review_data_indexing", "job_review_prioritization", "job_security_tagging", "job_target_catalog", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Generated DFD and threat model
 
 `job_threat_model_generation` (T-107) builds a data-flow diagram and a candidate threat list from

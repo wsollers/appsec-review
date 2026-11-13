@@ -1,3 +1,11 @@
+---
+title: "Operating test-coverage ingestion"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_language_build", "job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating test-coverage ingestion
 
 `job_test_coverage` runs after target cataloging, language builds, and artifact indexing. It imports

@@ -1,3 +1,11 @@
+---
+title: "Future Windows native-analysis project"
+kind: "architecture"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Future Windows native-analysis project
 
 Status: design only; no VM, image, installer, orchestration, or runtime implementation exists.

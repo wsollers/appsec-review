@@ -1,3 +1,11 @@
+---
+title: "C/C++ compiled-analysis operations"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_language_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # C/C++ compiled-analysis operations
 
 `job_cpp_compiled_analysis` consumes the accepted `job_language_build` handoff and discovers native

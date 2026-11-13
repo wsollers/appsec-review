@@ -1,3 +1,11 @@
+---
+title: "SVF points-to tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_svf_alias_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # SVF points-to tool image
 
 `appsec-review/tool-svf:3.3.0` runs SVF-3.3's field-sensitive Andersen analysis over clang-18

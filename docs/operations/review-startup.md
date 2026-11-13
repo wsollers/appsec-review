@@ -1,3 +1,11 @@
+---
+title: "Starting an appsec review: features and flags"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_codeql_analysis", "job_cpg_analysis", "job_final_report_publication", "job_inference_security_review", "job_poc_generation", "job_sanitizer_build", "job_source_history_analysis", "job_svf_alias_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Starting an appsec review: features and flags
 
 **For a full review, use `scripts/review-start` to launch Dagster's `wave1_review`.**

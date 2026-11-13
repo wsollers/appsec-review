@@ -1,3 +1,11 @@
+---
+title: "Review package and finding-lead contract"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_artifact_security_analysis", "job_ci_configuration_analysis", "job_code_graph_index", "job_cpg_analysis", "job_dependency_intelligence", "job_document_issue_analysis", "job_inference_security_review", "job_profile_data", "job_review_package_assembly", "job_svf_alias_analysis", "job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
@@ -86,7 +94,7 @@ of an unlocated unit. The configured package byte ceiling and membership gates a
 
 `review/packages.py::GraphContext` reads the accepted `graph` shards
 ([code-graph precomputation](code-graph-precomputation.md) section 7.5, rule
-`package-graph-context/1`). A graph shard applies to a package scope when it names the scope's
+`package-graph-context/2`). A graph shard applies to a package scope when it names the scope's
 build unit (shard producer `build_unit_id` or a fact's `scope.build_unit_id`) or holds a fact
 located in one of the scope's paths. A family is listed in `retrieval.graph_families` when an
 applying shard covers it in any state but `unavailable`.
@@ -288,7 +296,7 @@ The three view bounds live next to the package bounds:
    `missing` gap and a stale feed a `stale` gap, with ids from `make_id("gap", 1, ...)`. Then
    normalize every accepted lead of every family with its versioned rule
    `appsec-review/lead-family/<family>/<n>` from `review/lead_families.py::FAMILY_RULES`.
-   OWASP uses `owasp_control/2` for provisional evidence-bound hypotheses:
+   OWASP uses `lead-family/owasp_control/2` for provisional evidence-bound hypotheses:
 
    | Family | Accepted records | Reported severity |
    |---|---|---|

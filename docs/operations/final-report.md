@@ -1,3 +1,11 @@
+---
+title: "Operating the final publication gate and the final report"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating the final publication gate and the final report
 
 **Delivered snapshot contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC, remediation

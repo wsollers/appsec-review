@@ -1,3 +1,11 @@
+---
+title: "Seeded CodeQL neighborhoods"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_code_graph_index", "job_codeql_analysis", "job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Seeded CodeQL neighborhoods
 
 Status: contract (2026-10-16). Extends [`code-graph-precomputation.md`](code-graph-precomputation.md)

@@ -1,3 +1,11 @@
+---
+title: "CodeQL images"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_codeql_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # CodeQL images
 
 CodeQL is not in `containers/catalog.toml` and is not built by `containers/build-all.sh`. The

@@ -1,3 +1,11 @@
+---
+title: "Windows host build runner"
+kind: "architecture"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_language_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Windows host build runner
 
 Status: scripts implemented and proven on a canary; pipeline integration not started.

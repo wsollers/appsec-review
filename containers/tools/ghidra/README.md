@@ -1,3 +1,11 @@
+---
+title: "tool-ghidra: pinned Ghidra headless decompilation closure"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_review_intake"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # tool-ghidra: pinned Ghidra headless decompilation closure
 
 This directory builds `appsec-review/tool-ghidra:12.1.4`: an offline, non-root image that holds the

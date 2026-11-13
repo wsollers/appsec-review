@@ -1,3 +1,11 @@
+---
+title: "Job pass 10 - `job_project_build`"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 10 - `job_project_build`
 
 This pass advances T-057 using the user's capture-proven native-build direction of

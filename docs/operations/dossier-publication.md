@@ -1,3 +1,11 @@
+---
+title: "Dossier publication operations"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_dossier_publication"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Dossier publication operations
 
 Status: producer delivered in `065f736c`, centrally wired in `b702eb7`, assurance compatibility

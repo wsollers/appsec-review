@@ -1,3 +1,11 @@
+---
+title: "Report rendering (PDF and single-page HTML)"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_final_report_publication", "job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Report rendering (PDF and single-page HTML)
 
 `python -m appsec_review.reporting` turns a finished review run into a readable report: a LaTeX

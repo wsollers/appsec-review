@@ -1,3 +1,11 @@
+---
+title: "Clang static analysis"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_cpp_compiled_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Clang static analysis
 
 See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place

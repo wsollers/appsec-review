@@ -1,3 +1,11 @@
+---
+title: "tool-joern: pinned Joern/c2cpg runtime closure"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_cpg_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # tool-joern: pinned Joern/c2cpg runtime closure
 
 This directory builds `appsec-review/tool-joern:4.0.630`: an offline, non-root image that holds the

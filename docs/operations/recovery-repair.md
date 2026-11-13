@@ -1,3 +1,11 @@
+---
+title: "Recovery and repair admission"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_ci_configuration_analysis", "job_model_connectivity", "job_review_intake", "job_source_history_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Recovery and repair admission
 
 Recovery is **fail -> inspect bounded evidence -> reproduce in a focused unit test -> repair ->

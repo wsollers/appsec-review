@@ -1,3 +1,11 @@
+---
+title: "Operating the read-only operator MCP gateway"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_code_graph_index", "job_review_data_indexing", "job_review_prioritization"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating the read-only operator MCP gateway
 
 The gateway selects exactly one **application run**, even when that run has not reached index

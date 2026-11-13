@@ -1,3 +1,11 @@
+---
+title: "Cross-language CodeQL analysis"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_code_graph_index", "job_codeql_analysis", "job_evidence_collection", "job_language_build", "job_project_build", "job_review_data_indexing", "job_review_prioritization"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Cross-language CodeQL analysis
 
 `job_codeql_analysis` is the sole CodeQL producer. It runs after the accepted target catalog,
@@ -296,7 +304,7 @@ runner checks declared execution compatibility, not supplied payload integrity, 
 manifest's language, pack identity and bounds must equal the configuration.
 
 The export checkpoint is `export-checkpoint.json`
-(`appsec-review/codeql-export-checkpoint/1`). Its identity binds the database identity and tree,
+(`appsec-review/codeql-export-checkpoint/2`). Its identity binds the database identity and tree,
 the effective export contract, the manifest schema, the bounds and declared export/runner releases.
 A database, declared pack release, bound or declared runner release change reruns the export only. A query-suite or catalog change
 does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a

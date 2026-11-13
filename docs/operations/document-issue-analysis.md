@@ -1,3 +1,11 @@
+---
+title: "Document issue analysis"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_document_issue_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Document issue analysis
 
 `job_document_issue_analysis` runs after accepted review package assembly in `start`, `resume`,

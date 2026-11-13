@@ -1,3 +1,11 @@
+---
+title: "Model profiles: dev, prod, copilot-dev and copilot-prod"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_dependency_intelligence", "job_inference_security_review", "job_model_connectivity", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_project_build", "job_review_intake", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Model profiles: dev, prod, copilot-dev and copilot-prod
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review

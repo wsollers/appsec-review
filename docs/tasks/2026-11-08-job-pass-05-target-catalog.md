@@ -1,3 +1,11 @@
+---
+title: "Job pass 05 — `job_target_catalog`"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_build_environment_analysis", "job_ci_configuration_analysis", "job_language_build", "job_project_build", "job_source_history_analysis", "job_target_analysis_plan", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 05 — `job_target_catalog`
 
 Fifth job of the pass (`docs/processes/job-pass-checklist.md`). Advances T-035 (discovery-side

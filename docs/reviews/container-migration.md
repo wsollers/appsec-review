@@ -1,3 +1,11 @@
+---
+title: "Container migration acceptance record"
+kind: "review"
+subsystem: "images and deployment"
+status: "historical"
+jobs: ["job_cpg_analysis", "job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Container migration acceptance record
 
 Date: 2026-10-07

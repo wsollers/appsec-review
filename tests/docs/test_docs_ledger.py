@@ -9,19 +9,12 @@ import subprocess
 
 import pytest
 
+from scripts.docs_support import KINDS, SUBSYSTEMS
+
 
 ROOT = Path(__file__).resolve().parents[2]
 LEDGER = "docs/docs-ledger.json"
 SCHEMA = "appsec-review/docs-ledger/1"
-KINDS = {
-    "architecture", "operations", "process", "task", "walk", "review", "schema",
-    "history", "generated",
-}
-SUBSYSTEMS = {
-    "images and deployment", "target acquisition and build", "code intelligence",
-    "scanners and evidence collection", "review inference and guidance",
-    "runtime interchange", "reporting and metrics", "testing and operations",
-}
 DISPOSITIONS = {"keep", "revise", "merge-into", "retire", "generated"}
 FIELDS = {"path", "kind", "subsystem", "disposition", "reason", "decision_record"}
 

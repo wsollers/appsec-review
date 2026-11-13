@@ -1,3 +1,11 @@
+---
+title: "Test targets: where to get the repositories"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Test targets: where to get the repositories
 
 Reviews and the acceptance tests run against target repositories that are **not** part of this

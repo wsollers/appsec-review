@@ -1,3 +1,11 @@
+---
+title: "Operating Clang static analysis"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_cpp_compiled_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating Clang static analysis
 
 The Clang job runs after an accepted `job_cpp_compiled_analysis` handoff. Its central configuration

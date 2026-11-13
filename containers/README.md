@@ -1,3 +1,11 @@
+---
+title: "Container packaging"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_image_pin_verification"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Container packaging
 
 `catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it

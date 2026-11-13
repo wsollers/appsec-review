@@ -1,3 +1,11 @@
+---
+title: "Judge role and proof-of-concept generation"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review", "job_language_build", "job_poc_generation", "job_sanitizer_build", "job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Judge role and proof-of-concept generation
 
 Status: design; implementation follows this document. It extends
@@ -310,7 +318,7 @@ R4, R5, R6 or evidence admissibility. Section 5 (`job_poc_generation`) is not pa
 14. **`judge_model_distinct`** compares the judge's (provider, model) with the cells of the claim whose role is in
     `require_distinct_from_roles` (red and both blue cells with the checked-in list); it is true when that set is empty.
     It is recorded in the verdict, the finding package and `accounting.judge_verdicts`, and never required.
-15. **Finding package and handoff.** `finding-package/2` and `inference-review-handoff/2` gained fields without a version
+15. **Finding package and handoff.** `finding-package/2` and <!-- historical:begin -->`inference-review-handoff/2`<!-- historical:end --> gained fields without a version
     bump (this repository has no deployed consumers of the old shapes): `judge_verdict` (`verdict` is the judges'
     unanimous outcome, else `unresolved`; `disagrees_with_state` is set for `blue_correct` and `neither`, so a confirmed
     finding with a judge on blue's side shows both), `independence.judge_model_distinct` (null with no judge),

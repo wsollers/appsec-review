@@ -1,3 +1,11 @@
+---
+title: "Review prioritization operations"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_review_prioritization", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review prioritization operations
 
 `job_review_prioritization` ranks files and functions for LLM review from structural complexity,

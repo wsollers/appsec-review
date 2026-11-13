@@ -1,3 +1,11 @@
+---
+title: "Build environments, execution capture, and secret scanning"
+kind: "architecture"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_cpp_compiled_analysis", "job_language_build", "job_post_build_security_assessment", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Build environments, execution capture, and secret scanning
 
 The separately named default-enabled
@@ -122,7 +130,7 @@ External assets are fetched over HTTPS before the Docker build. Their declared b
 SHA-256 must match `assets.lock.json`; the Docker build then runs with `--network=none` and
 `--pull=false`. This separation keeps network retrieval out of Dockerfile execution. Build order is
 derived from declared image dependencies, and each run writes logs plus an
-`appsec-review/container-build-summary/1` record under `runs/container-builds/<run-id>/`.
+`appsec-review/container-build-summary/2` record under `runs/container-builds/<run-id>/`.
 
 Startup, functional, and security acceptance use `containers/runtime-policy.toml`: non-root
 the application/Dagster process uid and gid, read-only root filesystem, all capabilities dropped,

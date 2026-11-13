@@ -1,3 +1,11 @@
+---
+title: "Bounded focused tests and serial operator recovery"
+kind: "task"
+subsystem: "testing and operations"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Bounded focused tests and serial operator recovery
 
 This implements the operator-only safeguards for **T-057**, without changing release scoping,

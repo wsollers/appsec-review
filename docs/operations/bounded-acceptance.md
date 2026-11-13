@@ -1,3 +1,11 @@
+---
+title: "Bounded integration acceptance"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Bounded integration acceptance
 
 This is the operator guide for the explicit acceptance profiles exposed by `run-tests`.
@@ -372,7 +380,7 @@ For new fixtures:
 3. Do not launch child `git`. The supervisor resolves HEAD before the guarded test process and
    exports `APPSEC_ACCEPTANCE_TESTED_COMMIT`; use it rather than widening the executable guard.
 4. Use application producers and certified validators at real joins. Write framework
-   `handoff/2` fixture envelopes through `tests.handoff_fixture.write_fixture_handoff`; do not
+   `job-handoff/2` fixture envelopes through `tests.handoff_fixture.write_fixture_handoff`; do not
    replace the current review `/3` or gate/report `/2` domain contracts to make an integration pass.
    Freeze the actual configuration before synthetic upstream handoffs, and bind their
    explicitly claimed upstream digest. Declare tiny selections such as one lead package and

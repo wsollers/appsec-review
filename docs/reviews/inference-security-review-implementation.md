@@ -1,3 +1,11 @@
+---
+title: "Inference security review: slice 1 implementation record"
+kind: "review"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Inference security review: slice 1 implementation record
 
 Record of the 2026-10-12 work on branch `ccr-67a0aeda-uyt6x6`. It took the

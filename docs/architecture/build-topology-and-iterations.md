@@ -1,3 +1,11 @@
+---
+title: "Target build topology and bounded iterations"
+kind: "architecture"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_build_iteration", "job_language_build", "job_project_build", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Target build topology and bounded iterations
 
 ## Current graph/2 source contract

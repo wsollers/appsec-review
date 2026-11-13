@@ -1,3 +1,11 @@
+---
+title: "Detector coverage checklist against CodeBadger's detector list"
+kind: "review"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_clang_static_analysis", "job_cpp_compiled_analysis", "job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Detector coverage checklist against CodeBadger's detector list
 
 Status: review record, verified against repository files on 2026-10-16 at commit `dc8bc5d3`

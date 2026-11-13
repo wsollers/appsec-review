@@ -1,3 +1,11 @@
+---
+title: "Container image and Python module signing"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Container image and Python module signing
 
 Pinned container images and the installed `appsec_review` package are signed by the operator on the

@@ -1,3 +1,11 @@
+---
+title: "Tree-sitter parser image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Tree-sitter parser image
 
 This image is the only supported runtime for AST production. It performs no grammar download or

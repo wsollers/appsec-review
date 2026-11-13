@@ -1,3 +1,11 @@
+---
+title: "TASK - BUILD-TOPOLOGY FIXTURE MONOREPO AND ITS TARGET CONTRACT"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # TASK - BUILD-TOPOLOGY FIXTURE MONOREPO AND ITS TARGET CONTRACT
 
 Real monorepo targets (a C++ game server, a Unity client, iOS/Android clients, a PHP website) fail in

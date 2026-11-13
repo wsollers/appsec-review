@@ -1,3 +1,11 @@
+---
+title: "Application-security remediation integration"
+kind: "review"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Application-security remediation integration
 
 Status: integrated and locally verified on 2026-10-14. Root `AGENTS.md` governs.

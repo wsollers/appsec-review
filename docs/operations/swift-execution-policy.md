@@ -1,3 +1,11 @@
+---
+title: "Swift execution policy"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Swift execution policy
 
 Swift is an inventoried language, not enabled review coverage. The typed global setting

@@ -1,3 +1,11 @@
+---
+title: "Source history analysis"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_change_context_analysis", "job_ci_configuration_analysis", "job_image_pin_verification", "job_model_connectivity", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Source history analysis
 
 Status: automatic local Git source discovery, credential-gated GitHub enrichment, line-level

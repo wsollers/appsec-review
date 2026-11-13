@@ -1,3 +1,11 @@
+---
+title: "Produced-artifact security analysis"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_language_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Produced-artifact security analysis
 
 `job_artifact_security_analysis` consumes the accepted `job_language_build` publication and the

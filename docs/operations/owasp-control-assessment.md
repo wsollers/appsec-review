@@ -1,3 +1,11 @@
+---
+title: "Operating the OWASP control-assessment stage"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_owasp_control_assessment"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating the OWASP control-assessment stage
 
 `job_owasp_control_assessment` is **enabled by default** in `mode = "assessment"` across all

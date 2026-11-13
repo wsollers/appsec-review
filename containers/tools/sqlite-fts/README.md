@@ -1,3 +1,11 @@
+---
+title: "sqlite-fts tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_evidence_collection", "job_review_data_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # sqlite-fts tool image
 
 `appsec-review/tool-sqlite-fts:1.0.0` is the tool image declared by `tool-sqlite-fts` in

@@ -1,3 +1,11 @@
+---
+title: "DEVELOPMENT PACKAGE 01 - RECOVERY AND REPAIR ADMISSION"
+kind: "task"
+subsystem: "testing and operations"
+status: "historical"
+jobs: ["job_document_issue_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # DEVELOPMENT PACKAGE 01 - RECOVERY AND REPAIR ADMISSION
 
 The following development package is preserved verbatim before implementation.
