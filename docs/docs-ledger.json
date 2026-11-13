@@ -531,6 +531,14 @@
       "subsystem": "code intelligence"
     },
     {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/dependency-intelligence-enhancement.md",
+      "reason": "Keep the proposed dependency intelligence design and its T-149 implementation interfaces distinct from implemented behavior.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
       "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
@@ -835,12 +843,28 @@
       "subsystem": "testing and operations"
     },
     {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/threat-driven-hunting-enhancement.md",
+      "reason": "Keep the proposed T-151, T-155 and T-156 hunt coverage design and its shared evidence-resolution boundary.",
+      "subsystem": "review inference and guidance"
+    },
+    {
       "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/architecture/tree-sitter-ast.md",
       "reason": "Reconcile Tree-sitter AST production with its implementation and link generated facts from the subsystem dive in T-132.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/triage-verifier-enhancement.md",
+      "reason": "Preserve the proposed protected decision, scoped evidence, request-resolution and audit design with its approval boundaries.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
@@ -2041,6 +2065,30 @@
       "path": "docs/processes/walk-fresh-run-prompt.md",
       "reason": "Keep Prompt: start a fresh walk run from the top as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
       "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/2026-11-13-dependency-intelligence-review.md",
+      "reason": "Preserve the dated source-backed dependency review, exact baseline and empirical validation limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/2026-11-13-threat-driven-hunting-review.md",
+      "reason": "Preserve the dated attack-surface and hunting review, including the distinction from delivered T-146 work.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/2026-11-13-triage-verifier-review.md",
+      "reason": "Preserve the dated triage and verification review and its source-backed efficacy and evidence-contract limitations.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,

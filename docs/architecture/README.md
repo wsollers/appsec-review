@@ -25,6 +25,7 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [Cross-language CodeQL architecture](cross-language-codeql.md) | code intelligence | current |
 | [Dataflow-bounded package slices](dataflow-bounded-slices.md) | code intelligence | current |
 | [Build-bound debug-symbol indexing](debug-symbol-indexing.md) | code intelligence | current |
+| [Dependency intelligence enhancement design](dependency-intelligence-enhancement.md) | scanners and evidence collection | current |
 | [Dependency intelligence](dependency-intelligence.md) | scanners and evidence collection | current |
 | [Deployment image and source mount](deployment-image-and-source-mount.md) | images and deployment | current |
 | [Generated data-flow diagram and threat model](dfd-and-threat-model-generation.md) | review inference and guidance | historical |
@@ -63,7 +64,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [Telemetry and derived metrics](telemetry.md) | reporting and metrics | current |
 | [Test-coverage ingestion](test-coverage-ingestion.md) | scanners and evidence collection | current |
 | [Testing architecture](testing.md) | testing and operations | current |
+| [Threat-driven hunting: evidence-bound coverage and budget allocation](threat-driven-hunting-enhancement.md) | review inference and guidance | current |
 | [Tree-sitter AST production](tree-sitter-ast.md) | code intelligence | current |
+| [Proposed triage and verifier decision-product enhancements](triage-verifier-enhancement.md) | review inference and guidance | current |
 | [Windows host build runner](windows-host-runner.md) | target acquisition and build | current |
 | [Future Windows native-analysis project](windows-native-analysis-vm.md) | target acquisition and build | historical |
 | [Effective worker prompt contracts](worker-prompt-contracts.md) | review inference and guidance | current |

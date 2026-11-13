@@ -12,6 +12,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 | Document | Subsystem | Status |
 | --- | --- | --- |
+| [Dependency and supply-chain intelligence subsystem review](2026-11-13-dependency-intelligence-review.md) | scanners and evidence collection | current |
+| [Attack-surface discovery and threat-driven hunting review](2026-11-13-threat-driven-hunting-review.md) | review inference and guidance | current |
+| [Lead triage and red-blue-verifier efficacy review](2026-11-13-triage-verifier-review.md) | review inference and guidance | current |
 | [Application-security remediation integration](appsec-remediation-integration-2026-10-14.md) | review inference and guidance | historical |
 | [Appsec-review: system review and downstream verification plan](appsec-system-review-2026-11-06.md) | testing and operations | historical |
 | [Archived container assets review](archived-container-assets.md) | images and deployment | historical |

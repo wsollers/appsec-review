@@ -107,7 +107,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-104 | [Look up CPE candidates in the pinned NVD snapshot](#t-104-look-up-cpe-candidates-in-the-pinned-nvd-snapshot) | data | open |
 | T-105 | [Match vulnerabilities in one stage over the merged dependency inventory](#t-105-match-vulnerabilities-in-one-stage-over-the-merged-dependency-inventory) | scanners | blocked |
 | T-106 | [Restart the nightly data sync and refuse stale feeds at run readiness](#t-106-restart-the-nightly-data-sync-and-refuse-stale-feeds-at-run-readiness) | data | open |
-| T-107 | [Generate a data-flow diagram and threat model from accepted run evidence](#t-107-generate-a-data-flow-diagram-and-threat-model-from-accepted-run-evidence) | review | open |
+| T-107 | [Generate a data-flow diagram and threat model from accepted run evidence](#t-107-generate-a-data-flow-diagram-and-threat-model-from-accepted-run-evidence) | review | in-progress |
 | T-108 | [Publish the static deployment inventory as a job](#t-108-publish-the-static-deployment-inventory-as-a-job) | evidence | open |
 | T-109 | [Put a hard ceiling on test runs and enforce the ten-second unit limit](#t-109-put-a-hard-ceiling-on-test-runs-and-enforce-the-ten-second-unit-limit) | testing | open |
 | T-110 | [Decide what the walk does with shell environment scripts the bounded reader cannot read](#t-110-decide-what-the-walk-does-with-shell-environment-scripts-the-bounded-reader-cannot-read) | build | open |
@@ -149,6 +149,14 @@ until each is rewritten into the entry format when it is next touched.
 | T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | done (2026-11-13, docs/tasks/2026-11-13-behavior-oriented-review.md) |
 | T-147 | [Declare exact task and dataset publication bindings for documentation](#t-147-declare-exact-task-and-dataset-publication-bindings-for-documentation) | pipeline | open |
 | T-148 | [Resolve historical archive citations without restoring the archive](#t-148-resolve-historical-archive-citations-without-restoring-the-archive) | testing | open |
+| T-149 | [Route scoped dependency decision packets into review and account for their use](#t-149-route-scoped-dependency-decision-packets-into-review-and-account-for-their-use) | review | blocked |
+| T-150 | [Publish complete protected review decision products](#t-150-publish-complete-protected-review-decision-products) | review | open |
+| T-151 | [Bind hunt coverage obligations to accepted operation identities](#t-151-bind-hunt-coverage-obligations-to-accepted-operation-identities) | review | blocked |
+| T-152 | [Bind decisive evidence to scoped propositions and polarity](#t-152-bind-decisive-evidence-to-scoped-propositions-and-polarity) | evidence | blocked |
+| T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | blocked |
+| T-154 | [Audit labelled stage loss and dismissals by stratum](#t-154-audit-labelled-stage-loss-and-dismissals-by-stratum) | testing | blocked |
+| T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
+| T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1017,7 +1025,10 @@ until each is rewritten into the entry format when it is next touched.
   entry points listed by residual-coverage reason.
 - **Refs:** `src/appsec_review/observability/triage_reduction.py` (`hunt_lane_claims_excluded`),
   `src/appsec_review/review/packages.py`, `docs/architecture/review-prioritization.md`.
-  Remaining work: T-073.
+  Remaining work: T-073, T-156. Completed offline formulas do not establish independently
+  labelled hunt novelty or receipt-backed surface coverage; see
+  [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md) and
+  [evaluation design](architecture/threat-driven-hunting-enhancement.md#verification-and-empirical-evaluation).
 
 ### T-069 — Ingest developer outcomes and audit dismissed leads
 
@@ -1035,7 +1046,9 @@ until each is rewritten into the entry format when it is next touched.
   the final report states actionability completeness per finding.
 - **Refs:** T-060, `src/appsec_review/observability/experiments/contracts.py` (labels),
   `docs/operations/final-report.md`.
-  Remaining work: T-076.
+  Remaining work: T-076. T-154 extends the completed random-audit mechanism with stratified,
+  population-bound sampling; it does not reopen the implemented formulas. See
+  [triage design](architecture/triage-verifier-enhancement.md#5-independent-evaluation-design).
 
 ### T-070 — Slice findings by a game threat model
 
@@ -1068,9 +1081,17 @@ until each is rewritten into the entry format when it is next touched.
   whose comments instruct the reviewer, with the outcome recorded; a documented scheduled canary
   series on a fixed corpus and configuration whose detection-rate change flags drift. The canary
   runs are user-owned.
+  The 2026-11-13 review also identifies judge dissent being projected as verifier overturn.
+  Separate those actors and use the full expected verifier/citation population, not only
+  published survivors; retain requested, dropped, resolved, admitted and counted citation stages.
 - **Done when:** the citation-resolution rate is in the run-metrics summary under unit test, the
-  injection case is keyed, and the operations doc gives the canary command.
-- **Refs:** T-065, `src/appsec_review/review/evidence.py`, `pipeline/prompt-fragments/governing-rules.md`.
+  injection case is keyed, and the operations doc gives the canary command. A judge-only dissent
+  never increments verifier overturn, and absent/failed verifier cells remain in coverage.
+- **Refs:** T-065, T-154, `src/appsec_review/review/evidence.py`,
+  `src/appsec_review/observability/findings/run_adapter.py`,
+  `pipeline/prompt-fragments/governing-rules.md`,
+  [triage review](reviews/2026-11-13-triage-verifier-review.md),
+  [triage design](architecture/triage-verifier-enhancement.md).
 
 ### T-072 — Ingest crash reports as finding evidence
 
@@ -1105,14 +1126,20 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** an adapter from accepted run artifacts (catalog path index, review package manifests,
   lane coverage) to the reviewed and unreviewed source files with their content hashes, and to the
   catalogued entry points with `reviewed`, `not_admitted` and `not_built` status. No target scan.
+  Beyond T-146's operation-only versus whole-file distinction, consume T-156 receipts to report
+  actual operation/question investigation separately from legacy package execution. Derive
+  catalogued, built and extracted states from their own accepted records, not catalog membership.
 - **Progress:** `observability/findings/coverage_adapter.py` derives reviewed source files and
   entry points from a run (2026-11-11, `a71681a1`). Covered by unit tests only; not yet checked
   against a real run. Entry points are empty on real runs until T-086 gives them a producer.
 - **Done when:** `snapshot` needs no `--units` for a run with an accepted catalog, the integration
   test asserts non-null `reviewed_units`, and `scorecard` prints entry-point coverage without an
-  operator file.
+  operator file. A successful package or same-file sibling cannot grant investigation credit to
+  an unanswered operation; unavailable historical receipt detail remains unknown.
 - **Refs:** T-060, T-068, `src/appsec_review/observability/findings/run_adapter.py`,
-  `docs/architecture/finding-metrics.md` (section 12, decision 3).
+  `docs/architecture/finding-metrics.md` (section 12, decision 3), T-146, T-151, T-156,
+  [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-074 — Wire the fix re-check to the verifier role
 
@@ -1158,11 +1185,16 @@ until each is rewritten into the entry format when it is next touched.
   the final report; corpus cases and runtime guidance for server trust in client state,
   unvalidated replication RPCs, bitstream length handling and entitlement bypass, through the
   runtime-guidance checklist.
+  Reuse T-146's delivered counted-path/remediation projection. T-150 supplies decision-basis
+  and qualified-counterevidence references to the same protected dossier; T-151 supplies
+  candidate operation context, not established attacker/ownership/deployment finding labels.
 - **Done when:** a fixture review publishes the fields, the snapshot fingerprint basis is
   `function_and_code`, the report lists what each finding is missing, and one keyed corpus case
   exists per named weakness class.
 - **Refs:** T-069, T-070, T-002, `src/appsec_review/jobs/accepted_review.py`,
-  `.claude/skills/add-runtime-guidance/SKILL.md`.
+  `.claude/skills/add-runtime-guidance/SKILL.md`, T-146, T-150, T-151,
+  [triage design](architecture/triage-verifier-enhancement.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-077 — Derive lead records with stage attribution from a run
 
@@ -1174,6 +1206,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** an adapter from the lane A lead manifest, lead accounting and claim projection (the
   inputs `triage_reduction` already verifies) and the funnel's stage vocabulary to lead records;
   lead labels from the answer key by scope; the paired figures printed beside the funnel.
+  Consume T-150's complete decision products to retain unadmitted family/scanner provenance,
+  proposal-only cap/invalid outcomes and jointly deciding actor-role sets. Judge verdicts are
+  not removal authority. Keep independent labels outside worker-readable inputs.
 - **Progress:** `observability/findings/lead_adapter.py` derives lane A lead records with
   removal-stage attribution from a run, and `scorecard --run` uses it (2026-11-11, `a71681a1`).
   Covered by unit tests only; not yet checked against a real run, and `stepwise.py system` does not
@@ -1181,7 +1216,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** unit tests build lead records from a recorded lane A document, and
   `stepwise.py system` prints true-lead retention beside false-lead removal for a keyed corpus.
 - **Refs:** T-062, `src/appsec_review/observability/triage_reduction.py`,
-  `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/triage.py`.
+  `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/triage.py`,
+  T-150, T-154, [triage review](reviews/2026-11-13-triage-verifier-review.md),
+  [triage design](architecture/triage-verifier-enhancement.md).
 
 ### T-078 — Check the model login before a review is submitted
 
@@ -1320,15 +1357,18 @@ until each is rewritten into the entry format when it is next touched.
 
 - **State:** open
 - **Area:** review
-- **Why:** the coverage adapter (T-073) cannot name the source files of manifest `units` rows
-  that were not hunted, because those rows carry no `source_ids`, and it finds no entry points on
-  real runs, because no job assigns `surface:entry:*` tags.
-- **Scope:** record `source_ids` on every manifest unit row; either add a producer for
-  `surface:entry:*` tags or decide to read entry points from the code-graph entry-point facts, and
-  record the decision.
+- **Why:** the original adapter lacked source IDs below the hunt cutoff and a produced
+  entry-point denominator. T-146 now retains all unit source IDs and emits neutral graph-backed
+  remote-input tags, but broader source/entry classification and real-run coverage remain.
+- **Scope:** reconcile the delivered T-146 operation/fallback/source interface with accepted
+  graph entry facts; keep syntax/parser candidates a separate evidence tier. Decide the
+  authoritative entry denominator once for T-073/T-151. Remote input never establishes public
+  exposure, and source-only subjects must remain eligible without compiled evidence.
 - **Done when:** on a completed run the adapter reports reviewed and unreviewed files for every
   unit and a non-empty entry-point list for a target that has entry points.
-- **Refs:** `src/appsec_review/observability/findings/coverage_adapter.py`, T-073, T-068.
+- **Refs:** `src/appsec_review/observability/findings/coverage_adapter.py`, T-073, T-068,
+  T-146, T-151, [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-087 — Normalize crash symbols for corroboration
 
@@ -1586,11 +1626,18 @@ until each is rewritten into the entry format when it is next touched.
 
 - **State:** open
 - **Area:** topology
-- **Blocks:** T-098, T-100, T-101, T-102, T-105
+- **Blocks:** T-098, T-100, T-101, T-102, T-105, T-149
 - **Why:** dependencies are found in eight places with different record shapes, three of which never reach the merged inventory; the Freeciv catalog's dependency list was empty (walk 05). There is no one place that says what a dependency observation is or who may produce one.
 - **Scope:** define `dependency-observation/1` (name, version, how the version is known, ecosystem, purl, CPE candidates, component root, vendored flag, scope, finder id, resolving evidence); a registry of finders, each a pure function over accepted inputs returning observations and named gaps; move the existing producers behind it without changing behaviour (catalog `package.json`, Syft observations, native discovery); `normalize_dependencies` consumes only the registry's output and `job_dependency_intelligence` stays the single merge and SPDX publisher. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first. The user also asked (same date) that as many tools as possible feed the SBOM and review data.
-- **Done when:** catalog, Syft and native observations reach `normalize_dependencies` only through the registry, with unchanged output on the accepted cpp-multivuln baseline.
-- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `src/appsec_review/jobs/job_target_catalog/job.py`, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091, T-011.
+  Review refinement: separate immutable observations, physical instances and package coordinates;
+  preserve version-kind/conflict sets, source selectors, scoped relationships and inherited gaps.
+  Merge accepted artifact inventories, installed summaries and Unity metadata before deriving
+  SPDX and indexed projections, with every representation omission accounted. Preserve separate
+  copies and forge-specific repository namespaces rather than flattening matching PURLs.
+- **Done when:** catalog, Syft and native observations reach `normalize_dependencies` only through the registry, with unchanged output on the accepted cpp-multivuln baseline. Adversarial fixtures preserve distinct copies, conflicting identities and unsupported inputs; normalized/SPDX/retrieval differences have explicit projection dispositions.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `src/appsec_review/jobs/job_target_catalog/job.py`, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091, T-011,
+  [dependency review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [dependency design](architecture/dependency-intelligence-enhancement.md).
 
 ### T-100 — Find dependencies declared in native build systems
 
@@ -1609,8 +1656,10 @@ until each is rewritten into the entry format when it is next touched.
 - **Blocked by:** T-099
 - **Why:** the catalog recognises Maven, Gradle, NuGet, Cargo, Go, Python, Composer and RubyGems manifests but reports a deferred parser for most of them.
 - **Scope:** take manifest and lockfile contents from Syft and osv-scanner extraction rather than writing parsers, as registry finders. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): package-manager tools that need network egress to resolve (Maven, npm and the like) are pre-authorized by the user; each use is still declared in typed configuration and recorded in the run. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
-- **Done when:** no catalog gap reads that the dependency parser is deferred for a manifest type the catalog recognises.
-- **Refs:** `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/jobs/job_evidence_collection/`, T-099, T-011.
+- **Done when:** every recognized manifest/lockfile format has bounded extraction or a truthful unsupported-input outcome; independently labelled fixtures measure instance/identity recall, preserve transitive relationships and distinguish declared constraints from installed/resolved versions. Merely removing a deferred-parser message does not establish coverage.
+- **Refs:** `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/jobs/job_evidence_collection/`, T-099, T-011,
+  [dependency review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [dependency design](architecture/dependency-intelligence-enhancement.md).
 
 ### T-102 — Find components in built binaries with a cve-bin-tool scan adapter
 
@@ -1647,10 +1696,20 @@ until each is rewritten into the entry format when it is next touched.
 - **State:** blocked
 - **Area:** scanners
 - **Blocked by:** T-009, T-099, T-103, T-104
+- **Blocks:** T-149
 - **Why:** each matcher scans its own private view (Grype over a Syft SBOM, osv-scanner per project, nothing for native or vendored code), so coverage depends on which tool happened to see a dependency. Grype is off by `tools.disable_grype` and has no database snapshot on this host.
 - **Scope:** Grype and Trivy in SBOM mode over the published SPDX, OSV by purl through the index matcher, the CPE lookup, and cve-bin-tool per built binary, all over the merged inventory; every match records the matcher, the database snapshot id and how the version was known. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): (3) native-SBOM design decision 2 is lifted: discovered native versions may be matched against vulnerability data, labelled as leads; vendored copies stay leads because they are often patched. Then `disable_grype = false`, and T-010's dedupe becomes a property of the stage. (4) Order agreed: fix the stale nightly (T-106), then the registry with the vendored and native-declaration finders (T-099, T-098, T-100), then the databases into the nightly (T-009, T-103), then this stage. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+  Review refinement: preserve source/artifact OSV and Grype package coordinates through the
+  advisory join; bind each result to an accepted instance and exact feed/comparator identity.
+  Keep scanner report, affected range, local patch applicability and reachability separate,
+  retaining negative/unknown/unsupported outcomes. The design recommends a separate
+  target-independent matching producer to avoid inventory cycles; that boundary is proposed,
+  not approved or implemented here. T-009 code and indexed OSV matching already exist; do not
+  reimplement them or infer current feed deployment from historical host observations.
 - **Done when:** one run publishes matches from every enabled matcher over the same inventory with snapshot ids, a declared-version match is labelled a lead, and Grype coverage is no longer a configured-disabled gap.
-- **Refs:** `src/appsec_review/jobs/job_evidence_collection/`, `src/appsec_review/jobs/job_artifact_security_analysis/`, `appsec-review.toml` (`[tools]`), T-010, T-013.
+- **Refs:** `src/appsec_review/jobs/job_evidence_collection/`, `src/appsec_review/jobs/job_artifact_security_analysis/`, `appsec-review.toml` (`[tools]`), T-010, T-013, T-149,
+  [dependency review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [dependency design](architecture/dependency-intelligence-enhancement.md).
 
 ### T-106 — Restart the nightly data sync and refuse stale feeds at run readiness
 
@@ -1663,21 +1722,36 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-107 — Generate a data-flow diagram and threat model from accepted run evidence
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
-- **Why:** no job in the graph produces a data-flow diagram or a threat model; the catalog only classifies documents the target supplies, and Freeciv supplies none (walk 05). The user asked on 2026-11-11 whether the jobs that should create them exist; they do not. This is the F07 row of T-059 re-cut as one job.
-- **Scope:** a design for one job, `job_threat_model_generation`, is being written by a separate session on branch `dfd-threat-model` (not merged). This entry holds the id; its scope and done-when are replaced by the design's proposed text when the user approves the design. Nothing is implemented before that.
-- **Done when:** the user has approved a design, this entry carries its scope and acceptance, and the job publishes a data-flow diagram and threat model with resolving evidence on a real run.
-- **Refs:** T-059 (F07), T-070, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, branch `dfd-threat-model`.
+- **Why:** the original Freeciv walk had no generated threat model. The registered,
+  default-disabled deterministic first slice now publishes source-cited DFD/model/evidence/view
+  artifacts, but declaration/mitigation/asset enrichment and real-run usefulness remain unaccepted.
+- **Scope:** retain the implemented accepted-input ledger, citation validation and routing-only
+  outputs. Reconcile remaining design lanes against the merged source, not the former unmerged
+  branch description. T-146 owns the delivered optional package consumer; do not create another
+  operation map or consumer. T-108 owns static deployment publication.
+- **Done when:** the remaining approved scope is explicit and a separately requested real run
+  publishes useful, resolving DFD/threat-model products with honest actor/asset/mitigation and
+  deployment gaps. Existing code/unit coverage alone does not close real-run acceptance.
+- **Refs:** T-059 (F07), T-070, T-108, T-146,
+  `src/appsec_review/jobs/job_threat_model_generation/`,
+  `docs/architecture/dfd-and-threat-model-generation.md`,
+  [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-108 — Publish the static deployment inventory as a job
 
 - **State:** open
 - **Area:** evidence
 - **Why:** the `appsec_review.deployment` library extracts listeners, services and relationships from deployment documents, but no job publishes them as an accepted dataset, so a threat model has no deployment facts to build on. This is the static half of the F06 row of T-059.
-- **Scope:** proposed by the same design session as T-107 on branch `dfd-threat-model` (not merged): wire the existing library into a job whose output is an accepted dataset. This entry holds the id; its scope and done-when are replaced by the design's proposed text when the user approves it.
+- **Scope:** wire the existing library into an approved typed producer and accepted dataset,
+  preserving descriptor hashes, selected deployment/variant, conflicts and unsupported-input
+  coverage. Static declarations never imply observed effective deployment. Enrichment remains
+  optional for source-only hunting; reconcile the input-matrix placeholder with the actual route.
 - **Done when:** the user has approved the design, and a run publishes the static deployment inventory as an accepted, consumable dataset.
-- **Refs:** `src/appsec_review/deployment/`, T-059 (F06), T-107, branch `dfd-threat-model`.
+- **Refs:** `src/appsec_review/deployment/`, T-059 (F06), T-107,
+  [hunting design](architecture/threat-driven-hunting-enhancement.md#existing-products-enriched-elsewhere-not-duplicated).
 
 ### T-109 — Put a hard ceiling on test runs and enforce the ten-second unit limit
 
@@ -1919,7 +1993,12 @@ until each is rewritten into the entry format when it is next touched.
   dataset has exactly one bucket, and generated outputs pass the Stage 2 drift checks.
 - **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 3),
   `containers/catalog.toml`, `src/appsec_review/mcp/schema.py`,
-  `pipeline/guidance/registry.json`, T-128, T-115, T-126.
+  `pipeline/guidance/registry.json`, T-128, T-115, T-126,
+  [dependency product map](architecture/dependency-intelligence-enhancement.md#intelligence-products-and-routes),
+  [decision product map](architecture/triage-verifier-enhancement.md#1-product-and-authority-model),
+  [hunt product map](architecture/threat-driven-hunting-enhancement.md#intelligence-product-contracts-and-retrieval).
+  These mappings are provisional until this task assigns canonical buckets; they name actual
+  output kinds and artifact/index routes without blocking independent runtime implementation.
 
 ### T-130 — Author job operations pages around the generated contracts
 
@@ -2195,6 +2274,193 @@ until each is rewritten into the entry format when it is next touched.
 - **Refs:** T-128, `docs/reviews/archived-container-assets.md`,
   `docs/reviews/archived-container-assets.json`, `docs/reviews/container-migration.md`,
   `tests/docs/test_docs_links.py`, `AGENTS.md` (Rebuild boundary).
+
+### T-149 — Route scoped dependency decision packets into review and account for their use
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-099, T-105
+- **Why:** inventory-only advisory facts are retrievable but not independently admitted as
+  review leads; global dependency context competes under a shared cap and loses instance,
+  matching uncertainty and build relevance before review.
+- **Scope:** implement design slice DEP-A: instance/build/component-scoped decision packets,
+  accountable matcher nominations and bounded package views using existing review/index routes.
+  Preserve identity, version, match, delivery, patch and reachability as separate dimensions.
+  Record availability, supply, read, citation and disposition without inventing model attention;
+  project coverage through the existing final gate/report. Reuse T-146 operation anchors where
+  available and T-129 mapping coordination without a taxonomy implementation blocker. Refine
+  existing T-010 through T-013 and T-098 through T-106 work from the source-backed review rather
+  than duplicating finders, matchers or feed activation. This design does not enable scanning.
+- **Done when:** each nomination yields a relevant bounded packet or a named held/duplicate/
+  unavailable outcome; distinct copies and uncertainty survive projection; package/version facts
+  cannot prove local applicability. Deterministic fixtures show no silent loss and exact
+  gate-bound coverage. Independently labelled paired evaluations of inventory recall, identity/
+  advisory precision, reviewer use, known misses and cost remain separately authorized.
+- **Refs:** [review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [design](architecture/dependency-intelligence-enhancement.md),
+  `src/appsec_review/review/lead_families.py`, `src/appsec_review/review/advisories.py`,
+  `src/appsec_review/indexing/products.py`, T-129, T-146.
+
+### T-150 — Publish complete protected review decision products
+
+- **State:** open
+- **Area:** review
+- **Blocks:** T-152, T-153, T-154
+- **Why:** no-claim reasons, pre-claim caps/rejections and qualified counterevidence exist in
+  separate artifacts but do not form a complete queryable decision trail or developer brief.
+- **Scope:** implement TRI-A: immutable source-bound stage records, original proposal membership,
+  separate blindness/model/evidence verification coverage and decision-basis attachments.
+  Declare closed datasets/validators/readers, then a fixed-template protected audit adapter and
+  existing dossier/gate projection. Preserve current claim states, scoring, role counts and
+  judge/PoC policy; deny blind verifiers access to prior decision narratives or labels. T-077
+  owns lead-adapter/display completion and T-076 owns broader actionability. Reference T-156
+  coverage receipts when available, never reproduce their producer. T-129 is nonblocking mapping.
+- **Done when:** every collected lead, emitted proposal and expected cell has an exact terminal
+  trace or named gap; unadmitted provenance and counterevidence remain inspectable. Projection-only
+  fixtures preserve adjudication/score/ship/PoC decisions; scope, hash, redaction and capability
+  negative cases pass. New records do not become target evidence or independent quality labels.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md),
+  [design](architecture/triage-verifier-enhancement.md#tri-a-publish-complete-protected-decision-products),
+  `src/appsec_review/jobs/job_inference_security_review/teams.py`,
+  `src/appsec_review/jobs/job_inference_security_review/stages.py`,
+  `src/appsec_review/reporting/dossiers.py`, T-076, T-077, T-129, T-146.
+
+### T-151 — Bind hunt coverage obligations to accepted operation identities
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-146, T-086
+- **Blocks:** T-155, T-156
+- **Why:** T-146 supplies operations and routing questions but not a durable per-operation
+  investigation denominator with source-bound uncertainty and complete question/omission accounting.
+- **Scope:** implement HUNT-A as a bounded projection of the landed T-146 operation/fallback
+  universe, not another operation map or generated-model consumer. Bind questions to accepted
+  source/build/graph identities; separate catalogued/built/extracted/configuration facets and
+  candidate versus established actor/resource/ownership/deployment facts. Extend package views,
+  closed schemas and declared artifact readers. T-108 remains optional; T-129 mapping is nonblocking.
+- **Done when:** every enumerated operation/fallback has an obligation or explicit applicability/
+  omission reason; unknown/clipped scope remains visible and selected questions reach existing
+  packages. Identity, bounds, stale/foreign-input, duplicate-site and fallback regressions preserve
+  source authority. Independent exposed-surface efficacy acceptance is separately requested.
+- **Refs:** [review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [design](architecture/threat-driven-hunting-enhancement.md#p1-operation-bound-surface-obligations),
+  `src/appsec_review/review/units.py`, `src/appsec_review/review/packages.py`,
+  `src/appsec_review/jobs/job_inference_security_review/datasets.py`, T-070, T-073, T-076.
+
+### T-152 — Bind decisive evidence to scoped propositions and polarity
+
+- **State:** blocked
+- **Area:** evidence
+- **Blocked by:** T-150
+- **Blocks:** T-153
+- **Why:** evidence-kind admissibility does not generally bind the exact claim proposition and
+  polarity; guard checks in relation resolution and scoring can apply different semantic tests.
+- **Scope:** implement TRI-B application-validated warrants for already commissioned structured
+  presence/build and guard/range facts. Bind subject/sink/operand/build scope and both support/
+  contradiction directions; retain requested versus effective stance and reuse one warrant in
+  adjudication and scoring. Version policy/schema/cache identities. No new proof engine, widened
+  model authority or historical-state reinterpretation; policy activation requires approval.
+- **Done when:** actual validators reject wrong-subject/build/polarity claims, treat effective
+  guards consistently, retain legitimate direct evidence and leave uncommissioned semantics
+  qualified or unresolved. Numeric conclusions require exact tool facts, not citation membership.
+  Independently labelled paired policy evaluation is designed and separately authorized.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md#g2-admissibility-is-stronger-than-citation-validity-but-not-a-full-semantic-warrant),
+  [design](architecture/triage-verifier-enhancement.md#tri-b-bind-decisive-evidence-to-scoped-propositions-and-polarity),
+  `src/appsec_review/review/evidence.py`, `src/appsec_review/review/adjudication.py`,
+  `src/appsec_review/review/scoring/factors.py`.
+
+### T-153 — Reconcile bounded evidence obligations with verified resolutions
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-150, T-152
+- **Blocks:** T-156
+- **Why:** package follow-up retains evidence requests but seals them uniformly unsatisfied,
+  preventing a verified later answer from being distinguished from unavailable evidence.
+- **Scope:** implement TRI-C as the single canonical evidence-request identity, deduplication,
+  warranted-resolution and terminal-ledger lifecycle. Preserve original submissions and exact
+  scope/receipt references; reconcile only admitted evidence within current package rounds and
+  budgets. T-156 supplies transport/delivery receipts and references these canonical outcomes:
+  served/delivered never means resolved. No second request state machine, automatic producer/
+  specialist commissioning or cross-package grants. T-156 is not a reverse prerequisite.
+- **Done when:** a resolving answer closes only its matching scoped obligation with warrant/
+  receipt references; unrelated same-predicate evidence does not. Conflicts, caps, timeouts,
+  unavailable producers and scope denials retain exact reasons. Reuse/dedup preserve origins
+  and bounds; legacy delivery-only receipts retain unknown semantic resolution.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md#g3-evidence-requests-are-retained-but-never-recognized-as-resolved),
+  [design](architecture/triage-verifier-enhancement.md#tri-c-reconcile-bounded-evidence-obligations),
+  `src/appsec_review/jobs/job_inference_security_review/teams.py`,
+  `src/appsec_review/review/ledger.py`, `src/appsec_review/review/accounting.py`.
+
+### T-154 — Audit labelled stage loss and dismissals by stratum
+
+- **State:** blocked
+- **Area:** testing
+- **Blocked by:** T-150, T-071, T-077
+- **Why:** existing resolved-lead rates and uniform dismissal samples do not establish
+  all-collected/admitted retention, rare-stratum misses or trustworthy actor attribution.
+- **Scope:** implement TRI-D on the existing metrics/audit exporter: complete population pins,
+  explicitly named denominator views, seeded strata/inclusion probabilities and weighted labelled
+  estimates. Reuse T-071 actor/citation attribution, T-077 lead records and T-067 corpus ownership.
+  Exercise current family obligations through actual compact expansion, evidence resolution,
+  independence and adjudication, while keeping proxy evaluation labelled. Preserve completed
+  T-062/T-069 formulas. No automatic canary, panel change, fix recheck or live model comparison.
+- **Done when:** independently keyed recorded cases distinguish admission loss, silence, reasoned
+  dismissal, cap/invalid/timeout and unresolved outcomes; judge dissent never counts as verifier
+  overturn. Sampling/weighting is reproducible with honest unlabelled coverage; reports pair
+  retention/removal, false confirmation/unresolved, severity, stability, coverage and known cost.
+  Canned responses prove contracts, not real-model improvement; holdout use is separately approved.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md),
+  [design](architecture/triage-verifier-enhancement.md#tri-d-measure-labelled-stage-loss-and-audit-dismissals-by-stratum),
+  `src/appsec_review/observability/findings/triage.py`,
+  `src/appsec_review/observability/findings/labels.py`, `src/appsec_review/review/evaluation.py`.
+
+### T-155 — Allocate bounded hunt work fairly across surface and evidence strata
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-151
+- **Blocks:** T-156
+- **Why:** global top-N ranking and package-partition costs can favor well-instrumented
+  components; existing fair-share scheduling balances lanes, not opportunities within hunting.
+- **Scope:** implement HUNT-B: immutable versioned selection plans over T-151 questions with typed
+  component/surface/evidence strata, explicit fallback reserve and unmet-floor reasons.
+  Preserve T-146 opportunity scoring, current panels, lane-A admission and outer lane fairness.
+  Plan bounded package/question costs without silently enlarging actual job budgets. Allocation
+  policy and quality/cost margins require approval, not defaults invented from this source review.
+- **Done when:** identical inputs/settings produce identical plans; duplicate tags/templates do
+  not multiply weight. Declared floors hold when capacity suffices, otherwise omissions are
+  explicit; one unit's partitions cannot silently consume another's reserved first pass.
+  Exact lead accounting and budget limits survive. Efficacy comparison uses landed T-146 as
+  baseline and requires separate independent-label authorization.
+- **Refs:** [review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [design](architecture/threat-driven-hunting-enhancement.md#deterministic-fair-selection-under-fixed-budgets),
+  `src/appsec_review/review/units.py`, `src/appsec_review/review/teams.py`,
+  `src/appsec_review/jobs/job_inference_security_review/job.py`.
+
+### T-156 — Bind hunt investigation and omission coverage to execution receipts
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-151, T-155, T-153
+- **Why:** successful execution, supplied source and per-operation investigation are different
+  observations; available receipts do not provide the complete scoped question/delivery join.
+- **Scope:** implement HUNT-C protected investigation receipts and sanitized coverage projections:
+  exact expected-question partitions, original-source delivery spans and transport/served outcomes.
+  Reference T-153 canonical request IDs, warranted resolution and ledger closure; do not reproduce
+  their lifecycle. T-150 audit reads these receipts. Complete T-073 adapter/report integration
+  with separate discovery/selection/build/extraction/investigation axes. Delivery-only records may
+  land before T-153 with resolution explicitly unknown; final integrated acceptance requires it.
+- **Done when:** unanswered questions, unrelated same-file citations, clipped/redacted subjects
+  and unserved material requests cannot earn complete investigation credit. Every expected
+  question/request has an accountable outcome; spans resolve to pinned bytes; below-cutoff,
+  partial/reused/failed and historical work retains truthful coverage. No source-only receipt
+  implies compilation, no delivered receipt implies semantic resolution, and no new finding state
+  or worker authority appears. Real hunt-yield/coverage/cost evaluation stays separately authorized.
+- **Refs:** [review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [design](architecture/threat-driven-hunting-enhancement.md#from-selection-to-actual-coverage),
+  [shared resolution design](architecture/triage-verifier-enhancement.md#25-evidence-obligation-and-resolution),
+  `src/appsec_review/review/cells.py`, `src/appsec_review/observability/findings/coverage_adapter.py`.
 
 ## Legacy backlog
 
