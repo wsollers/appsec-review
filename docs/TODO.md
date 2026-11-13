@@ -107,6 +107,18 @@ until each is rewritten into the entry format when it is next touched.
 | T-112 | [Record what the analysis-summary trim removed, and do not report truncation under the bounds](#t-112-record-what-the-analysis-summary-trim-removed-and-do-not-report-truncation-under-the-bounds) | build | open |
 | T-113 | [Walk every job into tests/unit with code-level tests under the enforced tier](#t-113-walk-every-job-into-testsunit-with-code-level-tests-under-the-enforced-tier) | testing | in-progress |
 | T-114 | [Declare the debug-symbol decision dataset with the schema the job writes](#t-114-declare-the-debug-symbol-decision-dataset-with-the-schema-the-job-writes) | binary | open |
+| T-115 | [Record code-graph live verification in fixture provenance and test it against the lock](#t-115-record-code-graph-live-verification-in-fixture-provenance-and-test-it-against-the-lock) | graph | open |
+| T-116 | [Make the code-graph docs name all eight pinned export packs](#t-116-make-the-code-graph-docs-name-all-eight-pinned-export-packs) | graph | open |
+| T-117 | [Fix the stale image_id comments in appsec-review.toml (not during an active walk)](#t-117-fix-the-stale-image_id-comments-in-appsec-reviewtoml-not-during-an-active-walk) | images | open |
+| T-118 | [Run and record the JavaScript/TypeScript graph-export live tier](#t-118-run-and-record-the-javascripttypescript-graph-export-live-tier) | codeql | open |
+| T-119 | [Run and record the C# graph-export live tier](#t-119-run-and-record-the-c-graph-export-live-tier) | codeql | open |
+| T-120 | [Decide the unclassified sink models and whether html_output is the cross-site scripting class](#t-120-decide-the-unclassified-sink-models-and-whether-html_output-is-the-cross-site-scripting-class) | graph | open |
+| T-121 | [Fail when a live export carries a CodeQL model with no catalog decision](#t-121-fail-when-a-live-export-carries-a-codeql-model-with-no-catalog-decision) | graph | blocked |
+| T-122 | [Replace every hand-authored recording of a pinned language with its live export](#t-122-replace-every-hand-authored-recording-of-a-pinned-language-with-its-live-export) | codeql | blocked |
+| T-123 | [Write the code-graph acceptance record from a live run](#t-123-write-the-code-graph-acceptance-record-from-a-live-run) | graph | blocked |
+| T-124 | [Close or confirm the Rust remote-flow pruning gap](#t-124-close-or-confirm-the-rust-remote-flow-pruning-gap) | graph | open |
+| T-125 | [Close or confirm the Rust canonicalize sanitizer gap](#t-125-close-or-confirm-the-rust-canonicalize-sanitizer-gap) | graph | open |
+| T-126 | [Design the second-producer plan for non-C/C++ graph facts](#t-126-design-the-second-producer-plan-for-non-cc-graph-facts) | graph | blocked |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1672,6 +1684,124 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** record the trimmed items by kind and count in `bounds`; trim samples before descriptor documents (the documents are the planning evidence, the samples are illustration); report truncation only when the final size or count is at a bound; a focused regression with a summary that needs trimming.
 - **Done when:** a trimmed summary names what was removed; a summary that fits is not marked truncated; the regression passes.
 - **Refs:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py` (`summarize_catalog`, `trim_one`), walk record 09 (host-local), T-111.
+
+### T-115 — Record code-graph live verification in fixture provenance and test it against the lock
+
+- **State:** open
+- **Area:** graph
+- **Blocks:** T-122, T-126
+- **Why:** per-language live results exist only as prose in `rules/codeql-graph-export/README.md` ("Live verification"). Only `native` and `rust-synthetic` provenance say `recording: live`; Java, Python, Ruby and Go are sentences with no artifact, date, image id or pack hash behind them, and no test holds the README table to the fixtures or the fixtures to the pinned lock.
+- **Scope:** add an optional `live_verification` object to the fixture provenance schema (`date`, `codeql_version`, `source_image_id`, `pack_tree_sha256`, `result`, `notes`); fill it for `native` and `rust-synthetic` from their descriptions; leave it absent for hand-authored fixtures until T-118, T-119 and T-122 run. Add a unit test that (a) the README "Live result" column agrees with each fixture's provenance (an absent object means no live result recorded) and (b) a fixture with `live_verification` fails when its `pack_tree_sha256` differs from `export_query_packs.<language>.tree_sha256` or its `codeql_version` differs from `codeql.version` in `containers/tools/codeql/assets.lock.json`.
+- **Done when:** `tests/graph/test_export_provenance.py` passes, fails on a README/provenance disagreement, and fails on a lock mismatch (checked by mutating a copy in the test); `tests/graph/test_*_export.py` still pass.
+- **Refs:** `tests/fixtures/graph/codeql_export/*/provenance.json`, `rules/codeql-graph-export/README.md`, `containers/tools/codeql/assets.lock.json`, `docs/architecture/code-graph-precomputation.md` section 8.
+
+### T-116 — Make the code-graph docs name all eight pinned export packs
+
+- **State:** open
+- **Area:** graph
+- **Why:** `docs/architecture/indexing-and-query-reuse.md` (line 509) and `docs/operations/review-data-indexing.md` (line 326) say only C/C++ has a graph export pack. `containers/tools/codeql/assets.lock.json` `export_query_packs` pins cpp, csharp, go, java, javascript, python, ruby and rust, and `appsec-review.toml` configures all eight.
+- **Scope:** rewrite the two passages to the per-language table of `code-graph-precomputation.md` section 8 (pinned, live-recorded, hand-authored, deferred). Documentation only; `appsec-review.toml` is not touched here (T-117).
+- **Done when:** neither file contains the C/C++-only claim; `docs/docs-sync.json` updated per `.claude/skills/docs-sync/SKILL.md`; documentation checks only, no test run.
+- **Refs:** the two files above, `docs/architecture/code-graph-precomputation.md` section 8.
+
+### T-117 — Fix the stale image_id comments in appsec-review.toml (not during an active walk)
+
+- **State:** open
+- **Area:** images
+- **Why:** `appsec-review.toml` lines 1279-1281 and 1889-1890 say a profile's `image_id` lives in the TOML and the Rust image is "pinned above"; since T-051 ids live only in `deploy/dagster/host-pins.toml`. The loader hashes the raw TOML bytes into `source_sha256` (`src/appsec_review/config/loader.py` line 1504) and `runtime/runner.py` records it in every run's configuration `sources`, so a comment edit changes the frozen configuration identity and, under walk charter rule 7, ends an active run.
+- **Scope:** fix the two comments only, when no walk or review run is active on any host that will pull the change; no key changes.
+- **Done when:** `.venv/bin/python -c "from appsec_review.config import load_config; load_config('appsec-review.toml')"` succeeds; `tests/test_000_unit_environment_guard.py` and the config loader unit tests pass; the change lands between walks.
+- **Refs:** `appsec-review.toml`, `docs/operations/image-pin-verification.md`, `docs/processes/walk-charter.md` rule 7.
+
+### T-118 — Run and record the JavaScript/TypeScript graph-export live tier
+
+- **State:** open
+- **Area:** codeql
+- **Blocks:** T-122
+- **Why:** the `javascript` pack is pinned but no live result is recorded; the README row says "needs Node". On WSOLLERS1 the `node` profile image `audit-buildenv-typescript:local` is built (2026-11-09), host-pinned with a matching id, and `preinstalled_undeclared = "derive"` layers CodeQL onto it on first use. Unblocked on this host; needs only the run.
+- **Scope:** run `tests/live/test_codeql_graph_export_javascript_live.py` under the configured 1800 s live default; if the cold derive and compile exceed it, stop and report the measured time, do not declare a `time_budget`. Fix QL or `expected-facts.json` per "Changing the pack or catalog" (re-pin `tree_sha256` and `asset_lock_sha256`, recompile with `scripts/compile-codeql-queries.sh --language javascript`); record the outcome in the fixture's `live_verification` (T-115) or, until it lands, in the README row. Any re-pin of `tree_sha256`, `catalog_sha256` or `asset_lock_sha256` edits `appsec-review.toml`, which changes the frozen configuration identity (the T-117 mechanism); such a change lands only when no walk or review run is active on any host that will pull it, and all re-pins of this entry go in one commit. A live run that passes with no QL or catalog change needs no TOML edit, and the constraint does not apply.
+- **Done when:** the live test passes on the pinned image within the default budget; provenance and README agree under T-115's test; `tests/test_codeql_export_runner.py` and `tests/graph/test_javascript_export.py` pass; any re-pins land in one commit between walks.
+- **Refs:** `tests/live/test_codeql_graph_export_javascript_live.py`, `tests/fixtures/graph/codeql_export/javascript-synthetic/`, `rules/codeql-graph-export/javascript/`, `containers/buildenv/typescript/README.md`, T-115, T-117.
+
+### T-119 — Run and record the C# graph-export live tier
+
+- **State:** open
+- **Area:** codeql
+- **Blocks:** T-122
+- **Why:** the `csharp` pack is pinned but no live result is recorded. On WSOLLERS1 `audit-buildenv-dotnet:local` is built (2026-11-09), host-pinned with a matching id, and ships SDK 8.0.131 with `Microsoft.AspNetCore.App.Ref`, which the `net8.0` Web SDK fixture needs. Unblocked on this host; needs only the run.
+- **Scope:** run `tests/live/test_codeql_graph_export_csharp_live.py` under the 1800 s default; on overrun, stop and report the measured time, do not declare a `time_budget`. Fix QL or expectations per the pack-change procedure (`--language csharp`); record the outcome in `live_verification` (T-115) or, until it lands, in the README row. Any re-pin of `tree_sha256`, `catalog_sha256` or `asset_lock_sha256` edits `appsec-review.toml`, which changes the frozen configuration identity (the T-117 mechanism); such a change lands only when no walk or review run is active on any host that will pull it, and all re-pins of this entry go in one commit. A live run that passes with no QL or catalog change needs no TOML edit, and the constraint does not apply.
+- **Done when:** the live test passes on the pinned image within the default budget; provenance and README agree; `tests/test_codeql_export_runner.py` and `tests/graph/test_csharp_export.py` pass; any re-pins land in one commit between walks.
+- **Refs:** `tests/live/test_codeql_graph_export_csharp_live.py`, `tests/fixtures/graph/codeql_export/csharp-synthetic/`, `rules/codeql-graph-export/csharp/`, `containers/buildenv/dotnet/Dockerfile`, T-115, T-117.
+
+### T-120 — Decide the unclassified sink models and whether html_output is the cross-site scripting class
+
+- **State:** open
+- **Area:** graph
+- **Blocks:** T-121, T-122, T-126
+- **Why:** five CodeQL sink models are unclassified and never `direct_eligible`: `RemoteFlowSinkFunction` (C/C++), `NoSqlExecution` (Python), `HttpResponse` (Ruby), `UnmarshalingFunction` (Go), `PredicateInjectionSink` (Swift). `SinkClass` already has `html_output`, which the JavaScript catalog maps `ReflectedXss::Sink` onto; the open question is whether `html_output` is the cross-site scripting class or a distinct class is wanted. A catalog change re-pins `catalog_sha256` for all eight languages, and the README procedure then asks for each language's live tier again (T-122).
+- **Scope:** a written decision per model: extend `SinkClass` (contract enum, catalog schema, `docs/schemas/retrieval-mcp-tools.json`, goldens), map onto an existing class, or record as deliberately ignored with a reason; one decision on `html_output` versus a distinct class. Apply it in one change with the re-pins; name the live tiers it invalidates. Any re-pin of `tree_sha256`, `catalog_sha256` or `asset_lock_sha256` edits `appsec-review.toml`, which changes the frozen configuration identity (the T-117 mechanism); such a change lands only when no walk or review run is active on any host that will pull it, and all re-pins of this entry go in one commit. A live run that passes with no QL or catalog change needs no TOML edit, and the constraint does not apply.
+- **Done when:** the decision is recorded in `code-graph-precomputation.md` section 8; `tests/test_codeql_export_runner.py`, `tests/graph/test_*_export.py` and the catalog tests pass with regenerated goldens; the invalidated-tier list is in the README; any re-pins land in one commit between walks.
+- **Refs:** `src/appsec_review/graph/contract.py` (`SinkClass`), `rules/codeql-graph-export/catalog.json`, `catalog.schema.json`, `rules/codeql-graph-export/README.md` ("Catalog semantics"), T-117.
+
+### T-121 — Fail when a live export carries a CodeQL model with no catalog decision
+
+- **State:** blocked
+- **Area:** graph
+- **Blocked by:** T-120
+- **Why:** an exported `sink_sites` or `source_sites` row whose `model` matches no catalog rule silently becomes `unclassified`. Nothing distinguishes a model nobody has looked at from one the catalog deliberately leaves out, so new models arriving with a CodeQL upgrade go unnoticed.
+- **Scope:** add an `ignored` list per language to `catalog.json` and `catalog.schema.json`, each entry a `model` plus a `because` reason; a unit test that loads every fixture with `recording: live`, collects the distinct `model` (and `source_type`) values of its `sink_sites` and `source_sites`, and fails on any value that is neither matched by a rule nor listed as ignored.
+- **Done when:** `tests/graph/test_catalog_decisions.py` passes on the current live recordings and fails when an ignored entry is removed in a test copy; the five T-120 models are either classified or listed with reasons.
+- **Refs:** `rules/codeql-graph-export/catalog.json`, `catalog.schema.json`, `src/appsec_review/graph/catalog.py`, `tests/fixtures/graph/codeql_export/*/provenance.json`.
+
+### T-122 — Replace every hand-authored recording of a pinned language with its live export
+
+- **State:** blocked
+- **Area:** codeql
+- **Blocked by:** T-115, T-118, T-119, T-120 (all steps); T-124, T-125 (the rust-synthetic refresh step only) · **Blocks:** T-123
+- **Why:** six of eight pinned languages (java, python, ruby, go, javascript, csharp) hold hand-authored recordings, which are the author's expectation of the pack, not evidence of it. The T-120 catalog change also invalidates the native and Rust recordings.
+- **Scope:** one language per run, one at a time on the host: run that language's live tier, copy the passing `exports/` over the fixture's recording, set `recording: live` and `live_refreshable: true`, fill `live_verification`, regenerate the golden with `APPSEC_REVIEW_REGENERATE_GRAPH_GOLDEN=1`, and keep `expected-facts.json` as the semantic floor. Refresh `native` after the catalog change and `rust-synthetic` only after T-124 and T-125 are decided; if the Rust refresh happens first, a later Rust pack change requires one more Rust live run. Fix QL only where a live row shows the pack wrong. Any re-pin of `tree_sha256`, `catalog_sha256` or `asset_lock_sha256` edits `appsec-review.toml`, which changes the frozen configuration identity (the T-117 mechanism); such a change lands only when no walk or review run is active on any host that will pull it, and all re-pins of this entry go in one commit. A live run that passes with no QL or catalog change needs no TOML edit, and the constraint does not apply.
+- **Done when:** no fixture of a pinned language has `recording: hand-authored` (only `swift-synthetic` remains); every live tier passes; `tests/graph/test_*_export.py` and T-115's test pass; any re-pins land in one commit between walks.
+- **Refs:** `tests/fixtures/graph/codeql_export/*/`, `tests/live/test_codeql_graph_export*_live.py`, `rules/codeql-graph-export/README.md` ("Changing the pack or catalog" step 4), T-117.
+
+### T-123 — Write the code-graph acceptance record from a live run
+
+- **State:** blocked
+- **Area:** graph
+- **Blocked by:** T-122
+- **Why:** `deploy/dagster/verification/code-graph-acceptance.json` has never existed; `code-graph-precomputation.md` (lines 1057 and 1095) and `docs/reviews/code-graph-precomputation-implementation.md` say so. `tests/live/test_code_graph_live.py` writes it only when `APPSEC_CODE_GRAPH_VERIFICATION` is set, and today it builds C/C++ scopes only.
+- **Scope:** extend the live test with one seeded scope per pinned language from the existing fixtures (`LIVE_SCOPES` profile and mode per language); run it on `targets/appsec-multi-vuln-c094` for C/C++ (`APPSEC_MULTI_VULN_WORKSPACE`) plus the per-language scopes; write the record to `deploy/dagster/verification/code-graph-acceptance.json` and describe it in that directory's README.
+- **Done when:** the record exists and the test asserts, per language, at least one `dataflow_path` of two or more steps, at least one `guard_fact`, and a response from every `query_code_graph` mode (`callers`, `callees`, `sinks`, `entry_points`, `paths`, `guards`, `ranges`, `summary`, `sarif_path`); the architecture doc's "not written" sentences are removed.
+- **Refs:** `tests/live/test_code_graph_live.py`, `deploy/dagster/verification/README.md`, `docs/architecture/code-graph-precomputation.md` sections 5.2 and 10 (C9).
+
+### T-124 — Close or confirm the Rust remote-flow pruning gap
+
+- **State:** open
+- **Area:** graph
+- **Blocks:** T-122
+- **Why:** `rust_summarized_body_prunes_remote_flow` keeps four `path_flows` rows unmet in `rust-synthetic/expected-facts.json` `known_gaps` (remote to SQL, command, SSRF, deserialization). The live test fails once CodeQL closes it, but nothing records which option closes it. The option is the user's open decision.
+- **Scope:** reproduce against the live recording, then apply the user's chosen option from: (1) a pack-side flow step in `rules/codeql-graph-export/rust/`; (2) a rust-all upgrade past 0.2.21 with a recorded re-check version; (3) CodeQL data-extension model files, if codeql/rust-all 0.2.21 in the pinned 2.27.0 image accepts extensions for Rust; (4) Semgrep/Opengrep taint rules as a fallback producer for these four sink classes, correlated by span; (5) keep the gap as an accepted limit with the upstream cause named.
+- **Done when:** either the four rows move from `known_gaps` to expectations and the Rust live test passes with a refreshed recording, or the gap entry names the chosen option, the upstream cause and the re-check version; `tests/graph/test_rust_export.py` passes.
+- **Refs:** `tests/fixtures/graph/codeql_export/rust-synthetic/expected-facts.json`, `tests/live/test_codeql_graph_export_rust_live.py`, `rules/registry.toml` (`graph-export-rust`), `containers/tools/codeql/assets.lock.json` `extractors.rust`.
+
+### T-125 — Close or confirm the Rust canonicalize sanitizer gap
+
+- **State:** open
+- **Area:** graph
+- **Blocks:** T-122
+- **Why:** `rust_canonicalize_summary_does_not_propagate` keeps the `path_sanitizers` row for `canonicalize` unmet, and the Rust catalog has one sanitizer rule. Independent of T-124.
+- **Scope:** as T-124 for this gap, with the same five options; review whether the Rust sanitizer list should grow toward the other languages' two to six rules.
+- **Done when:** the row is an expectation with a refreshed recording, or the gap names the chosen option, upstream cause and re-check version; `tests/graph/test_rust_export.py` passes.
+- **Refs:** same files as T-124; `rules/codeql-graph-export/catalog.json` `rust.sanitizers`.
+
+### T-126 — Design the second-producer plan for non-C/C++ graph facts
+
+- **State:** blocked
+- **Area:** graph
+- **Blocked by:** T-115, T-120
+- **Why:** `graph/crosscheck.py` cross-checks `call_site` only, and every secondary shard is C/C++ (clangd, LLVM IR, Clang AST). Every other language's facts are `not_covered`, and nothing in `inference/`, `review/` or `reporting/` reads cross-check state, so a single-producer fact scores and reports like a corroborated one. No file in the repository mentions SCIP.
+- **Scope:** design doc only, `docs/architecture/second-producer-cross-check.md`: (1) a SCIP-based symbol index as `call_site` cross-check for managed languages; (2) Semgrep/Opengrep taint results correlated to `dataflow_path` by span in `graph/correlate.py`; (3) a `single_producer` label from `cross_check.state` carried into admissibility, score and report. Chunked per `.claude/skills/parallel-implementation/SKILL.md`; no implementation. Swift/Objective-C scope is the user's open decision, recorded not decided.
+- **Done when:** the design doc exists with decisions, chunks and acceptance per chunk; `docs/agent-reader.md` links it; implementation items get their own ids.
+- **Refs:** `src/appsec_review/graph/crosscheck.py`, `correlate.py`, `docs/architecture/code-graph-precomputation.md` D1 and section 4.1, `docs/reviews/review-protocol-second-opinion-brief.md`.
 
 ## Legacy backlog
 
