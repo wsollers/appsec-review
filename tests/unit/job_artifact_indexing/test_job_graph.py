@@ -18,7 +18,9 @@ from appsec_review.jobs.job_artifact_indexing.job import (
 from appsec_review.retrieval import write_manifest
 from appsec_review.runtime import consume
 from appsec_review.storage import atomic_json, file_sha256
-from tests.unit.job_artifact_indexing.support import RUN_ID, SETTINGS, SNAPSHOT, identity, recorded_receipt, unit_context
+from tests.unit.job_artifact_indexing.support import (
+    RUN_ID, SETTINGS, SNAPSHOT, assert_published_gaps, identity, recorded_receipt, unit_context,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -36,6 +38,7 @@ def test_graph_is_load_then_three_index_branches_joined_by_publication() -> None
     assert _TOPOLOGY == {"load": ("accepted_builds",), "index": ("catalogs", "members", "relationships"),
                          "acceptance": ("publish_handoff",)}
     assert job.input_validators == (_validate_config,) and job.output_validators == ()
+    assert job.strict_gaps is False
     assert (job.job_id, job.name, job.schema_identity) == ("job_artifact_indexing", "artifact_indexing", SCHEMA)
     assert job.implementation_identity is None and job.validation_identity is None
     assert units["index.catalogs"].handler is job_module._catalogs
@@ -108,6 +111,8 @@ def test_load_validates_receipts_merges_gaps_in_order_and_binds_the_upstream_man
     assert result["receipt_count"] == 1 and [item["workspace_path"] for item in result["receipts"][0]["validated_artifacts"]] == [
         "build/main.o", "build/app"]
     assert result["producer_gaps"] == ["plan gap", "accepted target artifact intake is unavailable"]
+    assert_published_gaps(upstream.run_root, "acceptance.publish_handoff", result["producer_gaps"],
+                          ["plan gap", "accepted target artifact intake is unavailable"])
     assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert (result["target_artifacts"], result["target_catalog_handoff_sha256"]) == ([], None)
     assert result["language_build_handoff_sha256"] == "f" * 64
@@ -125,6 +130,8 @@ def test_load_succeeds_without_gaps_when_the_intake_is_present_and_names_an_empt
     result = _load()(unit_context(upstream.run_root, "load.accepted_builds"))
     assert result["receipt_count"] == 0 and result["receipts"] == []
     assert result["producer_gaps"] == ["accepted language-build handoff contained no receipts"]
+    assert_published_gaps(upstream.run_root, "acceptance.publish_handoff", result["producer_gaps"],
+                          ["accepted language-build handoff contained no receipts"])
     assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
 
 
@@ -199,6 +206,7 @@ def test_load_accepted_artifact_index_returns_the_summary_bound_to_the_accepted_
                "artifacts": [summary, manifest]}
     _fake_upstream(monkeypatch, run_root, handoff, digest="e" * 64)
     assert load_accepted_artifact_index(run_root) == {**document, "handoff_sha256": "e" * 64}
+    assert_published_gaps(tmp_path, "acceptance.publish_handoff", document["gaps"], ["g"])
     _fake_upstream(monkeypatch, run_root, {**handoff, "artifacts": [manifest]})
     with pytest.raises(ArtifactIndexIntegrityError, match="summary is not bound to its accepted handoff"):
         load_accepted_artifact_index(run_root)

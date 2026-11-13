@@ -16,7 +16,7 @@ from appsec_review.jobs.job_artifact_indexing import artifact_index_fingerprint,
 from appsec_review.jobs.job_artifact_indexing.job import _catalogs, _manifest_entries, canonical_target_artifact_identity
 from appsec_review.retrieval import INDEX_SCHEMA, index_fingerprint
 from tests.unit.job_artifact_indexing.support import (
-    SETTINGS, SNAPSHOT, UNIT, loaded_output, unit_context, validated_artifact, validated_receipt,
+    SETTINGS, SNAPSHOT, UNIT, assert_published_gaps, loaded_output, unit_context, validated_artifact, validated_receipt,
 )
 
 
@@ -86,6 +86,7 @@ def test_rerun_reuses_every_completed_shard_and_producer_gaps_drive_the_terminal
     first = _catalogs(_unit(tmp_path, receipts, producer_gaps=["build-unit-x: probe skipped"]))
     assert first["shard_count"] == 4 and first["reused_count"] == 0
     assert first["gaps"] == ["build-unit-x: probe skipped"] and first["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert_published_gaps(tmp_path, "index.catalogs", first["gaps"], ["build-unit-x: probe skipped"])
     second = _catalogs(_unit(tmp_path, receipts, producer_gaps=["build-unit-x: probe skipped"]))
     assert second["reused_count"] == second["shard_count"] == 4
     assert [(item["shard_id"], item["sha256"], item["fingerprint"]) for item in second["indexes"]] == [
@@ -110,6 +111,8 @@ def test_target_intake_artifacts_get_their_own_partial_shard_with_delivery_gaps(
     assert index["shard_id"] == "catalog-target-intake"
     assert index["producer"] == {"job": "job_artifact_indexing", "unit": "index.catalogs", "family": "target-intake"}
     assert index["gaps"] == ("prebuilt/module.wasm: target artifact delivery status is unknown",)
+    assert_published_gaps(tmp_path, "index.catalogs", index["gaps"],
+                          ["prebuilt/module.wasm: target artifact delivery status is unknown"])
     assert index["fingerprint"] == index_fingerprint(
         name="artifacts", target_snapshot=SNAPSHOT, producer_artifacts=[target], tool_identity={"producer": "target-intake"},
         parser_identity=SETTINGS["catalog_parser_identity"], normalizer_identity=SETTINGS["normalizer_identity"],

@@ -12,7 +12,7 @@ from appsec_review.jobs.job_artifact_indexing import canonical_archive_member_id
 from appsec_review.jobs.job_artifact_indexing.job import ArtifactIndexIntegrityError, _member_rows, _members
 from appsec_review.retrieval import EntityKind, LogicalIdentity, RelationKind
 from tests.unit.job_artifact_indexing.support import (
-    SETTINGS, SNAPSHOT, UNIT, loaded_output, unit_context, validated_artifact, validated_receipt,
+    SETTINGS, SNAPSHOT, UNIT, assert_published_gaps, loaded_output, unit_context, validated_artifact, validated_receipt,
 )
 
 
@@ -65,6 +65,8 @@ def test_a_package_without_a_member_manifest_is_a_partial_shard_with_a_named_gap
     result = _members(_unit(tmp_path, [_package_receipt()]))
     (index,) = result["indexes"]
     assert result["gaps"] == list(index["gaps"]) == ["dist/sample.whl: archive member manifest unavailable"]
+    assert_published_gaps(tmp_path, "index.members", result["gaps"],
+                          ["dist/sample.whl: archive member manifest unavailable"])
     assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert _rows(tmp_path, index, "SELECT area, status, gap FROM coverage") == [
         ("dist/sample.whl", "partial", "dist/sample.whl: archive member manifest unavailable")]
@@ -110,3 +112,5 @@ def test_member_rows_are_pure_rows_of_the_artifact_sorted_by_member_path(tmp_pat
         (RelationKind.CONTAINS, package["canonical_identity"], True, 1.0)] * 2
     empty = _member_rows(unit_context(tmp_path, "index.members"), package, [])
     assert empty.gaps == ["dist/sample.whl: archive member manifest unavailable"] and empty.size == 0
+    assert_published_gaps(tmp_path, "index.members", empty.gaps,
+                          ["dist/sample.whl: archive member manifest unavailable"])
