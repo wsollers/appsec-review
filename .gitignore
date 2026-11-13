@@ -105,3 +105,7 @@ images/audit-buildenv-java/jdtls.tar.gz
 # acceptance material is listed below.
 /test/acceptance/*/
 !/test/acceptance/fix-pairs-candidates/
+
+# Coverage data written by pytest-cov
+.coverage
+.coverage.*
