@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/review-audit-publication/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "origin", "status", "manifest", "unavailable_reason", "policy"],
+  "properties": {
+    "schema": {"const": "appsec-review/review-audit-publication/1"},
+    "origin": {"$ref": "review-decision-audit.schema.json#/$defs/origin"},
+    "status": {"enum": ["available", "unavailable"]},
+    "manifest": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "review-decision-audit.schema.json#/$defs/manifest_ref"}
+      ]
+    },
+    "unavailable_reason": {
+      "enum": [null, "disabled", "capacity_exceeded", "input_unavailable"]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "settings", "sha256"],
+      "properties": {
+        "version": {"const": "decision-audit-projection/1"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "max_input_bytes", "max_records", "shard_records", "shard_bytes", "page_size", "max_page_size"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "max_input_bytes": {"type": "integer", "minimum": 4096, "maximum": 67108864},
+            "max_records": {"type": "integer", "minimum": 1, "maximum": 1000000},
+            "shard_records": {"type": "integer", "minimum": 1, "maximum": 5000},
+            "shard_bytes": {"type": "integer", "minimum": 4096, "maximum": 8388608},
+            "page_size": {"type": "integer", "minimum": 1, "maximum": 200},
+            "max_page_size": {"type": "integer", "minimum": 1, "maximum": 200}
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": {"const": "available"},
+        "manifest": {"$ref": "review-decision-audit.schema.json#/$defs/manifest_ref"},
+        "unavailable_reason": {"type": "null"},
+        "policy": {"properties": {"settings": {"properties": {"enabled": {"const": true}}}}}
+      }
+    },
+    {
+      "properties": {
+        "status": {"const": "unavailable"},
+        "manifest": {"type": "null"},
+        "unavailable_reason": {"const": "disabled"},
+        "policy": {"properties": {"settings": {"properties": {"enabled": {"const": false}}}}}
+      }
+    },
+    {
+      "properties": {
+        "status": {"const": "unavailable"},
+        "manifest": {"type": "null"},
+        "unavailable_reason": {"enum": ["capacity_exceeded", "input_unavailable"]},
+        "policy": {"properties": {"settings": {"properties": {"enabled": {"const": true}}}}}
+      }
+    }
+  ]
+}

@@ -66,7 +66,11 @@ integration, acceptance or live evaluation.
    machinery. Readers verify accepted publication pins, hashes, scope and record membership.
    The existing handoff publication creates the audit after writing the original inner review
    handoff, under the attempt's separate `artifacts/decision-audit/` subtree. Its generic unit
-   output binds the audit manifest; the audit binds the inner handoff and ledger. This avoids
+   output retains the existing `metadata_path` control field, pointing to protected
+   `publication.json`; explicit metadata/audit artifact references in the unit payload make
+   the runner pin every file. The descriptor binds the audit manifest and frozen policy;
+   the audit binds the inner handoff and ledger. An unpinned metadata path is never readable.
+   The runner's control allowlist is unchanged. This avoids
    a hash cycle, overlapping dataset ownership, a new task, or changes to existing finding/
    inner-handoff bytes merely to attach the audit. Configuration binding is parent-owned
    integration work, not a second status store or a mutable latest-pointer read.
@@ -77,6 +81,12 @@ integration, acceptance or live evaluation.
    configurations. New shipped configuration enables the projection. Audit bounds remain in
    full resolved configuration and the audit policy hash, but are excluded from model-cell/
    lane/round semantic fingerprints and are not permitted capacity-overlay settings.
+   Audit origin uses the full frozen resolved-configuration digest from the attempt claim/
+   accepted wrapper, not the inner handoff's model-semantic digest. Readers independently
+   derive origin from the accepted wrapper, scope, handoff and frozen settings. No exact
+   aggregate guidance/implementation digest is currently commissioned for this sidecar:
+   those links explicitly say not produced; opaque implementation labels are not hashed
+   and presented as measured source identity.
 6. **Bounded operator/application consumers.** Start with a declared accepted-artifact reader
    and fixed query templates plus the existing protected dossier. No new worker/MCP grant,
    arbitrary SQL, target traversal or blind-verifier access to prior decision narratives/labels.
