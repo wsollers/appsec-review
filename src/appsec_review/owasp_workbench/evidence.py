@@ -381,6 +381,10 @@ class EvidenceResolver:
 def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any,
                        settings: OwaspSettings) -> tuple[list[dict[str, Any]], list[str]]:
     """Bound discovery reads per component; delivery independently re-verifies selected sources."""
+    def supported(source: Any) -> bool:
+        return source.path.endswith(".py") and (
+            not source.language or source.language.lower() in {"python", "python3"})
+
     hints: dict[str, list[Mapping[str, Any]]] = {}
     extras, gaps = [], []
     bound = settings.max_discovery_files * 8
@@ -413,7 +417,7 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
             else:
                 extras.append(row["identity"])
     ordered = sorted({(source.path, source.identity): source for source in files}.values(),
-                     key=lambda source: (source.path not in hints, source.path, source.identity))
+                     key=lambda source: (not supported(source), source.path not in hints, source.path, source.identity))
     omitted_files = max(0, len(ordered) - settings.max_discovery_files)
     if omitted_files:
         gaps.append(f"max_discovery_files reached; {omitted_files} accepted files omitted (subject count unknown)")
@@ -432,7 +436,7 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
         if owner != component_id:
             gaps.append(f"{source.path}: unresolved source ownership; 1 file omitted (subject count unknown)")
             continue
-        if not source.path.endswith(".py") or (source.language and source.language.lower() not in {"python", "python3"}):
+        if not supported(source):
             gaps.append(f"{source.path}: unsupported source language; 1 file omitted (subject count unknown); "
                         f"source sha256 {location['file_sha256']}")
             continue

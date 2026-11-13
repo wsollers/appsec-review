@@ -171,7 +171,7 @@ push is part of this work.
 
 | Delivered surface | Exact behavior |
 | --- | --- |
-| OWASP subjects | Accepted index locations prioritize bounded Python discovery; complete AST subjects retain absolute lines, source hashes and omitted outside scope. Complete short HTTP modules retain their policy context; function-only authorization from an oversized module stays unresolved. |
+| OWASP subjects | Supported Python sources precede unsupported files, then accepted index locations prioritize bounded discovery; unrelated indexed native files cannot consume the supported-subject quota first. Complete AST subjects retain absolute lines, source hashes and omitted outside scope. Complete short HTTP modules retain their policy context; function-only authorization from an oversized module stays unresolved. |
 | Evidence projection | Configured evidence up to 200 records reaches the worker; proof obligations use exactly the projected records, never an omitted record after the old hard-coded 100-record cut. |
 | Invoked capabilities | Fourteen pinned graph mapping rules; canonical native language aliases; neutral `surface:entry:remote-input` rather than inferred public HTTP exposure. Original graph producers, byte spans and generated-source custody remain available. |
 | Operation planning | Exact graph sites form bounded operation units; whole-file fallback remains for unmodeled scope. Each located lead is assigned at most once to an operation or fallback. Source identities remain recorded below the hunt cutoff. |
@@ -193,8 +193,8 @@ The final changed-area command was:
 
 ```sh
 COVERAGE_FILE=test/tmp/t146-final.coverage scripts/run-tests.sh \
-  --expect-tests 366 --max-tests 366 --timeout-seconds 180 \
-  --parallel --test-workers 4 --shuffle-seed 1467 \
+  --expect-tests 367 --max-tests 367 --timeout-seconds 180 \
+  --parallel --test-workers 4 --shuffle-seed 1468 \
   --coverage appsec_review.review.behavior -- \
   tests/test_000_unit_environment_guard.py \
   tests/unit/review_behavior/test_contract_and_view.py \
@@ -216,8 +216,9 @@ COVERAGE_FILE=test/tmp/t146-final.coverage scripts/run-tests.sh \
   tests/unit/job_owasp_control_assessment/test_package_projection.py
 ```
 
-Result: **366 passed, 12.73 seconds**, four shuffled workers, no test over ten seconds. Slowest
-case was the environment guard, 0.658 seconds; slowest new case was 0.286 seconds.
+Result: **367 passed, 12.95 seconds**, four shuffled workers, no test over ten seconds. The
+preceding 366-case gate passed in 12.73 seconds; its slowest case was the environment guard,
+0.658 seconds, and its slowest new case was 0.286 seconds.
 `review/behavior.py`: **172/172 executable lines and 68/68 branch edges covered**. The subject
 selection helper and added tagging decisions also have complete focused executable-line/branch
 coverage in the agents' retained reports. This does not claim whole-repository coverage.
@@ -229,11 +230,11 @@ Directly affected existing units used the same wrapper with `--parallel --test-w
 | `tests/review/test_units.py tests/review/test_packages_graph_context.py tests/test_finding_run_adapter.py tests/test_finding_coverage_adapter.py tests/test_todo_registry.py` | `--expect-tests 81 --max-tests 81 --timeout-seconds 180 --shuffle-seed 148` | 81 passed, 22.96 s; no slow cases |
 | `tests/review/test_packages_dataflow_bound.py tests/test_job_test_selection.py::test_shipped_metadata_covers_registered_jobs_and_resolves_every_category tests/test_job_test_selection.py::test_shipped_recovery_maps_preserve_narrow_fixture_scopes_and_manual_categories 'tests/test_consumes_parity.py::test_consumes_are_registered_producers[job_inference_security_review]' 'tests/test_consumes_parity.py::test_consumes_are_scheduled_before_the_consumer[job_inference_security_review]' tests/test_consumes_parity.py::test_owasp_evidence_import_does_not_depend_on_registry_preload` | `--expect-tests 37 --max-tests 37 --timeout-seconds 180 --shuffle-seed 1466` | 37 passed, 12.72 s; no slow cases |
 
-The three disjoint final selections total **484 passing unit cases**. Ruff and whitespace checks
+The three disjoint final selections total **485 passing unit cases**. Ruff and whitespace checks
 passed over changed code and authored tests, including static checks of the unexecuted heavy tiers.
 Wrapper logs, exact command arrays, collection manifests, junit, per-case timings and branch
 reports remain host-local under the isolated checkout's `test/tmp/`; run identifiers are
-`tests-custom-20261113-170643-914041-59821`,
+`tests-custom-20261113-171200-944045-76541`,
 `tests-custom-20261113-165325-056772-13884`, and
 `tests-custom-20261113-170313-258724-48924`.
 
@@ -248,7 +249,8 @@ agent correction. These were not converted to skips, larger timeouts or weaker p
 
 Single-file coordinator probes also passed: actionability (23, 1.65 s), operation selection (37,
 0.99 s), model context after fixture repair (19, 1.71 s), evidence projection (5, 0.45 s), and
-publication bindings (6, 0.75 s), and actual lane-handler wiring (2, 0.70 s). The final static
+publication bindings (6, 0.75 s), actual lane-handler wiring (2, 0.70 s), and the combined
+projection/supported-language-priority probe (6, 0.45 s). The final static
 test-map checks also passed (2, 8.99 s). The intermediate 92-case combined unit gate passed in 6.44 s;
 its three uncovered model-context branches were then covered by the final selection above.
 

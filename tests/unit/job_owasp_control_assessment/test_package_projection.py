@@ -1,5 +1,7 @@
 import pytest
+from dataclasses import replace
 
+from appsec_review.owasp_workbench.evidence import component_evidence
 from appsec_review.owasp_workbench.engine import build_finding_packages
 from appsec_review.owasp_workbench.obligations import PROCEDURES
 
@@ -42,3 +44,15 @@ def test_omitted_evidence_cannot_generate_an_unanswerable_obligation(accepted):
 def test_projection_bound_is_closed(accepted, maximum):
     with pytest.raises(ValueError, match="between 1 and 200"):
         package(accepted, maximum)
+
+
+def test_unsupported_indexed_file_cannot_starve_supported_subjects(accepted, settings):
+    fixture = accepted({
+        "a.c": "void service(void) {}\n",
+        "z.py": "def query(value):\n    return db.execute('SELECT x FROM t WHERE id = ' + value)\n",
+    }, hints=(("a.c", 1, 1),), languages={"a.c": "C", "z.py": "Python"})
+    evidence, gaps = component_evidence(
+        fixture.resolver, "api", fixture.files, replace(settings, max_discovery_files=1))
+    assert len(evidence) == 1
+    assert evidence[0]["reference"]["locator"]["path"] == "z.py"
+    assert any("max_discovery_files" in gap for gap in gaps)
