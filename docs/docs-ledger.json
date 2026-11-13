@@ -1,0 +1,2764 @@
+{
+  "documents": [
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "AGENTS.md",
+      "reason": "Keep the sole repository-agent authority unchanged while the documentation program links to it.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/README.md",
+      "reason": "Reconcile Container packaging with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/analysis/binary/README.md",
+      "reason": "Reconcile Binary-analysis replacements with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/analysis/native/README.md",
+      "reason": "Reconcile Native-analysis capabilities with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/bases/jre/README.md",
+      "reason": "Reconcile jre base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/bases/php/README.md",
+      "reason": "Reconcile php base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/bases/python/README.md",
+      "reason": "Reconcile python base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/bases/ubuntu/README.md",
+      "reason": "Reconcile ubuntu base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/build-assets/README.md",
+      "reason": "Reconcile Build assets with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/buildenv/README.md",
+      "reason": "Reconcile Build environments with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/buildenv/native-toolchain/README.md",
+      "reason": "Reconcile Shared native toolchain with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/buildenv/rust-wasm/README.md",
+      "reason": "Reconcile Rust and WebAssembly build image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/buildenv/typescript/README.md",
+      "reason": "Reconcile Node/TypeScript build image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "containers/fixtures/blint/README.md",
+      "reason": "Keep BLint fixture as the fixture-specific provenance and usage reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "containers/fixtures/ghidra/README.md",
+      "reason": "Keep Ghidra known-binary fixture as the fixture-specific provenance and usage reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/report/latex/README.md",
+      "reason": "Reconcile LaTeX report renderer (`tool-report-latex`) with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/services/garnet/README.md",
+      "reason": "Reconcile Garnet result cache: Windows Nano Server image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/actionlint/README.md",
+      "reason": "Reconcile actionlint tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/blint/README.md",
+      "reason": "Reconcile blint tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/checkov/README.md",
+      "reason": "Reconcile checkov tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/clang-static-analysis/README.md",
+      "reason": "Reconcile Clang static-analysis tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/clangd-indexer/README.md",
+      "reason": "Reconcile tool-clangd-indexer: pinned clangd static indexer with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/codeql/README.md",
+      "reason": "Reconcile CodeQL images with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/cppcheck/README.md",
+      "reason": "Reconcile cppcheck tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/ghidra/README.md",
+      "reason": "Reconcile tool-ghidra: pinned Ghidra headless decompilation closure with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/git/README.md",
+      "reason": "Reconcile git tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/gitleaks/README.md",
+      "reason": "Reconcile gitleaks tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/gosec/README.md",
+      "reason": "Reconcile gosec tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/grype/README.md",
+      "reason": "Reconcile grype tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/hadolint/README.md",
+      "reason": "Reconcile hadolint tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/infer/README.md",
+      "reason": "Reconcile infer tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/joern/README.md",
+      "reason": "Reconcile tool-joern: pinned Joern/c2cpg runtime closure with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/mobsfscan/README.md",
+      "reason": "Reconcile mobsfscan tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/native-cpp/README.md",
+      "reason": "Reconcile native-cpp tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/opengrep/README.md",
+      "reason": "Reconcile opengrep tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/osv-scanner/README.md",
+      "reason": "Reconcile osv-scanner tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/phpcs/README.md",
+      "reason": "Reconcile phpcs tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/phpstan/README.md",
+      "reason": "Reconcile phpstan tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/pmd/README.md",
+      "reason": "Reconcile pmd tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/psalm/README.md",
+      "reason": "Reconcile psalm tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/semgrep/README.md",
+      "reason": "Reconcile semgrep tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/shellcheck/README.md",
+      "reason": "Reconcile shellcheck tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/spotbugs/README.md",
+      "reason": "Reconcile spotbugs tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/sqlite-fts/README.md",
+      "reason": "Reconcile sqlite-fts tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/svf/README.md",
+      "reason": "Reconcile SVF points-to tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/syft/README.md",
+      "reason": "Reconcile syft tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/tree-sitter/README.md",
+      "reason": "Reconcile Tree-sitter parser image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/trivy/README.md",
+      "reason": "Reconcile trivy tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "containers/tools/zizmor/README.md",
+      "reason": "Reconcile zizmor tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/SEI-CERT.md",
+      "reason": "Reconcile the SEI CERT coverage overview with the registered rule-pack facts and preserve links to the official standards.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/TODO.md",
+      "reason": "Keep the single deferred-work registry and its dated decisions as the home of every named gap.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "process",
+      "path": "docs/agent-reader.md",
+      "reason": "Update navigation to the generated index and canonical pages without introducing repository-agent rules.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/architecture/README.md",
+      "reason": "Replace the handwritten architecture index with frontmatter-derived navigation in T-128.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/binary-decompilation.md",
+      "reason": "Separate the current Third-party binary decompilation with Ghidra view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/bounded-acceptance.md",
+      "reason": "Reconcile Bounded acceptance architecture with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/bounded-worker-execution.md",
+      "reason": "Reconcile Shared bounded model execution with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/build-environments-and-execution-capture.md",
+      "reason": "Separate the current Build environments, execution capture, and secret scanning view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/build-topology-and-iterations.md",
+      "reason": "Separate the current Target build topology and bounded iterations view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/change-context-analysis.md",
+      "reason": "Reconcile Change-context analysis with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "merge-into",
+      "kind": "architecture",
+      "merge_target": "docs/operations/ci-configuration-analysis.md",
+      "path": "docs/architecture/ci-configuration-analysis.md",
+      "reason": "Consolidate the short CI lane overview and its nonexecution boundary into the CI job page, retaining a pointer during the merge transition.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/clang-static-analysis.md",
+      "reason": "Reconcile Clang static analysis with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/code-graph-precomputation.md",
+      "reason": "Preserve the dated code-graph decisions as history and move current-state exposition to the T-132 dive, linking T-115 through T-126.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "merge-into",
+      "kind": "architecture",
+      "merge_target": "docs/operations/codeql-analysis.md",
+      "path": "docs/architecture/cross-language-codeql.md",
+      "reason": "Consolidate the short CodeQL stage and identity overview into the CodeQL job page instead of maintaining two task inventories.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/dataflow-bounded-slices.md",
+      "reason": "Reconcile Dataflow-bounded package slices with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/debug-symbol-indexing.md",
+      "reason": "Separate the current Build-bound debug-symbol indexing view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/dependency-intelligence.md",
+      "reason": "Reconcile Dependency intelligence with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/deployment-image-and-source-mount.md",
+      "reason": "Separate the current Deployment image and source mount view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/dfd-and-threat-model-generation.md",
+      "reason": "Preserve the threat-model design decisions and reconcile implementation status separately without turning proposals into verified behavior.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/document-evidence-analysis.md",
+      "reason": "Reconcile Target document analysis and finding handoff with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/dossier-data-inventory.md",
+      "reason": "Separate the current Dossier data, queries and provenance view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/engineering-security-signals.md",
+      "reason": "Separate the current Engineering security signals view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/evidence-completion-and-remediation.md",
+      "reason": "Separate the current Evidence completion and remediation view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/evidence-sources-and-dataflow-retrieval.md",
+      "reason": "Separate the current Evidence sources, dataflow precomputation, and model-facing retrieval view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/finding-metrics.md",
+      "reason": "Separate the current Finding metrics view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/graph-alias-slice-layout-modes.md",
+      "reason": "Separate the current Alias, slice, and type-layout graph modes (design) view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/guidance-procedures.md",
+      "reason": "Reconcile Role-selected review procedures with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/indexing-and-query-reuse.md",
+      "reason": "Separate the current Review data indexing and reusable retrieval products view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/inference-security-review.md",
+      "reason": "Separate the current Near-terminal inference security review view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/job-consumer-read-paths.md",
+      "reason": "Reconcile Job consumer read-path inventory with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/job-input-contracts.md",
+      "reason": "Reconcile Job input and dispatch contracts with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/job-interchange.md",
+      "reason": "Reconcile Job interchange and native-result provenance with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/jobs-and-runtime.md",
+      "reason": "Reconcile Jobs and runtime with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/native-build-output-discovery.md",
+      "reason": "Separate the current Native build-output discovery and named build-output exclusions view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/native-sbom.md",
+      "reason": "Separate the current Native vendored dependency discovery and SPDX enrichment view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/openvex-export.md",
+      "reason": "Separate the current OpenVEX findings export view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/owasp-control-workbench.md",
+      "reason": "Reconcile OWASP control-assessment workbench with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/profile-data.md",
+      "reason": "Reconcile Profile-data ingestion with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/python-and-retrieval.md",
+      "reason": "Reconcile Python and retrieval architecture with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/red-discovery-output.md",
+      "reason": "Reconcile Red discovery output contract with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/retrieval-surfaces.md",
+      "reason": "Reconcile Retrieval surfaces: tools, MCP, review cells, and skills with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/review-judge-and-poc.md",
+      "reason": "Separate the current Judge role and proof-of-concept generation view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/review-package-contract.md",
+      "reason": "Reconcile Review package and finding-lead contract with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/review-prioritization.md",
+      "reason": "Reconcile Review prioritization with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/review-protocol-v2.md",
+      "reason": "Separate the current Review protocol v2: the model-facing layer view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/security-tag-taxonomy.md",
+      "reason": "Separate the current Security tag taxonomy view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/seeded-codeql-neighborhoods.md",
+      "reason": "Separate the current Seeded CodeQL neighborhoods view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/seeded-neighborhoods.md",
+      "reason": "Separate the current Seeded neighborhoods (all producers) view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/sei-cert-rule-pack.md",
+      "reason": "Reconcile SEI CERT rule pack with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/source-history-analysis.md",
+      "reason": "Separate the current Source history analysis view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/svf-alias-producer.md",
+      "reason": "Separate the current SVF points-to producer view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/telemetry.md",
+      "reason": "Reconcile Telemetry and derived metrics with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/test-coverage-ingestion.md",
+      "reason": "Reconcile Test-coverage ingestion with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/testing.md",
+      "reason": "State the forward T-113 testing contract in T-131 and distinguish every enforced rule from a named enforcement gap.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/tree-sitter-ast.md",
+      "reason": "Reconcile Tree-sitter AST production with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/windows-host-runner.md",
+      "reason": "Separate the current Windows host build runner view from its preserved decisions and link the subsystem dive in T-132.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/windows-native-analysis-vm.md",
+      "reason": "Preserve the Windows VM proposal as historical context and link the later host-runner decision and T-049 rather than presenting it as deployed.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/architecture/worker-prompt-contracts.md",
+      "reason": "Reconcile Effective worker prompt contracts with its implementation and link generated facts from the subsystem dive in T-132.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/assets/dossier-samples/confirmed-finding-cover.png",
+      "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/assets/dossier-samples/confirmed-finding-evidence.png",
+      "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/assets/dossier-samples/confirmed-finding-provenance.png",
+      "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/assets/dossier-samples/poc-cover.png",
+      "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "architecture",
+      "path": "docs/deployment-inventory.md",
+      "reason": "Reconcile the static deployment inventory with its implementation and link its T-108 job-publication gap.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "process",
+      "path": "docs/development/quality-gates.md",
+      "reason": "Reconcile the quality-gate procedure with its scripts and link the testing contract without adding new agent rules.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/docs-ledger.json",
+      "reason": "Maintain this authored disposition ledger as tracked documentation is added, merged or retired.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/docs-sync.json",
+      "reason": "Keep the last fully reconciled code commit distinct from this inventory-only survey.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/formal-verification/buildout-plan.md",
+      "reason": "Preserve Buildout Plan: SAST-to-Lean Verification and Proof-Directed Fuzzing as a design-discussion record without claiming the proposed verification system is implemented.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/formal-verification/design-review-2026-11-07.md",
+      "reason": "Preserve Design Review: Formal Verification Docs (2026-11-07) as a design-discussion record without claiming the proposed verification system is implemented.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/formal-verification/lean-guided-verification-conversation.md",
+      "reason": "Preserve Conversation Transcript: Lean-Guided Formal Verification for Application Security as a design-discussion record without claiming the proposed verification system is implemented.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/formal-verification/sast-to-lean-and-proof-directed-fuzzing.md",
+      "reason": "Preserve Design: SAST-to-Lean Verification and Proof-Directed Fuzzing as a design-discussion record without claiming the proposed verification system is implemented.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/handoffs/2026-10-09-build-execution-capture-restart.md",
+      "reason": "Preserve the dated build-capture handoff as history, never as current execution authority.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/migration-ledger.json",
+      "reason": "Preserve the historical rebuild mapping and its verification limits without treating it as the current job registry.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/acceptance-funnel.md",
+      "reason": "Reconcile Reading the per-defect funnel with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/artifact-indexing.md",
+      "reason": "Reconcile Produced-artifact indexing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/artifact-security-analysis.md",
+      "reason": "Reconcile Produced-artifact security analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/binary-decompilation.md",
+      "reason": "Reconcile Binary decompilation: running Ghidra before a review with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/bounded-acceptance.md",
+      "reason": "Reconcile Bounded integration acceptance with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/build-environment-analysis.md",
+      "reason": "Reconcile Static build-environment analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/change-context-analysis.md",
+      "reason": "Reconcile Change-context analysis operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/ci-configuration-analysis.md",
+      "reason": "Reconcile Operating CI configuration analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/clang-static-analysis.md",
+      "reason": "Reconcile Operating Clang static analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/code-graph-index.md",
+      "reason": "Reconcile Code-graph index with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/codeql-analysis.md",
+      "reason": "Reconcile Cross-language CodeQL analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/cpp-compiled-analysis.md",
+      "reason": "Reconcile C/C++ compiled-analysis operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/cpp-index-jobs.md",
+      "reason": "Reconcile C/C++ index jobs: clangd symbol index and Joern CPG with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/debug-symbol-indexing.md",
+      "reason": "Reconcile Debug-symbol indexing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/dependency-intelligence.md",
+      "reason": "Reconcile Operating dependency intelligence with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/document-issue-analysis.md",
+      "reason": "Reconcile Document issue analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/dossier-publication.md",
+      "reason": "Reconcile Dossier publication operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/final-report.md",
+      "reason": "Reconcile Operating the final publication gate and the final report with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/finding-metrics.md",
+      "reason": "Reconcile Finding metrics: operator guide with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/glasswing-experiments.md",
+      "reason": "Reconcile Glasswing quality experiments with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/guidance-evaluation.md",
+      "reason": "Reconcile Evaluating review guidance with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/image-pin-verification.md",
+      "reason": "Reconcile Image-pin verification and host bindings with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/inference-security-review.md",
+      "reason": "Reconcile Inference security review operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/job-test-selection.md",
+      "reason": "Reconcile Job-focused test selection with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/language-build.md",
+      "reason": "Reconcile Generic language-build operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/lead-severity-triage.md",
+      "reason": "Reconcile Lead severity triage with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/metrics.md",
+      "reason": "Reconcile Review metrics with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/model-profiles.md",
+      "reason": "Reconcile Model profiles: dev, prod, copilot-dev and copilot-prod with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/native-sbom.md",
+      "reason": "Reconcile Native SPDX inventory with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/openvex-export.md",
+      "reason": "Reconcile OpenVEX findings export with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/operator-scripts.md",
+      "reason": "Reconcile Operator scripts with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/owasp-control-assessment.md",
+      "reason": "Reconcile Operating the OWASP control-assessment stage with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/performance-assurance.md",
+      "reason": "Reconcile Performance and customer-evidence assurance with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/poc-generation.md",
+      "reason": "Reconcile Operating proof-of-concept generation with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/post-build-security-assessment.md",
+      "reason": "Reconcile Post-build security assessment with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/profile-data.md",
+      "reason": "Reconcile Operating profile-data ingestion with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/project-build.md",
+      "reason": "Reconcile Project-build operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/quality-and-retention.md",
+      "reason": "Reconcile Operational status, cost provenance, quality trends and retention with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/recovery-repair.md",
+      "reason": "Reconcile Recovery and repair admission with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/remediation.md",
+      "reason": "Reconcile Remediation planning and bounded validation with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/report-rendering.md",
+      "reason": "Reconcile Report rendering (PDF and single-page HTML) with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/retrieval-mcp.md",
+      "reason": "Reconcile Operating the read-only operator MCP gateway with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/review-data-indexing.md",
+      "reason": "Reconcile Operating review-data indexing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/review-prioritization.md",
+      "reason": "Reconcile Review prioritization operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/review-startup.md",
+      "reason": "Reconcile Starting an appsec review: features and flags with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/run-readiness.md",
+      "reason": "Reconcile Run readiness: preparing a host for review runs with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/sanitizer-build.md",
+      "reason": "Reconcile Operating the sanitizer build with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/security-tagging.md",
+      "reason": "Reconcile Operating the security-tagging stage with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/sei-cert-rule-pack.md",
+      "reason": "Reconcile Operating the SEI CERT rule pack with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/signing.md",
+      "reason": "Reconcile Container image and Python module signing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/source-history-analysis.md",
+      "reason": "Reconcile Source history analysis operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/ssh.md",
+      "reason": "Reconcile SSH from Windows into the WSL checkout with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/static-analysis.md",
+      "reason": "Reconcile Deterministic static-analysis evidence collection with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/svf-alias-analysis.md",
+      "reason": "Reconcile Operating SVF points-to analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/swift-execution-policy.md",
+      "reason": "Reconcile Swift execution policy with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/target-acquisition.md",
+      "reason": "Reconcile Target acquisition with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/target-analysis-planning.md",
+      "reason": "Reconcile Target analysis planning operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/telemetry-report.md",
+      "reason": "Reconcile End-of-review telemetry report (LaTeX/PDF) with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/test-coverage-ingestion.md",
+      "reason": "Reconcile Operating test-coverage ingestion with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/test-targets.md",
+      "reason": "Reconcile Test targets: where to get the repositories with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/third-party-data-sync.md",
+      "reason": "Reconcile Third-party data synchronization with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/threat-model-generation.md",
+      "reason": "Reconcile Generated DFD and threat model with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/tree-sitter-ast.md",
+      "reason": "Reconcile Tree-sitter AST operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/unity-build.md",
+      "reason": "Reconcile Unity discovery, inventory and builds with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/wasm-build.md",
+      "reason": "Reconcile WebAssembly output-family build operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/wave1-review.md",
+      "reason": "Reconcile Wave 1 review operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "docs/operations/wsl-native-docker.md",
+      "reason": "Reconcile Native WSL Docker: migration lessons with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/plans/build-discovery-test-program-2026-11-08.md",
+      "reason": "Preserve Build discovery: contract and test program as a planning and decision record linked from the current subsystem view.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/plans/job-catalog-and-interchange-audit-2026-11-07.md",
+      "reason": "Preserve Job catalog, information flow, interchange JSON and raw-tool-output audit (2026-11-07) as a planning and decision record linked from the current subsystem view.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "history",
+      "path": "docs/plans/native-compiler-profiles.md",
+      "reason": "Preserve Native admission from builder-image compiler profiles as a planning and decision record linked from the current subsystem view.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/acceptance-and-regression-testing.md",
+      "reason": "Keep Per-job output correctness, acceptance, and anti-regression as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/integration-tier-walk-prompt.md",
+      "reason": "Keep Integration-tier walk: the per-job session brief for a review host (T-113) as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/job-pass-checklist.md",
+      "reason": "Keep The job-by-job pass: checklist as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/local-dagster-parity.md",
+      "reason": "Keep Local and Dagster parity, one job at a time as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/test-tier-walk-prompt.md",
+      "reason": "Keep Test-tier walk: the per-job session brief (T-113) as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/walk-charter.md",
+      "reason": "Keep Job-by-job walk charter as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/walk-fresh-run-prompt.md",
+      "reason": "Keep Prompt: start a fresh walk run from the top as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/appsec-remediation-integration-2026-10-14.md",
+      "reason": "Preserve Application-security remediation integration as review history and retain its original decisions and verification limits.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/appsec-system-review-2026-11-06.md",
+      "reason": "Preserve Appsec-review: system review and downstream verification plan as review history and retain its original decisions and verification limits.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/archived-container-assets.json",
+      "reason": "Preserve the dated image-migration classifications and verification evidence alongside their review record.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/archived-container-assets.md",
+      "reason": "Preserve Archived container assets review as review history and retain its original decisions and verification limits.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/castle-style-detector-scoring.md",
+      "reason": "Preserve CASTLE-style detector scoring, negative controls and the CASTLE regression corpus as review history and retain its original decisions and verification limits.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/code-graph-precomputation-implementation.md",
+      "reason": "Preserve Code-graph precomputation: implementation record as review history and retain its original decisions and verification limits.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/container-migration.md",
+      "reason": "Preserve Container migration acceptance record as review history and retain its original decisions and verification limits.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/cppcheck-pmd-producers.md",
+      "reason": "Preserve Cppcheck and PMD producer decision as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/debug-symbol-indexing-implementation.md",
+      "reason": "Preserve Debug-symbol indexing implementation as review history and retain its original decisions and verification limits.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/dependency-output-filtering-design.md",
+      "reason": "Preserve Dependency output filtering: design as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/detector-coverage-checklist.md",
+      "reason": "Preserve Detector coverage checklist against CodeBadger's detector list as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/engineering-signal-jobs-implementation.md",
+      "reason": "Preserve Engineering-signal jobs implementation as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/evidence-completion-documentation-inventory.md",
+      "reason": "Preserve Evidence completion documentation inventory as review history and retain its original decisions and verification limits.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/fix-pair-corpus-candidates.md",
+      "reason": "Preserve Fix-pair corpus candidates (T-067) as review history and retain its original decisions and verification limits.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/fix-pair-corpus-shortlist.md",
+      "reason": "Preserve T-067: ten game and engine CVE fix-pair candidates as review history and retain its original decisions and verification limits.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/inference-security-review-implementation.md",
+      "reason": "Preserve Inference security review: slice 1 implementation record as review history and retain its original decisions and verification limits.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/inference-security-review-migration.md",
+      "reason": "Preserve Near-terminal inference review migration accounting as review history and retain its original decisions and verification limits.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/integration-live-test-implementation.md",
+      "reason": "Preserve Bounded integration and live acceptance as review history and retain its original decisions and verification limits.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/job-interchange-implementation.md",
+      "reason": "Preserve Job interchange implementation record as review history and retain its original decisions and verification limits.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/lead-coverage-audit.md",
+      "reason": "Preserve Lead coverage audit as review history and retain its original decisions and verification limits.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/multivuln-coverage-fixtures-implementation.md",
+      "reason": "Preserve Multivuln coverage fixtures implementation as review history and retain its original decisions and verification limits.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/native-evaluator-guide.lock.json",
+      "reason": "Keep only the external evaluator-guide identity pin here and never copy the answer key into documentation.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/native-sbom-implementation.md",
+      "reason": "Preserve Native SPDX enrichment implementation as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/openvex-export-implementation.md",
+      "reason": "Preserve OpenVEX findings export implementation as review history and retain its original decisions and verification limits.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/profile-data-and-dependency-exposure-implementation.md",
+      "reason": "Preserve Profile data and dependency exposure implementation as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/review-protocol-second-opinion-brief.md",
+      "reason": "Preserve Second-opinion brief: review protocol v2, the judge role and PoC generation as review history and retain its original decisions and verification limits.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/scanner-launch-reduction-design.md",
+      "reason": "Preserve Scanner launch reduction: design as review history and retain its original decisions and verification limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/samples/report-synthetic-fixture.html",
+      "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/samples/report-synthetic-fixture.pdf",
+      "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/binary-decompilation.schema.json",
+      "reason": "Keep binary-decompilation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-environment-analysis.schema.json",
+      "reason": "Keep build-environment-analysis.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-image-repair.schema.json",
+      "reason": "Keep build-image-repair.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-recipe-replay.schema.json",
+      "reason": "Keep build-recipe-replay.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-recipe.schema.json",
+      "reason": "Keep build-recipe.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-selection-policy.schema.json",
+      "reason": "Keep build-selection-policy.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-topology-refinement.schema.json",
+      "reason": "Keep build-topology-refinement.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-topology-v2.schema.json",
+      "reason": "Keep build-topology-v2.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/build-topology.schema.json",
+      "reason": "Keep build-topology.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/cpp-compiled-analysis.schema.json",
+      "reason": "Keep cpp-compiled-analysis.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/discovery-case.schema.json",
+      "reason": "Keep discovery-case.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/document-issue-ledger.schema.json",
+      "reason": "Keep document-issue-ledger.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/final-report/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/final-report/final-publication-gate.schema.json",
+      "reason": "Keep final-publication-gate.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/final-report/final-report.schema.json",
+      "reason": "Keep final-report.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/history-hotspots.schema.json",
+      "reason": "Keep history-hotspots.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/adjudication.schema.json",
+      "reason": "Keep adjudication.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/attack-chain-manifest.schema.json",
+      "reason": "Keep attack-chain-manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/attack-chain.schema.json",
+      "reason": "Keep attack-chain.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/blue-compact.schema.json",
+      "reason": "Keep blue-compact.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/blue-result.schema.json",
+      "reason": "Keep blue-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/cell-record.schema.json",
+      "reason": "Keep cell-record.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/chain-challenge-result.schema.json",
+      "reason": "Keep chain-challenge-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/chain-composer-result.schema.json",
+      "reason": "Keep chain-composer-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/chain-continuity-fact.schema.json",
+      "reason": "Keep chain-continuity-fact.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/chain-records.schema.json",
+      "reason": "Keep chain-records.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/claim.schema.json",
+      "reason": "Keep claim.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/compact-investigation.schema.json",
+      "reason": "Keep compact-investigation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/evidence-relation.schema.json",
+      "reason": "Keep evidence-relation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/finding-package.schema.json",
+      "reason": "Keep finding-package.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/gap.schema.json",
+      "reason": "Keep gap.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/handoff.schema.json",
+      "reason": "Keep handoff.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/judge-result-compact.schema.json",
+      "reason": "Keep judge-result-compact.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/judge-result.schema.json",
+      "reason": "Keep judge-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/lead-triage-result.schema.json",
+      "reason": "Keep lead-triage-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/ledger-event.schema.json",
+      "reason": "Keep ledger-event.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/red-compact.schema.json",
+      "reason": "Keep red-compact.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/red-discovery-result.schema.json",
+      "reason": "Keep red-discovery-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/score-package.schema.json",
+      "reason": "Keep score-package.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/verifier-compact.schema.json",
+      "reason": "Keep verifier-compact.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/verifier-result.schema.json",
+      "reason": "Keep verifier-result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/worker-turn.schema.json",
+      "reason": "Keep worker-turn.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/job-control.schema.json",
+      "reason": "Keep job-control.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/job-interchange.schema.json",
+      "reason": "Keep job-interchange.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/native-target-enforcement.schema.json",
+      "reason": "Keep native-target-enforcement.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/README.md",
+      "reason": "Keep OpenVEX shared contracts beside the schemas as the contract reference linked by authored pages.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/manifest.schema.json",
+      "reason": "Keep manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/result.schema.json",
+      "reason": "Keep result.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/upstream/LICENSE",
+      "reason": "Retain the upstream OpenVEX license unchanged alongside the pinned schema.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/upstream/openvex-v0.2.0.schema.json",
+      "reason": "Keep openvex-v0.2.0.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/upstream/upstream.lock.json",
+      "reason": "Keep the upstream OpenVEX schema identity and license provenance pinned.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/owasp-workbench.schema.json",
+      "reason": "Keep owasp-workbench.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/compile-record.schema.json",
+      "reason": "Keep compile-record.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/poc-candidate.schema.json",
+      "reason": "Keep poc-candidate.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/poc-generation.schema.json",
+      "reason": "Keep poc-generation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/provenance.schema.json",
+      "reason": "Keep provenance.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/writer-answer.schema.json",
+      "reason": "Keep writer-answer.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/post-build-security-assessment.schema.json",
+      "reason": "Keep post-build-security-assessment.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/README.md",
+      "reason": "Keep Remediation artifact contracts beside the schemas as the contract reference linked by authored pages.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/exact-patch.schema.json",
+      "reason": "Keep exact-patch.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/plan.schema.json",
+      "reason": "Keep plan.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/planning-handoff.schema.json",
+      "reason": "Keep planning-handoff.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/planning.schema.json",
+      "reason": "Keep planning.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/validation-handoff.schema.json",
+      "reason": "Keep validation-handoff.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/validation.schema.json",
+      "reason": "Keep validation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation/validations.schema.json",
+      "reason": "Keep validations.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/retrieval-mcp-tools.json",
+      "reason": "Keep the runtime-consumed MCP tool catalog and its source-parity checks distinct from generated documentation.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/review-package-manifest.schema.json",
+      "reason": "Keep review-package-manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/review-package-view.schema.json",
+      "reason": "Keep review-package-view.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/review-packages.schema.json",
+      "reason": "Keep review-packages.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/sei-cert-mapping.schema.json",
+      "reason": "Keep sei-cert-mapping.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/sei-cert-multivuln-expectations.schema.json",
+      "reason": "Keep sei-cert-multivuln-expectations.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/sei-cert-rule-pack.schema.json",
+      "reason": "Keep sei-cert-rule-pack.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/sei-cert-source-index.schema.json",
+      "reason": "Keep sei-cert-source-index.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/target-analysis-plan.schema.json",
+      "reason": "Keep target-analysis-plan.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/target-analysis-proposal.schema.json",
+      "reason": "Keep target-analysis-proposal.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/threat-model/generated-dfd.schema.json",
+      "reason": "Keep generated-dfd.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/threat-model/generated-model-evidence.schema.json",
+      "reason": "Keep generated-model-evidence.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/threat-model/generated-threat-model.schema.json",
+      "reason": "Keep generated-threat-model.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/threat-model/threat-model-generation.schema.json",
+      "reason": "Keep threat-model-generation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/topology-fixture-expectations.schema.json",
+      "reason": "Keep topology-fixture-expectations.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-06-bounded-worker-execution.md",
+      "reason": "Preserve Development package 03 - shared bounded worker execution as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-06-development-quality-gates.md",
+      "reason": "Preserve DEVELOPMENT PACKAGE 02 - INCREMENTAL DEVELOPMENT QUALITY GATES as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-06-operations-quality-tracking.md",
+      "reason": "Preserve DEVELOPMENT PACKAGE 05 - OPERATIONAL VISIBILITY, QUALITY TRENDS AND RETENTION as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-06-operator-mcp-development-skills.md",
+      "reason": "Preserve Development package 06 - read-only operator MCP and development skills as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-06-recovery-repair-admission.md",
+      "reason": "Preserve DEVELOPMENT PACKAGE 01 - RECOVERY AND REPAIR ADMISSION as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-06-worker-prompt-contracts.md",
+      "reason": "Preserve Development package 04 - Consistent worker guidance and artifact contracts as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-07-job-control-schema-standardization.md",
+      "reason": "Preserve TASK - STANDARDIZE, VALIDATE AND RECORD THE JOB CONTROL LAYER as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-07-tooling-only-image-and-source-mount.md",
+      "reason": "Preserve TASK - TOOLING-ONLY DAGSTER IMAGE WITH A MOUNTED SOURCE CHECKOUT as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-07-topology-fixture-monorepo.md",
+      "reason": "Preserve TASK - BUILD-TOPOLOGY FIXTURE MONOREPO AND ITS TARGET CONTRACT as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-01-model-connectivity.md",
+      "reason": "Preserve Job pass 01 \u2014 `job_model_connectivity` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-02-image-pin-verification.md",
+      "reason": "Preserve Job pass 02 \u2014 `job_image_pin_verification` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-03-target-acquisition.md",
+      "reason": "Preserve Job pass 03 \u2014 `job_target_acquisition` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-04-review-intake.md",
+      "reason": "Preserve Job pass 04 \u2014 `job_review_intake` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-05-target-catalog.md",
+      "reason": "Preserve Job pass 05 \u2014 `job_target_catalog` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-06-build-environment-analysis.md",
+      "reason": "Preserve Job pass 06 \u2014 `job_build_environment_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-08-job-pass-07-ci-configuration-analysis.md",
+      "reason": "Preserve Job pass 07 \u2014 `job_ci_configuration_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-10-job-pass-08-source-history-analysis.md",
+      "reason": "Preserve Job pass 08 - `job_source_history_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-10-t051-host-local-pins.md",
+      "reason": "Preserve T-051 - Host-local image pins on WSOLLERS1 as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-10-t057-repair-loop-safeguards.md",
+      "reason": "Preserve Bounded focused tests and serial operator recovery as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-11-job-pass-10-project-build.md",
+      "reason": "Preserve Job pass 10 - `job_project_build` as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-11-job-pass-11-language-build.md",
+      "reason": "Preserve Job pass 11: admitted environment inputs and captured-build consumption as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-11-job-pass-14-artifact-indexing.md",
+      "reason": "Preserve Job pass 14: catalog-only artifact input as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-11-job-pass-20-cpp-compiled-analysis.md",
+      "reason": "Preserve Job pass 20: preserve project-relative Infer observations as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-12-crash-ingestion-research.md",
+      "reason": "Preserve Crash aggregation APIs and source-linked test data as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-12-dfd-threat-model-plan.md",
+      "reason": "Preserve PLAN - GENERATE A DFD AND THREAT MODEL FROM ACCEPTED RUN EVIDENCE as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-13-docs-program-prompt.md",
+      "reason": "Preserve Documentation program: generated inventory, authored job pages, subsystem dives as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/review-data-indexing-prompt.md",
+      "reason": "Preserve Implementation prompt: comprehensive review-data indexing as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/review-graph-precomputation-prompt.md",
+      "reason": "Preserve Implementation prompt: source graphs and reusable review queries as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/seeded-clang-neighborhoods-prompt.md",
+      "reason": "Preserve Implementation prompt: seeded neighborhoods for the Clang, LLVM IR, AST and CPG producers as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "revise",
+      "kind": "operations",
+      "path": "scripts/README.md",
+      "reason": "Reconcile the script index with current wrappers and link the operator runbooks rather than duplicate their procedures.",
+      "subsystem": "testing and operations"
+    }
+  ],
+  "schema": "appsec-review/docs-ledger/1",
+  "scope": {
+    "decision_records": "Preserve dated decisions and conservatively protect design, review and task records; revise means metadata or separated current exposition, never rewriting decisions.",
+    "dispositions": "Planned maintenance actions, not claims that prose is reconciled or that a future generated index already exists; keep permits the frontmatter required by T-128.",
+    "host_local_walks": "Excluded from the committed inventory; local walk rows remain keep and host-local and are not portable existence requirements.",
+    "membership": "git-tracked files, including this ledger",
+    "paths": [
+      "AGENTS.md",
+      "containers/**/README.md",
+      "docs/**",
+      "scripts/README.md"
+    ]
+  },
+  "survey": {
+    "inventory_commit": "4f32730db5b5dcaba64e1b64cb376f07cab29fbd",
+    "method": "Surveyed the cumulative changed-file inventory and first-parent history, then classified the full tracked documentation set using headings, navigation, contract references and decision/status text.",
+    "reconciliation": "The cumulative behavior delta has not been fully reconciled; docs/docs-sync.json retains its existing watermark.",
+    "since_commit": "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4",
+    "status": "inventory-only",
+    "upstream_difference": "The observed upstream smoke-targets prompt is not in this checkout's inventory commit and is not claimed as inventoried here.",
+    "upstream_observed_commit": "3757c8ce30ff0137b39e2992ca219d725495d171"
+  }
+}

@@ -119,8 +119,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-124 | [Close or confirm the Rust remote-flow pruning gap](#t-124-close-or-confirm-the-rust-remote-flow-pruning-gap) | graph | open |
 | T-125 | [Close or confirm the Rust canonicalize sanitizer gap](#t-125-close-or-confirm-the-rust-canonicalize-sanitizer-gap) | graph | open |
 | T-126 | [Design the multi-producer plan for code-graph and dataflow facts](#t-126-design-the-multi-producer-plan-for-code-graph-and-dataflow-facts) | graph | blocked |
-| T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | open |
-| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | blocked |
+| T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | done (2026-11-13, docs/docs-ledger.json) |
+| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | open |
 | T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | blocked |
 | T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | blocked |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
@@ -1812,7 +1812,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-127 — Inventory the documentation in a disposition ledger
 
-- **State:** open
+- **State:** done (2026-11-13, docs/docs-ledger.json)
 - **Area:** pipeline
 - **Blocks:** T-128
 - **Why:** the documentation mixes current architecture, operations, plans and dated records
@@ -1823,15 +1823,20 @@ until each is rewritten into the entry format when it is next touched.
   when applicable, a one-sentence reason and the decision-record flag. Survey the delta from
   `docs/docs-sync.json` first, then the remaining documents. Keep `docs/walks/` rows host-local
   with disposition `keep`; their content is not a source of rules. Do not rewrite dated decisions.
+  The user clarified on 2026-11-13 that the committed ledger covers tracked files only:
+  walk entries stay local and are not portable existence requirements. The delivered ledger
+  records 342 paths including itself, its inventory commit and the inventory-only survey;
+  it does not claim the cumulative behavior delta has been reconciled.
 - **Done when:** `tests/docs/test_docs_ledger.py` rejects a tracked document with no row, a row
   naming a missing file, a merge without a target and retirement of a decision record; the ledger
   covers the stated paths, and the docs-sync record names only a commit actually reconciled.
 - **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 1),
-  `.claude/skills/docs-sync/SKILL.md`, `docs/docs-sync.json`, `AGENTS.md`.
+  `.claude/skills/docs-sync/SKILL.md`, `docs/docs-sync.json`, `AGENTS.md`,
+  `docs/docs-ledger.json`, `tests/docs/test_docs_ledger.py`.
 
 ### T-128 — Generate the documentation inventory and enforce frontmatter and links
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Blocked by:** T-127
 - **Blocks:** T-129
@@ -1847,6 +1852,9 @@ until each is rewritten into the entry format when it is next touched.
   Output is deterministic, sorted and LF, without timestamps, with source and do-not-edit
   notices. Do not edit the source TOML, catalog, guidance registry or `DATASETS` tables;
   register source defects in this registry instead.
+  The link validator must distinguish links from literal Markdown examples in inline or fenced
+  code: Stage 1 found the existing `tests/test_documentation.py` regex treating the program
+  prompt's inline `relative/path.md#anchor` example as a missing file, unchanged from `145bcceda`.
 - **Done when:** `tests/docs/test_generated_docs.py` detects regeneration differences;
   `tests/docs/test_docs_frontmatter.py` rejects missing or invalid frontmatter;
   `tests/docs/test_docs_links.py` rejects unresolved relative links and anchors; and
@@ -1854,7 +1862,8 @@ until each is rewritten into the entry format when it is next touched.
   and gap identifiers in authored prose. Each test is independent and under ten seconds.
 - **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 2),
   `appsec-review.toml`, `containers/catalog.toml`, `src/appsec_review/mcp/schema.py`,
-  `pipeline/guidance/registry.json`, `tests/job-test-map.json`, T-117, T-127.
+  `pipeline/guidance/registry.json`, `tests/job-test-map.json`, `tests/test_documentation.py`,
+  T-117, T-127.
 
 ### T-129 — Map tools and datasets to intelligence buckets and availability matrices
 
