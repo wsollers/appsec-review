@@ -3,7 +3,7 @@
 Session prompt. Start a fresh session on `wsollers/appsec-review` with this file, `AGENTS.md`,
 `.claude/skills/multi-session-coordination/SKILL.md` and `docs/operations/test-targets.md` read in
 that order. This document is the brief; it decides nothing that `AGENTS.md` decides. Stage 0
-registers the T ids; add the parent id to this paragraph in that commit.
+registered the T ids; the parent entry is T-134 (T-135 to T-145 are its parts).
 
 ## Goal
 
