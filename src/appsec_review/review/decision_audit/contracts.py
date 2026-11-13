@@ -51,6 +51,7 @@ class Stage(StrEnum):
     SEVERITY_TRIAGE = "severity_triage"
     ADMISSION = "admission"
     PACKAGE_ASSEMBLY = "package_assembly"
+    CELL_EXECUTION = "cell_execution"
     RED_DISCOVERY = "red_discovery"
     PROPOSAL_NORMALIZATION = "proposal_normalization"
     CLAIM_CAP = "claim_cap"
@@ -507,6 +508,8 @@ class DecisionRecord(_Product):
     deciding_actor_roles: tuple[Role, ...]
     required_predicates: tuple[Predicate, ...]
     missing_predicates: tuple[Predicate, ...]
+    actor_role: Role | None = None
+    actor_role_absence_reason: AbsenceReason | None = AbsenceReason.NOT_APPLICABLE
 
     def __post_init__(self) -> None:
         _sort(self, "deciding_actor_roles", "required_predicates", "missing_predicates")
@@ -1059,6 +1062,8 @@ def from_document(value: object, *, expected_origin: Origin) -> Product | AuditM
                 "deciding_row": None if body["deciding_row"] is None else DecidingRow(body["deciding_row"]),
                 "deciding_row_absence_reason": _absence(body["deciding_row_absence_reason"]),
                 "deciding_actor_roles": tuple(Role(item) for item in _array(body["deciding_actor_roles"])),
+                "actor_role": None if body["actor_role"] is None else Role(body["actor_role"]),
+                "actor_role_absence_reason": _absence(body["actor_role_absence_reason"]),
                 "original_outcome": _link(body["original_outcome"]),
                 "cell_receipt": _optional_source(body["cell_receipt"])})
         elif schema == VERIFICATION_SCHEMA:
