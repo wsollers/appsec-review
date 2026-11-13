@@ -1,3 +1,4 @@
+"""The job's run metrics as ``aggregate_run_metrics`` derives them from its pipeline events."""
 from __future__ import annotations
 
 from appsec_review.observability import PipelineLog, aggregate_run_metrics

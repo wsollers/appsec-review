@@ -1,3 +1,5 @@
+"""Byte-exact line tables and bounded source resolution of ``_Sources`` over a hand-built
+inventory (no shard, no inventory scan)."""
 from __future__ import annotations
 
 import hashlib

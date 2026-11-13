@@ -1,4 +1,11 @@
-"""Genuine compiler artifacts through the real readers, publisher and retrieval."""
+"""Pre-walk end-to-end suite of job_debug_symbol_indexing, pending replacement (T-113).
+
+Genuine compiler artifacts through the real readers, publisher, retrieval core and MCP adapter,
+over the hand-written ``_seed`` run. At HEAD 308d8b75 all six cases fail before the job runs:
+``_index_fixture`` passes the reader-test ``settings()`` mapping, whose ``tools`` host-path entry
+``parse_debug_symbol_settings`` now rejects (``unknown debug-symbol reader settings``). Stale
+fixture, not a regression of this job.
+"""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -13,7 +20,7 @@ from appsec_review.jobs.job_debug_symbol_indexing import build_job
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.observability import EventLog, PipelineLog, aggregate_run_metrics
 from appsec_review.retrieval import RetrievalCore
-from tests.test_debug_symbol_indexing import RUN_ID, _seed, _shard
+from tests.integration.job_debug_symbol_indexing.test_debug_symbol_indexing_graph import RUN_ID, _seed, _shard
 from tests.test_debug_symbol_readers import FIXTURES, fixture_runner, settings
 
 

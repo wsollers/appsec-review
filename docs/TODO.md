@@ -106,6 +106,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-111 | [Surface build-descriptor bounds as gap records and size them against real targets](#t-111-surface-build-descriptor-bounds-as-gap-records-and-size-them-against-real-targets) | build | open |
 | T-112 | [Record what the analysis-summary trim removed, and do not report truncation under the bounds](#t-112-record-what-the-analysis-summary-trim-removed-and-do-not-report-truncation-under-the-bounds) | build | open |
 | T-113 | [Walk every job into tests/unit with code-level tests under the enforced tier](#t-113-walk-every-job-into-testsunit-with-code-level-tests-under-the-enforced-tier) | testing | in-progress |
+| T-114 | [Declare the debug-symbol decision dataset with the schema the job writes](#t-114-declare-the-debug-symbol-decision-dataset-with-the-schema-the-job-writes) | binary | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1716,7 +1717,17 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `_seed`-based graph suite, the two runner-level throughput cases and the shared input-contract
   suite parked under `tests/integration/job_artifact_indexing/`, where 40 cases already failed at
   HEAD 05ac85ae because the synthetic language-build handoff is no longer admitted; the shard-layout
-  oracle test moved to `tests/acceptance/job_artifact_indexing/`). Next: job_debug_symbol_indexing.
+  oracle test moved to `tests/acceptance/job_artifact_indexing/`);
+  job_debug_symbol_indexing (15 unit files, 194 cases: new contract, graph/validator/reader-identity,
+  accepted-inputs, decision, probe/privacy, source-resolution, extraction, normalization,
+  publication and accepted-loader tests over a real `JobContext` with the upstream readers and the
+  symbol reader faked at their boundaries; the workflow, source-bounds, metrics and host-binding
+  files moved in whole, the settings and build-image-identity cases moved in from the graph and
+  execution suites; the `_seed`-based whole-DAG suite, the fake-engine production-path suite and
+  the genuine-fixture end-to-end suite parked under `tests/integration/job_debug_symbol_indexing/`,
+  where at HEAD 308d8b75 the two JobRunner cases fail at admission and all six end-to-end cases
+  fail on a stale `tools` reader setting; the `target_decision` declaration/schema mismatch found
+  by the contract test is T-114). Next: job_test_coverage.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,
@@ -1799,6 +1810,25 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `docs/architecture/testing.md` ("The tests/unit/ tier", "The test-tier walk"),
   `docs/processes/test-tier-walk-prompt.md`, `docs/processes/integration-tier-walk-prompt.md`,
   `tests/job-test-map.json`.
+
+### T-114 — Declare the debug-symbol decision dataset with the schema the job writes
+
+- **State:** open
+- **Area:** binary
+- **Why:** `job_debug_symbol_indexing/datasets.py` declares the `target_decision` dataset with schema
+  `appsec-review/debug-symbol-decision/1`, while `debug_symbols/contract.py` sets
+  `DECISION_SCHEMA = "appsec-review/debug-symbol-decision/2"`, which `_decision` writes into
+  `decision.json` and `_read_decision` / `load_accepted_debug_symbols` require. The declaration
+  was not bumped when the decision gained its frozen execution plan, so the published document
+  never carries its declared schema id (found by the T-113 contract test on 2026-11-13).
+- **Scope:** declare `target_decision` with `DECISION_SCHEMA` (or derive the declaration from the
+  contract constant), and make `tests/unit/job_debug_symbol_indexing/test_contract.py` assert the
+  declared schema for the decision like the other documents instead of the written constant.
+- **Done when:** the contract test pins `declared["target_decision"].schema == DECISION_SCHEMA` and
+  the `TODO(T-114)` comment in it is gone.
+- **Refs:** `src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py`,
+  `src/appsec_review/debug_symbols/contract.py`,
+  `tests/unit/job_debug_symbol_indexing/test_contract.py`.
 
 ### T-001 — Finish OWASP acceptance beyond bounded static assessment
 

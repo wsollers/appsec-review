@@ -132,8 +132,29 @@
       "live": []
     },
     "job_debug_symbol_indexing": {
-      "unit": ["tests/test_debug_symbol_indexing.py"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_debug_symbol_indexing/test_contract.py",
+        "tests/unit/job_debug_symbol_indexing/test_job_graph.py",
+        "tests/unit/job_debug_symbol_indexing/test_workflow.py",
+        "tests/unit/job_debug_symbol_indexing/test_settings.py",
+        "tests/unit/job_debug_symbol_indexing/test_host_bindings.py",
+        "tests/unit/job_debug_symbol_indexing/test_accepted_inputs.py",
+        "tests/unit/job_debug_symbol_indexing/test_decision.py",
+        "tests/unit/job_debug_symbol_indexing/test_probe_and_privacy.py",
+        "tests/unit/job_debug_symbol_indexing/test_sources.py",
+        "tests/unit/job_debug_symbol_indexing/test_source_bounds.py",
+        "tests/unit/job_debug_symbol_indexing/test_extract.py",
+        "tests/unit/job_debug_symbol_indexing/test_normalize.py",
+        "tests/unit/job_debug_symbol_indexing/test_publish.py",
+        "tests/unit/job_debug_symbol_indexing/test_accepted_loader.py",
+        "tests/unit/job_debug_symbol_indexing/test_metrics.py"
+      ],
+      "integration": [
+        "tests/integration/job_debug_symbol_indexing/test_debug_symbol_indexing_graph.py",
+        "tests/integration/job_debug_symbol_indexing/test_debug_symbol_execution.py",
+        "tests/integration/job_debug_symbol_indexing/test_debug_symbol_end_to_end.py",
+        "tests/integration/job_artifact_indexing/test_artifact_indexing_scale.py"
+      ],
       "acceptance": [],
       "live": []
     },

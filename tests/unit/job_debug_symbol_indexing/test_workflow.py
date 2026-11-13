@@ -1,3 +1,5 @@
+"""The job's place in the review topology and the Dagster graph definitions: registry, CLI graph
+order, wave-1 dependencies and the composite graphs, built but never executed."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +16,7 @@ from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime import active_job_ids, job_is_enabled
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.mark.parametrize("target", ("clang", "msvc"))

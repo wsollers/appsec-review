@@ -1,3 +1,15 @@
+"""Pre-walk graph suite of job_debug_symbol_indexing, pending replacement (T-113).
+
+Every case here seeds a run with hand-written accepted handoffs (``_seed`` writes the
+artifact-indexing and language-build ``handoff.json``/``latest.json`` through
+``write_fixture_handoff``) and runs the whole four-unit DAG with ``Job.execute``, 1 to 6 s per
+case at HEAD 308d8b75 where all 29 remaining cases pass. The claims are replaced by the
+handler-level tests in ``tests/unit/job_debug_symbol_indexing/`` (decision, extraction,
+normalization, publication, accepted inputs, loader); the three code-level cases that lived here
+(escaped reference probe, bounded settings, settings defaults) moved there outright.
+``RUN_ID``, ``SNAPSHOT``, ``_seed``, ``_extractor`` and ``_shard`` are imported by the execution and
+end-to-end suites beside this file.
+"""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -287,15 +299,6 @@ def test_post_reader_artifact_drift_does_not_publish_records(tmp_path):
     assert "acceptance.publish_handoff" not in result["outputs"]
 
 
-def test_escaped_artifact_reference_is_an_integrity_failure(tmp_path):
-    from appsec_review.jobs.job_debug_symbol_indexing.job import FrameworkIntegrityError, _probe
-
-    artifact = {"artifact_identity": "fixture", "kind": "executable",
-                "reference": {"path": "../outside", "sha256": "a" * 64, "size_bytes": 1}}
-    with pytest.raises(FrameworkIntegrityError, match="reference is invalid"):
-        _probe(tmp_path, artifact, 1024)
-
-
 def test_reader_exception_is_an_observable_gap_not_an_integrity_success(tmp_path):
     context, _, _ = _seed(tmp_path)
 
@@ -485,24 +488,3 @@ def test_disabled_reader_never_runs_and_has_named_coverage_gap(tmp_path):
     result = build_job(extractor=_extractor(calls)).execute(context)
     assert calls == []
     assert "debug_symbol_indexing_disabled" in " ".join(result["outputs"]["acceptance.publish_handoff"]["gaps"])
-
-
-@pytest.mark.parametrize("settings", [
-    {"unknown": True}, {"compiler_target": "gcc"}, {"max_artifacts": 0},
-    {"enabled": "true"}, {"reader": {"max_records": True}},
-    {"reader": {"timeout_seconds": float("inf")}}, {"reader": {"unknown": 1}},
-    {"reader": {"max_records": 10**400}},
-    {"reader": {"tools": {"llvm_dwarfdump": {"path": "tool"}}}},
-])
-def test_settings_are_bounded_and_closed(settings):
-    with pytest.raises(ValueError):
-        parse_debug_symbol_settings(settings)
-
-
-def test_settings_defaults_and_unavailable_accepted_loader(tmp_path):
-    settings = parse_debug_symbol_settings({})
-    assert settings["enabled"] is True
-    assert settings["max_artifacts"] == 128
-    assert settings["reader"]["max_records"] == 100000
-    with pytest.raises(ValueError, match="accepted"):
-        load_accepted_debug_symbols(tmp_path)

@@ -1,3 +1,5 @@
+"""The run-frozen execution plan and resume identity: the managed reader image binding comes from
+the run's frozen host pins and resolved configuration, never from the mutable host."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -18,7 +20,7 @@ from appsec_review.storage.atomic import canonical_json
 from tests.host_pins_support import fixture_bindings, fixture_preinstalled, write_host_pins
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _freeze(tmp_path, *, images=None, releases=None):

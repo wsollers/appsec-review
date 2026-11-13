@@ -1,3 +1,15 @@
+"""Pre-walk production-path suite of job_debug_symbol_indexing, pending replacement (T-113).
+
+These cases run the whole job with the production reader path: the real ``ContainerExporter``
+over a fake container engine, the shipped configuration and container catalog, genuine fixture
+binaries and recorded tool exports, 3 to 5 s per case; two cases drive a ``JobRunner`` claim. At
+HEAD 308d8b75 ``test_production_reader_runs_inside_strict_job_scope`` fails for both targets with
+``RetrievalIntegrityError: expected exactly one accepted handoff for job_artifact_indexing`` (the
+hand-written ``_seed`` handoff is not admitted under the runner: stale fixture, not a regression
+of this job); the other 25 cases pass. The code-level cases (``build_image_identity``, host-path
+reader settings) moved to ``tests/unit/job_debug_symbol_indexing/test_settings.py``; the bounded
+export-driver cases stay here with the execution path they exercise.
+"""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -15,11 +27,11 @@ from appsec_review.debug_symbols import _container_export as driver
 from appsec_review.debug_symbols import execution
 from appsec_review.jobs.job_debug_symbol_indexing import build_job, load_accepted_debug_symbols
 from appsec_review.storage import atomic_json, file_sha256
-from tests.test_debug_symbol_indexing import _seed
+from tests.integration.job_debug_symbol_indexing.test_debug_symbol_indexing_graph import _seed
 from tests.handoff_fixture import write_fixture_handoff
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tests" / "fixtures" / "debug_symbols"
 BUILD_IMAGE = "sha256:" + "d" * 64
 
@@ -201,7 +213,7 @@ def test_production_reader_runs_inside_strict_job_scope(tmp_path, monkeypatch, c
     from appsec_review.config import load_config
     from appsec_review.runtime import JobRunner
     from appsec_review.runtime.scope import review_scope
-    from tests.test_debug_symbol_indexing import RUN_ID, SNAPSHOT
+    from tests.integration.job_debug_symbol_indexing.test_debug_symbol_indexing_graph import RUN_ID, SNAPSHOT
 
     config = load_config(ROOT / "appsec-review.toml", compiler_target=target)
     config = replace(config, runtime=replace(config.runtime, runs_dir=tmp_path,
@@ -282,22 +294,6 @@ def test_genuine_msvc_artifacts_flow_through_image_exporter(tmp_path, monkeypatc
     assert result["failed_units"] == []
     assert result["outputs"]["acceptance.publish_handoff"]["item_count"] > 0
     assert len(engine.runs) == 1
-
-
-@pytest.mark.parametrize("image", [
-    None, {}, {"image_id": "mutable:tag", "user": "10001:10001"},
-    {"image_id": BUILD_IMAGE, "user": "0:0"},
-])
-def test_unpinned_or_root_build_identity_is_rejected(image):
-    with pytest.raises(execution.SymbolIntegrityError):
-        execution.build_image_identity(image)
-
-
-def test_host_path_settings_are_rejected_instead_of_ignored():
-    from appsec_review.config.debug_symbols import parse_debug_symbol_settings
-    with pytest.raises(ValueError, match="unknown debug-symbol reader settings"):
-        parse_debug_symbol_settings({"reader": {"tools": {
-            "llvm_dwarfdump": {"path": "C:\\approved\\llvm-dwarfdump.exe", "sha256": "a" * 64}}}})
 
 
 def test_fresh_execution_attempts_cannot_alias_previous_receipt_shards(
