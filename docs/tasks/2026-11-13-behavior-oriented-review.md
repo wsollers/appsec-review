@@ -268,6 +268,17 @@ operator-owned `targets/appsec-multi-vuln` checkout, absent from the isolated wo
 No target was cloned, copied or modified to satisfy them; those links require the final
 main-checkout check. Report: `tests-custom-20261113-171609-586641-90985`.
 
+Local main was fast-forwarded from the released documentation boundary to
+`db83f11aea561fa4f59937f9c9207da821e28052` after a fresh zero-active-run check and serialized
+source/index holds. The six other session-owned untracked review/design pages were preserved
+and excluded. The same 367-case unit command above passed on main in **8.97 seconds**, using
+seed `1470` without coverage collection (`tests-custom-20261113-172106-439272-9026`).
+The two previously failing link selectors were rerun on main with the wrapper's
+`--expect-tests 2 --max-tests 2 --timeout-seconds 60 --parallel --test-workers 2 --shuffle-seed 1471`:
+both passed in **2.25 seconds** (`tests-custom-20261113-172137-947120-10731`).
+No slow cases occurred, generated documentation remained drift-free, and the existing T-148
+archive-source skip remains a named documentation gap. No push or deployment reload occurred.
+
 ### Manual validation boundary
 
 Integration cases are authored under `tests/integration/job_security_tagging/`,
