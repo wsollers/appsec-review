@@ -10,11 +10,11 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## Status, scope and non-goals
 
-**Proposed design, not implemented or approved.** Written 2026-11-13 against code
+**Implementation authorized on 2026-11-13; not yet delivered.** Written against code
 `5926171238607e27a948bc7d40ce190a853b3d0c`; the
 [source-backed review](../reviews/2026-11-13-triage-verifier-review.md) records the
 shared-working-tree limitation and evidence. Frontmatter status means this is the
-current proposal, not that the proposed runtime exists. Scheduling/progress belongs
+current design, not that the proposed runtime exists. Scheduling/progress belongs
 only in [the TODO registry](../TODO.md).
 
 T-146 landed before this registry handoff at main
@@ -39,6 +39,54 @@ Improve the usefulness of review decisions without widening model authority:
   contributes decision provenance and counterevidence interfaces, not parallel versions.
 
 ## 1. Product and authority model
+
+### T-150 implementation decisions, 2026-11-13
+
+The user authorized chunked implementation with unit coverage and final code review before
+commit/push, and explicitly prohibited integration and acceptance execution. The first wave is
+the behavior-preserving T-150 foundation; the other proposed policy changes are not activated
+by these decisions.
+
+For later evidence-adjudication and hunt-allocation waves, the user explicitly selected
+**implement as opt-in**, preserving current defaults until separately authorized efficacy
+validation. Implementing those policies does not authorize activating them or running
+integration, acceptance or live evaluation.
+
+1. **One decision authority.** Produce model-free audit projections from accepted review inputs
+   and existing ledger/cell/lead records. Do not change admission, claim state, evidence policy,
+   scores, role counts, ship-block status or judge/PoC eligibility.
+2. **Closed shared contracts first.** Use versioned, independently validated decision,
+   verification-coverage, decision-basis and manifest records with canonical content identities.
+   Preserve original run/attempt/lead/proposal/claim/cell identities and exact input references;
+   never synthesize a claim identity for a rejected or capped proposal.
+3. **Protected allowlisted data.** Project bounded redacted fields and references, never raw
+   prompts, transcripts or arbitrary worker dictionaries. Counterevidence remains labelled by
+   its existing role and admissibility; its inclusion in an audit does not make it direct proof.
+4. **Existing lifecycle.** Publish through declared datasets and the existing job/attempt
+   machinery. Readers verify accepted publication pins, hashes, scope and record membership.
+   The existing handoff publication creates the audit after writing the original inner review
+   handoff, under the attempt's separate `artifacts/decision-audit/` subtree. Its generic unit
+   output binds the audit manifest; the audit binds the inner handoff and ledger. This avoids
+   a hash cycle, overlapping dataset ownership, a new task, or changes to existing finding/
+   inner-handoff bytes merely to attach the audit. Configuration binding is parent-owned
+   integration work, not a second status store or a mutable latest-pointer read.
+5. **Explicit compatibility.** Historical absence is an unavailable audit capability with its
+   reason. Do not fabricate old reads, rewrite accepted artifacts or silently reinterpret old
+   schema/policy identities. New records have their own closed schemas and fingerprints.
+   An absent decision-audit settings table disables the optional publication for frozen
+   configurations. New shipped configuration enables the projection. Audit bounds remain in
+   full resolved configuration and the audit policy hash, but are excluded from model-cell/
+   lane/round semantic fingerprints and are not permitted capacity-overlay settings.
+6. **Bounded operator/application consumers.** Start with a declared accepted-artifact reader
+   and fixed query templates plus the existing protected dossier. No new worker/MCP grant,
+   arbitrary SQL, target traversal or blind-verifier access to prior decision narratives/labels.
+7. **Separate future semantics.** T-152 owns warrants, T-153 owns semantic request resolution,
+   and T-156 owns delivered-span/question-coverage receipts. References to unavailable future
+   products remain explicitly absent; T-150 does not duplicate or pretend to implement them.
+8. **Reviewed chunks.** Each isolated chunk supplies actual-logic unit regressions and changed
+   line/branch coverage. The coordinator reviews each contract/chunk before local commits and
+   reviews the combined code before serialized main integration and the requested push.
+   Integration, acceptance, live models, target execution and deployment reload remain unrun.
 
 The first delivery is a **deterministic decision-audit projection**, not a new reviewer
 or new truth store. It joins accepted lead collection/admission, protected cell results,
