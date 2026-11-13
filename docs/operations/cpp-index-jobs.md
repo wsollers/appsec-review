@@ -1,3 +1,11 @@
+---
+title: "C/C++ index jobs: clangd symbol index and Joern CPG"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # C/C++ index jobs: clangd symbol index and Joern CPG
 
 Two independent jobs index accepted C/C++ projects after `job_cpp_compiled_analysis` completes.

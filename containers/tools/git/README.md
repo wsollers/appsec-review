@@ -1,3 +1,11 @@
+---
+title: "git tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_evidence_collection", "job_source_history_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # git tool image
 
 `appsec-review/tool-git:2.43.0` is the tool image declared by `tool-git` in

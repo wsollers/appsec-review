@@ -1,3 +1,11 @@
+---
+title: "Rust and WebAssembly build image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Rust and WebAssembly build image
 
 `Dockerfile` installs Rust 1.90.0 (`rustc`, `cargo`, the `x86_64-unknown-linux-gnu`,

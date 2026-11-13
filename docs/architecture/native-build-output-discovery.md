@@ -1,3 +1,11 @@
+---
+title: "Native build-output discovery and named build-output exclusions"
+kind: "architecture"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_artifact_indexing", "job_codeql_analysis", "job_dependency_intelligence", "job_language_build", "job_poc_generation", "job_project_build", "job_remediation_validation", "job_review_intake", "job_sanitizer_build", "job_source_history_analysis", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native build-output discovery and named build-output exclusions
 
 Status: implemented on the native build-output implementation branch; see

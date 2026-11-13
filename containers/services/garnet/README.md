@@ -1,3 +1,11 @@
+---
+title: "Garnet result cache: Windows Nano Server image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Garnet result cache: Windows Nano Server image
 
 The inference security review caches pointers to completed blue-role cell results in

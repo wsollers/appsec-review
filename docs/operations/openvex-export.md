@@ -1,3 +1,11 @@
+---
+title: "OpenVEX findings export"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_openvex_export"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OpenVEX findings export
 
 **Automatic local export at

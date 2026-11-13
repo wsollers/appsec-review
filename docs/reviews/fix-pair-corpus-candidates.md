@@ -1,3 +1,11 @@
+---
+title: "Fix-pair corpus candidates (T-067)"
+kind: "review"
+subsystem: "testing and operations"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Fix-pair corpus candidates (T-067)
 
 Status: research output of 2026-11-11 for T-067 in [`../TODO.md`](../TODO.md). **This is a candidate list

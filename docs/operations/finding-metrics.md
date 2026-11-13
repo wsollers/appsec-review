@@ -1,3 +1,11 @@
+---
+title: "Finding metrics: operator guide"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Finding metrics: operator guide
 
 Design and rationale: [`../architecture/finding-metrics.md`](../architecture/finding-metrics.md).

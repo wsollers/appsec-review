@@ -1,3 +1,11 @@
+---
+title: "Shared bounded model execution"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Shared bounded model execution
 
 `src/appsec_review/inference/execution.py` supplies **mechanics, not an agent framework**.

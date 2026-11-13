@@ -1,3 +1,11 @@
+---
+title: "Node/TypeScript build image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Node/TypeScript build image
 
 `Dockerfile` defines `audit-buildenv-typescript:local`, the image behind the `node` build profile

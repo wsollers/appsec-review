@@ -1,3 +1,11 @@
+---
+title: "Review metrics"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review metrics
 
 Run `appsec-review metrics --run-id <id>` after or during a review. The command deterministically
@@ -11,7 +19,7 @@ findings are correct, useful, repeatable and acted on is the subject of the
 
 The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
 adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`), introduced
-in `appsec-review/run-metrics/5` and retained in the current `/7`. It separates handoff admission, execution, coverage, native retention,
+in <!-- historical:begin -->`appsec-review/run-metrics/5`<!-- historical:end --> and retained in the current `/7`. It separates handoff admission, execution, coverage, native retention,
 and observation provenance. Historical `/4` summaries lack this section; absence is not zero
 provenance work. Do not copy claimed event counts into reports:
 retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
@@ -270,9 +278,9 @@ establish a security-negative result.
 The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
 requires PoC, chain, remediation, dossier and final-publication tracking from their first
 implementation. The existing `metrics` command and summary path remain the operating surface;
-no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
-combined source `6975aef2` retained `completion-process-metrics/1` in `run-metrics/4`;
-`run-metrics/5` retained it alongside interchange and the other domain sections, as do `/6` and the current `/7`.
+no separate backend is needed. Integration `b702eb7` first added `completion` to <!-- historical:begin -->`run-metrics/3`<!-- historical:end -->;
+combined source `6975aef2` retained `completion-process-metrics/1` in <!-- historical:begin -->`run-metrics/4`<!-- historical:end -->;
+<!-- historical:begin -->`run-metrics/5`<!-- historical:end --> retained it alongside interchange and the other domain sections, as do `/6` and the current `/7`.
 This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
 parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.

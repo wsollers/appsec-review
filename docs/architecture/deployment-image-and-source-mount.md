@@ -1,3 +1,11 @@
+---
+title: "Deployment image and source mount"
+kind: "architecture"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_poc_generation", "job_sanitizer_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Deployment image and source mount
 
 **Status:** Implemented in the Dagster deployment (`deploy/dagster/`) as of 2026-11-07; the direct

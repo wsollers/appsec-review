@@ -1,3 +1,11 @@
+---
+title: "Agent navigation"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_code_graph_index", "job_final_publication_gate", "job_final_report_publication", "job_poc_generation", "job_sanitizer_build", "job_svf_alias_analysis", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Agent navigation
 
 Repository-wide authority and trust rules live only in [`../AGENTS.md`](../AGENTS.md).

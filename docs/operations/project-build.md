@@ -1,3 +1,11 @@
+---
+title: "Project-build operations"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_image_pin_verification", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Project-build operations
 
 `job_project_build` consumes only the accepted, hash-verified target analysis plan and turns its

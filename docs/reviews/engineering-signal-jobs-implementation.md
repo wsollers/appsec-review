@@ -1,3 +1,11 @@
+---
+title: "Engineering-signal jobs implementation"
+kind: "review"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_clang_static_analysis", "job_dependency_intelligence", "job_profile_data", "job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Engineering-signal jobs implementation
 
 Status: implemented and locally verified. Root `AGENTS.md` governs.

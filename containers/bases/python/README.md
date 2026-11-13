@@ -1,3 +1,11 @@
+---
+title: "python base image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # python base image
 
 `appsec-review/base-python:3.12-bookworm` is the shared runtime base image declared by `base-python`

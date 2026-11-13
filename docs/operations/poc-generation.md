@@ -1,3 +1,11 @@
+---
+title: "Operating proof-of-concept generation"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_language_build", "job_poc_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating proof-of-concept generation
 
 **Delivered contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC reads the shared verified

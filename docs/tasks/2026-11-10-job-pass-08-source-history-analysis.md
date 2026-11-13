@@ -1,3 +1,11 @@
+---
+title: "Job pass 08 - `job_source_history_analysis`"
+kind: "task"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_ci_configuration_analysis", "job_source_history_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 08 - `job_source_history_analysis`
 
 This run-first receipt advances T-057. The parent executes the job before selecting repairs;

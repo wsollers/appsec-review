@@ -1,3 +1,11 @@
+---
+title: "Binary-analysis replacements"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Binary-analysis replacements
 
 The omnibus reverse-engineering image is replaced by enabled narrow tools where coverage overlaps:

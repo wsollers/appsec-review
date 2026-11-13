@@ -1,3 +1,11 @@
+---
+title: "Scanner launch reduction: design"
+kind: "review"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_artifact_security_analysis", "job_language_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Scanner launch reduction: design
 
 Status: implemented at `4d7bb1c1` on branch

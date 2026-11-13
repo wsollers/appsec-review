@@ -1,3 +1,11 @@
+---
+title: "Evidence completion documentation inventory"
+kind: "review"
+subsystem: "reporting and metrics"
+status: "historical"
+jobs: ["job_binary_evidence_indexing", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Evidence completion documentation inventory
 
 Date: 2026-10-28. Phase: source inventory and delivered-contract reconciliation.

@@ -1,3 +1,11 @@
+---
+title: "Static build-environment analysis"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_build_environment_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Static build-environment analysis
 
 `job_build_environment_analysis` is default enabled after the accepted target catalog and before

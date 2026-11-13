@@ -1,3 +1,11 @@
+---
+title: "Source history analysis operations"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_source_history_analysis", "job_target_analysis_plan", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Source history analysis operations
 
 `job_source_history_analysis` runs after the accepted target catalog and before

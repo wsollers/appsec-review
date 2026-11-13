@@ -1,3 +1,11 @@
+---
+title: "Smoke targets: one minimal buildable repository per language, plus the guide"
+kind: "task"
+subsystem: "testing and operations"
+status: "historical"
+jobs: ["job_project_build", "job_review_prioritization"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Smoke targets: one minimal buildable repository per language, plus the guide
 
 Session prompt. Start a fresh session on `wsollers/appsec-review` with this file, `AGENTS.md`,

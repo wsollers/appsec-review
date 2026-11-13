@@ -1,3 +1,11 @@
+---
+title: "Second-opinion brief: review protocol v2, the judge role and PoC generation"
+kind: "review"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_inference_security_review", "job_poc_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Second-opinion brief: review protocol v2, the judge role and PoC generation
 
 Audience: an independent reviewer (a person, Copilot, or another model session) who has not seen the design

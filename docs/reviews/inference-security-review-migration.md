@@ -1,3 +1,11 @@
+---
+title: "Near-terminal inference review migration accounting"
+kind: "review"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Near-terminal inference review migration accounting
 
 This is design/migration accounting, not a runtime registry. It records how narrowly reviewed

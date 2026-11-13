@@ -1,3 +1,11 @@
+---
+title: "Operating the security-tagging stage"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_owasp_control_assessment", "job_security_tagging"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating the security-tagging stage
 
 `security_tagging` assigns basis-qualified tags from the

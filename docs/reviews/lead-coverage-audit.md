@@ -1,3 +1,11 @@
+---
+title: "Lead coverage audit"
+kind: "review"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_artifact_security_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_evidence_collection", "job_post_build_security_assessment"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Lead coverage audit
 
 Status: audit of lane A intake, with the fixes that came out of it. Sample run: `2026-10-21-0007` (cpp-multivuln

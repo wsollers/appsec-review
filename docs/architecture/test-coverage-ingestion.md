@@ -1,3 +1,11 @@
+---
+title: "Test-coverage ingestion"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_language_build", "job_target_catalog", "job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Test-coverage ingestion
 
 See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place

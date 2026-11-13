@@ -1,3 +1,11 @@
+---
+title: "Job pass 04 — `job_review_intake`"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_binary_evidence_indexing", "job_model_connectivity", "job_project_build", "job_review_intake", "job_target_analysis_plan", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 04 — `job_review_intake`
 
 Fourth job of the pass (`docs/processes/job-pass-checklist.md`). Closes T-053; advances T-047;

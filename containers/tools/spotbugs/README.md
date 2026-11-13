@@ -1,3 +1,11 @@
+---
+title: "spotbugs tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # spotbugs tool image
 
 `appsec-review/tool-spotbugs:4.10.4` is the tool image declared by `tool-spotbugs` in

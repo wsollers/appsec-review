@@ -1,3 +1,11 @@
+---
+title: "WebAssembly output-family build operations"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_cpp_compiled_analysis", "job_language_build", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # WebAssembly output-family build operations
 
 The WebAssembly lane in `job_language_build` consumes only the accepted, hash-verified

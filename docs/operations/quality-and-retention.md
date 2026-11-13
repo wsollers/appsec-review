@@ -1,3 +1,11 @@
+---
+title: "Operational status, cost provenance, quality trends and retention"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operational status, cost provenance, quality trends and retention
 
 These are derived operator facilities, not a replacement scheduler, recovery controller,

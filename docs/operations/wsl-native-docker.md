@@ -1,3 +1,11 @@
+---
+title: "Native WSL Docker: migration lessons"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native WSL Docker: migration lessons
 
 This runbook records the 2026-10-27 migration of the Dagster deployment from Docker Desktop to

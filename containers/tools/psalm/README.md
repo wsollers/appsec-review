@@ -1,3 +1,11 @@
+---
+title: "psalm tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # psalm tool image
 
 `appsec-review/tool-psalm:6.18.1` is the tool image declared by `tool-psalm` in

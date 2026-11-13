@@ -1,3 +1,11 @@
+---
+title: "Python and retrieval architecture"
+kind: "architecture"
+subsystem: "runtime interchange"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Python and retrieval architecture
 
 Retrieval is a core application capability. Producers publish immutable, independently

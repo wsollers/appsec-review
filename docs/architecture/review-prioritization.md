@@ -1,3 +1,11 @@
+---
+title: "Review prioritization"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_codeql_analysis", "job_evidence_collection", "job_review_prioritization", "job_source_history_analysis", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review prioritization
 
 Status: implemented in `src/appsec_review/jobs/job_review_prioritization/`. Operator guidance is in
@@ -265,7 +273,7 @@ innermost unit by line. An unplanned, failed, or absent Semgrep run is the
 For each accepted CodeQL path-problem observation, each SARIF thread flow is a candidate path from its
 first to its last step. The job keeps the shortest flow per (rule, source location, sink location)
 and attributes source and sink to their innermost units. The CodeQL SARIF normalizer
-(`appsec-review/codeql-sarif-normalizer/2`) records each step's `code_flow` and `thread_flow`
+(`appsec-review/codeql-sarif-normalizer/3`) records each step's `code_flow` and `thread_flow`
 indices so alternative flows are not concatenated; observations normalized without them are reported as
 `semantic_path_flow_boundaries_unavailable`. A language whose CodeQL scopes did not succeed, a
 language CodeQL does not cover (PHP), and an absent CodeQL handoff make `semantic_path` missing for

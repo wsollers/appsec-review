@@ -1,3 +1,11 @@
+---
+title: "T-067: ten game and engine CVE fix-pair candidates"
+kind: "review"
+subsystem: "testing and operations"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # T-067: ten game and engine CVE fix-pair candidates
 
 Research-only survey for **T-067**, checked against public upstream records on **2026-11-12**. This shortlist contains **10 distinct CVEs and fixing commits across 7 projects**. It builds on the existing 26-row inventory in `docs/reviews/fix-pair-corpus-candidates.md`; it does not replace that inventory or modify `test/acceptance/fix-pairs-candidates/pairs.toml`.

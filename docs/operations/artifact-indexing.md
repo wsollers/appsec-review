@@ -1,3 +1,11 @@
+---
+title: "Produced-artifact indexing"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_language_build", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Produced-artifact indexing
 
 `job_artifact_indexing` is the repository-independent boundary between accepted language builds and

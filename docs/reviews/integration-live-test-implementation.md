@@ -1,3 +1,11 @@
+---
+title: "Bounded integration and live acceptance"
+kind: "review"
+subsystem: "testing and operations"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Bounded integration and live acceptance
 
 Implementation record for the approved integration/live coverage plan, based on `fcac4306`.

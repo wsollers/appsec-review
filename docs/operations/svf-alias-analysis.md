@@ -1,3 +1,11 @@
+---
+title: "Operating SVF points-to analysis"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_code_graph_index", "job_cpp_compiled_analysis", "job_inference_security_review", "job_svf_alias_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating SVF points-to analysis
 
 `job_svf_alias_analysis` runs after an accepted `job_cpp_compiled_analysis` handoff and before

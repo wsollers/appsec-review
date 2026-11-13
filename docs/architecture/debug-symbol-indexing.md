@@ -1,3 +1,11 @@
+---
+title: "Build-bound debug-symbol indexing"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_debug_symbol_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Build-bound debug-symbol indexing
 
 ## Decisions and scope

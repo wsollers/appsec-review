@@ -1,3 +1,11 @@
+---
+title: "Native-analysis capabilities"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_cpp_compiled_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native-analysis capabilities
 
 The archived native and CodeQL images are decomposed here conceptually, not copied. Planned bounded

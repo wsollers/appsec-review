@@ -1,3 +1,11 @@
+---
+title: "Multivuln coverage fixtures implementation"
+kind: "review"
+subsystem: "testing and operations"
+status: "historical"
+jobs: ["job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Multivuln coverage fixtures implementation
 
 Status: implemented and verified. Root `AGENTS.md` governs the parent repository; target-owned

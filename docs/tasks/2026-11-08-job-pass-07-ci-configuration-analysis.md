@@ -1,3 +1,11 @@
+---
+title: "Job pass 07 — `job_ci_configuration_analysis`"
+kind: "task"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_ci_configuration_analysis", "job_evidence_collection", "job_review_intake", "job_source_history_analysis", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 07 — `job_ci_configuration_analysis`
 
 Seventh job of the pass (`docs/processes/job-pass-checklist.md`). Converts the job to typed failures

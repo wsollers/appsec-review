@@ -1,3 +1,11 @@
+---
+title: "Job pass 14: catalog-only artifact input"
+kind: "task"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_review_intake", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 14: catalog-only artifact input
 
 This T-057 repair continues the user-authorized serial c094 walk. Run `2026-11-11-0004`

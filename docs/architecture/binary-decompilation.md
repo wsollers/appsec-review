@@ -1,3 +1,11 @@
+---
+title: "Third-party binary decompilation with Ghidra"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_cpg_analysis", "job_review_data_indexing", "job_review_intake", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Third-party binary decompilation with Ghidra
 
 Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is a design

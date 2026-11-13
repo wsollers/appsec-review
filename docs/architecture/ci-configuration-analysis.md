@@ -1,3 +1,11 @@
+---
+title: "Static CI configuration analysis"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_ci_configuration_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Static CI configuration analysis
 
 `job_ci_configuration_analysis` is a source-only review lane. It accepts the immutable target catalog, discovers a fixed set of native CI definition paths, classifies providers, fans out provider/tool tasks, normalizes observations, attaches conservative pipeline/workflow/stage/job/step context, publishes one immutable observation shard per tool branch, performs exact-only correlation, and joins coverage deterministically.

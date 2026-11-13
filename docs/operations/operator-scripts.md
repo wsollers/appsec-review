@@ -1,3 +1,11 @@
+---
+title: "Operator scripts"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_model_connectivity"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operator scripts
 
 Small, guarded scripts in `scripts/` start and stop the local Dagster stack, start and end reviews,

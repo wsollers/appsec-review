@@ -1,3 +1,11 @@
+---
+title: "opengrep tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # opengrep tool image
 
 `appsec-review/tool-opengrep:1.30.2` is the tool image declared by `tool-opengrep` in

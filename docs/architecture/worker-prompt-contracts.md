@@ -1,3 +1,11 @@
+---
+title: "Effective worker prompt contracts"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review", "job_remediation_planning"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Effective worker prompt contracts
 
 This inventory describes **actually dispatched model workers**, not every name in the guidance

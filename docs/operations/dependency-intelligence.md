@@ -1,3 +1,11 @@
+---
+title: "Operating dependency intelligence"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_dependency_intelligence"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating dependency intelligence
 
 Run `job_dependency_intelligence` after target cataloging, accepted language builds, artifact

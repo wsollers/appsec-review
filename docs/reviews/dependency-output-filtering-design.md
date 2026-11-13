@@ -1,3 +1,11 @@
+---
+title: "Dependency output filtering: design"
+kind: "review"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_codeql_analysis", "job_language_build", "job_poc_generation", "job_project_build", "job_sanitizer_build", "job_target_catalog", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Dependency output filtering: design
 
 Status: implemented on branch `william-sollers-xbox-dependency-output-filtering-implementati`

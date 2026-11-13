@@ -1,3 +1,11 @@
+---
+title: "Build environments"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_image_pin_verification", "job_language_build", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Build environments
 
 Each enabled build environment is a language-only, non-root (`10001:10001`) image used by

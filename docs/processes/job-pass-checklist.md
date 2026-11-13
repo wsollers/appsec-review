@@ -1,3 +1,11 @@
+---
+title: "The job-by-job pass: checklist"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # The job-by-job pass: checklist
 
 Applied to every job in `wave1_review` graph order (`docs/tasks/2026-11-08-job-pass-NN-*.md` is the

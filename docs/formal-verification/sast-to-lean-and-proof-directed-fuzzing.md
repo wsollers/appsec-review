@@ -1,3 +1,11 @@
+---
+title: "Design: SAST-to-Lean Verification and Proof-Directed Fuzzing"
+kind: "history"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_poc_generation", "job_sanitizer_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Design: SAST-to-Lean Verification and Proof-Directed Fuzzing
 
 **Status:** Proposed design; not implemented by this document  

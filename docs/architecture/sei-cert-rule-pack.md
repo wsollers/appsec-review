@@ -1,3 +1,11 @@
+---
+title: "SEI CERT rule pack"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # SEI CERT rule pack
 
 `rules/sei-cert/` is a portable Semgrep CE / OpenGrep rule pack mapped to the SEI CERT C, C++,

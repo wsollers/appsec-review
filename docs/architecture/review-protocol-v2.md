@@ -1,3 +1,11 @@
+---
+title: "Review protocol v2: the model-facing layer"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review protocol v2: the model-facing layer
 
 Status: implemented (see section 13 for the decisions taken where this document left a choice open). Observed behavior comes from the first live

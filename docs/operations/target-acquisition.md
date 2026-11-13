@@ -1,3 +1,11 @@
+---
+title: "Target acquisition"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_image_pin_verification", "job_model_connectivity", "job_review_intake", "job_target_acquisition", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Target acquisition
 
 A review **system** is composed of one or more **components**, because one reviewed system can live

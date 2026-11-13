@@ -1,3 +1,11 @@
+---
+title: "Code-graph precomputation: implementation record"
+kind: "review"
+subsystem: "code intelligence"
+status: "historical"
+jobs: ["job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_inference_security_review", "job_review_data_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Code-graph precomputation: implementation record
 
 Record of the 2026-10-12 work on branch `ccr-67a0aeda-uyt6x6` that took

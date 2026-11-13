@@ -1,3 +1,11 @@
+---
+title: "Cross-language CodeQL architecture"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_codeql_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Cross-language CodeQL architecture
 
 The CodeQL vertical slice has four deterministic stages:

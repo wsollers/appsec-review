@@ -1,3 +1,11 @@
+---
+title: "grype tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # grype tool image
 
 The independent `job_third_party_data_sync.grype_db_sync` step imports and validates the mirrored

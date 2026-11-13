@@ -1,3 +1,11 @@
+---
+title: "Retrieval surfaces: tools, MCP, review cells, and skills"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_binary_evidence_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Retrieval surfaces: tools, MCP, review cells, and skills
 
 Four things in this repository are easy to confuse because older documents use "MCP" for all of

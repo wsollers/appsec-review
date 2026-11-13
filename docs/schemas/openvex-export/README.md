@@ -1,3 +1,11 @@
+---
+title: "OpenVEX shared contracts"
+kind: "schema"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_openvex_export"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OpenVEX shared contracts
 
 These are the **strict shared contracts for standalone post-gate export**, reconciled at

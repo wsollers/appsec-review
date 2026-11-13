@@ -1,3 +1,11 @@
+---
+title: "Local and Dagster parity, one job at a time"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_dependency_intelligence", "job_inference_security_review", "job_post_build_security_assessment", "job_project_build", "job_review_data_indexing", "job_review_prioritization", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Local and Dagster parity, one job at a time
 
 Status: approved 2026-10-18, with model replay (section 6).

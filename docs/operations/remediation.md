@@ -1,3 +1,11 @@
+---
+title: "Remediation planning and bounded validation"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_remediation_planning", "job_remediation_validation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Remediation planning and bounded validation
 
 Status: producers `6278e580`, central wiring `b702eb7` and follow-up `e769645f`, 2026-10-28. Planning and validation

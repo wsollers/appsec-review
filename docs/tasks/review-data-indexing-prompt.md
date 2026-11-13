@@ -1,3 +1,11 @@
+---
+title: "Implementation prompt: comprehensive review-data indexing"
+kind: "task"
+subsystem: "runtime interchange"
+status: "historical"
+jobs: ["job_review_data_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Implementation prompt: comprehensive review-data indexing
 
 Status: implemented by `job_review_data_indexing`; see

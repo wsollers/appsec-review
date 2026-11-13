@@ -1,3 +1,11 @@
+---
+title: "OWASP control-assessment workbench"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OWASP control-assessment workbench
 
 The workbench is a bounded, evidence-backed stage **before hunt/package assembly and red/blue

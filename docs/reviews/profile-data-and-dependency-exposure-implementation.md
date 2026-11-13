@@ -1,3 +1,11 @@
+---
+title: "Profile data and dependency exposure implementation"
+kind: "review"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_profile_data"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Profile data and dependency exposure implementation
 
 Status: implemented and verified. Root `AGENTS.md` governs repository work; target files,

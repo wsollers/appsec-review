@@ -1,3 +1,11 @@
+---
+title: "Telemetry and derived metrics"
+kind: "architecture"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Telemetry and derived metrics
 
 `runs/<run-id>/data/logs/pipeline.jsonl` is the canonical append-only event stream. Every record uses
@@ -65,7 +73,7 @@ Native retention/provenance events take run/job/attempt identity explicitly from
 owner. Native reference/byte work counters also measure verified reuse consumption; they describe
 logical reference processing, not fresh scanner execution or physical retained occupancy.
 
-The interchange upgrade introduced `appsec-review/run-metrics/5`, adding `interchange` with schema
+The interchange upgrade introduced <!-- historical:begin -->`appsec-review/run-metrics/5`<!-- historical:end -->, adding `interchange` with schema
 `appsec-review/interchange-metrics/1`. It derives publication/receipt identities and verifies the
 referenced bytes and retention/provenance computation instead of trusting event-supplied counts.
 Missing or tampered receipts are named integrity gaps, not zero work. Repeated publication/receipt
@@ -387,8 +395,8 @@ canonical pipeline stream and regenerable `data/telemetry/summary.json`. No sepa
 backend or Azure service is requested.
 
 [`observability/completion.py::completion_metrics`](../../src/appsec_review/observability/completion.py)
-first added `completion` to `appsec-review/run-metrics/3`; combined source `6975aef2` retains
-the same `completion-process-metrics/1` semantics in `run-metrics/4`, alongside the existing
+first added `completion` to <!-- historical:begin -->`appsec-review/run-metrics/3`<!-- historical:end -->; combined source `6975aef2` retains
+the same `completion-process-metrics/1` semantics in <!-- historical:begin -->`run-metrics/4`<!-- historical:end -->, alongside the existing
 review and new CodeQL/OWASP/review-flow/Tree-sitter views.
 Its `semantics` is `appsec-review/completion-process-metrics/1`, with
 `authority: observational_process_metrics_not_security_evidence`. Fixed lanes are

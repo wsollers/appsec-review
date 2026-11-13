@@ -1,3 +1,11 @@
+---
+title: "Tree-sitter AST operations"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Tree-sitter AST operations
 
 Build `appsec-review/tool-tree-sitter:1.0.0` only after acquiring the ignored Linux asset cache as

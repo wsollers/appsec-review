@@ -1,3 +1,11 @@
+---
+title: "Job pass 03 — `job_target_acquisition`"
+kind: "task"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_change_context_analysis", "job_review_intake", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 03 — `job_target_acquisition`
 
 Third job of the pass (`docs/processes/job-pass-checklist.md`). Advances T-047; shrinks the legacy

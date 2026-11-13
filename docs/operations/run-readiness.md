@@ -1,3 +1,11 @@
+---
+title: "Run readiness: preparing a host for review runs"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_codeql_analysis", "job_image_pin_verification", "job_model_connectivity"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Run readiness: preparing a host for review runs
 
 The one-time preparation of a review host, after which the fix–test–restart loop never rebuilds an

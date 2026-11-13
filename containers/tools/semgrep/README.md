@@ -1,3 +1,11 @@
+---
+title: "semgrep tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # semgrep tool image
 
 `appsec-review/tool-semgrep:1.178.0` is the tool image declared by `tool-semgrep` in

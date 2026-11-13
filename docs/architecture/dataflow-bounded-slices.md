@@ -1,3 +1,11 @@
+---
+title: "Dataflow-bounded package slices"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Dataflow-bounded package slices
 
 Status: implemented for the review-package context of lane A finding leads (`package-slice/2`,

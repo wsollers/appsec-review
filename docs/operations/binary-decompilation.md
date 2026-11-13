@@ -1,3 +1,11 @@
+---
+title: "Binary decompilation: running Ghidra before a review"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_review_intake"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Binary decompilation: running Ghidra before a review
 
 `appsec-review binary-decompile` disassembles and decompiles configured third-party binaries with

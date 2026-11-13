@@ -1,3 +1,11 @@
+---
+title: "Operating profile-data ingestion"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_language_build", "job_profile_data"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating profile-data ingestion
 
 `job_profile_data` imports execution-profile artifacts retained by accepted builds. It never creates

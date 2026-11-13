@@ -1,3 +1,11 @@
+---
+title: "Security tag taxonomy"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_security_tagging"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Security tag taxonomy
 
 Status: first vertical slice implemented by `job_security_tagging` (see

@@ -1,3 +1,11 @@
+---
+title: "SSH from Windows into the WSL checkout"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # SSH from Windows into the WSL checkout
 
 Development, builds, tests and walks run inside WSL ([`AGENTS.md`](../../AGENTS.md), "Workspace

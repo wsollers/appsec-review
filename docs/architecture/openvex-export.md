@@ -1,3 +1,11 @@
+---
+title: "OpenVEX findings export"
+kind: "architecture"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_openvex_export", "job_poc_generation", "job_review_intake", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OpenVEX findings export
 
 Status: **automatic local export**, reconciled against

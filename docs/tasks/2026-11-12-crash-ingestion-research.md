@@ -1,3 +1,11 @@
+---
+title: "Crash aggregation APIs and source-linked test data"
+kind: "task"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Crash aggregation APIs and source-linked test data
 
 Research for T-072 crash-report ingestion and its remaining T-075 integration, 2026-11-12.

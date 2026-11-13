@@ -1,3 +1,11 @@
+---
+title: "Conversation Transcript: Lean-Guided Formal Verification for Application Security"
+kind: "history"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Conversation Transcript: Lean-Guided Formal Verification for Application Security
 
 > **Archive status:** Discussion transcript for the `appsec-review` project. This is a conversation record, not an approved architecture, implementation claim, validated proof, or authorization to run security tests.

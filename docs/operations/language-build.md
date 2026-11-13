@@ -1,3 +1,11 @@
+---
+title: "Generic language-build operations"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_build_environment_analysis", "job_build_iteration", "job_language_build", "job_project_build", "job_sanitizer_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Generic language-build operations
 
 **Graph/2 source admission:** actual dispatch, local build caches, task checkpoints, direct
