@@ -144,7 +144,7 @@ def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None
     path = run_root / f"data/recovery/workers/{token}.json"
     record = {"schema": WORKER_PROTOCOL, "pid": os.getpid(),
               "process_identity": process_identity(os.getpid()), "status": "ACTIVE",
-              "preparing_job": preparing_job,
+              "preparing_job": preparing_job, "dispatch": current_dispatch,
               "pid_namespace": os.readlink("/proc/self/ns/pid") if os.name == "posix" else None}
     with bounded_file_lock(run_root / "data/recovery/admission.lock", 30):
         if preparing_job is not None:
@@ -166,9 +166,10 @@ def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None
 def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str | None = None) -> tuple[str, ...]:
     """Read-only stop inspection. Retained leases are never silently reconciled or cleared.
 
-    ``current_dispatch`` names the Dagster dispatch that is executing now; its own claims are not
+    ``current_dispatch`` names the Dagster dispatch that is executing now. Its own claims are not
     historical and are not asked for a stop receipt (a resumed run writes its first claim before its
-    second job begins). Every other dispatch still needs a verified stop.
+    second job begins), and its own registered workers are the jobs it is running in parallel, not
+    workers that must have stopped. Every other dispatch still needs a verified stop.
     """
     from appsec_review.config.native_dagster import native_execution_requested
     from appsec_review.runtime.resources import process_identity
@@ -179,6 +180,8 @@ def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str 
         worker = read_document(path)
         if worker.get("schema") != WORKER_PROTOCOL or worker.get("status") not in {"ACTIVE", "EXITED"}:
             reasons.append("worker cleanup state is unknown")
+        elif worker["status"] == "ACTIVE" and current_dispatch is not None and worker.get("dispatch") == current_dispatch:
+            continue
         elif worker["status"] == "ACTIVE":
             local = process_identity(os.getpid())
             if (not local or not worker.get("process_identity")

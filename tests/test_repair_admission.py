@@ -352,6 +352,24 @@ def test_claim_of_the_live_dagster_dispatch_needs_no_stop_receipt(tmp_path):
                                         orchestration={"system": "dagster", "run_id": "dispatch-other"})
 
 
+def test_parallel_workers_of_the_live_dagster_dispatch_are_not_stopped_workers(tmp_path):
+    """Jobs of one dispatch run in parallel; a rerun with prior attempts must not refuse a job's
+    begin because a sibling job of the same dispatch is active. Regression for smoke-cpp run
+    2026-11-13-0001, dispatch abd5d04f, which refused build_environment_analysis__begin and
+    source_history_analysis__begin with "a registered worker is still active"."""
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    live = {"system": "dagster", "run_id": "dispatch-live"}
+    with worker_scope(config, root, preparing_job="job_sibling", orchestration=live):
+        assert "a registered worker is still active" in stopped_reasons(config, root)
+        assert "a registered worker is still active" not in stopped_reasons(config, root, current_dispatch="dispatch-live")
+        JobRunner(config).begin_attempt(job, run_id=root.name, orchestration=live)
+        with pytest.raises(ValueError, match="registered worker is still active"):
+            JobRunner(config).begin_attempt(job, run_id=root.name,
+                                            orchestration={"system": "dagster", "run_id": "dispatch-other"})
+
+
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
     config, (job,), _ = fixture(tmp_path)
     monkeypatch.setenv("MODEL_TOKEN", "do-not-disclose")

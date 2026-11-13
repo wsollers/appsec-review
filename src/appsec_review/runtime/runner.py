@@ -539,7 +539,8 @@ class JobRunner:
     def execute_or_reuse_unit(self, job: Job, claim: Mapping[str, Any], unit_id: str) -> Mapping[str, Any]:
         try:
             from appsec_review.runtime.repair import worker_scope
-            with worker_scope(self.config, self.runs.resolve(str(claim["run_id"]))):
+            with worker_scope(self.config, self.runs.resolve(str(claim["run_id"])),
+                              orchestration=claim.get("orchestration")):
                 return self._execute_or_reuse_unit(job, claim, unit_id)
         except BaseException as exc:
             try:
@@ -867,7 +868,8 @@ class JobRunner:
 
     def finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
         from appsec_review.runtime.repair import worker_scope
-        with worker_scope(self.config, self.runs.resolve(str(claim["run_id"]))):
+        with worker_scope(self.config, self.runs.resolve(str(claim["run_id"])),
+                          orchestration=claim.get("orchestration")):
             return self._finalize_attempt(job, claim)
 
     def _finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
