@@ -1,4 +1,4 @@
-"""Regression tests for the pre-intake image-pin verification gate (``job_image_pin_verification``).
+"""Pre-walk suite pending replacement: whole-graph image-pin gate regressions.
 
 The command runner is always a fake: no test reaches Docker or writes under the repository's ``runs/``.
 """
@@ -12,20 +12,19 @@ import tomllib
 
 import pytest
 
-from appsec_review.cli import GRAPH_JOB_IDS
-from appsec_review.config import load_config, parse_image_pin_verification_settings
+from appsec_review.config import load_config
 from appsec_review.config.host_pins import HOST_PINS_PATH, bound_catalog_images
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_image_pin_verification import build_job
 from appsec_review.jobs.job_image_pin_verification.pins import configured_pins
 from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.runtime import GraphRunner, active_job_ids
+from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.registry import builtin_registry
 from tests.telemetry_support import assert_job_lifecycle, job_events
 from tests.host_pins_support import fixture_bindings, write_host_pins
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 JOB_ID = "job_image_pin_verification"
 SECTION = f"[jobs.{JOB_ID}.settings]"
 PIN_X = "sha256:" + "1" * 64
@@ -137,42 +136,6 @@ def _failure_message(config) -> str:
     status = json.loads((root / "status.json").read_text())
     assert status["status"] == "FAILED"
     return status["error"]["message"]
-
-
-# ---------------------------------------------------------------- pin selection
-
-def test_repository_pins_cover_catalog_images_build_profiles_and_codeql_source() -> None:
-    document = json.loads(load_config(ROOT / "appsec-review.toml").resolved_json)
-    catalog = tomllib.loads((ROOT / "containers" / "catalog.toml").read_text(encoding="utf-8"))["images"]
-    sources = {pin["source"] for pin in configured_pins(catalog, document)}
-    enabled = {item["id"] for item in catalog if item.get("state") == "enabled" and not item.get("manual")}
-    assert {f"containers/catalog.toml images.{image}.image_id" for image in enabled} <= sources
-    assert not any(".tool-report-latex." in source for source in sources)  # manual: no pipeline job runs it
-    profiles = document["jobs"]["job_project_build"]["settings"]["profiles"]
-    assert {f"jobs.job_project_build.settings.profiles.{name}.image_id" for name in profiles} <= sources
-    assert "jobs.job_codeql_analysis.settings.source_image_id" in sources
-
-
-def test_configured_pins_cover_enabled_catalog_images_and_enabled_job_settings_only() -> None:
-    document = {"jobs": {
-        "job_project_build": {"settings": {"profiles": {"native": {
-            "tag": "audit-buildenv-cpp:local", "image_id": "sha256:" + "a" * 64, "user": "10001:10001"}}}},
-        "job_codeql_analysis": {"settings": {"source_image_tag": "audit-codeql:x",
-                                             "source_image_id": "sha256:" + "b" * 64}},
-        "job_off": {"settings": {"enabled": False, "tag": "t", "image_id": "sha256:" + "c" * 64}},
-    }}
-    catalog = [{"id": "tool-x", "state": "enabled", "tag": "fixture/tool-x:1", "image_id": "sha256:" + "d" * 64},
-               {"id": "tool-y", "state": "enabled", "tag": "fixture/tool-y:1"},
-               {"id": "tool-z", "state": "deferred", "tag": "fixture/tool-z:1"},
-               {"id": "tool-m", "state": "enabled", "manual": True, "tag": "fixture/tool-m:1"}]
-    pins = configured_pins(catalog, document)
-    assert [(pin["source"], pin["tag"], pin["image_id"]) for pin in pins] == [
-        ("containers/catalog.toml images.tool-x.image_id", "fixture/tool-x:1", "sha256:" + "d" * 64),
-        ("containers/catalog.toml images.tool-y.image_id", "fixture/tool-y:1", None),
-        ("jobs.job_codeql_analysis.settings.source_image_id", "audit-codeql:x", "sha256:" + "b" * 64),
-        ("jobs.job_project_build.settings.profiles.native.image_id", "audit-buildenv-cpp:local",
-         "sha256:" + "a" * 64),
-    ]
 
 
 # ---------------------------------------------------------------- success path
@@ -376,45 +339,7 @@ def test_the_gate_passes_on_resume_after_the_operator_re_pins_the_moved_tag(tmp_
     assert summary["event_counts"]["IMAGE_PIN_VERIFICATION_COMPLETED"] == 1
 
 
-# ---------------------------------------------------------------- settings
-
-def test_repository_settings_are_typed_and_enabled_by_default() -> None:
-    config = load_config(ROOT / "appsec-review.toml")
-    settings = config.job(JOB_ID).typed_settings
-    assert settings == parse_image_pin_verification_settings(config.job(JOB_ID).settings)
-    assert settings.enabled is True
-
-
-@pytest.mark.parametrize("key, value, message", [
-    ("enabled", '"yes"', "enabled must be a boolean"),
-    ("unexpected", "1", "unknown settings: unexpected"),
-    ("parallelism", "2", "unknown settings: parallelism"),
-    ("pin_mismatch", '"report"', "unknown settings: pin_mismatch"),
-])
-def test_settings_validation_rejects_bad_values(tmp_path: Path, key: str, value: str, message: str) -> None:
-    config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text(_settings_source(**{key: value}), encoding="utf-8")
-    with pytest.raises(ValueError, match=re.escape(message)):
-        load_config(config_path)
-
-
-def test_settings_validation_rejects_a_missing_switch() -> None:
-    with pytest.raises(ValueError, match="missing settings: enabled"):
-        parse_image_pin_verification_settings({})
-
-
 # ---------------------------------------------------------------- topology
-
-def test_direct_graph_places_the_gate_between_the_model_gate_and_intake(tmp_path: Path) -> None:
-    order = list(GRAPH_JOB_IDS)
-    assert order.index("job_model_connectivity") + 1 == order.index(JOB_ID)
-    assert order.index(JOB_ID) + 1 == order.index("job_target_acquisition")
-    assert order.index("job_target_acquisition") + 1 == order.index("job_review_intake")
-    config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text(_settings_source(enabled="false"), encoding="utf-8")
-    selected = active_job_ids(load_config(config_path), GRAPH_JOB_IDS)
-    assert JOB_ID not in selected
-    assert selected[:3] == ("job_model_connectivity", "job_target_acquisition", "job_review_intake")
 
 
 COMPOSITES = {"wave1_review": "", "ci_configuration_review": "ci_review__",

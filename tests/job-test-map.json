@@ -212,8 +212,19 @@
       "live": []
     },
     "job_image_pin_verification": {
-      "unit": ["tests/test_image_pin_verification.py"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_image_pin_verification/test_configuration.py",
+        "tests/unit/job_image_pin_verification/test_contract.py",
+        "tests/unit/job_image_pin_verification/test_host_pins.py",
+        "tests/unit/job_image_pin_verification/test_image_pin_update.py",
+        "tests/unit/job_image_pin_verification/test_job_graph.py",
+        "tests/unit/job_image_pin_verification/test_pins.py",
+        "tests/unit/job_image_pin_verification/test_update_boundaries.py"
+      ],
+      "integration": [
+        "tests/integration/job_image_pin_verification/test_host_pins.py",
+        "tests/integration/job_image_pin_verification/test_image_pin_verification.py"
+      ],
       "acceptance": [],
       "live": []
     },

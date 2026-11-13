@@ -1729,8 +1729,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   fail on a stale `tools` reader setting; the `target_decision` declaration/schema mismatch found
   by the contract test is T-114); job_model_connectivity (3 unit files, 64 cases:
   contract, graph, validators and step behavior; whole-job and dispatch cases moved to
-  `tests/integration/job_model_connectivity/`; full job-package line and branch coverage).
-  The unit manager resumed in registry order; next: job_image_pin_verification.
+  `tests/integration/job_model_connectivity/`; full job-package line and branch coverage);
+  job_image_pin_verification (7 unit files, 122 cases: contract, graph, configuration,
+  host bindings, image inspection and update boundaries; 15 whole-graph cases preserved in
+  `tests/integration/job_image_pin_verification/`; full job-package line and branch coverage).
+  The unit manager resumed in registry order; next: job_target_acquisition.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,
