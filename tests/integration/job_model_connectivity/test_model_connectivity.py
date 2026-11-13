@@ -1,7 +1,7 @@
-"""job_model_connectivity: the live model gate that opens every graph dispatch.
+"""Pre-walk suite pending replacement: job_model_connectivity graph execution.
 
-Unit tests: the real configuration file, the real runner, a fake provider check at the one external
-boundary. No Docker, no model, no network, no target checkout.
+Preserved graph/lifecycle checks, not code-level unit tests. Run only with explicit integration
+authorization; provider checks are fake and targets are fixtures, not operator checkouts.
 """
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from appsec_review.config import load_config
 from appsec_review.interchange import GAP_SCHEMA
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_model_connectivity import build_job
-from appsec_review.jobs.job_model_connectivity.job import JOB_ID, ModelConnectivityBlocked, TOPOLOGY
-from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA, configured_models, required_models
+from appsec_review.jobs.job_model_connectivity.job import JOB_ID, ModelConnectivityBlocked
+from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA
 from appsec_review.runtime import GraphRunner
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 DISABLED_ONLY = "claude-disabled-only"
 
 
@@ -72,22 +72,6 @@ def _disable_only_model(text: str) -> str:
     block = '[jobs.job_post_build_security_assessment.settings.model]\nenabled = false\nprovider = "claude-cli"\nmodel = "claude-haiku-5-5"'
     assert text.count(block) == 1
     return text.replace(block, block.replace('model = "claude-haiku-5-5"', f'model = "{DISABLED_ONLY}"'))
-
-
-# ------------------------------------------------------------------ the pure decision
-
-def test_required_models_excludes_disabled_jobs_and_disabled_settings() -> None:
-    document = {"jobs": {
-        "job_a": {"settings": {"model": {"provider": "p", "model": "m-live"}}},
-        "job_b": {"settings": {"enabled": False, "model": {"provider": "p", "model": "m-job-off"}}},
-        "job_c": {"settings": {"model": {"provider": "p", "model": "m-setting-off", "enabled": False}}},
-        "job_d": {"settings": {"enabled": True, "models": {"x": {"provider": "q", "model": "m-nested"}}}},
-    }}
-    required, not_required = required_models(document)
-    assert [(item["job_id"], item["model"]) for item in required] == [("job_a", "m-live"), ("job_d", "m-nested")]
-    assert {(item["job_id"], item["reason"]) for item in not_required} == {
-        ("job_b", "job disabled"), ("job_c", "model setting disabled")}
-    assert len(configured_models(document)) == 4
 
 
 # ------------------------------------------------------------------ the runtime path
@@ -231,14 +215,3 @@ def test_timeout_outside_the_bound_is_refused(tmp_path: Path, timeout, message) 
     with pytest.raises(ValueError, match=message):
         GraphRunner(config, [build_job(check_models=_check([]))]).run(
             target_root=target, source_fingerprint=source_fingerprint(target))
-
-
-def test_configured_topology_matches_the_job() -> None:
-    config = load_config(ROOT / "appsec-review.toml", profile="dev")
-    job = config.jobs[JOB_ID]
-    assert tuple(job.steps) == tuple(TOPOLOGY)
-    for step, tasks in TOPOLOGY.items():
-        assert tuple(job.step(step).tasks) == tasks
-    built = build_job(check_models=_check([]))
-    assert [unit.unit_id for unit in built.units] == [f"{step}.{task}" for step, tasks in TOPOLOGY.items() for task in tasks]
-    assert built.strict_gaps and built.always_execute and not built.propagate_handoff

@@ -280,8 +280,15 @@
       ]
     },
     "job_model_connectivity": {
-      "unit": ["tests/test_model_preflight.py::test_registry_wires_the_real_check_into_the_first_job_of_a_review"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_model_connectivity/test_contract.py",
+        "tests/unit/job_model_connectivity/test_job_graph.py",
+        "tests/unit/job_model_connectivity/test_steps.py"
+      ],
+      "integration": [
+        "tests/integration/job_model_connectivity/test_dispatch.py",
+        "tests/integration/job_model_connectivity/test_model_connectivity.py"
+      ],
       "acceptance": [],
       "live": []
     },

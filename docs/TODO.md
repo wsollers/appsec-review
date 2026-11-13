@@ -1727,7 +1727,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   the genuine-fixture end-to-end suite parked under `tests/integration/job_debug_symbol_indexing/`,
   where at HEAD 308d8b75 the two JobRunner cases fail at admission and all six end-to-end cases
   fail on a stale `tools` reader setting; the `target_decision` declaration/schema mismatch found
-  by the contract test is T-114). Next: job_test_coverage.
+  by the contract test is T-114); job_model_connectivity (3 unit files, 64 cases:
+  contract, graph, validators and step behavior; whole-job and dispatch cases moved to
+  `tests/integration/job_model_connectivity/`; full job-package line and branch coverage).
+  The unit manager resumed in registry order; next: job_image_pin_verification.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,
