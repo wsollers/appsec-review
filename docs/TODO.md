@@ -138,6 +138,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | open |
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | open |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | open |
+| T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | in-progress |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2105,6 +2106,25 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** clone each smoke repository to `targets/appsec-review-smoke-<language>` at `v1.0.0` (ignored by `targets/.gitignore`; add a pattern only if one is needed) and the guide to a sibling of the checkout. Add to `docs/operations/test-targets.md` one table row per smoke target (purpose, build profile, planted advisory, the one build unit), the clone lines for Linux and Windows in the existing style, the guide's clone line with the same never-under-`targets/` warning the multi-vuln guide carries, and a paragraph stating what the smoke tier proves (attribution of a failure to a pipeline stage; whether code intelligence squelches the planted false positives) and does not (recall, scale). Run the docs link check if `docs/tasks/2026-11-13-docs-program-prompt.md` Stage 2 has produced one, otherwise check links by hand.
 - **Done when:** `targets/` holds the nine clones at their tags; `git status` in this repository shows only `docs/TODO.md` and `docs/operations/test-targets.md` changed (plus `targets/.gitignore` if a pattern was needed); every link in the edited page resolves; the change is committed on `main` and handed to the WSL checkout, not pushed.
 - **Refs:** `docs/tasks/2026-11-13-smoke-targets-prompt.md` Stage 5; `docs/operations/test-targets.md`; `targets/.gitignore`; `tests/test_blind_target_isolation.py`.
+
+### T-146 — Make review behavior-oriented and developer-actionable
+
+- **State:** in-progress
+- **Area:** review
+- **Why:** Tags and completed jobs do not establish useful findings. Prefix-biased OWASP
+  evidence, raw tag-count ranking and disconnected behavioral context can consume the review
+  budget without investigating complete, relevant security operations.
+- **Scope:** Subject-complete bounded OWASP evidence; observed graph-backed capabilities;
+  operation/boundary-oriented packages with explicit fallback; optional admitted generated-model
+  context; deduplicated opportunity ranking; truthful actionability metrics; a documented bounded
+  investigation/verification process. Preserve evidence authority and independent adjudication.
+- **Done when:** The documented implementation slices and their valuable code-level unit
+  regressions pass independently, shuffled and within ten seconds per test. Integration and
+  acceptance scenarios are authored but not executed without separate permission. Completion
+  of implementation is distinguished from the later user-owned real-run efficacy comparison.
+- **Refs:** `docs/tasks/2026-11-13-behavior-oriented-review.md`,
+  `src/appsec_review/owasp_workbench/`, `src/appsec_review/review/`,
+  `src/appsec_review/jobs/job_security_tagging/`, T-001, T-073, T-076, T-086, T-107.
 
 ## Legacy backlog
 
