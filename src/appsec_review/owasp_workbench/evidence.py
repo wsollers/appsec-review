@@ -13,6 +13,7 @@ from appsec_review.retrieval.source_resolution import read_source_bytes
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.secret_redaction import REDACTION_RULE, placeholder
 from .standards import digest
+from .subject_selection import SELECTION_RULE, SourceSubject, parse_subjects, select_subjects
 
 
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT
@@ -38,7 +39,7 @@ _AUTHORITATIVE_INDEX = {
     "build_action": "build", "tool_observation": "observations", "tag_assignment": "tags",
     "priority_item": "priority",
 }
-EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/1"
+EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/2"
 
 
 def redact(text: str) -> tuple[str, bool]:
@@ -101,6 +102,7 @@ class EvidenceResolver:
             raise ValueError("evidence resolver run/target/manifest isolation mismatch")
         self.core, self.scope = core, scope
         self.max_source_lines = max_source_lines
+        self._subject_cache: dict[str, tuple[SourceSubject, ...]] = {}
         self.metrics = {"attempts": 0, "denials": 0, "truncations": 0, "missing": 0}
         self.shards = {(item["name"], item["shard_id"]): item for item in scope.shards
                        if item["name"] in UPSTREAM_INDEXES
@@ -233,6 +235,23 @@ class EvidenceResolver:
             raise ValueError("accepted evidence names an unknown component")
         return declared[0] if declared else None
 
+    def _source(self, entity: Mapping[str, Any], *, limit: int = 16_777_216) -> bytes:
+        location = entity["location"]
+        self.metrics["attempts"] += 1
+        data = read_source_bytes(self.core.run_root, self.core.target_root,
+            target_snapshot=self.scope.target_snapshot, path=location["path"],
+            sha256=location["file_sha256"], native=location.get("producer_location"), limit=limit)
+        if (any(type(location[key]) is not int for key in ("start_byte", "end_byte", "start_line", "end_line"))
+                or not 0 <= location["start_byte"] < location["end_byte"] <= len(data)
+                or not 1 <= location["start_line"] <= location["end_line"] <= len(data.splitlines())):
+            raise ValueError("accepted source span is outside verified content")
+        return data
+
+    def _subjects(self, data: bytes, sha: str) -> tuple[SourceSubject, ...]:
+        if sha not in self._subject_cache:
+            self._subject_cache[sha] = parse_subjects(data.decode("utf-8"))
+        return self._subject_cache[sha]
+
     def materialize(self, identity: str, *, component_id: str,
                     locator: Mapping[str, Any] | None = None, max_lines: int | None = None) -> dict[str, Any]:
         max_lines = self.max_source_lines if max_lines is None else max_lines
@@ -244,19 +263,12 @@ class EvidenceResolver:
         shard = self.shards[(entity["index"], entity["shard_id"])]
         location = entity.get("location")
         payload = entity.get("payload", {})
-        gaps, truncated = [], False
+        gaps, truncated, source_subject = [], False, None
         if shard.get("gaps"):
             gaps.extend(redact(str(item))[0] for item in shard["gaps"])
         if location is not None:
-            self.metrics["attempts"] += 1
-            data = read_source_bytes(self.core.run_root, self.core.target_root,
-                target_snapshot=self.scope.target_snapshot, path=location["path"],
-                sha256=location["file_sha256"], native=location.get("producer_location"))
+            data = self._source(entity)
             lines = data.decode("utf-8").splitlines()
-            if (any(type(location[key]) is not int for key in ("start_byte", "end_byte", "start_line", "end_line"))
-                    or not 0 <= location["start_byte"] < location["end_byte"] <= len(data)
-                    or not 1 <= location["start_line"] <= location["end_line"] <= len(lines)):
-                raise ValueError("accepted source span is outside verified content")
             first, last = (1, len(lines)) if entity["kind"] == "source_file" else (
                 location["start_line"], location["end_line"])
             start, end = first, min(last, first + max_lines - 1)
@@ -277,6 +289,16 @@ class EvidenceResolver:
                 expected["lines"] = span
                 start, end = span
             raw = "\n".join(lines[start - 1:end])
+            if location["path"].endswith(".py") and entity["kind"] in _SOURCE_KINDS:
+                try:
+                    complete = [item for item in self._subjects(data, location["file_sha256"])
+                                if (item.first, item.last) == (start, end)]
+                except (SyntaxError, ValueError, RecursionError):
+                    complete = []
+                if complete:
+                    subject = min(complete, key=lambda item: (item.kind == "module", item.name))
+                    source_subject = {**subject.record(), "complete": True,
+                                      "outside_lines": len(lines) - (end - start + 1)}
             private = False
             for line in lines[:start - 1]:
                 if "-----BEGIN " in line and "PRIVATE KEY-----" in line:
@@ -291,7 +313,10 @@ class EvidenceResolver:
                         "source" if entity["kind"] in _SOURCE_KINDS
                         else "scanner_observation" if entity["kind"] == "tool_observation" else "declaration")
             omitted = (start - first) + (last - end)
-            if omitted:
+            if source_subject is not None and source_subject["outside_lines"]:
+                gaps.append(f"complete source subject lines {start}-{end}; "
+                            f"{source_subject['outside_lines']} file lines outside subject remain unassessed")
+            elif omitted:
                 gaps.append(f"source excerpt bounded to lines {start}-{end}; {omitted} accepted subject lines omitted")
                 truncated = True
         else:
@@ -336,6 +361,7 @@ class EvidenceResolver:
             "excerpt": excerpt[:16000], "redaction": {"rule": REDACTION_RULE, "applied": was_redacted},
             "truncated": truncated, "limitations": gaps,
             "expansion": {"tool": "find", "identity": identity},
+            **({"source_subject": source_subject} if source_subject is not None else {}),
         }
 
     def resolve(self, citation: Mapping[str, Any], *, component_id: str) -> dict[str, Any]:
@@ -350,6 +376,111 @@ class EvidenceResolver:
         except (ValueError, OSError, UnicodeError):
             self.metrics["denials"] += 1
             raise
+
+
+def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any,
+                       settings: OwaspSettings) -> tuple[list[dict[str, Any]], list[str]]:
+    """Bound discovery reads per component; delivery independently re-verifies selected sources."""
+    hints: dict[str, list[Mapping[str, Any]]] = {}
+    extras, gaps = [], []
+    bound = settings.max_discovery_files * 8
+    for number, row in enumerate(resolver.scope.store.entities(
+            tuple(resolver.shards.values()), limit=bound + 1)):
+        if number == bound:
+            gaps.append("accepted subject index scan cap reached; further locations omitted (count unknown)")
+            break
+        if not resolver._original(row) or row["kind"] in {"source_file", "component", "project"}:
+            continue
+        try:
+            owner = resolver._component(row)
+        except ValueError:
+            gaps.append("accepted index record has ambiguous or conflicting ownership; 1 record omitted")
+            continue
+        if owner != component_id:
+            continue
+        location = row.get("location")
+        if location and (row["kind"] in _SOURCE_KINDS or row["index"] == "graph"):
+            if (not location.get("ambiguous")
+                    and all(type(location.get(key)) is int for key in ("start_line", "end_line"))
+                    and 1 <= location["start_line"] <= location["end_line"]):
+                hints.setdefault(location["path"], []).append(location)
+            else:
+                gaps.append("accepted subject location is unresolved; 1 location omitted")
+        elif row["index"] not in _ROUTING_INDEXES and row["kind"] not in _SOURCE_KINDS:
+            if location is not None:
+                gaps.append(f"{location['path']}: 1 located non-subject record omitted; "
+                            "source evidence is selected through the bounded source inventory")
+            else:
+                extras.append(row["identity"])
+    ordered = sorted({(source.path, source.identity): source for source in files}.values(),
+                     key=lambda source: (source.path not in hints, source.path, source.identity))
+    omitted_files = max(0, len(ordered) - settings.max_discovery_files)
+    if omitted_files:
+        gaps.append(f"max_discovery_files reached; {omitted_files} accepted files omitted (subject count unknown)")
+    remaining = settings.max_discovery_bytes
+    evidence, omitted_subjects = [], 0
+    for source in ordered[:settings.max_discovery_files]:
+        entity = resolver._entity(source.identity)
+        location = entity.get("location")
+        if location is None or location["path"] != source.path:
+            raise ValueError("accepted source inventory disagrees with original source location")
+        try:
+            owner = resolver._component(entity)
+        except ValueError:
+            gaps.append(f"{source.path}: ambiguous source ownership; 1 file omitted (subject count unknown)")
+            continue
+        if owner != component_id:
+            gaps.append(f"{source.path}: unresolved source ownership; 1 file omitted (subject count unknown)")
+            continue
+        if not source.path.endswith(".py") or (source.language and source.language.lower() not in {"python", "python3"}):
+            gaps.append(f"{source.path}: unsupported source language; 1 file omitted (subject count unknown); "
+                        f"source sha256 {location['file_sha256']}")
+            continue
+        try:
+            data = resolver._source(entity, limit=remaining)
+        except ValueError as exc:
+            if str(exc) != "source exceeds excerpt verification bound":
+                raise
+            gaps.append(f"{source.path}: max_discovery_bytes reached; 1 file omitted (subject count unknown)")
+            continue
+        remaining -= len(data)
+        try:
+            text = data.decode("utf-8")
+            parsed = resolver._subjects(data, location["file_sha256"])
+        except (UnicodeError, SyntaxError, ValueError, RecursionError):
+            gaps.append(f"{source.path}: accepted Python source parse failure; 1 file omitted (subject count unknown)")
+            continue
+        verified_hints = [hint for hint in hints.get(source.path, ())
+                          if hint["file_sha256"] == location["file_sha256"]
+                          and hint["end_line"] <= len(text.splitlines())]
+        if len(verified_hints) != len(hints.get(source.path, ())):
+            raise ValueError("accepted subject index location disagrees with original source")
+        selected, omitted = select_subjects(parsed, text, max_lines=settings.max_source_lines,
+                                           hints=verified_hints)
+        gaps.extend(f"{source.path}: {gap}" for gap in omitted)
+        for subject in selected:
+            if len(evidence) >= settings.max_evidence_per_component:
+                omitted_subjects += 1
+                continue
+            locator = {"kind": "source", "path": source.path, "file_sha256": location["file_sha256"],
+                       "lines": [subject.first, subject.last],
+                       "source_custody": location.get("producer_location")}
+            value = resolver.materialize(source.identity, component_id=component_id, locator=locator)
+            evidence.append({"component_id": component_id, **value})
+    if omitted_subjects:
+        gaps.append(f"evidence cap reached; {omitted_subjects} complete recognized subjects omitted")
+    extra_ids = sorted(set(extras))
+    available = max(0, settings.max_evidence_per_component - len(evidence))
+    if len(extra_ids) > available:
+        gaps.append(f"evidence cap reached; {len(extra_ids) - available} accepted non-subject records omitted")
+    for identity in extra_ids[:available]:
+        try:
+            value = resolver.materialize(identity, component_id=component_id)
+        except (ValueError, OSError, UnicodeError) as exc:
+            gaps.append(f"{identity}: {type(exc).__name__}: {exc}")
+        else:
+            evidence.append({"component_id": component_id, **value})
+    return evidence, [f"{component_id}: {gap}" for gap in gaps]
 
 
 def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_path: Path) -> dict[str, Any]:
@@ -389,7 +520,7 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
                 "guard", "sink", "entry_point", "frameworks", "language") if key in payload}),
         })
     # Inventory walks are over accepted indices, never the target tree, and stop at named bounds.
-    for component in scope.components:
+    for component in sorted(scope.components, key=lambda item: item.component_id):
         raw = resolver._entity(component.identity)
         payload = raw["payload"]
         refs = []
@@ -409,43 +540,9 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         routing = routes[component.component_id][:settings.max_evidence_per_component]
         if len(routes[component.component_id]) > len(routing):
             limitations.append(f"{component.component_id}: routing cap reached; at least 1 routing record omitted")
-        candidates = dict.fromkeys(source.identity for source in files)
-        inspected = 0
-        stopped = False
-        if len(candidates) <= settings.max_evidence_per_component:
-            for shard in scope.shards:
-                if (shard["name"], shard["shard_id"]) not in resolver.shards or shard["name"] in {"source", "components"}:
-                    continue
-                for row in scope.store.entities((shard,), limit=scan_limit - inspected + 1):
-                    if inspected == scan_limit:
-                        stopped = True
-                        break
-                    inspected += 1
-                    if not resolver._original(row):
-                        continue
-                    try:
-                        owner = resolver._component(row)
-                    except ValueError:
-                        continue
-                    if owner == component.component_id:
-                        candidates[row["identity"]] = None
-                        if len(candidates) > settings.max_evidence_per_component:
-                            break
-                if stopped or len(candidates) > settings.max_evidence_per_component:
-                    break
-        unique = list(candidates)
-        omitted = max(0, len(unique) - settings.max_evidence_per_component)
-        for identity in unique[:settings.max_evidence_per_component]:
-            try:
-                value = resolver.materialize(identity, component_id=component.component_id,
-                                             max_lines=settings.max_source_lines)
-                evidence.append({"component_id": component.component_id, **value})
-            except (ValueError, OSError, UnicodeError) as exc:
-                limitations.append(f"{component.component_id}/{identity}: {type(exc).__name__}: {exc}")
-        if omitted:
-            limitations.append(f"{component.component_id}: evidence cap reached; at least {omitted} further accepted records omitted")
-        if stopped:
-            limitations.append(f"{component.component_id}: accepted index scan cap reached; further evidence may be omitted (count unknown)")
+        selected, gaps = component_evidence(resolver, component.component_id, files, settings)
+        evidence.extend(selected)
+        limitations.extend(gaps)
         tag_subjects: dict[str, set[str]] = {}
         for item in routing:
             if isinstance(item["tag"], str):
@@ -458,7 +555,7 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         }
         components.append({
             "target_id": scope.target_snapshot, "project_id": str(payload.get("project_id") or component.identity),
-            "component_id": component.component_id, "paths": [source.path for source in files],
+            "component_id": component.component_id, "paths": sorted(source.path for source in files),
             "languages": sorted({source.language for source in files if source.language}),
             "frameworks": _redact_data(list(payload.get("frameworks") or ())),
             "tags": _redact_data(list(payload.get("tags") or ())),
@@ -469,8 +566,12 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
                 "evidence": [_evidence_content(item) for item in evidence
                              if item["component_id"] == component.component_id],
                 "routing_context": routing, "tag_cloud": tag_cloud,
-                "rules": {"binding": EVIDENCE_RULE, "redaction": REDACTION_RULE,
+                "discovery_inventory": sorted((source.path, source.identity) for source in files),
+                "coverage": [item for item in limitations if item.startswith(component.component_id + ":")],
+                "rules": {"binding": EVIDENCE_RULE, "selection": SELECTION_RULE, "redaction": REDACTION_RULE,
                           "max_source_lines": settings.max_source_lines,
+                          "max_discovery_files": settings.max_discovery_files,
+                          "max_discovery_bytes": settings.max_discovery_bytes,
                           "max_evidence_per_component": settings.max_evidence_per_component},
             }),
             "limitations": [item for item in limitations if item.startswith(component.component_id + ":")],

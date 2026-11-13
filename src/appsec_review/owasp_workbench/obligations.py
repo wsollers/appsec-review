@@ -32,6 +32,8 @@ _STATIC_LIMITS = (
     "Bounded static source cannot establish runtime/deployment state, exploitability, absence of "
     "unseen alternate paths, component-wide safety or certification.",
     "Only the named site and its resolved context are in scope; unknown coverage is not clean.",
+    "A complete source subject is not complete prerequisite evidence: external policy, guards, "
+    "callers and alternate paths must still be resolved.",
 )
 
 
@@ -416,6 +418,8 @@ def _sites(rule: Procedure, evidence: Mapping[str, Any]) -> tuple[list[dict[str,
         result.append({"subject_id": digest(identity), "name": name,
                        "source_identity": ref["source_identity"],
                        **{key: identity[key] for key in ("scope", "locator", "content_sha256")},
+                       **({"source_subject": evidence["source_subject"]}
+                          if evidence.get("source_subject") else {}),
                        **({"operation": identity["operation"]} if operation is not None else {})})
     return result, limitations
 
@@ -480,7 +484,8 @@ def instantiate(control: Mapping[str, Any], row: Mapping[str, Any],
                 gaps.append("source site lacks an accepted evidence identity")
                 continue
             current, evidence_ids = candidates.setdefault(site["subject_id"], (site, []))
-            if (site["source_identity"], site["name"]) < (current["source_identity"], current["name"]):
+            if (site["source_identity"], site["name"], digest(site)) < (
+                    current["source_identity"], current["name"], digest(current)):
                 candidates[site["subject_id"]] = (site, evidence_ids)
             if item["evidence_id"] not in evidence_ids:
                 evidence_ids.append(item["evidence_id"])
