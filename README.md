@@ -6,6 +6,9 @@ evidence collection) against a local target checkout. Every job writes immutable
 `runs/<run-id>/`. Missing, skipped, or failed coverage is recorded as a named gap, never as a clean
 result.
 
+For a one-page view of how a run works, from cloning the repository to the final report, start
+with [`docs/overview.md`](docs/overview.md).
+
 The repository is mid-rebuild. Repository-agent rules live only in [`AGENTS.md`](AGENTS.md), which
 governs. [`docs/agent-reader.md`](docs/agent-reader.md) is navigation for agents and adds no rules;
 the architecture index is [`docs/architecture/README.md`](docs/architecture/README.md).

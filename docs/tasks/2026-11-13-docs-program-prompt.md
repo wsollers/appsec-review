@@ -205,7 +205,11 @@ Acceptance: the ledger has no `retire` or `merge-into` rows left; all docs tests
 ## Conventions
 
 - Markdown (GFM) with YAML frontmatter is the source format. Tables have at most seven columns.
-  Mermaid is the only diagram format; no images.
+  Mermaid is the diagram format for job and subsystem pages; no raster images. The one
+  exception is the executive front page `docs/overview.md`, whose diagram is the hand-authored
+  `docs/assets/review-pipeline.svg` (text, diffable, no external fonts or images). The index
+  generator keeps `docs/overview.md` as the first link of `docs/README.md` and never
+  regenerates it.
 - Labeled links: `[label](relative/path.md#anchor)`; reference-style definitions are allowed
   at the foot of a page when a generator emits them.
 - Prose follows the repository's style: short sentences, one fact per sentence, identifiers in
