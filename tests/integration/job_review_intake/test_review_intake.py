@@ -1,9 +1,7 @@
-"""job_review_intake through the real runner: the four independent steps, their failure paths, and
-what the intake handoff, artifacts and telemetry carry.
+"""Pre-walk suite pending replacement: intake graph, failure paths and lifecycle telemetry.
 
-Unit tests: the real configuration file, the real GraphRunner, a fake only at the provider boundary;
-no Docker, no model, no network, no targets/ checkout. The model-preflight decision itself is covered
-in tests/test_model_preflight.py; the acquisition record in tests/test_target_acquisition.py.
+Preserved for explicitly authorized integration execution. Code-level intake coverage now lives
+in tests/unit/job_review_intake; the model-preflight graph is beside this module.
 """
 from __future__ import annotations
 
@@ -16,16 +14,13 @@ import shutil
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.interchange import GAP_SCHEMA
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job
-from appsec_review.jobs.job_review_intake.job import (
-    ModelPreflightBlocked, TOPOLOGY, TargetIntakeError, coverage_gap_records,
-)
+from appsec_review.jobs.job_review_intake.job import ModelPreflightBlocked, TargetIntakeError
 from appsec_review.runtime import GraphRunner
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 JOB_ID = "job_review_intake"
 
 
@@ -124,16 +119,6 @@ def test_intake_is_reused_on_resume_when_nothing_changed(tmp_path: Path) -> None
 
 
 # ------------------------------------------------------------------ coverage gaps
-
-def test_coverage_gaps_are_path_scoped_records_and_configured_exclusions_are_not_gaps() -> None:
-    gaps = [{"path": ".git", "reason": "excluded_directory"},
-            {"path": "link", "reason": "symlink_excluded"},
-            {"path": "dev/null", "reason": "non_regular_descriptor"}]
-    records = coverage_gap_records("prepare_target.validate_target", gaps)
-    assert [(gap["scope_id"], gap["code"], gap["retryable"]) for gap in records] == [
-        ("link", "producer_reported_gap", False), ("dev/null", "producer_reported_gap", False)]
-    assert all(gap["schema"] == GAP_SCHEMA and gap["unit_id"] == "prepare_target.validate_target" for gap in records)
-
 
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks are unavailable on this platform")
 def test_a_symlink_in_the_target_is_a_named_coverage_gap_and_the_intake_still_publishes(tmp_path: Path) -> None:
@@ -255,15 +240,3 @@ def test_a_required_binary_without_a_publication_fails_intake(tmp_path: Path) ->
             target_root=target, source_fingerprint=source_fingerprint(target))
     assert list(config.runtime.runs_dir.glob(f"*/data/jobs/{JOB_ID}/attempts/*/steps")) == []
 
-
-# ------------------------------------------------------------------ configuration
-
-def test_configured_topology_matches_the_job_and_the_job_is_strict() -> None:
-    config = load_config(ROOT / "appsec-review.toml", profile="dev")
-    job = config.jobs[JOB_ID]
-    assert tuple(job.steps) == tuple(TOPOLOGY)
-    for step, tasks in TOPOLOGY.items():
-        assert tuple(job.step(step).tasks) == tasks
-    built = build_job(check_models=_available)
-    assert built.strict_gaps and not built.always_execute and built.propagate_handoff
-    assert [unit.unit_id for unit in built.units] == [f"{step}.{task}" for step, tasks in TOPOLOGY.items() for task in tasks]

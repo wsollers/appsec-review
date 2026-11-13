@@ -16,7 +16,7 @@ from appsec_review.jobs.job_model_connectivity import build_job as build_connect
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.registry import builtin_registry
-from tests.test_model_preflight import _fixture, _serving
+from tests.integration.job_review_intake.test_model_preflight import _fixture, _serving
 
 
 def test_registry_wires_the_real_check_into_the_first_job_of_a_review(monkeypatch, tmp_path: Path) -> None:

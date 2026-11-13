@@ -383,10 +383,16 @@
     },
     "job_review_intake": {
       "unit": [
-        "tests/test_model_preflight.py::test_intake_confirms_every_configured_model_before_publishing",
-        "tests/test_model_preflight.py::test_an_unwired_intake_reports_that_no_check_ran"
+        "tests/unit/job_review_intake/test_binary_evidence.py",
+        "tests/unit/job_review_intake/test_configuration.py",
+        "tests/unit/job_review_intake/test_contract.py",
+        "tests/unit/job_review_intake/test_models.py",
+        "tests/unit/job_review_intake/test_target.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_review_intake/test_model_preflight.py",
+        "tests/integration/job_review_intake/test_review_intake.py"
+      ],
       "acceptance": [],
       "live": []
     },

@@ -1862,8 +1862,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_model_connectivity/`; full job-package line and branch coverage);
   job_image_pin_verification (7 unit files, 122 cases: contract, graph, configuration,
   host bindings, image inspection and update boundaries; 15 whole-graph cases preserved in
-  `tests/integration/job_image_pin_verification/`; full job-package line and branch coverage).
-  The unit manager resumed in registry order; next: job_target_acquisition.
+  `tests/integration/job_image_pin_verification/`; full job-package line and branch coverage);
+  job_review_intake (5 unit files, 133 cases: contract, configuration, target and binary-evidence
+  handling, model discovery; 14 graph cases preserved in `tests/integration/job_review_intake/`;
+  full job-package line and branch coverage). The unit manager resumed in registry order;
+  job_target_acquisition is blocked on its published `/2` versus declared `/1` schema mismatch.
+  Next: job_target_catalog.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,
