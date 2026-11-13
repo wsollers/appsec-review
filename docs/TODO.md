@@ -119,6 +119,13 @@ until each is rewritten into the entry format when it is next touched.
 | T-124 | [Close or confirm the Rust remote-flow pruning gap](#t-124-close-or-confirm-the-rust-remote-flow-pruning-gap) | graph | open |
 | T-125 | [Close or confirm the Rust canonicalize sanitizer gap](#t-125-close-or-confirm-the-rust-canonicalize-sanitizer-gap) | graph | open |
 | T-126 | [Design the multi-producer plan for code-graph and dataflow facts](#t-126-design-the-multi-producer-plan-for-code-graph-and-dataflow-facts) | graph | blocked |
+| T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | open |
+| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | blocked |
+| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | blocked |
+| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | blocked |
+| T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
+| T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | blocked |
+| T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1802,6 +1809,162 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** design doc only, `docs/architecture/multi-producer-dataflow.md`: (1) a fact-family by producer by language matrix (CodeQL, SCIP, Semgrep/Opengrep taint, Psalm taint, clangd/LLVM/Clang AST, Tree-sitter) stating for each cell primary, second opinion, or none, with PHP as a taint-primary language; (2) a SCIP-based symbol index as the `call_site` cross-check for managed languages; (3) Semgrep/Opengrep taint rules generated per language from `rules/codeql-graph-export/catalog.json` (its sink APIs with argument index, source APIs and sanitizers, keyed to `SinkClass` and `SourceClass`), hash-locked in `rules/semgrep/rules.lock.json` the way `banned-functions.yml` is generated from `appsec-review.toml`, so CodeQL classification and taint rules share one source of truth; the doc states and costs the three prerequisites (per-language pattern syntax in the generator, `--dataflow-traces` on both engine invocations in `job_evidence_collection/adapters.py` lines 797 and 803, a normalizer that retains `dataflow_trace` as ordered steps) and decides between `dataflow_path` corroboration, which needs all three, and `sink_site` corroboration by span, which pattern matches already give; (4) a producer list and a precision tag on every graph fact (Semgrep CE and Opengrep taint are intraprocedural) and a `single_producer` label from `cross_check.state`, carried into admissibility, score and report so a model can tell a corroborated fact from one to hunt; (5) scan-time and rule-count cost per language. Chunked per `.claude/skills/parallel-implementation/SKILL.md`; no implementation. Swift/Objective-C scope is the user's open decision, recorded not decided.
 - **Done when:** the design doc exists with the matrix, decisions, chunks and acceptance per chunk; `docs/agent-reader.md` links it; `docs/architecture/code-graph-precomputation.md` D1 points to it for second producers; implementation items (the rule generator, the trace normalizer, the SCIP job, the fact labels) get their own ids.
 - **Refs:** `src/appsec_review/graph/crosscheck.py`, `correlate.py`, `contract.py`, `rules/codeql-graph-export/catalog.json`, `src/appsec_review/rulepacks/banned_functions.py`, `src/appsec_review/jobs/job_evidence_collection/adapters.py`, `docs/architecture/code-graph-precomputation.md` D1 and section 4.1, `docs/reviews/review-protocol-second-opinion-brief.md`, T-120, T-124.
+
+### T-127 — Inventory the documentation in a disposition ledger
+
+- **State:** open
+- **Area:** pipeline
+- **Blocks:** T-128
+- **Why:** the documentation mixes current architecture, operations, plans and dated records
+  without a complete inventory or an explicit disposition for each file.
+- **Scope:** Stage 1 of the documentation program. Create `docs/docs-ledger.json` with schema
+  `appsec-review/docs-ledger/1`, covering files under `docs/`, `containers/**/README.md`,
+  `scripts/README.md` and `AGENTS.md`. Record path, kind, subsystem, disposition, merge target
+  when applicable, a one-sentence reason and the decision-record flag. Survey the delta from
+  `docs/docs-sync.json` first, then the remaining documents. Keep `docs/walks/` rows host-local
+  with disposition `keep`; their content is not a source of rules. Do not rewrite dated decisions.
+- **Done when:** `tests/docs/test_docs_ledger.py` rejects a tracked document with no row, a row
+  naming a missing file, a merge without a target and retirement of a decision record; the ledger
+  covers the stated paths, and the docs-sync record names only a commit actually reconciled.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 1),
+  `.claude/skills/docs-sync/SKILL.md`, `docs/docs-sync.json`, `AGENTS.md`.
+
+### T-128 — Generate the documentation inventory and enforce frontmatter and links
+
+- **State:** blocked
+- **Area:** pipeline
+- **Blocked by:** T-127
+- **Blocks:** T-129
+- **Why:** job, task, dataset, retrieval and model-guidance facts are repeated in authored prose
+  without a generated home or checks that detect drift.
+- **Scope:** Stage 2. Add `scripts/generate-docs.py` and `scripts/generate-docs.sh`, reading the
+  central configuration through its loader, container catalog, job `DATASETS` and typed
+  contracts, MCP tools and retrieval indices, guidance registry, `tests/job-test-map.json` and
+  the bucket map when present. Generate `docs/generated/inventory.json`,
+  `docs/generated/guidance.md`, marked job-page blocks with the task tree, tools, contracts,
+  datasets, routes, model usage, test files, Dagster placement and Mermaid skeleton, plus
+  `docs/README.md` and kind indices. Add authored frontmatter and reconciliation markers.
+  Output is deterministic, sorted and LF, without timestamps, with source and do-not-edit
+  notices. Do not edit the source TOML, catalog, guidance registry or `DATASETS` tables;
+  register source defects in this registry instead.
+- **Done when:** `tests/docs/test_generated_docs.py` detects regeneration differences;
+  `tests/docs/test_docs_frontmatter.py` rejects missing or invalid frontmatter;
+  `tests/docs/test_docs_links.py` rejects unresolved relative links and anchors; and
+  `tests/docs/test_docs_identifiers.py` rejects unknown backticked job, task, dataset, schema
+  and gap identifiers in authored prose. Each test is independent and under ten seconds.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 2),
+  `appsec-review.toml`, `containers/catalog.toml`, `src/appsec_review/mcp/schema.py`,
+  `pipeline/guidance/registry.json`, `tests/job-test-map.json`, T-117, T-127.
+
+### T-129 — Map tools and datasets to intelligence buckets and availability matrices
+
+- **State:** blocked
+- **Area:** pipeline
+- **Blocked by:** T-128
+- **Blocks:** T-130
+- **Why:** no single view connects the tools and datasets to intelligence coverage by language,
+  retrieval availability and the review roles that can use it.
+- **Scope:** Stage 3. Author `docs/intelligence-buckets.json` with schema
+  `appsec-review/intelligence-buckets/1`, at most twelve defined buckets and exactly one bucket
+  per catalog tool and dataset. Extend `scripts/generate-docs.py` to emit
+  `docs/generated/matrix-tool-bucket.md` and `docs/generated/matrix-bucket-availability.md`
+  with JSON counterparts. Join tools, jobs and tasks, languages, image state, producers,
+  datasets, stages, retrieval indices, MCP tools and role capabilities. Markdown summaries
+  have at most seven columns; each empty availability cell names a gap id. Add newly found
+  gaps to `docs/TODO.md` in the same commit, linking existing T-115 through T-126 where relevant.
+- **Done when:** `tests/docs/test_intelligence_buckets.py` rejects an unmapped tool or dataset,
+  a bucket without a definition and an empty matrix cell without a gap id; every tool and
+  dataset has exactly one bucket, and generated outputs pass the Stage 2 drift checks.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 3),
+  `containers/catalog.toml`, `src/appsec_review/mcp/schema.py`,
+  `pipeline/guidance/registry.json`, T-128, T-115, T-126.
+
+### T-130 — Author job operations pages around the generated contracts
+
+- **State:** blocked
+- **Area:** pipeline
+- **Blocked by:** T-129
+- **Blocks:** T-131
+- **Why:** generated job contracts cannot explain a job's purpose, internal decisions, gap
+  behavior or the evidence needed to accept its results.
+- **Scope:** Stage 4. Create or revise `docs/operations/<job>.md` in
+  `tests/job-test-map.json` order and according to the ledger. Include frontmatter, purpose
+  and refused claims, the generated block, gap causes with retryable or advisory classification,
+  and the walk charter's four acceptance checks. For jobs with real internal logic, add
+  per-step pseudocode, internal Mermaid dataflow and gap edges, and resume/invalidation rules.
+  Explain model-backed jobs' role and persona choices through links to generated guidance.
+  Link shared mechanisms to one canonical architecture or operations page, creating missing
+  pages rather than duplicating facts. Leave the T-113 walk's current job page untouched.
+- **Done when:** the job-page set matches the ledger and job map, the Stage 2 tests pass,
+  `docs/docs-sync.json` names the reconciled commit, and the current T-113 job page is unchanged.
+  Each page's acceptance section describes checks; this work runs no integration, acceptance
+  or live validation.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 4),
+  `docs/processes/walk-charter.md`, `tests/job-test-map.json`, `docs/docs-sync.json`,
+  `docs/architecture/job-interchange.md`, T-113, T-129.
+
+### T-131 — Document the forward testing contract and its enforcement
+
+- **State:** blocked
+- **Area:** testing
+- **Blocked by:** T-130
+- **Blocks:** T-132
+- **Why:** the testing documentation must distinguish the tier contract decided under T-113
+  from what current guards and scripts actually enforce.
+- **Scope:** Stage 5. Revise `docs/architecture/testing.md` around code-level unit tests with
+  canned fixtures, no Docker/tools/models, under ten seconds per test and ten minutes per
+  suite; integration's 300 s default; live's 1800 s default; job-map tier selection; per-job
+  acceptance with the charter's four checks; and `scripts/run-tests.sh` for long runs.
+  Name the existing enforcing test, guard or script beside each rule. Mark unenforced rules
+  "stated, not enforced" and register their gaps here, reusing existing ids when applicable.
+  Keep the short form in `AGENTS.md` linked to the testing page; add no new agent rules.
+- **Done when:** `tests/docs/test_docs_links.py` passes, every enforcement reference names an
+  existing file and demonstrates the stated guard, and each unenforced rule names a TODO id.
+  Documentation checks do not execute integration, acceptance or live tests.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 5),
+  `docs/architecture/testing.md`, `docs/processes/walk-charter.md`, `tests/job-test-map.json`,
+  `tests/conftest.py`, `tests/unit/conftest.py`, `scripts/run-tests.sh`, T-113, T-109, T-130.
+
+### T-132 — Write current-state subsystem architecture dives
+
+- **State:** blocked
+- **Area:** pipeline
+- **Blocked by:** T-131
+- **Blocks:** T-133
+- **Why:** subsystem behavior is scattered across plans and implementation records, making
+  historical decisions easy to mistake for the current implementation.
+- **Scope:** Stage 6. Maintain one current-state page under `docs/architecture/` for each of:
+  images and deployment; target acquisition and build; code intelligence; scanners and
+  evidence collection; review inference and guidance; runtime interchange; reporting and
+  metrics; testing and operations. Each has As built today, dated Decisions linking original
+  records, Named gaps by T id, Jobs and pages, and Mermaid Dataflow. Mark superseded plans
+  and implementation records historical with a current-page pointer, without rewriting their
+  dated decisions. Regenerate `docs/architecture/README.md` from frontmatter.
+- **Done when:** all eight subsystems have the required current-state page, historical records
+  retain their decisions, and the frontmatter, links, identifiers and generated-index checks pass.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 6),
+  `docs/architecture/`, `docs/docs-sync.json`, T-131, T-115, T-116, T-117, T-118,
+  T-119, T-120, T-121, T-122, T-123, T-124, T-125, T-126.
+
+### T-133 — Apply approved documentation merges and retirements
+
+- **State:** blocked
+- **Area:** pipeline
+- **Blocked by:** T-132
+- **Why:** duplicate and obsolete non-decision documents remain after current pages exist;
+  removing them must not discard decision history or break navigation.
+- **Scope:** Stage 7. Stop for the user's decision before deletions, then apply the ledger's
+  approved `merge-into` and `retire` dispositions. Delete only non-decision records whose
+  ledger reason supports retirement. Leave a one-line pointer for one release after a merge
+  before removing the old page, preserving dated decision records. Reconcile
+  `docs/docs-ledger.json`, regenerate the indices and record the final reconciled commit in
+  `docs/docs-sync.json`. A rendered static site is optional, ignored, derived from Markdown
+  and never committed; no site tooling is required to complete the stage.
+- **Done when:** approved dispositions are applied without deleting decision records, the ledger
+  has no remaining `retire` or `merge-into` rows, all program docs tests and
+  `tests/test_todo_registry.py` pass, and the docs-sync record names the final reconciled commit.
+- **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 7),
+  `docs/docs-sync.json`, `AGENTS.md`, T-127, T-132.
 
 ## Legacy backlog
 
