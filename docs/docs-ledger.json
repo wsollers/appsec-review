@@ -2950,6 +2950,22 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/review-audit-publication.schema.json",
+      "reason": "Keep the closed audit availability and frozen-policy metadata contract aligned with accepted control-field transport.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/review-decision-audit.schema.json",
+      "reason": "Keep the protected decision, verification, basis and manifest contracts with their identity and continuation constraints.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/review-package-manifest.schema.json",
       "reason": "Keep review-package-manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "review inference and guidance"

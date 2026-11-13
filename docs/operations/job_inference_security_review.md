@@ -199,8 +199,14 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `attack_chains` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `claim_ledger` | `publication` | `appsec-review/ledger-event/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `lead_triage` | `triage` | `application/json` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_audit_continuations` | `publication` | `application/x-ndjson` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_audit_metadata` | `publication` | `appsec-review/review-audit-publication/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `review_cells` | `lead_review` | `appsec-review/cell-attempt-receipt/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_decision_audit` | `publication` | `appsec-review/review-audit-manifest/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_decision_bases` | `publication` | `appsec-review/decision-basis/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_decisions` | `publication` | `appsec-review/review-decision/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `review_packages` | `packages` | `appsec-review/review-package/6` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_verification_coverage` | `publication` | `appsec-review/verification-coverage/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `scores_and_findings` | `publication` | `appsec-review/finding-package/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -1303,18 +1309,42 @@ flowchart LR
   output_schema3["application/json"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["review_cells"]
-  output_schema4["appsec-review/cell-attempt-receipt/1"]
+  output4["review_audit_continuations"]
+  output_schema4["application/x-ndjson"]
   job --> output4
   output4 -. schema .-> output_schema4
-  output5["review_packages"]
-  output_schema5["appsec-review/review-package/6"]
+  output5["review_audit_metadata"]
+  output_schema5["appsec-review/review-audit-publication/1"]
   job --> output5
   output5 -. schema .-> output_schema5
-  output6["scores_and_findings"]
-  output_schema6["appsec-review/finding-package/2"]
+  output6["review_cells"]
+  output_schema6["appsec-review/cell-attempt-receipt/1"]
   job --> output6
   output6 -. schema .-> output_schema6
+  output7["review_decision_audit"]
+  output_schema7["appsec-review/review-audit-manifest/1"]
+  job --> output7
+  output7 -. schema .-> output_schema7
+  output8["review_decision_bases"]
+  output_schema8["appsec-review/decision-basis/1"]
+  job --> output8
+  output8 -. schema .-> output_schema8
+  output9["review_decisions"]
+  output_schema9["appsec-review/review-decision/1"]
+  job --> output9
+  output9 -. schema .-> output_schema9
+  output10["review_packages"]
+  output_schema10["appsec-review/review-package/6"]
+  job --> output10
+  output10 -. schema .-> output_schema10
+  output11["review_verification_coverage"]
+  output_schema11["appsec-review/verification-coverage/1"]
+  job --> output11
+  output11 -. schema .-> output_schema11
+  output12["scores_and_findings"]
+  output_schema12["appsec-review/finding-package/2"]
+  job --> output12
+  output12 -. schema .-> output_schema12
 ```
 
 <!-- generated:end -->

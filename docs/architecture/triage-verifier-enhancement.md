@@ -106,27 +106,32 @@ it never produces an empty successful population.
 TRI-A references HUNT-C's operation/question coverage and transport receipts; it does
 not produce a second copy of those receipts or infer delivery from package membership.
 
-Canonical bucket names are not defined yet. **review_claims** and **metrics** below are
-provisional conceptual groupings only. T-129 maps concrete tool IDs and typed
-dataset/output-kind IDs to its canonical taxonomy. It must not treat a documentation
-subsystem label or the proposed dataset names as an already implemented bucket.
+T-129 released the [canonical taxonomy](../intelligence-buckets.json) after the initial review.
+The six declared T-150 output kinds belong to **review_products**, retaining their protected
+disposition, operational authority and sanitized-metadata-only inventory route. Offline
+measurements remain **metrics**. Future warrant/obligation products are still proposals,
+not produced datasets. Bucket membership never grants a worker or MCP capability.
 
 ### Product routes
 
-The dataset IDs and new protected query route in this table are **proposed**. They are
-names to register during implementation, not current typed declarations.
+The table distinguishes declared T-150 interfaces from future T-152/T-153 proposals.
+A declaration is not evidence that a run produced, consumed or accepted the product;
+delivery state remains in T-150 and its implementation verification record.
 
 | Product / conceptual group | Producer and concrete publication route | Index / retrieval route | Consumer and decision benefit | Evidence ceiling |
 | --- | --- | --- | --- | --- |
-| Decision audit / review_claims | Inference publication emits proposed review_decisions JSONL plus manifest under its attempt's publish_handoff directory | Initially bound artifact reader; subsequently a protected SQLite audit artifact, not a globally granted evidence shard | Operator, lead adapter, final gate; explain every admitted/unadmitted/proposal-only/claim outcome | Derived decision record, never new source evidence |
-| Predicate warrants and verification coverage / review_claims | Inference relation resolution/adjudication emits proposed predicate_warrants and verification_coverage artifacts, referenced by audit rows | Same protected audit route, indexed by claim/predicate/evidence identity | Adjudicator, scorer, independent verifier's own evidence evaluation, operator | Only application-validated commissioned facts can support R5; audit row itself cannot |
-| Evidence obligations and resolutions / review_claims | Inference package rounds and ledger seal emit proposed evidence_obligations artifact, bound to existing request/claim IDs | Same protected audit route; in-package application supplies only admitted requests to later rounds | Existing red/blue follow-up capability; operator locates the next missing fact | Question/resolution metadata; never an instruction to run a new tool |
-| Decision basis in developer briefs / review_claims | Finding attachment and accepted-review projection; existing dossier/gate/report producers bind it | Protected dossier detail plus sanitized final summaries; no new public raw-evidence endpoint | Developer, remediation planner for confirmed findings; preserve relevant counterevidence and limits | Immutable accepted decision plus original citations; not a new claim state |
+| Decision audit / review_products | Declared review_decisions JSONL, review_decision_audit manifest and review_audit_metadata descriptor under attempt/artifacts/decision-audit | Bounded accepted-artifact reader and fixed operator query templates; no globally granted evidence shard | Operator, lead adapter, final gate; explain every admitted/unadmitted/proposal-only/claim outcome | Derived decision record, never new source evidence |
+| Verification coverage / review_products | Declared review_verification_coverage rows referenced by the audit manifest | Protected accepted-artifact route by claim/cell/evidence identity | Operator and authorized application readers; separate blindness, diversity and support completeness | Observed verification metadata, not new proof or a vote |
+| Predicate warrants / proposed review_products placement | Proposed predicate_warrants from T-152 relation resolution/adjudication | Future protected references; no new worker query grant | Adjudicator, scorer and verifier's own evidence evaluation | Only application-validated commissioned facts can support R5; audit row itself cannot |
+| Evidence obligations and resolutions / proposed review_products placement | Proposed T-153 evidence_obligations artifact, bound to existing request/claim IDs | Protected route; in-package application supplies only admitted requests to later rounds | Existing red/blue follow-up capability; operator locates the next missing fact | Question/resolution metadata; never an instruction to run a new tool |
+| Decision basis in developer briefs / review_products | Declared review_decision_bases; existing dossier/gate bind exact accepted finding/claim references | Protected dossier detail plus sanitized bindings; no new public raw-evidence endpoint | Developer and authorized application readers; preserve counterevidence and limits | Immutable accepted decision plus original citations; not a new claim state |
+| Reference continuations / review_products | Declared review_audit_continuations JSONL, bound by field and manifest | Validated with the complete bundle before consumption | Authorized readers retain complete provenance beyond inline bounds | References retain original authority; continuation storage adds none |
 | Outcome attribution / metrics | Offline finding adapters emit a versioned operator metric document with source-product hashes | Existing offline snapshot/history/scorecard paths; no worker input | Operator and independent evaluator; measure loss, confusion and cost | Derived measurements and externally admitted labels, never evidence for adjudication |
 | Stratified audit/evaluation manifest / metrics | Offline evaluator exports population/selection/label bindings | Protected operator artifact, intentionally excluded from review capabilities | Human annotators and experiment analysis; estimate dismissal misses without tuning on holdout | Independent labels stay outside the review run's readable scope |
 
-The audit SQLite artifact should be built from immutable JSONL, versioned and hash-bound.
-It is a **proposed protected application query adapter**, not a new member of
+The first implementation uses bounded, hash-bound artifact readers and fixed query templates;
+the earlier SQLite materialization option is not a requirement or a new storage service.
+This is a **protected application query adapter**, not a new member of
 `retrieval/index.py::INDEX_NAMES` granted to all roles. Queries are fixed templates:
 lead trace, claim decision basis, predicate coverage, open obligations and bounded
 stage/family populations. Exact accepted handoff pin and caller authorization are required.
@@ -219,10 +224,15 @@ handoff hash without mutating those artifacts.
 }
 ```
 
-Closed `stage` values: collection, severity_triage, admission, package_assembly,
+Closed `stage` values: collection, severity_triage, admission, package_assembly, cell_execution,
 red_discovery, proposal_normalization, claim_cap, blue_review, independent_verification,
 judge_review, adjudication, scoring and publication. Use stage-specific outcome enums,
 not new producer terminal statuses or new claim states.
+
+The separate cell_execution stage copies the original CellStatus and nondeciding actor_role.
+It requires the original cell identity, carries no deciding roles/row and never turns a successful
+red cell into a proposal/no-claim conclusion or a successful judge into a verdict. Semantic
+decision rows remain distinct; expected-cell coverage counts unique cells, not decision rows.
 
 Red outcomes include proposed, explicit_no_claim, blocked, invalid, timed_out,
 not_launched and proposal_rejected. Preserve original raw outcome and its cell receipt
@@ -455,11 +465,10 @@ that require a location disclose their narrower eligible denominator.
 | Metrics | Consume stage records and separate judge dissent, verifier refutation and confirmation coverage | T-071/T-077; retain completed triage/severity/outcome formulas |
 | Testing | Real deterministic parsers/joins/warrants with external boundaries faked; labelled offline experiments | Existing focused review/finding tests plus independent fixtures; no implicit live tier |
 
-T-129 is **nonblocking documentation mapping and reconciliation**, not an implementation
-prerequisite. Implement and register concrete typed datasets, closed schemas and accepted
-read routes in their owning runtime contracts without waiting for the canonical bucket
-taxonomy. Coordinate those identities with T-129 and reconcile its mapping when available;
-do not omit local dataset/route documentation while it is pending.
+T-129 is **nonblocking documentation mapping and reconciliation**, not a runtime prerequisite.
+Its canonical mapping now covers the six declared T-150 products under review_products.
+Register any future concrete datasets, schemas and accepted read routes with their owning
+contracts and update that single mapping, rather than inventing new conceptual bucket names.
 Dependency-intelligence and hunting enhancements should
 supply their existing lead/operation/evidence identities and producer coverage through
 these interfaces. Neither subsystem supplies a correctness label. Do not duplicate

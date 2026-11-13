@@ -1085,9 +1085,15 @@
       "remediation_proposals",
       "remediation_validation_receipts",
       "remediation_validation_summary",
+      "review_audit_continuations",
+      "review_audit_metadata",
       "review_cells",
+      "review_decision_audit",
+      "review_decision_bases",
+      "review_decisions",
       "review_intake",
       "review_packages",
+      "review_verification_coverage",
       "sanitizer_build_summary",
       "sanitizer_build_workspaces",
       "scorecard_responses",
@@ -1235,6 +1241,7 @@
       "applicability-rules/1",
       "application/json",
       "application/octet-stream",
+      "application/x-ndjson",
       "application_risk_matrix/1",
       "application_risk_matrix/3",
       "appsec-review-catalog-acquisition/1",
@@ -1467,6 +1474,7 @@
       "appsec-review/debug-symbol-inputs/1",
       "appsec-review/debug-symbol-metrics/1",
       "appsec-review/debug-symbol-records/1",
+      "appsec-review/decision-basis/1",
       "appsec-review/delivered-scope/2",
       "appsec-review/delivery-propagation/2",
       "appsec-review/dependency-catalog/1",
@@ -1824,10 +1832,13 @@
       "appsec-review/retention-plan/1",
       "appsec-review/retrieval-index/2",
       "appsec-review/retrieval-response/1",
+      "appsec-review/review-audit-manifest/1",
+      "appsec-review/review-audit-publication/1",
       "appsec-review/review-capability/1",
       "appsec-review/review-changed-paths/1",
       "appsec-review/review-data-indexing-inputs/2",
       "appsec-review/review-data-indexing/1",
+      "appsec-review/review-decision/1",
       "appsec-review/review-evidence-map/1",
       "appsec-review/review-export-bundle/1",
       "appsec-review/review-heuristics/1",
@@ -1978,6 +1989,7 @@
       "appsec-review/unity-inventory/1",
       "appsec-review/validation-work/1",
       "appsec-review/validator-batch-result/1",
+      "appsec-review/verification-coverage/1",
       "appsec-review/verified-control-results/1",
       "appsec-review/verified-dispatch-stop/1",
       "appsec-review/verifier-compact/1",
@@ -2226,6 +2238,8 @@
       "debug-symbol-inputs/1",
       "debug-symbol-metrics/1",
       "debug-symbol-records/1",
+      "decision-audit-projection/1",
+      "decision-basis/1",
       "delivered-scope/2",
       "delivery-propagation/2",
       "dependency-advisories/4",
@@ -2658,11 +2672,14 @@
       "retrieval-index/2",
       "retrieval-normalizer/1",
       "retrieval-response/1",
+      "review-audit-manifest/1",
+      "review-audit-publication/1",
       "review-capability/1",
       "review-cell-executor/3",
       "review-changed-paths/1",
       "review-data-indexing-inputs/2",
       "review-data-indexing/1",
+      "review-decision/1",
       "review-evidence-map/1",
       "review-export-bundle/1",
       "review-heuristics/1",
@@ -2837,6 +2854,7 @@
       "unsupported_runtime_adapter/1",
       "validation-work/1",
       "validator-batch-result/1",
+      "verification-coverage/1",
       "verified-control-results/1",
       "verified-dispatch-stop/1",
       "verifier-compact/1",
@@ -4777,9 +4795,15 @@
       "remediation_proposals": "review_products",
       "remediation_validation_receipts": "review_products",
       "remediation_validation_summary": "review_products",
+      "review_audit_continuations": "review_products",
+      "review_audit_metadata": "review_products",
       "review_cells": "review_products",
+      "review_decision_audit": "review_products",
+      "review_decision_bases": "review_products",
+      "review_decisions": "review_products",
       "review_intake": "source_snapshot",
       "review_packages": "review_products",
+      "review_verification_coverage": "review_products",
       "sanitizer_build_summary": "build_and_deployment",
       "sanitizer_build_workspaces": "build_and_deployment",
       "scorecard_responses": "dependencies_and_advisories",
@@ -16630,6 +16654,66 @@
             "schema": "appsec-review/finding-package/2"
           },
           {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "review_audit_metadata",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/review-audit-publication/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_decision_audit",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/review-audit-manifest/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_decisions",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/review-decision/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_verification_coverage",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/verification-coverage/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_decision_bases",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/decision-basis/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_audit_continuations",
+            "producer": "job_inference_security_review",
+            "schema": "application/x-ndjson"
+          },
+          {
             "authority": "producer_evidence",
             "availability": "optional",
             "channel": "handoff",
@@ -16738,7 +16822,7 @@
           "job_remediation_validation"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "e485670f4ea8c5375ec0e8be56ae45c3b1ffddffad0dc45fcbf1401ca7cbcbeb",
+        "sha256": "a6c264f72b2a51e28775e9caaef4986181a151f937ceb814b4898d0a3ad7ee09",
         "target_access": "accepted_evidence"
       },
       "dagster": {
@@ -18510,6 +18594,66 @@
             "schema": "appsec-review/finding-package/2"
           },
           {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "review_audit_metadata",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/review-audit-publication/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_decision_audit",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/review-audit-manifest/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_decisions",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/review-decision/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_verification_coverage",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/verification-coverage/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_decision_bases",
+            "producer": "job_inference_security_review",
+            "schema": "appsec-review/decision-basis/1"
+          },
+          {
+            "authority": "operational",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "not_applicable",
+            "output_kind": "review_audit_continuations",
+            "producer": "job_inference_security_review",
+            "schema": "application/x-ndjson"
+          },
+          {
             "authority": "producer_evidence",
             "availability": "when_producer_enabled",
             "channel": "handoff",
@@ -18619,7 +18763,7 @@
           "job_dossier_publication"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "04da632ece17b7879b2430e753fc80bc360a29cdd3e476b0c01b7fc3a028cf5f",
+        "sha256": "7d2d2d069c42e586b2774248b1ddd1393af8b07682f52e45971fe7cfb7642306",
         "target_access": "accepted_evidence"
       },
       "dagster": {
@@ -20695,6 +20839,56 @@
         },
         {
           "artifacts": [
+            "data/jobs/job_inference_security_review/attempts/*/artifacts/decision-audit/continuations/**.jsonl"
+          ],
+          "authority": "operational",
+          "description": "Manifest-bound closed source/relation reference continuation rows.",
+          "disposition": "protected",
+          "family": "inference_review",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "review_audit_continuations",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "protected bounded references decoded by their declared continuation field",
+          "required": false,
+          "route_gap": null,
+          "schema": "application/x-ndjson",
+          "sensitivity": "sensitive",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_inference_security_review/attempts/*/artifacts/decision-audit/publication.json"
+          ],
+          "authority": "operational",
+          "description": "Accepted audit availability, frozen projection policy and manifest binding.",
+          "disposition": "protected",
+          "family": "inference_review",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "review_audit_metadata",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "protected operator/application metadata; no worker evidence or query grant",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/review-audit-publication/1",
+          "sensitivity": "sensitive",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
             "data/jobs/job_inference_security_review/cells/**",
             "data/jobs/job_inference_security_review/attempts/*/steps/lead_review/**",
             "data/jobs/job_inference_security_review/attempts/*/steps/hunt_review/**",
@@ -20726,6 +20920,81 @@
         },
         {
           "artifacts": [
+            "data/jobs/job_inference_security_review/attempts/*/artifacts/decision-audit/manifest.json"
+          ],
+          "authority": "operational",
+          "description": "Exact protected audit shard membership, source identities and population coverage.",
+          "disposition": "protected",
+          "family": "inference_review",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "review_decision_audit",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "derived audit manifest; historical or disabled absence remains explicit",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/review-audit-manifest/1",
+          "sensitivity": "sensitive",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_inference_security_review/attempts/*/artifacts/decision-audit/decision_basis/*.jsonl"
+          ],
+          "authority": "operational",
+          "description": "Exact finding/claim/adjudication decision bases including noncounted counterevidence.",
+          "disposition": "protected",
+          "family": "inference_review",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "review_decision_bases",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "protected dossier/operator context; does not change accepted claim authority",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/decision-basis/1",
+          "sensitivity": "sensitive",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_inference_security_review/attempts/*/artifacts/decision-audit/decision/*.jsonl"
+          ],
+          "authority": "operational",
+          "description": "Bounded lead, proposal, cell and claim stage decisions with original provenance.",
+          "disposition": "protected",
+          "family": "inference_review",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "review_decisions",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "protected decision metadata, not additional target evidence",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/review-decision/1",
+          "sensitivity": "sensitive",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
             "data/jobs/job_inference_security_review/attempts/*/steps/packages/**"
           ],
           "authority": "routing_context",
@@ -20747,6 +21016,31 @@
           "shard_prefixes": [],
           "shard_suffixes": [],
           "step": "packages",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_inference_security_review/attempts/*/artifacts/decision-audit/verification_coverage/*.jsonl"
+          ],
+          "authority": "operational",
+          "description": "Separate observed verifier blindness, diversity and evidence-support coverage.",
+          "disposition": "protected",
+          "family": "inference_review",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "review_verification_coverage",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "protected verification observations; no retrospective or inferred success",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/verification-coverage/1",
+          "sensitivity": "sensitive",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
           "store": "retrieval"
         },
         {
@@ -21130,6 +21424,15 @@
           "max_output_tokens": 6000000,
           "max_retrieval_queries": 40000,
           "timeout_seconds": 28800
+        },
+        "decision_audit": {
+          "enabled": true,
+          "max_input_bytes": 67108864,
+          "max_page_size": 200,
+          "max_records": 100000,
+          "page_size": 50,
+          "shard_bytes": 8388608,
+          "shard_records": 5000
         },
         "lanes": {
           "exploration_enabled": false,
@@ -42559,9 +42862,9 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "5d686b523b888ae6cd41ff16cf52499554789bf45245c44402cb19f8a03657b1",
+    "appsec-review.toml": "9768fa2f3a16f6cc7e061d22c1290c32acbc8ac9073e24791ad446bcf0e3a8a5",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
-    "docs/intelligence-buckets.json": "524ce752d42ecc17614c6216883215d303dafabdb912b587765ae87ea5720f84",
+    "docs/intelligence-buckets.json": "4e13149b56f423af4802da451ad18235641ab756de7c087055e1c26b70573b3b",
     "pipeline/guidance/registry.json": "77cef0f167f4a5541dc597eae24c80d02be352ae0e4090c50918353eb3872146",
     "src/appsec_review/__init__.py": "e8ee360d5e72b7f3ad9bf9b84ca9b734b76a9f9d2cf9730e4eabb11121ce692c",
     "src/appsec_review/__main__.py": "6eb6f048c25e857f17755bbc341b70b7184cb4026b743fba3eaecc6951f65fc3",
@@ -42617,7 +42920,7 @@
     "src/appsec_review/config/host_pins.py": "d7f4a411be50fe0d4c197a0bed15f4a2474dc06fa682999aaf3f10fccbe061ee",
     "src/appsec_review/config/image_builder_service.py": "a2cbaa1f748c630ba1816afc31a29de62494f4036cab087f0a2c4c9aa6148d3a",
     "src/appsec_review/config/image_pin_verification.py": "ebc74bd6cef04001bef7237939e73f72f585fe34f1328f4caadae845616a240a",
-    "src/appsec_review/config/inference_review.py": "80896ea26d7b4b9a407c9385b5d0423396fd633b2a88a04347dc0bae9746381b",
+    "src/appsec_review/config/inference_review.py": "acefe19b47d86c2a6ea07474a6ed2534a837e5bd9bf230f78427c7ae7825c4db",
     "src/appsec_review/config/loader.py": "be217d3094fcfcf89d8929ab97d1995698816eea09281d00c08cec6d6bf0c086",
     "src/appsec_review/config/native_dagster.py": "b1be8153fa77a1a565ceff7449adc5a2e01adc031ce356abaf50c0d26bbc3bb7",
     "src/appsec_review/config/native_engine.py": "b21229a3ffafb5e87e4f339b7b0e6dc3489ee6611bc06c348e310da09d189fab",
@@ -42821,7 +43124,7 @@
     "src/appsec_review/jobs/job_document_issue_analysis/datasets.py": "fe18dd3f7a2d6cd783375490aead11c7ff0c6c80a31489193f1a72600254d56c",
     "src/appsec_review/jobs/job_document_issue_analysis/job.py": "8c970238c5e46e8d27f44aed414b2ca95173f16aefbb438f6c14587198da856a",
     "src/appsec_review/jobs/job_dossier_publication/__init__.py": "8def940a5d45905271521f85772625fdb078502fc35e501c4deea29aaa3561f2",
-    "src/appsec_review/jobs/job_dossier_publication/datasets.py": "8343afa4dece46c7d940416542dde9c8d253f10c6bd24820f58f7a6db43e06ed",
+    "src/appsec_review/jobs/job_dossier_publication/datasets.py": "0432db8f3da299237a3343e0d08f5f91aed03643f46a6b078ccc175fb2eef95f",
     "src/appsec_review/jobs/job_dossier_publication/inputs.py": "8ad54ddc4dd8c4d8ce798a265c3901eea3b8d5d6557675e02028ff244fb776e1",
     "src/appsec_review/jobs/job_dossier_publication/job.py": "1e52daa37fe15acd6cad27b036e36b47c0a2b4b539ea7f7c3e326fc246729e67",
     "src/appsec_review/jobs/job_dossier_publication/settings.py": "cb8d09ea63c164c1e8fe897ecf5f5425a998604bca08a94b160dca49c95c18e7",
@@ -42833,7 +43136,7 @@
     "src/appsec_review/jobs/job_final_publication_gate/__init__.py": "3035b075ea271a307e980ae31411c127bbcf0db6fbe90ef570bb3ea347695f28",
     "src/appsec_review/jobs/job_final_publication_gate/attachments.py": "3246c9500d974402a27e7be919c1cc581686beffd0bf479b8ee0afb31360d079",
     "src/appsec_review/jobs/job_final_publication_gate/classify.py": "644955484a92bdf86931beb80f91f4960e32e3324dcf4ebae473c125b0a4d0cf",
-    "src/appsec_review/jobs/job_final_publication_gate/datasets.py": "bf4656b5b5eebeb2f567902fb21b73d3c32c2da5a44b9cba00449c6c671a4bbf",
+    "src/appsec_review/jobs/job_final_publication_gate/datasets.py": "29851fe3c02bf89be0fbada44947e147ff991ef54247c1bc624f9192bff4cb77",
     "src/appsec_review/jobs/job_final_publication_gate/job.py": "3db0060d4090a9db223a803408c2f7b43ff3862e4f619734d2d34ff96ee248f4",
     "src/appsec_review/jobs/job_final_publication_gate/settings.py": "81cee1cfc0057f815060b05b54bc67628d779f03725df0c517ee590be96033bf",
     "src/appsec_review/jobs/job_final_publication_gate/verify.py": "eb7c0426a857016d2f1011e5a96f19d6919f59af272d3a9be30c09d4b50896b0",
@@ -42849,7 +43152,7 @@
     "src/appsec_review/jobs/job_image_pin_verification/pins.py": "4ea6ffcd81475a35e75bde7316360a4f68eeb37ddccb630847bed6b1cbc8e9ab",
     "src/appsec_review/jobs/job_inference_security_review/__init__.py": "056c3c7d7e437b22762e7fe9b79d47560bf191833d6833acd2d2c6c8bd70da5a",
     "src/appsec_review/jobs/job_inference_security_review/chains.py": "8fcd6acc7d207c7a69e051c5780ab559f16e1bb228b7b3149d0ba9a1a090e319",
-    "src/appsec_review/jobs/job_inference_security_review/datasets.py": "554454fbc84859d854d37c9a00711fbfc908b55ecba82b0c858aa61ecf0406d2",
+    "src/appsec_review/jobs/job_inference_security_review/datasets.py": "cc5bf325e7fb1c8544bf70fb07e4eff54f035ae1cb43f6b27104668338663c2f",
     "src/appsec_review/jobs/job_inference_security_review/job.py": "e937a28617bce38900fe40b34514709f9033c23980def2493765ed6fb142ab1d",
     "src/appsec_review/jobs/job_inference_security_review/schemas.py": "3202bd3e0bb796c0fa07d15d0b6e753932a1d505a3b20021ebe6fa0c3f357fc9",
     "src/appsec_review/jobs/job_inference_security_review/stages.py": "fa372ba201bc6fa0f426d98d11771bb6e35b3e7be024f61c1688cf1c9774b976",
@@ -43171,6 +43474,9 @@
     "src/appsec_review/review/claims.py": "236de9c059c7e30d11669aece83fef1cc2f5ea9b0c1af6d4bed55c47c3bfdeaa",
     "src/appsec_review/review/compact.py": "adc77edc7a31147bb7964a23b92ef6f224efe6155338932d8c4c283466be07b1",
     "src/appsec_review/review/competence.py": "b4ad68ddc6d65c5a96d8cf5eab2cd07f36e5960b901da7d17147cf7c336c6824",
+    "src/appsec_review/review/decision_audit/__init__.py": "e26d1b28ee1c448c94164c9366828795c1ba61e8ed01ee77f409c54de208bf69",
+    "src/appsec_review/review/decision_audit/contracts.py": "c612157969e652fd5718785b14f20b59248a6c939b206d83a2654bf773502fa0",
+    "src/appsec_review/review/decision_audit/metadata.py": "b9b3fe4bde2277648810d089f60f33f837875a51b188757b115128b48d60740e",
     "src/appsec_review/review/evaluation.py": "59beeb0caaa539dd2517c9982faf1c1cd0cfd22ad46a36d46b4d06fa4dbf0264",
     "src/appsec_review/review/evidence.py": "cf08aeadc87095d390dc513120a65dcd07cab48c2b5f6831de5a9f9bcd392ec5",
     "src/appsec_review/review/fact_summary.py": "24165e6f9dd20234203c61c8ae5f6c3621b286857b8965e8a6c408cd2ee7c124",

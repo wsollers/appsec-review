@@ -87,6 +87,12 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_inference_security_review` | `claim_ledger` | `appsec-review/ledger-event/1` | handoff | optional | gap |
 | `job_inference_security_review` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | handoff | optional | gap |
 | `job_inference_security_review` | `scores_and_findings` | `appsec-review/finding-package/2` | handoff | optional | gap |
+| `job_inference_security_review` | `review_audit_metadata` | `appsec-review/review-audit-publication/1` | handoff | optional | gap |
+| `job_inference_security_review` | `review_decision_audit` | `appsec-review/review-audit-manifest/1` | handoff | optional | not_applicable |
+| `job_inference_security_review` | `review_decisions` | `appsec-review/review-decision/1` | handoff | optional | not_applicable |
+| `job_inference_security_review` | `review_verification_coverage` | `appsec-review/verification-coverage/1` | handoff | optional | not_applicable |
+| `job_inference_security_review` | `review_decision_bases` | `appsec-review/decision-basis/1` | handoff | optional | not_applicable |
+| `job_inference_security_review` | `review_audit_continuations` | `application/x-ndjson` | handoff | optional | not_applicable |
 | `job_poc_generation` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_poc_generation` | `poc_generation_summary` | `appsec-review/poc-generation-handoff/2` | handoff | optional | gap |
 | `job_poc_generation` | `poc_writer_cells` | `appsec-review/poc-writer-receipt/1` | handoff | optional | gap |
@@ -405,56 +411,86 @@ flowchart LR
   input_schema54["appsec-review/finding-package/2"]
   producer54 --> input54 --> job
   input54 -. schema .-> input_schema54
-  producer55["job_poc_generation"]
-  input55["handoff"]
-  input_schema55["appsec-review/job-handoff/2"]
+  producer55["job_inference_security_review"]
+  input55["review_audit_metadata"]
+  input_schema55["appsec-review/review-audit-publication/1"]
   producer55 --> input55 --> job
   input55 -. schema .-> input_schema55
-  producer56["job_poc_generation"]
-  input56["poc_generation_summary"]
-  input_schema56["appsec-review/poc-generation-handoff/2"]
+  producer56["job_inference_security_review"]
+  input56["review_decision_audit"]
+  input_schema56["appsec-review/review-audit-manifest/1"]
   producer56 --> input56 --> job
   input56 -. schema .-> input_schema56
-  producer57["job_poc_generation"]
-  input57["poc_writer_cells"]
-  input_schema57["appsec-review/poc-writer-receipt/1"]
+  producer57["job_inference_security_review"]
+  input57["review_decisions"]
+  input_schema57["appsec-review/review-decision/1"]
   producer57 --> input57 --> job
   input57 -. schema .-> input_schema57
-  producer58["job_poc_generation"]
-  input58["poc_reproducers"]
-  input_schema58["appsec-review/poc-provenance/2"]
+  producer58["job_inference_security_review"]
+  input58["review_verification_coverage"]
+  input_schema58["appsec-review/verification-coverage/1"]
   producer58 --> input58 --> job
   input58 -. schema .-> input_schema58
-  producer59["job_remediation_planning"]
-  input59["handoff"]
-  input_schema59["appsec-review/job-handoff/2"]
+  producer59["job_inference_security_review"]
+  input59["review_decision_bases"]
+  input_schema59["appsec-review/decision-basis/1"]
   producer59 --> input59 --> job
   input59 -. schema .-> input_schema59
-  producer60["job_remediation_planning"]
-  input60["remediation_planning_summary"]
-  input_schema60["appsec-review/remediation-planning/1"]
+  producer60["job_inference_security_review"]
+  input60["review_audit_continuations"]
+  input_schema60["application/x-ndjson"]
   producer60 --> input60 --> job
   input60 -. schema .-> input_schema60
-  producer61["job_remediation_planning"]
-  input61["remediation_proposals"]
-  input_schema61["appsec-review/remediation-plan/1"]
+  producer61["job_poc_generation"]
+  input61["handoff"]
+  input_schema61["appsec-review/job-handoff/2"]
   producer61 --> input61 --> job
   input61 -. schema .-> input_schema61
-  producer62["job_remediation_validation"]
-  input62["handoff"]
-  input_schema62["appsec-review/job-handoff/2"]
+  producer62["job_poc_generation"]
+  input62["poc_generation_summary"]
+  input_schema62["appsec-review/poc-generation-handoff/2"]
   producer62 --> input62 --> job
   input62 -. schema .-> input_schema62
-  producer63["job_remediation_validation"]
-  input63["remediation_validation_summary"]
-  input_schema63["appsec-review/remediation-validations/1"]
+  producer63["job_poc_generation"]
+  input63["poc_writer_cells"]
+  input_schema63["appsec-review/poc-writer-receipt/1"]
   producer63 --> input63 --> job
   input63 -. schema .-> input_schema63
-  producer64["job_remediation_validation"]
-  input64["remediation_validation_receipts"]
-  input_schema64["appsec-review/remediation-validation/1"]
+  producer64["job_poc_generation"]
+  input64["poc_reproducers"]
+  input_schema64["appsec-review/poc-provenance/2"]
   producer64 --> input64 --> job
   input64 -. schema .-> input_schema64
+  producer65["job_remediation_planning"]
+  input65["handoff"]
+  input_schema65["appsec-review/job-handoff/2"]
+  producer65 --> input65 --> job
+  input65 -. schema .-> input_schema65
+  producer66["job_remediation_planning"]
+  input66["remediation_planning_summary"]
+  input_schema66["appsec-review/remediation-planning/1"]
+  producer66 --> input66 --> job
+  input66 -. schema .-> input_schema66
+  producer67["job_remediation_planning"]
+  input67["remediation_proposals"]
+  input_schema67["appsec-review/remediation-plan/1"]
+  producer67 --> input67 --> job
+  input67 -. schema .-> input_schema67
+  producer68["job_remediation_validation"]
+  input68["handoff"]
+  input_schema68["appsec-review/job-handoff/2"]
+  producer68 --> input68 --> job
+  input68 -. schema .-> input_schema68
+  producer69["job_remediation_validation"]
+  input69["remediation_validation_summary"]
+  input_schema69["appsec-review/remediation-validations/1"]
+  producer69 --> input69 --> job
+  input69 -. schema .-> input_schema69
+  producer70["job_remediation_validation"]
+  input70["remediation_validation_receipts"]
+  input_schema70["appsec-review/remediation-validation/1"]
+  producer70 --> input70 --> job
+  input70 -. schema .-> input_schema70
   output0["dossier_publications"]
   output_schema0["appsec-review/dossier-publication/1"]
   job --> output0
