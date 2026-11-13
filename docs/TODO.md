@@ -129,8 +129,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-126 | [Design the multi-producer plan for code-graph and dataflow facts](#t-126-design-the-multi-producer-plan-for-code-graph-and-dataflow-facts) | graph | blocked |
 | T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | done (2026-11-13, docs/docs-ledger.json) |
 | T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | done (2026-11-13, docs/generated/inventory.json) |
-| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | open |
-| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | blocked |
+| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | done (2026-11-13, docs/intelligence-buckets.json) |
+| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | open |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
 | T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | blocked |
 | T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
@@ -157,6 +157,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-154 | [Audit labelled stage loss and dismissals by stratum](#t-154-audit-labelled-stage-loss-and-dismissals-by-stratum) | testing | blocked |
 | T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
 | T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
+| T-157 | [Declare language and applicability metadata for intelligence matrices](#t-157-declare-language-and-applicability-metadata-for-intelligence-matrices) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1974,7 +1975,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-129 — Map tools and datasets to intelligence buckets and availability matrices
 
-- **State:** open
+- **State:** done (2026-11-13, docs/intelligence-buckets.json)
 - **Area:** pipeline
 - **Blocked by:** T-128
 - **Blocks:** T-130
@@ -1988,6 +1989,12 @@ until each is rewritten into the entry format when it is next touched.
   datasets, stages, retrieval indices, MCP tools and role capabilities. Markdown summaries
   have at most seven columns; each empty availability cell names a gap id. Add newly found
   gaps to `docs/TODO.md` in the same commit, linking existing T-115 through T-126 where relevant.
+  Delivered: twelve primary-purpose buckets, all 32 canonical catalog tools and 156 unique
+  output kinds across 158 producer/dataset declarations, plus 204 bucket/language cells over
+  seventeen source-declared language labels. Composite outputs retain their original authority,
+  schema and protection. User decision on 2026-11-13: source-backed not-applicable states are
+  distinct from missing cells; missing or partially declared cells name T-147 or T-157.
+  These are declaration matrices, not proof of run coverage or issued worker capabilities.
 - **Done when:** `tests/docs/test_intelligence_buckets.py` rejects an unmapped tool or dataset,
   a bucket without a definition and an empty matrix cell without a gap id; every tool and
   dataset has exactly one bucket, and generated outputs pass the Stage 2 drift checks.
@@ -2002,7 +2009,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-130 — Author job operations pages around the generated contracts
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Blocked by:** T-129
 - **Blocks:** T-131
@@ -2461,6 +2468,30 @@ until each is rewritten into the entry format when it is next touched.
   [design](architecture/threat-driven-hunting-enhancement.md#from-selection-to-actual-coverage),
   [shared resolution design](architecture/triage-verifier-enhancement.md#25-evidence-obligation-and-resolution),
   `src/appsec_review/review/cells.py`, `src/appsec_review/observability/findings/coverage_adapter.py`.
+
+### T-157 — Declare language and applicability metadata for intelligence matrices
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** dataset declarations do not bind outputs to languages, most producer language
+  selectors are not exposed by the typed inventory, and several tool input selectors use formats
+  or predicates rather than source-language lists. A configured producer language or an accepted file suffix cannot
+  establish per-dataset coverage or a run/package-scoped review capability.
+- **Scope:** make those boundaries explicit in authoritative producer and tool-input contracts,
+  then project them into the documentation matrices without inferring support from names or
+  prose. Retain the distinction between declared input compatibility, configured producer
+  candidates, actual publication, and issued review capabilities. User decision on 2026-11-13:
+  intentional source-backed not-applicable cells are populated states, while missing or
+  unsupported cells require a named TODO gap. Preserve protected payloads and the separate
+  OWASP store; do not grant new access merely to fill a matrix cell. Existing source declarations
+  are not changed by the documentation program.
+- **Done when:** focused tests cover each declared applicability boundary against its owning
+  selector or producer contract, every bucket/language pair is represented without guessed
+  coverage, and remaining unknown cells name an explicit accepted limit or unresolved item.
+- **Refs:** T-129, T-147, `docs/intelligence-buckets.json`,
+  `scripts/docs_matrices.py`, `src/appsec_review/runtime/datasets.py`,
+  `src/appsec_review/tool_inputs.py`, `src/appsec_review/review/capability.py`,
+  `tests/docs/test_intelligence_buckets.py`.
 
 ## Legacy backlog
 

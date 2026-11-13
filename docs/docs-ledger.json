@@ -1030,6 +1030,38 @@
       "decision_record": false,
       "disposition": "generated",
       "kind": "generated",
+      "path": "docs/generated/matrix-bucket-availability.json",
+      "reason": "Regenerate every bucket/language cell and producer/dataset declaration without claiming run coverage.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-bucket-availability.md",
+      "reason": "Regenerate the seven-column declaration summary while retaining named gaps and source-backed non-applicability.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-tool-bucket.json",
+      "reason": "Regenerate the complete canonical-tool classification and declared input/binding matrix.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-tool-bucket.md",
+      "reason": "Regenerate the bounded Markdown summary of tool classification, bindings and gaps.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
       "path": "docs/generated/walk-index.md",
       "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
       "subsystem": "testing and operations"
@@ -1041,6 +1073,14 @@
       "path": "docs/handoffs/2026-10-09-build-execution-capture-restart.md",
       "reason": "Preserve the dated build-capture handoff as history, never as current execution authority.",
       "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/intelligence-buckets.json",
+      "reason": "Keep the authored primary-purpose bucket definitions and exact tool/dataset assignments as the taxonomy source.",
+      "subsystem": "runtime interchange"
     },
     {
       "decision_record": true,

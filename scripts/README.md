@@ -35,6 +35,15 @@ markers around the preserved text. Those markers do not exempt its links. Missin
 archive citations are separately reported under [T-148](../docs/TODO.md); new broken links are
 not accepted as archive exceptions.
 
+`docs/intelligence-buckets.json` assigns one primary-purpose bucket to each canonical catalog
+tool and dataset output kind. The generator validates complete, unique assignments before
+writing the tool and availability matrices, in Markdown and JSON. Composite outputs retain
+their original schema, stage, sensitivity and authority; bucket membership never grants access.
+The full JSON includes every bucket/language pair and separate producer/dataset declarations.
+Source-backed not-applicable states are distinct from missing information, which names
+[T-147](../docs/TODO.md) or [T-157](../docs/TODO.md). Configured candidates, input compatibility
+and registry eligibility are not observed execution, language coverage or issued capabilities.
+
 Operator scripts for the review host. Every script exists as a bash script (`<name>.sh`, Linux and
 WSL) and a PowerShell twin (`<name>.ps1`) with the same options (`--kebab-case` in bash,
 `-PascalCase` in PowerShell). Run any of them with `--help` / `-Help` for the full option list.

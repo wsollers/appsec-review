@@ -31,6 +31,9 @@ SOURCES = (
     "src/appsec_review/orchestration/topology.py",
     "src/appsec_review/orchestration/dagster/adapter.py",
 )
+MATRIX_SOURCES = (*SOURCES, "docs/intelligence-buckets.json",
+                  "src/appsec_review/tool_inputs.py", "src/appsec_review/jobs/cataloging.py",
+                  "src/appsec_review/review/capability.py")
 INDEX_PATHS = {
     "architecture": "docs/architecture/README.md",
     "operations": "docs/operations/README.md",
@@ -148,7 +151,7 @@ def source_identifiers(root: Path) -> tuple[set[str], set[str]]:
         cwd=root, capture_output=True, text=True, check=True, timeout=5,
     ).stdout.split("\0")
     paths = sorted(set(tracked) | {
-        "scripts/documentation.py", "tests/acceptance_review_stages.py",
+        "scripts/documentation.py", "scripts/docs_matrices.py", "tests/acceptance_review_stages.py",
     })
     for relative in paths:
         path = root / relative
@@ -316,7 +319,9 @@ def build_inventory(root: Path = ROOT) -> dict:
     }
     bucket_path = root / "docs/intelligence-buckets.json"
     if bucket_path.exists():
-        result["intelligence_buckets"] = json.loads(bucket_path.read_text(encoding="utf-8"))
+        from scripts.docs_matrices import load_buckets
+        result["intelligence_buckets"] = load_buckets(bucket_path)
+        result["tool_policy"] = plain(config.tools)
     if source_hashes(root) != before:
         raise RuntimeError("documentation sources changed during generation; retry at a stable boundary")
     return result
@@ -445,14 +450,17 @@ def authored_documents(root: Path) -> dict[str, str]:
             and row["disposition"] != "generated"}
 
 
+def json_view(document: dict, source_notice: str) -> str:
+    body = json.dumps({key: value for key, value in document.items() if key != "generated_from"},
+                      indent=2, sort_keys=True)
+    return '{ "generated_from": ' + json.dumps(source_notice) + ",\n" + body[2:] + "\n"
+
+
 def render(root: Path, inventory: dict) -> dict[str, str]:
     import posixpath
 
     commit = json.loads((root / "docs/docs-sync.json").read_text(encoding="utf-8"))["synced_commit"]
-    body = json.dumps({key: value for key, value in inventory.items() if key != "generated_from"},
-                      indent=2, sort_keys=True)
-    files = {INVENTORY: '{ "generated_from": ' + json.dumps(inventory["generated_from"]) + ",\n"
-             + body[2:] + "\n"}
+    files = {INVENTORY: json_view(inventory, inventory["generated_from"])}
     documents = authored_documents(root)
     assignments = inventory["guidance_assignments"]
     lines = [f"<!-- {notice()} -->", "# Model guidance registry", "",
@@ -487,6 +495,20 @@ def render(root: Path, inventory: dict) -> dict[str, str]:
             )
         documents[path] = files[path]
     documents[GUIDANCE] = files[GUIDANCE]
+    if "intelligence_buckets" in inventory:
+        from scripts.docs_matrices import build_matrices, matrix_documents, matrix_markdown
+        todo_ids = set(re.findall(r"^### (T-\d{3}) ", (root / "docs/TODO.md").read_text(), re.M))
+        taxonomy = inventory["intelligence_buckets"]
+        matrices = build_matrices(inventory, taxonomy, todo_ids)
+        for path, document in matrix_documents(matrices, taxonomy, inventory["tool_policy"]).items():
+            files[path] = json_view(document, notice(MATRIX_SOURCES))
+        for path, body in matrix_markdown(matrices).items():
+            title = body.splitlines()[0].removeprefix("# ")
+            files[path] = with_frontmatter(
+                metadata(title, "generated", "runtime interchange", commit),
+                f"\n<!-- {notice(MATRIX_SOURCES)} -->\n" + body,
+            )
+            documents[path] = files[path]
     for kind, path in INDEX_PATHS.items():
         documents[path] = with_frontmatter(
             metadata(f"{kind.title()} index", "generated", "testing and operations", commit), "")
@@ -516,6 +538,14 @@ def render(root: Path, inventory: dict) -> dict[str, str]:
         "The inventory describes the checked-in dev recipe, not host bindings or a completed run.",
         f"Undeclared task bindings are named under [{GAP_ID}](TODO.md).", "",
     ]
+    if "intelligence_buckets" in inventory:
+        root_lines += [
+            "## Intelligence buckets", "",
+            "[Bucket definitions and assignments](intelligence-buckets.json), "
+            "[tool matrix](generated/matrix-tool-bucket.md), and "
+            "[availability matrix](generated/matrix-bucket-availability.md).",
+            "These are declaration inventories, not evidence that a review ran or achieved coverage.", "",
+        ]
     files["docs/README.md"] = with_frontmatter(
         metadata("Documentation", "generated", "overview", commit), "\n".join(root_lines),
     )
