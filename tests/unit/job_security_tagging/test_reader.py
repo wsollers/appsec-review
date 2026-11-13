@@ -164,6 +164,9 @@ def test_publication_creates_resolving_site_entity_without_extra_authority(tmp_p
     assert subject.identity.value == records[0]["subject"]["logical_id"]
     assert subject.location == tag.location
     assert subject.location.producer_location["assignment_evidence"] == row.identity
+    assert subject.payload == {"subject": records[0]["subject"]}
+    assert tag.payload["family"] == "code_facts" and tag.payload["basis"] == "invoked"
+    assert tag.payload["evidence"][0]["ref"] == row.identity
     assert len(relations) == 2 and any(item.target_id == subject.identity.value for item in relations)
     project = next(item for item in entities if item.identity.kind == EntityKind.PROJECT)
     assert project.location is None

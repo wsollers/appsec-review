@@ -19,6 +19,7 @@ from appsec_review.jobs.cataloging import (
     MANIFEST_ECOSYSTEMS, MANIFEST_SUFFIX_ECOSYSTEMS, SOURCE_ECOSYSTEMS, manifest_ecosystem,
 )
 from appsec_review.jobs.component_ownership import Ownership, resolve_ownership
+from appsec_review.graph.catalog import LANGUAGE_ALIASES
 from appsec_review.graph.contract import fact_identity, validate_payload
 from appsec_review.graph.crosscheck import SourceFile
 from appsec_review.retrieval import EntityKind, LogicalIdentity, SourceLocation
@@ -362,9 +363,11 @@ def collect_graph_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voca
             continue
         field = "source_class" if row.kind == "entry_point" else "sink_class"
         klass = row.payload["result"][field]
+        language = LANGUAGE_ALIASES.get(row.payload["scope"]["language"].strip().lower())
         matched = [rule for rule in rules.graph_rules
                    if rule["family"] == row.kind and klass in rule["classes"]
-                   and ("languages" not in rule or row.payload["scope"]["language"] in rule["languages"])]
+                   and ("languages" not in rule or language is not None and language in {
+                       LANGUAGE_ALIASES.get(name.strip().lower()) for name in rule["languages"]})]
         if not matched:
             gap("unmapped_class", f"{row.kind}/{klass}: no semantics-preserving vocabulary mapping")
             continue
