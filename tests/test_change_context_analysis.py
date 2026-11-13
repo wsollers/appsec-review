@@ -25,7 +25,9 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.retrieval import EntityKind, LogicalIdentity, RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import atomic_json, file_sha256
-from tests.test_source_history_analysis import GIT, ROOT, LocalDocker, commit, configured, git, history_job, write
+from tests.integration.job_source_history_analysis.test_analysis import (
+    GIT, ROOT, LocalDocker, commit, configured, git, history_job, write,
+)
 
 
 DAY = 86_400

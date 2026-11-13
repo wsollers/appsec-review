@@ -319,7 +319,9 @@ def test_expected_dispositions_do_not_trip_latch(tmp_path, disposition):
                 client.fetch({"host": "github.com", "owner": "example", "name": "example"})
             assert error.value.kind == "not_found"
         elif disposition == "missing_history":
-            from tests.test_source_history_analysis import test_missing_history_is_an_explicit_skip_not_a_clean_result
+            from tests.integration.job_source_history_analysis.test_analysis import (
+                test_missing_history_is_an_explicit_skip_not_a_clean_result,
+            )
             test_missing_history_is_an_explicit_skip_not_a_clean_result(tmp_path)
         else:
             from tests.review.test_cells import ScriptedInfer, capability, final, retrieve, run

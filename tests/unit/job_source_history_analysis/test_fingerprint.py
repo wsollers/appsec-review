@@ -13,7 +13,7 @@ def _artifact(name):
 
 @pytest.fixture
 def inputs():
-    config = load_config(Path(__file__).parents[1] / "appsec-review.toml")
+    config = load_config(Path(__file__).parents[3] / "appsec-review.toml")
     return {
         "snapshot": "snapshot",
         "source_identity": "b" * 64,

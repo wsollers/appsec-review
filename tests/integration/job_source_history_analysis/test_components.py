@@ -1,3 +1,4 @@
+"""Pre-walk suite pending replacement: composed acquisition and cross-job history scenarios."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -21,7 +22,9 @@ from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.units import UnitContext
 from appsec_review.runtime.job import JobContext
 from appsec_review.storage import atomic_json, file_sha256
-from tests.test_source_history_analysis import LocalDocker, ROOT, T0, commit, configured, git, history_job, write
+from tests.integration.job_source_history_analysis.test_analysis import (
+    LocalDocker, ROOT, T0, commit, configured, git, history_job, write,
+)
 
 
 def repository(root: Path) -> str:
@@ -235,35 +238,6 @@ def test_direct_target_discovery_is_bounded_and_nonexecuting(tmp_path: Path, mon
                          api_base="https://api.github.com")
 
 
-@pytest.mark.parametrize(("url", "api", "expected"), [
-    ("https://github.com/acme/widget.git", "https://api.github.com", "acme/widget"),
-    ("git@github.com:acme/widget.git", "https://api.github.com", "acme/widget"),
-    ("ssh://git@github.com/acme/widget.git", "https://api.github.com", "acme/widget"),
-    ("https://github.enterprise/acme/widget.git", "https://github.enterprise/api/v3", "acme/widget"),
-    ("https://github.com.attacker.invalid/acme/widget", "https://api.github.com", None),
-    ("https://github.com@attacker.invalid/acme/widget", "https://api.github.com", None),
-    ("https://token@github.com/acme/widget", "https://api.github.com", None),
-    ("https://github.com/acme/../widget", "https://api.github.com", None),
-    ("https://github.com:444/acme/widget", "https://api.github.com", None),
-    ("https://[invalid/acme/widget", "https://api.github.com", None),
-    ("ext::helper", "https://api.github.com", None),
-])
-def test_github_discovery_never_selects_target_endpoints(url, api, expected):
-    assert github_repository(url, api) == expected
-
-
-def test_github_redirects_and_metadata_symlinks_are_refused(tmp_path: Path):
-    assert _NoRedirect().redirect_request(None, None, 302, "", {}, "https://attacker.invalid") is None
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    atomic_json(outside / "record.json", {"records": {}})
-    (tmp_path / "link").symlink_to(outside, target_is_directory=True)
-    with pytest.raises(ValueError, match="symlinks"):
-        read_pinned(tmp_path, "link/record.json", file_sha256(outside / "record.json"))
-    with pytest.raises(ValueError, match="unsafe"):
-        read_pinned(tmp_path, "../record.json", "a" * 64)
-
-
 @pytest.mark.parametrize(("enabled", "credential", "reason"), [
     ("auto", None, "github_credentials_missing"),
     (False, "fixture-token", "github_enrichment_disabled"),
@@ -326,37 +300,6 @@ def test_nested_catalog_source_metadata_is_part_of_resume_identity(tmp_path: Pat
     assert history_identity(target) == cheap
     assert job.probe_input_identity(target, run) != before
     assert history_identity(target, ("../outside",)) != cheap
-
-
-def test_failed_source_lane_is_reported_without_discarding_its_peer(tmp_path: Path):
-    from types import SimpleNamespace
-    from appsec_review.jobs.source_lanes import per_source
-    events = EventLog(tmp_path / "events.jsonl")
-    first = {"by_source": {"bad": {"source": {"source_id": "bad"}},
-                            "good": {"source": {"source_id": "good"}}}}
-    unit = UnitContext(SimpleNamespace(events=events), "acquire.git_history", "acquire", "git_history",
-                       tmp_path / "unit", {"resolve_sources.resolve_history_source": first})
-    called = []
-
-    def handler(context):
-        source = context.output("resolve_sources.resolve_history_source")["source"]["source_id"]
-        called.append(source)
-        if source == "bad":
-            raise OSError("fixture producer failed")
-        return {"artifact": {"path": "retained"}, "gaps": [], "terminal_status": "SUCCEEDED"}
-
-    output = per_source(handler, "resolve_sources.resolve_history_source")(unit)
-    assert called == ["bad", "good"]
-    assert output["by_source"]["bad"]["source_error"] is True
-    assert output["by_source"]["good"]["artifact"] == {"path": "retained"}
-    assert output["gaps"] == ["bad:source_failed:acquire.git_history:OSError"]
-    called.clear()
-    next_unit = replace(unit, unit_id="acquire.normalize_changes",
-                        outputs={**unit.outputs, "acquire.git_history": output})
-    after = per_source(handler, "resolve_sources.resolve_history_source")(next_unit)
-    assert called == ["good"]
-    assert after["by_source"]["bad"]["reason"] == "upstream_source_failed"
-    assert "SOURCE_LANE_FAILED" in (tmp_path / "events.jsonl").read_text()
 
 
 def test_changed_component_manifest_is_a_gap_without_falling_back_to_target_remote(tmp_path: Path):

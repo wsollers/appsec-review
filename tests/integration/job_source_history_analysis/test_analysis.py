@@ -1,3 +1,4 @@
+"""Pre-walk suite pending replacement: graph, executor and host-Git history scenarios."""
 from __future__ import annotations
 
 import ast
@@ -42,7 +43,7 @@ from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, file_sha256
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 DAY = 86_400
 T0 = 1_700_000_000
 GIT = shutil.which("git")
@@ -637,67 +638,6 @@ def test_symbols_stop_on_second_invocation_oom_and_preserve_receipt(tmp_path: Pa
     assert not (unit.unit_root / "artifacts/symbols.json").exists()
 
 
-def test_parsers_tolerate_hostile_paths_and_message_bytes() -> None:
-    head = "a" * 40
-    parent = "b" * 40
-    data = (b"\x01" + head.encode() + b"\x1f" + parent.encode() + b"\x1f10\x1f20\x1fx\x1f@evil\0\n"
-            b"1\t2\tdir/tab\there\nnew\0" b"3\t4\t\0old name\0new\x01name\0" b"-\t-\tbin.dat\0"
-            b"\x01" + parent.encode() + b"\x1f\x1f5\x1f6\x1fone@example.test\0")
-    commits = parse_log(data)
-    assert [item["commit"] for item in commits] == [head, parent]
-    assert commits[0]["author_key"] == "x\x1f@evil"
-    assert commits[0]["files"][0]["path"] == "dir/tab\there\nnew"
-    assert commits[0]["files"][1] == {"path": "new\x01name", "renamed_from": "old name", "added": 3, "deleted": 4,
-                                      "binary": False}
-    assert commits[0]["files"][2]["binary"] is True
-    assert commits[1]["parents"] == [] and commits[1]["files"] == []
-    messages, gaps = parse_messages(head.encode() + b"\0body\0with " + parent.encode() + b"\0 nul\n\0" +
-                                    parent.encode() + b"\0second\n\0", [head, parent])
-    assert not gaps
-    assert messages[head] == b"body\0with " + parent.encode() + b"\0 nul\n"
-    assert messages[parent] == b"second\n"
-    porcelain = (f"{head} 1 1 2\ncommitter-time 100\nfilename f\n\tline\n{head} 2 2\n\tline2\n").encode()
-    assert parse_blame(porcelain) == [100, 100]
-
-
-def test_window_classification_and_ranking_are_deterministic() -> None:
-    commits = [
-        {"commit": "c" * 40, "parents": ["b" * 40], "author_time": 0, "commit_time": T0, "author_key": "a",
-         "files": [{"path": "new.py", "renamed_from": "old.py", "added": 1, "deleted": 1, "binary": False}]},
-        {"commit": "b" * 40, "parents": ["a" * 40], "author_time": 0, "commit_time": T0 + 50, "author_key": "b",
-         "files": [{"path": "old.py", "renamed_from": None, "added": 5, "deleted": 0, "binary": False}]},
-        {"commit": "a" * 40, "parents": [], "author_time": 0, "commit_time": T0 - 400 * DAY, "author_key": "a",
-         "files": [{"path": "old.py", "renamed_from": None, "added": 9, "deleted": 0, "binary": False}]},
-    ]
-    normalized = normalize(commits, current_paths={"new.py": {}}, shallow=(), window_months=6, max_changes=10,
-                           bulk_threshold=50)
-    assert [item["change_id"] for item in normalized["changes"]] == ["c" * 40, "b" * 40]
-    assert normalized["changes"][1]["files"][0]["current_path"] == "new.py"
-    assert normalized["observations"] == ["timestamp_anomaly:1"]
-    assert normalized["changes"][1]["effective_time"] == T0
-    truncated = normalize(commits, current_paths={}, shallow=(), window_months=120, max_changes=2, bulk_threshold=50)
-    assert truncated["gaps"] == ["history_window_truncated"]
-    shallow = normalize(commits[:2], current_paths={}, shallow=("b" * 40,), window_months=6, max_changes=10,
-                        bulk_threshold=50)
-    assert shallow["gaps"] == ["shallow_history"]
-    classes = classify(normalized["changes"], {"c" * 40: b'Revert "x"\n\nThis reverts commit ' + b"b" * 40 + b".\n",
-                                               "b" * 40: b"Add parser\n\nSee GHSA-abcd-efgh-jkmp and CWE-79"},
-                       {"b" * 40: {"labels": ["bug"]}}, known_commits=["b" * 40, "c" * 40],
-                       fix_labels=["bug"], security_labels=["security"], formatting_tolerance=0.1)
-    assert classes["c" * 40]["revert"] == "exact" and classes["b" * 40]["reverted_by"] == "c" * 40
-    assert classes["b" * 40]["fix"] == "github_label"
-    assert classes["b" * 40]["security_fix"] == "heuristic"
-    assert classes["b" * 40]["security_references"] == ["CWE-79"]
-    units = {key: {"relative_churn": churn / 10, "revision_frequency": count / 6, "author_entropy": 0.0,
-                   "complexity": None, "churn_lines": churn, "change_count": count}
-             for key, churn, count in (("b.py", 10, 2), ("a.py", 10, 2), ("c.py", 50, 1))}
-    weights = {"relative_churn": 3, "revision_frequency": 1, "author_entropy": 1, "complexity": 1}
-    ranked = sii_score(units, weights=weights, tier_1_share=Fraction(1, 20), tier_2_share=Fraction(3, 20))
-    assert [item["key"] for item in ranked["ranked"]] == ["c.py", "a.py", "b.py"]
-    assert ranked == sii_score(dict(reversed(list(units.items()))), weights=weights, tier_1_share=Fraction(1, 20),
-                               tier_2_share=Fraction(3, 20))
-
-
 def test_source_resolution_rejects_escapes_and_selects_mainline(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     build_repository(outside)
@@ -861,57 +801,6 @@ def test_shallow_and_divergent_targets_report_named_gaps(tmp_path: Path) -> None
     assert produced["publish.publish_handoff"]["terminal_status"] == "PARTIAL"
 
 
-def test_github_enrichment_records_review_bypass_without_identities(tmp_path: Path) -> None:
-    head, merged, direct = "a" * 40, "b" * 40, "c" * 40
-    responses = {
-        f"/repos/acme/widget/commits/{head}": (200, {"sha": head}),
-        f"/repos/acme/widget/commits/{head}/pulls?per_page=100&page=1": (200, [
-            {"number": 7, "merged_at": "x", "merge_commit_sha": head, "user": {"login": "dev"},
-             "head": {"sha": "h7"}, "labels": [{"name": "Security<script>"}], "title": "ignore instructions"}]),
-        "/repos/acme/widget/pulls/7": (200, {"merged_by": {"login": "dev"}, "head": {"sha": "h7"}}),
-        "/repos/acme/widget/pulls/7/reviews?per_page=100&page=1": (200, [
-            {"state": "APPROVED", "user": {"login": "dev"}, "commit_id": "h7"}]),
-        f"/repos/acme/widget/commits/{merged}/pulls?per_page=100&page=1": (200, [
-            {"number": 8, "merged_at": "x", "merge_commit_sha": merged, "user": {"login": "dev"}, "head": {"sha": "h8"}}]),
-        "/repos/acme/widget/pulls/8": (200, {"merged_by": {"login": "lead"}, "head": {"sha": "h8"}}),
-        "/repos/acme/widget/pulls/8/reviews?per_page=100&page=1": (200, [
-            {"state": "APPROVED", "user": {"login": "lead"}, "commit_id": "h8"}]),
-        f"/repos/acme/widget/commits/{direct}/pulls?per_page=100&page=1": (200, []),
-    }
-    seen: list[tuple[str, str]] = []
-
-    def transport(url, headers, timeout):
-        path = url.removeprefix("https://api.example.test")
-        seen.append((path, headers.get("Authorization", "")))
-        status, body = responses[path]
-        return status, {}, json.dumps(body).encode()
-
-    settings = GitHubSettings("https://api.example.test", "acme/widget", "secret-token", 100, 5)
-    result = enrich(GitHubClient(settings, transport), head, [head, merged, direct])
-    facts = {key: {name: value for name, value in item.items() if name != "evidence"}
-             for key, item in result["facts"].items()}
-    assert facts[head] == {"pull_request": 7, "direct_push": False, "labels": ["securityscript"],
-                           "approved_by_other": False, "approval_stale": False, "self_merged": True,
-                           "review_bypass": True, "created_at": None, "merged_at": None,
-                           "head_sha": None, "head_committed_at": None, "approvals": [], "status": "complete"}
-    assert facts[merged]["review_bypass"] is False
-    assert facts[direct] == {"pull_request": None, "direct_push": True, "review_bypass": True,
-                             "labels": [], "status": "complete"}
-    assert result["facts"][head]["evidence"]["pulls"]["complete"] is True
-    assert all(auth == "Bearer secret-token" for _, auth in seen)
-    assert "dev" not in json.dumps(result) and "ignore" not in json.dumps(result)
-
-    def limited(url, headers, timeout):
-        if url.endswith(f"/commits/{head}"):
-            return 200, {}, json.dumps({"sha": head}).encode()
-        return 403, {"X-RateLimit-Remaining": "0"}, b"{}"
-
-    throttled = enrich(GitHubClient(settings, limited), head, [head, merged])
-    assert throttled["gaps"] == ["github_rate_limited"] and throttled["retriable"] is True
-    with pytest.raises(ValueError):
-        GitHubSettings("http://api.example.test", "acme/widget", None, 1, 1)
-
-
 def test_github_enrichment_flows_through_the_job(tmp_path: Path, monkeypatch) -> None:
     config = configured(tmp_path, github=True)
     target = tmp_path / "target"
@@ -970,40 +859,6 @@ class ChunkReader:
 
 def _header(commit: str, parent: str = "") -> bytes:
     return b"\x01" + commit.encode() + b"\x1f" + parent.encode() + b"\x1f10\x1f20\x1fdev@example.test\0"
-
-
-def test_history_parsers_read_incrementally_with_bounded_records() -> None:
-    commits = [f"{index:040x}" for index in range(1, 4)]
-    log = b"".join(_header(commit) + b"".join(f"1\t1\tdir/file-{commit[-1]}-{n}.py\0".encode() for n in range(5000))
-                   for commit in commits)
-    assert len(log) > 4 * CHUNK_BYTES
-    reader = ChunkReader(log)
-    parsed = parse_log_stream(reader, max_record_bytes=256, max_changed_paths=15000)
-    assert [len(item["files"]) for item in parsed] == [5000, 5000, 5000]
-    assert len(reader.sizes) > 4 and max(reader.sizes) <= CHUNK_BYTES
-    with pytest.raises(HistoryBoundError) as paths:
-        parse_log_stream(ChunkReader(log), max_record_bytes=256, max_changed_paths=14999)
-    assert paths.value.gap == "git_changed_path_bound_reached"
-    long_path = _header(commits[0]) + b"1\t1\t" + b"p" * (3 * CHUNK_BYTES) + b"\0"
-    with pytest.raises(HistoryBoundError) as record:
-        parse_log_stream(ChunkReader(long_path), max_record_bytes=4096, max_changed_paths=10)
-    assert record.value.gap == "git_record_bound_reached"
-
-    body = b"fix: " + b"x\0y" * (CHUNK_BYTES)  # NULs and size well beyond one chunk
-    messages_data = (commits[0].encode() + b"\0" + body + b"\0" + commits[1].encode() + b"\0short\n\0" +
-                     commits[2].encode() + b"\0last\n\0")
-    reader = ChunkReader(messages_data)
-    messages, gaps, oversized = parse_messages_stream(reader, commits, max_message_bytes=1024)
-    assert max(reader.sizes) <= CHUNK_BYTES
-    assert oversized == [commits[0]] and gaps == ["commit_message_bound_reached"]
-    assert messages[commits[0]] == body[:1024] and messages[commits[1]] == b"short\n"
-    assert messages[commits[2]] == b"last\n"
-    assert parse_messages_stream(ChunkReader(messages_data), commits, max_message_bytes=len(body))[0][commits[0]] == body
-    classes = classify([{"change_id": commit, "files": []} for commit in commits], messages, {}, known_commits=commits,
-                       fix_labels=[], security_labels=[], formatting_tolerance=0.1,
-                       incomplete_messages=oversized)
-    assert classes[commits[0]]["message_complete"] is False and classes[commits[0]]["fix"] == "heuristic"
-    assert classes[commits[1]]["message_complete"] is True
 
 
 def _git_limit(name: str, value: int) -> dict[str, str]:
@@ -1199,120 +1054,6 @@ def _reviews(count: int, *, start: int = 1, approver: str | None = None, at: int
 def _pull(number: int, *, merge: str | None = None) -> dict:
     return {"number": number, "merged_at": "x" if merge else None, "merge_commit_sha": merge,
             "user": {"login": "author"}, "head": {"sha": "h7"}}
-
-
-def test_github_pagination_follows_every_page_and_finds_late_approval() -> None:
-    pulls = [[_pull(number) for number in range(1, 6)], [_pull(number) for number in (6, 8, 9, 10, 13)],
-             [_pull(11), _pull(7, merge=HEAD), _pull(12), _pull(3)]]
-    reviews = [_reviews(100), _reviews(60, start=101, approver="lead", at=150)]
-    reviews[1].append(dict(reviews[0][3]))  # a record repeated across pages
-    api = Paged({f"/repos/acme/widget/commits/{HEAD}/pulls": pulls, "/repos/acme/widget/pulls/7/reviews": reviews})
-    result = enrich(GitHubClient(_settings(per_page=5), api), HEAD, [HEAD])
-    assert result["gaps"] == [] and result["indeterminate_count"] == 0
-    fact = result["facts"][HEAD]
-    assert fact["pull_request"] == 7 and fact["direct_push"] is False
-    assert fact["approved_by_other"] is True and fact["review_bypass"] is False, "approval on page 2 must count"
-    pages = fact["evidence"]["pulls"]["pages"]
-    assert [item["page"] for item in pages] == [1, 2, 3] and fact["evidence"]["pulls"]["record_count"] == 13
-    assert fact["evidence"]["pulls"]["duplicate_count"] == 1
-    assert all(len(item["response_sha256"]) == 64 for item in pages)
-    assert fact["evidence"]["reviews"]["record_count"] == 160 and fact["evidence"]["reviews"]["duplicate_count"] == 1
-    assert fact["evidence"]["reviews"]["complete"] is True
-    assert result["pagination"] == {"identity": "appsec-review/github-link-pagination/1", "per_page": 5,
-                                    "max_pages": 100, "max_records": 10000}
-    assert "lead" not in json.dumps(result) and "author" not in json.dumps(result)
-    # Reordering PR records on a page does not change which PR is chosen.
-    pulls[2].reverse()
-    again = enrich(GitHubClient(_settings(per_page=5), Paged(api.collections)), HEAD, [HEAD])
-    assert again["facts"][HEAD]["pull_request"] == 7
-
-
-@pytest.mark.parametrize(("link", "gap"), [
-    (lambda base, page, size, total: f'<https://evil.test{base}?per_page={size}&page={page + 1}>; rel="next"',
-     "github_pagination_malformed"),
-    (lambda base, page, size, total: f'<{API}/repos/acme/other/pulls/7/reviews?per_page={size}&page=2>; rel="next"',
-     "github_pagination_malformed"),
-    (lambda base, page, size, total: f'<{API}{base}?per_page={size}&page={page + 2}>; rel="next"',
-     "github_pagination_malformed"),
-    (lambda base, page, size, total: f'<{API}{base}?per_page={size}&page=2&since=x>; rel="next"',
-     "github_pagination_malformed"),
-    (lambda base, page, size, total: f'<{API}{base}?per_page={size}&page=abc>; rel="next"',
-     "github_pagination_malformed"),
-    (lambda base, page, size, total: f'<{API}{base}?per_page={size}&page={page}>; rel="next"',
-     "github_pagination_cycle"),
-    (lambda base, page, size, total: f'<{API}{base}?per_page={size}&page=1>; rel="next"' if page == 2 else
-     f'<{API}{base}?per_page={size}&page=2>; rel="next"', "github_pagination_cycle"),
-])
-def test_github_malformed_or_cyclic_cursors_leave_reviews_indeterminate(link, gap) -> None:
-    reviews = [_reviews(100), _reviews(10, start=101, approver="lead", at=105), _reviews(1, start=200)]
-    api = Paged({f"/repos/acme/widget/commits/{HEAD}/pulls": [[_pull(7, merge=HEAD)]],
-                 "/repos/acme/widget/pulls/7/reviews": reviews},
-                link=lambda base, page, size, total: None if base.endswith("/pulls") else link(base, page, size, total))
-    result = enrich(GitHubClient(_settings(), api), HEAD, [HEAD])
-    fact = result["facts"][HEAD]
-    assert gap in result["gaps"] and "github_review_history_incomplete" in result["gaps"]
-    assert fact["review_bypass"] is None and fact["approved_by_other"] is None and fact["status"] == "indeterminate"
-    assert fact["direct_push"] is False and fact["pull_request"] == 7
-    assert fact["evidence"]["reviews"]["complete"] is False and fact["evidence"]["reviews"]["gap"] == gap
-    assert len(api.seen) < 10, "a cyclic cursor must not loop"
-
-
-def test_github_page_failure_or_rate_limit_after_first_page_is_an_explicit_gap() -> None:
-    pulls_path = f"/repos/acme/widget/commits/{HEAD}/pulls"
-    collections = {pulls_path: [[_pull(1)], [_pull(2)]], "/repos/acme/widget/pulls/7/reviews": [[], []]}
-    limited = Paged(collections, fail={f"{pulls_path}?per_page=1&page=2": (403, {"X-RateLimit-Remaining": "0"}, b"{}")})
-    result = enrich(GitHubClient(_settings(per_page=1), limited), HEAD, [HEAD, "b" * 40])
-    fact = result["facts"][HEAD]
-    assert fact["direct_push"] is None and fact["review_bypass"] is None, "no direct-push conclusion from page 1"
-    assert result["gaps"] == ["github_rate_limited"] and result["retriable"] is True
-    assert "b" * 40 not in result["facts"] and not any("b" * 40 in path for path in limited.seen)
-    failing = Paged(collections, fail={f"{pulls_path}?per_page=1&page=2": (502, {}, b"oops")})
-    result = enrich(GitHubClient(_settings(per_page=1), failing), HEAD, [HEAD])
-    assert result["facts"][HEAD]["direct_push"] is None and result["gaps"] == ["github_page_unavailable"]
-    assert result["retriable"] is True
-
-
-def test_github_bound_exhaustion_never_reports_bypass_or_direct_push() -> None:
-    pulls_path = f"/repos/acme/widget/commits/{HEAD}/pulls"
-    reviews_path = "/repos/acme/widget/pulls/7/reviews"
-    no_pr = Paged({pulls_path: [[_pull(1)], [_pull(2)], []]})
-    result = enrich(GitHubClient(_settings(per_page=1, max_pages=2), no_pr), HEAD, [HEAD])
-    assert result["facts"][HEAD]["direct_push"] is None and result["facts"][HEAD]["review_bypass"] is None
-    assert result["gaps"] == ["github_pagination_bound_reached"]
-    many_reviews = Paged({pulls_path: [[_pull(7, merge=HEAD)]],
-                          reviews_path: [_reviews(3), _reviews(3, start=4, approver="lead", at=6)]})
-    result = enrich(GitHubClient(_settings(per_page=3, max_records=4), many_reviews), HEAD, [HEAD])
-    assert result["facts"][HEAD]["review_bypass"] is None
-    assert set(result["gaps"]) == {"github_pagination_bound_reached", "github_review_history_incomplete"}
-    budget = Paged({pulls_path: [[_pull(7, merge=HEAD)]], reviews_path: [_reviews(3), _reviews(3, start=4)]})
-    result = enrich(GitHubClient(_settings(per_page=3, max_requests=4), budget), HEAD, [HEAD])
-    assert result["facts"][HEAD]["review_bypass"] is None
-    assert "github_request_budget_exhausted" in result["gaps"]
-    signals = compute_signals(
-        [{"change_id": HEAD, "effective_time": T0, "bulk": False, "author": "author-0001",
-          "files": [{"path": "a.py", "current_path": "a.py", "added": 1, "deleted": 0}]}], {}, result["facts"],
-        eligible={"a.py": {"line_count": 1}}, roots=[(".", "component:0001")], anchor_time=T0,
-        window_months=12, half_life_days=90, minor_author_share=0.05, fix_interval_days=30,
-        filters=FilterRules((), (), (), (), (), (), 0.05))
-    assert signals["files"]["a.py"]["review_bypass_count"] == 0
-    assert signals["files"]["a.py"]["review_bypass_unresolved_count"] == 1
-    assert signals["components"]["component:0001"]["review_bypass_unresolved_count"] == 1
-
-
-def test_github_budget_exhaustion_at_head_commit_is_indeterminate() -> None:
-    pulls_path = f"/repos/acme/widget/commits/{HEAD}/pulls"
-    reviews_path = "/repos/acme/widget/pulls/7/reviews"
-    api = Paged({pulls_path: [[_pull(7, merge=HEAD)]], reviews_path: [[]]})
-
-    def transport(url, headers, timeout):
-        if url == f"{API}/repos/acme/widget/pulls/7":
-            return 200, {}, json.dumps({"head": {"sha": "b" * 40}}).encode()
-        return api(url, headers, timeout)
-
-    result = enrich(GitHubClient(_settings(max_requests=4), transport), HEAD, [HEAD])
-    fact = result["facts"][HEAD]
-    assert fact["status"] == "indeterminate" and fact["review_bypass"] is None
-    assert "github_request_budget_exhausted" in result["gaps"]
 
 
 def test_github_pagination_inputs_bind_job_identity(tmp_path: Path) -> None:

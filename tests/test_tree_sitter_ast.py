@@ -216,7 +216,7 @@ def test_both_callers_share_metrics_and_ast_reuse_is_not_an_invocation(tmp_path:
     from appsec_review.jobs.job_tree_sitter_ast.job import _grammar_locks
     from appsec_review.jobs.job_tree_sitter_ast.scope_execution import parse_scope
     from appsec_review.observability import aggregate_run_metrics
-    from tests.test_source_history_analysis import LocalDocker, invoke_symbols, symbol_unit
+    from tests.integration.job_source_history_analysis.test_analysis import LocalDocker, invoke_symbols, symbol_unit
 
     unit = symbol_unit(tmp_path, {"python/app.py": ("Python", "def check():\n    return 1\n")})
     docker = LocalDocker()

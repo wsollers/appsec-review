@@ -9,7 +9,6 @@ from copy import deepcopy
 from dataclasses import replace
 import hashlib
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -21,7 +20,6 @@ from appsec_review.jobs.job_source_history_analysis import changelog, job as his
 from appsec_review.jobs.job_source_history_analysis.changelog import ChangelogLimits, PathBinder
 from appsec_review.jobs.job_source_history_analysis.settings import parse_settings
 from appsec_review.jobs.job_source_history_analysis.signals import classify_text
-from appsec_review.jobs.job_target_analysis_plan.planning import history_priority
 from appsec_review.observability import EventLog
 from appsec_review.retrieval import IndexBuilder
 from appsec_review.runtime import plan_jobs
@@ -29,7 +27,7 @@ from appsec_review.runtime.job import JobContext
 from appsec_review.runtime.units import UnitContext
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 FIXTURES = ROOT / "tests" / "fixtures" / "changelog_history"
 LIMITS = ChangelogLimits(max_files=16, max_file_bytes=1 << 20, max_entries=1000, max_line_bytes=4096,
                          max_paths_per_entry=100)
@@ -456,8 +454,8 @@ def test_file_count_bound_is_exact(tmp_path: Path) -> None:
     unit, handler = lane(tmp_path / "over", {**SOURCES, **logs}, bounds={"max_files": 2})
     output = handler(unit)
     assert [item["path"] for item in artifact(unit, output)["changelogs"]] == ["ChangeLog", "a/ChangeLog"]
-    assert ("truncated", "changelog_file_bound_reached: source:.: 1 files") in [
-        (gap["code"], gap["reason"]) for gap in output["gaps"]]
+    assert ("truncated", "source:.", "changelog_file_bound_reached: source:.: 1 files") in [
+        (gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]]
 
 
 def test_byte_bound_is_exact_and_the_unparsed_bytes_are_counted(tmp_path: Path) -> None:
@@ -470,8 +468,8 @@ def test_byte_bound_is_exact_and_the_unparsed_bytes_are_counted(tmp_path: Path) 
     output = handler(unit)
     record = artifact(unit, output)["changelogs"][0]
     assert (record["size_bytes"], record["parsed_bytes"]) == (2096, 2048) and output["entry_count"] == 3
-    assert ("truncated", "changelog_bytes_truncated: ChangeLog: 48 bytes") in [
-        (gap["code"], gap["reason"]) for gap in output["gaps"]]
+    assert ("truncated", "ChangeLog", "changelog_bytes_truncated: ChangeLog: 48 bytes") in [
+        (gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]]
 
 
 def test_changed_or_escaping_change_log_bytes_fail_the_unit(tmp_path: Path) -> None:
@@ -519,8 +517,8 @@ def test_a_failure_inside_the_unit_is_a_named_gap_without_target_text(tmp_path: 
         output = handler(unit)
         validate_unit_output(output, unit_id=UNIT, strict_gaps=True)
         assert output["terminal_status"] == "PARTIAL"
-        assert [(gap["code"], gap["reason"]) for gap in output["gaps"]] == [(
-            "producer_failed",
+        assert [(gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]] == [(
+            "producer_failed", f"source:{'api' if sources else '.'}",
             f"changelog_unit_failed: source:{'api' if sources else '.'}: 1 sources (RuntimeError)")]
         if sources:
             assert output["by_source"]["docs"]["terminal_status"] == "SKIPPED_NA", "one lane never kills another"
@@ -533,16 +531,18 @@ def test_a_failure_inside_the_unit_is_a_named_gap_without_target_text(tmp_path: 
         assert "secret" not in (unit.job.run_root / "events.jsonl").read_text(encoding="utf-8")
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root reads files regardless of their mode")
-def test_an_unreadable_change_log_is_a_gap_and_the_others_are_still_read(tmp_path: Path) -> None:
+def test_an_unreadable_change_log_is_a_gap_and_the_others_are_still_read(tmp_path: Path, monkeypatch) -> None:
     unit, handler = lane(tmp_path, {**SOURCES, "ChangeLog": fixture("gnu/ChangeLog"),
                                     "doc/ChangeLog": fixture("svn/ChangeLog")})
-    blocked = unit.job.target_root / "ChangeLog"
-    blocked.chmod(0)
-    try:
-        output = handler(unit)
-    finally:
-        blocked.chmod(0o644)
+    original = Path.open
+
+    def open_file(path, *args, **kwargs):
+        if path == unit.job.target_root / "ChangeLog":
+            raise PermissionError("fixture read denied")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_file)
+    output = handler(unit)
     validate_unit_output(output, unit_id=UNIT, strict_gaps=True)
     assert ("input_unavailable", "ChangeLog", "changelog_unreadable: ChangeLog: 1 files (PermissionError)") in [
         (gap["code"], gap["scope_id"], gap["reason"]) for gap in output["gaps"]]
@@ -666,16 +666,19 @@ def test_job_validator_requires_the_change_log_task_and_settings(tmp_path: Path)
     assert build_job().strict_gaps is False, "the job is still on the legacy gap list; this unit alone emits records"
 
 
-def test_plan_projection_drops_change_log_files_the_catalog_does_not_accept() -> None:
-    accepted = {"path": "src/auth.c", "sha256": "a" * 64, "rank": 1, "change_count": 2, "lifetime_change_count": 3,
-                "last_change_date": "2024-03-10", "fix_change_count": 1, "security_fix_change_count": 1,
-                "source": "changelog", "role": "primary", "source_id": "."}
-    history = {"ranking": {}, "changelog": {"role": "primary", "identity": changelog.IDENTITY, "files": [
-        accepted, {**accepted, "path": "src/gone.c"}, {**accepted, "path": "src/util.c", "sha256": "b" * 64}]}}
-    catalog = {"files": [{"path": "src/auth.c", "sha256": "a" * 64}, {"path": "src/util.c", "sha256": "c" * 64}],
-               "components": []}
-    priority = history_priority(history, catalog)
-    assert priority["status"] == "UNAVAILABLE" and priority["files"] == []
-    assert priority["changelog"] == {"status": "AVAILABLE", "source": "changelog", "role": "primary",
-                                     "identity": changelog.IDENTITY, "reason": None, "files": [accepted]}
-    assert history_priority(None, catalog)["changelog"]["status"] == "UNAVAILABLE"
+def test_changelog_handler_passes_catalog_and_limits_to_both_steps(tmp_path, monkeypatch):
+    unit, handler = lane(tmp_path, {"ChangeLog": b"fixture", "a.py": b"x"})
+    calls = []
+    parsed_value = changelog.parse(b"## 2024-01-01\n- a\n", LIMITS, classify_text)
+    summary_value = changelog.summarize([], catalog={}, root=".", window_months=6, bulk_threshold=500)
+    monkeypatch.setattr(changelog, "parse", lambda *args: calls.append(("parse", args)) or parsed_value)
+    monkeypatch.setattr(changelog, "summarize", lambda *args, **kwargs:
+                        calls.append(("summarize", args, kwargs)) or summary_value)
+    output = handler(unit)
+    assert calls[0][1][0] == b"fixture" and calls[0][1][2] is classify_text
+    assert calls[0][1][1] == parse_settings(history_settings()).changelog
+    assert calls[1][1] == ([{"path": "ChangeLog", "parsed": parsed_value}],)
+    assert calls[1][2] == {"catalog": {"ChangeLog": hashlib.sha256(b"fixture").hexdigest(),
+                                      "a.py": hashlib.sha256(b"x").hexdigest()},
+                           "root": ".", "window_months": 6, "bulk_threshold": 500}
+    assert artifact(unit, output)["entries"] == [] and output["terminal_status"] == "SUCCEEDED"

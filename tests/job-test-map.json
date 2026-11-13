@@ -434,11 +434,27 @@
     },
     "job_source_history_analysis": {
       "unit": [
-        "tests/test_source_history_analysis.py::test_symbols_keep_mixed_languages_and_same_basenames_separate",
-        "tests/test_source_history_analysis.py::test_symbols_keep_exact_node_boundary_and_named_truncation",
-        "tests/test_source_history_changelog.py::test_unit_parses_every_format_and_reports_each_gap_as_a_record"
+        "tests/unit/job_source_history_analysis/test_algorithms.py",
+        "tests/unit/job_source_history_analysis/test_artifacts.py",
+        "tests/unit/job_source_history_analysis/test_changelog.py",
+        "tests/unit/job_source_history_analysis/test_contract.py",
+        "tests/unit/job_source_history_analysis/test_edge_cases.py",
+        "tests/unit/job_source_history_analysis/test_fingerprint.py",
+        "tests/unit/job_source_history_analysis/test_git.py",
+        "tests/unit/job_source_history_analysis/test_github.py",
+        "tests/unit/job_source_history_analysis/test_handlers.py",
+        "tests/unit/job_source_history_analysis/test_legacy_hotspots.py",
+        "tests/unit/job_source_history_analysis/test_publication.py",
+        "tests/unit/job_source_history_analysis/test_settings.py",
+        "tests/unit/job_source_history_analysis/test_sources.py",
+        "tests/unit/job_source_history_analysis/test_symbols_handler.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_source_history_analysis/test_analysis.py",
+        "tests/integration/job_source_history_analysis/test_changelog_projection.py",
+        "tests/integration/job_source_history_analysis/test_components.py",
+        "tests/integration/job_source_history_analysis/test_hotspots.py"
+      ],
       "acceptance": [],
       "live": []
     },
