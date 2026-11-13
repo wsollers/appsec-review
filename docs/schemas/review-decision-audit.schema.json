@@ -218,14 +218,14 @@
     },
     "decision": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "record_id", "visibility", "authority", "context", "stage", "outcome", "original_outcome", "cell_receipt", "reason_code", "basis_status", "deciding_row", "deciding_row_absence_reason", "deciding_actor_roles", "required_predicates", "missing_predicates"],
+      "required": ["schema", "record_id", "visibility", "authority", "context", "stage", "outcome", "original_outcome", "cell_receipt", "reason_code", "basis_status", "deciding_row", "deciding_row_absence_reason", "deciding_actor_roles", "required_predicates", "missing_predicates", "actor_role", "actor_role_absence_reason"],
       "properties": {
         "schema": {"const": "appsec-review/review-decision/1"},
         "record_id": {"type": "string", "minLength": 73, "maxLength": 73, "pattern": "^decision-[0-9a-f]{64}$"},
         "visibility": {"const": "protected_audit"},
         "authority": {"const": "projection_only"},
         "context": {"$ref": "#/$defs/context"},
-        "stage": {"enum": ["collection", "severity_triage", "admission", "package_assembly", "red_discovery", "proposal_normalization", "claim_cap", "blue_review", "independent_verification", "judge_review", "adjudication", "scoring", "publication"]},
+        "stage": {"enum": ["collection", "severity_triage", "admission", "package_assembly", "cell_execution", "red_discovery", "proposal_normalization", "claim_cap", "blue_review", "independent_verification", "judge_review", "adjudication", "scoring", "publication"]},
         "outcome": {"$ref": "#/$defs/id"},
         "original_outcome": {"$ref": "#/$defs/link"},
         "cell_receipt": {"$ref": "#/$defs/optional_source"},
@@ -234,15 +234,33 @@
         "deciding_row": {"enum": [null, "r1_duplicate", "r2_out_of_scope", "r3_unresolved_contradiction", "r4_direct_contradiction", "r5_confirmed", "r6_supported", "r7_insufficient_evidence"]},
         "deciding_row_absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]},
         "deciding_actor_roles": {"type": "array", "items": {"$ref": "#/$defs/role"}, "maxItems": 14, "uniqueItems": true},
+        "actor_role": {
+          "description": "Original producing role, not deciding authority or an endorsement of a semantic outcome.",
+          "oneOf": [{"$ref": "#/$defs/role"}, {"type": "null"}]
+        },
+        "actor_role_absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]},
         "required_predicates": {"$ref": "#/$defs/predicates"},
         "missing_predicates": {"$ref": "#/$defs/predicates"}
       },
       "allOf": [
+        {"if": {"properties": {"actor_role": {"type": "null"}}}, "then": {"properties": {"actor_role_absence_reason": {"$ref": "#/$defs/absence"}}}, "else": {"properties": {"actor_role_absence_reason": {"type": "null"}}}},
         {"if": {"properties": {"deciding_row": {"type": "null"}}}, "then": {"properties": {"deciding_row_absence_reason": {"$ref": "#/$defs/absence"}}}, "else": {"properties": {"deciding_row_absence_reason": {"type": "null"}}}},
         {"if": {"properties": {"stage": {"const": "collection"}}}, "then": {"properties": {"outcome": {"enum": ["collected", "unavailable"]}}}},
         {"if": {"properties": {"stage": {"const": "severity_triage"}}}, "then": {"properties": {"outcome": {"enum": ["assessed", "unknown", "not_required"]}}}},
         {"if": {"properties": {"stage": {"const": "admission"}}}, "then": {"properties": {"outcome": {"enum": ["admitted", "not_admitted"]}}}},
         {"if": {"properties": {"stage": {"const": "package_assembly"}}}, "then": {"properties": {"outcome": {"enum": ["assembled", "omitted", "blocked"]}}}},
+        {
+          "if": {"properties": {"stage": {"const": "cell_execution"}}},
+          "then": {
+            "properties": {
+              "outcome": {"enum": ["succeeded", "failed", "blocked", "timed_out", "canceled", "invalid", "not_launched"]},
+              "actor_role": {"$ref": "#/$defs/role"},
+              "deciding_actor_roles": {"maxItems": 0},
+              "deciding_row": {"type": "null"},
+              "context": {"properties": {"subject": {"properties": {"cell_id": {"properties": {"value": {"$ref": "#/$defs/id"}}}}}}}
+            }
+          }
+        },
         {"if": {"properties": {"stage": {"const": "red_discovery"}}}, "then": {"properties": {"outcome": {"enum": ["proposed", "explicit_no_claim", "blocked", "invalid", "timed_out", "not_launched", "proposal_rejected"]}}}},
         {"if": {"properties": {"stage": {"const": "proposal_normalization"}}}, "then": {"properties": {"outcome": {"enum": ["normalized", "merged", "rejected"]}}}},
         {"if": {"properties": {"stage": {"const": "claim_cap"}}}, "then": {"properties": {"outcome": {"enum": ["admitted", "capped"]}}}},

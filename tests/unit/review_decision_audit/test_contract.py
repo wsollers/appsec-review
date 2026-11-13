@@ -247,7 +247,10 @@ def test_reader_rejects_malformed_or_wrong_semantics(field: str, value: object) 
         c.from_document(doc, expected_origin=origin())
 
 
-@pytest.mark.parametrize("field", ["schema", "record_id", "context", "reason_code", "missing_predicates"])
+@pytest.mark.parametrize("field", [
+    "schema", "record_id", "context", "reason_code", "missing_predicates",
+    "actor_role", "actor_role_absence_reason",
+])
 def test_legacy_missing_fields_are_not_defaults(field: str) -> None:
     doc = decision().to_dict()
     del doc[field]
@@ -1077,3 +1080,147 @@ def test_manifest_reference_cannot_alias_product_or_reference_shards(path: str) 
     with pytest.raises(IntegrityError, match="distinct paths"):
         c.validate_bundle(manifest, shards, expected_origin=origin(), continuations={ref.path: rows},
                           manifest_reference=c.ManifestRef.of(path, manifest))
+
+
+def cell_terminal(status: CellStatus, role: Role = Role.RED_TEAM_ANALYST) -> c.DecisionRecord:
+    original = decision(preclaim=True)
+    ctx = replace(original.context,
+                  subject=replace(original.context.subject, proposal_ref=link()),
+                  sources=(source("cell-1"),), origin_proposals=())
+    return replace(original, context=ctx, stage=c.Stage.CELL_EXECUTION, outcome=status.value,
+                   original_outcome=link(status.value), reason_code=c.ReasonCode.RECORDED_DECISION,
+                   basis_status=c.BasisStatus.UNSTATED, actor_role=role, actor_role_absence_reason=None)
+
+
+@pytest.mark.parametrize("status", list(CellStatus))
+def test_cell_execution_preserves_every_terminal_status_without_semantic_inference(status: CellStatus) -> None:
+    record = cell_terminal(status)
+    document_validator().validate(record.to_dict())
+    restored = c.from_document(record.to_dict(), expected_origin=origin())
+    assert_typed_tree(record, restored)
+    assert restored.stage is c.Stage.CELL_EXECUTION
+    assert restored.outcome == status.value
+    assert restored.original_outcome.value == status.value
+    assert restored.actor_role is Role.RED_TEAM_ANALYST
+    assert restored.actor_role_absence_reason is None
+    assert restored.context.subject.cell_id.value == "cell-1"
+    assert restored.context.subject.claim_id.value is None
+    assert restored.context.subject.proposal_ref.value is None
+    assert restored.context.origin_proposals == ()
+    assert restored.deciding_actor_roles == () and restored.deciding_row is None
+    assert restored.required_predicates == () and restored.missing_predicates == ()
+    validate_single(restored, {})
+
+
+def test_application_defaults_and_nondeciding_actor_roles_are_explicit_and_hash_bound() -> None:
+    application = decision()
+    assert application.actor_role is None
+    assert application.actor_role_absence_reason is c.AbsenceReason.NOT_APPLICABLE
+    assert_typed_tree(application, c.from_document(application.to_dict(), expected_origin=origin()))
+    known = replace(application, actor_role=Role.LEAD_TRIAGER, actor_role_absence_reason=None)
+    unknown = replace(application, actor_role_absence_reason=c.AbsenceReason.LEGACY_UNRECORDED)
+    assert_typed_tree(known, c.from_document(known.to_dict(), expected_origin=origin()))
+    assert_typed_tree(unknown, c.from_document(unknown.to_dict(), expected_origin=origin()))
+    assert len({application.record_id, known.record_id, unknown.record_id}) == 3
+    judge = cell_terminal(CellStatus.SUCCEEDED, Role.ADJUDICATION_JUDGE)
+    assert judge.actor_role is Role.ADJUDICATION_JUDGE
+    assert judge.deciding_actor_roles == ()
+    assert judge.outcome == "succeeded"
+    assert_typed_tree(judge, c.from_document(judge.to_dict(), expected_origin=origin()))
+    assert judge.record_id != cell_terminal(CellStatus.SUCCEEDED).record_id
+
+
+@pytest.mark.parametrize("changes", [
+    {"actor_role": Role.RED_TEAM_ANALYST},
+    {"actor_role": Role.RED_TEAM_ANALYST, "actor_role_absence_reason": c.AbsenceReason.LEGACY_UNRECORDED},
+    {"actor_role": None, "actor_role_absence_reason": None},
+    {"actor_role": "invented_role", "actor_role_absence_reason": None},
+    {"actor_role": True, "actor_role_absence_reason": None},
+    {"actor_role_absence_reason": "invented_reason"},
+    {"actor_role_absence_reason": True},
+])
+def test_actor_role_and_absence_must_agree_without_defaulting_unknown_data(changes: dict) -> None:
+    with pytest.raises(IntegrityError):
+        replace(decision(), **changes)
+    document = decision().to_dict()
+    document.update(changes)
+    assert list(document_validator().iter_errors(document))
+    with pytest.raises(IntegrityError):
+        c.from_document(document, expected_origin=origin())
+
+
+def test_cell_execution_requires_an_actual_cell_and_known_nondeciding_role() -> None:
+    terminal = cell_terminal(CellStatus.SUCCEEDED)
+    without_cell = replace(terminal.context, subject=replace(terminal.context.subject, cell_id=link()))
+    with pytest.raises(IntegrityError):
+        replace(terminal, context=without_cell)
+    with pytest.raises(IntegrityError):
+        replace(terminal, actor_role=None, actor_role_absence_reason=c.AbsenceReason.LEGACY_UNRECORDED)
+    with pytest.raises(IntegrityError):
+        replace(terminal, deciding_actor_roles=(Role.RED_TEAM_ANALYST,))
+    with pytest.raises(IntegrityError):
+        replace(terminal, deciding_actor_roles=(Role.ADJUDICATION_JUDGE,))
+    with pytest.raises(IntegrityError):
+        replace(terminal, deciding_row=DecidingRow.CONFIRMED, deciding_row_absence_reason=None)
+    document = terminal.to_dict()
+    document["context"]["subject"]["cell_id"] = link().to_dict()
+    assert list(document_validator().iter_errors(document))
+    with pytest.raises(IntegrityError):
+        c.from_document(document, expected_origin=origin())
+
+
+@pytest.mark.parametrize("outcome", [
+    "proposed", "explicit_no_claim", "proposal_rejected", "red_correct", "unresolved", "confirmed",
+    "not_produced", "unavailable", "SUCCEEDED", True, None,
+])
+def test_cell_execution_outcomes_are_exactly_terminal_statuses(outcome: object) -> None:
+    with pytest.raises(IntegrityError):
+        replace(cell_terminal(CellStatus.SUCCEEDED), outcome=outcome)
+
+
+@pytest.mark.parametrize(("stage", "outcome"), [
+    (c.Stage.RED_DISCOVERY, "succeeded"),
+    (c.Stage.RED_DISCOVERY, "failed"),
+    (c.Stage.RED_DISCOVERY, "canceled"),
+    (c.Stage.JUDGE_REVIEW, "succeeded"),
+    (c.Stage.PROPOSAL_NORMALIZATION, "unavailable"),
+    (c.Stage.ADJUDICATION, "unavailable"),
+])
+def test_terminal_stage_does_not_expand_existing_semantic_or_missing_input_outcomes(
+        stage: c.Stage, outcome: str) -> None:
+    with pytest.raises(IntegrityError):
+        replace(decision(), stage=stage, outcome=outcome)
+
+
+def test_terminal_and_semantic_populations_coexist_without_double_inference() -> None:
+    red_terminal = cell_terminal(CellStatus.SUCCEEDED)
+    red_semantic = replace(red_terminal, stage=c.Stage.RED_DISCOVERY, outcome="explicit_no_claim",
+                           original_outcome=link("no_claim"), reason_code=c.ReasonCode.UNSTATED)
+    judge_terminal = cell_terminal(CellStatus.SUCCEEDED, Role.ADJUDICATION_JUDGE)
+    judge_terminal = replace(judge_terminal, context=replace(
+        judge_terminal.context, sources=(source("judge-cell"),),
+        subject=replace(judge_terminal.context.subject, cell_id=link("judge-cell"), claim_id=link("claim-1"),
+                        lead_id=link())))
+    judge_semantic = replace(judge_terminal, stage=c.Stage.JUDGE_REVIEW, outcome="unresolved",
+                             original_outcome=link("unresolved"))
+    records = (red_terminal, red_semantic, judge_terminal, judge_semantic)
+    manifest, shards = products_bundle(records)
+    manifest = replace(manifest, coverage=tuple(
+        replace(item, expected=2, emitted=2) if item.population == c.Population.CELLS else
+        replace(item, expected=1, emitted=1) if item.population == c.Population.LEADS else item
+        for item in manifest.coverage))
+    c.validate_bundle(manifest, shards, expected_origin=origin(),
+                      manifest_reference=c.ManifestRef.of("audit/manifest.json", manifest))
+    assert len({record.record_id for record in records}) == 4
+    assert len({record.context.subject.cell_id.value for record in records}) == 2
+    assert sum(record.stage == c.Stage.CELL_EXECUTION for record in records) == 2
+    assert sum(record.outcome == "explicit_no_claim" for record in records) == 1
+    assert sum(record.outcome == "unresolved" for record in records) == 1
+    assert not any(record.outcome == "proposed" for record in records)
+    assert all(record.context.subject.proposal_ref.value is None for record in records)
+    assert all(record.deciding_actor_roles == () and record.deciding_row is None for record in records)
+    assert next(item.emitted for item in manifest.coverage if item.population == c.Population.DECISIONS) == 4
+    assert next(item.emitted for item in manifest.coverage if item.population == c.Population.CELLS) == 2
+    assert next(item.emitted for item in manifest.coverage if item.population == c.Population.PROPOSALS) == 0
+    for record in records:
+        assert_typed_tree(record, c.from_document(record.to_dict(), expected_origin=origin()))
