@@ -210,6 +210,43 @@ def test_container_output_must_match_locked_tool_image_and_grammar_identity() ->
                                    image_id="sha256:locked", execution_image_id="sha256:locked")
 
 
+def test_reused_shard_is_reattested_by_the_current_attempt(tmp_path: Path) -> None:
+    """The attempt that reuses a scope shard records its own computed receipt for it, as the building
+    attempt did. Regression for smoke-cpp run 2026-11-13-0001 (dispatch b21d03d3): after an
+    implementation change the publish step refused to consume a shard whose only receipt belonged to
+    the first attempt."""
+    from appsec_review.jobs.job_tree_sitter_ast.normalize import attest_reused_shard
+    from appsec_review.retrieval import IndexBuilder
+    from appsec_review.jobs.job_tree_sitter_ast.datasets import DATASETS
+    from appsec_review.runtime.datasets import dataset_contract
+    from appsec_review.storage.shared import SharedArtifacts, publication_scope_for_owner, reference
+
+    root = tmp_path / "run-1"
+    root.mkdir()
+
+    def owner(attempt: str) -> SharedArtifacts:
+        attempt_root = root / "data/jobs/job_tree_sitter_ast/attempts" / attempt
+        actor = {"run_id": root.name, "job_id": "job_tree_sitter_ast", "attempt_id": attempt,
+                 "orchestration": {"system": "fixture"}}
+        atomic_json(attempt_root / "claim.json", {
+            **actor, "attempt_path": attempt_root.relative_to(root).as_posix(),
+            "dataset_contract": dataset_contract("job_tree_sitter_ast", ("load", "plan", "parse", "acceptance"), DATASETS)})
+        return SharedArtifacts(root, attempt_root, {**actor, "claim": reference(root, attempt_root / "claim.json")})
+
+    index_path = root / "data/indices/analysis" / ("f" * 64 + ".sqlite")
+    with publication_scope_for_owner(owner("attempt_0001")):
+        sha = IndexBuilder(index_path, name="analysis", fingerprint="f" * 64, target_snapshot="snap",
+                           shard_id="scope-1").build()
+    metadata = {"fingerprint": "f" * 64, "index_identity": {"name": "analysis", "shard_id": "scope-1", "sha256": sha}}
+    with publication_scope_for_owner(owner("attempt_0002")):
+        attest_reused_shard(root, index_path, metadata, target_snapshot="snap")
+    receipts = sorted((root / "data/jobs/job_tree_sitter_ast/attempts").glob("*/shared/index-shard/*.json"))
+    assert [path.parts[-4] for path in receipts] == ["attempt_0001", "attempt_0002"]
+    values = [json.loads(path.read_text(encoding="utf-8")) for path in receipts]
+    assert all(value["mode"] == "computed" and value["object"]["sha256"] == sha for value in values)
+    assert values[0]["computation"] == values[1]["computation"]
+
+
 def test_both_callers_share_metrics_and_ast_reuse_is_not_an_invocation(tmp_path: Path) -> None:
     from dataclasses import asdict
     from appsec_review.container_runtime import ContainerExecutor, load_catalog

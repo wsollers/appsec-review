@@ -16,7 +16,7 @@ from appsec_review.retrieval.source_resolution import read_source_bytes, source_
 from appsec_review.jobs.delivery_scope import source_in_scope
 
 from .model import GrammarLock, Scope, scope_fingerprint
-from .normalize import NORMALIZER_SCHEMA, normalize_scope, reusable_shard
+from .normalize import NORMALIZER_SCHEMA, attest_reused_shard, normalize_scope, reusable_shard
 
 
 ExecutorFactory = Callable[[UnitContext], ContainerExecutor]
@@ -88,6 +88,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     metadata_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.json"
     metadata = reusable_shard(metadata_path, artifact_path, index_path, fingerprint)
     if metadata is not None:
+        attest_reused_shard(unit.job.run_root, index_path, metadata, target_snapshot=unit.job.source_fingerprint)
         record_reuse(unit, scope.scope_id, fingerprint, metadata.get("tree_sitter_invocation_id"))
         return {**metadata, "index_reused": True}
     scratch = (unit.job.run_root / "data" / "treesitter" / "work" / unit.job.attempt_id /

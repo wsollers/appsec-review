@@ -34,6 +34,28 @@ def reusable_shard(metadata_path: Path, artifact_path: Path, index_path: Path, f
     return metadata
 
 
+def attest_reused_shard(run_root: Path, index_path: Path, metadata: Mapping[str, Any], *,
+                        target_snapshot: str) -> None:
+    """Register custody of a reused scope shard under the current attempt.
+
+    ``reusable_shard`` verified the shard's bytes against its metadata, so the reusing attempt stands
+    behind the same computation and records it exactly as ``IndexBuilder.build`` does for a shard it
+    writes. Without this, only the original attempt's receipt exists; under a repair admission after
+    an implementation change that receipt is incompatible, and consuming the shard through a manifest
+    refuses ("repair cannot relabel an unresolved or incompatible named computation as legacy").
+    """
+    from appsec_review.retrieval.index import INDEX_SCHEMA
+    from appsec_review.storage.shared import current
+    owner = current()
+    if owner is None or not index_path.is_relative_to(owner.run_root / "data" / "indices"):
+        return
+    identity = metadata["index_identity"]
+    owner.named("index-shard", index_path, computed=True, expected_sha256=str(identity["sha256"]),
+                computation={"fingerprint": metadata["fingerprint"], "name": identity["name"],
+                             "shard_id": identity["shard_id"], "target_snapshot": target_snapshot,
+                             "schema": INDEX_SCHEMA})
+
+
 def node_identity(target_snapshot: str, scope: Scope, grammar: GrammarLock,
                   path: str, file_sha256: str, node: Mapping[str, Any]) -> LogicalIdentity:
     return LogicalIdentity.derive(EntityKind.AST_NODE, target_snapshot, {
