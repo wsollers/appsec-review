@@ -142,7 +142,9 @@ def _accepted_artifacts(run_root: Path) -> dict[str, Any]:
     if not has_artifact_shard and (artifacts or indexed.get("artifact_count") != 0 or
                                    indexed.get("artifact_shard_count") != 0):
         raise FrameworkIntegrityError("accepted artifact-indexing manifest has no artifacts shard")
-    producer_gaps = [*accepted.get("gaps", ()), *indexed.get("gaps", ())]
+    # Upstream handoffs carry producer-gap/1 records or free text; this job reports gap text.
+    from appsec_review.jobs.job_project_build.enforcement import gap_text
+    producer_gaps = [gap_text(gap) for gap in (*accepted.get("gaps", ()), *indexed.get("gaps", ()))]
     producer_gaps.extend(gap for artifact in artifacts if (gap := delivery_gap(artifact)))
     if not artifacts:
         producer_gaps.append("no target or produced artifacts were available for artifact security analysis")
