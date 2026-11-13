@@ -254,6 +254,20 @@ projection/supported-language-priority probe (6, 0.45 s). The final static
 test-map checks also passed (2, 8.99 s). The intermediate 92-case combined unit gate passed in 6.44 s;
 its three uncovered model-context branches were then covered by the final selection above.
 
+The Stage 2 documentation boundary `f4c2c14c068158a00cf3e0b6c0ec76ed8a8f6a2f` was merged with
+explicit resolution of the T-146 record: the canonical frontmatter and T-147/T-148 entries were
+preserved. Four directly related narratives were corrected and `scripts/generate-docs.sh`
+regenerated the inventory and three affected job pages; `--check` reported no drift.
+The 85-case documentation/TODO wrapper selection (`--expect-tests 85 --max-tests 85
+--timeout-seconds 180 --parallel --test-workers 4 --shuffle-seed 1469`, selecting
+`tests/docs/test_docs_frontmatter.py`, `test_docs_identifiers.py`, `test_docs_ledger.py`,
+`test_docs_links.py`, `test_generated_docs.py`, `tests/test_documentation.py`, and
+`tests/test_todo_registry.py`) produced 82 passes, two failures and one T-148 archive skip in
+8.56 seconds, with no slow cases. Both failures name the same two pre-existing links to the
+operator-owned `targets/appsec-multi-vuln` checkout, absent from the isolated worktree.
+No target was cloned, copied or modified to satisfy them; those links require the final
+main-checkout check. Report: `tests-custom-20261113-171609-586641-90985`.
+
 ### Manual validation boundary
 
 Integration cases are authored under `tests/integration/job_security_tagging/`,

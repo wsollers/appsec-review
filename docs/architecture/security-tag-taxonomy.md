@@ -701,7 +701,7 @@ carry:
 | Area | Implemented | Not yet implemented (reported as named gaps) |
 | --- | --- | --- |
 | Vocabulary | Namespace registry, grammar, ID normalizers, namespace/basis table, `proposed` rejection | Pinned NIST, SSDF, MISRA, PSS, SLSA, CI/CD and Kubernetes Top 10, Scorecard, and KEV catalogs |
-| Code facts | `lang` from the source inventory; `infra`/`platform` from configuration-file paths (`declared`); `func` from inventory package names (`declared`); `infra:ci:*` from CI static rules (`reported`) | `invoked` capability detection from AST or taint models; `data`, `surface` entry and privilege facts; `component` roles |
+| Code facts | `lang` from source inventory; file/package capabilities (`declared`); CI capabilities (`reported`); bounded exact graph entry/sink capabilities (`invoked`), including native memory and neutral remote/file/CLI/environment/IPC inputs | Standalone AST-only capability detection; unsupported graph classes; sensitivity and privilege facts; published `component` role tags |
 | Weaknesses | `cwe` from CodeQL SARIF rule tags, Gitleaks (`cwe:798`), and CI rules; `cert-*` from CERT rule IDs; `vuln:severity:*` and `cwe:1395` from advisory matches; `gap:crosswalk-unmapped` for unmapped findings | Semgrep, Checkov, and Trivy declared CWEs (the evidence normalizer does not retain them yet) |
 | Crosswalk | Curated one-hop rules with `same_subject`, `component`, `ci_job`, and `project` scopes; conflict and proposed-namespace rejection at assembly | `upstream` CWE→CAPEC→ATT&CK rules from a run-pinned MITRE feed; `taint_path`, `iac_resource`, `k8s_object`, and `container_stage` scopes |
 | Gaps | Per-shard coverage gaps, absent required indexes, `gap:catalog-fixture` for fixture-only control catalogs | Infrastructure gaps (`unrendered`, `deployed-state`, `offline`) |
@@ -709,3 +709,12 @@ carry:
 
 Gap tags carry basis `reported`: a producer or the tagging job reported the missing coverage.
 Curated crosswalk rules carry `reviewer: pending-human-review` until a reviewer signs them off.
+
+T-146 adds fourteen pinned graph mapping rules. Each invoked assignment retains the original
+graph reference and producer, re-resolved source bytes/span, and a stable source-site identity.
+`surface:entry:remote-input` does not imply HTTP, public deployment or authorization status.
+Ambiguous, missing, conflicting, unsupported or bounded-out evidence remains a gap. Canonical
+`func:authn:*`, session, crypto, storage and network tags route component questions with their
+original declared/invoked basis; neither tags nor derived crosswalk labels satisfy a control.
+The [implementation and unit record](../tasks/2026-11-13-behavior-oriented-review.md) distinguishes
+delivered behavior from unrun integration, acceptance and real-model efficacy.

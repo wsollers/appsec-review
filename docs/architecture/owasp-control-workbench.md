@@ -87,6 +87,20 @@ site. A complete narrowed site can retain its identity while omitted material re
 unresolved coverage. Unsupported languages, unrecognized constructs and other controls stay named
 `not_assessed`/unresolved work; a lexical match or documentation declaration cannot satisfy them.
 
+T-146 selects complete original Python subjects rather than the first 120 lines of each file.
+Supported sources precede unsupported files; accepted syntax/graph locations prioritize bounded
+discovery. `max_discovery_files = 512` and `max_discovery_bytes = 8388608` bound discovery per
+component. The existing source-line, evidence and subject limits still bound dispatched work.
+Omitted files, subjects and outside lines remain explicit coverage limits, separate from a
+clipped or redacted subject that cannot establish an obligation.
+
+Complete short HTTP modules retain their policy context; a route function extracted from an
+oversized module cannot establish external middleware/authorization prerequisites. Evidence
+projection and obligation construction use the same configured evidence set, including settings
+above the former hard-coded 100-reference cut. The binding and acceptance identities are
+`owasp-evidence-binding/2` and `owasp-assessment-acceptance/3`; no additional control procedure or
+runtime adapter is implied. See the [design and unit record](../tasks/2026-11-13-behavior-oriented-review.md).
+
 The `MASVS-NETWORK-1` obligation records what runtime evidence would require, but **has no accepted
 runtime adapter**. It remains unsupported even with `dynamic_authorized = true`. Static TLS/HTTPS
 strings and MASTG mappings are not runtime transport proof.

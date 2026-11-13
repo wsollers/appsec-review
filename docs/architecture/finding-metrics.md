@@ -414,8 +414,8 @@ confirmed high or critical finding.
 | Part of this design | Module (`observability/findings/`) | State | Item |
 | --- | --- | --- | --- |
 | Fingerprint, lifecycle, finding history | `identity`, `lifecycle`, `history` | implemented | T-060 |
-| Reviewed units derived from a run | `coverage_adapter` | implemented; not run against a real accepted run; files of units below the hunt cutoff are not recorded by a run | T-073 |
-| Entry points derived from a run | `coverage_adapter` | implemented from `surface:entry:*` tags; no producer assigns those tags yet, and no tag marks a parser | T-073 |
+| Reviewed units derived from a run | `coverage_adapter` | implemented; T-146 manifests retain sources below the cutoff and distinguish operation-only review from whole-file review; real-run efficacy remains unverified | T-073, T-146 |
+| Entry points derived from a run | `coverage_adapter` | graph-backed input tags now exist, including neutral remote input; no tag establishes deployed exposure or a parser entry point | T-073, T-146 |
 | Targeted fix re-check: requests, admission, scoring | `recheck` | implemented, model-free | T-061 |
 | Live verifier transport for the re-check | none | open | T-074 |
 | Labelled triage effectiveness, split ratios, audit miss rate | `triage`, `labels` | implemented | T-062 |
@@ -428,13 +428,19 @@ confirmed high or critical finding.
 | Hunt-lane value and coverage | `coverage` | implemented | T-068 |
 | Developer outcomes, audit sample, actionability | `labels`, `actionability` | implemented | T-069 |
 | Game slices from path rules | `slices` | implemented | T-070 |
-| Attacker position, owner, function and remediation recorded by the review; game cases and guidance | none | open | T-076 |
+| Attacker position, owner, function and remediation recorded by the review; game cases and guidance | `run_adapter` (remediation projection only) | T-146 reads certified exact-finding remediation attachments; other missing dimensions remain unknown | T-076, T-146 |
 | Reviewer integrity: citations, verification, canary drift | `integrity` | implemented; injection case not keyed | T-071 |
 | Crash adapters, binding, corroboration, missed buckets, lead candidates | `crash/` | implemented | T-072 |
 | Crash evidence as a review-graph job and lane A lead family; raw minidumps | none | open | T-075 |
 | Scorecard and operator command line | `scorecard`, `cli` | implemented | T-060 to T-072 |
 
 Corpus series, canary runs and live reviews remain user-owned manual validation.
+
+T-146 actionability requires a counted, complete supporting reachability relation before crediting
+an entry-to-sink path. Absence from a missing-predicate list is not path evidence. A proposed
+remediation is credited only from its exact certified finding binding; static/build checks never
+count as a runtime-validated fix. The [implementation record](../tasks/2026-11-13-behavior-oriented-review.md)
+reports focused unit coverage, not observed precision, recall or developer acceptance.
 
 ## 12. Implementation decisions
 

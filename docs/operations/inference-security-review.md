@@ -582,6 +582,14 @@ ratings.
 
 ## Tuning lane B ranking
 
+T-146 adds exact-site operation units alongside retained whole-file fallback units. Each located
+lead is assigned at most once to an operation or fallback. New manifests retain source identities
+even below the hunt cutoff; reviewing one operation does not count as whole-file coverage.
+`packages.max_operation_records = 2000` bounds discovery. Optional generated DFD/threat-model
+context is read through the admitted input contract, bounded by
+`packages.max_behavior_artifact_bytes = 8388608`, and joined by original graph identity.
+Its boundary/flow questions remain routing context, not predicate evidence or new tool authority.
+
 Lane B ranks review units by the sum of their known signal points (see the design section "Lane B:
 open discovery"). The top `lanes.hunt_max_units` units are hunted. Every weight is set in one
 table, and the checked-in values are the shipped defaults:
@@ -591,8 +599,8 @@ table, and the checked-in values are the shipped defaults:
 lps = 1000                           # full review-prioritization (LPS) score
 sii = 1000                           # full source-history instability (SII) score
 hotspot = 1000                       # full hotspot score
-tag_density = 1000                   # tag density at tag_density_full_tags_per_file tags per file
-tag_density_full_tags_per_file = 4
+tag_density = 1000                   # retained key: distinct evidenced security-operation sites
+tag_density_full_tags_per_file = 4    # retained key: sites for full points, no file-count multiplier
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -609,12 +617,18 @@ signal (a missing producer or feed) still contributes nothing, whatever its weig
 
 The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
 and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
-which reassembles hunt packages. The rank rule stays `review-unit-rank/2` because the formula does
-not change.
+which reassembles hunt packages. `review-unit-rank/3` replaces raw tag counting: language, gap,
+reported and derived tags do not add operation points; multiple labels/producers at one physical
+site count once. Missing or partial evidence remains unknown rather than proving absence.
+Fresh packages use `assemble-review-packages/13` and the model-facing `package-view/5`.
+Preceding publications remain readable without being reused as the new semantic output.
+Generated-map bytes remain bound through final certification. Role counts, verifier independence,
+judge policy and execution authority are unchanged; see the
+[design and focused unit record](../tasks/2026-11-13-behavior-oriented-review.md).
 
 ## Code-graph evidence
 
-When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ only):
+When the run has accepted `graph` shards (`job_code_graph_index`):
 
 - **Packages.** Lead packages embed the `dataflow_path` facts correlated `bridged` or `partial`
   with a CodeQL lead, with their sink, entry point, guards and ranges; hunt packages embed the

@@ -24,16 +24,16 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `collection` | `collection.coverage_gaps` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L269) |
-| `collection` | `collection.observation_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L263) |
-| `collection` | `collection.source_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L255) |
-| `crosswalk` | `crosswalk.apply_crosswalk` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L274) |
-| `integrity` | `integrity.validate_assignments` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L308) |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L351) |
-| `publication` | `publication.publish_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L327) |
-| `publication` | `publication.publish_tag_cloud` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L344) |
-| `scope` | `scope.resolve_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L235) |
-| `taxonomy` | `taxonomy.load_taxonomy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L224) |
+| `collection` | `collection.coverage_gaps` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L275) |
+| `collection` | `collection.observation_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L269) |
+| `collection` | `collection.source_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L258) |
+| `crosswalk` | `crosswalk.apply_crosswalk` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L280) |
+| `integrity` | `integrity.validate_assignments` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L314) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L357) |
+| `publication` | `publication.publish_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L333) |
+| `publication` | `publication.publish_tag_cloud` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L350) |
+| `scope` | `scope.resolve_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L238) |
+| `taxonomy` | `taxonomy.load_taxonomy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L227) |
 
 ### Accepted input declarations
 
@@ -183,10 +183,10 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 
 | Tier | Files or selectors |
 | --- | --- |
-| acceptance | None declared |
-| integration | None declared |
+| acceptance | `tests/acceptance/job_security_tagging/test_behavioral_tags.py` |
+| integration | `tests/integration/job_security_tagging/test_behavioral_tags.py` |
 | live | None declared |
-| unit | `tests/test_security_tagging.py::test_grammar_and_identifier_normalization`<br>`tests/test_security_tagging.py::test_namespace_basis_table_is_enforced`<br>`tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity` |
+| unit | `tests/unit/job_security_tagging/test_behavioral_tags.py`<br>`tests/unit/job_security_tagging/test_handler.py`<br>`tests/unit/job_security_tagging/test_reader.py`<br>`tests/unit/job_security_tagging/test_rules_and_roles.py`<br>`tests/unit/job_security_tagging/test_native_language_aliases.py`<br>`tests/test_security_tagging.py::test_grammar_and_identifier_normalization`<br>`tests/test_security_tagging.py::test_namespace_basis_table_is_enforced`<br>`tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity` |
 
 ### Dagster placement
 
