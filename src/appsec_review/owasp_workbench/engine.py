@@ -373,7 +373,9 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
                            evidence: Sequence[Mapping[str, Any]], *,
                            retrieval_manifest: Mapping[str, Any],
                            assessment_mode: str = "qualification",
-                           max_subjects: int = 8) -> tuple[dict[str, Any], ...]:
+                           max_subjects: int = 8, max_evidence: int = 200) -> tuple[dict[str, Any], ...]:
+    if type(max_evidence) is not int or not 1 <= max_evidence <= 200:
+        raise ValueError("package evidence bound must be between 1 and 200")
     row_by_id = {row["row_id"]: row for row in rows}
     control_by_id = {control["control_identity"]: control for control in controls}
     component_by_id = {item["component_id"]: item for item in classifications}
@@ -385,6 +387,8 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
         observations = [dict(item) for item in evidence
                         if item.get("component_id") == row["component_id"] and
                         item.get("control_id") in {None, row["control_id"]}]
+        omitted = max(0, len(observations) - max_evidence)
+        observations = observations[:max_evidence]
         package = {
             "schema": "appsec-review/finding-package/1",
             "row_id": row_id, "batch_id": batch["batch_id"],
@@ -395,7 +399,7 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
             "component": {"target_id": row["target_id"], "project_id": row["project_id"],
                           "component_id": row["component_id"], "roles": component["roles"],
                           "evidence": component["evidence"]},
-            "evidence_references": observations[:100],
+            "evidence_references": observations,
             "allowed_retrieval_tools": sorted(set(batch["required_tools"]) |
                                               {"find", "read_excerpt", "resolve_evidence"}),
             "retrieval_manifest": dict(retrieval_manifest),
@@ -414,6 +418,9 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
                 *component.get("limitations", []),
                 "Assessment covers named source subjects, not the entire component or deployed system.",
             ]
+        if omitted:
+            package.setdefault("limitations", []).append(
+                f"package evidence bound omitted {omitted} accepted records; no obligations use omitted evidence")
         package["package_id"] = f"package-{_hash(package)[:24]}"
         packages.append(package)
     return tuple(packages)

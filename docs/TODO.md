@@ -138,7 +138,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | open |
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | open |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | open |
-| T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | in-progress |
+| T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | done (2026-11-13, docs/tasks/2026-11-13-behavior-oriented-review.md) |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2109,7 +2109,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-146 — Make review behavior-oriented and developer-actionable
 
-- **State:** in-progress
+- **State:** done (2026-11-13, docs/tasks/2026-11-13-behavior-oriented-review.md)
 - **Area:** review
 - **Why:** Tags and completed jobs do not establish useful findings. Prefix-biased OWASP
   evidence, raw tag-count ranking and disconnected behavioral context can consume the review

@@ -77,6 +77,16 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        *(InputRequirement("job_threat_model_generation", kind, schema,
+                           authority=EvidenceAuthority.ROUTING_CONTEXT,
+                           availability=Availability.OPTIONAL, missing=MissingPolicy.GAP)
+          for kind, schema in (
+              ("handoff", "appsec-review/job-handoff/2"),
+              ("generated_dfd", "appsec-review/generated-dfd/1"),
+              ("generated_threat_model", "appsec-review/generated-threat-model/1"),
+              ("generated_model_evidence", "appsec-review/generated-model-evidence/1"),
+              ("threat_model_documents", "appsec-review/threat-model-generation/1"),
+          )),
         InputRequirement("job_artifact_indexing", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_artifact_indexing", "artifact_catalog",

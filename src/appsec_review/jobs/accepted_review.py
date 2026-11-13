@@ -152,11 +152,15 @@ def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review
         set_ref = _ref(_unit_output(outputs, f"packages.assemble_{lane}_packages").get("artifact"), f"{lane} package set")
         document = read_bound_json(run_root, set_ref)
         reference = _ref(document.get("package_manifest"), f"{lane} package manifest")
-        manifest = verify_package_manifest(resolve_bound(run_root, reference))
+        manifest = verify_package_manifest(resolve_bound(run_root, reference), run_root=run_root)
         _require(manifest["content_sha256"] == document["package_manifest_content_sha256"],
                  f"{lane} package manifest does not match its lane document")
         contents[lane] = manifest["content_sha256"]
         bindings.extend((set_ref, reference))
+        if manifest.get("behavior_model") is not None:
+            model = manifest["behavior_model"]
+            bindings.append(_ref(model["handoff"], "generated-model handoff"))
+            bindings.extend(_ref(item, "generated-model artifact") for item in model["artifacts"].values())
         for package in document["packages"]:
             package_ref = _ref(package, f"{lane} review package")
             resolve_bound(run_root, package_ref)

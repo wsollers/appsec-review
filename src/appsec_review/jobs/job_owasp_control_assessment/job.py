@@ -178,7 +178,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             values = list(build_finding_packages(batch, rows, controls, classifications,
                 loaded["evidence"], retrieval_manifest=loaded["retrieval_manifest"],
                 assessment_mode=loaded["assessment_mode"],
-                max_subjects=parse_settings(unit.job.config.settings).max_subjects_per_control))
+                max_subjects=parse_settings(unit.job.config.settings).max_subjects_per_control,
+                max_evidence=parse_settings(unit.job.config.settings).max_evidence_per_component))
             task = {"task_id": batch["batch_id"],
                     "question": "Assess only the supplied control-component proof obligations.",
                     "proof_obligations": [item["proof_obligations"] for item in values],

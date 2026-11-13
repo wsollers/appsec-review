@@ -177,6 +177,8 @@ class PackageAssemblySettings:
     max_view_bytes: int
     max_view_source_lines: int
     max_view_type_declarations: int
+    max_operation_records: int = 2000
+    max_behavior_artifact_bytes: int = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -728,7 +730,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         "hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
         "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth",
         "max_view_bytes", "max_view_source_lines", "max_view_type_declarations",
-        "slice_strategies", "max_slice_lines", "max_slice_lines_per_function"})
+        "slice_strategies", "max_slice_lines", "max_slice_lines_per_function"},
+        {"max_operation_records", "max_behavior_artifact_bytes"})
     slice_strategies = packages_value["slice_strategies"]
     if not isinstance(slice_strategies, list):
         raise ValueError(f"{field}.slice_strategies must be an array of strategy names")
@@ -754,6 +757,10 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         max_view_source_lines=_int(packages_value["max_view_source_lines"], f"{field}.max_view_source_lines", 10, 2000),
         max_view_type_declarations=_int(packages_value["max_view_type_declarations"],
                                         f"{field}.max_view_type_declarations", 0, 32),
+        max_operation_records=_int(packages_value.get("max_operation_records", 2000),
+                                   f"{field}.max_operation_records", 1, 100_000),
+        max_behavior_artifact_bytes=_int(packages_value.get("max_behavior_artifact_bytes", 8 * 1024 * 1024),
+                                         f"{field}.max_behavior_artifact_bytes", 1, 64 * 1024 * 1024),
     )
     if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
         raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "

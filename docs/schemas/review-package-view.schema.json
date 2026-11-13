@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-view.schema.json",
-  "title": "Review package view (package-view/4)",
+  "title": "Review package view (package-view/5; reads /4)",
   "description": "The labelled, budgeted, model-facing view of a stored review package (review/package_view.py, review-protocol-v2.md section 4). Built at cell time and never stored as an identity; build_view validates every view against this schema. Persona and stack profile are routing fields the caller sets per cell.",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
                "graph_families", "truncation"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-view/1"},
-    "rule": {"const": "appsec-review/package-view/4"},
+    "rule": {"enum": ["appsec-review/package-view/4", "appsec-review/package-view/5"]},
     "protocol": {"const": "review-protocol/2"},
     "kind": {"type": ["string", "null"]},
     "lane": {"type": ["string", "null"]},
@@ -25,7 +25,33 @@
       "properties": {
         "component_id": {"type": ["string", "null"]},
         "build_unit_id": {"type": ["string", "null"]},
-        "partition_key": {"type": "string"}
+        "partition_key": {"type": "string"},
+        "operation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["authority", "path", "lines", "questions", "limitations", "model_context_count", "model_context"],
+          "properties": {
+            "authority": {"const": "routing_context"},
+            "path": {"type": "string"},
+            "lines": {"type": "array", "minItems": 2, "maxItems": 2,
+                      "items": {"type": "integer", "minimum": 1}},
+            "questions": {"type": "array", "items": {"type": "string"}},
+            "limitations": {"type": "array", "items": {"type": "string"}},
+            "model_context_count": {"type": "integer", "minimum": 0},
+            "model_context": {
+              "type": "array", "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["flow_id", "interaction", "basis", "boundary_ids", "threat_ids", "authority"],
+                "properties": {
+                  "flow_id": {"type": "string"}, "interaction": {"type": "string"},
+                  "basis": {"enum": ["verified_semantic", "declared", "observed_syntax", "derived"]},
+                  "boundary_ids": {"type": "array", "items": {"type": "string"}},
+                  "threat_ids": {"type": "array", "items": {"type": "string"}},
+                  "authority": {"const": "routing_context"}
+                }
+              }
+            }
+          }
+        }
       }
     },
     "partition": {"type": ["object", "null"]},

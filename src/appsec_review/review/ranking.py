@@ -1,10 +1,10 @@
-"""Lane B review-unit rank weights (``review-unit-rank/2``), typed and validated.
+"""Lane B review-unit rank weights (``review-unit-rank/3``), typed and validated.
 
 The weights turn each accepted rank signal into integer points on the 0-1000 signal scale. They are
 semantic configuration (``jobs.job_inference_security_review.settings.ranking``): they change which
 units are hunted, so they enter the package manifest and every fingerprint derived from the settings.
-The defaults are the values ``review-unit-rank/2`` shipped with; changing a weight changes the order,
-not the rule's semantics, so the rule id does not change.
+The numerical weights retain prior configuration defaults; version 3 replaces raw label counting
+with evidenced operation sites. The version change invalidates prior ranking/package identities.
 """
 from __future__ import annotations
 
@@ -20,8 +20,9 @@ class RankWeights:
 
     - ``lps``, ``sii``, ``hotspot``: points for a full (1.0 or 100 %) producer score; a partial score
       scales linearly and is capped at the weight.
-    - ``tag_density``: points when a unit carries ``tag_density_full_tags_per_file`` security tag
-      assignments per member file; fewer tags scale linearly.
+    - ``tag_density``: retained configuration name for distinct invoked security-operation sites,
+      not tag counts. ``tag_density_full_tags_per_file`` is the retained saturation setting:
+      multiple labels/producers at one physical site count once, with no file-count multiplier.
     - ``lead_hint_medium``/``_low``/``_info``: points per medium/low/info lead hint in the unit, the sum
       capped at ``lead_hints_max``.
     - ``advisory_kev``: points when any of the unit's advisories is CISA KEV-listed.

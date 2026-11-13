@@ -1,9 +1,10 @@
 ---
 title: "Behavior-oriented review and subject-complete OWASP evidence"
 kind: "task"
-subsystem: "security review"
-status: "in-progress"
-jobs: ["job_security_tagging", "job_owasp_control_assessment", "job_inference_security_review"]
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review", "job_owasp_control_assessment", "job_security_tagging"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Behavior-oriented review
 
@@ -162,6 +163,101 @@ manual efficacy work tracked by T-146 and the existing finding-metrics registry 
 
 ## Implementation and verification record
 
-Initial base: `750278483e86dd44a1be88a5039b7f58f194d59b`. Implementation and focused unit results
-will be recorded here before handoff. Historical run observations motivated the design but are
-not a baseline proving current-model efficacy.
+Implemented on isolated Linux worktrees, starting at
+`750278483e86dd44a1be88a5039b7f58f194d59b` and incorporating the coordinated unit-tier baseline
+`04e99d02c845abfd48763394621cf7a37559c9c2`. The documentation-only design landed separately as
+`5926171238607e27a948bc7d40ce190a853b3d0c`. No deployment reload, review, container execution or
+push is part of this work.
+
+| Delivered surface | Exact behavior |
+| --- | --- |
+| OWASP subjects | Accepted index locations prioritize bounded Python discovery; complete AST subjects retain absolute lines, source hashes and omitted outside scope. Complete short HTTP modules retain their policy context; function-only authorization from an oversized module stays unresolved. |
+| Evidence projection | Configured evidence up to 200 records reaches the worker; proof obligations use exactly the projected records, never an omitted record after the old hard-coded 100-record cut. |
+| Invoked capabilities | Fourteen pinned graph mapping rules; canonical native language aliases; neutral `surface:entry:remote-input` rather than inferred public HTTP exposure. Original graph producers, byte spans and generated-source custody remain available. |
+| Operation planning | Exact graph sites form bounded operation units; whole-file fallback remains for unmodeled scope. Each located lead is assigned at most once to an operation or fallback. Source identities remain recorded below the hunt cutoff. |
+| Ranking | `review-unit-rank/3` counts distinct invoked operation sites. Language, gap, reported and derived labels do not add site points. The existing `tag_density` setting names are retained for frozen-configuration compatibility; they no longer count tags or multiply by file count. |
+| Generated map | Optional typed DFD/model/evidence/result inputs join by original graph identity, not prose. Context remains routing-only. Package-manifest verification and final-gate bindings reverify the exact generated artifacts. |
+| Worker view | `package-view/5` includes bounded operation questions, original source windows and generated boundary context; windows are explicitly not complete control proof. Generated identities acquire no evidence labels or retrieval grants. |
+| Compatibility | Fresh packages use `assemble-review-packages/13`. Readers still accept the preceding `/12`, rank `/2` and view `/4` publications; old bytes are not rewritten or reused as the new semantic output. |
+| Quality feedback | Counted complete reachability, rather than absence from a missing-predicate list, determines path availability. Certified exact-finding remediation attachments determine plan availability. Compile/static checks never count as a runtime-validated fix. Operation-only review is not whole-file coverage. |
+
+Two implementation agents delivered `669a9244` plus alias correction `2086646a`, and `47b3954e`
+plus complete-HTTP-module correction `4501c805`. The coordinator integrated those exact changes,
+implemented operation planning and quality wiring, and repaired the evidence-projection mismatch.
+No new proof family, runtime adapter, role-count reduction or judge-policy change is claimed.
+The existing T-001, T-073, T-076, T-086 and T-107 entries retain their broader/manual scope.
+
+### Focused unit execution
+
+The final changed-area command was:
+
+```sh
+COVERAGE_FILE=test/tmp/t146-final.coverage scripts/run-tests.sh \
+  --expect-tests 366 --max-tests 366 --timeout-seconds 180 \
+  --parallel --test-workers 4 --shuffle-seed 1467 \
+  --coverage appsec_review.review.behavior -- \
+  tests/test_000_unit_environment_guard.py \
+  tests/unit/review_behavior/test_contract_and_view.py \
+  tests/unit/review_behavior/test_handler_wiring.py \
+  tests/unit/review_behavior/test_coverage.py \
+  tests/unit/review_behavior/test_model_context.py \
+  tests/unit/review_behavior/test_operations.py \
+  tests/unit/review_behavior/test_publication_bindings.py \
+  tests/unit/observability_findings/test_actionability_evidence.py \
+  tests/unit/job_security_tagging/test_behavioral_tags.py \
+  tests/unit/job_security_tagging/test_handler.py \
+  tests/unit/job_security_tagging/test_reader.py \
+  tests/unit/job_security_tagging/test_rules_and_roles.py \
+  tests/unit/job_security_tagging/test_native_language_aliases.py \
+  tests/unit/job_owasp_control_assessment/test_subject_selection.py \
+  tests/unit/job_owasp_control_assessment/test_subject_acceptance.py \
+  tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py \
+  tests/unit/job_owasp_control_assessment/test_subject_settings.py \
+  tests/unit/job_owasp_control_assessment/test_package_projection.py
+```
+
+Result: **366 passed, 12.73 seconds**, four shuffled workers, no test over ten seconds. Slowest
+case was the environment guard, 0.658 seconds; slowest new case was 0.286 seconds.
+`review/behavior.py`: **172/172 executable lines and 68/68 branch edges covered**. The subject
+selection helper and added tagging decisions also have complete focused executable-line/branch
+coverage in the agents' retained reports. This does not claim whole-repository coverage.
+
+Directly affected existing units used the same wrapper with `--parallel --test-workers 4`:
+
+| Exact selectors after `--` | Count guard / shuffle seed | Result |
+| --- | --- | --- |
+| `tests/review/test_units.py tests/review/test_packages_graph_context.py tests/test_finding_run_adapter.py tests/test_finding_coverage_adapter.py tests/test_todo_registry.py` | `--expect-tests 81 --max-tests 81 --timeout-seconds 180 --shuffle-seed 148` | 81 passed, 22.96 s; no slow cases |
+| `tests/review/test_packages_dataflow_bound.py tests/test_job_test_selection.py::test_shipped_metadata_covers_registered_jobs_and_resolves_every_category tests/test_job_test_selection.py::test_shipped_recovery_maps_preserve_narrow_fixture_scopes_and_manual_categories 'tests/test_consumes_parity.py::test_consumes_are_registered_producers[job_inference_security_review]' 'tests/test_consumes_parity.py::test_consumes_are_scheduled_before_the_consumer[job_inference_security_review]' tests/test_consumes_parity.py::test_owasp_evidence_import_does_not_depend_on_registry_preload` | `--expect-tests 37 --max-tests 37 --timeout-seconds 180 --shuffle-seed 1466` | 37 passed, 12.72 s; no slow cases |
+
+The three disjoint final selections total **484 passing unit cases**. Ruff and whitespace checks
+passed over changed code and authored tests, including static checks of the unexecuted heavy tiers.
+Wrapper logs, exact command arrays, collection manifests, junit, per-case timings and branch
+reports remain host-local under the isolated checkout's `test/tmp/`; run identifiers are
+`tests-custom-20261113-170643-914041-59821`,
+`tests-custom-20261113-165325-056772-13884`, and
+`tests-custom-20261113-170313-258724-48924`.
+
+Failures retained during development: a fresh environment lacked pytest/pip and the parallel
+guard's Dagster import dependency (resolved by installing declared dependencies only in the
+isolated environments); one reader fixture omitted `size_bytes`; the bounded ShardSet location
+projection does not carry a per-row snapshot, so operation discovery now uses the already-verified
+scope snapshot and rejects an explicitly conflicting one. The first existing-regression attempt
+on the wrong checkout was not credited; the isolated rerun exposed that projection defect, which
+was fixed and covered. Seven short-module authorization failures were reproduced before the
+agent correction. These were not converted to skips, larger timeouts or weaker proof checks.
+
+Single-file coordinator probes also passed: actionability (23, 1.65 s), operation selection (37,
+0.99 s), model context after fixture repair (19, 1.71 s), evidence projection (5, 0.45 s), and
+publication bindings (6, 0.75 s), and actual lane-handler wiring (2, 0.70 s). The final static
+test-map checks also passed (2, 8.99 s). The intermediate 92-case combined unit gate passed in 6.44 s;
+its three uncovered model-context branches were then covered by the final selection above.
+
+### Manual validation boundary
+
+Integration cases are authored under `tests/integration/job_security_tagging/`,
+`tests/integration/job_owasp_control_assessment/` and `tests/integration/review_behavior/`.
+Acceptance cases are authored in the corresponding `tests/acceptance/` directories and require
+explicit operator-supplied run/evidence prerequisites. All are registered in `tests/job-test-map.json`.
+**Integration, acceptance, live model efficacy and real-target review execution: NOT RUN.**
+Historical run observations motivated this change; neither those observations nor the unit
+coverage establish improved real-target precision, recall or developer acceptance.

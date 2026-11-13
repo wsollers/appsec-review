@@ -54,7 +54,7 @@ def test_rank_is_deterministic_and_records_its_basis(scope) -> None:
     assert [item.unit.key for item in ranked][:2] == [NATIVE, SVC]
     native = _signals(ranked[0].unit)
     assert (native["lps"].value, native["sii"].value, native["hotspot"].value) == (550, 900, 800)
-    assert native["tag_density"].value == 125 and native["lead_hints"].value == 0
+    assert native["tag_density"].value == 0 and native["lead_hints"].value == 0
     svc = _signals(ranked[1].unit)
     assert svc["lead_hints"].value == 160  # one medium SAST hint, one low SAST and one low advisory hint
     assert (svc["sii"].value, svc["sii"].state, svc["sii"].reason) == (None, "unknown", "no_record")
@@ -143,11 +143,14 @@ def _rank_sha256(scope, unit_max_files: int, weights=None) -> str:
 
 
 @pytest.mark.parametrize("unit_max_files", [1, 200])
-def test_default_rank_weights_reproduce_the_shipped_rank_byte_for_byte(scope, unit_max_files) -> None:
-    assert _rank_sha256(scope, unit_max_files) == SHIPPED_RANK_SHA256[unit_max_files]
-    assert _rank_sha256(scope, unit_max_files, RankWeights()) == SHIPPED_RANK_SHA256[unit_max_files]
+def test_operation_rank_invalidates_the_old_label_count_rank(scope, unit_max_files) -> None:
+    current = _rank_sha256(scope, unit_max_files)
+    assert current != SHIPPED_RANK_SHA256[unit_max_files]
+    assert _rank_sha256(scope, unit_max_files, RankWeights()) == current
+    assert all(_signals(unit)["tag_density"].value in (0, None)
+               for unit in build_units(scope, collect_leads(scope), unit_max_files=unit_max_files))
     assert (KEV_POINTS, EPSS_POINTS) == (RankWeights().advisory_kev, RankWeights().advisory_epss) == (250, 250)
-    assert RANK_RULE == "appsec-review/review-unit-rank/2"
+    assert RANK_RULE == "appsec-review/review-unit-rank/3"
 
 
 def test_changed_rank_weights_reorder_units_deterministically(scope) -> None:
@@ -167,7 +170,7 @@ def test_changed_rank_weights_reorder_units_deterministically(scope) -> None:
                                                           weights=weights) if item.key == key))
 
     scaled = signals(NATIVE, RankWeights(lps=500, tag_density_full_tags_per_file=2))
-    assert scaled["lps"].value == 275 and scaled["tag_density"].value == 250
+    assert scaled["lps"].value == 275 and scaled["tag_density"].value == 0
     svc = signals(SVC, RankWeights(lead_hint_medium=7, lead_hint_low=1, advisory_epss=1000))
     assert svc["lead_hints"].value == 7 + 1 + 1 and svc["advisory_epss"].value == 970
     assert signals(SVC, RankWeights(lead_hints_max=50))["lead_hints"].value == 50

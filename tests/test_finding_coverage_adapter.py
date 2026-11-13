@@ -144,6 +144,7 @@ def tag(term, name, path):
 
 def test_the_tag_to_kind_table_is_the_taxonomys_entry_group_and_leaves_parser_out():
     assert adapter.ENTRY_KIND_BY_TAG == {
+        "surface:entry:remote-input": "network_handler",
         "surface:entry:http-public": "network_handler", "surface:entry:http-internal": "network_handler",
         "surface:entry:message-consumer": "network_handler", "surface:entry:rpc": "rpc_handler",
         "surface:entry:file-input": "file_loader"}

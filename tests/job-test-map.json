@@ -231,6 +231,13 @@
     },
     "job_inference_security_review": {
       "unit": [
+        "tests/unit/review_behavior/test_contract_and_view.py",
+        "tests/unit/review_behavior/test_handler_wiring.py",
+        "tests/unit/review_behavior/test_coverage.py",
+        "tests/unit/review_behavior/test_model_context.py",
+        "tests/unit/review_behavior/test_operations.py",
+        "tests/unit/review_behavior/test_publication_bindings.py",
+        "tests/unit/observability_findings/test_actionability_evidence.py",
         "tests/review/test_discovery_competence.py",
         "tests/review/test_prompt_competence.py",
         "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
@@ -238,8 +245,14 @@
         "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema",
         "tests/test_inference_fixture_contracts.py"
       ],
-      "integration": ["tests/integration/test_review_consumer_acceptance.py"],
-      "acceptance": ["tests/acceptance/test_prompt_competence.py::test_live_prompt_competence"],
+      "integration": [
+        "tests/integration/test_review_consumer_acceptance.py",
+        "tests/integration/review_behavior/test_package_join.py"
+      ],
+      "acceptance": [
+        "tests/acceptance/test_prompt_competence.py::test_live_prompt_competence",
+        "tests/acceptance/review_behavior/test_behavioral_review.py"
+      ],
       "live": []
     },
     "job_language_build": {
@@ -311,9 +324,16 @@
       "live": []
     },
     "job_owasp_control_assessment": {
-      "unit": ["tests/test_owasp_assessment_job.py"],
-      "integration": [],
-      "acceptance": [],
+      "unit": [
+        "tests/test_owasp_assessment_job.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+        "tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_settings.py",
+        "tests/unit/job_owasp_control_assessment/test_package_projection.py"
+      ],
+      "integration": ["tests/integration/job_owasp_control_assessment/test_subject_selection.py"],
+      "acceptance": ["tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"],
       "live": []
     },
     "job_poc_generation": {
@@ -425,12 +445,17 @@
     },
     "job_security_tagging": {
       "unit": [
+        "tests/unit/job_security_tagging/test_behavioral_tags.py",
+        "tests/unit/job_security_tagging/test_handler.py",
+        "tests/unit/job_security_tagging/test_reader.py",
+        "tests/unit/job_security_tagging/test_rules_and_roles.py",
+        "tests/unit/job_security_tagging/test_native_language_aliases.py",
         "tests/test_security_tagging.py::test_grammar_and_identifier_normalization",
         "tests/test_security_tagging.py::test_namespace_basis_table_is_enforced",
         "tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity"
       ],
-      "integration": [],
-      "acceptance": [],
+      "integration": ["tests/integration/job_security_tagging/test_behavioral_tags.py"],
+      "acceptance": ["tests/acceptance/job_security_tagging/test_behavioral_tags.py"],
       "live": []
     },
     "job_source_history_analysis": {

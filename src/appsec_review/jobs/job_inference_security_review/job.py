@@ -353,8 +353,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                  manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
             assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
                                          collection=triaged_collection(unit, scope), cwe_reference=reference,
-                                         slice_sources=AcceptedSliceSources(scope, core=core))
-            manifest_path = publish_packages(assembly, unit.unit_root / "assembly")
+                                         slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core)
+            manifest_path = publish_packages(assembly, unit.unit_root / "assembly", run_root=unit.job.run_root)
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]
             entities = {package.package_id: tuple(sorted(set(package.document()["retrieval"]["entity_ids"]) - excluded))
@@ -401,7 +401,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "cwe_reference": reference.record(),
                 "rule_predicates": {lead["observation_id"]: [item.value for item in tool_rules.lead_predicates(lead)]
                                     for lead in sorted(leads, key=lambda item: item["observation_id"])},
-                "units": [{"unit_key": row["unit_key"], "position": row["position"], "hunted": row["hunted"]}
+                "units": [{"unit_key": row["unit_key"], "position": row["position"], "hunted": row["hunted"],
+                           "source_ids": row["source_ids"], "coverage_scope": row["coverage_scope"]}
                           for row in assembly.manifest["units"]],
             }
             gaps = [f"{gap.producer}:{gap.scope}: {gap.state}" for gap in assembly.gaps]
@@ -649,7 +650,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         for lane in ("lead", "hunt"):
             document = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
             reference = document["package_manifest"]
-            verify_package_manifest(unit.job.run_root / reference["path"])
+            verify_package_manifest(unit.job.run_root / reference["path"], run_root=unit.job.run_root)
             _read(unit.job.run_root, reference)
         completeness_doc = _read(unit.job.run_root, unit.output("completeness.audit")["artifact"])
         merged = stages.merge_verified(shard_paths(unit, LEDGER_UNITS))

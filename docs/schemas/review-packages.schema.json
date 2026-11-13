@@ -1845,6 +1845,43 @@
         }
       }
     },
+    "behavior_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "authority", "operation_id", "path", "file_sha256", "start_line", "end_line",
+                   "source_id", "anchor_ids", "classes", "questions", "model_context", "limitations"],
+      "properties": {
+        "schema": {"const": "appsec-review/behavior-context/1"},
+        "authority": {"const": "routing_context"},
+        "operation_id": {"type": "string", "pattern": "^operation-[0-9a-f]{64}$"},
+        "path": {"type": "string", "minLength": 1},
+        "file_sha256": {"$ref": "#/$defs/inference_sha"},
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1},
+        "start_byte": {"type": ["integer", "null"], "minimum": 0},
+        "end_byte": {"type": ["integer", "null"], "minimum": 0},
+        "source_id": {"type": "string", "minLength": 1},
+        "anchor_ids": {"$ref": "#/$defs/inference_identities"},
+        "classes": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "questions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "model_context": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["flow_id", "interaction", "basis", "boundary_ids", "threat_ids", "authority"],
+            "properties": {
+              "flow_id": {"type": "string"},
+              "interaction": {"type": "string"},
+              "basis": {"enum": ["verified_semantic", "declared", "observed_syntax", "derived"]},
+              "boundary_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+              "threat_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+              "authority": {"const": "routing_context"}
+            }
+          }
+        }
+      }
+    },
     "inference_scope": {
       "type": "object",
       "additionalProperties": false,
@@ -1882,7 +1919,8 @@
         },
         "artifact_ids": {
           "$ref": "#/$defs/inference_identities"
-        }
+        },
+        "operation": {"$ref": "#/$defs/behavior_operation"}
       }
     },
     "inference_rank": {
@@ -1909,7 +1947,7 @@
           "minimum": 0
         },
         "rule": {
-          "const": "appsec-review/review-unit-rank/2"
+          "enum": ["appsec-review/review-unit-rank/2", "appsec-review/review-unit-rank/3"]
         },
         "basis": {
           "type": "array",
@@ -2108,7 +2146,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/12"
+          "enum": ["appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13"]
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

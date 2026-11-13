@@ -2678,6 +2678,8 @@ mode = "assessment"
 reviewer_profile = "reviewer"
 max_evidence_per_component = 60
 max_source_lines = 120
+max_discovery_files = 512
+max_discovery_bytes = 8388608
 max_subjects_per_control = 8
 max_batches = 200
 max_turns = 4
@@ -2713,7 +2715,9 @@ retries = 1
 component_rules = "1"
 applicability_rules = "1"
 batching_rules = "1"
-result_validator = "1"
+evidence_binding = "2"
+subject_selection = "1"
+result_validator = "3"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
 catalog_path = "data/reference/owasp/catalogs/asvs-5.0.0.json"
@@ -2809,9 +2813,9 @@ max_assignments = 500000
 
 [jobs.job_security_tagging.settings.taxonomy]
 vocabulary_path = "data/reference/taxonomy/vocabulary.json"
-vocabulary_sha256 = "fc2873c832b843bdbdb9607e1609ef6eb3258f59a6fa29b3e0141fce98e29239"
+vocabulary_sha256 = "fed95821aa333942a0c11b35d0fbc68c2ff22d2ef1cad6dfdce30185af532bf2"
 capability_rules_path = "data/reference/taxonomy/capability-rules.json"
-capability_rules_sha256 = "7065cfaca14bea9a68b38e7853aefbb5e02e4cc59aa32d92e99d5acf7673df28"
+capability_rules_sha256 = "0fd8236398e3026c04675c091f9b8af60ccc861a2a825d6b93c9a436be72feb5"
 crosswalk_path = "data/reference/taxonomy/crosswalk.json"
 crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
 
@@ -2900,8 +2904,8 @@ max_text_chars = 2000
 lps = 1000                           # full review-prioritization (LPS) score
 sii = 1000                           # full source-history instability (SII) score
 hotspot = 1000                       # full hotspot score
-tag_density = 1000                   # tag density at tag_density_full_tags_per_file tags per file
-tag_density_full_tags_per_file = 4
+tag_density = 1000                   # retained key: distinct evidenced security-operation sites, not tag counts
+tag_density_full_tags_per_file = 4    # retained key: distinct sites for full points, no file-count multiplier
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -2913,6 +2917,8 @@ advisory_epss = 250                  # times the unit's highest EPSS percentile
 [jobs.job_inference_security_review.settings.packages]
 hunt_menu_partition_size = 25
 unit_max_files = 200
+max_operation_records = 2000
+max_behavior_artifact_bytes = 8388608
 max_context_entries = 64
 max_package_bytes = 65536
 max_page_size = 20

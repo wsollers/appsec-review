@@ -1,15 +1,15 @@
-"""Lane B review units: deterministic partitioning and ranking from accepted signals.
+"""Lane B operation units and explicit whole-file fallback, ranked from accepted signals.
 
-A review unit is an accepted component, then its trust boundary when an accepted producer names
-one (none does yet, so it is ``None``), then build unit, then a stable range of sorted source
-paths. Units are ranked by ``review-unit-rank/2`` from the signals that are available: review
-prioritization (LPS), source-history instability (SII), hotspots, security-tag density,
+An operation unit binds an original source site and its generated boundary context, when supplied.
+Fallback units retain stable sorted source ranges so seeded operations cannot hide unmodeled code.
+Units are ranked by ``review-unit-rank/3`` from the signals that are available: review
+prioritization (LPS), source-history instability (SII), hotspots, distinct security-operation sites,
 medium/low/info lead hints, and the reference context of the unit's dependency/artifact advisories:
 ``advisory_kev`` (``RankWeights.advisory_kev`` points when any advisory is KEV-listed) and
 ``advisory_epss`` (the highest EPSS percentile times ``RankWeights.advisory_epss``). A missing signal,
 including an advisory whose KEV or EPSS feed was unavailable, is recorded as ``unknown``; it is never
 read as zero. Every weight comes from :class:`~appsec_review.review.ranking.RankWeights`
-(``settings.ranking``); the defaults reproduce the shipped ``review-unit-rank/2`` order exactly.
+(``settings.ranking``); retained tag-density setting names now weight deduplicated operation sites.
 Only the top ``hunt_max_units`` units receive hunt packages; every other unit is a coverage gap
 with reason ``below_hunt_cutoff``.
 """
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Any
 
@@ -25,9 +25,10 @@ from appsec_review.retrieval.model import LogicalIdentity
 from appsec_review.review.lead_families import ADVISORY_FAMILIES, Lead, LeadCollection
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, MAX_SIGNAL_POINTS, RankWeights
 from appsec_review.review.scope import AcceptedScope, ScopeGap
+from appsec_review.review.behavior import Operation, opportunity_sites
 
 
-RANK_RULE = "appsec-review/review-unit-rank/2"
+RANK_RULE = "appsec-review/review-unit-rank/3"
 SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints", "advisory_kev", "advisory_epss")
 # Default reference-context weights (points of the 0-1000 signal scale), kept as names for callers.
 # KEV is a binary catalog fact; EPSS percentile is scaled. Both are deliberately below a full LPS/SII
@@ -136,6 +137,7 @@ class ReviewUnit:
     leads: tuple[Lead, ...]
     context: tuple[ContextEntry, ...]
     signals: tuple[Signal, ...]
+    operation: Mapping[str, Any] | None = None
 
     @property
     def score(self) -> int:
@@ -199,7 +201,9 @@ def _unit_key(component: str, boundary: str | None, build_unit: str | None, labe
 
 
 def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_files: int,
-                weights: RankWeights = DEFAULT_RANK_WEIGHTS) -> tuple[ReviewUnit, ...]:
+                weights: RankWeights = DEFAULT_RANK_WEIGHTS,
+                operations: tuple[Operation, ...] = (),
+                model_context: Mapping[str, tuple[Mapping[str, Any], ...]] | None = None) -> tuple[ReviewUnit, ...]:
     """Partition the accepted scope into review units with their signals, in key order."""
     if unit_max_files < 1:
         raise ValueError("unit_max_files must be positive")
@@ -262,9 +266,10 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 matched = [row for row in rows[signal] if row["path"] in member_set]
                 context.extend(context_entry(row["identity"], row["role"], row["shard_sha256"]) for row in matched)
                 if signal == "tag_density":
-                    full = weights.tag_density_full_tags_per_file * max(1, len(members))
-                    value = (min(weights.tag_density, (len(matched) * weights.tag_density) // full)
-                             if members else None)
+                    sites = opportunity_sites(matched)
+                    full = weights.tag_density_full_tags_per_file
+                    value = (min(weights.tag_density, (len(sites) * weights.tag_density) // full)
+                             if members and (sites or scope.producer(producer).state == "available") else None)
                     signals.append(Signal(signal, value, None if value is not None else "no_record"))
                     continue
                 values = [row["value"] for row in matched if row["value"] is not None]
@@ -286,8 +291,63 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 trust_boundary_id=None, build_unit_id=build_unit_id, range_label=label, paths=tuple(members),
                 source_ids=tuple(sources), leads=tuple(leads),
                 context=tuple(unique[key] for key in sorted(unique)), signals=tuple(signals)))
+    if operations:
+        units = _operation_units(scope, units, operations, model_context or {}, weights, rows)
     units.sort(key=lambda item: item.key)
     return tuple(units)
+
+
+def _operation_units(scope: AcceptedScope, units: list[ReviewUnit], operations: tuple[Operation, ...],
+                     model_context: Mapping[str, tuple[Mapping[str, Any], ...]],
+                     weights: RankWeights, signal_rows: Mapping[str, list[dict[str, Any]]]) -> list[ReviewUnit]:
+    """Keep whole-file fallback coverage; allocate a located lead to at most one exact operation."""
+    assigned: set[str] = set()
+    result: list[ReviewUnit] = []
+    for operation in sorted(operations, key=lambda item: item.operation_id):
+        bases = [unit for unit in units if operation.path in unit.paths
+                 and unit.component_id == operation.component_id and unit.build_unit_id == operation.build_unit_id]
+        if len(bases) != 1:
+            raise ValueError("operation does not belong to exactly one fallback review unit")
+        base = bases[0]
+        leads = tuple(lead for lead in base.leads if lead.observation_id not in assigned
+                      and lead.path == operation.path and lead.start_line is not None
+                      and operation.start_line <= lead.start_line <= operation.end_line)
+        assigned.update(lead.observation_id for lead in leads)
+        context = model_context.get(operation.operation_id, ())
+        boundaries = {identity for item in context for identity in item["boundary_ids"]}
+        boundary = next(iter(boundaries)) if len(boundaries) == 1 else None
+        signals = []
+        for signal in base.signals:
+            if signal.signal == "tag_density":
+                signals.append(Signal("tag_density", weights.tag_density // weights.tag_density_full_tags_per_file, None))
+            elif signal.signal in {"lps", "sii", "hotspot"}:
+                values = [row["value"] for row in signal_rows[signal.signal]
+                          if row["path"] == operation.path and row["value"] is not None]
+                signals.append(Signal(signal.signal, max(values), None) if values
+                               else Signal(signal.signal, None, signal.reason or "no_record"))
+            elif signal.signal == "lead_hints":
+                hints = {"medium": weights.lead_hint_medium, "low": weights.lead_hint_low, "info": weights.lead_hint_info}
+                signals.append(Signal("lead_hints", min(weights.lead_hints_max, sum(
+                    hints.get(lead.reported_severity, 0) for lead in leads if lead.duplicate_of is None)), None))
+        signals.extend(_advisory_signals(scope, leads, weights))
+        result.append(replace(
+            base, key=_unit_key(base.component_id, boundary, base.build_unit_id, operation.operation_id),
+            range_label=operation.operation_id, trust_boundary_id=boundary, paths=(operation.path,),
+            source_ids=(operation.source_id,), leads=leads,
+            context=tuple(context_entry(identity, role) for identity, role in operation.anchors),
+            signals=tuple(signals), operation=operation.record(context)))
+    covered_sites = {(operation.path, operation.file_sha256, operation.start_line, operation.end_line,
+                      operation.start_byte, operation.end_byte) for operation in operations}
+    for unit in units:
+        remaining = [row for row in signal_rows["tag_density"]
+                     if row["path"] in unit.paths]
+        sites = opportunity_sites(remaining) - covered_sites
+        signals = tuple(Signal("tag_density", min(weights.tag_density,
+                        len(sites) * weights.tag_density // weights.tag_density_full_tags_per_file), None)
+                        if signal.signal == "tag_density" and signal.value is not None else signal for signal in unit.signals)
+        result.append(replace(unit, leads=tuple(lead for lead in unit.leads if lead.observation_id not in assigned),
+                              signals=signals))
+    return result
 
 
 def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead],
@@ -341,7 +401,8 @@ def _signal_rows(scope: AcceptedScope, weights: RankWeights = DEFAULT_RANK_WEIGH
     for shard in scope.producer("security_tagging").shards:
         for row in store.entities((shard,), kinds=("tag_assignment",)):
             rows["tag_density"].append({"identity": row["identity"], "path": _path(row), "role": "tag",
-                                        "value": None, "shard_sha256": scope.shard_sha256(shard)})
+                                        "value": None, "payload": row["payload"],
+                                        "shard_sha256": scope.shard_sha256(shard)})
     for values in rows.values():
         values.sort(key=lambda item: (str(item["path"]), item["identity"]))
     return rows

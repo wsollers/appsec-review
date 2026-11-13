@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-manifest.schema.json",
   "title": "Review package manifest (review-package-manifest/1)",
-  "description": "The manifest assemble-review-packages/12 publishes beside the package bytes (review/packages.py). assemble_packages validates the document before hashing it, and verify_package_manifest validates it again before any consumer reads a package.",
+  "description": "The manifest assemble-review-packages/13 publishes beside the package bytes (review/packages.py); preceding /12 publications remain readable. assemble_packages validates before hashing, and verify_package_manifest rechecks package bytes and generated routing-input bindings.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "assembly_rule", "package_schema", "run_id", "manifest_sha256", "target_snapshot",
@@ -10,7 +10,7 @@
                "units", "gaps", "cwe_reference", "counts", "audit"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-manifest/1"},
-    "assembly_rule": {"const": "appsec-review/assemble-review-packages/12"},
+    "assembly_rule": {"enum": ["appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13"]},
     "package_schema": {"const": "appsec-review/review-package/6"},
     "run_id": {"type": "string", "minLength": 1},
     "manifest_sha256": {"$ref": "#/$defs/sha"},
@@ -96,9 +96,21 @@
           "rule": {"$ref": "#/$defs/rule"},
           "basis": {"type": "array", "items": {"type": "object"}},
           "hunted": {"type": "boolean"},
+          "source_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "coverage_scope": {"enum": ["operation", "files"]},
+          "operation": {"type": ["object", "null"]},
           "lead_count": {"$ref": "#/$defs/count"},
           "package_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
         }
+      }
+    },
+    "behavior_model": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["handoff", "artifacts"],
+      "properties": {
+        "handoff": {"type": "object", "required": ["path", "sha256"]},
+        "artifacts": {"type": "object", "required": ["dfd.json", "threat-model.json", "evidence.json"]}
       }
     },
     "gaps": {"type": "array", "items": {"$ref": "#/$defs/gap"}},

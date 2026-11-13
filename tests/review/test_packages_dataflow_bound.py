@@ -302,9 +302,10 @@ def test_the_manifest_counts_finding_leads_by_bound(dataflow) -> None:
 def test_the_view_and_manifest_schemas_pin_the_emitted_versions() -> None:
     view, manifest = validator(VIEW_SCHEMA_FILE).schema, validator(MANIFEST_SCHEMA_FILE).schema
     assert view["properties"]["schema"]["const"] == VIEW_SCHEMA
-    assert view["properties"]["rule"]["const"] == VIEW_RULE
+    assert set(view["properties"]["rule"]["enum"]) == {"appsec-review/package-view/4", VIEW_RULE}
     assert manifest["properties"]["schema"]["const"] == MANIFEST_SCHEMA
-    assert manifest["properties"]["assembly_rule"]["const"] == ASSEMBLY_RULE
+    assert set(manifest["properties"]["assembly_rule"]["enum"]) == {
+        "appsec-review/assemble-review-packages/12", ASSEMBLY_RULE}
     assert manifest["properties"]["package_schema"]["const"] == PACKAGE_SCHEMA
     rules = manifest["properties"]["rules"]["properties"]
     assert rules["neighborhood"]["const"] == NEIGHBORHOOD_RULE and rules["slice"]["const"] == SLICE_RULE
@@ -383,7 +384,7 @@ def test_the_view_shows_only_slice_lines_with_elisions_and_the_lead_line(dataflo
     fixture, ids, _scope, assembly, core = dataflow
     package = _package(assembly, fixture, "sast_critical")
     view = build_view(package, core, LIMITS)
-    assert view.document["rule"] == VIEW_RULE == "appsec-review/package-view/4"
+    assert view.document["rule"] == VIEW_RULE == "appsec-review/package-view/5"
     rows = [row for row in view.document["source"] if row["role"] == "slice"]
     by_ref = {row["ref"]: row for row in rows}
     p_row = by_ref[ids["p"]]
