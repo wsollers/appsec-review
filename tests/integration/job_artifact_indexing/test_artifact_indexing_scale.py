@@ -17,8 +17,8 @@ from appsec_review.jobs.job_debug_symbol_indexing import job as debug_job
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
-from tests.test_artifact_indexing import RUN_ID
-from tests.test_artifact_indexing_throughput import _scaled_native_run
+from tests.integration.job_artifact_indexing.test_artifact_indexing_graph import RUN_ID
+from tests.integration.job_artifact_indexing.test_artifact_indexing_throughput import _scaled_native_run
 
 OBJECTS = 5_000
 BATCH = 2_000

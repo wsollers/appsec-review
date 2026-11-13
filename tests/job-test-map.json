@@ -3,19 +3,34 @@
   "jobs": {
     "job_artifact_indexing": {
       "unit": [
-        "tests/test_artifact_indexing.py",
-        "tests/test_artifact_input_contracts.py"
+        "tests/unit/job_artifact_indexing/test_contract.py",
+        "tests/unit/job_artifact_indexing/test_job_graph.py",
+        "tests/unit/job_artifact_indexing/test_identities.py",
+        "tests/unit/job_artifact_indexing/test_receipt_validation.py",
+        "tests/unit/job_artifact_indexing/test_target_artifacts.py",
+        "tests/unit/job_artifact_indexing/test_catalogs.py",
+        "tests/unit/job_artifact_indexing/test_members.py",
+        "tests/unit/job_artifact_indexing/test_relationships.py",
+        "tests/unit/job_artifact_indexing/test_shards.py"
       ],
-      "integration": ["tests/integration/test_artifact_indexing_scale.py"],
-      "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_artifact_index_count_is_bounded_by_the_classified_catalog"],
+      "integration": [
+        "tests/integration/job_artifact_indexing/test_artifact_indexing_graph.py",
+        "tests/integration/job_artifact_indexing/test_artifact_indexing_throughput.py",
+        "tests/integration/job_artifact_indexing/test_artifact_input_contracts.py",
+        "tests/integration/job_artifact_indexing/test_artifact_indexing_scale.py"
+      ],
+      "acceptance": [
+        "tests/acceptance/job_artifact_indexing/test_artifact_index_shard_layout.py",
+        "tests/acceptance/test_dependency_output_bounds.py::test_artifact_index_count_is_bounded_by_the_classified_catalog"
+      ],
       "live": []
     },
     "job_artifact_security_analysis": {
-      "unit": [
-        "tests/test_artifact_security_analysis.py",
-        "tests/test_artifact_input_contracts.py"
+      "unit": ["tests/test_artifact_security_analysis.py"],
+      "integration": [
+        "tests/integration/test_installer_record_scans.py",
+        "tests/integration/job_artifact_indexing/test_artifact_input_contracts.py"
       ],
-      "integration": ["tests/integration/test_installer_record_scans.py"],
       "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones"],
       "live": []
     },

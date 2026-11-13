@@ -1,4 +1,10 @@
-"""Mandatory artifact inputs fail at admission, before scanner or container work."""
+"""Mandatory artifact inputs fail at admission, before scanner or container work.
+
+Pre-walk suite shared by job_artifact_indexing and job_artifact_security_analysis, pending
+replacement (T-113): every case publishes recorded producers through a real ``JobRunner`` or
+``GraphRunner`` (8 to 28 s), so it runs in the integration tier. The admission contract itself is
+pinned at code level in ``tests/unit/job_artifact_indexing/test_contract.py``.
+"""
 import json
 
 import pytest
@@ -47,7 +53,7 @@ def test_artifact_indexing_reads_catalog_without_undeclared_intake(tmp_path):
     from appsec_review.runtime.inputs import read_input_observations
     from appsec_review.storage import atomic_json, file_sha256
     from tests.artifact_input_support import recorded_job
-    from tests.test_artifact_indexing import _seed
+    from tests.integration.job_artifact_indexing.test_artifact_indexing_graph import _seed
 
     config, target, snapshot, root, receipts, document, _, _ = _seed(
         tmp_path, source_files={"prebuilt.wasm": "\0asm\x01\0\0\0"},

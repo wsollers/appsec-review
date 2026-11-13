@@ -18,7 +18,7 @@ import pytest
 
 from appsec_review.jobs.job_artifact_indexing import job as artifact_indexing
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[3]
 ORACLE = ROOT / "test" / "acceptance" / "cpp-multivuln-v1" / "job_artifact_indexing.json"
 BATCHED = re.compile(r"^(relations|members)-(?P<unit>build-unit-[A-Za-z0-9_.-]+)-(?P<batch>\d{4})$")
 FAMILIES = {"relations": "relationships", "members": "members"}

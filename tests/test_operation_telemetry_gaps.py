@@ -682,7 +682,7 @@ def _indexing_run(tmp_path: Path, monkeypatch, *, disable_spans: bool = False):
     from appsec_review.runtime.repair import stopped_reasons
     from appsec_review.storage import atomic_json
     from tests.artifact_input_support import recorded_graph
-    from tests.test_artifact_indexing import RUN_ID, _identity, _seed
+    from tests.integration.job_artifact_indexing.test_artifact_indexing_graph import RUN_ID, _identity, _seed
 
     config, target, snapshot, run_root, receipts, accepted_path, _handoff_path, _latest = _seed(
         tmp_path, build_families=("native", "python"), publish=False)

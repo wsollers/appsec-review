@@ -47,7 +47,7 @@ def _short_interval_config(config_path: Path):
 def test_artifact_indexing_run_summary_exposes_progress_phases_and_hotspots(tmp_path: Path) -> None:
     from appsec_review.jobs.job_artifact_indexing import build_job
     from appsec_review.runtime import GraphRunner
-    from tests.test_artifact_indexing import RUN_ID, _seed
+    from tests.integration.job_artifact_indexing.test_artifact_indexing_graph import RUN_ID, _seed
 
     _config, target, snapshot, run_root, receipts, *_ = _seed(tmp_path)
     assert sum(len(receipt["artifacts"]) for receipt in receipts) > 1

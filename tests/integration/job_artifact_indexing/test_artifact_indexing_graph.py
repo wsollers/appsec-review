@@ -1,3 +1,17 @@
+"""Pre-walk graph suite of job_artifact_indexing, pending replacement (T-113).
+
+Every case here publishes a synthetic language-build handoff with ``_seed`` and runs the job through
+``GraphRunner`` or a ``JobRunner`` claim, so it belongs to the integration tier. At HEAD 05ac85ae the
+GraphRunner cases fail at admission with ``required input unavailable: job_language_build/handoff``
+and the explicit-claim cases with ``producer output contract mismatch:
+job_language_build/topology_refinement_inputs`` (the synthetic handoff declares no language-build
+datasets); ``test_iteration_terminal_receipts_cross_accepted_artifact_index`` additionally asserts
+build-iteration dispositions that changed (``independent`` is now ``unsupported``). Stale fixtures,
+not regressions of this job. The code-level claims (identities, fingerprints, receipt validation,
+Node checks, relations, catalogs, shard reuse) now live in ``tests/unit/job_artifact_indexing/``.
+``_seed``, ``_identity`` and ``_publish_changed_language_receipts`` are imported by other
+integration files and by ``tests/test_operation_telemetry_gaps.py``.
+"""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -14,7 +28,6 @@ from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_artifact_indexing import (
     artifact_index_fingerprint,
     build_job,
-    canonical_archive_member_identity,
     canonical_artifact_identity,
     load_accepted_artifact_index,
 )
@@ -22,7 +35,6 @@ from appsec_review.jobs.job_artifact_indexing.job import (
     _finish_shard,
     _manifest_entries,
     _shard_layout,
-    _validate_receipts,
 )
 from appsec_review.retrieval import (
     INDEX_SCHEMA,
@@ -40,7 +52,7 @@ from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 RUN_ID = "2026-10-08-0001"
 
 
@@ -439,36 +451,6 @@ def test_accepted_reader_rejects_malformed_or_unbound_retained_receipts(
         runner.execute_or_reuse_unit(job, claim, "load.accepted_builds")
 
 
-def test_canonical_artifact_and_archive_member_identities_are_stable_and_strict() -> None:
-    artifact = {"workspace_path": "dist/module.wasm", "sha256": "1" * 64,
-                "size_bytes": 8, "kind": "wasm-module"}
-    first = canonical_artifact_identity("snapshot", "unit", artifact)
-    second = canonical_artifact_identity("snapshot", "unit", dict(reversed(list(artifact.items()))))
-    assert first == second and first.kind == EntityKind.WASM_MODULE
-    member = canonical_archive_member_identity("snapshot", first,
-                                                {"member": "pkg/mod.py", "size_bytes": 9})
-    assert member.kind == EntityKind.ARCHIVE_MEMBER
-    with pytest.raises(ValueError, match="non-canonical"):
-        canonical_archive_member_identity("snapshot", first,
-                                          {"member": "pkg/../secret", "size_bytes": 9})
-
-
-def test_fingerprints_bind_relevant_inputs_but_not_scanner_or_mcp_identity() -> None:
-    receipt = {"build_unit_id": "unit", "fingerprint": "1" * 64,
-               "recipe_identity": "2" * 64, "probe_identity": "3" * 64,
-               "upstream_handoff_sha256": "4" * 64, "image": {"image_id": "sha256:" + "5" * 64},
-               "workspace_manifest": {"sha256": "6" * 64}, "commands": [],
-               "executor_identity": "executor/1", "capture_identity": "capture/1", "family": "native"}
-    artifact = {"workspace_path": "a.o", "sha256": "7" * 64, "size_bytes": 1, "kind": "object"}
-    arguments = dict(name="artifacts", target_snapshot="snapshot", receipt=receipt,
-        artifacts=[artifact], upstream_manifests=["6" * 64], extractor_identity="extractor/1",
-        parser_identity="parser/1", normalizer_identity="normalizer/1", mapping_identity="mapping/1")
-    first = artifact_index_fingerprint(**arguments)
-    assert first == artifact_index_fingerprint(**arguments)
-    assert first != artifact_index_fingerprint(**{**arguments, "extractor_identity": "extractor/2"})
-    assert "scanner" not in json.dumps(arguments) and "mcp" not in json.dumps(arguments)
-
-
 @pytest.mark.parametrize("family, observation_count", (("rust", 3), ("native", 3),
                                                        ("native", 501)))
 def test_repeated_link_observations_produce_one_relation_with_provenance(
@@ -553,40 +535,6 @@ def test_node_catalog_payload_preserves_source_identity_and_exact_producing_acti
             "AND source_id=?", (identity,)
         ).fetchone()
     assert relation == (1, 1.0, None)
-
-
-def test_node_artifact_validation_rejects_weakened_origin_or_workspace_identity(tmp_path: Path) -> None:
-    _config, _target, snapshot, run_root, receipts, *_ = _seed(tmp_path)
-    receipt = receipts[0]
-    receipt["family"] = "node"
-    receipt["artifacts"][0]["artifact_origin"] = "untrusted-discovery"
-
-    with pytest.raises(ValueError, match="origin is invalid"):
-        _validate_receipts(run_root, snapshot, [receipt])
-
-    receipt["artifacts"][0]["artifact_origin"] = "build-output"
-    receipt["artifacts"][0]["build_unit_id"] = "other-unit"
-    with pytest.raises(ValueError, match="build-unit identity changed"):
-        _validate_receipts(run_root, snapshot, [receipt])
-
-
-def test_node_package_integrity_is_bound_to_the_workspace_artifact(tmp_path: Path) -> None:
-    _config, _target, snapshot, run_root, receipts, *_ = _seed(tmp_path)
-    receipt = receipts[0]
-    receipt["family"] = "node"
-    artifact = receipt["artifacts"][1]
-    artifact.update(kind="package", artifact_origin="build-output")
-    receipt["artifacts"] = [artifact]
-    receipt["tool_invocations"] = [{"package_integrity": [{
-        "workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"],
-        "integrity": "sha512-fixture", "shasum": "a" * 40,
-    }]}]
-
-    validated, gaps = _validate_receipts(run_root, snapshot, [receipt])
-
-    assert not gaps
-    assert validated[0]["validated_artifacts"][0]["package_integrity"]["integrity"] == (
-        "sha512-fixture")
 
 
 def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tmp_path: Path) -> None:

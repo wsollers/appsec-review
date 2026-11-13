@@ -16,7 +16,7 @@ from appsec_review.jobs.job_test_coverage import build_job as coverage_job, load
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.validation import validation_scope
-from tests.test_artifact_indexing import RUN_ID, _identity, _publish_changed_language_receipts, _seed
+from tests.integration.job_artifact_indexing.test_artifact_indexing_graph import RUN_ID, _identity, _publish_changed_language_receipts, _seed
 
 
 REPORTS = {

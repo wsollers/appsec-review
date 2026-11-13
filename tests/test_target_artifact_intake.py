@@ -212,38 +212,3 @@ def test_target_artifact_scanner_mount_keeps_original_filename_without_copying_p
     assert request.target_root != path.parent
     assert list(request.target_root.iterdir()) == [request.target_root / "customer.jar"]
     assert (request.target_root / "customer.jar").stat().st_size == 0
-
-
-@pytest.mark.parametrize("corrupt", ["platform_role", "different_target", "outside_object_store"])
-def test_invalid_target_artifact_provenance_is_rejected_before_payload_access(tmp_path, monkeypatch, corrupt):
-    from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
-    from appsec_review.jobs.job_artifact_indexing.job import ArtifactIndexIntegrityError, _target_artifacts
-    from appsec_review.jobs.job_evidence_collection import job as evidence
-    from appsec_review.storage import shared
-    from appsec_review.runtime import consume
-    monkeypatch.setattr(consume, "has_accepted_upstream", lambda root, job_id: job_id == "job_target_catalog")
-    raw = {"path": "data/shared/objects/" + "a" * 64, "sha256": "a" * 64, "size_bytes": 8,
-           "schema": "appsec-review/target-artifact-intake/1",
-           "kind": "wasm-module", "workspace_path": "module.wasm", "target_relative_path": "module.wasm",
-           "artifact_origin": "target-intake", "scope_version": SCOPE_VERSION,
-           "scope_role": ScopeRole.UNKNOWN.value, "source_fingerprint": "target",
-           "delivery_status": "unknown", "mapping": "exact-target-path", "mapping_confidence": 1.0}
-    if corrupt == "platform_role":
-        raw["scope_role"] = ScopeRole.PLATFORM.value
-    elif corrupt == "different_target":
-        raw["source_fingerprint"] = "different"
-    else:
-        raw["path"] = "data/codeql/scopes/unit/export/pack/supplied"
-    catalog = SimpleNamespace(source_fingerprint="target", handoff_sha256="b" * 64,
-                              target_artifact_inventory_available=True, target_artifact_gaps=(),
-                              target_artifacts=(raw,))
-    def load_catalog_without_intake(_root, *, intake_target_root):
-        # Artifact indexing declares no job_review_intake input, so it must not ask for that read.
-        assert intake_target_root is False
-        return catalog
-    monkeypatch.setattr(evidence, "load_target_catalog", load_catalog_without_intake)
-    monkeypatch.setattr(shared, "verify_reference",
-                        lambda *args: pytest.fail("invalid provenance reached payload verification"))
-    unit = SimpleNamespace(job=SimpleNamespace(run_root=tmp_path, source_fingerprint="target"))
-    with pytest.raises(ArtifactIndexIntegrityError, match="provenance"):
-        _target_artifacts(unit)
