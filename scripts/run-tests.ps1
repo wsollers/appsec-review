@@ -15,6 +15,7 @@ param(
     [int]$ShuffleSeed,
     [switch]$NoShuffle,
     [switch]$Strict,
+    [string]$Coverage,
     [string]$Baseline,
     [string]$WriteBaseline,
     [string]$Acceptance,

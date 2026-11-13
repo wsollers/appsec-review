@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 import hashlib
 import json
+import keyword
 import os
 from pathlib import Path
 import platform
@@ -256,11 +257,40 @@ def shared_error_groups(report: dict) -> list[dict]:
             for signature, nodes in sorted(groups.items(), key=lambda pair: (-len(pair[1]), pair[0])) if len(nodes) > 1]
 
 
+def coverage_report(path: Path) -> dict:
+    """Read counts without making coverage availability or completeness a test verdict."""
+    result = {"json": str(path)}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        totals = payload.get("totals") if isinstance(payload, dict) else None
+        keys = ("covered_lines", "num_statements", "missing_lines",
+                "covered_branches", "num_branches", "missing_branches")
+        if not isinstance(totals, dict) or any(type(totals.get(key)) is not int or totals[key] < 0 for key in keys):
+            raise ValueError("coverage totals must contain nonnegative integer line and branch counts")
+        if (totals["covered_lines"] + totals["missing_lines"] != totals["num_statements"]
+                or totals["covered_branches"] + totals["missing_branches"] != totals["num_branches"]):
+            raise ValueError("coverage totals have inconsistent covered/missing counts")
+        result["totals"] = {key: totals[key] for key in keys}
+    except (OSError, UnicodeError, ValueError) as error:
+        result["error"] = f"{type(error).__name__}: {error}"
+    return result
+
+
 def render_report(report: dict, *, log: Path, timings: Path, diff: dict | None, baseline: Path | None) -> str:
     counts = ", ".join(f"{report['counts'].get(key, 0)} {key}" for key in ("passed", "failed", "error", "skipped", "xfailed", "xpassed")
                        if report["counts"].get(key)) or "no summary line found"
     lines = [f"counts: {counts}", f"elapsed: {report['elapsed_s']} s" if report["elapsed_s"] is not None else "elapsed: unknown",
              f"log: {log}", f"junit: {report['junit']}" + ("" if report["junit_present"] else " (missing)"), f"timings: {timings}"]
+    if "coverage" in report:
+        coverage = report["coverage"]
+        lines.append(f"coverage JSON: {coverage['json']}")
+        if "totals" in coverage:
+            totals = coverage["totals"]
+            lines.append(f"coverage totals: lines {totals['covered_lines']}/{totals['num_statements']} "
+                         f"(missing {totals['missing_lines']}), branches {totals['covered_branches']}/{totals['num_branches']} "
+                         f"(missing {totals['missing_branches']})")
+        else:
+            lines.append(f"coverage totals: unavailable ({coverage['error']})")
     lines.append(f"slower than {SLOW_SECONDS:g}s: " + (", ".join(f"{item['node']} ({item['duration_s']}s)" for item in report["slow"]) or "none"))
     lines.append(f"failures: {len(report['failures'])}")
     for item in report["failures"]:
@@ -298,7 +328,15 @@ def parse_output(text: str, known: dict[str, str]) -> Result:
 def run(args: argparse.Namespace, root: Path) -> int:
     started = time.monotonic()
     root = root.resolve()
+    coverage = getattr(args, "coverage", None)
+    if coverage is not None and (not re.fullmatch(r"appsec_review(?:\.[A-Za-z_][A-Za-z0-9_]*)*", coverage)
+                                 or any(keyword.iskeyword(part) for part in coverage.split("."))):
+        print("error: --coverage PACKAGE must be a dotted module name under appsec_review", file=sys.stderr, flush=True)
+        return 2
     if getattr(args, "acceptance", None):
+        if coverage is not None:
+            print("error: --coverage cannot combine with --acceptance", file=sys.stderr, flush=True)
+            return 2
         if (any(getattr(args, name, None) is not None for name in
                 ("max_tests", "expect_tests", "collection_seconds", "timeout_seconds"))
                 or getattr(args, "allow_heavy", False)):
@@ -347,6 +385,16 @@ def run(args: argparse.Namespace, root: Path) -> int:
         print(f"error: suite {args.suite!r} has no existing selectors", file=sys.stderr, flush=True)
         return 2
     python, environment = find_python(root)
+    if coverage is not None:
+        try:
+            probe = subprocess.run([python, "-c", "import pytest_cov"], cwd=root,
+                                   env={**os.environ, **environment}, capture_output=True, text=True,
+                                   timeout=min(5.0, limits.timeout_seconds), check=False)
+            if probe.returncode:
+                raise ValueError(f"pytest_cov is not importable with {python}: {probe.stderr.strip()}")
+        except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+            print(f"error: --coverage requires importable pytest_cov: {error}", file=sys.stderr, flush=True)
+            return 2
     parallel = args.parallel
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f") + f"-{os.getpid()}"
     name = "custom" if args.extra else args.suite
@@ -355,6 +403,14 @@ def run(args: argparse.Namespace, root: Path) -> int:
     # Pin config/root and clear its addopts; only the wrapper may select scope and scratch paths.
     command[3:3] = ["-p", "ops_test_guard", "-c", str(root / "pyproject.toml"),
                     f"--rootdir={root}", "-o", "addopts="]
+    collection_command = command.copy()
+    if parallel:
+        index = collection_command.index("-n")
+        del collection_command[index:index + 2]
+    collection_command.append("--collect-only")
+    coverage_path = Path("test/tmp") / f"{session}.coverage.json"
+    if coverage is not None:
+        command += [f"--cov={coverage}", "--cov-branch", f"--cov-report=json:{coverage_path.as_posix()}"]
     log = root / "test" / "tmp" / "logs" / f"{session}.log"
     if args.suite == "live" and not args.extra:
         print(LIVE_WARNING, flush=True)
@@ -379,11 +435,6 @@ def run(args: argparse.Namespace, root: Path) -> int:
                "manifest": str(manifest), "proof_directory": str(proofs), "stage": "collect"}
     env[CONTROL_ENV] = json.dumps(control)
     collection_log = log.with_suffix(".collection.log")
-    collection_command = command.copy()
-    if parallel:
-        index = collection_command.index("-n")
-        del collection_command[index:index + 2]
-    collection_command.append("--collect-only")
     deadline = started + limits.timeout_seconds
     collection_deadline = min(deadline, time.monotonic() + limits.collection_seconds)
     collected = supervise(
@@ -398,6 +449,8 @@ def run(args: argparse.Namespace, root: Path) -> int:
             print(f"  {node}", flush=True)
         control["stage"] = "execute"
         env[CONTROL_ENV] = json.dumps(control)
+        if coverage is not None:
+            env["COVERAGE_FILE"] = f"test/tmp/{session}.coverage"
         executed = supervise(command, root, env, process_root / "execute", log, deadline=deadline,
                              cleanup_seconds=min(3.0, limits.timeout_seconds / 4))
         stages["execution"] = executed
@@ -424,6 +477,8 @@ def run(args: argparse.Namespace, root: Path) -> int:
     text = log.read_text(encoding="utf-8", errors="replace")
     print(text, end="", flush=True)
     fixed = junit_report(root / "test" / "tmp" / f"{session}.junit.xml", text)
+    if coverage is not None:
+        fixed["coverage"] = coverage_report(root / coverage_path)
     baseline_path = Path(args.baseline).resolve() if getattr(args, "baseline", None) else None
     diff = differential(fixed, load_baseline(baseline_path)) if baseline_path else None
     timings = root / "test" / "tmp" / f"{session}.timings.sqlite"
@@ -486,6 +541,15 @@ def register(commands, add, root: Path) -> None:
                      help="reproduce a shuffled order (named suites except live are shuffled by default)")
     sub.add_argument("--no-shuffle", action="store_true", help="keep pytest's deterministic collection order")
     sub.add_argument("--strict", action="store_true", help="fail even when only known failures remain")
+    sub.add_argument("--coverage", metavar="PACKAGE",
+                     help="branch coverage JSON for appsec_review or one dotted submodule (requires pytest-cov)")
+    # Refuse raw --cov even before "--", without changing existing option abbreviations.
+    option_tuples = sub._get_option_tuples
+
+    def exact_coverage_option(option_string):
+        return [match for match in option_tuples(option_string) if match[1] != "--coverage"]
+
+    sub._get_option_tuples = exact_coverage_option
     sub.add_argument("--baseline", metavar="FILE",
                      help="node ids that fail without this change (one per line; FAILED/ERROR prefixes allowed); "
                           "the verdict becomes the differential: new failures fail, unchanged ones do not")

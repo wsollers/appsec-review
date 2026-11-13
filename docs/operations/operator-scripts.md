@@ -514,6 +514,16 @@ exact files/nodes and supported pytest options after `--`; that selection is shu
 `--shuffle-seed` is given. Test standards and the working loop are in
 [`../architecture/testing.md`](../architecture/testing.md).
 
+`--coverage PACKAGE` (`-Coverage PACKAGE`) records line and branch coverage for `appsec_review`
+or one dotted module beneath it, including with `--parallel`. Invalid module names are refused
+before any subprocess starts; an import probe requires `pytest_cov` in the selected interpreter
+(also for `--dry-run`). The execution command alone gains `--cov=PACKAGE --cov-branch
+--cov-report=json:test/tmp/<session>.coverage.json`, with
+`COVERAGE_FILE=test/tmp/<session>.coverage`; the collection command is unchanged.
+This option cannot combine with `--acceptance`. Raw `--cov*` flags remain refused.
+There is no cache option: `-p no:cacheprovider` remains refused, and pytest's cache already lives
+under `test/tmp/.pytest_cache`. Without `--coverage`, the command and report are unchanged.
+
 Named broad suites still require explicit selection and adequate explicit budgets; defaults
 are not expanded to make them pass. Integration/live files additionally require `--allow-heavy`
 in focused mode. `live` and `all-offline` are explicitly manual suites, not permission to run
@@ -533,6 +543,11 @@ Every run also writes pytest's junit file (`test/tmp/tests-<suite>-<timestamp>.j
 - `counts` (passed, failed, error, skipped, xfailed, xpassed) and `elapsed` from pytest's summary line;
 - the `log`, `junit` and `timings` paths (the timings database `tests/conftest.py` writes beside the
   base temp);
+- only with `--coverage`: two additional lines, `coverage JSON` with its path and `coverage totals`
+  with covered/total and missing line and branch counts read from that JSON. Missing, unreadable
+  or malformed JSON is reported as unavailable, not as zero coverage or a test failure. The saved
+  report includes the same counts or error under `report.coverage`. Coverage numbers and report
+  availability never change the wrapper's exit code; the caller owns any coverage gate;
 - `slower than 10s`: every test over the unit limit with its duration;
 - `failures`: every `FAILED`/`ERROR` node id verbatim, each followed by the `E ` lines of its report;
 - `shared error text`: failures whose last `E ` line is the same (whitespace collapsed, memory
