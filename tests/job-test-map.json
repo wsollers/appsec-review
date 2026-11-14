@@ -199,7 +199,9 @@
       "unit": [
         "tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that",
         "tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket",
-        "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps"
+        "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps",
+        "tests/unit/review_decision_audit_wiring/test_classification.py",
+        "tests/unit/review_decision_audit_wiring/test_gate_handler.py"
       ],
       "integration": [],
       "acceptance": ["tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket"],
@@ -252,7 +254,9 @@
         "tests/unit/review_decision_audit_producer/test_integrity.py",
         "tests/unit/review_decision_audit_producer/test_projection.py",
         "tests/unit/review_decision_audit_producer/test_publication.py",
-        "tests/unit/review_decision_audit_producer/test_review_fixes.py"
+        "tests/unit/review_decision_audit_producer/test_review_fixes.py",
+        "tests/unit/review_decision_audit_wiring/test_inference_handler.py",
+        "tests/unit/review_decision_audit_wiring/test_origin.py"
       ],
       "integration": [
         "tests/integration/test_review_consumer_acceptance.py",
@@ -653,7 +657,8 @@
         "tests/test_input_contract_admission.py",
         "tests/test_downstream_input_contracts.py",
         "tests/test_standalone_input_contracts.py",
-        "tests/test_shard_ownership.py"
+        "tests/test_shard_ownership.py",
+        "tests/unit/review_decision_audit_wiring/test_optional_declarations.py"
       ],
       "integration": ["tests/integration/test_job_input_contracts.py"],
       "acceptance": ["tests/acceptance/test_job_input_contracts.py"],
@@ -738,16 +743,19 @@
       "unit": [
         "tests/unit/review_decision_audit/test_contract.py",
         "tests/unit/review_decision_audit/test_datasets.py",
+        "tests/unit/review_decision_audit/test_imports.py",
         "tests/unit/review_decision_audit/test_metadata.py",
         "tests/unit/review_decision_audit/test_settings.py",
         "tests/unit/review_decision_audit_consumers/test_accepted_review.py",
         "tests/unit/review_decision_audit_consumers/test_cli.py",
+        "tests/unit/review_decision_audit_consumers/test_control_budget.py",
         "tests/unit/review_decision_audit_consumers/test_known_cell_scope.py",
         "tests/unit/review_decision_audit_consumers/test_lead_trace.py",
         "tests/unit/review_decision_audit_consumers/test_proposals.py",
         "tests/unit/review_decision_audit_consumers/test_query.py",
         "tests/unit/review_decision_audit_consumers/test_reader.py",
-        "tests/unit/review_decision_audit_consumers/test_reader_edges.py"
+        "tests/unit/review_decision_audit_consumers/test_reader_edges.py",
+        "tests/unit/review_decision_audit_consumers/test_source_permissions.py"
       ],
       "integration": [],
       "acceptance": [],

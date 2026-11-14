@@ -92,12 +92,12 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_inference_security_review` | `claim_ledger` | `appsec-review/ledger-event/1` | handoff | optional | gap |
 | `job_inference_security_review` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | handoff | optional | gap |
 | `job_inference_security_review` | `scores_and_findings` | `appsec-review/finding-package/2` | handoff | optional | gap |
-| `job_inference_security_review` | `review_audit_metadata` | `appsec-review/review-audit-publication/1` | handoff | optional | gap |
-| `job_inference_security_review` | `review_decision_audit` | `appsec-review/review-audit-manifest/1` | handoff | optional | not_applicable |
-| `job_inference_security_review` | `review_decisions` | `appsec-review/review-decision/1` | handoff | optional | not_applicable |
-| `job_inference_security_review` | `review_verification_coverage` | `appsec-review/verification-coverage/1` | handoff | optional | not_applicable |
-| `job_inference_security_review` | `review_decision_bases` | `appsec-review/decision-basis/1` | handoff | optional | not_applicable |
-| `job_inference_security_review` | `review_audit_continuations` | `application/x-ndjson` | handoff | optional | not_applicable |
+| `job_inference_security_review` | `review_audit_metadata` | `appsec-review/review-audit-publication/1` | handoff | when_output_declared | gap |
+| `job_inference_security_review` | `review_decision_audit` | `appsec-review/review-audit-manifest/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_decisions` | `appsec-review/review-decision/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_verification_coverage` | `appsec-review/verification-coverage/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_decision_bases` | `appsec-review/decision-basis/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_audit_continuations` | `application/x-ndjson` | handoff | when_output_declared | not_applicable |
 | `job_poc_generation` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_poc_generation` | `poc_generation_summary` | `appsec-review/poc-generation-handoff/2` | handoff | optional | gap |
 | `job_poc_generation` | `poc_writer_cells` | `appsec-review/poc-writer-receipt/1` | handoff | optional | gap |
@@ -108,6 +108,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_remediation_validation` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_remediation_validation` | `remediation_validation_summary` | `appsec-review/remediation-validations/1` | handoff | optional | gap |
 | `job_remediation_validation` | `remediation_validation_receipts` | `appsec-review/remediation-validation/1` | handoff | optional | gap |
+| `job_post_build_security_assessment` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_post_build_security_assessment` | `build_security` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 
 ### Published dataset declarations
 
@@ -496,6 +498,16 @@ flowchart LR
   input_schema70["appsec-review/remediation-validation/1"]
   producer70 --> input70 --> job
   input70 -. schema .-> input_schema70
+  producer71["job_post_build_security_assessment"]
+  input71["handoff"]
+  input_schema71["appsec-review/job-handoff/2"]
+  producer71 --> input71 --> job
+  input71 -. schema .-> input_schema71
+  producer72["job_post_build_security_assessment"]
+  input72["build_security"]
+  input_schema72["appsec-review/retrieval-index/2"]
+  producer72 --> input72 --> job
+  input72 -. schema .-> input_schema72
   output0["dossier_publications"]
   output_schema0["appsec-review/dossier-publication/1"]
   job --> output0

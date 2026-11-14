@@ -341,6 +341,13 @@ Available JSON pages distinguish `available`, `total`, `returned`, `coverage`, `
 This valid unavailable response exits 0; unusable inputs and integrity failures exit 2 with a
 named error. Fresh capacity/input omissions retain their specific reason.
 
+Control authentication has a fixed 64 MiB ceiling independent of a smaller optional audit
+budget. A valid unavailable descriptor verifies its frozen policy and original scope/handoff/
+projection anchors, retains those read receipts and opens no audit payloads. Available audits
+charge all control bytes against their frozen `max_input_bytes` before reading the manifest
+or rows. A small budget therefore cannot turn a valid disabled/capacity-limited descriptor
+into a publication failure, but it never permits an over-budget available audit.
+
 For another page, pass the returned `next_cursor` with the same run, template, filters and
 `--limit`. The cursor binds the exact accepted handoff, manifest, query and page size; changed
 acceptance or query settings invalidate it. Defaults and ceilings come from the run's frozen

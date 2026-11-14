@@ -25,9 +25,19 @@ operational receipts are distinct from source evidence, and raw review-cell prop
 provisional even when their producing attempt is accepted.
 
 Required inputs reject absence; optional inputs report gaps or explicit non-applicability.
-Conditional requirements apply when their producer is enabled in the frozen configuration.
+`when_producer_enabled` requirements apply when their producer is enabled in the frozen configuration.
 An accepted producer can still have partial, unavailable or retriable coverage. Acceptance is not
 completeness. A required producer envelope does not make every optional, per-scope dataset mandatory.
+
+`when_output_declared` is a separate, explicit compatibility mode for non-envelope handoff
+datasets. It lets an absent historical output declaration follow the requirement's gap or
+non-applicability policy. A present declaration still requires the exact schema and known
+authority; coverage restrictions and accepted run/target/attempt/hash checks still apply.
+This mode grants no permission to read undeclared payloads, even if their bytes are pinned
+elsewhere in the envelope. Ordinary optional/required behavior and historical serialized
+contract field shapes remain unchanged. The six protected decision-audit inputs on the
+dossier and final gate use this mode so historical audit absence can reach the reader's
+explicit `legacy_unrecorded` result.
 
 Scheduling edges order jobs, including transparent disabled vertices. Only semantic inputs
 participate in input selection and invalidation. Dispatch classes are `review_graph`,
