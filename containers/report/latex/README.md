@@ -35,6 +35,9 @@ confirmed finding (including document-origin findings) and per accepted PoC outc
 configured dossier cap with omissions recorded. The standalone
 report scripts remain available (see
 [`docs/operations/report-rendering.md`](../../../docs/operations/report-rendering.md)).
+The catalog's purpose text still says no pipeline job uses this image; the dossier consumer above
+supersedes that claim. Correcting the metadata is tracked by
+[T-050](../../../docs/TODO.md#t-050-container-catalog-deferred-acceptance-work).
 
 Build and check (about 5 minutes, about 1.0 GB image):
 

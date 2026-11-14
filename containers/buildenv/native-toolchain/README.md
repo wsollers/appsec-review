@@ -11,6 +11,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 The C/C++, Go, Python, PHP, Rust/WebAssembly and Node/TypeScript build environments share one
 C/C++ toolchain: node-gyp addons, phpize extensions, setuptools C extensions, cgo,
 clang `--target=wasm32` and direct native builds. Java, Android and .NET use separate bases.
+The catalog's purpose text still says every language environment inherits this base; correcting
+that metadata is tracked by
+[T-050](../../../docs/TODO.md#t-050-container-catalog-deferred-acceptance-work).
 
 It also carries the build drivers every family may meet (T-058): Autotools 2.71, libtool 2.4.7,
 CMake 3.28, Ninja 1.11, Meson 1.3 and pkg-config. A Go module with cgo + CMake, a Python package

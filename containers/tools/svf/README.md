@@ -50,7 +50,8 @@ Then refresh the tag's host binding, not `containers/catalog.toml`; see
 [image pin verification](../../../docs/operations/image-pin-verification.md).
 The manual live tier (`tests/live/test_svf_live.py`) still compares against an unbound catalog
 load. With no tracked `image_id`, it skips even when the image exists; this is a validation gap,
-not evidence that host-bound execution passed.
+not evidence that host-bound execution passed. The fixture correction is tracked by
+[T-050](../../../docs/TODO.md#t-050-container-catalog-deferred-acceptance-work).
 
 ## Runtime policy
 
