@@ -57,7 +57,7 @@ from appsec_review.review.result_cache import Memo
 from appsec_review.review.claims import normalize_claim
 from appsec_review.review.compact import Expander, expand_blue, expand_judge, expand_red, expand_verifier
 from appsec_review.review.fact_summary import summarize_fact
-from appsec_review.review.evidence import resolve_relation, satisfies
+from appsec_review.review.evidence import resolve_relation, resolve_warranted_relation, satisfies
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
 from appsec_review.review.judge import (
@@ -75,6 +75,7 @@ from appsec_review.review.package_view import PackageView, ViewLimits, build_vie
 from appsec_review.review import red_discovery
 from appsec_review.review.red_discovery import RED_ROLES, Citation, RedInvocation
 from appsec_review.review.teams import FairShareScheduler, QueuedPackage, ReviewTeamSemaphore, TeamUnavailable
+from appsec_review.review.warrants import PredicateWarrant, WARRANT_RULE_VERSION, WarrantScope, warrant_json
 from appsec_review.storage import atomic_json, file_sha256
 
 from .schemas import SchemaSet
@@ -83,6 +84,7 @@ LANE_SCHEMA = "appsec-review/inference-review-lane/1"
 VALIDATOR_VERSION = "inference-review-results/4"
 CHAIN_SEEDS_SCHEMA = "appsec-review/red-chain-seeds/1"
 POC_BASIS_SCHEMA = "appsec-review/red-poc-basis/1"
+WARRANTS_SCHEMA = "appsec-review/lane-predicate-warrants/1"
 RESULT_SCHEMAS = {Role.RED_TEAM_ANALYST: red_discovery.SCHEMA_NAME, Role.HYPOTHESIS_HUNTER: red_discovery.SCHEMA_NAME,
                   Role.BLUE_TEAM_REFUTER: "blue-result", Role.INDEPENDENT_VERIFIER: "verifier-result",
                   Role.ADJUDICATION_JUDGE: "judge-result"}
@@ -296,6 +298,7 @@ class TeamResult:
     cells: list[CellRecord] = field(default_factory=list)
     claims: list[Claim] = field(default_factory=list)
     relations: list[EvidenceRelation] = field(default_factory=list)
+    warrants: dict[str, PredicateWarrant] = field(default_factory=dict)
     gaps: list[Gap] = field(default_factory=list)
     requests: list[dict[str, Any]] = field(default_factory=list)
     independence: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
@@ -595,12 +598,35 @@ def _seen(cell: _Cell) -> set[str]:
     return set(receipt.get("seen_identities", ()))
 
 
+def _warrants_enabled(ctx: Any) -> bool:
+    settings = getattr(ctx, "settings", None)
+    policy = getattr(settings, "warrant_policy", None)
+    return bool(getattr(policy, "enabled", False))
+
+
+def _warrant_scope(work: PackageWork) -> WarrantScope:
+    scope = work.document.get("scope") if isinstance(work.document, Mapping) else {}
+    if not isinstance(scope, Mapping):
+        scope = {}
+    operation = scope.get("operation")
+    op_id = operation.get("operation_id") if isinstance(operation, Mapping) else None
+    build_id = scope.get("build_unit_id")
+    snapshot = work.document.get("target_snapshot") if isinstance(work.document, Mapping) else None
+    return WarrantScope(
+        target_snapshot=str(snapshot) if isinstance(snapshot, str) and snapshot else None,
+        build_scope_id=str(build_id) if isinstance(build_id, str) and build_id else None,
+        operation_id=str(op_id) if isinstance(op_id, str) and op_id else None,
+    )
+
+
 def _relations(ctx: ReviewContext, cell: _Cell, claim_id: str, items: Iterable[Mapping[str, Any]],
-               seen: set[str]) -> tuple[list[EvidenceRelation], list[Gap]]:
+               seen: set[str], *, claim: Claim | None = None, scope: WarrantScope | None = None,
+               warrants: dict[str, PredicateWarrant] | None = None) -> tuple[list[EvidenceRelation], list[Gap]]:
     relations: list[EvidenceRelation] = []
     gaps: list[Gap] = []
     allowed = ROLE_RELATION_KINDS[cell.spec.role]
     receipt = cell.record.receipt_sha256 if cell.record else None
+    warrants_enabled = _warrants_enabled(ctx) and claim is not None
     for item in items:
         kind = RelationKind(item["kind"])
         predicate = Predicate(item["predicate"])
@@ -610,12 +636,25 @@ def _relations(ctx: ReviewContext, cell: _Cell, claim_id: str, items: Iterable[M
                                  predicate=predicate))
             continue
         entity = str(item["entity_id"])
-        resolved = resolve_relation(ctx.core, claim_id=claim_id, predicate=predicate, kind=kind, entity_id=entity,
-                                    producing_cell_id=cell.cell_id,
-                                    retrieval_receipt_sha256=receipt if entity in seen else None,
-                                    rule_predicates=ctx.rule_predicates.get(entity, ()),
-                                    role=cell.spec.role.value)
-        (relations if isinstance(resolved, EvidenceRelation) else gaps).append(resolved)
+        if warrants_enabled and claim is not None:
+            warranted = resolve_warranted_relation(
+                ctx.core, claim=claim, predicate=predicate, kind=kind, entity_id=entity,
+                producing_cell_id=cell.cell_id, retrieval_receipt_sha256=receipt if entity in seen else None,
+                rule_predicates=ctx.rule_predicates.get(entity, ()), role=cell.spec.role.value, scope=scope)
+            if isinstance(warranted, Gap):
+                gaps.append(warranted)
+            else:
+                relation, warrant = warranted
+                relations.append(relation)
+                if warrants is not None:
+                    warrants[relation.relation_id] = warrant
+        else:
+            resolved = resolve_relation(ctx.core, claim_id=claim_id, predicate=predicate, kind=kind, entity_id=entity,
+                                        producing_cell_id=cell.cell_id,
+                                        retrieval_receipt_sha256=receipt if entity in seen else None,
+                                        rule_predicates=ctx.rule_predicates.get(entity, ()),
+                                        role=cell.spec.role.value)
+            (relations if isinstance(resolved, EvidenceRelation) else gaps).append(resolved)
     return relations, gaps
 
 
@@ -642,7 +681,9 @@ def _markers(texts: Iterable[str]) -> list[str]:
 
 
 def _red_relations(ctx: ReviewContext, cell: _Cell, claim_id: str, red: Mapping[str, Any],
-                   proposal: Mapping[str, Any], seen: set[str]) -> tuple[list[EvidenceRelation], list[Gap]]:
+                   proposal: Mapping[str, Any], seen: set[str], *, claim: Claim | None = None,
+                   scope: WarrantScope | None = None,
+                   warrants: dict[str, PredicateWarrant] | None = None) -> tuple[list[EvidenceRelation], list[Gap]]:
     """Relations for one red proposal: its cited references and its observed taint hops.
 
     ``nominates`` references and hops whose basis is ``analyst_hypothesis`` never become relations.
@@ -654,13 +695,17 @@ def _red_relations(ctx: ReviewContext, cell: _Cell, claim_id: str, red: Mapping[
     for citation in red_discovery.proposal_citations(red, proposal):
         if citation.kind is None:
             continue
+        candidates: dict[str, PredicateWarrant] = {}
         found, failed = _relations(ctx, cell, claim_id, [{"kind": citation.kind.value, "entity_id": citation.entity_id,
-                                                          "predicate": citation.predicate.value}], seen)
+                                                          "predicate": citation.predicate.value}], seen,
+                                   claim=claim, scope=scope, warrants=candidates if warrants is not None else None)
         gaps.extend(failed)
         for relation in found:
             mismatch = _citation_mismatch(ctx, relation, citation)
             if mismatch is None:
                 relations.append(relation)
+                if warrants is not None and relation.relation_id in candidates:
+                    warrants[relation.relation_id] = candidates[relation.relation_id]
             else:
                 gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim_id, mismatch, predicate=relation.predicate))
     return relations, gaps
@@ -912,10 +957,14 @@ def _round_state(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> t
     """Only deterministic R5 states, with R6 independence, can supply accepted seed facts."""
     known = []
     states = []
+    warrants_enabled = _warrants_enabled(ctx)
     for claim in sorted(result.claims, key=lambda item: item.claim_id):
         relations = [item for item in result.relations if item.claim_id == claim.claim_id]
         independent = any(item["independent"] for item in result.independence.get(claim.claim_id, ()))
-        decision = adjudicate(claim, relations, independent, work.entities, (), round=work.round_index)
+        claim_warrants = ([result.warrants[item.relation_id] for item in relations if item.relation_id in result.warrants]
+                          if warrants_enabled else None)
+        decision = adjudicate(claim, relations, independent, work.entities, (), round=work.round_index,
+                              warrants=claim_warrants, warrant_policy_enabled=warrants_enabled)
         states.append({"claim_id": claim.claim_id, "state": decision.state.value,
                        "predicates": [(item.predicate.value, item.outcome.value) for item in decision.predicates]})
         if decision.state not in {ClaimState.SUPPORTED, ClaimState.CONFIRMED}:
@@ -1062,8 +1111,9 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
             future.result()
     judges = _plan_judges(ctx, work, routing, reviews, result)
     _run_judges(ctx, judges)
+    warrant_scope = _warrant_scope(work) if _warrants_enabled(ctx) else None
     for group, control, reach, verifier in reviews:
-        _review(ctx, group, (control, reach), verifier, result)
+        _review(ctx, group, (control, reach), verifier, result, scope=warrant_scope)
     for plan in judges:
         _judged(ctx, plan, result)
 
@@ -1302,19 +1352,23 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
                                        "proposal_claims": {local: local_claims.get(local) for local in steps},
                                        "seed": dict(seed)})
     ordered = []
+    warrant_scope = _warrant_scope(work) if _warrants_enabled(ctx) else None
     for claim_id in sorted(groups):
         group = groups[claim_id]
         cells = sorted({cell.cell_id for cell in group["cells"]})
         group["claim"] = replace(group["claim"], origin_cell_ids=tuple(cells))
         relations: dict[str, EvidenceRelation] = {}
+        group_warrants: dict[str, PredicateWarrant] = {}
         gaps = list({gap.gap_id: gap for gap in group["gaps"]}.values())
         requests: list[dict[str, Any]] = []
         for cell, proposal, red, seen in group["items"]:
-            found, failed = _red_relations(ctx, cell, claim_id, red, proposal, seen)
+            found, failed = _red_relations(ctx, cell, claim_id, red, proposal, seen,
+                                           claim=group["claim"], scope=warrant_scope, warrants=group_warrants)
             relations.update((relation.relation_id, relation) for relation in found)
             gaps.extend(failed)
             requests.extend(_requests(cell, claim_id, red_discovery.proposal_requests(red, proposal["local_id"])))
         group["relations"] = [relations[key] for key in sorted(relations)]
+        group["warrants"] = group_warrants
         group["relation_gaps"] = gaps
         group["requests"] = requests
         group["support"] = len({relation.predicate for relation in relations.values()
@@ -1389,6 +1443,7 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
             result.triage.append({"claim_id": group["claim"].claim_id, "decision": "admitted", "reason": None,
                                   "support": group["support"]})
         result.relations.extend(group["relations"])
+        result.warrants.update(group.get("warrants", {}))
         result.requests.extend(group["requests"])
         _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
                          group["claim"].claim_id, "admitted", None)
@@ -1401,7 +1456,7 @@ def _actor(cell: _Cell) -> ActorRecord:
 
 
 def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _Cell], verifier: _Cell,
-            result: TeamResult) -> None:
+            result: TeamResult, *, scope: WarrantScope | None = None) -> None:
     claim: Claim = group["claim"]
     markers = list(group["narratives"])
     for cell in (*blues, verifier):
@@ -1411,7 +1466,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
     for cell in blues:
         if cell.record.status is CellStatus.SUCCEEDED and cell.outcome.result is not None:
             found, failed = _relations(ctx, cell, claim.claim_id, cell.outcome.result.get("proposed_relations", ()),
-                                       _seen(cell))
+                                       _seen(cell), claim=claim, scope=scope, warrants=result.warrants)
             result.relations.extend(found)
             result.gaps.extend(failed)
             result.requests.extend(_requests(cell, claim.claim_id, cell.outcome.result.get("evidence_requests", ())))
@@ -1425,7 +1480,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
         return
     seen = _seen(verifier)
     found, failed = _relations(ctx, verifier, claim.claim_id, verifier.outcome.result.get("proposed_relations", ()),
-                               seen)
+                               seen, claim=claim, scope=scope, warrants=result.warrants)
     result.relations.extend(found)
     result.gaps.extend(failed)
     result.requests.extend(_requests(verifier, claim.claim_id, verifier.outcome.result.get("evidence_requests", ())))
@@ -1562,14 +1617,16 @@ def _ordered_packages(packages: Sequence[PackageWork]) -> list[PackageWork]:
             for work in pair if work is not None] + ordinary
 
 
-def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledger_path: Path, stream: str) -> dict[str, Any]:
+def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledger_path: Path, stream: str, *,
+                 warrants_enabled: bool = False) -> dict[str, Any]:
     """A lane that could not start: every package is a gapped package and the shard records it."""
     teams = []
     for work in sorted(packages, key=lambda item: (item.rank, item.package_id)):
         team = TeamResult(work.package_id, lane, work.unit_key, leads=_lead_ids(work))
         team.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"lane failure: {reason}"))
         teams.append(team)
-    return _seal(None, lane, teams, {Lane.LEAD: 0, Lane.HUNT: 0}, ledger_path, stream)
+    return _seal(None, lane, teams, {Lane.LEAD: 0, Lane.HUNT: 0}, ledger_path, stream,
+                 warrants_enabled=warrants_enabled)
 
 
 def _signal(signal_dir: Path, lane: Lane, ordered: Sequence[PackageWork], allocation: Mapping[Lane, int], *,
@@ -1588,7 +1645,7 @@ def _read_signal(signal_dir: Path, lane: Lane) -> Mapping[str, Any] | None:
 
 
 def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], allocation: Mapping[Lane, int],
-          ledger_path: Path, stream: str) -> dict[str, Any]:
+          ledger_path: Path, stream: str, *, warrants_enabled: bool = False) -> dict[str, Any]:
     writer = LedgerWriter(ledger_path, stream)
     gaps: dict[str, Gap] = {}
     for team in teams:
@@ -1662,6 +1719,8 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
     }
     document["counts"].update(claims=len({claim.claim_id for team in teams for claim in team.claims}),
                               cells=len(expected_cells), gaps=len(gaps))
+    if warrants_enabled or _warrants_enabled(ctx):
+        document["warrants"] = _warrants_artifact(lane, teams, Path(ledger_path).with_name("warrants.json"))
     return document
 
 
@@ -1709,6 +1768,24 @@ def _poc_basis_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path) -> 
                                     "or executable code, and no claim state depends on them",
                        "briefs": entries})
     return {"path": str(path), "schema": POC_BASIS_SCHEMA, "count": len(entries), "sha256": file_sha256(path)}
+
+
+def _warrants_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path) -> dict[str, Any]:
+    """Persist the lane's ``predicate-warrant/1`` records when ``warrant_policy.enabled`` is on."""
+    merged: dict[str, PredicateWarrant] = {}
+    for team in teams:
+        admitted_relations = {item.relation_id for item in team.relations}
+        for relation_id, warrant in team.warrants.items():
+            if relation_id not in admitted_relations:
+                continue
+            existing = merged.get(relation_id)
+            if existing is not None and existing != warrant:
+                raise IntegrityError(f"conflicting predicate warrants for relation {relation_id}")
+            merged[relation_id] = warrant
+    items = [warrant_json(merged[key]) for key in sorted(merged, key=lambda rel_id: merged[rel_id].warrant_id)]
+    atomic_json(path, {"schema": WARRANTS_SCHEMA, "lane": lane.value, "rule": WARRANT_RULE_VERSION,
+                       "count": len(items), "items": items})
+    return {"path": str(path), "schema": WARRANTS_SCHEMA, "count": len(items), "sha256": file_sha256(path)}
 
 
 def _merge_lists(items: Iterable[Mapping[str, list[Any]]]) -> dict[str, list[Any]]:

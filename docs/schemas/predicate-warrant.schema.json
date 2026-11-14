@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/predicate-warrant.schema.json",
+  "title": "Predicate Warrant and Lane Warrant Artifact Contracts",
+  "description": "Deterministic proposition-scoped evidence warrant (TRI-B / T-152) binding each decisive evidence citation to a specific obligation predicate, polarity, subject scope, and machine basis.",
+  "oneOf": [
+    {"$ref": "#/$defs/warrant"},
+    {"$ref": "#/$defs/lane_warrants"}
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "warrant_id": {
+      "type": "string",
+      "pattern": "^warrant-[0-9a-f]{64}$"
+    },
+    "claim_id": {
+      "type": "string",
+      "pattern": "^claim-[0-9a-f]{64}$"
+    },
+    "relation_id": {
+      "type": "string",
+      "pattern": "^evrel-[0-9a-f]{64}$"
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "logical_id": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 512,
+      "pattern": "^asr:[a-z0-9_]+:.+$"
+    },
+    "sink_logical_id": {
+      "type": "string",
+      "minLength": 15,
+      "maxLength": 512,
+      "pattern": "^asr:sink_site:.+$"
+    },
+    "nullable_string": {
+      "oneOf": [
+        {"$ref": "#/$defs/non_empty_string"},
+        {"type": "null"}
+      ]
+    },
+    "nullable_sha256": {
+      "oneOf": [
+        {"$ref": "#/$defs/sha256"},
+        {"type": "null"}
+      ]
+    },
+    "predicate": {
+      "enum": [
+        "affected_construct",
+        "attacker_input_control",
+        "source_to_sink_reachability",
+        "missing_or_ineffective_guard",
+        "configuration_enables",
+        "security_impact"
+      ]
+    },
+    "relation_kind": {
+      "enum": [
+        "supports",
+        "contradicts",
+        "qualifies"
+      ]
+    },
+    "warrant_basis": {
+      "enum": [
+        "structured_presence",
+        "structured_build_fact",
+        "structured_flow_fact",
+        "structured_guard_check",
+        "numeric_bound_check",
+        "mapped_tool_observation",
+        "uncommissioned_semantics"
+      ]
+    },
+    "warrant_result": {
+      "enum": [
+        "established_support",
+        "established_contradiction",
+        "qualified",
+        "not_established",
+        "uncommissioned"
+      ]
+    },
+    "warrant_reason_code": {
+      "enum": [
+        "bound_presence_supports_construct",
+        "presence_cannot_contradict_construct",
+        "bound_flow_supports_predicate",
+        "positive_fact_cannot_contradict",
+        "bound_configuration_fact",
+        "configuration_fact_inconclusive",
+        "effective_guard_bounds_destination",
+        "effective_guard_cannot_support_missing_guard",
+        "guard_absent_at_bound_sink",
+        "guard_ineffective_for_destination",
+        "destination_bound_unproved",
+        "operand_or_width_missing",
+        "operand_mismatch",
+        "numeric_machine_fact_required",
+        "bound_mapped_evidence",
+        "subject_not_bound_to_claim",
+        "ambiguous_subject_binding",
+        "sink_mismatch",
+        "build_scope_mismatch",
+        "contradiction_role_not_permitted",
+        "incomplete_fact_record",
+        "indirect_or_analyst_assessed",
+        "uncommissioned_semantic_predicate",
+        "qualifying_observation"
+      ]
+    },
+    "warrant_coverage": {
+      "enum": [
+        "complete_for_supplied_facts",
+        "incomplete_facts",
+        "ambiguous_binding",
+        "out_of_scope",
+        "uncommissioned_method"
+      ]
+    },
+    "subject_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "affected_entity_ids",
+        "operation_id",
+        "sink_id",
+        "build_scope_id"
+      ],
+      "properties": {
+        "affected_entity_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/logical_id"},
+          "uniqueItems": true
+        },
+        "operation_id": {"$ref": "#/$defs/nullable_string"},
+        "sink_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/sink_logical_id"},
+            {"type": "null"}
+          ]
+        },
+        "build_scope_id": {"$ref": "#/$defs/nullable_string"}
+      }
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entity_id",
+        "entity_kind",
+        "shard_id",
+        "content_sha256",
+        "locator",
+        "retrieval_receipt_sha256"
+      ],
+      "properties": {
+        "entity_id": {"$ref": "#/$defs/logical_id"},
+        "entity_kind": {"$ref": "#/$defs/non_empty_string"},
+        "shard_id": {"$ref": "#/$defs/non_empty_string"},
+        "content_sha256": {"$ref": "#/$defs/sha256"},
+        "locator": {"$ref": "#/$defs/non_empty_string"},
+        "retrieval_receipt_sha256": {"$ref": "#/$defs/nullable_sha256"}
+      }
+    },
+    "warrant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "warrant_id",
+        "claim_id",
+        "relation_id",
+        "predicate",
+        "requested_relation",
+        "effective_relation",
+        "subject_binding",
+        "basis",
+        "evidence_refs",
+        "rule",
+        "result",
+        "reason_code",
+        "coverage"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/predicate-warrant/1"},
+        "warrant_id": {"$ref": "#/$defs/warrant_id"},
+        "claim_id": {"$ref": "#/$defs/claim_id"},
+        "relation_id": {"$ref": "#/$defs/relation_id"},
+        "predicate": {"$ref": "#/$defs/predicate"},
+        "requested_relation": {"$ref": "#/$defs/relation_kind"},
+        "effective_relation": {"$ref": "#/$defs/relation_kind"},
+        "subject_binding": {"$ref": "#/$defs/subject_binding"},
+        "basis": {"$ref": "#/$defs/warrant_basis"},
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidence_ref"}
+        },
+        "rule": {"const": "predicate-warrants/1"},
+        "result": {"$ref": "#/$defs/warrant_result"},
+        "reason_code": {"$ref": "#/$defs/warrant_reason_code"},
+        "coverage": {"$ref": "#/$defs/warrant_coverage"}
+      }
+    },
+    "lane_warrants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "lane",
+        "rule",
+        "count",
+        "items"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/lane-predicate-warrants/1"},
+        "lane": {"enum": ["lead", "hunt"]},
+        "rule": {"const": "predicate-warrants/1"},
+        "count": {"type": "integer", "minimum": 0},
+        "items": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/warrant"}
+        }
+      }
+    }
+  }
+}

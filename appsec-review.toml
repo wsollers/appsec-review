@@ -2865,6 +2865,11 @@ shard_bytes = 8388608
 page_size = 50
 max_page_size = 200
 
+# Opt-in TRI-B application-validated predicate warrants (T-152). Default activation requires
+# separately authorized paired labelled policy evaluation and explicit approval.
+[jobs.job_inference_security_review.settings.warrant_policy]
+enabled = false
+
 [jobs.job_inference_security_review.settings.rounds]
 max_rounds = 3
 stable_rounds_required = 1

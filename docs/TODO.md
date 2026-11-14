@@ -156,8 +156,8 @@ until each is rewritten into the entry format when it is next touched.
 | T-149 | [Route scoped dependency decision packets into review and account for their use](#t-149-route-scoped-dependency-decision-packets-into-review-and-account-for-their-use) | review | blocked |
 | T-150 | [Publish complete protected review decision products](#t-150-publish-complete-protected-review-decision-products) | review | done (2026-11-13, 08d50a742) |
 | T-151 | [Bind hunt coverage obligations to accepted operation identities](#t-151-bind-hunt-coverage-obligations-to-accepted-operation-identities) | review | blocked |
-| T-152 | [Bind decisive evidence to scoped propositions and polarity](#t-152-bind-decisive-evidence-to-scoped-propositions-and-polarity) | evidence | blocked |
-| T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | blocked |
+| T-152 | [Bind decisive evidence to scoped propositions and polarity](#t-152-bind-decisive-evidence-to-scoped-propositions-and-polarity) | evidence | done (2026-11-14, docs/architecture/triage-verifier-enhancement.md#t-152-implementation-record) |
+| T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | open |
 | T-154 | [Audit labelled stage loss and dismissals by stratum](#t-154-audit-labelled-stage-loss-and-dismissals-by-stratum) | testing | blocked |
 | T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
 | T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
@@ -2402,7 +2402,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-152 — Bind decisive evidence to scoped propositions and polarity
 
-- **State:** blocked
+- **State:** done (2026-11-14, docs/architecture/triage-verifier-enhancement.md#t-152-implementation-record)
 - **Area:** evidence
 - **Blocked by:** T-150
 - **Blocks:** T-153
@@ -2419,12 +2419,13 @@ until each is rewritten into the entry format when it is next touched.
   Independently labelled paired policy evaluation is designed and separately authorized.
 - **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md#g2-admissibility-is-stronger-than-citation-validity-but-not-a-full-semantic-warrant),
   [design](architecture/triage-verifier-enhancement.md#tri-b-bind-decisive-evidence-to-scoped-propositions-and-polarity),
+  `docs/schemas/predicate-warrant.schema.json`, `src/appsec_review/review/warrants.py`,
   `src/appsec_review/review/evidence.py`, `src/appsec_review/review/adjudication.py`,
   `src/appsec_review/review/scoring/factors.py`.
 
 ### T-153 — Reconcile bounded evidence obligations with verified resolutions
 
-- **State:** blocked
+- **State:** open
 - **Area:** review
 - **Blocked by:** T-150, T-152
 - **Blocks:** T-156

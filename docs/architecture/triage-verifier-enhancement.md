@@ -140,7 +140,7 @@ delivery state remains in T-150 and its implementation verification record.
 | --- | --- | --- | --- | --- |
 | Decision audit / review_products | Declared review_decisions JSONL, review_decision_audit manifest and review_audit_metadata descriptor under attempt/artifacts/decision-audit | Bounded accepted-artifact reader and fixed operator query templates; no globally granted evidence shard | Operator and final gate; lead-adapter completion remains T-077; explain admitted/unadmitted/proposal-only/claim outcomes and omissions | Derived decision record, never new source evidence |
 | Verification coverage / review_products | Declared review_verification_coverage rows referenced by the audit manifest | Protected accepted-artifact route by claim/cell/evidence identity | Operator and authorized application readers; separate blindness, diversity and support completeness | Observed verification metadata, not new proof or a vote |
-| Predicate warrants / proposed review_products placement | Proposed predicate_warrants from T-152 relation resolution/adjudication | Future protected references; no new worker query grant | Adjudicator, scorer and verifier's own evidence evaluation | Only application-validated commissioned facts can support R5; audit row itself cannot |
+| Predicate warrants / review_products (opt-in T-152) | Opt-in lane `warrants.json` (`appsec-review/lane-predicate-warrants/1`) of `predicate-warrant/1` records when `warrant_policy.enabled = true` | Protected `FutureReferences.warrants` + `continuations/warrants/` in `decision-audit`; no worker query grant | Adjudicator, scorer (`GuardAbsentExtractor`) and protected audit readers | Only application-validated commissioned facts can support R5; default-off (`enabled = false`) until paired evaluation approval |
 | Evidence obligations and resolutions / proposed review_products placement | Proposed T-153 evidence_obligations artifact, bound to existing request/claim IDs | Protected route; in-package application supplies only admitted requests to later rounds | Existing red/blue follow-up capability; operator locates the next missing fact | Question/resolution metadata; never an instruction to run a new tool |
 | Decision basis in developer briefs / review_products | Declared review_decision_bases; existing dossier/gate bind exact accepted finding/claim references | Protected dossier detail plus sanitized bindings; no new public raw-evidence endpoint | Developer and authorized application readers; preserve counterevidence and limits | Immutable accepted decision plus original citations; not a new claim state |
 | Reference continuations / review_products | Declared review_audit_continuations JSONL, bound by field and manifest | Validated with the complete bundle before consumption | Authorized readers retain complete provenance beyond inline bounds | References retain original authority; continuation storage adds none |
@@ -181,8 +181,9 @@ T-150 families now have closed [codecs](../../src/appsec_review/review/decision_
 and a [schema](../schemas/review-decision-audit.schema.json); those definitions, rather than
 the early examples, are authoritative for implemented fields and invariants. The separate
 [publication descriptor](../schemas/review-audit-publication.schema.json) binds availability
-and frozen policy. Warrants, obligation resolution and stratified evaluation remain proposals
-owned by T-152, T-153 and T-154.
+and frozen policy. T-152 adds closed opt-in [warrant codecs and validators](../../src/appsec_review/review/warrants.py)
+and [schema](../schemas/predicate-warrant.schema.json) behind `warrant_policy.enabled = false`.
+Obligation resolution and stratified evaluation remain proposals owned by T-153 and T-154.
 
 ```text
 T-150 closed schema families:
@@ -192,8 +193,11 @@ appsec-review/decision-basis/1
 appsec-review/review-audit-manifest/1
 appsec-review/review-audit-publication/1
 
-PROPOSED schema families, NOT registered:
+T-152 opt-in closed schema families (default warrant_policy.enabled = false):
 appsec-review/predicate-warrant/1
+appsec-review/lane-predicate-warrants/1
+
+PROPOSED schema families, NOT registered:
 appsec-review/evidence-obligation/1
 appsec-review/stratified-review-audit/1
 ```
@@ -839,3 +843,52 @@ scripts/run-tests.sh --expect-tests 44 --max-tests 44 --timeout-seconds 180 \
 Result: **44 passed in 44.85 seconds**, with no failures, skips or case over ten seconds.
 The report is `test/tmp/reports/tests-custom-20261114-113616-609700-97527.json`.
 Integration, acceptance, live and deployment checks remain **NOT RUN**.
+
+## T-152 implementation record
+
+T-152 (`TRI-B`) implements application-validated predicate warrants behind the default-off
+`[jobs.job_inference_security_review.settings.warrant_policy]` setting (`enabled = false`),
+preserving default R5 adjudication, relation identities, `POLICY_SHA256`, package `basis`,
+and `FutureReferences.warrants = not_produced` byte-for-byte until policy activation is
+explicitly approved.
+
+Implemented surfaces:
+
+- [Typed warrant contract and validator](../../src/appsec_review/review/warrants.py) (`appsec-review/predicate-warrant/1`, `WARRANT_RULE_VERSION = "predicate-warrants/1"`) and [closed JSON Schema](../schemas/predicate-warrant.schema.json) (`predicate-warrant/1` and `lane-predicate-warrants/1`).
+- [Opt-in evidence resolution](../../src/appsec_review/review/evidence.py) (`resolve_warranted_relation`), retaining requested versus effective stance, downgrading wrong-subject, wrong-sink, wrong-build-scope, wrong-polarity, cherry-picked non-constraining sibling guard, `O1` numeric-prose, and uncommissioned semantic citations to `RelationKind.QUALIFIES` with explicit `WarrantReasonCode` and `WarrantCoverage`, and versioning `relation_id` with `WARRANT_RULE_VERSION`.
+- [Opt-in R5 adjudication](../../src/appsec_review/review/adjudication.py) (`WARRANT_POLICY_SHA256`, `policy_sha256(warrant_policy_enabled=...)`) and [shared scoring factor reuse](../../src/appsec_review/review/scoring/factors.py) (`FactorInput.warrants`, `GuardAbsentExtractor`), ensuring adjudication and scoring consume one warrant per relation rather than diverging guard heuristics.
+- [Pipeline and protected audit wiring](../../src/appsec_review/jobs/job_inference_security_review/teams.py) (`_warrants_artifact`, `stages.apply_policy`, `stages.score_claims`, `job.py` package `basis` versioning, `audit.py` symmetric lane verification, and `decision_audit/projection.py` `FutureReferences.warrants` + `continuations/warrants/` overflow shards).
+
+### Paired policy evaluation protocol (separately authorized)
+
+Default activation (`warrant_policy.enabled = true`) is gated on a separately authorized
+offline paired evaluation using `T-067` / `T-154` (`TRI-D`) independently labelled fixtures
+held outside any worker-readable scope:
+
+1. **Paired arms on identical inputs:** Replay recorded cell transcripts and accepted index
+   manifests under `warrant_policy.enabled = false` (`POLICY_SHA256`) and
+   `warrant_policy.enabled = true` (`WARRANT_POLICY_SHA256`) with identical model profiles,
+   guidance bundles, and budgets; no historical run artifacts are rewritten.
+2. **Stratified populations:** Stratify claims and relations across obligation families
+   (`memory_safety`, `numeric_truncation_sign_overflow`, `injection_reachability`,
+   `configuration_exposure`) and stance directions (`supports` vs `contradicts`), reporting
+   `WarrantReasonCode` confusion tables separately from unlabelled cases.
+3. **Predeclared acceptance criteria:**
+   - True-positive confirmation recall non-inferior within predeclared margin
+     ($\Delta\text{recall} \ge -0.02$), with zero regressions on exact-bound
+     `sink_site` + `dataflow_path` + `guard_fact(none)` fixtures.
+   - Measurable reduction in false confirmations and false dismissals caused by unrelated
+     guards, wrong-polarity presence citations, cross-sink symbol collisions, and `O1`
+     scanner-prose numeric assertions.
+   - Exact agreement (`100%`) between R5 `missing_or_ineffective_guard` warrant outcomes
+     and `GuardAbsentExtractor` factor values on scored claims.
+   - Explicit user authorization before flipping `warrant_policy.enabled` in
+     `appsec-review.toml`.
+
+### Verification summary
+
+Focused unit and regression checkpoints (commits `c12d9ef45` and `f881795d8` plus pipeline/audit/schema wiring):
+
+- `tests/unit/review_warrants/{test_warrants,test_optin_wiring,test_pipeline_audit_wiring}.py` + `tests/unit/review_decision_audit_producer/test_capture.py`: **30 passed in 6.64 seconds** (`--parallel --test-workers 2 --shuffle-seed 1525`), zero tests over 10 seconds.
+- Broad review/audit/contract regression sweep across `tests/unit/review_warrants/*`, `tests/unit/review_decision_audit_{producer,consumers}/*`, `tests/review/test_{evidence,adjudication,scoring,scoring_factors,predicate_admission,guard_bounds_mapping,numeric_reasoning,inference_review_schemas}.py`, and `tests/test_downstream_input_contracts.py`: **1,173 cases verified** (`1,170 passed` on initial sweep + `3` stub-context `SimpleNamespace` cases in `test_capture.py` fixed via `_warrants_enabled` and re-verified green), zero tests over 10 seconds.
+- Integration, acceptance, live Dagster/model runs, paired labelled corpus execution, and deployment reload remain **NOT RUN**.

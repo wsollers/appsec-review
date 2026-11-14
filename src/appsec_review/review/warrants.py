@@ -159,10 +159,11 @@ class WarrantReasonCode(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class WarrantScope:
-    """Optional caller-supplied snapshot and build-scope pins for warrant checks."""
+    """Optional caller-supplied snapshot, operation, and build-scope pins for warrant checks."""
 
     target_snapshot: str | None = None
     build_scope_id: str | None = None
+    operation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -519,7 +520,10 @@ def _infer_expected_build_scope(claim_entities: Mapping[str, Mapping[str, Any]],
     return next(iter(found_scopes)) if len(found_scopes) == 1 else None
 
 
-def _claim_operation_id(claim_entities: Mapping[str, Mapping[str, Any]]) -> str | None:
+def _claim_operation_id(claim_entities: Mapping[str, Mapping[str, Any]],
+                        scope: WarrantScope | None = None) -> str | None:
+    if scope is not None and scope.operation_id:
+        return scope.operation_id
     symbols = sorted(
         entity_id for entity_id, entity in claim_entities.items()
         if entity.get("kind") in {EntityKind.SYMBOL.value, EntityKind.BINARY_FUNCTION.value}
@@ -949,7 +953,7 @@ def evaluate_warrant(
     claim_entities = _resolve_claim_entities(core, claim)
     expected_build_scope = _infer_expected_build_scope(claim_entities, scope)
     entity_build_scope = _entity_build_scope_id(entity)
-    operation_id = _claim_operation_id(claim_entities)
+    operation_id = _claim_operation_id(claim_entities, scope)
     candidate_sinks, sinks_ambiguous = _candidate_sinks_for_claim(core, claim, claim_entities)
     bound_sink_id = next(iter(candidate_sinks)) if len(candidate_sinks) == 1 else None
 

@@ -27,6 +27,8 @@ from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import canonical_json
 from appsec_review.storage.shared import safe_path
 
+from .teams import WARRANTS_SCHEMA
+
 
 @dataclass(frozen=True)
 class AuditInputs:
@@ -195,6 +197,18 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
     projection = ledger_project(events)
     projected = document(inputs.projection, "appsec-review/claim-projection/1")
     lanes = tuple(document(ref, "appsec-review/inference-review-lane/1") for ref in inputs.lanes)
+    warrants: dict[str, Document] = {}
+    if any(lane.value.get("warrants") is not None for lane in lanes):
+        if not all(lane.value.get("warrants") is not None for lane in lanes):
+            raise IntegrityError("audit lanes disagree on predicate warrant production")
+        for lane in lanes:
+            ref = lane.value["warrants"]
+            if not isinstance(ref, Mapping) or "path" not in ref or "sha256" not in ref:
+                raise IntegrityError("malformed lane predicate warrant reference")
+            warrant_doc = document(ref, WARRANTS_SCHEMA)
+            if warrant_doc.value.get("lane") != lane.value["lane"]:
+                raise IntegrityError("lane predicate warrant artifact belongs to another lane")
+            warrants[lane.value["lane"]] = warrant_doc
     sets = tuple(document(ref, "appsec-review/inference-review-lane-packages/1") for ref in inputs.package_sets)
     packages = {}
     for package_set in sets:
@@ -291,7 +305,8 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
         document(inputs.adjudications, "appsec-review/inference-review-adjudications/1"),
         document(inputs.scores, "appsec-review/inference-review-scores/3"), findings,
         document(inputs.triage, "appsec-review/lead-triage/1"), receipts, checks, collection,
-        lead_sources, inputs.additional_expected_cells), settings=settings, directory=directory)
+        lead_sources, inputs.additional_expected_cells, warrants=warrants),
+        settings=settings, directory=directory)
     artifacts = []
     manifest = publish_bundle(run_root=run_root, attempt_root=attempt_root, origin=origin, settings=settings,
                               records=result.records, coverage=result.coverage, continuations=result.continuations,

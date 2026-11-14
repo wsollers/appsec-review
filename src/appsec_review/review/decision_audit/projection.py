@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 import hashlib
 from typing import Any, Mapping
 
@@ -13,6 +13,7 @@ from appsec_review.review.ledger import Projection
 from appsec_review.review.lead_families import LeadCollection
 from appsec_review.review.models import Admissibility, CellStatus, IntegrityError, Predicate, RelationKind, Role
 from appsec_review.review.secret_redaction import redact_message
+from appsec_review.review.warrants import WarrantResult, warrant_from_json
 from appsec_review.storage import canonical_json
 
 from . import contracts as c
@@ -83,6 +84,7 @@ class ProjectionInputs:
     collection: LeadCollection | None
     lead_sources: Mapping[str, c.SourceRef]
     additional_expected_cells: Mapping[str, str]
+    warrants: Mapping[str, Document] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,37 @@ class _Projector:
             self.claim_scores[score["claim_id"]].append(score)
         self.capabilities = {row["cell_id"]: row for lane in inputs.lanes
                              for row in lane.value.get("capabilities", ())}
+        self.relation_warrants: dict[str, c.SourceRef] = {}
+        self.claim_warrants: dict[str, list[c.SourceRef]] = defaultdict(list)
+        self.cell_warrants: dict[tuple[str, str], list[c.SourceRef]] = defaultdict(list)
+        for lane_name, warrant_doc in sorted(inputs.warrants.items()):
+            items = warrant_doc.value.get("items")
+            if (not isinstance(items, list)
+                    or warrant_doc.value.get("count") != len(items)
+                    or warrant_doc.value.get("lane") != lane_name):
+                raise IntegrityError("malformed lane predicate warrants document")
+            for raw in items:
+                warrant = warrant_from_json(raw)
+                if warrant.claim_id not in inputs.projection.claims:
+                    raise IntegrityError("predicate warrant names a claim absent from the accepted projection")
+                accepted_rels = {item.relation_id: item for item in inputs.projection.relations.get(warrant.claim_id, ())}
+                if warrant.relation_id not in accepted_rels:
+                    raise IntegrityError("predicate warrant names a relation absent from the accepted projection")
+                rel = accepted_rels[warrant.relation_id]
+                uses = (
+                    (c.EvidenceUse.READ, c.EvidenceUse.CITED)
+                    if warrant.result in (WarrantResult.ESTABLISHED_SUPPORT, WarrantResult.ESTABLISHED_CONTRADICTION)
+                    and rel.admissibility in (Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE)
+                    and rel.kind in (RelationKind.SUPPORTS, RelationKind.CONTRADICTS)
+                    else (c.EvidenceUse.READ,)
+                )
+                ref = warrant_doc.ref(warrant.warrant_id, *uses)
+                if warrant.relation_id in self.relation_warrants:
+                    raise IntegrityError("duplicate predicate warrant for relation in decision audit")
+                self.relation_warrants[warrant.relation_id] = ref
+                self.claim_warrants[warrant.claim_id].append(ref)
+                if rel.producing_cell_id:
+                    self.cell_warrants[(warrant.claim_id, rel.producing_cell_id)].append(ref)
 
     def add(self, record: c.Product) -> c.Product:
         if len(self.records) >= self.settings.max_records:
@@ -171,41 +204,80 @@ class _Projector:
                          link(scope.get("build_unit_id"), c.AbsenceReason.LEGACY_UNRECORDED), link(cell),
                          c.Round(round_index, None if round_index is not None else c.AbsenceReason.LEGACY_UNRECORDED))
 
-    def context(self, subject: c.Subject, *, sources=(), relations=(), proposals=(), text=None, gaps=()) -> c.Context:
+    def _spill_field(self, field_name: c.ReferenceField, remaining: tuple[c.SourceRef | c.RelationRef, ...],
+                     claim_id: c.Link, refs: list[c.ContinuationRef]) -> None:
+        while remaining:
+            chunk = remaining[:min(self.settings.shard_records, c.MAX_SHARD_RECORDS)]
+            while sum(len(canonical_json(row.to_dict())) for row in chunk) > self.settings.shard_bytes and len(chunk) > 1:
+                chunk = chunk[:len(chunk) // 2]
+            if sum(len(canonical_json(row.to_dict())) for row in chunk) > self.settings.shard_bytes:
+                raise AuditUnavailable("reference_exceeds_shard_bytes")
+            data = c.reference_bytes(field_name, chunk, origin=self.i.origin, claim_id=claim_id)
+            digest = hashlib.sha256(data).hexdigest()
+            path = f"{self.directory}/continuations/{field_name}/{digest}.jsonl"
+            refs.append(c.make_continuation(field_name, path, chunk, origin=self.i.origin, claim_id=claim_id))
+            self.continuations[path] = chunk
+            remaining = remaining[len(chunk):]
+
+    @staticmethod
+    def _dedup_sources(values: tuple[c.SourceRef, ...]) -> tuple[c.SourceRef, ...]:
+        by_key: dict[tuple[str, str | None], c.SourceRef] = {}
+        for item in values:
+            key = (item.path, item.record_id.value)
+            prev = by_key.get(key)
+            if prev is None:
+                by_key[key] = item
+            else:
+                merged_uses = tuple(dict.fromkeys((*prev.uses, *item.uses)))
+                by_key[key] = replace(prev, uses=merged_uses)
+        return tuple(sorted(by_key.values(), key=lambda row: canonical_json(row.to_dict())))
+
+    def context(self, subject: c.Subject, *, sources=(), relations=(), proposals=(), warrants=None,
+                text=None, gaps=()) -> c.Context:
         if not sources:
             sources = (self.i.projection_document.ref(),)
+        warrant_values: tuple[c.SourceRef, ...] = ()
+        if self.i.warrants:
+            raw_warrants = (
+                tuple(self.relation_warrants[rel.relation_id]
+                      for rel in relations if rel.relation_id in self.relation_warrants)
+                if warrants is None else tuple(warrants)
+            )
+            warrant_values = self._dedup_sources(raw_warrants)
         fields = {c.ReferenceField.SOURCES: tuple(sources), c.ReferenceField.RELATIONS: tuple(relations),
                   c.ReferenceField.ORIGIN_PROPOSALS: tuple(proposals)}
         inline = {}
-        refs = []
-        room = c.MAX_INLINE_REFERENCES
-        for field, values in fields.items():
+        refs: list[c.ContinuationRef] = []
+        room = c.MAX_INLINE_REFERENCES - (1 if warrant_values else 0)
+        for field_name, values in fields.items():
             values = tuple(sorted(values, key=lambda row: canonical_json(row.to_dict())))
-            inline[field] = values[:room]
+            inline[field_name] = values[:room]
             remaining = values[room:]
-            room -= len(inline[field])
-            while remaining:
-                chunk = remaining[:min(self.settings.shard_records, c.MAX_SHARD_RECORDS)]
-                while sum(len(canonical_json(row.to_dict())) for row in chunk) > self.settings.shard_bytes and len(chunk) > 1:
-                    chunk = chunk[:len(chunk) // 2]
-                if sum(len(canonical_json(row.to_dict())) for row in chunk) > self.settings.shard_bytes:
-                    raise AuditUnavailable("reference_exceeds_shard_bytes")
-                data = c.reference_bytes(field, chunk, origin=self.i.origin, claim_id=subject.claim_id)
-                digest = hashlib.sha256(data).hexdigest()
-                path = f"{self.directory}/continuations/{field}/{digest}.jsonl"
-                refs.append(c.make_continuation(field, path, chunk, origin=self.i.origin, claim_id=subject.claim_id))
-                self.continuations[path] = chunk
-                remaining = remaining[len(chunk):]
+            room -= len(inline[field_name])
+            self._spill_field(field_name, remaining, subject.claim_id, refs)
+        future = _FUTURE
+        if self.i.warrants:
+            if warrant_values:
+                warrant_room = room + 1
+                inline_warrants = warrant_values[:warrant_room]
+                self._spill_field(c.ReferenceField.WARRANTS, warrant_values[warrant_room:], subject.claim_id, refs)
+                future = replace(_FUTURE, warrants=c.OptionalSources(inline_warrants, None))
+            else:
+                absence = (
+                    c.AbsenceReason.NOT_APPLICABLE
+                    if subject.claim_id.value is None else c.AbsenceReason.NOT_PRODUCED
+                )
+                future = replace(_FUTURE, warrants=c.OptionalSources((), absence))
         if len(refs) > c.MAX_INLINE_REFERENCES:
             raise AuditUnavailable("continuation_reference_limit")
         if len(set(gaps)) > c.MAX_INLINE_REFERENCES:
             raise AuditUnavailable("gap_reference_limit")
         return c.Context(self.i.origin, subject, inline[c.ReferenceField.SOURCES], inline[c.ReferenceField.RELATIONS],
-                         inline[c.ReferenceField.ORIGIN_PROPOSALS], tuple(refs), _FUTURE, explanation(text),
+                         inline[c.ReferenceField.ORIGIN_PROPOSALS], tuple(refs), future, explanation(text),
                          tuple(sorted(set(gaps))))
 
     def decision(self, subject: c.Subject, stage: c.Stage, outcome: str, *, sources=(), relations=(), proposals=None,
-                 text=None, gaps=(), reason=None, basis=c.BasisStatus.EXISTING_POLICY, row=None,
+                 warrants=None, text=None, gaps=(), reason=None, basis=c.BasisStatus.EXISTING_POLICY, row=None,
                  required=(), missing=(), receipt: Document | None = None,
                  original: c.Link | None = None) -> c.DecisionRecord:
         actor = self.cells.get(subject.cell_id.value)
@@ -213,7 +285,8 @@ class _Projector:
         if proposals is None:
             proposals = self.origins.get(subject.claim_id.value, ())
         record = c.DecisionRecord(
-            self.context(subject, sources=sources, relations=relations, proposals=proposals, text=text, gaps=gaps),
+            self.context(subject, sources=sources, relations=relations, proposals=proposals, warrants=warrants,
+                         text=text, gaps=gaps),
             stage, _OUTCOMES.get(stage, {}).get(outcome, outcome), original if original is not None else link(outcome), c.OptionalSource(
                 receipt.ref(subject.cell_id.value) if receipt else None,
                 None if receipt else c.AbsenceReason.NOT_PRODUCED),
@@ -367,9 +440,13 @@ class _Projector:
                 self.decision(subject, c.Stage.RED_DISCOVERY, "emitted", sources=(source,), receipt=receipt,
                               text=why if bound is None else None, gaps=gaps, original=link(), proposals=(source,))
                 if bound is not None:
+                    norm_warrants = (
+                        self.cell_warrants.get((claim, cell_id), ())
+                        if self.i.warrants and outcome == "admitted" and claim is not None else None
+                    )
                     self.decision(subject, c.Stage.CLAIM_CAP if outcome == "over_cap" else c.Stage.PROPOSAL_NORMALIZATION,
                                   outcome, sources=(source, bound[1].ref(local)), text=why, receipt=receipt,
-                                  proposals=(source,),
+                                  proposals=(source,), warrants=norm_warrants,
                                   reason=c.ReasonCode.MISSING_EVIDENCE if why == "unresolvable_citation" else None)
         if set(capture) - seen:
             raise IntegrityError("capture contains a proposal absent from original receipts")
@@ -560,7 +637,9 @@ class _Projector:
                               basis=c.BasisStatus.CITED_NONDECIDING)
             for score in self.claim_scores.get(identity, ()):
                 outcome = "unrated" if "technical_severity" in score and score["technical_severity"] is None else "scored"
+                score_warrants = self.claim_warrants.get(identity, ()) if self.i.warrants else None
                 self.decision(subject, c.Stage.SCORING, outcome, sources=(self.i.scores.ref(score["score_id"]),),
+                              warrants=score_warrants,
                               original=link(score.get("technical_severity"), c.AbsenceReason.NOT_PRODUCED),
                               text=labelled_text(score, ("technical_severity", "provider", "band")))
         for finding in self.i.findings:

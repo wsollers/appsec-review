@@ -33,6 +33,7 @@ from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, fact
 from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest, SeverityAssessment
 from appsec_review.review import ship_block
 from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
+from appsec_review.review.warrants import PredicateWarrant
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
 from .datasets import PLANNED_CONSUMERS
@@ -128,11 +129,22 @@ def adjudication_json(item: Adjudication, round_index: int = 0) -> dict[str, Any
             "policy_sha256": item.policy_sha256}
 
 
-def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path: Path, stream: str) -> dict[str, Any]:
+def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path: Path, stream: str, *,
+                 warrants: Sequence[PredicateWarrant] | None = None,
+                 warrant_policy_enabled: bool = False) -> dict[str, Any]:
     writer = LedgerWriter(ledger_path, stream)
     adjudicated: list[str] = []
     records: list[dict[str, Any]] = []
     gaps: dict[str, Gap] = {}
+    warrants_by_claim: dict[str, list[PredicateWarrant]] = defaultdict(list)
+    if warrant_policy_enabled and warrants is not None:
+        for warrant in warrants:
+            if warrant.claim_id not in projection.claims:
+                raise IntegrityError("predicate warrant names a claim absent from the accepted projection")
+            claim_rel_ids = {item.relation_id for item in projection.relations.get(warrant.claim_id, ())}
+            if warrant.relation_id not in claim_rel_ids:
+                raise IntegrityError("predicate warrant names a relation absent from the accepted projection")
+            warrants_by_claim[warrant.claim_id].append(warrant)
     for claim_id, view in projection.claims.items():          # canonical claim id order
         round_index = merged.get("claim_rounds", {}).get(claim_id, 0)
         verifiers = merged["independence"].get(claim_id, [])
@@ -140,9 +152,11 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
         verifier_gap = None
         if not independent and merged["verifier_gaps"].get(claim_id):
             verifier_gap = gap_from_json(merged["verifier_gaps"][claim_id][0])
+        claim_warrants = warrants_by_claim.get(claim_id, ()) if warrant_policy_enabled else None
         decision = adjudicate(view.claim, projection.relations.get(claim_id, ()), independent,
                               merged["scope_entities"].get(claim_id, ()), adjudicated, view.claim.state,
-                              verifier_gap=verifier_gap, round=round_index)
+                              verifier_gap=verifier_gap, round=round_index,
+                              warrants=claim_warrants, warrant_policy_enabled=warrant_policy_enabled)
         adjudicated.append(claim_id)
         records.append(adjudication_json(decision, round_index))
         state = ClaimState.PROPOSED
@@ -159,7 +173,8 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
     for record in records:
         counts[record["state"]] += 1
     return {"schema": "appsec-review/inference-review-adjudications/1", "rules": r5.RULES_VERSION,
-            "policy_sha256": r5.POLICY_SHA256, "adjudications": records, "states": dict(sorted(counts.items())),
+            "policy_sha256": r5.policy_sha256(warrant_policy_enabled=warrant_policy_enabled),
+            "adjudications": records, "states": dict(sorted(counts.items())),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
 
 
@@ -308,7 +323,8 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
                  cwe_impact_overrides: Mapping[str, Any], out_dir: Path, ledger_path: Path, stream: str,
                  schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None, *,
                  scoring: Any | None = None, evidence: EvidenceSource | None = None,
-                 cwe_catalog: ImpactCatalog | None = None) -> dict[str, Any]:
+                 cwe_catalog: ImpactCatalog | None = None,
+                 warrants: Sequence[PredicateWarrant] | None = None) -> dict[str, Any]:
     """Score every confirmed or supported claim with every registered provider.
 
     ``scoring`` is the job's ``ScoringSettings``; it selects the enabled provider implementations and
@@ -327,6 +343,11 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
     factor_registry = default_factor_registry(overrides, cwe_catalog)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
+    warrants_by_claim: dict[str, list[PredicateWarrant]] | None = None
+    if warrants is not None:
+        warrants_by_claim = defaultdict(list)
+        for warrant in warrants:
+            warrants_by_claim[warrant.claim_id].append(warrant)
     # An enabled provider that cannot run is a named gap, once per run, and is published below.
     for missing_provider in registry.unavailable:
         writer.record_gap(make_gap(GapClass.SCORE_GAP, f"provider:{missing_provider.provider}",
@@ -341,7 +362,8 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
         data = factor_input(claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
                             weakness_cwe=claim.weakness_cwe, affected_entities=claim.affected_entities,
                             predicates=record["predicates"], relations=projection.relations.get(claim.claim_id, ()),
-                            source=evidence, kev_listed=reference.get("kev_listed"))
+                            source=evidence, kev_listed=reference.get("kev_listed"),
+                            warrants=warrants_by_claim.get(claim.claim_id, ()) if warrants_by_claim is not None else None)
         for provider_id in registry.ids():
             provider = registry.get(provider_id)
             wanted = consumed_factors(provider)

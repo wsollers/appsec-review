@@ -2950,6 +2950,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/predicate-warrant.schema.json",
+      "reason": "Keep predicate-warrant.schema.json as the closed machine-readable contract for opt-in TRI-B predicate warrants and lane warrant sidecars.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/remediation/README.md",
       "reason": "Keep Remediation artifact contracts beside the schemas as the contract reference linked by authored pages.",
       "subsystem": "review inference and guidance"

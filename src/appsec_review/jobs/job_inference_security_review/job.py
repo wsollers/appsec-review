@@ -54,6 +54,7 @@ from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.slicing.sources import AcceptedSliceSources
 from appsec_review.review.teams import ReviewTeamSemaphore
 from appsec_review.review.scoring.evidence_source import AcceptedEvidenceSource
+from appsec_review.review.warrants import PredicateWarrant, WARRANT_RULE_VERSION, warrant_from_json
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -61,7 +62,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from . import audit, chains, stages
 from .datasets import CONTRACT, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
-from .teams import PackageWork, ReviewContext, lane_failure, run_lane
+from .teams import WARRANTS_SCHEMA, PackageWork, ReviewContext, lane_failure, run_lane
 
 SCHEMA = "appsec-review/inference-security-review/1"
 TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"), "triage": ("lead_severity",),
@@ -382,8 +383,12 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                              if key not in {"package_id", "manifest_sha256", "input_fingerprint", "run_id"}}
                 shards = sorted({label for identity in entities[package.package_id]
                                  for label in membership.get(identity, ())})
+                evidence_rules = (
+                    {**EVIDENCE_RULES, "warrant_rule": WARRANT_RULE_VERSION}
+                    if settings.warrant_policy.enabled else EVIDENCE_RULES
+                )
                 basis = sha256_hex({"package": sanitized, "shards": shards, "assembly": ASSEMBLY_RULE,
-                                    **EVIDENCE_RULES})
+                                    **evidence_rules})
                 records.append({"package_id": package.package_id, "kind": package.kind, "lane": lane.value,
                                 "sha256": package.sha256, "unit_key": package.unit_key, "rank": list(rank),
                                 "basis": basis, "dependency_shards": shards,
@@ -443,12 +448,15 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 safety.fail(f"review lane failed: {type(exc).__name__}", action=f"review.lane.{lane.value}")
                 if ledger_path.exists():
                     ledger_path.unlink()
-                document = lane_failure(lane, works, f"{type(exc).__name__}", ledger_path, unit.unit_id)
+                document = lane_failure(lane, works, f"{type(exc).__name__}", ledger_path, unit.unit_id,
+                                        warrants_enabled=settings.warrant_policy.enabled)
                 unit.job.events.write("INFERENCE_REVIEW_LANE_FAILED", lane=lane.value, error_type=type(exc).__name__)
             document["ledger_shard"]["path"] = _artifact(run_root, ledger_path)["path"]
             document["chain_seeds"]["path"] = _artifact(run_root, Path(document["chain_seeds"]["path"]))["path"]
             if document.get("poc_basis"):
                 document["poc_basis"]["path"] = _artifact(run_root, Path(document["poc_basis"]["path"]))["path"]
+            if document.get("warrants"):
+                document["warrants"]["path"] = _artifact(run_root, Path(document["warrants"]["path"]))["path"]
             gaps = [f"{lane.value}: {document['counts'].get('gaps', 0)} gaps"] if document["counts"].get("gaps") else []
             unit.job.events.write("INFERENCE_REVIEW_LANE_COMPLETED", lane=lane.value, **{
                 key: value for key, value in document["counts"].items()})
@@ -459,6 +467,27 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
 
     def lane_documents(unit: UnitContext) -> list[Mapping[str, Any]]:
         return [_read(unit.job.run_root, unit.output(f"{lane}_review.teams")["artifact"]) for lane in ("lead", "hunt")]
+
+    def lane_warrants(unit: UnitContext) -> tuple[PredicateWarrant, ...] | None:
+        if not _settings(unit).warrant_policy.enabled:
+            return None
+        by_relation: dict[str, PredicateWarrant] = {}
+        for lane in lane_documents(unit):
+            ref = lane.get("warrants")
+            if not isinstance(ref, Mapping) or "path" not in ref or "sha256" not in ref:
+                raise IntegrityError("warrant_policy.enabled requires verified warrants artifact on every lane")
+            artifact = _read(unit.job.run_root, ref)
+            if (artifact.get("schema") != WARRANTS_SCHEMA
+                    or not isinstance(artifact.get("items"), list)
+                    or artifact.get("count") != len(artifact["items"])):
+                raise IntegrityError("malformed lane predicate warrants artifact")
+            for raw in artifact["items"]:
+                warrant = warrant_from_json(raw)
+                existing = by_relation.get(warrant.relation_id)
+                if existing is not None and existing != warrant:
+                    raise IntegrityError(f"conflicting predicate warrants for relation {warrant.relation_id}")
+                by_relation[warrant.relation_id] = warrant
+        return tuple(by_relation[key] for key in sorted(by_relation, key=lambda rel_id: by_relation[rel_id].warrant_id))
 
     def shard_paths(unit: UnitContext, units: Sequence[str]) -> list[Path]:
         paths = []
@@ -488,7 +517,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         if projection.head != merged["ledger_head_sha256"]:
             raise IntegrityError("lane ledger changed between merge and adjudication")
         ledger_path = unit.unit_root / "ledger.jsonl"
-        document = stages.apply_policy(merged, projection, ledger_path, unit.unit_id)
+        warrants = lane_warrants(unit)
+        document = stages.apply_policy(merged, projection, ledger_path, unit.unit_id,
+                                       warrants=warrants, warrant_policy_enabled=warrants is not None)
         return {"artifact": _write(unit, "adjudications.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "states": document["states"],
                 "gaps": [], "terminal_status": "SUCCEEDED"}
@@ -521,7 +552,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                        settings.scoring.cwe_impact_overrides, unit.unit_root / "scores", ledger_path,
                                        unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
                                        references=stages.claim_references(merged, documents),
-                                       scoring=settings.scoring, evidence=evidence, cwe_catalog=catalog)
+                                       scoring=settings.scoring, evidence=evidence, cwe_catalog=catalog,
+                                       warrants=lane_warrants(unit))
         gaps: list[str] = []
         return {"artifact": _write(unit, "scores.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),
