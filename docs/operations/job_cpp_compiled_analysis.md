@@ -261,7 +261,10 @@ Source: [handler and branch normalizers](../../src/appsec_review/jobs/job_cpp_co
 ### `plan`
 
 1. Load accepted language-build receipts, require this snapshot, and derive native analysis actions.
-   Include captured native compile components where present; require unique project keys.
+   Require a capture-backed `native_compile_database` on each materialized native receipt;
+   missing capture raises before project preparation. Include captured native components from
+   other build families and require unique project keys. A build-system database alone is not
+   a substitute for this admitted capture.
 2. Sort by root/build system and publish `accepted-cpp-plan.json` with topology counts. No actions
    is explicitly not-applicable, not a successful compiler coverage claim.
 
@@ -271,9 +274,9 @@ Source: [handler and branch normalizers](../../src/appsec_review/jobs/job_cpp_co
    retain a named blocked project instead of attempting analysis.
 2. Verify workspace location, manifest schema, complete file-set equality and every file/artifact
    hash. Missing or changed accepted bytes raises; it is not an ordinary parser gap.
-3. Copy the project's source and accepted build directory. For captured native components,
-   verify and install their accepted compile database. Write `source-mapping.json` with target
-   paths, scratch paths, source hashes, case snapshot and language-build provenance.
+3. Copy the project's source and accepted build directory. For native and mixed-family captured
+   components, verify and install their accepted compile database. Write `source-mapping.json`
+   with target paths, scratch paths, source hashes, case snapshot and language-build provenance.
 
 ### `catalog`
 
@@ -369,7 +372,9 @@ Legacy reasons become `producer_reported_gap` under
 default non-retryable metadata, not advisory status.
 
 - Input absent/failed: unbuilt planned projects, failed accepted builds, empty captured native
-  database and invalid/missing compile database.
+  database and invalid/missing produced compile data during catalog normalization.
+  A materialized native receipt lacking the required capture-backed database instead fails
+  planning in `native_analysis_actions`; it is not a successful gap publication.
 - Tooling failure: AST/IR/binary exit/timeout/OOM, failed replay units, missing/invalid AST, IR,
   binary or Infer reports, Infer capture-count absence/mismatch and unsupported output parsing.
 - Coverage missing: no exact compile/link relation, ambiguous cross-unit IR callee, unresolved

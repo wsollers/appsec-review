@@ -239,9 +239,9 @@ Source: [handler and diagnostic adapter](../../src/appsec_review/jobs/job_clang_
 2. Bind scope, adapter, settings, tool and optional seed/neighborhood identities to a checkpoint.
    Reuse only verified matching evidence. With no seeds or selected supported rows, run no engine
    and preserve the seeded ledger's omissions.
-3. Invoke both engines through `tool-native-cpp`, each in its own scratch directory with a file-size
-   ceiling. On tool/image exception, timeout, OOM or truncated streams/output, discard that engine's
-   result and record why. A failed exit is discarded except seeded per-unit failure reports allow
+3. Invoke both engines through `tool-clang-static-analysis`, each in its own scratch directory
+   with a file-size ceiling. On tool/image exception, timeout, OOM or truncated streams/output,
+   discard that engine's result and record why. A failed exit is discarded except seeded per-unit failure reports allow
    successful units to survive.
 4. Read bounded JSON diagnostics and per-unit results. Preserve parse/diagnostic-cap reasons.
    Resolve each diagnostic to accepted source; drop unresolved diagnostics with a reason.
