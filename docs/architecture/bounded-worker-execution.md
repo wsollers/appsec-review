@@ -12,7 +12,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 Each job still constructs its own request, authorizes its own retrieval, validates its own final
 answer, and decides whether that answer is a finding, abstention, unresolved obligation or gap.
 The engine does not grant tools, load guidance, choose personas, run commands, or change a
-claim's state. Deterministic scoring and attack-chain helpers remain deterministic.
+claim's state. Scoring and the attack-chain continuity-policy helpers remain deterministic;
+the separate chain composition/refutation/verifier workers are model-backed callers of the
+bounded cell machinery, not additional authority supplied by this engine.
 
 ## Stable interfaces
 

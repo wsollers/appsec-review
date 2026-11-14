@@ -21,7 +21,7 @@ It is not the security report. For findings see [final publication](final-report
 
 ## Inputs
 
-The report reads only two run files, both read-only:
+The report's primary inputs are two read-only run files:
 
 - `runs/<id>/data/logs/pipeline.jsonl` — the authoritative event log. Each record is validated; a
   torn final record is ignored and named.
@@ -30,6 +30,10 @@ The report reads only two run files, both read-only:
   recomputed in memory with `aggregate_run_metrics` and is **never written back**.
 
 Anything that cannot be read becomes a named gap (see [statuses and gaps](#statuses-and-named-gaps)).
+If summary recomputation is needed, `aggregate_run_metrics` also reopens the run-owned accepted
+handoffs and artifacts required by receipt-backed sections such as triage reduction and OpenVEX.
+Thus fallback derivation is not a two-file-only read, and a valid event log alone cannot prove
+those sections' evidence.
 
 ## Structure
 
@@ -86,9 +90,10 @@ terminal path — **including failed and cancelled runs**:
   is released).
 - Application orchestrator (`GraphRunner`): after `RUN_COMPLETED` or `GRAPH_FAILED` is written and
   the resume lock is released, the graph writes the final run metrics and then renders the report.
-  The per-job metric refreshes in `JobRunner` do not trigger it.
+  `JobRunner` does not refresh the whole-run summary at every job publication; run-level drivers
+  and standalone launch finalization own that work.
 
-The hook never raises, never changes the run's completion status or the error a failed run
+The hook catches renderer `Exception`s, never changes the run's completion status or the error a failed run
 re-raises, and never appends to `pipeline.jsonl`. A rendering problem is logged once and recorded
 only in the report's own receipt. Resuming a run renders it again and replaces the earlier report.
 
@@ -148,7 +153,10 @@ max_tex_bytes = 8388608 # 1..67108864
 max_pdf_bytes = 16777216 # 1..67108864; also the renderer's file-size limit
 ```
 
-The image pin is the same as the dossier job's. Unknown keys, non-boolean switches, out-of-range
+The shown image ID is the typed fallback, not an observation of this host. Resolved host-local
+pins and the frozen configuration are authoritative; follow
+[image pin verification](image-pin-verification.md) rather than copying another host's ID.
+Unknown keys, non-boolean switches, out-of-range
 integers, an `image_id` that is not `sha256:<64 hex>` and an empty tag fail configuration loading.
 The resolved section is part of the run's frozen configuration; `settings_sha256` in the receipt
 identifies it.

@@ -162,9 +162,10 @@ overlay may set only `review_teams`, `[...settings.result_cache]` (see [Blue res
 `orchestration.dagster.pools.*`, `review_policy.resources.*` (the host resource budget) and
 `review_policy.releases.*` (the host's [component release IDs](performance-assurance.md#operator-declared-releases),
 which are not capacity and do change release-bound identities); any other key is rejected.
-It is recorded as its own hashed layer in the run's configuration manifest. Capacity is excluded
-from cell fingerprints, so runs with different team counts reuse each other's cells and produce
-identical canonical outputs.
+It is recorded as its own hashed layer in the run's configuration manifest. Team capacity is
+excluded from semantic cell fingerprints; unchanged cells may be reused when the remaining
+admission bindings permit it. This is not a guarantee of identical fresh model answers or
+completion under different contention and exhausted budgets.
 
 [`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
 raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts; the checked-in
@@ -235,7 +236,8 @@ connect_timeout_seconds = 0.5                   # 0.05..10; connect and socket t
 - **Fail-open.** A store that is unreachable, times out, or has no `redis` client turns every lookup
   into a miss and every write into a no-op. The first failure disables the memo for the rest of
   that job attempt and logs one `REVIEW_RESULT_CACHE_UNAVAILABLE` warning. The cell runs the model
-  normally, and the outcome is identical to running without the memo. Unavailability is not a gap.
+  normally under the same evidence/validation contract; a fresh stochastic answer need not equal
+  the cached answer. Cache unavailability itself is not a coverage gap.
 - **Auditing.** A hit writes the cell's own receipt with `turns: []`, zero counts, and
   `reused_from = {cell_id, attempt, receipt_sha256, memo_key}`, which names the receipt of the model
   call that produced the result. A pointer that fails any check is a miss. The checks are: another
@@ -673,8 +675,9 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
   answer did not account for), `compact_result` (what the model wrote), `result` (the expanded document the
   validators saw), `repair_errors` (why the last attempt was rejected) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
   and validator versions changed.
-- **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` (now empty: the compact answer carries no
-  chain seeds) and names it in the lane document under `poc_basis`.
+- **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` and names it under
+  `poc_basis`. Compact discovery can carry bounded `chain_seeds`; the pre-seal composer consumes
+  eligible adjudicated claim-ID hints, never seed prose as continuity proof.
 - **View bounds.** `max_view_bytes`, `max_view_source_lines` and `max_view_type_declarations` under
   `[jobs.job_inference_security_review.settings.packages]` bound what a cell sees. A view that omitted rows names
   them in a material gap and in `omitted`; the whole stored package, including every gap, stays hash-pinned.
@@ -796,16 +799,19 @@ Decision 4 separates the findings the handoff publishes:
   No remediation job reads it. A backlog item enters remediation only after a later review
   confirms it.
 
-The handoff's `planned_consumers` names the four downstream jobs fixed by decision 8 and the
-handoff fields each one reads: `job_remediation_planning`, `job_remediation_validation`,
-`job_final_publication_gate` and `job_final_report_publication`. The gate and the report are built and
-read this handoff ([`final-report.md`](final-report.md)); the two remediation jobs are not.
+The historical `planned_consumers` projection does not grant reads. Planning, validation, the
+gate and report are implemented with typed input contracts. Planning/validation read the
+accepted review and exact prerequisite bindings; the final report reads only the gate-certified
+snapshot, not the review handoff independently. See [remediation](remediation.md),
+[final publication](final-report.md) and [input admission](../architecture/job-input-contracts.md#admission-and-read-receipts).
 
 ## Outcomes
 
 - Ordinary failures, such as provider errors, timeouts, invalid output, a failed team or an entire
   failed lane, become typed gaps. The handoff is then published with status `DEGRADED`.
   `review_incomplete = true` is set when the gap ratio exceeds `lanes.incomplete_gap_ratio`.
+  This continuation applies only while the runtime permits it: an active first-error controller
+  can raise `ReviewStopped` instead. Cancellation/admission refusal is not successful coverage.
 - Integrity failures block publication and leave the accepted pointer unchanged. These include a
   tampered manifest or shard, a broken ledger chain, a non-deterministic merge, or the application
   granting a forbidden capability.

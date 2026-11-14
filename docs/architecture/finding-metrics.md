@@ -447,30 +447,31 @@ reports focused unit coverage, not observed precision, recall or developer accep
 Where the code differs from the text above, the code is authoritative and this section says why.
 
 1. **A separate document, not a run-summary section.** `finding-metrics/1` is built on request by
-   the operator command. The run-owned telemetry summary and its schema are unchanged: the summary
-   is recomputed at every job completion, and verifying the whole review there would add cost to
-   every run and couple a derived view to the run lifecycle.
+   the operator command. The run-owned telemetry summary and its schema are separate. Current
+   run-level drivers and standalone launch finalization refresh that summary, not every job
+   publication; finding-scorecard construction does not become a completion hook.
 2. **Triage reduction is not edited.** The split ratios are computed from the existing
    `triage_reduction` section by `triage.split_ratios`; the section keeps its `/1` schema.
 3. **Coverage is derived from what a run records, and supplied for the rest.** A run records review
-   units by component, not by source file, but every review package body names the accepted
+   units by component/build and operation or fallback scope; every review package body names the accepted
    `source_file` identities in its scope, the claim projection records each cell's role and
    terminal status, and the accepted source catalog maps an identity to its path and content hash.
-   `coverage_adapter` joins them: a catalogued file is reviewed when a package that contained it had
-   every red cell succeed; any other catalogued file is `cells_incomplete`, `not_launched` or
-   `not_packaged`. Three things are not derivable and are named instead of guessed:
-   - The files of a review unit below the hunt cutoff. The package manifest lists such a unit by
-     key only, so its files are `not_packaged` like files of no unit, and
-     `units_below_hunt_cutoff:<n>` counts the units. The manifest's `units` rows would have to carry
-     their `source_ids` to split them.
+   `coverage_adapter` joins them: successful red cells on an operation-only package leave the
+   containing file `operation_only`, not reviewed. A successful whole-file package may establish
+   reviewed status; other reasons include `cells_incomplete`, `not_launched`, `below_hunt_cutoff`
+   and `not_packaged`. T-146 updated the implementation while preserving the original
+   evidence-derived-coverage decision:
+   - Current manifests retain below-cutoff units' `source_ids`, so those files can be identified as
+     `below_hunt_cutoff`; the `units_below_hunt_cutoff:<n>` gap also retains the unit count.
+     Older manifests without those identities cannot support that attribution.
    - A parser entry point. Entry points are derived from accepted `surface:entry:*` tags
-     (`http-public`, `http-internal` and `message-consumer` as network handlers, `rpc` as RPC
+     (`remote-input`, `http-public`, `http-internal` and `message-consumer` as network handlers, `rpc` as RPC
      handlers, `file-input` as file loaders). No term of that group is a parser, and
      `func:data:parse-*` marks code that calls a parser, not an entry point.
-   - Entry points at all, for now. The vocabulary defines `surface:entry:*`, but no tagging
-     producer assigns it, so the derived catalogue is null with a named gap until one does. The
-     code graph's `entry_point` facts (taint sources with a `source_class`) are a candidate second
-     source and are not used: a source site is not an entry point of one of the four kinds.
+   - Graph-backed tagging now emits bounded source-resolved `surface:entry:*` assignments.
+     The neutral `remote-input` tag does not establish a public HTTP route or deployment exposure.
+     A run without accepted entry tags still produces a null catalogue with a named gap.
+     The adapter consumes tags, not raw graph rows as an unqualified second catalogue.
 
    An operator `--units` or `--entry-points` file still takes precedence. When neither a file nor a
    derivation gives the units, an absent finding is `not_covered` and the snapshot names the gap.

@@ -17,6 +17,10 @@ code, contacts clouds or scans sockets.
 F02 owns the authoritative job contracts. F06 must wire admission, central typed settings,
 accepted inputs, dataset publication, registry/topology/test-map registration and retrieval
 to those contracts. None of those integration surfaces is implemented by this domain.
+Those F02/F06 labels describe the original implementation-fleet ownership, not a current
+dispatch. The registered deployment-inventory producer remains [T-108](TODO.md); the existing
+generated threat-model job records its absence. The pure parser/import API below does not
+commission a collector, establish runtime exposure or add review-worker grants.
 
 ## Public contracts
 

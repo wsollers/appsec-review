@@ -23,7 +23,9 @@ original producer and the consuming invocation separately. Legacy
 The ledger's internal `content_sha256` covers its JSON body without that field and is distinct
 from the object store's exact-byte SHA-256. The ledger keeps
 document evidence, source mapping, proof obligations, mapping ambiguity, and coverage gaps.
-It is private candidate material. `findings` and `scoring_inputs` are empty until independent
-review and finding publication are implemented. An empty finding list says nothing about target
+It is private candidate material. `findings` and `scoring_inputs` remain empty because this
+document-candidate path does not commission independent review or finding publication; the
+separate general inference and publication jobs already exist. See the
+[authored job contract](job_document_issue_analysis.md). An empty finding list says nothing about target
 security, so the job is always `COMPLETED_WITH_GAPS` and its first named gap says so. Changed accepted source bytes, package bytes, or handoff hashes stop the job rather
 than creating a clean result.

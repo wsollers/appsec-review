@@ -27,11 +27,14 @@ Lifecycle families are:
 - `TOOL_INVOCATION_STARTED/COMPLETED` for scanners and external tools, with immutable tool identity,
   retry, duration, result/gap counts, truncation, disposition, and error class.
 - `MCP_TOOL_STARTED/COMPLETED` for transport calls and `RETRIEVAL_SUBOP_COMPLETED` for child spans.
-- `MODEL_CALL_STARTED/COMPLETED` around inference calls (currently emitted by target analysis
-  planning, project-build image repair, post-build security assessment, OWASP worker/independent
-  assessment, and lead/hunt red/blue/verifier/judge cells), with
+- `MODEL_CALL_STARTED/COMPLETED` around actual inference dispatches, including target analysis
+  planning, post-build security assessment, OWASP worker/independent assessment and review cells,
+  with
   provider/model/reasoning identities, guidance and request hashes, token/cache counts, duration,
   retry, status, and error class.
+  Registered model settings alone do not prove a call: project-build image repair retains a
+  dormant helper but the current job units do not invoke it. See
+  [worker dispatch](worker-prompt-contracts.md#dispatch-inventory).
 - `DAGSTER_QUEUE_DELAY`, written by the Dagster adapter when it claims a job attempt, with the
   Dagster run id and the delay in milliseconds since that Dagster run was created.
 - `PROJECT_IMAGE_BUILD_STARTED`, `PROJECT_IMAGE_BUILT|REUSED|BUILD_FAILED`, and
@@ -364,13 +367,13 @@ root, build unit, profile, and query-suite identity. `summed_work_ms` sums produ
 The view includes p50, p95, maximum, fresh/reused counts, and language/project/profile rollups.
 Missing receipts, failed producers, and planned scopes without timing remain explicit gaps.
 
-Raw SARIF/tool observations are not finding counts. The only authoritative defect/vulnerability
-lifecycle metrics are the existing `FINDING_TRANSITION` state counts. TODO: before reporting
-triaged-away/refuted and confirmed defect or vulnerability rates by taxonomy, implement immutable
-transition receipts that bind a finding package to its observation identities, normalized defect
-or vulnerability classification, prior and new state, actor class, reason hash, timestamp, and
-supersession identity. Metrics must reject broken transition chains and must never infer candidates
-or confirmation from observation volume.
+Raw SARIF/tool observations are not finding counts. `finding_states` counts emitted
+`FINDING_TRANSITION` events; it is not the accepted inference review's final-state snapshot.
+Use the implemented [finding-metrics domain](finding-metrics.md) for accepted report membership,
+labelled triage effectiveness and lifecycle comparisons. Its independent labels and retained
+evidence remain necessary; neither observation volume nor a model's dismissal establishes a
+true/false label. Remaining complete stage attribution and decision products are T-077/T-150
+in the [single TODO registry](../TODO.md), not a new backlog here.
 
 For fleet/control-plane state, `python deploy/dagster/bin/run_report.py` reports the live Dagster
 run list alongside bounded slow-operation rankings collected from available summaries. It separates

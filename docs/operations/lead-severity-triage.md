@@ -22,7 +22,8 @@ The stage chooses an assessed priority in this order:
 The checked-in development configuration keeps that profile on Haiku. The model has no tools and
 receives only the scanner rule, bounded message and path, pinned reference context, a bounded
 source excerpt, and the finding's bounded `tool_facts`. Secret-family excerpts pass through
-`secret-redaction/1` first. Invalid output gets one repair turn. Provider failure, timeout, an
+`secret-redaction/1` first. Invalid output may get one repair turn when retry policy and execution
+admission permit it; active first-error mode does not promise a retry. Provider failure, timeout, an
 oversized request, insufficient context, or uncited numeric reasoning leaves the lead `unknown`
 with a named `triage_failed:*`, `triage_skipped:*`, or `triage_unresolved:*` gap; it never becomes
 `low` by default.
@@ -86,4 +87,3 @@ When `unresolved` is nonzero, inspect the lead rows and batch gaps in `lead-tria
 
 Cache entries are content-addressed by the lead input, rule table, model binding, prompt, and pinned
 reference context. A changed input is never silently reused.
-

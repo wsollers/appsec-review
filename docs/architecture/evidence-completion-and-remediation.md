@@ -46,6 +46,13 @@ execute them**. A compiled function is developer documentation, not an observed 
 Runtime proof, automatic patch application to a target, and automatic release clearance are not
 part of this proposal.
 
+Current admission is governed by [typed input contracts](job-input-contracts.md#admission-and-read-receipts):
+the gate requires enabled completion producers' handoff envelopes. Missing required envelopes
+are rejected before capability classification. The gap outcomes below describe accepted
+producers' incomplete/capped/failed item coverage, not permission to bypass that admission check.
+The [current reporting dive](reporting-and-metrics.md) and authored job pages distinguish this
+implemented path from the original baseline and delivery sequence retained below.
+
 ## 1. What was missing at the original baseline
 
 The gap is partly missing implementation and partly publication ordering:

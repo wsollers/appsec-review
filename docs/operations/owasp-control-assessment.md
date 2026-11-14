@@ -28,8 +28,8 @@ verification. Prioritization and tagging do not depend on OWASP.
 Direct CLI `start`, `resume` and `plan-resume` also select security tagging and OWASP after
 prioritization/code-graph indexing and before review data indexing. Normal enabled-job filtering
 applies: OWASP is selected by default, and `resume`/`plan-resume --force-from` can name tagging
-or OWASP only when that job is enabled. This does not add Dagster's CI/post-build branches or
-standalone third-party sync to the direct graph. A standalone dispatch must use the run's accepted
+or OWASP only when that job is enabled. Both drivers now use the same typed review-job contracts,
+including enabled CI/post-build producers; third-party sync remains standalone. A standalone dispatch must use the run's accepted
 upstream handoffs and snapshot, not an arbitrary source tree.
 
 For assessment, retain `enabled = true`, `mode = "assessment"` and enabled worker/reviewer profiles,
@@ -57,6 +57,8 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 | `max_batch_size` | 12 | 1–64 | Control-component rows per batch |
 | `max_components_per_batch` | 5 | 1–16 | Distinct components per batch |
 | `max_components` | 128 | 1–128 | Components accepted for classification |
+| `max_discovery_files` | 512 | 1–4096 | Candidate accepted source files per component; omission counts remain explicit |
+| `max_discovery_bytes` | 8388608 | 1–16777216 | Total accepted source bytes inspected per component |
 | `max_evidence_per_component` | 60 | 1–200 | Accepted evidence/routing bounds; omissions remain named |
 | `max_source_lines` | 120 | 1–500 | Source materialization cap, recorded in publication `assessment_bounds` |
 | `max_subjects_per_control` | 8 | 1–32 | Named proof subjects per control |
@@ -66,7 +68,7 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 | `dynamic_authorized` | false | boolean | Authorization policy, not adapter availability; no runtime/manual evidence adapter is implemented |
 | `model.*` | enabled, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | complete selected model profile | Worker policy; separate job-level gate controls dispatch |
 | `models.reviewer.*` | same as worker | complete selected model profile | Separate fresh request context using original evidence, no prior worker answer/transcript |
-| `parser_versions.*` | `component_rules`, `applicability_rules`, `batching_rules`, `result_validator` = `"1"` | strings | Versioned parser/validator fingerprint inputs |
+| `parser_versions.*` | component/applicability/batching/subject selection `"1"`; evidence binding `"2"`; result validator `"3"` | strings | Versioned parser/validator fingerprint inputs; exact keys remain in central TOML |
 | `standards.<family>` | complete catalog pins in TOML | pinned catalog path/hash and upstream identity | Reviewed ASVS, MASVS, MASTG and risk-context catalogs |
 
 Selected model profiles require `enabled`, `provider`, `model`, `reasoning`, `max_input_tokens`,

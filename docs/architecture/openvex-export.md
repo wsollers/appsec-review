@@ -690,7 +690,8 @@ may stale latest without discarding historical semantic work. Tampered/unreadabl
 bytes retain known execution counts, but make their semantic contribution unknown with a
 named gap; without a verifiable accepted output semantic totals are null.
 
-Runtime's ordinary snapshot occurs before `HANDOFF_ACCEPTED`; a later job snapshot or
+Whole-run snapshots are refreshed by run-level drivers and standalone launch finalization,
+not at every job publication. A mid-run summary can lag `HANDOFF_ACCEPTED`;
 `appsec-review metrics --run-id <id>` refreshes acceptance-backed semantics. No runtime
 sequencing rewrite is needed. A pre-acceptance snapshot is not an accepted-empty verdict.
 

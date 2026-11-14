@@ -9,7 +9,7 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/12`); the catalog-derived
+(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/13`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -51,7 +51,7 @@ exact route registration is not proof of control enforcement.
 | `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |
 | `lead_menu[].weaknesses` | One block per CWE in `rule_cwe` (origin `rule`) and in the joined NVD records (origin `nvd`), at most eight: CWE id, name and abstraction from the run-pinned MITRE catalog (`source: mitre_catalog`), else from accepted `reference_intelligence` facts, else `unresolved`. |
 | `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the scanner-reported value is admitted, `assessed_severity` when an audited triage assessment is admitted, and `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
-| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/2` rank and basis. |
+| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/3` rank and basis. |
 | `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
@@ -241,7 +241,7 @@ required keys, validated at load:
 | `max_slice_lines` | slice lines per package | 1–2000 |
 | `max_slice_lines_per_function` | slice lines per function | 1–`max_slice_lines` |
 
-**The model-facing view (`package-view/4`, `review/package_view.py`).** A cell is shown a view built at cell time
+**The model-facing view (`package-view/5`, `review/package_view.py`).** A cell is shown a view built at cell time
 from the stored package, never stored as an identity and never part of a reuse basis (the basis stays the hash of the
 stored package). Labels are assigned in a fixed order so one package always yields the same labels: `L` lead, `S`
 source, `K` sink, `R` range, `G` guard, `F` call site (chain hops first, then callers, then callees), `P` flow, `E`
@@ -337,7 +337,7 @@ The three view bounds live next to the package bounds:
    derives `tool_observation` entities has no decision. The audit is in
    [`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md).
 
-   **Secret values never reach a model (`secret-redaction/1`, `review/secret_redaction.py`).** Secret scanners run
+   **Secret-lead view redaction (`secret-redaction/1`, `review/secret_redaction.py`).** Secret scanners run
    with `--redact` and the intake keeps no match, secret or entropy field: a `secret` lead carries only scanner,
    rule id, location, `location_exact` and the stable observation id, and its scanner message is passed through
    `redact_message`. The one remaining path is the source text of the model-facing view: for a `secret` lead the
@@ -358,10 +358,12 @@ The three view bounds live next to the package bounds:
    unknown-severity records. Preserve the original identity, native and reported severity, and the
    assessment reason or unresolved triage gap separately.
    Duplicate and suppression state is context, not a reason to remove the package.
-4. **Lane B.** Partition review units by accepted component, then accepted trust boundary if
-   known (none is accepted yet, so it is `null`), build unit and stable range of sorted source
-   paths (`unit_max_files`). Rank units by `review-unit-rank/2`: the sum of the available signals
-   in integer points 0–1000 (LPS, SII, hotspot, tag density, medium/low/info lead hints,
+4. **Lane B.** Build accepted graph-operation units with exact source sites and bounded generated
+   boundary context when supplied; retain component/build-unit path batches (`unit_max_files`)
+   as whole-file fallback. Assign a located lead to at most one operation or fallback unit.
+   Rank units by `review-unit-rank/3`: the sum of available signals
+   in integer points 0–1000 (LPS, SII, hotspot, distinct invoked operation sites under the retained
+   `tag_density` setting name, medium/low/info lead hints,
    `advisory_kev` = 250 when any advisory lead in the unit is KEV-listed, and `advisory_epss` =
    250 times the highest EPSS percentile), then the count of known signals, then unit key. A
    missing signal is `unknown` with reason `producer_unavailable`, `no_record` or
@@ -374,6 +376,9 @@ The three view bounds live next to the package bounds:
    `max_context_entries`, or beyond the byte bound of a single-lead package, is omitted with a
    `truncated` gap and `omitted_context`. Leads are never truncated: a package that cannot fit
    one lead without context blocks the membership gate with an integrity failure.
+   The manifest retains source identities and `coverage_scope` even below the hunt cutoff.
+   Operation-only review is not whole-file coverage. Generated model identities remain
+   routing context; `review/behavior.py` verifies their origin, hashes and original citations.
 5. Form the expected set `E` of all admitted leads (by severity or KEV listing), including
    suppressed and duplicate IDs, and `F` from finding-lead packages. Require `E ⊆ F` per family and
    severity, exactly one package
@@ -396,14 +401,14 @@ The three view bounds live next to the package bounds:
 |---|---|---|---|
 | All languages, source | target catalog `source`; Tree-sitter `analysis` where grammar/scope succeeds | `search`, `find`, `read_excerpt`, `trace`, `query_precomputed(symbol_links)` | Parse failure or unsupported grammar is per language/scope; no symbol/call graph inference from syntax alone. |
 | C/C++ build units | language build, compiled analysis, clangd symbols; `build`, `compiled`, `analysis`; CodeQL graph exports normalized by `job_code_graph_index` into `graph` | `query_build_security`, `query_artifacts`, `symbol_links`, `query_code_graph` | Graph families are per CodeQL scope and family, with `complete`/`partial`/`unavailable` rows. LLVM direct-call and Clang AST are cross-check inputs only. Joern is deprecated and absent from runs by default. |
-| Go, Java/Kotlin, C#, JavaScript/TypeScript, Python, Rust build units | accepted build/artifact shards; CodeQL `observations` only for successfully executed scopes | `query_artifacts`, `query_codeql`, `build_provenance`, `scanner_correlation` | Build/CodeQL absence is per unit and language. Their graph export packs are not configured or lock-pinned in the shipped configuration, so every graph family is `unavailable` for these scopes; CodeQL path steps do not become general call/dataflow graph edges. |
+| Other configured CodeQL languages | accepted build/artifact, observation and graph shards for successfully published scopes | `query_artifacts`, `query_codeql`, `query_code_graph`, `build_provenance`, `scanner_correlation` | Export packs are configured beyond C/C++; actual family coverage is determined by accepted per-scope publication, not language presence. See [code intelligence](code-intelligence.md). SARIF path steps alone do not become general graph edges. |
 | PHP, shell and other catalog languages | source/Tree-sitter and applicable SAST observations | `query_observations`, `scanner_correlation`, `search` | CodeQL, compiled and symbol lanes unavailable unless a matching accepted shard exists. |
 | Cross-cutting build, CI, history, control and intelligence | accepted artifact, CI, history, priority, OWASP and pinned reference shards | `query_artifacts`, `query_ci_configuration`, `query_change_context`, `query_hotspots`; `query_precomputed` products `artifact_inventory`, `dependency_advisories`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` | Missing input/feed, stale feed or partial source yields a named query-set gap, not complete coverage. |
 
 `indexing/matrix.py` computes language and build-unit cells from accepted shards;
-`input_matrix.py` reconciles producer declarations against them. Stage-1 products are
-`build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`,
-`ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` and `symbol_links`.
+`input_matrix.py` reconciles producer declarations against them. Current stage-1 products,
+including `document_context`, and publication boundaries are described in the
+[indexing job page](../operations/job_review_data_indexing.md#process).
 The five link families are `representation`, `finding_source`, `package_advisory`,
 `symbol_syntax` and `history_code`. The seven former graph query sets (`call_graph`,
 `control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`,
@@ -452,10 +457,11 @@ with partial coverage must remain a gap.
 
 Dagster exposes the job's units as visible dependencies. The implemented topology
 (`[jobs.job_inference_security_review.steps]` in `appsec-review.toml`) is `scope.accept_manifest →
-scope.assemble_scope → packages.assemble_lead_packages / packages.assemble_hunt_packages →
+scope.assemble_scope → triage.lead_severity → packages.assemble_lead_packages / packages.assemble_hunt_packages →
 lead_review.teams / hunt_review.teams` (each team unit runs red, normalization, triage, blue and
-verifier cells) `→ merge.claims → adjudicate.apply_policy → scoring.score_claims →
-completeness.audit → publication.publish_claim_ledger / publication.publish_handoff`.
+verifier and selected judge cells) `→ merge.claims → adjudicate.apply_policy → scoring.score_claims →
+attack_chains.compose_candidates → attack_chains.refute_edges → attack_chains.verify_weakest_links →
+completeness.audit → publication.publish_claim_ledger → publication.publish_handoff`.
 Assembly and publication use immutable application attempts and a serialized accepted handoff;
 Dagster schedules and records node outcomes. Every expected worker cell has one terminal record.
 Ordinary producer/worker failures become scoped gaps; integrity and membership failures stop
@@ -475,7 +481,10 @@ configuration so an upstream change invalidates only affected packages and worke
    to end.
 3. Done: capability-scoped dispatch (in-process `CellCapability`, `ScopedRetrievalMcpAdapter`) and
    red, blue and blind projections, with denied cross-package and cross-scope queries tested.
-4. Partly done: C/C++ graph facts come from CodeQL exports (`graph` index). Per-language export
-   packs, and per-language/build-unit dependency selection, remain open.
-5. Partly done: inference fan-out and adjudication exist (slice 1); downstream accepted finding
-   publication remains open.
+4. Implemented beyond the original C/C++ slice: configured per-language graph exports feed
+   accepted `graph` shards. Per-language live verification and remaining producer limits are
+   tracked separately; registration is not successful target coverage.
+5. Implemented: inference fan-out, adjudication, finding/score publication and the downstream
+   completion gate/report path. The document-candidate integration described above remains
+   separate; see [review inference](review-inference-and-guidance.md) and
+   [reporting](reporting-and-metrics.md) for current boundaries.

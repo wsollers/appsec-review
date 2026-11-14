@@ -43,6 +43,13 @@ in [guidance procedures](guidance-procedures.md) and [red discovery output](red-
 The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
 its document hunts are not yet consumed by the inference review job.
 
+Current source reconciliation through `dd6e025ce82a69d4b755a013e78723b2eb3ee772` is summarized
+in [review inference and guidance](review-inference-and-guidance.md) and the
+[authored job page](../operations/job_inference_security_review.md). T-150 adds pure
+decision-audit contracts/validators at this boundary, not a production audit writer, sidecar or
+new worker/MCP grant. Historical readiness decisions and the wider unimplemented designs below
+remain records of their original scope, not claims that those stages execute today.
+
 ## Purpose and governing decisions
 
 `job_inference_security_review` is the near-terminal, evidence-bound inference job that turns the
@@ -574,7 +581,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   <!-- historical:begin -->`lead-family/artifact_scanner/2`<!-- historical:end --> add the NVD band; <!-- historical:begin -->`lead-family/source_sast/2`<!-- historical:end --> adds the shellcheck, psalm and Infer
   producers). Every observation producer has an explicit lead-or-not decision
   ([`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md)); a credential literal is never shown to a
-  model (`secret-redaction/1`). Unknown severity is never treated as low.
+  model by the secret-lead view projection (`secret-redaction/1`); that rule alone is not a
+  guarantee over every retrieval route. Unknown severity is never treated as low.
   Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
@@ -589,14 +597,15 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 
 ### Lane B: open discovery
 
-- **Unit of work.** The unit of work is a ranked review unit: a component, trust boundary, or
-  function cluster. Units are ranked deterministically from accepted signals:
+- **Unit of work.** Exact-site operation units coexist with retained component/build-unit
+  whole-file fallback batches. Optional admitted generated models supply bounded routing context,
+  not direct evidence or proven deployment boundaries. Units are ranked deterministically from accepted signals:
   - review-prioritization LPS;
   - source-history instability (SII);
   - hotspots;
-  - security tag density;
+  - distinct evidenced security-operation sites, not raw tag counts;
   - medium, low, and info leads, which also appear on the hunt menu as hints;
-  - advisory reference signals (`review-unit-rank/2`): `advisory_kev` is 250 points when any
+  - advisory reference signals (`review-unit-rank/3`): `advisory_kev` is 250 points when any
     dependency/artifact advisory in the unit is KEV-listed, and `advisory_epss` is the unit's highest
     EPSS percentile times 250. A unit with no advisory lead scores a true zero; an advisory whose KEV
     or EPSS feed was unavailable makes the signal `unknown` (`feed_unavailable`), never zero. Both
@@ -607,13 +616,14 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   signals and then by unit key. Every weight is configurable (decision B2) in the typed, validated
   table `[jobs.job_inference_security_review.settings.ranking]` (`review/ranking.py::RankWeights`).
   Unknown keys are rejected, and every weight is an integer in `[0, 1000]`. The defaults are the
-  shipped `review-unit-rank/2` values and reproduce its order byte for byte:
+  retained numerical weights; version 3 changes the opportunity signal and therefore invalidates
+  prior ranking/package identities:
 
   | Key | Default | Signal points |
   |---|---|---|
   | `lps`, `sii`, `hotspot` | 1000 each | producer score in [0, 1] (or a percentage) times the weight, capped at the weight |
-  | `tag_density` | 1000 | `tags x weight / (tag_density_full_tags_per_file x member files)`, capped at the weight |
-  | `tag_density_full_tags_per_file` | 4 | tags per member file that earn the full `tag_density` weight |
+  | `tag_density` | 1000 | retained key: distinct invoked operation sites times weight / saturation count, capped at weight; no file-count multiplier |
+  | `tag_density_full_tags_per_file` | 4 | retained key: distinct sites that earn the full weight; multiple labels/producers at one physical site count once |
   | `lead_hint_medium`, `lead_hint_low`, `lead_hint_info` | 100, 30, 10 | per medium/low/info lead hint |
   | `lead_hints_max` | 1000 | cap on the summed lead hints |
   | `advisory_kev` | 250 | any advisory in the unit is KEV-listed |
@@ -622,7 +632,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   The weights reach `review/units.py` through `PackageSettings.rank_weights`. They are recorded in
   the package manifest's `settings` and are semantic settings, so they enter every fingerprint
   derived from the settings. Changing a weight changes the order, not the rule, so `RANK_RULE`
-  stays `review-unit-rank/2`.
+  stays `review-unit-rank/3`.
 
   The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
   is a `coverage_gap` with reason `below_hunt_cutoff`.

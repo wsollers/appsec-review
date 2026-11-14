@@ -114,9 +114,10 @@ production performance claims.
 
 Treat every entry in `review.gaps`, every nonzero `source_gap_count`, and every build or CodeQL gap
 as missing coverage. A missing, changed, escaped, or malformed receipt is an integrity gap and is
-never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
-finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
-or vulnerabilities.
+never evidence that the corresponding scope is clean. `finding_states` counts emitted lifecycle
+transitions, not unique accepted final findings. Use the
+[finding snapshot and scorecard](../architecture/finding-metrics.md) for that partition;
+scanner observations and CodeQL SARIF result counts are not confirmed defects or vulnerabilities.
 
 ## Triage reduction
 
@@ -414,9 +415,10 @@ acceptance produce explicit gaps/conflicts. `attempts` holds correlation details
 `duplicate_lifecycle_records` records deduplication.
 Timing stays in logs/receipts/summary, outside deterministic document/manifest/result bytes.
 
-The ordinary runtime metrics snapshot is written **before** `HANDOFF_ACCEPTED`. A later
-job snapshot or `appsec-review metrics --run-id <id>` refreshes accepted semantics after
-acceptance. An initial missing-acceptance gap/null total is not an accepted empty export.
+Whole-run snapshots are refreshed by run-level completion/error drivers and standalone launch
+finalization, not on every `JobRunner` publication. A summary read during a run can therefore lag
+`HANDOFF_ACCEPTED`; `appsec-review metrics --run-id <id>` explicitly refreshes accepted semantics.
+A missing-acceptance gap/null total in an earlier snapshot is not an accepted empty export.
 No runtime sequencing change or background metrics service is added. Corrupt accepted output
 is an export-reader integrity failure; the metrics wrapper records `latest_state = stale`
 with `latest_accepted_output_unavailable`, not a clean result. The final report does not

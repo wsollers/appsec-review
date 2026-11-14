@@ -279,6 +279,14 @@ indices so alternative flows are not concatenated; observations normalized witho
 language CodeQL does not cover (PHP), and an absent CodeQL handoff make `semantic_path` missing for
 those files.
 
+### History from composed sources
+
+The accepted history publication may bind several repository-specific documents under
+`sources.repositories`. `job_review_prioritization/job.py::history_values` verifies each artifact,
+merges file and exact-symbol signal maps, and rejects overlapping signal paths rather than
+choosing a source silently. Missing per-source rankings keep named gaps; available sources still
+contribute their metrics. The legacy single-history document remains readable.
+
 ## LLM Prioritization Score (`appsec-review/llm-prioritization-score/1`)
 
 Files and functions are scored separately with the same weights.

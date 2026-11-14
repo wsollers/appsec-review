@@ -89,7 +89,7 @@ packages, build artifacts, and tool observations.
 | `declared` | A manifest, SBOM entry, or import makes the capability available. No call site was resolved. | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang` |
 | `invoked` | A resolved call site, route registration, decorator, or configuration key exercises the capability. For declarative configuration (IaC, manifests, Dockerfiles, workflows), the parsed key or resource is the resolved site. | `func`, `infra`, `data`, `surface` |
 | `reported` | A scanner rule matched, through SARIF or another normalized observation. The match is unverified. For `gap`, a producer or this job reported missing coverage. | `cwe`, `cert-*`, `misra-*`, `vuln`, `scorecard`, `func`, `infra` (rule-defined capability matches), `gap` |
-| `confirmed` | An adjudicated claim with resolving evidence, produced by the inference review or the workbench. | `cwe`, `cert-*`, `misra-*`, `vuln`, `capec`, `attack` |
+| `confirmed` | An adjudicated claim with resolving evidence. The current pre-review tagging producer does not mint this basis; an OWASP assessment is not final claim confirmation. | `cwe`, `cert-*`, `misra-*`, `vuln`, `capec`, `attack` |
 | `derived` | A crosswalk produced this tag from other assignments. It means "applicable" or "relevant to review". | `surface` (boundary tags only), `asvs5`, `masvs2`, `nist53r5`, `ssdf`, `k8s-pss`, `slsa1`, `top10-2025`, `api-top10-2023`, `cicd-top10`, `k8s-top10-2022`, `scorecard`, `cwe`, `capec`, `attack` |
 
 Validation rejects every namespace/basis pair outside this table. For example, a `cwe:*` tag with
@@ -675,8 +675,9 @@ the direct CLI graph and `wave1_review` when enabled. The default-enabled OWASP 
 using accepted assignments and
 distinct-subject tag-cloud counts as bounded routing context, not proof; absent tags are unknown.
 There is no OWASP-to-tagging dependency. Review data indexing closes the producer wave before
-package assembly and inference review. Tagging reads only the accepted, hash-verified retrieval
-manifest and publishes immutable `tags` retrieval shards, one per display family.
+package assembly and inference review. Tagging reads the admitted, hash-verified retrieval
+manifest/shards and resolves exact source bytes for eligible graph sites; it does not discover
+source by walking the target tree. It publishes immutable `tags` retrieval shards, one per display family.
 A shard's fingerprint covers:
 
 - its upstream manifest;
@@ -684,6 +685,7 @@ A shard's fingerprint covers:
 - the crosswalk hash;
 - the capability-rule hash;
 - the assignment content.
+- the component topology and ownership-rule identity.
 
 Assignments are queried through the existing bounded `search`, `find`, and `coverage` filters with
 `indexes=["tags"]` and `kinds=["tag_assignment"]`, so no new MCP tool is needed. The vocabulary,

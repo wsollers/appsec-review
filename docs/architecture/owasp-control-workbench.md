@@ -41,8 +41,8 @@ flowchart TD
 
 Direct `start`/`resume`/`plan-resume` and Dagster select this chain when the jobs are enabled.
 Direct `--force-from` accepts tagging or OWASP only when enabled; OWASP is enabled by
-default but can be explicitly disabled. This is shared OWASP ordering, not full graph parity: the direct graph still omits
-CI/post-build branches, and third-party sync remains standalone. See
+default but can be explicitly disabled. Both drivers derive review-job membership and ordering from
+the typed contracts, including enabled CI/post-build producers; third-party sync remains standalone. See
 [wave 1 operations](../operations/wave1-review.md).
 
 ## Catalog authority, completeness and licensing
@@ -139,7 +139,7 @@ Its results are visibly qualification-only and never production-eligible. Merely
 
 ## Publication, downstream use and resumability
 
-Four deterministic validator cells partition batches across the `owasp_validator` pool, followed
+Four configured worker cells receive deterministic batch partitions across the `owasp_validator` pool, followed
 by independent review, exactly-once join and immutable publication. Every selected control ×
 component row must occur exactly once; a missing, duplicate or unexpected row blocks the join.
 A failed cell retains named gaps without erasing successful siblings.
