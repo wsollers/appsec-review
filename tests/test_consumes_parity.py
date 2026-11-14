@@ -77,3 +77,34 @@ def test_owasp_evidence_import_does_not_depend_on_registry_preload() -> None:
         "assert UPSTREAM_JOBS == build_job().contract.consumes",
     ], cwd=Path(__file__).resolve().parents[1], text=True, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr
+
+
+def test_every_input_requirement_matches_its_producer_declaration() -> None:
+    """A consumer that names an output kind must name the schema and authority its producer declares today.
+    Regression for smoke-cpp run 2026-11-14-0004: owasp_control_assessment__begin failed with
+    "producer output contract mismatch: job_debug_symbol_indexing/target_decision" after the producer moved
+    its decision schema to /2 while the consumer still required /1; admit_inputs refuses such a claim."""
+    from appsec_review.runtime.contracts import Availability, InputChannel
+    registry = builtin_registry()
+    jobs = {job_id: registry.build(job_id) for job_id in sorted(registry.job_ids())}
+    declarations = {job_id: {item.output_kind: item for item in job.datasets} for job_id, job in jobs.items()}
+    mismatches = []
+    for job_id in sorted(jobs):
+        contract = jobs[job_id].contract
+        if contract is None:
+            continue
+        for requirement in contract.inputs:
+            if requirement.channel is not InputChannel.HANDOFF or requirement.output_kind == "handoff":
+                continue
+            declaration = declarations.get(requirement.producer, {}).get(requirement.output_kind)
+            if declaration is None:
+                if requirement.availability is not Availability.WHEN_DECLARED:
+                    mismatches.append(f"{job_id}: {requirement.producer}/{requirement.output_kind} is not declared")
+                continue
+            if declaration.schema != requirement.schema:
+                mismatches.append(f"{job_id}: {requirement.producer}/{requirement.output_kind} requires "
+                                  f"{requirement.schema}, producer declares {declaration.schema}")
+            elif declaration.authority is not None and declaration.authority != requirement.authority:
+                mismatches.append(f"{job_id}: {requirement.producer}/{requirement.output_kind} authority "
+                                  f"{requirement.authority.value} vs declared {declaration.authority.value}")
+    assert mismatches == []

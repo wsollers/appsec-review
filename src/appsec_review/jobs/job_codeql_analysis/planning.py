@@ -99,6 +99,14 @@ def _rust_prerequisite_gaps(files: Sequence[Mapping[str, Any]], root: str) -> tu
     return tuple(gaps)
 
 
+# An accepted build that completed with named gaps (build-output classification heuristics, an unrecognised
+# compiler probe in the capture) still materialised a workspace and an exact command set; CodeQL replays it
+# and the build's gaps travel with the scope (they are appended above from receipt["gaps"]). A build that
+# failed or was not applicable has no environment. smoke-cpp run 2026-11-14-0004 lost its only C/C++ scope to
+# a COMPLETED_WITH_GAPS receipt whose gaps were all low-severity heuristics.
+_USABLE_BUILD_STATUSES = frozenset({"SUCCEEDED", "COMPLETED_WITH_GAPS"})
+
+
 def replay_commands(receipt: Mapping[str, Any]) -> tuple[tuple[Mapping[str, Any], str], ...] | None:
     """Resolve exact configure/build commands, deriving absent roles from the accepted recipe."""
     recipe, commands = receipt.get("recipe"), receipt.get("commands")
@@ -293,7 +301,7 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
                 elif "cpp" not in inventory:
                     gaps.append(
                         f"{build_unit}/cpp: pinned runtime did not report the required extractor")
-                elif receipt.get("terminal_status") != "SUCCEEDED" or not receipt.get("workspace"):
+                elif receipt.get("terminal_status") not in _USABLE_BUILD_STATUSES or not receipt.get("workspace"):
                     gaps.append(
                         f"{build_unit}/cpp: no successful accepted materialized environment")
                 elif replay_commands(receipt) is None:
@@ -324,7 +332,7 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         if language not in inventory:
             gaps.append(f"{build_unit}/{language}: pinned runtime did not report the required extractor")
             continue
-        if receipt.get("terminal_status") != "SUCCEEDED" or not receipt.get("workspace"):
+        if receipt.get("terminal_status") not in _USABLE_BUILD_STATUSES or not receipt.get("workspace"):
             gaps.append(f"{build_unit}/{language}: no successful accepted materialized environment")
             continue
         commands = receipt.get("commands")

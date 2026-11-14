@@ -416,3 +416,23 @@ def test_codeql_source_image_has_no_node_runtime_for_source_only_typescript():
     text = " ".join(path.read_text(encoding="utf-8") for path in sources)
     assert "Dockerfile.source" in {path.name for path in sources}
     assert "/opt/node" not in text and "nodejs" not in text
+
+
+@pytest.mark.parametrize("status, expect_scope", [("SUCCEEDED", True), ("COMPLETED_WITH_GAPS", True), ("FAILED", False)])
+def test_a_build_that_completed_with_gaps_is_still_a_codeql_environment(status: str, expect_scope: bool) -> None:
+    """Regression for smoke-cpp run 2026-11-14-0004: the only C/C++ build receipt was COMPLETED_WITH_GAPS (build-output
+    heuristics, an unrecognised compiler probe) with a workspace and an exact command set, and planning recorded
+    "no successful accepted materialized environment" instead of a scope. Its gaps still reach the plan."""
+    from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan
+    receipt = _receipt("native", "native-main", ".", "sha256:" + "1" * 64, "audit-buildenv-cpp:local", "10001:10001")
+    receipt["terminal_status"] = status
+    receipt["gaps"] = ["build-output-heuristic: classified per_file by directory name (low)"]
+    receipt["recipe"] = {"configure_commands": ["cmake -S . -B build"], "build_commands": ["cmake --build build"]}
+    receipt["commands"] = [{"role": "configure", "argv_sha256": "c" * 64}, {"role": "build", "argv_sha256": "d" * 64}]
+    plan = build_codeql_plan(source_fingerprint="f" * 64, files=[_file("src/main.c"), _file("src/util.c")],
+                             receipts=[receipt], supported_extractors=["cpp"], source_image_id="sha256:" + "2" * 64)
+    cpp_scopes = [scope for scope in plan.scopes if scope.language == "cpp"]
+    assert bool(cpp_scopes) is expect_scope
+    assert any("build-output-heuristic" in gap for gap in plan.gaps)
+    if not expect_scope:
+        assert any("no successful accepted materialized environment" in gap for gap in plan.gaps)
