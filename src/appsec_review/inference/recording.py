@@ -138,7 +138,9 @@ def _json_tree(value: Any) -> None:
         elif item is None or type(item) is bool:
             pass
         elif type(item) is int:
-            if not -(2 ** 63) <= item < 2 ** 63:
+            # Signed 64-bit below, unsigned 64-bit above: debug-symbol addresses are unsigned 64-bit
+            # (`appsec_review.debug_symbols.contract`) and the review tool catalog declares that bound.
+            if not -(2 ** 63) <= item < 2 ** 64:
                 raise ExecutionContractError("model recording integer exceeds its bound")
         elif type(item) is float and math.isfinite(item):
             pass
