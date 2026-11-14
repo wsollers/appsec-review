@@ -140,7 +140,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout) |
 | T-146 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-146-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | open |
 | T-147 | [Scope the dataset-contract repair refusal to the changed job](#t-147-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`) |
-| T-148 | [Measure a job's implementation identity from the modules it imports](#t-148-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | open |
+| T-148 | [Measure a job's implementation identity from the modules it imports](#t-148-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`) |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2129,7 +2129,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-148 — Measure a job's implementation identity from the modules it imports
 
-- **State:** open
+- **State:** done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`)
 - **Area:** pipeline
 - **Why:** `build_release` digests every job's `implementation` and `validation` identity over the job package closure plus all of `common` (every file under `src/appsec_review/**` outside job packages), so any change to shared code re-identifies all 42 jobs and a repair reuses nothing. The import graph is dense (`appsec_review.storage` is imported by over two hundred modules, the runtime by every job), so the gain is bounded, but modules no job imports (operator tooling, CLI, acceptance helpers) stop re-identifying jobs.
 - **Scope:** extend the existing static import walk in `build_release` so a job's closure holds the job package files, the other job packages it imports, and only the `appsec_review.*` modules under `common` it transitively imports (module imports imply their parent packages); non-Python `common` files, validators and scripts stay in every closure as today. Any walked module whose `appsec_review` import cannot be resolved to a file in the release, or that imports dynamically (`importlib.import_module`, `__import__`), keeps the whole `common` set for that job. The manifest shape, `validate_release`, `implementation-release.json` measurement at launch (`deploy/dagster/bin/host.py`) and module signing are unchanged; `docs/architecture/deployment-image-and-source-mount.md` describes the closure.

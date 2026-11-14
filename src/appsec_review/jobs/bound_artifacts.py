@@ -59,7 +59,44 @@ def read_bound_json(run_root: Path, reference: Mapping[str, Any]) -> Any:
 
 def source_context_datasets() -> dict[str, tuple[DatasetDeclaration, ...]]:
     """Original evidence outputs used by downstream source/context readers, not graph ancestors."""
-    from importlib import import_module
+    # Spelled out rather than imported by a computed name so the release import walk can follow
+    # them; the walk does not make every job depend on these packages through this shared module.
+    from appsec_review.jobs.job_target_catalog import datasets as _job_target_catalog
+    from appsec_review.jobs.job_tree_sitter_ast import datasets as _job_tree_sitter_ast
+    from appsec_review.jobs.job_cpp_compiled_analysis import datasets as _job_cpp_compiled_analysis
+    from appsec_review.jobs.job_cpp_symbol_index import datasets as _job_cpp_symbol_index
+    from appsec_review.jobs.job_svf_alias_analysis import datasets as _job_svf_alias_analysis
+    from appsec_review.jobs.job_code_graph_index import datasets as _job_code_graph_index
+    from appsec_review.jobs.job_codeql_analysis import datasets as _job_codeql_analysis
+    from appsec_review.jobs.job_evidence_collection import datasets as _job_evidence_collection
+    from appsec_review.jobs.job_clang_static_analysis import datasets as _job_clang_static_analysis
+    from appsec_review.jobs.job_cpg_analysis import datasets as _job_cpg_analysis
+    from appsec_review.jobs.job_ci_configuration_analysis import datasets as _job_ci_configuration_analysis
+    from appsec_review.jobs.job_artifact_security_analysis import datasets as _job_artifact_security_analysis
+    from appsec_review.jobs.job_binary_evidence_indexing import datasets as _job_binary_evidence_indexing
+    from appsec_review.jobs.job_dependency_intelligence import datasets as _job_dependency_intelligence
+    from appsec_review.jobs.job_review_prioritization import datasets as _job_review_prioritization
+    from appsec_review.jobs.job_security_tagging import datasets as _job_security_tagging
+    from appsec_review.jobs.job_review_data_indexing import datasets as _job_review_data_indexing
+    tables = {
+        "job_target_catalog": _job_target_catalog.DATASETS,
+        "job_tree_sitter_ast": _job_tree_sitter_ast.DATASETS,
+        "job_cpp_compiled_analysis": _job_cpp_compiled_analysis.DATASETS,
+        "job_cpp_symbol_index": _job_cpp_symbol_index.DATASETS,
+        "job_svf_alias_analysis": _job_svf_alias_analysis.DATASETS,
+        "job_code_graph_index": _job_code_graph_index.DATASETS,
+        "job_codeql_analysis": _job_codeql_analysis.DATASETS,
+        "job_evidence_collection": _job_evidence_collection.DATASETS,
+        "job_clang_static_analysis": _job_clang_static_analysis.DATASETS,
+        "job_cpg_analysis": _job_cpg_analysis.DATASETS,
+        "job_ci_configuration_analysis": _job_ci_configuration_analysis.DATASETS,
+        "job_artifact_security_analysis": _job_artifact_security_analysis.DATASETS,
+        "job_binary_evidence_indexing": _job_binary_evidence_indexing.DATASETS,
+        "job_dependency_intelligence": _job_dependency_intelligence.DATASETS,
+        "job_review_prioritization": _job_review_prioritization.DATASETS,
+        "job_security_tagging": _job_security_tagging.DATASETS,
+        "job_review_data_indexing": _job_review_data_indexing.DATASETS,
+    }
     selections = (
         ("job_target_catalog", ("source_files", "declaration_symbols", "target_documents")),
         ("job_tree_sitter_ast", ("tree_sitter_ast", "tree_sitter_coverage")),
@@ -82,7 +119,7 @@ def source_context_datasets() -> dict[str, tuple[DatasetDeclaration, ...]]:
     )
     result: dict[str, tuple[DatasetDeclaration, ...]] = {}
     for producer, kinds in selections:
-        declarations = import_module(f"appsec_review.jobs.{producer}.datasets").DATASETS
+        declarations = tables[producer]
         selected = tuple(item for item in declarations if item.output_kind in kinds)
         if {item.output_kind for item in selected} != set(kinds):
             raise ValueError(f"source context names an unknown output: {producer}")
