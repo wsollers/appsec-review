@@ -213,8 +213,12 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   identical content yields the same content-addressed snapshot.
 
 Feed publications are immutable snapshot directories. A manifest hashes every published file, and
-`current.json` advances atomically only after full validation. A failed refresh leaves the prior
-last-known-good pointer unchanged.
+`current.json` advances atomically after that snapshot's publication checks. Failures before this
+commit leave the prior pointer unchanged; later verification or global-metadata failure can occur
+after a valid snapshot was committed. Publication is per feed, not one rollback transaction across
+the job's independent branches. Inspect exact snapshot/receipt identities after a failed job rather
+than assuming every pointer stayed unchanged. The
+[canonical producer page](job_third_party_data_sync.md#process) separates these boundaries.
 
 ## Per-run pinning and freshness
 

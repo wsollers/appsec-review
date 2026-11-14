@@ -8,10 +8,14 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Native build-output discovery and named build-output exclusions
 
-Status: implemented on the native build-output implementation branch; see
+Status: source-integrated; see
 [Implementation notes](#implementation-notes) for where the code differs from this design. The
 design was agreed with the neighbouring design sessions listed under [Ownership](#ownership). The
-line numbers below refer to base commit `38c934d9`.
+problem, design, ownership and original validation plan below retain base commit `38c934d9`'s
+context; their line numbers and “today” statements are not current source locations.
+Current job behavior and test selections are in
+[language build](../operations/job_language_build.md) and
+[project build](../operations/job_project_build.md). No new live validation is implied.
 
 ## Problem
 
@@ -423,6 +427,11 @@ built under `tmp_path`, without running CMake or Meson:
 
 ### Validation commands (WSL, Linux-filesystem checkout)
 
+These are the original implementation-plan selectors, preserved as historical context.
+For current tier/file ownership use the generated selections on
+[language build](../operations/job_language_build.md#test-selection) and
+[project build](../operations/job_project_build.md#test-selection), not this old combined command.
+
 ```sh
 python -m pytest -q --basetemp=test/tmp/native-build-output \
   tests/test_build_output_config.py tests/test_build_output_scope.py \
@@ -495,11 +504,10 @@ Recorded by the implementation where the code refined or deviated from the desig
   excluded by the shipped rule therefore lowers the CMake bookkeeping counts.
 - **Misplaced tables.** `jobs.<id>.build_outputs` and `jobs.<id>.settings.build_outputs` fail at
   load.
-- **Unused hook.** `node.catalog` and `php.catalog` accept the `dispositions=` keyword and
-  ignore it until the installer-record classifiers use it. Until then, a Node or PHP language-build
-  unit applies no `[build_outputs]` rule: the shipped `node-bundler-cache` rule takes effect only in
-  project-build probes, and those units' `configured_exclusions`, `roots` and
-  `BUILD_OUTPUT_CLASSIFIED` counts (except `target_rows`) are empty.
+- **Installer integration now consumes the hook.** The original mechanism left `dispositions=`
+  unused in Node/PHP. Current `node.catalog` and `php.catalog` use the walk, configured exclusions
+  and verified npm/Composer package roots, with per-file carve-outs for unverified content.
+  Their receipts and classification counts are no longer empty by construction.
 - **`bookkeeping` document key.** `document()` also carries the `bookkeeping` projection beside
   `schema`, `policy_identity`, `layout_sources`, `roots` and `configured_exclusions`.
 
@@ -518,9 +526,9 @@ Recorded by the implementation where the code refined or deviated from the desig
   `build-output-layout-source-bound-exceeded`, `-unreadable`, `-malformed` or `-limit`.
 - **MSBuild output directories are read but not consumed.** `read_msbuild_dirs` resolves
   `OutDir` and `IntDir` into `LayoutFacts.output_directories` and names unresolved values
-  `build-output-msbuild-directory-unresolved`. No caller passes `msbuild_properties` yet, because
-  the Linux language build never runs MSBuild. The directories classify nothing until a Windows
-  native lane exists.
+  `build-output-msbuild-directory-unresolved`. The native classifier does not currently pass
+  `msbuild_properties`, so these directories do not classify its outputs. This is not a claim
+  that the separate Linux .NET SDK lane never invokes MSBuild.
 - Static Ninja edges and capture attribution (`output_attribution.py`) add a root only where no
   fact root already covers it. Linked outputs a dependency produces into a mixed directory are
   tagged per file as `dependency-sourced-output`, not rooted.
@@ -555,11 +563,12 @@ Recorded by the implementation where the code refined or deviated from the desig
   telemetry change: the name is in `_PHASES`, and `_execute_one` runs native discovery,
   registration, cataloguing and the classification gaps inside that phase, which accumulates into
   the `unit.execute` span.
-- **Follow-up: `ScopeRole.RUNTIME_DEPENDENCY`.** This role is owned by the dependency output
-  filtering work (e9ae8d09), which is not on main. `native_outputs` resolves it with `getattr`.
-  Until it lands, a dependency shared library that a target ELF loads stays `build_dependency`,
-  which routes to the same `supply_chain` lane. The promotion activates automatically once the
-  role exists. A `FOLLOW-UP(runtime_dependency)` comment marks the place.
+- **`ScopeRole.RUNTIME_DEPENDENCY` is present.** The earlier integration note anticipated this
+  role. Current `config/assurance.py` declares it and `delivery_scope.py` maps it to the
+  `supply_chain` lane. `native_outputs.tag_and_promote` can therefore promote a dependency
+  library when a target ELF's loader evidence resolves it; unknown delivery is not inferred
+  from a directory name. The retained `getattr` fallback/comment is not evidence that the role
+  remains unlanded.
 
 ### Chunk E (other catalogers)
 
@@ -570,16 +579,13 @@ Recorded by the implementation where the code refined or deviated from the desig
   the sanitizer catalogue. It adds
   `build_output_dispositions` to each unit result and `build_outputs_policy` to the summary.
   `excluded_bookkeeping` is the dispositions' bookkeeping projection.
-- **Project build.** `job_project_build` `_outputs` walks the dispositions. Native probes call
-  `native_outputs.register` with no captures and no file API query, so a probe classifies from
-  the CMake cache, Meson introspection, static Ninja (when neither is present), vcpkg and Conan
-  records and the name heuristic. The probe receipt gains
-  `build_output_dispositions` and `build_output_gaps`. Classification gaps go into
-  `build_output_gaps`, not `gaps`, so probe acceptance and repair are unchanged.
-  `build_output_gaps` holds the reader, summarised-content and heuristic gaps; the
-  `named_gaps()` conflict and bound gaps are not added to it. The
-  `[build_outputs]` policy identity joins the probe checkpoint identity. The project
-  `EXECUTOR_IDENTITY` is unchanged.
+- **Project build.** The retained `_outputs`/probe helpers describe the older uncaptured
+  classification path. Current `probe.native` calls the captured language executor for isolated
+  native units, including file-API preparation and capture-backed classification. Product-connected
+  native units use the iteration controller. The project-owned receipt retains
+  `build_output_dispositions`; delivery gaps remain separately available to language/artifact
+  publication instead of being mistaken for native target-proof failure. See the
+  [canonical project process](../operations/job_project_build.md#process).
 
 ### Chunk G (retained graph acceptance)
 

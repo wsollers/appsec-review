@@ -29,7 +29,9 @@ The lane is a prioritization producer, like history:
   anomaly".
 - Commit messages, identities, timestamps, review metadata, deployment records, and organization
   data are untrusted data, never instructions. Only identifiers, enumerations, numbers, and
-  timestamps survive normalization; titles, bodies, names, and emails are never stored or indexed.
+  timestamps survive normalization; titles, bodies, names, and emails are not normalized/indexed
+  review facts. Exact operator-export copies are retained separately as protected inputs and
+  can still contain original fields.
 - Observed facts (review-host timestamps, approval commit ids, deployment events, organization
   status) are kept apart from heuristic classifications (fix labels, test association, off-hours
   policy), and every derived value records its basis.
@@ -41,11 +43,10 @@ job_target_catalog -> job_source_history_analysis -> job_target_analysis_plan ->
                                                                                    \-> job_change_context_analysis -> job_codeql_analysis
 ```
 
-In Dagster's `wave1_review` the job follows `job_tree_sitter_ast` and precedes
-`job_codeql_analysis`, which composes its manifest like other siblings; security tagging lists it
-among its fallback predecessors. The direct CLI graph includes `job_tree_sitter_ast` and runs this
-job after `job_evidence_collection`, followed by `job_codeql_analysis`, `job_review_prioritization`,
-and `job_review_data_indexing`. When Tree-sitter is not accepted, function-level attribution is the
+The typed contract schedules the job after `job_tree_sitter_ast`; direct and Dagster graphs derive
+their ordering from the same topology rather than separate handwritten job lists. The
+[canonical job declaration](../operations/job_change_context_analysis.md#dagster-placement)
+records current placement. When Tree-sitter is not accepted, function-level attribution is the
 named gap `function_spans_unavailable:tree_sitter_not_accepted`.
 
 The job does not rescan Git or re-derive history calculations. It consumes, through hash-verified
@@ -87,7 +88,9 @@ the final head SHA, the head commit's committer time, and every other-reviewer a
 commit time.
 
 Operator exports are read only from a path relative to the repository root, never from inside the
-target, only when their SHA-256 matches `export_sha256`, and only into closed schemas. A copy of
+target, and only when their SHA-256 matches `export_sha256`. The readers validate the recognized
+schema and required record shapes, then normalize supported fields; they do not reject every
+unknown raw field as a closed-schema validator would. A copy of
 each accepted export is kept in the attempt (`artifacts/inputs/<name>.json`) and listed under
 `raw_exports` in the accepted document. Failures are named gaps: `*_export_unpinned`,
 `*_export_missing`, `*_export_hash_mismatch`, `*_export_invalid`, `*_export_outside_repository`,
@@ -294,8 +297,10 @@ manifest, authority).
 All thresholds, weights, sources, and bounds live in
 `[jobs.job_change_context_analysis.settings]` (see the operations guide for the full table). The
 settings parser is closed: unknown keys, out-of-range bounds, malformed patterns, an enabled export
-without a path, invalid zones, inverted business hours, unknown priority signals, negative weights,
+without a path, malformed zone names, inverted business hours, unknown priority signals, negative weights,
 or no positive weight fail validation.
+An otherwise well-formed zone unavailable to `ZoneInfo` becomes
+`time_zone_database_unavailable` in source loading, not necessarily a configuration rejection.
 
 | Step | Tasks |
 |---|---|

@@ -9,14 +9,17 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 # WebAssembly output-family build operations
 
 The WebAssembly lane in `job_language_build` consumes only the accepted, hash-verified
-`job_project_build` dispatch and probe receipts. It does not discover a WebAssembly source
+`job_project_build` dispatch and matching image-preparation identities. It does not require an
+old successful probe for every prepared unit, discover a WebAssembly source
 language or publish a separate handoff. Instead, centrally configured
 producer rules select accepted Rust, native C/C++, Node/AssemblyScript, WAT, or other explicitly
 enabled source-family recipes whose commands and outputs establish WebAssembly intent.
 
-Each selected unit runs in dependency order through the same pinned, non-root, dependency-egress,
-read-only container boundary used by project-build probing. Independent ready units share the
-configured worker pool. The executor may add diagnostic-only verbosity flags to accepted build
+Selected units run serially in the global dependency-aware iteration controller, using its shared
+target/install workspace and verified product interfaces. Network selection follows the source
+family: native production selects `none`, other families `bridge`; the standalone adapter's
+executor default is `bridge`. The root filesystem is read-only, not the run-owned build workspace.
+See [the canonical language-build process](job_language_build.md#process). The executor may add diagnostic-only verbosity flags to accepted build
 drivers (`cargo`, CMake, Make, or Ninja); it never adds target execution or tests and never
 instantiates a produced module or component.
 
@@ -38,8 +41,10 @@ The artifact catalog recognizes modules, components, WAT, source maps and debug 
 JavaScript/TypeScript bindings, WIT/WAI interface metadata, native side modules, libraries,
 packages, intermediates, and generated sources. Workspace manifests and retained artifact hashes
 are verified before checkpoint reuse. A changed target snapshot, recipe, dependency identity,
-derived image, probe, producer selection, toolchain, capture contract, limit, upstream handoff, or
-upstream build fingerprint invalidates only the affected checkpoint.
+derived image, preparation identity, producer selection, toolchain, capture contract, limit,
+upstream handoff or exact product interface invalidates the affected checkpoint and dependent
+nodes. Shared-workspace execution uses controller product checkpoints rather than the adapter's
+private-workspace cache.
 
 Checkpoint lookup and publication also require operator-owned `platform`, `validation`,
 `build_toolchain`, and `wasm_instrumentation` release IDs in `[review_policy.releases]`.
@@ -50,7 +55,10 @@ the frozen assurance policy participate in the checkpoint identity. Checkpoints 
 the current run; they are not a cross-run import mechanism. Target outputs and execution evidence
 retain their content hashes in both assurance modes.
 
-Producer failures publish `FAILED` or `BLOCKED` receipts and preserve successful siblings. Path,
+Producer failures retain `FAILED` or `BLOCKED` receipts; siblings can continue when a prepared
+receipt and confirmed cleanup permit rollback. A refusal before that boundary can stop the
+controller, as tracked by [T-092](../TODO.md#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build).
+Path,
 hash, configuration, accepted-handoff, manifest, and checkpoint-integrity failures stop publication.
 `NOT_APPLICABLE` means no accepted recipe matched a configured WebAssembly producer; it is not a
 clean-build claim.

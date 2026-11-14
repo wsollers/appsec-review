@@ -20,10 +20,11 @@ does not run it.
 job_language_build -> job_sanitizer_build -> job_review_data_indexing
 ```
 
-It depends on the accepted `job_language_build` handoff, is a sibling of `job_cpp_compiled_analysis`,
-and no job consumes its output. The dataset inventory job closes the graph after every leaf, so it
-waits for this one and audits its files, but it reads nothing from it. The graph keeps exactly one
-terminal job. Its central configuration must define this exact topology:
+It depends on the accepted `job_language_build` handoff. Review-data indexing reads its accepted
+handoff and unit accounting for the dataset audit; that is not consumption or execution of the
+instrumented binaries. Existing compiled-analysis lanes still use the ordinary build.
+Current scheduling and dataset declarations are on the
+[canonical job page](job_sanitizer_build.md#declared-job-contract). Its internal topology is:
 
 ```text
 load.accepted_native -> build.units -> acceptance.publish_handoff
@@ -42,12 +43,15 @@ For every receipt of the accepted language build whose family is `native`, the j
    protected argv documents (the same replay set `job_codeql_analysis` uses). A command the secret
    scan redacted, or a missing or incomplete command set, cannot be replayed and is a gap;
 3. copies the accepted source into a fresh workspace, `data/sanitizer/<build-unit-id>/workspace`.
-   The normal build's `data/build/native/units/<build-unit-id>/workspace` is neither reused nor
-   altered, and `build` directories are never copied, so CMake configures from scratch;
+   The normal workspace identified by the accepted receipt is neither reused nor altered;
+   it may be a project-owned attempt or the shared iteration workspace. The sanitizer source-copy
+   helper excludes build directories, so CMake configures from scratch;
 4. replays the commands in the accepted build image through `BuildContainerExecutor`, the container
    policy the normal build uses (non-root, all capabilities dropped, `no-new-privileges`, read-only
-   root, 2 CPUs, 4 GiB, 1024 processes), with these environment variables added to the recorded
-   environment of every command:
+   root and a PID bound). Ordinary Docker argv has no fixed CPU/memory flags; runtime resource
+   admission and the opt-in native adapter's limits are separate. Sanitizer replay uses the
+   executor's default `bridge` network, not the ordinary native lane's explicit `none`.
+   These environment variables are added to each recorded command:
 
    | Variable | Value |
    | --- | --- |
@@ -67,10 +71,10 @@ For every receipt of the accepted language build whose family is `native`, the j
    are pruned entirely, including the linked outputs the language build kept, because they are not
    part of the target's instrumentation verdict. The job does not rediscover the layout.
 
-The compiler is the one the accepted recipe resolves. In `audit-buildenv-cpp:local` that is
-`/usr/bin/c++`, GCC 13.3, whose `libasan` and `libubsan` are present. The image also carries
-`clang++-18` but not its compiler-rt sanitizer runtime, so a recipe that selects clang fails to link
-and is reported as a missing runtime (below), not skipped.
+The compiler is the one the accepted recipe resolves in its pinned image. A local tag alone does
+not establish compiler version or sanitizer-runtime availability. Read the bound image/build
+evidence; if the selected toolchain lacks its runtime, the failed command reports that condition
+rather than silently switching compiler or skipping the rebuild.
 
 ## The no-execution invariant
 
@@ -86,8 +90,9 @@ Instrumentation is verified by **reading** the file with the bounded, dependency
 symbol tables hold `__asan_*` names (`__asan_init`, `__asan_report_*`, `__asan_memcpy`) or it names
 `libasan`/`libclang_rt.asan`; it references the UBSan runtime for `__ubsan_*` names or
 `libubsan`/`libclang_rt.ubsan`. The normal build's file at the same workspace path is read the same
-way as a control (`baseline`), so the record shows the plain build lacks the runtime. A stripped
-file has no symbol tables and proves nothing either way; it is reported as `no_symbol_tables`.
+way as a control (`baseline`); the control can itself reference the runtime or be unavailable/
+changed. Its absence is not manufactured. Missing symbol tables are `no_symbol_tables` only when
+no recognized runtime library reference establishes evidence; malformed ELF is `unparsed`.
 
 ## Settings
 
@@ -148,7 +153,8 @@ identity), `gaps`, and:
 - `not_applicable_units[]`: accepted units of other families (`SKIPPED_NA`, not gaps);
 - `omitted_units[]`: native units beyond `max_units`.
 
-The job status is `SUCCEEDED` only when every planned unit is instrumented. Otherwise it is
+The job status is `SUCCEEDED` only when every planned unit is instrumented and no native unit was
+omitted by the bound. Otherwise it is
 `COMPLETED_WITH_GAPS`; with no native unit it is `NOT_APPLICABLE`. A unit is `instrumented` when it
 has no gap and at least one output, and an output is `instrumented` when its runtime evidence was
 read and every `required_evidence` sanitizer is referenced.
@@ -173,6 +179,10 @@ the reason:
 | `unit bound of N reached; this native build unit was not rebuilt` | more native units than `max_units` |
 
 A target changing during the build is a framework integrity failure, not a gap: the unit fails.
+The job still publishes legacy reason strings, canonicalized as `producer_reported_gap` with
+`retryable=False`. A nested rebuild's `FAILED` status alone does not request automatic retry of
+an accepted aggregate `COMPLETED_WITH_GAPS` result; see
+[resume and invalidation](job_sanitizer_build.md#resume-and-invalidation).
 
 ## Plugging in a later execution stage
 
@@ -181,7 +191,8 @@ input. Such a stage would take the accepted `job_sanitizer_build` handoff, requi
 `upstream.language_build_handoff_sha256` and each output's `sha256` and workspace manifest to match
 the files under `data/sanitizer/`, and run only outputs with `instrumented: true`. It must carry its
 own execution sandbox, input and time bounds and crash-report handling (`ASAN_OPTIONS`,
-`UBSAN_OPTIONS`), declare `job_sanitizer_build` in its `CONSUMES`, and publish its own datasets. The
+`UBSAN_OPTIONS`), declare the exact accepted sanitizer inputs in its typed `Job.contract`
+(`CONSUMES` is derived), and publish its own datasets. The
 no-execution rule above applies to this job and to the existing build and assessment jobs; it does
 not extend to a stage that is authorized to run code.
 
@@ -191,8 +202,9 @@ not extend to a stage that is authorized to run code.
   recipe's `network_required` flag, which the handoff only records.
 - Families other than `native` (Go, Rust, Node, Python and others) are `SKIPPED_NA`; sanitizing them
   needs their own toolchain flags.
-- The instrumented build's compiler and optimization level differ from the normal build's; do not
-  compare the two binaries beyond their sanitizer evidence.
+- Replay keeps the accepted image and commands but changes instrumentation/environment flags.
+  Do not assume a different compiler, identical optimization or runtime equivalence; the control
+  comparison here concerns sanitizer evidence.
 
 ## Verification
 

@@ -204,23 +204,28 @@ Steps, settings, recipe validation, image capability and recovery are summarized
 
 `job_project_build` consumes only the accepted, hash-verified plan. It resolves/prepares images,
 publishes static dispatches and an immutable runtime execution graph with iterative build
-dispatches. Non-Unity `probe` tasks remain for topology compatibility but perform no compilation.
-Unity retains its existing single engine execution. Static dispatch and concrete evidence
+dispatches. `probe.native` executes isolated native units once; product-connected native units
+remain controller-owned. Other non-Unity probes do not compile. Unity retains its existing
+single engine execution. Static dispatch and concrete evidence
 collection can still branch immediately after planning instead of waiting for compiled analysis.
 
 A project image is derived from the hash-pinned language baseline. Its identity covers the recipe,
 baseline image, generator contract, and dependency-file hashes. Supported dependency restoration
 can occur while building that image and during accepted network-enabled production commands.
 Commands use direct argv, a read-only container root, a non-root user, dropped capabilities and
-bounded resources. Images are reused only when their manifest and runtime image identity match.
+PID/time/output bounds. Ordinary Docker build commands have no fixed CPU/memory flags; runtime
+resource admission and the opt-in native adapter's limits are separate. Generic native production
+uses network `none`, while other production families use `bridge`. Images are reused only when
+their manifest, declared releases and runtime image identity match.
 Language-specific dependency cache locations embedded in the derived image accelerate Cargo, Go,
 Maven/Gradle, NuGet, npm, Composer, or Python dependency use. Project images use a digest-pinned
 Buildx/BuildKit client and load the result into the local engine. Docker image mutation is narrowly
 serialized as an engine-safety boundary. Missing approved bounded image-builder capability is
 explicit `derived_image_preparation_unavailable`, never permission for unmanaged build fallback.
 
-`job_language_build` evaluates the global graph before family publication and invokes registered
-`job_build_iteration` separately for each ready node. These production executions are authoritative;
+`job_language_build` evaluates the global graph before family publication, consumes project-owned
+native/Unity receipts without rebuilding and invokes registered `job_build_iteration` separately
+for the remaining ready nodes. These production executions are authoritative;
 there is no non-Unity full-graph probe followed by a second full-graph build. Producers commit
 verified products and shared workspace generations; consumers receive real include/library,
 pkg-config and CMake interfaces rather than only an upstream-ready Boolean.
@@ -245,6 +250,8 @@ separate immutable recipe-bound refinement, not in `node.recipe_revision`.
 
 Choosing a late deterministic recipe requires a new accepted refinement before any cache or
 execution path. Old graph/1 artifacts remain inspectable but require accepted replanning for
-execution. Missing source members, conditional effective inputs and unresolved native compiler
-metadata remain named blockers, not managed/family exemptions. See
+execution. Missing source members, unresolved operations and required interfaces remain blockers,
+not managed/family exemptions. Missing static compiler metadata alone is not a native pre-build
+refusal; current native output acceptance requires captured invocation proof and measured image
+compiler profiles. See
 [the current source contract](../architecture/build-topology-and-iterations.md#current-graph2-source-contract).

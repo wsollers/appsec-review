@@ -95,7 +95,7 @@ operator re-pins and signs                and verify its signature envelope
                                   |
                                   v
                      fresh non-root build container
-                     network: bridge for dependencies
+                     network: none for native; bridge for other production families
                      root filesystem: read-only
                                   |
                      build-driver.sh under strace
@@ -200,21 +200,26 @@ only from npm's installer record, `node_modules/.package-lock.json`, and keeps o
 per verified package rather than one row per file (see
 [installed npm dependencies](../operations/language-build.md)).
 
-The project-image cache is keyed by the full recipe identity. Before deriving or reusing a project
-image, `ProjectImageResolver` verifies the pinned family base's signature; the derived image itself
-is unsigned and is trusted through that verified base and its recorded identity. Reuse requires the
-manifest, retained
-Dockerfile hash, and current local image ID to agree. A missing or changed image, Dockerfile, or
-manifest rejects the cache entry. Docker daemon mutation is narrowly serialized, while unrelated
-family work can remain parallel.
+The project-image cache is keyed by the operational recipe, dependency identities and declared
+releases. Before deriving or reusing a customized image, `ProjectImageResolver` applies the
+configured signature policy to the pinned family base; a runtime-derived image carries that base
+identity rather than its own signature. See [signing](../operations/signing.md).
+Reuse checks the manifest, release declarations, retained nonsymlink Dockerfile and current image
+ID, plus the preparation receipt where a bounded builder owns the image. `dockerfile_sha256`
+is null: the resolver does not establish a fresh Dockerfile-content hash match. Relevant generator
+changes require the declared release to change. Missing/changed image identity or invalid retained
+preparation rejects reuse. Docker daemon mutation is narrowly serialized, while unrelated family
+work can remain parallel.
 
 ## Executing an accepted build
 
 `job_project_build` prepares images and publishes an immutable execution graph/dispatch.
-Non-Unity `probe` tasks are compatibility no-ops; Unity still executes once. Language-build's
-global controller invokes registered `job_build_iteration` separately for each ready production
-node, before family publication. Each invocation has a request, attempt ID and distinct Dagster
-UUID. This is one authoritative build, not two whole-graph probe/rebuild passes.
+`probe.native` executes isolated native units once through the captured language executor;
+product-connected native units remain with the shared-workspace controller. Unity also executes
+once. Other family probes do not compile. Language-build consumes those project-owned receipts
+and invokes registered `job_build_iteration` for the remaining ready production nodes before
+family publication. Each invocation has a request, attempt ID and distinct Dagster UUID.
+This is one authoritative build, not two whole-graph probe/rebuild passes.
 
 The complete target is materialized in `runs/<run-id>/workspace/build/target`, mounted at
 `/workspace`; `workspace/build/install` is the run-owned mutable `/install` prefix. Compatible
@@ -237,7 +242,10 @@ Make/CMake source/driver guard before every launch. Configure-created symlinks c
 the next build launch. This does not add arbitrary export/install commands.
 
 The sandbox retains non-root identity, dropped capabilities, `no-new-privileges`, a read-only root,
-resource/time/cancellation bounds and dependency egress policy. `execute`/`execute_captured` accept
+PID/time/output/cancellation bounds and the selected network policy. Ordinary Docker build argv
+has no fixed CPU/memory flags; the opt-in native adapter adds those flags. Runtime resource
+admission is separate from per-container limits. Generic native production selects network
+`none`; other production families select `bridge`. `execute`/`execute_captured` accept
 the separate validated `install_dir`; mutable install bytes cannot be labeled read-only image
 content. Temporary mount-permission windows close before explicit `cleanup_complete` acceptance,
 without changing upstream committed modes/mtime/bytes. Exact-name run-owned leases support crash
@@ -562,9 +570,11 @@ executor.
 ## `appsec-multi-vuln` project-type coverage matrix
 
 The authoritative corpus mapping is
-[`support/project-matrix.json`](../../targets/appsec-multi-vuln/support/project-matrix.json),
-documented by the [corpus guide](../../targets/appsec-multi-vuln/README.md), at nested-repository
+[`support/project-matrix.json`](https://github.com/wsollers/appsec-multi-vuln/blob/7c10536389c3cfb20a27d7a6a78943267ea43b3f/support/project-matrix.json),
+documented by the [corpus guide](https://github.com/wsollers/appsec-multi-vuln/blob/7c10536389c3cfb20a27d7a6a78943267ea43b3f/README.md), at nested-repository
 commit `7c10536389c3cfb20a27d7a6a78943267ea43b3f`. Every path below was resolved at that commit.
+These are preserved historical corpus references, not source revalidated by this documentation
+reconciliation; those target-owned files are unavailable in the isolated documentation worktree.
 The capture and artifact columns are covered by the deterministic matrix contract. CodeQL entries
 below retain executor/receipt names
 `manual` and `none`; the central configuration names are now `build` and `source`, and
@@ -961,18 +971,12 @@ The main implementation surfaces are:
   hardening expectations), and `containers/buildenv/*` (the family images);
 - `src/appsec_review/jobs/job_language_build/elf.py` and `go.py` — bounded ELF, Go build-fact, and
   package-catalog readers; and
-- `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
-  `tests/test_captured_build_reconciliation.py`, `tests/test_project_build.py`,
-  `tests/test_go_language_build.py`, `tests/test_rust_language_build.py`,
-  `tests/test_go_build_facts.py`, `tests/test_elf_loader_facts.py`,
-  `tests/test_language_build.py`, `tests/test_language_build_python.py`,
-  `tests/test_language_build_node.py`, `tests/test_node_installed_dependencies.py`,
-  `tests/test_node_dependency_output_filtering.py`, `tests/test_jvm_language_build.py`,
-  `tests/test_raw_trace_retention.py`, `tests/test_native_components.py`,
-  `tests/test_family_binary_assessment.py`, `tests/test_live_build_toolchains.py`, and the
-  real-image `tests/integration/test_{family,jvm_dotnet,node}_project_builds.py` — unit, live and
-  integration contracts. `tests/capture_fakes.py` replaces
-  only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.
+- The generated test selections on [project build](../operations/job_project_build.md#test-selection),
+  [language build](../operations/job_language_build.md#test-selection) and
+  [build iteration](../operations/job_build_iteration.md#test-selection) identify their current
+  unit, integration and acceptance locations. `tests/test_build_capture.py` and
+  `tests/test_build_container_executor.py` cover the shared collector/executor.
+  `tests/capture_fakes.py` replaces the external Docker boundary; it is not real compiler evidence.
 
 ## Acceptance sequence
 

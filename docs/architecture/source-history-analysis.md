@@ -60,10 +60,11 @@ GitHub only adds review-process facts on top of it.
 - Generated code, lockfiles, fixtures, documentation, vendored code, bulk changes, and formatting
   changes are excluded from ranking by explicit rules, and their metrics and exclusion reasons are
   kept.
-- PR and deployment timing are not acquired. They are named unavailable signals and are never
-  inferred from commit timestamps.
-- `job_target_analysis_plan` consumes the ranking. A history change therefore reruns the plan and
-  everything below it.
+- This lane does not compute PR/deployment timing signals. Accepted GitHub enrichment does retain
+  review timestamps for change-context analysis; those facts do not populate history's
+  unavailable timing metrics or authorize inference from commit timestamps.
+- `job_target_analysis_plan` consumes the ranking. A changed history handoff invalidates its
+  semantic consumers and their downstream closure, not unrelated scheduling-only branches.
 - A runtime input-identity probe lets resume planning detect changes to history alone.
 - Scanning history for leaked secrets is out of scope.
 - Following submodules is a TODO. For now each gitlink is a `submodule_history_not_followed` gap.
@@ -83,7 +84,9 @@ job_target_catalog -> job_ci_configuration_analysis -> job_target_analysis_plan 
 The direct CLI graph runs the job between the catalog and the plan. In Dagster's `wave1_review` it
 is a sibling of CI configuration analysis, and the plan waits for both. The job consumes:
 
-- the accepted intake handoff and its `sha256-bounded-tree-v1` fingerprint; and
+- the accepted intake handoff and target fingerprint (the output retains the legacy
+  `sha256-bounded-tree-v1` label, but `cataloging.source_fingerprint` hashes the raw non-VCS tree,
+  including catalog-excluded regular bytes and symlink identities); and
 - the accepted catalog: inventory paths, sizes, hashes, and component roots.
 
 The inventory excludes `.git`, so the source fingerprint does not cover history. A history-only
@@ -92,7 +95,7 @@ The `appsec-review/source-history-identity/2` input probe hashes bounded discove
 refs, selected commits, object formats, shallow boundaries, and local Git configuration bytes,
 including repository roots from the accepted catalog. The runner records the probe
 value in the claim and handoff. The resume planner re-probes against the graph target, and a
-mismatch reruns the job and invalidates everything downstream. The job's publish unit re-probes
+mismatch reruns the job and invalidates its semantic downstream closure. The job's publish unit re-probes
 before publishing, so a history that changes mid-run fails the attempt instead of being accepted.
 
 ## Source resolution and snapshot binding
@@ -884,7 +887,14 @@ The runtime identity covers the catalog entries for `tool-git` and `tool-tree-si
 
 ## Gap and decision taxonomy
 
-| Code | Decision | Meaning |
+These are payload reasons and source/area dispositions, not a list of distinct canonical gap
+codes. Legacy text becomes `producer_reported_gap` with `retryable=False`; explicit `GAP`
+dispositions add separate retry accounting. Change-log records use the typed codes shown below
+and default to `retryable=False`, including parser failures. False is not an advisory waiver.
+Read the verified outcomes and the [canonical gap explanation](../operations/job_source_history_analysis.md#gaps)
+before interpreting an accepted partial result.
+
+| Reason | Decision | Meaning |
 |---|---|---|
 | `no_git_metadata`, `no_commits` | `SKIPPED_NA` | Git does not apply |
 | `git_history_disabled`, `github_enrichment_disabled` | `SKIPPED_POLICY` | turned off by configuration |
