@@ -9,7 +9,7 @@ accepted pins, filesystem custody and bytes through the existing bound-artifact 
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, fields
 from enum import StrEnum
 from functools import lru_cache
@@ -319,6 +319,7 @@ class Explanation(_Contract):
 
 @dataclass(frozen=True, slots=True)
 class RelationRef(_Contract):
+    """Original predicate accounting; ``counted`` does not make a relation decisive for a row."""
     DEF = "relation_ref"
     relation_id: str
     claim_id: str
@@ -342,6 +343,38 @@ class RelationRef(_Contract):
                              or self.admissibility not in
                              (Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE)):
             raise IntegrityError("nondeciding relation cannot be counted")
+
+
+def deciding_roles(row: DecidingRow | None, required_predicates: Collection[Predicate],
+                   relations: Sequence[RelationRef]) -> tuple[Role, ...]:
+    """Attribute only the recorded row, without selecting a row or changing a claim state.
+
+    Counted relations include predicate-accounted facts that did not decide this row.
+    Application-only rows have no evidence-role attribution; optional predicates never decide.
+    Pass the complete relation population, before splitting it across inline and continuation
+    storage. Storage boundaries must not change attribution.
+    """
+    try:
+        row = None if row is None else DecidingRow(row)
+        required = frozenset(Predicate(item) for item in required_predicates)
+    except (TypeError, ValueError) as exc:
+        raise IntegrityError("deciding attribution requires a closed row and required predicates") from exc
+    if not isinstance(relations, Sequence) or any(not isinstance(item, RelationRef) for item in relations):
+        raise IntegrityError("deciding attribution requires typed relation references")
+    _unique([item.relation_id for item in relations], "attribution relation identities")
+    if row in (None, DecidingRow.DUPLICATE, DecidingRow.OUT_OF_SCOPE, DecidingRow.INSUFFICIENT_EVIDENCE):
+        return ()
+    counted = tuple(item for item in relations if item.counted and item.predicate in required)
+    support = {item.predicate for item in counted if item.kind == RelationKind.SUPPORTS}
+    contradiction = {item.predicate for item in counted if item.kind == RelationKind.CONTRADICTS}
+    if row == DecidingRow.UNRESOLVED_CONTRADICTION:
+        decisive = tuple(item for item in counted if item.predicate in support & contradiction)
+    elif row == DecidingRow.DIRECT_CONTRADICTION:
+        decisive = tuple(item for item in counted
+                         if item.kind == RelationKind.CONTRADICTS and item.predicate in contradiction - support)
+    else:
+        decisive = tuple(item for item in counted if item.kind == RelationKind.SUPPORTS)
+    return tuple(sorted({Role(item.actor_role) for item in decisive}))
 
 
 @dataclass(frozen=True, slots=True)
@@ -518,17 +551,27 @@ class DecisionRecord(_Product):
             raise IntegrityError("missing predicates must be required predicates")
         if self.stage == Stage.ADJUDICATION and self.context.subject.claim_id.value is None:
             raise IntegrityError("adjudication requires an original claim identity")
-        roles = {item.actor_role for item in self.context.relations if item.counted}
-        if not roles <= set(self.deciding_actor_roles):
-            raise IntegrityError("deciding roles omit counted relation provenance")
         if Role.ADJUDICATION_JUDGE in self.deciding_actor_roles:
             raise IntegrityError("judge is not a deciding actor")
+        _verify_deciding_roles(
+            self, self.context.relations,
+            defer_incomplete=any(ref.field == ReferenceField.RELATIONS for ref in self.context.continuations))
         if self.cell_receipt.value is not None:
             if self.context.subject.cell_id.value is None:
                 raise IntegrityError("cell receipt requires an original cell identity")
         sources = _source_bindings(self)
         _check_sources(self.context.origin, sources)
         _check_paths((*sources, *self.context.continuations))
+
+
+def _verify_deciding_roles(record: DecisionRecord, relations: Sequence[RelationRef], *,
+                           defer_incomplete: bool) -> None:
+    if defer_incomplete and record.deciding_row in (
+            DecidingRow.UNRESOLVED_CONTRADICTION, DecidingRow.DIRECT_CONTRADICTION,
+            DecidingRow.CONFIRMED, DecidingRow.SUPPORTED):
+        return
+    if record.deciding_actor_roles != deciding_roles(record.deciding_row, record.required_predicates, relations):
+        raise IntegrityError("deciding roles do not match the recorded row's decisive relation provenance")
 
 
 @dataclass(frozen=True, slots=True)
@@ -935,9 +978,8 @@ def _verify_continuations(record: Product, continued: Mapping[str, Sequence[Sour
         if name == ReferenceField.RELATIONS:
             relations = [item for item in rows if isinstance(item, RelationRef)]
             _unique([item.relation_id for item in relations], "continued relation identities")
-            if isinstance(record, DecisionRecord) and not {
-                    item.actor_role for item in relations if item.counted} <= set(record.deciding_actor_roles):
-                raise IntegrityError("deciding roles omit continued relation provenance")
+            if isinstance(record, DecisionRecord):
+                _verify_deciding_roles(record, relations, defer_incomplete=False)
             if isinstance(record, VerificationRecord):
                 _verify_verifier_relations(record, relations, defer_missing=False)
         else:
@@ -1119,6 +1161,6 @@ __all__ = [
     "PredicateCoverage", "Product", "ProductKind", "ReasonCode", "RecordRef", "ReferenceField",
     "RelationRef", "Round", "SCHEMA_FILE", "ShardRef", "SourceRef", "Stage", "Subject",
     "SupportCoverage", "VERIFICATION_SCHEMA", "VerificationRecord", "canonical_bytes",
-    "from_document", "make_continuation", "make_shard", "reference_bytes",
+    "deciding_roles", "from_document", "make_continuation", "make_shard", "reference_bytes",
     "reference_from_document", "validate_bundle",
 ]
