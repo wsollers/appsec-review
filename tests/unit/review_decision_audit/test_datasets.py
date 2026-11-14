@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from types import SimpleNamespace
+
 import pytest
 
 from appsec_review.indexing.inventory import compile_glob
@@ -10,6 +13,8 @@ from appsec_review.jobs.job_poc_generation.datasets import CONTRACT as POC_CONTR
 from appsec_review.jobs.job_remediation_planning.datasets import CONTRACT as REMEDIATION_CONTRACT
 from appsec_review.runtime.contracts import Availability, MissingPolicy
 from appsec_review.runtime.datasets import EvidenceAuthority, validate_declarations
+from appsec_review.runtime.inputs import admit_inputs
+from tests.unit.review_decision_audit_consumers.source_permission_fixture import SourceRun
 
 JOB = "job_inference_security_review"
 ROOT = f"data/jobs/{JOB}/attempts/attempt-1/artifacts/decision-audit"
@@ -53,7 +58,7 @@ def test_only_declared_application_consumers_get_optional_audit_permissions(cont
         declaration = next(value for value in DATASETS if value.output_kind == kind)
         assert item.schema == declaration.schema
         assert item.authority is EvidenceAuthority.OPERATIONAL
-        assert item.availability is Availability.OPTIONAL
+        assert item.availability is Availability.WHEN_DECLARED
         assert item.missing is (MissingPolicy.GAP if kind == "review_audit_metadata"
                                 else MissingPolicy.NOT_APPLICABLE)
 
@@ -68,3 +73,35 @@ def test_new_audit_routes_do_not_claim_existing_finding_payloads():
     owners = [item.output_kind for item in DATASETS
               if any(compile_glob(pattern).fullmatch(path) for pattern in item.artifacts)]
     assert owners == ["scores_and_findings"]
+
+
+@pytest.mark.parametrize("consumer,contract", [
+    ("job_dossier_publication", DOSSIER_CONTRACT),
+    ("job_final_publication_gate", GATE_CONTRACT),
+], ids=["dossier", "gate"])
+@pytest.mark.parametrize("publication", ["legacy", "declared", "wrong-schema", "wrong-authority"])
+def test_actual_consumer_contracts_admit_only_compatible_audit_declarations(tmp_path, consumer, contract, publication):
+    run = SourceRun(tmp_path)
+    declarations = tuple(row for row in DATASETS if publication != "legacy" or row.output_kind not in KINDS)
+    if publication in {"wrong-schema", "wrong-authority"}:
+        changes = ({"schema": "appsec-review/review-audit-publication/999"} if publication == "wrong-schema"
+                   else {"authority": EvidenceAuthority.PROVISIONAL})
+        declarations = tuple(replace(row, **changes) if row.output_kind == "review_audit_metadata" else row
+                             for row in declarations)
+    accepted = run.publish(JOB, {}, declarations=declarations)
+    context = SimpleNamespace(run_root=run.root, evidence_target_snapshot=run.target,
+                              config=SimpleNamespace(job_id=consumer), contract=contract,
+                              upstream_handoffs={JOB: accepted.sha256})
+    if publication in {"wrong-schema", "wrong-authority"}:
+        with pytest.raises(ValueError, match="producer output contract mismatch|producer evidence authority mismatch"):
+            admit_inputs(context, {JOB, consumer})
+        return
+    admission = admit_inputs(context, {JOB, consumer})
+    rows = {row["output_kind"]: row for row in admission["requirements"]
+            if row["producer"] == JOB and row["output_kind"] in KINDS}
+    assert set(rows) == KINDS
+    for kind, row in rows.items():
+        assert row["available"] is False and row["supplied"] is False and row["read"] is False
+        assert row["cited"] is None
+        assert row["handoff_sha256"] == accepted.sha256
+        assert row["status"] == ("gap" if kind == "review_audit_metadata" else "not_applicable")

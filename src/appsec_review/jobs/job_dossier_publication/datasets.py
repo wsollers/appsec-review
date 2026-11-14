@@ -40,9 +40,9 @@ CONTRACT = JobContract(
                          "appsec-review/finding-package/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_inference_security_review", "review_audit_metadata",
                          "appsec-review/review-audit-publication/1", authority=EvidenceAuthority.OPERATIONAL,
-                         availability=Availability.OPTIONAL, missing=MissingPolicy.GAP),
+                         availability=Availability.WHEN_DECLARED, missing=MissingPolicy.GAP),
         *(InputRequirement("job_inference_security_review", kind, schema,
-                           authority=EvidenceAuthority.OPERATIONAL, availability=Availability.OPTIONAL,
+                           authority=EvidenceAuthority.OPERATIONAL, availability=Availability.WHEN_DECLARED,
                            missing=MissingPolicy.NOT_APPLICABLE)
           for kind, schema in (
               ("review_decision_audit", "appsec-review/review-audit-manifest/1"),

@@ -156,6 +156,30 @@ def test_dossier_units_reverify_the_sidecar_and_reject_a_substituted_reference(t
             directory / "rejected-create", {"load.verify_inputs": {"artifact": artifact_ref(case.root, alternate_inputs)}}))
 
 
+def test_legacy_dossier_input_snapshot_keeps_original_rendering(tmp_path, monkeypatch):
+    case, _, _, _, _, _ = accepted_case(tmp_path)
+    directory = case.root / "data/jobs/job_dossier_publication/attempts/attempt_0001"
+    context = SimpleNamespace(run_root=case.root, repository_root=ROOT, events=EventLog(directory / "events.jsonl"),
+                              config=SimpleNamespace(settings=dossier_settings(render_pdf=False).identity()))
+    core = SimpleNamespace(read_excerpt=lambda **_: {"results": [], "truncated": False})
+
+    def unexpected_audit_read(*args, **kwargs):
+        raise AssertionError("legacy dossier snapshot opened the optional audit")
+
+    monkeypatch.setattr("appsec_review.review.decision_audit.reader.load_decision_audit", unexpected_audit_read)
+    job = build_job(repository_root=ROOT, core_factory=lambda *_: core, review_loader=load_accepted_review)
+    loaded = job.units[0].handler(UnitContext(context, "load.verify_inputs", "load", "verify_inputs",
+                                              directory / "load", {}))
+    snapshot = read_bound_json(case.root, loaded["artifact"])
+    assert "decision_audit" not in snapshot and "decision_audit_unavailable_reason" not in snapshot
+    result = job.units[1].handler(UnitContext(context, "dossiers.create", "dossiers", "create",
+                                              directory / "create", {"load.verify_inputs": loaded}))
+    summary = read_bound_json(case.root, result["artifact"])
+    dossier = read_bound_json(case.root, summary["items"][0]["files"]["json"])
+    assert dossier["state"] == "confirmed"
+    assert "decision_basis" not in dossier
+
+
 def test_fresh_unavailable_audit_retains_its_reason_in_the_protected_dossier(tmp_path):
     case, _, _, reference, _, _ = accepted_case(tmp_path)
     accepted = accepted_handoff(case.root, REVIEW_JOB)

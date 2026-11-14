@@ -35,8 +35,10 @@ class SourceRun:
         atomic_json(self.root / "data/configuration/manifest.json", {
             "resolved_sha256": file_sha256(self.root / "data/configuration/resolved.json")})
 
-    def publish(self, producer, outputs, *, attempt="attempt_0001", upstream=None, artifacts=(), target=None):
-        declarations = import_module(f"appsec_review.jobs.{producer}.datasets").DATASETS
+    def publish(self, producer, outputs, *, attempt="attempt_0001", upstream=None, artifacts=(), target=None,
+                declarations=None):
+        if declarations is None:
+            declarations = import_module(f"appsec_review.jobs.{producer}.datasets").DATASETS
         directory = self.root / f"data/jobs/{producer}/attempts/{attempt}"
         atomic_json(directory / "claim.json", {
             "dataset_contract": dataset_contract(producer, sorted(

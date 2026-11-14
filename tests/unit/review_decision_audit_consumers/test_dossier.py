@@ -19,6 +19,7 @@ def test_protected_basis_preserves_public_claim_evidence_and_scoring(tmp_path):
     before = build_dossier(**fixture.dossier())
     after = build_dossier(**fixture.dossier(), decision_audit=audit)
     assert "decision_basis" not in before
+    assert "Protected decision basis" not in render_latex(dossier_document(before))
     assert {key: value for key, value in after.items() if key != "decision_basis"} == before
     basis = after["decision_basis"]
     assert basis["available"] and basis["record_id"] == fixture.basis.record_id
