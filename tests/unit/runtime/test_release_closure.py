@@ -152,11 +152,15 @@ REPOSITORY = Path(__file__).resolve().parents[3]
 def test_no_shipped_module_defeats_the_walk_with_a_computed_dynamic_import() -> None:
     """One computed ``import_module`` in a module every job reaches sends every job back to the
     whole shared closure (``jobs/bound_artifacts.py`` and ``review/slicing/registry.py`` did)."""
-    offenders = sorted(
-        path.relative_to(REPOSITORY).as_posix()
-        for path in (REPOSITORY / "src/appsec_review").rglob("*.py")
-        if "development" not in path.parts and "__pycache__" not in path.parts
-        and module_imports(path.relative_to(REPOSITORY).as_posix(), path.read_bytes())[1])
+    offenders = []
+    for path in sorted((REPOSITORY / "src/appsec_review").rglob("*.py")):
+        if "development" in path.parts or "__pycache__" in path.parts:
+            continue
+        source = path.read_bytes()
+        if b"import_module" not in source and b"__import__" not in source:
+            continue  # only a candidate needs the AST walk, which keeps this under the unit budget
+        if module_imports(path.relative_to(REPOSITORY).as_posix(), source)[1]:
+            offenders.append(path.relative_to(REPOSITORY).as_posix())
     assert offenders == []
 
 
