@@ -1,6 +1,6 @@
 """Publication declarations for dependency intelligence."""
 
-from appsec_review.runtime.datasets import artifact_only, indexed
+from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_dependency_intelligence/attempts/*"
@@ -45,6 +45,30 @@ DATASETS = (
                   "Exact bounded OpenSSF Scorecard responses retained with hashes.",
                   artifacts=(_A + "/steps/scorecards/tasks/fetch/artifacts/scorecards/*.json",),
                   reason="raw responses are retained for reproducibility; normalized context is indexed"),
+    protected("native_inputs", "inputs", "inventory", "appsec-review/native-inputs/1",
+              "Normalized native source inventory accepted for SBOM discovery: target paths, hashes and roots.",
+              artifacts=(_A + "/steps/inputs/tasks/load_accepted/protected-native-inputs.json",),
+              reason="a complete path-and-hash inventory of customer source is protected metadata"),
+    artifact_only("unity_inventory", "inputs", "inventory", "appsec-review/unity-inventory/1",
+                  "Unity project descriptors found in the accepted inventory.",
+                  artifacts=(_A + "/steps/inputs/tasks/load_accepted/unity-inventory.json",),
+                  reason="descriptor inventory feeds native discovery, whose claims are indexed"),
+    artifact_only("native_inference_inputs", "resolution", "inventory",
+                  "appsec-review/native-inference-artifacts/1",
+                  "The discovery document each inference step read and the manifest of model artifacts it used.",
+                  artifacts=(_A + "/steps/resolution/tasks/curate_components/native-discovery.json",
+                             _A + "/steps/resolution/tasks/curate_components/model-artifacts.json",
+                             _A + "/steps/resolution/tasks/investigate_components/native-discovery.json",
+                             _A + "/steps/resolution/tasks/investigate_components/model-artifacts.json"),
+                  reason="exact inputs of each inference step are retained beside its result for audit"),
+    protected("native_inference_io", "resolution", "inventory", "appsec-review/native-inference-attempt/1",
+              "Immutable model requests, responses and attempt records of native component inference.",
+              artifacts=("data/native-inference/**",),
+              reason="requests carry bounded target content and responses are raw model output"),
+    protected("native_sbom_conversion", "publication", "inventory", "appsec-review/container-execution/1",
+              "Staged Syft inventory, the SPDX conversion execution receipt and its raw streams.",
+              artifacts=("data/native-sbom/**", _A + "/steps/publication/tasks/publish_sbom/conversion.json"),
+              reason="raw tool streams can contain unbounded target content"),
     artifact_only("dependency_intelligence_handoff", "acceptance", "inventory",
                   "appsec-review/dependency-intelligence-handoff/1",
                   "Accepted dependency, repository, Scorecard, gap, and retrieval-manifest identities.",
