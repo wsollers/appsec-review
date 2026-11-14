@@ -39,14 +39,16 @@ and a second, different snapshot of the same run and stage is refused.
 - `--target-id` is your stable name for the target (`[a-z0-9][a-z0-9._-]*`). A run names its
   target by path and fingerprint, neither of which survives a new revision.
 - Without `--units` the reviewed source files are derived from the run (T-073):
-  - A catalogued file is **reviewed** when a review package that contained it had every red cell
-    succeed. Its content hash is the accepted source catalog's. Reviewed means a review ran over
-    the file, never that the file is clean.
-  - Every other catalogued file is unreviewed with one reason: `cells_incomplete` (in a package
-    whose red cells did not all succeed), `not_launched` (in a package no red cell was launched
-    for) or `not_packaged` (in no assembled package). A run does not record the files of a review
-    unit below the hunt cutoff, so those files are `not_packaged` too; the gap
-    `units_below_hunt_cutoff:<n>` counts the units.
+  - A catalogued file is **reviewed** when a file-covering review package that contained it had
+    every red cell succeed. A successful operation-scoped package yields `operation_only`, not
+    whole-file coverage. Its content hash is the accepted source catalog's. Reviewed never means
+    that the file is clean.
+  - Other reasons are `cells_incomplete` (a package's red cells did not all succeed),
+    `not_launched` (no red cell launched for the package), `below_hunt_cutoff`, or `not_packaged`.
+    Below-cutoff units retain source identities and supply `below_hunt_cutoff` when no package
+    state already describes that source; `units_below_hunt_cutoff:<n>` still counts units.
+    When several packages mention a file, the derivation retains its best supported coverage
+    state rather than treating an operation-only success as whole-file review.
   - Files the run never catalogued are not listed.
   - When the derivation fails the snapshot has no units and the gap
     `reviewed_units_not_derived:<reason>` names why (no accepted review, an unreadable package or
@@ -141,7 +143,7 @@ the run's accepted `surface:entry:*` security tags:
 
 | Tag | Kind |
 | --- | --- |
-| `surface:entry:http-public`, `surface:entry:http-internal`, `surface:entry:message-consumer` | `network_handler` |
+| `surface:entry:remote-input`, `surface:entry:http-public`, `surface:entry:http-internal`, `surface:entry:message-consumer` | `network_handler` |
 | `surface:entry:rpc` | `rpc_handler` |
 | `surface:entry:file-input` | `file_loader` |
 
@@ -151,9 +153,10 @@ the run's accepted `surface:entry:*` security tags:
   (`entry_point_kind_unmapped:parser`). The other entry terms (`cli`, `env-config`, `local-ipc`,
   `mobile-deeplink`, `cloud-public`, `ci-untrusted`) are none of the four kinds and are counted in
   `entry_tags_without_kind:<n>`.
-- The tagging producers assign no `surface:entry:*` tag today. Until one does, the derived
-  catalogue is `n/a` with the gap `entry_points_not_derived:no_entry_point_tags`; supply
-  `--entry-points` to measure entry-point coverage in the meantime. The file is a list of
+- Tagging emits mapped entry tags from admitted, source-verified graph facts. A run without
+  such accepted tags still has an unavailable catalogue with
+  `entry_points_not_derived:no_entry_point_tags`; this does not prove it has no entry points.
+  An explicit `--entry-points` file remains an operator-supplied alternative. The file is a list of
   `{"entry_id", "kind", "path", "status", "reason"}` rows.
 
 Without `--run`, `--leads` is a list of `{"lead_id", "admitted", "disposition", "removed_stage",
@@ -205,8 +208,9 @@ not an exploitability claim.
 On the scorecard a crash bucket binds to the reviewed code by build identifier (`--debug-id`),
 revision (`--crash-revision`) or symbol. A published finding is crash-corroborated when a bound
 bucket has a frame in the finding's function, or in its file within its lines, and the fault class
-is compatible with the weakness family. Corroboration is evidence for the judge and a label source;
-it never confirms a claim by itself. Memory-safety buckets bound to reviewed code with no finding
+is compatible with the weakness family. This operator scorecard corroboration is an offline
+evaluation/label boundary; it is not currently delivered to the review judge and never confirms
+a claim by itself. Memory-safety buckets bound to reviewed code with no finding
 at any frame are counted under "where it is blind".
 
 ## 4. Draw an audit sample of removed leads
