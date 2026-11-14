@@ -234,7 +234,8 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Every deferred item is an entry `### T-NNN — Imperative title` with the fields `State`, `Area`,
   `Blocked by`/`Blocks` (when non-empty), `Why`, `Scope`, `Done when`, `Refs`, in that order, and a
   row in the index table. The format and the allowed `Area` and `State` values are at the top of
-  the file. Ids are allocated sequentially, never reused or renumbered.
+  the file. Ids are allocated sequentially within one of two ranges (`T-001` upward, shared;
+  `T-5000` upward for the review host's sessions), never reused or renumbered.
 - Closing an item sets `State: done (date, commit or task doc)`; the entry stays. Splitting an item
   creates new ids that name the parent in `Refs`. An item that turns out to be wrong is marked
   `done` with the reason, not deleted.

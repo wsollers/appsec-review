@@ -187,3 +187,13 @@ def test_guard_names_each_production_variable() -> None:
     assert len(offences) == len(production)
     for name, value in production.items():
         assert any(offence.startswith(f"{name}={value!r}") for offence in offences), name
+
+
+def test_harness_umask_keeps_run_directories_private(tmp_path) -> None:
+    """The custody check refuses group- or world-writable run roots; a permissive host umask must not
+    reach the tests (145 custody failures per run on a umask-0002 host before this)."""
+    import os
+    created = tmp_path / "run-root"
+    created.mkdir()
+    assert created.stat().st_mode & 0o022 == 0, oct(created.stat().st_mode)
+    assert os.umask(0o022) == 0o022
