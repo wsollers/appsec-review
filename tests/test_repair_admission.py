@@ -765,6 +765,90 @@ def test_shared_producer_change_invalidates_its_real_consumer_not_an_independent
     assert any("cached computation from job_a" in reason for reason in decisions[1].reasons)
 
 
+def _dataset(job_id):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.storage.shared import RECEIPT_SCHEMA
+    return artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=(f"data/jobs/{job_id}/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+
+
+def _contract(**fields):
+    from appsec_review.runtime.contracts import JobContract
+    return JobContract(**fields)
+
+
+def _input(producer):
+    from appsec_review.interchange import HANDOFF_SCHEMA
+    from appsec_review.runtime.contracts import InputRequirement
+    return InputRequirement(producer=producer, output_kind="handoff", schema=HANDOFF_SCHEMA)
+
+
+@pytest.mark.parametrize("change", ["added-dataset", "added-input"])
+def test_compatible_dataset_contract_widening_forces_only_the_changed_job(tmp_path, change):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    dependencies = {"job_a": (), "job_b": ("job_a",), "job_c": ()}
+    before = replace(jobs[1], contract=_contract()) if change == "added-input" else jobs[1]
+    graph = GraphRunner(config, (jobs[0], before, jobs[2]), dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    after = (replace(before, contract=_contract(inputs=(_input("job_a"),))) if change == "added-input"
+             else replace(before, datasets=(_dataset("job_b"),)))
+    plan = plan_repair(config, root, (jobs[0], after, jobs[2]), "none", dependencies=dependencies)
+    assert plan["admissible"] is True, plan["refusals"]
+    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "RUN", "REUSE"]
+    assert "dataset contract identity changed" in plan["decisions"][1]["reasons"]
+    assert canonical_json(plan) == canonical_json(
+        plan_repair(config, root, (jobs[0], after, jobs[2]), "none", dependencies=dependencies))
+
+
+@pytest.mark.parametrize("change", ["removed-dataset", "edited-dataset", "removed-input", "changed-flag",
+                                    "contract-added"])
+def test_incompatible_dataset_contract_change_refuses_the_plan(tmp_path, change):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    if change == "removed-dataset":
+        before, after = replace(jobs[1], datasets=(_dataset("job_b"),)), jobs[1]
+    elif change == "edited-dataset":
+        before = replace(jobs[1], datasets=(_dataset("job_b"),))
+        after = replace(jobs[1], datasets=(replace(_dataset("job_b"), description="Edited"),))
+    elif change == "removed-input":
+        before = replace(jobs[1], contract=_contract(inputs=(_input("job_a"),)))
+        after = replace(jobs[1], contract=_contract())
+    elif change == "changed-flag":
+        before = replace(jobs[1], contract=_contract())
+        after = replace(jobs[1], contract=_contract(propagate_handoff=False))
+    else:
+        before, after = jobs[1], replace(jobs[1], contract=_contract())
+    first = GraphRunner(config, (jobs[0], before), dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    plan = plan_repair(config, root, (jobs[0], after), "none", dependencies=dependencies)
+    assert plan["admissible"] is False
+    assert "unsupported dataset compatibility change for job_b" in plan["refusals"]
+    assert not any("job_a" in refusal for refusal in plan["refusals"])
+    with pytest.raises(ValueError, match="repair refused"):
+        admit_repair(config, root, (jobs[0], after), plan, dependencies=dependencies)
+
+
+def test_widened_dataset_contract_refuses_a_plan_that_would_reuse_the_old_attempt(tmp_path, monkeypatch):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ()}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    widened = replace(jobs[1], datasets=(_dataset("job_b"),))
+    # Even a planner that overlooked the contract change cannot admit reuse of the narrower attempt.
+    original = ResumePlanner._accepted
+    def overlooking(self, job, upstream, *args, **kwargs):
+        reasons, handoff_hash = original(self, job, upstream, *args, **kwargs)
+        return [reason for reason in reasons if reason != "dataset contract identity changed"], handoff_hash
+    monkeypatch.setattr(ResumePlanner, "_accepted", overlooking)
+    plan = plan_repair(config, root, (jobs[0], widened), "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "REUSE"]
+    assert plan["admissible"] is False
+    assert "dataset contract of job_b changed but its accepted attempt would be reused" in plan["refusals"]
+
+
 def test_named_cache_cannot_hide_an_incompatible_producer_as_legacy(tmp_path):
     from appsec_review.runtime.datasets import artifact_only
     from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts

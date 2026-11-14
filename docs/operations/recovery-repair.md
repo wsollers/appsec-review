@@ -105,7 +105,13 @@ appsec-review resume --run-id RUN --target TARGET
 
 The plan is deterministic and contains compatibility version, old binding identity, exact
 replacement release/deployment identity, attempt snapshots, every job decision, unit checkpoint
-decisions and refusal reasons. Review it before admission. `admit-repair` rederives it while
+decisions and refusal reasons. Review it before admission. A changed job dataset contract refuses
+the whole plan (`unsupported dataset compatibility change for <job>`) unless the change only
+*adds* datasets or typed input requirements and leaves every other field of the contract
+identical; such a compatible widening forces that job to `RUN` and the plan stays admissible,
+while a plan that would reuse an accepted attempt of the widened job is refused. A removed or
+edited dataset, a removed input, a contract schema change or a changed dispatch flag is still an
+incompatible wire-contract change that no source-code repair can approve. `admit-repair` rederives it while
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command
 only records admission. It does not execute the restart.
 

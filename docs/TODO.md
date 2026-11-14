@@ -139,7 +139,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | done (2026-11-13, https://github.com/wsollers/appsec-review-smoke-guide, commit dc69349) |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout) |
 | T-146 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-146-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | open |
-| T-147 | [Scope the dataset-contract repair refusal to the changed job](#t-147-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | open |
+| T-147 | [Scope the dataset-contract repair refusal to the changed job](#t-147-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`) |
 | T-148 | [Measure a job's implementation identity from the modules it imports](#t-148-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
@@ -2120,9 +2120,8 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-147 — Scope the dataset-contract repair refusal to the changed job
 
-- **State:** open
+- **State:** done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`)
 - **Area:** pipeline
-- **Blocked by:** T-146
 - **Why:** `plan_repair` appends "unsupported dataset compatibility change for <job>" when any job's `dataset_contract` SHA differs from its last claim, and the whole plan is inadmissible. On 2026-11-13 declaring additional producers for `job_owasp_control_assessment` refused the in-place repair of all 42 jobs although only that job changed and it was going to run anyway.
 - **Scope:** a compatible change (the old contract's datasets and `job_contract.inputs` are each a subset of the new ones and every other field is identical) forces the changed job to run and leaves the plan admissible; the refusal stays when the plan would reuse an accepted attempt of the changed job or when the change removes a dataset or input, changes the contract schema or any other contract field. Its descendants follow T-146.
 - **Done when:** unit tests cover an added dataset and an added input requirement (admissible, the job runs) and a removed dataset and a changed non-input field (refused).
