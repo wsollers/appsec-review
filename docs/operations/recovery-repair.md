@@ -17,7 +17,11 @@ commands, workers, Docker builds, or models.
 `release-dependencies.json` declares job packages, shared application code and package resources,
 container catalogs/query packs/adapters, validators/schema assets, bundled reference fixtures,
 runtime guidance/rules, dependency locks, the image recipe, and scripts. The release
-builder follows static cross-job helper imports as well. It rejects a release lacking shared
+builder walks each job's transitive static `appsec_review` imports into `common` (including
+enclosing package `__init__` files, falling back to full `common` on dynamic or unresolvable
+imports, while shared modules that import job packages contribute only themselves; see
+[Deployment image and source mount](../architecture/deployment-image-and-source-mount.md)) as well
+as cross-job helper imports. It rejects a release lacking shared
 code or validator coverage, or an absent explicitly named dependency. At release measurement:
 
 ```sh
@@ -100,7 +104,12 @@ new server while the old one finishes); the stack's own `lifecycle reload` recre
 `data/recovery/dispatches/<uuid>.json`. It refuses a missing/wrong/nonterminal run, a live/unknown
 worker, and any other launcher without health support. Retained resource leases and uncertain controller permits still block admission.
 Registered local workers are checked by process generation and PID namespace; foreign or
-unverifiable workers fail closed. Historical receipts without worker identity are uncertainty,
+unverifiable workers fail closed. During a live Dagster dispatch (`current_dispatch`),
+`worker_scope` and `ResourceAdmission` record `dispatch`, and `stopped_reasons` exempts that
+dispatch's own `claim.json` dispatches, its `ACTIVE` sibling workers, and its non-persistent,
+non-quarantined resource leases so parallel jobs in the resumed run do not block repair-bound
+verification; quarantined leases and every other dispatch still block admission. Historical
+receipts without worker identity are uncertainty,
 even when they say `FAILED` or `SUCCEEDED`: they do not prove that independent workers stopped.
 
 After the stopped deployment has been replaced with the repaired release:
@@ -111,7 +120,7 @@ appsec-review admit-repair --run-id RUN --target TARGET --plan repair-plan.json
 appsec-review resume --run-id RUN --target TARGET
 ```
 
-The plan is deterministic and contains compatibility version, old binding identity, exact
+The plan (`appsec-review/repair-plan/2`) is deterministic and contains compatibility version, old binding identity, exact
 replacement release/deployment identity, attempt snapshots, every job decision, unit checkpoint
 decisions and refusal reasons. Review it before admission. Each job decision is one of `REUSE`
 (every identity, the accepted handoff, its artifacts and every pinned upstream handoff match),
@@ -119,7 +128,7 @@ decisions and refusal reasons. Review it before admission. Each job decision is 
 and this job's own identities, configuration or accepted handoff changed too, or the plan is a
 historical, successor or deferred-fingerprint forced plan) or `REVALIDATE` (an ancestor will run but
 everything that is this job's own still verifies, so the runtime decides at dispatch). A `REVALIDATE`
-job is reused at dispatch only when, after every existing refusal has passed, each producer it pinned
+job (other than `job_target_analysis_plan`, which always runs when not `REUSE`) is reused at dispatch only when, after every existing refusal has passed, each producer it pinned
 is **equivalent** to the one accepted now: the same handoff, or a newer accepted handoff whose
 evidence-body `content_sha256` equals the pinned one
 ([job interchange](../architecture/job-interchange.md), "Evidence header, evidence body and the

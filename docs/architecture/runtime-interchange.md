@@ -44,7 +44,10 @@ binding, not that a tool observation is correct.
 
 The [shared object store](../../src/appsec_review/storage/shared.py) publishes content by
 no-replace identity. One hash proves equal bytes, not the same computation or originating
-producer. Accepted manifests compose verified immutable retrieval shards while preserving their
+producer; when a later attempt reuses a content-fingerprinted shard under `data/indices`,
+`IndexBuilder.attest_existing` / `build_or_reuse` re-attests custody (`index-shard`,
+`computed=True`) under the reusing attempt so repair-admitted implementations carry a compatible
+producer receipt. Accepted manifests compose verified immutable retrieval shards while preserving their
 physical identities and upstream references. The
 [retrieval identity/manifest contract](python-and-retrieval.md) and
 [retrieval surfaces](retrieval-surfaces.md) own those details. Public routes expose their declared
@@ -52,11 +55,17 @@ normalized records or sanitized metadata; an inventory reference does not grant 
 payload access.
 
 Resume re-verifies accepted publication identity and the applicable semantic dependency closure.
+When an ancestor runs, consumers whose own identities, configuration, dataset contract and accepted
+handoff still match are planned as `REVALIDATE` (`appsec-review/repair-plan/2`) and reused at
+dispatch (`appsec-review/attempt-revalidation/1`, `REVALIDATED`) only if every pinned producer is
+the identical handoff or carries equal `content_sha256` (`appsec-review/handoff-content/2`, T-161).
 Generic [unit checkpoints](../../src/appsec_review/runtime/checkpoints.py) admit only bounded,
 successful, portable values whose inputs/implementation and predecessor reuse remain valid.
 Path-, workspace-, process-, budget- and side-effect-bound results are not generic portable
 successes. [Repair admission](../operations/recovery-repair.md) handles an explicitly approved
-implementation change without rewriting earlier attempts. Mutable pointers, workspaces and
+implementation change — including strictly additive dataset or typed-input contract widenings that
+force the widened job to `RUN` (`compatible_dataset_change`, T-162) — without rewriting earlier
+attempts. Mutable pointers, workspaces and
 controller state are not themselves immutable evidence.
 
 T-150 now publishes a protected audit after the original inner review handoff, using the existing
@@ -73,6 +82,7 @@ records their exact scope. No worker/MCP authority is added.
 |---|---|---|
 | 2026-10-28 record | [Job interchange implementation record](../reviews/job-interchange-implementation.md) | Domain payloads remain domain-owned beneath shared validated control and admitted input boundaries. The record's original validation claims are not a fresh run. |
 | 2026-11-13 | [Documentation program](../tasks/2026-11-13-docs-program-prompt.md) | Static availability, actual production, actual consumption and evidence authority are documented separately. |
+| 2026-11-13 | [Content identity](job-interchange.md#evidence-header-evidence-body-and-the-content-identity) and [repair admission](../operations/recovery-repair.md) (T-161, T-162, T-163) | Equivalent-upstream `REVALIDATE` (`handoff-content/2`), strictly additive dataset/input widening, and per-job static `common` import closure narrow repair blast radius without rewriting accepted attempts or weakening byte-pinned provenance. |
 
 ## Named gaps
 
@@ -85,6 +95,8 @@ records their exact scope. No worker/MCP authority is added.
   not evidence that all SVF coverage was lost.
 - [T-152, T-153 and T-156](../TODO.md) retain the unimplemented warrant, semantic-resolution and
   execution-coverage boundaries beyond T-150's implemented audit.
+- [T-164](../TODO.md) owns content-addressed artifact references throughout handoff bodies in place
+  of interim attempt-path `@` normalization and `artifact_content` pairs.
 
 ## Jobs and pages
 

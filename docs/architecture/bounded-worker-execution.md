@@ -161,9 +161,13 @@ recorded command. Legacy v1 successful responses remain readable; legacy v1 erro
 rejected because their lost semantics cannot be recovered safely.
 
 Recordings use `<job>/<request-key>.<sequence>.json`; repeated identical calls reserve their
-ordinal at admission, not completion. Copy `recording-root.json` **with** the job directories
-when replaying elsewhere. Malformed envelopes, mismatched roots/requests and replay misses are
-explicit integrity failures, never an invitation to call a live provider.
+ordinal at admission, not completion. On an in-place repair re-run in `record` mode, an existing
+same-run recording with a `result` is replayed instead of calling the live provider again, while an
+existing `error` envelope is skipped so the repaired attempt retries live and appends at the next
+sequence slot. Request canonicalization accepts integer values in `-(2**63) <= n < 2**64` so
+unsigned 64-bit debug-symbol addresses serialize cleanly. Copy `recording-root.json` **with** the
+job directories when replaying elsewhere. Malformed envelopes, mismatched roots/requests and replay
+misses are explicit integrity failures, never an invitation to call a live provider.
 
 Shared hash-only execution receipts live under
 `data/inference-executions/<job-attempt-digest>/<execution-id>/<sequence>.json`.
