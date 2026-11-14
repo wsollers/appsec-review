@@ -1,7 +1,7 @@
 ---
 title: "language_build"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "target acquisition and build"
 status: "current"
 jobs: ["job_language_build"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # language_build
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+What did the admitted build units actually execute and produce, with what source, toolchain,
+capture and product dependencies? Language-build publishes verified receipts and build indices,
+reusing project-owned native/Unity executions where appropriate. It refuses to call a successful
+driver exit complete compiler capture, an existing file a newly built output, or a compiled
+artifact proof of runtime shipment, reachability or security.
 
 <!-- generated:begin job=job_language_build -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -247,3 +253,141 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handlers and generic executor](../../src/appsec_review/jobs/job_language_build/job.py),
+[capture reconciliation](../../src/appsec_review/jobs/job_language_build/capture.py),
+[JVM](../../src/appsec_review/jobs/job_language_build/jvm.py) and
+[Wasm](../../src/appsec_review/jobs/job_language_build/wasm.py) adapters.
+[Language-build operations](language-build.md) owns family details; shared
+[topology/iterations](../architecture/build-topology-and-iterations.md) and
+[capture semantics](../architecture/build-environments-and-execution-capture.md) are linked rather
+than redefined here.
+
+### `iterations`
+
+1. Read accepted project-build dispatches and revalidate source, workflow, unique unit IDs,
+   recipe/profile/dependency identities, preparation references and topology refinement.
+   Refuse graphless/legacy execution modes and changed source bytes.
+2. Select explicit recipe revisions and processing decisions. Retain upstream image failures
+   and platform/policy exclusions as receipts. Consume project-owned native receipts without
+   scheduling a second execution.
+3. Construct `BuildIterations` from the admitted graph, selected dispatches, configuration,
+   releases and output policy. Schedule serial dependency-ready nodes in the shared complete
+   target/install workspace; verify product interfaces, not just predecessor statuses.
+4. Invoke each production transaction through `job_build_iteration`. Generic, JVM or Wasm
+   execution uses the same admitted workspace/interfaces. Configure/build commands are bounded
+   by time, streams, artifact counts and family policy; no model supplies new commands here.
+5. Capture applicable native/Rust/.NET/Go process execution. Reconcile only successful
+   `process_exec` events as compiler authority; preserve incomplete capture, redaction and
+   missing tool execution. Use family parsers for package, generated-source and output facts.
+6. Recheck target identity, classify output trees and bookkeeping, validate native/Go target
+   evidence, retain protected argv/streams and immutable artifact bytes. Failed build outputs
+   are not accepted products. Commit only successful product transactions with confirmed cleanup;
+   preserve diagnostics and recover/rollback through the controller on failure.
+
+### `load`
+
+1. Re-read accepted dispatch authority for each configured family and enforce its typed
+   settings. Shared envelope/identity errors are hard failures, not missing family coverage.
+2. Select Wasm output producers from configured rules rather than equating output format with
+   source language. Other family selections exclude those Wasm-routed dispatches.
+3. Retain native/project-owned and Unity engine receipts, unavailable upstream units and
+   explicit platform/policy dispositions. Validate accepted Go/Rust and other family-specific
+   recipe requirements; do not silently omit a planned unit whose preparation failed.
+4. Record processing applicability and any unmatched configured Wasm producer reason.
+
+### `execute`
+
+1. In the admitted iterative path, collect the controller's receipts by output family and add
+   the one-time Unity receipts. Do not rebuild after `iterations.dispatch`.
+2. Carry both receipt gaps and delivery gaps into the family result. A family with no receipts
+   is `NOT_APPLICABLE`; a failed planned unit remains a named receipt, not an absent lane.
+3. Return per-family counts and statuses. The retained non-iterative implementation is not
+   authority to bypass the earlier iterative-mode admission.
+
+### `acceptance`
+
+1. Join family receipts, controller graph and processing decisions. Name dispatch families
+   outside the supported executor set rather than silently dropping them.
+2. Write `accepted-language-builds.json` with the exact upstream project handoff hash.
+3. Build the aggregate `build` shard from actual commands, invocations and artifact references;
+   compose it with JVM and upstream shards under a verified manifest.
+4. Publish receipt and index datasets only after framework validation. Keep workspaces and
+   exact command material protected, distinct from sanitized queryable build actions.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  prepared["project_build_dispatch"] --> job["job_language_build"]
+  job --> controller["iterations.dispatch"]
+  controller --> transaction["job_build_iteration"]
+  transaction --> receipts["language-build-receipt"]
+  owned["project-owned native / Unity receipts"] --> load["load"]
+  prepared --> load
+  controller --> load
+  load --> execute["execute"]
+  receipts --> execute
+  execute --> publish["acceptance.publish_handoff"]
+  publish --> outputs["language_build_receipts + build_actions + jvm_build_actions"]
+  transaction --> protected["build_workspaces"]
+  receipts -. "capture / product / delivery gaps" .-> gaps["outcomes"]
+```
+
+## Gaps
+
+This job mixes preserved typed records with legacy strings. Legacy values become canonical
+`producer_reported_gap`, `retryable=False`; native enforcement records also use that code and
+default false. Nested failed/blocked receipts and processing `GAP` dispositions can add
+status-derived retry accounting. Inspect the canonical outcomes rather than labeling all
+build gaps either retryable or advisory.
+
+| Boundary | Source-derived omissions or failures |
+| --- | --- |
+| Dispatch/controller | Missing immutable image/release/refinement/product evidence; unsupported/unresolved topology; unavailable dependency; selected policy/capability gaps; retained upstream preparation failure. |
+| Command execution | Nonzero exit, timeout, command failure and unconfirmed cleanup. Failed command artifacts are withheld; unconfirmed cleanup stops workspace progress. |
+| Capture/reconciliation | Missing or truncated capture, disabled environment capture, secret-redacted records, failed/unmatched execution, missing required compiler/linker evidence and incomplete wrapper/provenance joins. |
+| Family interpretation | Invalid/unsupported .NET platform or recipe; Go catalog/metadata/target mismatch; Rust metadata or linker evidence missing; Node dependency/lifecycle or invocation/output gaps; Python package/frontend or archive mapping gaps; PHP Composer/autoload/native-tool gaps; JVM provenance and Wasm producer/output gaps. |
+| Output/enforcement | Artifact bounds, unresolved source/output/delivery mapping, missing expected outputs, invalid native target proof or compiler profile, unsupported native product closure, and processing artifact-validation/evidence gaps. |
+
+These are reason families emitted by the linked adapters, not invented producer-gap codes.
+Absent supported work may be `NOT_APPLICABLE`; a Windows-only or otherwise unsupported planned
+unit can still carry named coverage loss. Accepted input bytes are not new compiler outputs.
+Source drift, corrupt retained captures/manifests, recipe identity mismatches and invalid shared
+authority fail closed; they are not successful publication with a warning.
+See [job interchange](../architecture/job-interchange.md). A walk must separately approve every
+actual cause and its cost, including deterministic capability limitations.
+
+## Acceptance
+
+1. **A. Inputs:** Match project/plan/catalog/environment handoff reads, selected recipe revision,
+   image preparation and product-interface pins to the claim. Verify project-owned receipt
+   hashes instead of treating reused execution as newly observed work.
+2. **B. Independent comparison:** Account for every selected unit once as executed, reused,
+   blocked, failed or not applicable. Compare command exits and successful exec-event counts
+   with raw captures; compare retained output hashes/sizes, machine/format and source mappings
+   against independent byte inspection. Compare workspace and installed-product counts.
+3. **C. Gaps:** Group verified outcomes by unit, family and cause; reconcile output/delivery and
+   capture omissions with receipts. Check rejected/failed products did not enter accepted
+   artifacts. Stop on any cause outside the walk's expected-gaps list.
+4. **D. Baseline:** After comparison, use `stepwise.py accept`; record corpus namespace and saved
+   baseline of selected units, command/capture/output counts, reused products and coverage.
+
+## Resume and invalidation
+
+The global controller binds source/topology, selected recipe, image, configuration, releases,
+execution/output policy and upstream product hashes. It verifies committed products and
+receipt artifacts before reuse; changing a producer invalidates dependent nodes while retaining
+admissible unrelated checkpoints.
+
+The generic private build fingerprint additionally includes dependency files, preparation,
+project handoff, capture/executor identity, processing facts/decisions/modes, family options and
+execution bounds; exact interfaces are added to the key. Private caches are used only outside
+the shared-workspace path and require successful, complete capture with verified artifacts.
+Project-owned native execution disables that private cache. JVM/Wasm fingerprints also bind
+their specialized toolchain/provenance/layout or producer selections and upstream dependencies.
+Incomplete capture is not checkpointed as complete evidence. Whole-job admission rechecks
+topology and immutable artifacts under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).

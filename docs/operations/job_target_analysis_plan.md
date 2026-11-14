@@ -1,7 +1,7 @@
 ---
 title: "target_analysis_plan"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "target acquisition and build"
 status: "current"
 jobs: ["job_target_analysis_plan"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # target_analysis_plan
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Which accepted source scopes need which scanners and build recipes, and which build
+relationships can deterministic evidence establish? The planner publishes validated scope,
+recipe and topology decisions for later admission. It refuses to let model suggestions suppress
+mandatory baseline coverage, invent source ownership/dependencies, authorize execution or
+turn advisory environment/history context into native target proof.
 
 <!-- generated:begin job=job_target_analysis_plan -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -221,3 +227,142 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handlers](../../src/appsec_review/jobs/job_target_analysis_plan/job.py) and
+[planning/feedback validation](../../src/appsec_review/jobs/job_target_analysis_plan/planning.py).
+Detailed operator interpretation lives in [target analysis planning](target-analysis-planning.md);
+the [topology architecture](../architecture/build-topology-and-iterations.md) owns build-graph semantics.
+
+### `catalog_summary`
+
+1. Read the accepted catalog and hash-verify its child documents and schemas. Require the
+   catalog snapshot to equal the claim, not just a plausible target path.
+2. Read available accepted source history as routing context; explicitly mark another snapshot
+   stale. Load the signed environment availability contract; missing expected-current evidence
+   blocks instead of silently becoming optional.
+3. Apply Swift execution policy to planning inputs. Summarize components, files, descriptors,
+   build units and compile databases under configured item/byte/prefix bounds.
+4. Publish `catalog-summary.json` and a truncation reason if the summary was bounded. The
+   summary is model context, not a replacement for full accepted descriptor authority.
+
+### `analysis_decisions`
+
+1. Derive scanner scopes and mandatory non-selections deterministically from exact accepted
+   paths/hashes. Account for each build unit once, initially without a recipe, and retain
+   source-only scopes, compile-database availability and history priority.
+2. Compile `build_topology.executable_graph`, its evidence bundle and planning refinement from
+   accepted declarations. Keep actions `executable=False`; the graph describes relationships,
+   not a launch permit.
+3. If there are no ambiguities, keep the deterministic plan. If the configured model is
+   disabled or unwired, publish a named model-assistance gap without dropping baseline scanners.
+4. Otherwise partition non-Unity units by family, build system and required image profile;
+   enforce scope/unit bounds and recursively bisect oversized multi-unit requests. An
+   oversized singleton gets a bounded-feedback gap, not a larger allowance.
+5. Assemble hash-pinned guidance and closed allowlists. Run `bounded_feedback` with one shared
+   per-scope call/deadline/byte budget for initial responses, repairs and evidence rounds.
+   `need_evidence` may request only allowed inventory paths and exact raw hashes; verify bytes,
+   withhold sensitive content and reject nonprogressing or unsupported requests.
+6. Validate `final` recipes or explicit abstentions against accepted units and image/command
+   policy. Merge accepted recipes, record contradictions and omissions, and recompile the
+   whole graph; a model hint cannot become scheduling or compiler authority.
+7. Cache only a complete validated final without abstentions. Recognized response/provider/
+   timeout failures consume the finite budget and yield named exhaustion; unexpected
+   application/integrity errors propagate.
+
+### `plan_acceptance`
+
+1. Validate source identity, exact scanner scopes, mandatory baseline accounting, accepted
+   components/history paths, one action per build unit and unmodified descriptor facts.
+2. Validate every recipe, reject inferred Unity recipes, and reproduce the graph from the
+   whole accepted declaration set. Reject foreign identities or a different graph.
+3. Write `accepted-analysis-plan.json`; index components, selections, build actions and
+   source-backed topology facts in the `target-analysis-plan` shard of `analysis`.
+4. Verify the composed manifest and publish counts, gaps, plan identity and topology identity.
+   Preserve unrelated upstream shards; an invalid index or plan prevents accepted publication.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  catalog["catalog_documents"] --> job["job_target_analysis_plan"]
+  history["history_documents"] --> load["catalog_summary.load_accepted_catalog"]
+  environment["build_environment"] --> load
+  job --> load
+  load --> summary["catalog_summary.summarize_components"]
+  summary --> rules["analysis_decisions.apply_deterministic_rules"]
+  rules --> resolve["analysis_decisions.resolve_ambiguity"]
+  feedback["bounded_feedback + planning_feedback_cache"] <--> resolve
+  resolve --> validate["plan_acceptance.validate_plan"]
+  validate --> index["plan_acceptance.index_plan"]
+  index --> output["analysis_plan + analysis_plan_documents"]
+  feedback -. "bounds / abstention / invalid response" .-> gaps["coverage_gaps"]
+  rules -. "unresolved topology" .-> gaps
+```
+
+## Gaps
+
+This pinned job returns legacy strings in unit `gaps`; canonical outcomes convert them to
+`producer_reported_gap`, `retryable=False`. They are not dedicated registered codes named
+after feedback errors, and false is not an advisory waiver.
+
+| Where | Causes retained in the plan or unit |
+| --- | --- |
+| Summary/deterministic rules | Summary truncation, inherited catalog omissions, disabled Swift, unavailable/stale history context, missing recognized build systems or compile databases, and the distinction between descriptor targets and compiled link outputs. |
+| Environment/topology compilation | Partial/unavailable environment context; compiler-produced graph reasons for unsupported/unresolved ownership/products, cycles, dynamic declarations and incomplete dependency discovery. |
+| Ambiguity resolution | Disabled/unavailable model, omitted bounded scopes, explicit model abstentions and bounded-feedback exhaustion. |
+| `bounded_feedback` | Internal deadline, request/response byte bounds, call/evidence-round exhaustion, timeout/provider/output/schema errors, sensitive output rejection, invalid/out-of-scope/hash-mismatched evidence requests, repeated requests, document/additive byte bounds, unsupported encoding and sensitive evidence withheld. |
+
+These are coverage reasons; a malformed cache, changed accepted evidence, escaped path,
+invalid mandatory coverage or graph that fails reproduction raises instead of becoming a
+safe fallback. Unexpected provider/application errors and external cancellation are not a
+successful bounded exhaustion. A walk must establish every cause against source and its
+approved expected-gaps list; deterministic unknowns still have a review cost.
+Canonical outcome semantics are in [job interchange](../architecture/job-interchange.md).
+
+## Acceptance
+
+1. **A. Inputs:** Match catalog, history and environment read receipts to admitted handoff pins.
+   Verify summary provenance, environment mode/reference and every additional evidence hash.
+2. **B. Independent comparison:** Compare the plan's build-unit IDs/count against catalog
+   descriptors, scanner scopes against independent applicability checks and graph edges
+   against source declaration lines. Reproduce the deterministic graph from its evidence
+   bundle; inspect selected recipe cwd/inputs/outputs without executing them.
+3. **C. Gaps:** Group verified outcomes and inspect topology/feedback reasons, omitted scopes,
+   null recipes and abstentions. A model-disabled run is not complete recipe coverage.
+   Stop for any cause not authorized by the walk.
+4. **D. Baseline:** After those checks, use `stepwise.py accept`; record corpus namespace and
+   saved baseline of scoped units, selections, graph identity, recipe dispositions and gaps.
+
+## Resume and invalidation
+
+Whole-job admission binds catalog/history/environment, target and frozen configuration; planner
+reuse additionally compares current environment availability with the stored plan.
+`bounded_feedback` keys include the actual request/allowlists, accepted units, source,
+guidance/model identity, whole evidence bundle, environment, profiles, rules, feedback limits
+and call timeout. Complete-cache reads revalidate evidence, scopes, redaction and proposal;
+partial/abstained/failed conversations are not reusable finals. The analysis shard binds the
+accepted plan artifact plus parser/normalizer/mapping identities. A source change need not
+rebuild unrelated jobs, but changed semantic inputs invalidate their downstream closure under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+
+## Model usage
+
+`build_planning` selects the [DevOps persona](../generated/guidance.md#personas-devops_engineer)
+with the family-specific Build Engineer role because the bounded question is how to prepare
+that family's accepted build unit, not whether the application is vulnerable. Roles cover
+[native](../generated/guidance.md#roles-build_engineer_native),
+[Rust](../generated/guidance.md#roles-build_engineer_rust),
+[Go](../generated/guidance.md#roles-build_engineer_go),
+[Java](../generated/guidance.md#roles-build_engineer_java),
+[Node](../generated/guidance.md#roles-build_engineer_node),
+[.NET](../generated/guidance.md#roles-build_engineer_dotnet),
+[Python](../generated/guidance.md#roles-build_engineer_python),
+[PHP](../generated/guidance.md#roles-build_engineer_php) and
+[Wasm](../generated/guidance.md#roles-build_engineer_wasm).
+The [registered planning procedure](../generated/guidance.md#runtime_skills-target-analysis-planning)
+is selected through the governed worker boundary; Unity is excluded from generic inference.
+Request allowlists grant no scanner/component choices in this path. See
+[worker prompt contracts](../architecture/worker-prompt-contracts.md) for assembly and authority;
+generated declarations above identify model settings without proving a call occurred.
