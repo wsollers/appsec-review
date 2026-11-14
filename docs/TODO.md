@@ -150,7 +150,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-147 | [Declare exact task and dataset publication bindings for documentation](#t-147-declare-exact-task-and-dataset-publication-bindings-for-documentation) | pipeline | open |
 | T-148 | [Resolve historical archive citations without restoring the archive](#t-148-resolve-historical-archive-citations-without-restoring-the-archive) | testing | open |
 | T-149 | [Route scoped dependency decision packets into review and account for their use](#t-149-route-scoped-dependency-decision-packets-into-review-and-account-for-their-use) | review | blocked |
-| T-150 | [Publish complete protected review decision products](#t-150-publish-complete-protected-review-decision-products) | review | open |
+| T-150 | [Publish complete protected review decision products](#t-150-publish-complete-protected-review-decision-products) | review | in-progress |
 | T-151 | [Bind hunt coverage obligations to accepted operation identities](#t-151-bind-hunt-coverage-obligations-to-accepted-operation-identities) | review | blocked |
 | T-152 | [Bind decisive evidence to scoped propositions and polarity](#t-152-bind-decisive-evidence-to-scoped-propositions-and-polarity) | evidence | blocked |
 | T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | blocked |
@@ -2310,7 +2310,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-150 — Publish complete protected review decision products
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Blocks:** T-152, T-153, T-154
 - **Why:** no-claim reasons, pre-claim caps/rejections and qualified counterevidence exist in
@@ -2322,6 +2322,9 @@ until each is rewritten into the entry format when it is next touched.
   judge/PoC policy; deny blind verifiers access to prior decision narratives or labels. T-077
   owns lead-adapter/display completion and T-076 owns broader actionability. Reference T-156
   coverage receipts when available, never reproduce their producer. T-129 is nonblocking mapping.
+  The 2026-11-13 sync checkpoint contains only reviewed codec/schema/unit foundations:
+  no runtime enablement, output/consumer registrations, audit reads or publication wiring.
+  The full producer/consumer slice remains under implementation and review.
 - **Done when:** every collected lead, emitted proposal and expected cell has an exact terminal
   trace or named gap; unadmitted provenance and counterevidence remain inspectable. Projection-only
   fixtures preserve adjudication/score/ship/PoC decisions; scope, hash, redaction and capability

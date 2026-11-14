@@ -10,12 +10,20 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## Status, scope and non-goals
 
-**Proposed design, not implemented or approved.** Written 2026-11-13 against code
+**Implementation authorized; runtime slice not yet delivered.** Written 2026-11-13 against code
 `5926171238607e27a948bc7d40ce190a853b3d0c`; the
 [source-backed review](../reviews/2026-11-13-triage-verifier-review.md) records the
 shared-working-tree limitation and evidence. Frontmatter status means this is the
 current proposal, not that the proposed runtime exists. Scheduling/progress belongs
 only in [the TODO registry](../TODO.md).
+
+The 2026-11-13 sync checkpoint adds only the reviewed pure
+[record contract](../../src/appsec_review/review/decision_audit/contracts.py),
+[closed schema](../schemas/review-decision-audit.schema.json) and focused unit regressions.
+It does not change configuration defaults, register audit outputs or consumers, add audit reads,
+or wire runtime publication. T-150 remains in progress while the producer/consumer slice is
+reviewed. Later evidence-adjudication and hunt-allocation changes are to be opt-in, as selected
+by the user; integration and acceptance execution remain prohibited for this implementation.
 
 T-146 landed before this registry handoff at main
 `2612ee80f305970707520ad92774d1e1c1336c1c`. Its
@@ -48,10 +56,12 @@ it never produces an empty successful population.
 TRI-A references HUNT-C's operation/question coverage and transport receipts; it does
 not produce a second copy of those receipts or infer delivery from package membership.
 
-Canonical bucket names are not defined yet. **review_claims** and **metrics** below are
-provisional conceptual groupings only. T-129 maps concrete tool IDs and typed
-dataset/output-kind IDs to its canonical taxonomy. It must not treat a documentation
-subsystem label or the proposed dataset names as an already implemented bucket.
+At design-review time bucket names were provisional. T-129 has since published the
+[canonical taxonomy](../intelligence-buckets.json): the proposal's **review_claims**
+grouping corresponds to **review_products**, while offline measurements remain **metrics**.
+The pure-contract checkpoint declares no audit datasets and changes no bucket mappings.
+Future concrete output kinds must be mapped when their producer declarations land;
+bucket membership never grants a worker or MCP capability.
 
 ### Product routes
 
@@ -399,9 +409,9 @@ that require a location disclose their narrower eligible denominator.
 
 T-129 is **nonblocking documentation mapping and reconciliation**, not an implementation
 prerequisite. Implement and register concrete typed datasets, closed schemas and accepted
-read routes in their owning runtime contracts without waiting for the canonical bucket
-taxonomy. Coordinate those identities with T-129 and reconcile its mapping when available;
-do not omit local dataset/route documentation while it is pending.
+read routes in their owning runtime contracts and reconcile those exact identities with
+the released T-129 mapping. Do not omit local dataset/route documentation or treat a
+taxonomy entry as runtime authority.
 Dependency-intelligence and hunting enhancements should
 supply their existing lead/operation/evidence identities and producer coverage through
 these interfaces. Neither subsystem supplies a correctness label. Do not duplicate

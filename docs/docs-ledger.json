@@ -2950,6 +2950,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/review-decision-audit.schema.json",
+      "reason": "Keep the reviewed pure decision-audit codec contract; runtime publication and consumer wiring remain T-150 work.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/review-package-manifest.schema.json",
       "reason": "Keep review-package-manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "review inference and guidance"
