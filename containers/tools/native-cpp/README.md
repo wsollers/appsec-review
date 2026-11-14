@@ -15,20 +15,21 @@ Its only external artifact is the `.deb` closure for `clang-18`, `cmake` and `be
 8.3 and Python 3.12 development headers (`php8.3-cli`, `php8.3-dev`, `python3-dev`, which brings
 `python3.12-dev` and `libpython3.12-dev`), pinned by exact byte size and SHA-256 in
 `assets.lock.json`. `packages.manifest` lists every package, version
-and SHA-256 in it. The lock URL is the Ubuntu archive root, not a downloadable file, so acquire the
-closure first:
+and SHA-256 in it. The lock URL is the Ubuntu archive root, not a downloadable file.
+The catalog builder calls the acquisition helper when the tar is missing or mismatched; it can
+also be invoked explicitly:
 
 ```text
 containers/tools/native-cpp/acquire_assets.sh
 ```
 
-The script resolves the closure inside the Dockerfile's pinned Ubuntu base, so it is exactly what the
-offline install needs. APT verifies the signed archive metadata and each package hash, and the tar is
-written deterministically to `downloads/native-cpp-debs.tar`. The Ubuntu archive moves as updates
-are published, so a later acquisition can give a different closure. When it does, build and smoke
-the image, then record the new tar size and SHA-256 in `assets.lock.json` and commit the new
-`downloads/packages.manifest` as `packages.manifest`. The launcher verifies the tar and stops if it
-is missing or does not match the lock.
+The script resolves the closure inside the Dockerfile's pinned Ubuntu base against Ubuntu snapshot
+`20261015T070000Z`, with the host CA bundle mounted read-only. Acquisition uses the network; APT
+verifies signed archive metadata and package hashes. The tar is written deterministically to
+`downloads/native-cpp-debs.tar`. The launcher removes stale locked files before acquisition and
+rejects a result that still differs from the lock. A deliberate closure change requires reviewing
+the new tar size/hash and `downloads/packages.manifest`, then updating `assets.lock.json` and
+`packages.manifest` before the catalog build; acquisition does not silently re-lock them.
 
 ## Debug-symbol reader fallback
 
@@ -59,8 +60,9 @@ packages at the versions those build environments' Dockerfiles install; change t
 test fails when they differ). The Dockerfile asserts the headers, the `php-config8.3` and
 `python3.12-config` include paths, and a Clang syntax check of `php.h` and `Python.h`.
 
-Replaying in each unit's own build-environment image was rejected: those images carry gcc, not this
-image's Clang 18 replay driver, and the AST and IR lanes would then depend on every family image.
+Replay uses this analysis image's fixed Clang 18 driver and header closure rather than depending
+on each family image. The shared native build environments now carry both gcc and Clang; that
+availability does not change the job's replay image.
 
 A header that is still missing (for example a generated `config.h` that existed only in the build
 workspace) is not hidden. The replay receipt records each translation unit's exit and stderr, and
@@ -78,10 +80,10 @@ containers/build-all.sh build tool-native-cpp
 containers/build-all.ps1 build tool-native-cpp
 ```
 
-Equivalent direct build once `downloads/native-cpp-debs.tar` is in place:
+Equivalent direct build once `downloads/native-cpp-debs.tar` is in place and verified against the lock:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/tools/native-cpp/Dockerfile \
   --build-arg TOOL_VERSION=1.0.0 \
   --tag appsec-review/tool-native-cpp:1.0.0 containers/tools/native-cpp

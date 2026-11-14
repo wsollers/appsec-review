@@ -8,7 +8,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # CodeQL images
 
-CodeQL is not in `containers/catalog.toml` and is not built by `containers/build-all.sh`. The
+CodeQL has no enabled image in `containers/catalog.toml` and is not built by `containers/build-all.sh`
+(the catalog retains deferred legacy entries). The
 licensed CodeQL payload is downloaded from its pinned upstream release (see [`LICENSE.md`](LICENSE.md));
 this directory holds the build script and the layers the repository adds on top of it. Run every command from the repository root.
 
@@ -28,18 +29,21 @@ the `github/codeql-coding-standards@v2.62.0` CERT C++ query packs into the ignor
 builds the `buildenv-native-toolchain` base through `containers/build-all.sh` when it is missing,
 then runs `docker build --network=none` for `Dockerfile.bundle` (`audit-codeql:local`) and
 `Dockerfile.custom-source` (`audit-codeql:custom-2.27.0`) and prints the final image id. It needs
-only `docker`, `curl` and `sha256sum`; nothing is fetched from a review host. Optional environment:
+Bash, `docker`, `curl` and `sha256sum`; building a missing native-toolchain base also requires
+Python 3.11+ for the catalog builder and permits its APT network access. Nothing is fetched from
+a review host. Optional environment:
 `APPSEC_DOCKER_BIN` (docker client), `CODEQL_LOCAL_TAG` / `CODEQL_CUSTOM_TAG` (alternative tags,
 for example to rebuild without replacing pinned tags) and `CODEQL_KEEP_DOWNLOADS=1` (keep the
 verified archives). CodeQL's license terms still apply (see [`LICENSE.md`](LICENSE.md)); never
 commit the downloaded payloads.
 
 Byte-identical rebuilds are not a goal: a fresh build has a new image id. The final image must pass
-the runner's `inventory` action against `assets.lock.json` before updating its source-image
-identity and lock-file hash below.
-The resulting image id must equal `source_image.image_id` in `assets.lock.json` and
-`jobs.job_codeql_analysis.settings.source_image_id` in `appsec-review.toml`; the runtime refuses a
-source tag whose identity changed. Customer review execution does not hash `assets.lock.json`,
+the runner's `inventory` action against `assets.lock.json` before updating its host source-image
+binding. The lock and central configuration declare the source tag, not a host image ID.
+`deploy/dagster/host-pins.toml` supplies the resolved
+`jobs.job_codeql_analysis.settings.source_image_id`; the runtime refuses a source tag whose
+identity changed. See [image pin verification](../../../docs/operations/image-pin-verification.md).
+Customer review execution does not hash `assets.lock.json`,
 the supplied runner or installed packs/extractors. Update the relevant
 `review_policy.releases` declarations when platform material changes; missing declarations disable
 reuse rather than restore payload fingerprinting.
@@ -107,14 +111,15 @@ WSL 2). Each one uses only the repository's Dockerfiles and pinned upstream down
 image copied from another host.
 
 1. Build the source image with `containers/tools/codeql/build-source-image.sh`. Run the runner's
-   `inventory` action against `assets.lock.json`. Then set the printed image id as
-   `source_image.image_id` in `assets.lock.json` and as
-   `jobs.job_codeql_analysis.settings.source_image_id` in `appsec-review.toml`.
+   `inventory` action against `assets.lock.json`. Then refresh its tag binding in the ignored
+   `deploy/dagster/host-pins.toml` with `appsec-review update-image-pins --write`;
+   do not put the machine-specific image ID in the asset lock or tracked configuration.
 2. Rebuild any build-environment image a CodeQL build profile uses, for example
    `python3 containers/build.py build audit-buildenv-rust-wasm`, which ships `rust-src` for the
    Rust extractor (see [`../../buildenv/rust-wasm/README.md`](../../buildenv/rust-wasm/README.md)).
-   Update every `image_id` pin of that image in `appsec-review.toml`. A `preinstalled_runtimes`
-   entry bound to the old `build_image_id` no longer matches. Remove it or re-declare it; with no
+   Refresh that tag's host binding. A `preinstalled_runtimes`
+   entry in the host-pins file bound to the old `build_image_id` no longer matches.
+   Remove it or re-declare it; with no
    entry the new image derives under `preinstalled_undeclared = "derive"` and fails under `"fail"`.
 3. When a graph-export pack, `columns.json` or `catalog.json` changes, recompute the pack tree
    hashes in `assets.lock.json` `export_query_packs` and in the matching `appsec-review.toml`
@@ -123,8 +128,12 @@ image copied from another host.
    Then update `jobs.job_codeql_analysis.settings.asset_lock_sha256`. When `codeql_runner.py`
    changes, bump `review_policy.releases.codeql_runner`. The shared compile-cache volume is keyed
    by the declared CodeQL release and runtime user only, so a runner release does not cold the
-   cache; a CodeQL release change does (warm it with `containers/build.py query-packs --warm`).
-4. Run the offline contract tests (`tests/test_codeql_export_runner.py`). Then run the live tiers:
+   cache; a CodeQL release change does. After an image/release or graph-export/custom QL change,
+   use `scripts/compile-codeql-queries.sh` before an authorized review. It compiles only the
+   registry's `warm = true` packs, serially; do not warm the already precompiled standard or
+   licensed CERT suites.
+4. Run the offline contract tests (`tests/test_codeql_export_runner.py`). The following live tiers
+   are separate, explicitly requested manual validation, not an automatic documentation or repair gate:
 
    ```text
    .venv/bin/python -m pytest -q tests/live/test_codeql_graph_export_live.py \

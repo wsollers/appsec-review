@@ -64,16 +64,10 @@ POSIX equivalent.
    the file only at exactly 159,888,487 bytes and SHA-256 `48259f33…a763`. On a mismatch or
    transfer error it deletes the partial file and fails. An existing file is reused only after its
    size and SHA-256 are verified again.
-2. **Docker build.** `build.py` runs:
-
-   ```sh
-   docker build --network=none --pull=false \
-     --file containers/tools/clangd-indexer/Dockerfile \
-     --tag appsec-review/tool-clangd-indexer:23.1.0 \
-     --build-arg CLANGD_SHA512=1c901aca… --build-arg TOOL_VERSION=23.1.0 \
-     --build-context shared=containers/tools/shared \
-     containers/tools/clangd-indexer
-   ```
+2. **Docker build.** `build.py` supplies `--network=none --pull=false --progress=plain
+   --provenance=false --sbom=false`, the exact `CLANGD_SHA512` and `TOOL_VERSION` build arguments
+   from [`catalog.toml`](../../catalog.toml), and the `shared=containers/tools/shared` named
+   build context. Use the catalog command above rather than an abbreviated digest in a manual build.
 
 3. **Unpack stage**, inside the build:
    - checks the archive against the pinned SHA-512 build argument (`sha512sum --check --strict`);

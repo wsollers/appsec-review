@@ -24,7 +24,7 @@ containers/build-all.ps1 build base-php
 Equivalent direct build:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/bases/php/Dockerfile \
   --tag appsec-review/base-php:8.4-bookworm containers/bases/php
 ```

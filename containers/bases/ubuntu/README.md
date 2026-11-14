@@ -24,7 +24,7 @@ containers/build-all.ps1 build base-ubuntu
 Equivalent direct build:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/bases/ubuntu/Dockerfile \
   --tag appsec-review/base-ubuntu:24.04 containers/bases/ubuntu
 ```

@@ -23,13 +23,13 @@ installed.
 `/target`, an application-written `/gitdir` (minimal `config` and detached `HEAD`) is mounted
 read-only as `GIT_DIR`, and output goes to the writable `/scratch`. The target's own Git config,
 hooks, and refs are never consulted. The run uses `tool.toml` and
-[`runtime-policy.toml`](../../runtime-policy.toml): no network, UID/GID 10001, read-only root,
+[`runtime-policy.toml`](../../runtime-policy.toml): no network, non-root execution, read-only root,
 dropped capabilities, `no-new-privileges`, and bounded CPU, memory, PIDs, time, and output. Its
 `tool.toml` sets `static_adapter = false`, so it has no `job_evidence_collection` adapter.
 
 ## Build
 
-Run from the repository root. The launcher builds missing dependency images in order, fetches and
+Run from the repository root. The launcher builds dependency images in order, fetches and
 verifies the locked assets, runs the build with networking disabled, and writes logs under
 `runs/container-builds/<run-id>/`:
 
@@ -41,7 +41,7 @@ containers/build-all.ps1 build tool-git
 Equivalent direct build once the dependency images exist and `downloads/` holds the verified assets:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/tools/git/Dockerfile \
   --build-arg TOOL_VERSION=2.43.0 \
   --tag appsec-review/tool-git:2.43.0 containers/tools/git

@@ -8,37 +8,44 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # LaTeX report renderer (`tool-report-latex`)
 
-The image renders the review report's LaTeX to a deterministic PDF. It replaces the archived
+The image renders the review report's LaTeX to a deterministic PDF for fixed inputs, template and
+image. It replaces the archived
 `audit-report` image (not copied). It is enabled in
 [`containers/catalog.toml`](../../catalog.toml) because its conditions are met:
 
 - hash-locked package closure: `acquire_assets.sh` resolves 111 exact-version Ubuntu 24.04 `.deb`
   files (`texlive-xetex`, `texlive-fonts-recommended`, `fonts-inter`, `fonts-jetbrains-mono`,
   `poppler-utils` and dependencies) from the Dockerfile's pinned base; `packages.manifest` lists every
-  version and SHA-256, `assets.lock.json` pins the tar by size and SHA-256 (the build is offline,
-  like `tool-native-cpp`; place the tar in `downloads/` by running the script);
+  version and SHA-256, `assets.lock.json` pins the tar by size and SHA-256. Acquisition uses
+  snapshot `20261021T120000Z` and the host CA bundle mounted read-only. The catalog builder runs
+  the helper if the locked tar is missing or mismatched, then verifies it before the offline build;
 - template separated from the image: `template/` is mounted read-only at `/template`;
 - deterministic render: `render-pdf.sh` sets `SOURCE_DATE_EPOCH` (from `/input/source-date-epoch`) and
-  `FORCE_SOURCE_DATE=1`, runs without shell escape, repeats until references settle;
+  `FORCE_SOURCE_DATE=1`, runs without shell escape, and makes at most three passes for references
+  to settle;
 - structural checks: `render-pdf` prints `pdfinfo` and writes `report.txt` (`pdftotext`); `pdftoppm`
   is in the image for visual checks; `tests/integration/test_pdf_docker.py` checks the PDF structure.
 
-Runtime: the standard boundary of `runtime-policy.toml` (no network, UID 10001, read-only root, all
+Runtime: the standard boundary of `runtime-policy.toml` (no network, non-root, read-only root, all
 capabilities dropped). Mounts: `/template` and `/input` read-only, `/scratch` writable. Dossier
 publication uses this same image through `ContainerExecutor`. The protected
-`job_dossier_publication` binds its immutable image ID in central settings, consumes the accepted
+`job_dossier_publication` binds its immutable image ID in resolved, host-bound settings, consumes the accepted
 review and optional PoC/remediation summaries before the final gate, and writes one dossier per
-confirmed finding (including document-origin findings) and per accepted PoC outcome. The standalone
+confirmed finding (including document-origin findings) and per accepted PoC outcome, up to the
+configured dossier cap with omissions recorded. The standalone
 report scripts remain available (see
 [`docs/operations/report-rendering.md`](../../../docs/operations/report-rendering.md)).
 
 Build and check (about 5 minutes, about 1.0 GB image):
 
 ```text
-containers/report/latex/acquire_assets.sh      # refresh the closure; then update assets.lock.json
-containers/build-all.sh build tool-report-latex
+containers/build-all.sh build tool-report-latex  # acquires the locked closure when needed
 containers/build-all.sh smoke --functional tool-report-latex
 ```
+
+For an intentional closure update, run `acquire_assets.sh`, review the new manifest and tar identity,
+and update the committed lock/manifest before building. Ordinary acquisition must match the
+existing lock and does not authorize re-locking.
 
 Layout: `Dockerfile`, `render-pdf.sh` (entry point `/opt/tool/bin/render-pdf`), `tool.toml`,
 `acquire_assets.sh`, `assets.lock.json`, `packages.manifest`, `template/`
@@ -61,7 +68,9 @@ may expose sanitized descriptions, statuses and references, not generated functi
 Compile verification is explicitly not runtime proof; remediation checks do not claim a finding
 is fixed.
 
-The harmless seeded fixture creates both finding and PoC dossiers for layout review:
+The harmless seeded fixture creates both finding and PoC dossiers for layout review.
+The fixture render and integration/live checks below require separate, explicit manual validation;
+the unit selectors do not authorize them:
 
 ```text
 python -m tests.dossier_fixture --run runs/dossier-synthetic-sample --image-id sha256:<verified-image-id>

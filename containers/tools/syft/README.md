@@ -15,7 +15,7 @@ which must exist locally first. Its external artifacts are pinned by exact byte 
 
 ## Build
 
-Run from the repository root. The launcher builds missing dependency images in order, fetches and
+Run from the repository root. The launcher builds dependency images in order, fetches and
 verifies the locked assets, runs the build with networking disabled, and writes logs under
 `runs/container-builds/<run-id>/`:
 
@@ -27,7 +27,7 @@ containers/build-all.ps1 build tool-syft
 Equivalent direct build once the dependency images exist and `downloads/` holds the verified assets:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/tools/syft/Dockerfile \
   --build-arg TOOL_VERSION=1.52.0 \
   --tag appsec-review/tool-syft:1.52.0 containers/tools/syft

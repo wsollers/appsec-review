@@ -24,7 +24,7 @@ containers/build-all.ps1 build base-python
 Equivalent direct build:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/bases/python/Dockerfile \
   --tag appsec-review/base-python:3.12-bookworm containers/bases/python
 ```

@@ -12,12 +12,15 @@ This directory builds `appsec-review/tool-joern:4.0.630`: an offline, non-root i
 reviewed Joern 4.0.630 C/C++ closure (the core Joern libraries plus the `c2cpg` frontend) on the
 repository's digest-pinned Java 21 base.
 
-**Status: deprecated (2026-10-12); the image is available, but it provides no coverage.** Its
+**Status: deprecated by the 2026-10-12 decision; disabled in the default review.** Its
 consumer is the independent `job_cpg_analysis`, shipped disabled
-(`jobs.job_cpg_analysis.settings.enabled = false`) and absent from the default review graph; when
-enabled it still publishes only a `BLOCKED` shard. CodeQL is the code-graph producer (see "Why
-Joern is deprecated" in `docs/architecture/code-graph-precomputation.md` and
-`docs/operations/cpp-index-jobs.md`).
+(`jobs.job_cpg_analysis.settings.enabled = false`) and absent from the default review graph.
+When explicitly enabled, whole-program scopes still publish `BLOCKED` observations with
+unavailable coverage. Seeded scopes can export bounded per-function calls, branches and
+reaching-definition counts with partial coverage; failed or cut exports remain unavailable.
+CodeQL is the default code-graph producer. See the historical decision in
+[`code-graph-precomputation.md`](../../../docs/architecture/code-graph-precomputation.md) and
+the [current CPG job page](../../../docs/operations/job_cpg_analysis.md).
 A successful build or version probe is not CPG coverage.
 
 ## Files
@@ -138,6 +141,10 @@ log).
 
 The build never runs `joern-install.sh`, curl or wget, a package manager, Maven, SBT, or coursier,
 and it never executes target code.
+
+The unpack stage also extracts the Linux amd64 zstd JNI library from its locked JAR into
+`/opt/joern/native`; `JAVA_TOOL_OPTIONS` points Java there so it does not need to load that library
+from the runtime's `noexec` temporary filesystem.
 
 ### 5. Verify the image
 

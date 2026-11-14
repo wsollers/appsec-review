@@ -24,7 +24,7 @@ containers/build-all.ps1 build base-jre
 Equivalent direct build:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/bases/jre/Dockerfile \
   --tag appsec-review/base-jre:21-noble containers/bases/jre
 ```
