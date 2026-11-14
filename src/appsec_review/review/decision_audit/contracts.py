@@ -15,13 +15,15 @@ from enum import StrEnum
 from functools import lru_cache
 import hashlib
 import json
-from typing import ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 from appsec_review.application_paths import application_asset
-from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.review.adjudication import DecidingRow
 from appsec_review.review.models import Admissibility, CellStatus, IntegrityError, Predicate, RelationKind, Role
 from appsec_review.storage.atomic import canonical_json
+
+if TYPE_CHECKING:
+    from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 
 MAX_EXPLANATION = 2000
 MAX_INLINE_REFERENCES = 256
@@ -149,6 +151,9 @@ class SupportCoverage(StrEnum):
 
 @lru_cache(maxsize=1)
 def _schemas() -> SchemaSet:
+    # Loading the job package eagerly would re-enter these contracts through audit publication.
+    from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
+
     path = application_asset(f"docs/schemas/{SCHEMA_FILE}")
     schemas = SchemaSet(path.parents[2] / SCHEMA_DIRECTORY)
     document = json.loads(path.read_text(encoding="utf-8"))
