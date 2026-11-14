@@ -279,13 +279,15 @@ than redefined here.
 4. Invoke each production transaction through `job_build_iteration`. Generic, JVM or Wasm
    execution uses the same admitted workspace/interfaces. Configure/build commands are bounded
    by time, streams, artifact counts and family policy; no model supplies new commands here.
-5. Capture applicable native/Rust/.NET/Go process execution. Reconcile only successful
+5. Capture applicable native/Rust/.NET/Go/Node/Python/PHP process execution. Reconcile only successful
    `process_exec` events as compiler authority; preserve incomplete capture, redaction and
    missing tool execution. Use family parsers for package, generated-source and output facts.
 6. Recheck target identity, classify output trees and bookkeeping, validate native/Go target
    evidence, retain protected argv/streams and immutable artifact bytes. Failed build outputs
    are not accepted products. Commit only successful product transactions with confirmed cleanup;
-   preserve diagnostics and recover/rollback through the controller on failure.
+   preserve diagnostics. Sibling continuation after failure requires a prepared receipt and
+   confirmed cleanup; pre-receipt refusals can stop the controller even after rollback, and
+   uncertain cleanup prevents safe workspace progress.
 
 ### `load`
 
@@ -340,9 +342,10 @@ flowchart LR
 
 This job mixes preserved typed records with legacy strings. Legacy values become canonical
 `producer_reported_gap`, `retryable=False`; native enforcement records also use that code and
-default false. Nested failed/blocked receipts and processing `GAP` dispositions can add
-status-derived retry accounting. Inspect the canonical outcomes rather than labeling all
-build gaps either retryable or advisory.
+default false. Nested failed/blocked receipt status alone does not set canonical retryability.
+The framework reads the unit's own status and explicit dispositions, including processing `GAP`
+dispositions, for status-derived retry accounting. Inspect canonical outcomes rather than
+labeling all build gaps either retryable or advisory.
 
 Canonical upstream causes retain their identity, code, unit/scope, retryability and evidence
 references through receipt and control propagation. Cause groups are validated before merging;
@@ -395,11 +398,12 @@ admissible unrelated checkpoints.
 
 The generic private build fingerprint additionally includes dependency files, preparation,
 project handoff, capture/executor identity, processing facts/decisions/modes, family options and
-execution bounds; exact interfaces are added to the key. Private caches are used only outside
-the shared-workspace path and require successful, complete capture with verified artifacts.
+execution bounds; exact interfaces are added to the key. This generic private cache is used only
+outside the shared-workspace path and requires success, complete capture and verified artifacts.
 Project-owned native execution disables that private cache. JVM/Wasm fingerprints also bind
 their specialized toolchain/provenance/layout or producer selections and upstream dependencies.
-Incomplete capture is not checkpointed as complete evidence. Whole-job admission rechecks
+That generic cache's completeness rule is not a blanket claim about every family adapter or
+controller product checkpoint. Whole-job admission rechecks
 topology and immutable artifacts under
 [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
 
