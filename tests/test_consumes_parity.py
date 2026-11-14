@@ -54,6 +54,18 @@ def test_security_tagging_declares_the_manifest_publishers_it_follows() -> None:
     assert set(job.consumes) <= set(upstream_closure(job.job_id, dependencies, set(dependencies)))
 
 
+def test_owasp_declares_every_producer_the_tags_manifest_embeds() -> None:
+    """OWASP accepts security_tagging's manifest and opens every embedded shard, so it must declare
+    every producer that manifest can carry. Regression for smoke-cpp run 2026-11-13-0001: the target
+    produced profile data and test coverage, their shards reached the tags manifest, and
+    load_inputs refused with "undeclared or unsupplied shard producer: job_profile_data"."""
+    registry, _, _ = _graph()
+    owasp = registry.build("job_owasp_control_assessment")
+    tagging = registry.build("job_security_tagging")
+    missing = sorted(({*tagging.consumes, "job_security_tagging"} - set(owasp.consumes)) - {"job_owasp_control_assessment"})
+    assert not missing, f"OWASP cannot read shards from producers it does not declare: {missing}"
+
+
 def test_owasp_evidence_import_does_not_depend_on_registry_preload() -> None:
     from pathlib import Path
     import subprocess
