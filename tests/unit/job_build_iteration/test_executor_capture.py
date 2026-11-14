@@ -4,6 +4,8 @@ runner answers the docker argv in-process; nothing is started."""
 from __future__ import annotations
 
 import json
+import os
+import stat
 from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,9 +14,9 @@ import pytest
 
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.container_runtime import BuildProfile, CaptureScope
-from appsec_review.container_runtime.build_executor import reconcile_build_leases
+from appsec_review.container_runtime.build_executor import _write_stream, reconcile_build_leases
 from appsec_review.jobs.build_workspace import BuildWorkspace, NodeBinding, ProductSpec
-from tests.capture_fakes import simulated_executor
+from tests.capture_fakes import SYNTHETIC_SECRET, failing_scanner, secret_scanner, simulated_executor
 from tests.unit.job_build_iteration.support import NATIVE_OBJECT, NATIVE_OUTPUT, TARGET, _compiler_metadata
 
 VARIANT = {"configuration": "release", "target_arch": "x86_64", "execution_role": "target",
@@ -149,3 +151,60 @@ def test_export_publishes_actual_install_outputs_and_aliases_without_reclaiming_
         writer.commit(specs)
         writer.verify_product(producer.reference, binding)
     assert library.read_bytes() == b"A"
+
+
+FOREIGN_ENTRIES = ("pipe", "stdout", "tool-calls/00000001-cc/stderr", "tool-calls/tree", "trace.999")
+
+
+@pytest.mark.parametrize("scanner", [failing_scanner, secret_scanner()], ids=["scan_failed", "scan_ran"])
+def test_host_never_follows_links_a_build_leaves_in_its_capture_directory(tmp_path: Path, scanner):
+    """C06-F01: a link, FIFO or replaced stream in the capture directory is removed and named, and
+    the host neither reads through it nor writes through it, whether or not the secret scan ran."""
+    workspace, outside, capture = tmp_path / "workspace", tmp_path / "host", tmp_path / "capture"
+    (workspace / "unit").mkdir(parents=True)
+    (outside / "tree").mkdir(parents=True)
+    victims = {name: outside / name for name in ("stdout-victim", "trace-victim", "call-victim")}
+    for name, path in victims.items():
+        path.write_text(f"host {name} {SYNTHETIC_SECRET}\n", encoding="utf-8")
+    (outside / "tree" / "inner").write_text("host tree marker\n", encoding="utf-8")
+    before = {path: path.read_bytes() for path in sorted(outside.rglob("*")) if path.is_file()}
+
+    def behavior(_argv, _workspace, _directory, _environment, container):
+        container.exec("/usr/bin/cc", ["cc", "a.c"])
+        container.tool_call("cc", ["a.c"], executable="/usr/bin/cc")
+        (container.root / "stdout").symlink_to(victims["stdout-victim"])
+        (container.root / "trace.999").symlink_to(victims["trace-victim"])
+        call = container.root / "tool-calls" / "00000001-cc"
+        (call / "stderr").unlink()
+        (call / "stderr").symlink_to(victims["call-victim"])
+        (container.root / "tool-calls" / "tree").symlink_to(outside / "tree", target_is_directory=True)
+        os.mkfifo(container.root / "pipe")
+        return 0, b"build output\n", b""
+
+    executor = simulated_executor(
+        BuildProfile("native", "fixture:local", "sha256:" + "a" * 64, "1000:1000"), behavior, scanner=scanner)
+    result = executor.execute_captured(
+        ("cc", "a.c"), workspace=workspace, working_directory="unit", environment={},
+        capture_directory=capture,
+        capture_config=BuildCaptureConfig("ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 100, 100),
+        scope=CaptureScope("fixture", "job_language_build", "attempt", "unit", "native"))
+
+    assert {path: path.read_bytes() for path in sorted(outside.rglob("*")) if path.is_file()} == before
+    entries = [path for path in capture.rglob("*")]
+    assert all(stat.S_ISREG(path.lstat().st_mode) or stat.S_ISDIR(path.lstat().st_mode) for path in entries)
+    retained = b"".join(path.read_bytes() for path in entries if path.is_file())
+    assert not any(marker in retained for marker in (b"-victim", b"host tree marker", SYNTHETIC_SECRET.encode()))
+    record = json.loads(result.capture_record.read_text(encoding="utf-8"))
+    assert record["coverage"]["complete"] is False
+    assert [gap.rsplit(": ", 1)[1] for gap in record["coverage"]["gaps"]
+            if gap.startswith("capture entry was not a regular file and was removed: ")] == list(FOREIGN_ENTRIES)
+    assert result.stdout_file == capture / "stdout" and not result.stdout_file.is_symlink()
+
+
+def test_host_stream_write_replaces_a_planted_link_instead_of_writing_through_it(tmp_path: Path):
+    victim, stream = tmp_path / "victim", tmp_path / "stdout"
+    victim.write_bytes(b"host file")
+    stream.symlink_to(victim)
+    _write_stream(stream, b"build output")
+    assert victim.read_bytes() == b"host file"
+    assert not stream.is_symlink() and stream.read_bytes() == b"build output"

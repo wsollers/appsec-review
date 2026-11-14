@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import time
 import uuid
@@ -154,6 +155,44 @@ def reconcile_build_leases(directory: Path, *, workspace: Path, install: Path,
         atomic_json(path, {**lease, "container_closed": True})
 
 
+def _write_stream(path: Path, data: bytes) -> None:
+    """Write a host-owned stream file without following anything the build left at its path."""
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        path.unlink()
+    flags = (os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0) |
+             getattr(os, "O_BINARY", 0))
+    with os.fdopen(os.open(path, flags, 0o644), "wb") as stream:
+        stream.write(data)
+
+
+def _remove_foreign_capture_entries(capture_root: Path) -> list[str]:
+    """Delete every link, FIFO, socket and device node in a build's capture directory.
+
+    The build container writes to this directory, so such an entry is target content that could
+    point the host at any path it can reach. Each one is removed without being opened and named
+    as a capture gap, before any later step reads, copies or rewrites capture files.
+    """
+    removed: list[str] = []
+    pending = [capture_root]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as listing:
+            entries = sorted(listing, key=lambda entry: entry.name)
+        for entry in entries:
+            mode = entry.stat(follow_symlinks=False).st_mode
+            if stat.S_ISDIR(mode):
+                os.chmod(entry.path, stat.S_IMODE(mode) | 0o700)
+                pending.append(Path(entry.path))
+            elif not stat.S_ISREG(mode):
+                os.unlink(entry.path)
+                removed.append(Path(entry.path).relative_to(capture_root).as_posix()[:200])
+    removed.sort()
+    gaps = [f"capture entry was not a regular file and was removed: {name}" for name in removed[:16]]
+    if len(removed) > 16:
+        gaps.append(f"capture entries were not regular files and were removed: {len(removed) - 16} more")
+    return gaps
+
+
 def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
                   stderr_path: Path) -> tuple[int | None, bool]:
     """Run without pipe buffering and retain both diagnostic streams in full."""
@@ -168,8 +207,8 @@ def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
     if native is not None:
         stdout_path.parent.mkdir(parents=True, exist_ok=True)
         stderr_path.parent.mkdir(parents=True, exist_ok=True)
-        stdout_path.write_bytes(native[1])
-        stderr_path.write_bytes(native[2])
+        _write_stream(stdout_path, native[1])
+        _write_stream(stderr_path, native[2])
         return native[0], native[3]
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
@@ -590,6 +629,7 @@ class BuildContainerExecutor:
                         str(capture_config.tool_call_count_limit), logical_wrappers,
                         "1" if capture_config.capture_envp else "0", *argv))
         stdout_path, stderr_path = capture_root / "stdout", capture_root / "stderr"
+        foreign_entries: list[str] = []
         self._register_lease(command, root, install_dir)
         try:
             with self._container(command):
@@ -602,8 +642,9 @@ class BuildContainerExecutor:
                     code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
                     if not safety.active():
                         self._stop_on_timeout(command, timed_out)
-                    stdout_path.write_bytes(stdout)
-                    stderr_path.write_bytes(stderr)
+                    foreign_entries.extend(_remove_foreign_capture_entries(capture_root))
+                    _write_stream(stdout_path, stdout)
+                    _write_stream(stderr_path, stderr)
                 if safety.active():
                     atomic_json(capture_root / "execution-outcome.json", {
                         "exit_code": code, "timed_out": timed_out, "cleanup": "PENDING",
@@ -619,6 +660,13 @@ class BuildContainerExecutor:
             if install_dir is not None:
                 self._restrict_workspace(install_dir)
             capture_root.chmod(0o755)  # the build container's write window into the capture closed
+        # Nothing below may follow a path the build could have replaced in its capture directory.
+        foreign_entries.extend(_remove_foreign_capture_entries(capture_root))
+        for stream_path in (stdout_path, stderr_path):
+            if not stream_path.exists():
+                _write_stream(stream_path, b"")
+        if not (capture_root / "events.jsonl").is_file():
+            raise RuntimeError("the build replaced the host capture event stream")
         if install_dir is not None:
             atomic_json(capture_root / "execution-outcome.json", {
                 "exit_code": code, "timed_out": timed_out, "cleanup": "PENDING",
@@ -632,7 +680,7 @@ class BuildContainerExecutor:
                                         bytes_limit=capture_config.raw_trace_bytes_limit,
                                         envp_redact_names=capture_config.envp_redact_names)
                       if capture_config.retain_raw_traces else None)
-        parse_errors = reference_raw_traces(parse_errors, raw_traces)
+        parse_errors = (*foreign_entries, *reference_raw_traces(parse_errors, raw_traces))
         recorder.flush()
         roots = CaptureRoots("/workspace", root, logical_capture, self.profile.image_id,
                              posixpath.normpath(f"/workspace/{working_directory}"),
@@ -706,10 +754,10 @@ class BuildContainerExecutor:
         # This copy is disposable and can live above the deep command directory. Keeping it
         # here also leaves enough path budget for compiler names on Windows hosts.
         staging = capture_root.parent.parent / f".host-{capture_root.name}"
-        shutil.copytree(tool_root, staging)
+        shutil.copytree(tool_root, staging, symlinks=True)
         shutil.rmtree(tool_root)
         staging.chmod(0o700)
-        shutil.copytree(staging, tool_root)
+        shutil.copytree(staging, tool_root, symlinks=True)
         shutil.rmtree(staging)
         for path in (tool_root, *tool_root.rglob("*")):
             path.chmod(0o700 if path.is_dir() else 0o600)
@@ -738,8 +786,10 @@ class BuildContainerExecutor:
 
         def retain(source: Path, relative: str, *, sanitize: bool) -> None:
             target = scan_input / relative
+            if source.is_symlink() or not source.is_file():
+                return
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+            shutil.copyfile(source, target, follow_symlinks=False)
             target.chmod(0o644)
             if sanitize:
                 persistent[relative] = source
@@ -783,6 +833,9 @@ class BuildContainerExecutor:
         scan_timed_out = False
 
         def redact_source(source: Path, line_number: int | None = None) -> None:
+            if source.is_symlink():
+                source.unlink(missing_ok=True)
+                return
             if source.name == "events.jsonl":
                 rows = source.read_text(encoding="utf-8").splitlines()
                 selected = ([line_number - 1] if line_number is not None and 0 < line_number <= len(rows)
