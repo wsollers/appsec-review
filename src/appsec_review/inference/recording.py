@@ -76,7 +76,6 @@ class _Scope:
     counts: Counter = field(default_factory=Counter)
     replay_root: Path | None = None
     origins: dict[Path, str | None] = field(default_factory=dict)
-    seeded: set[tuple[str, Path, str]] = field(default_factory=set)
 
 
 _scope: _Scope | None = None
@@ -258,7 +257,7 @@ def _origin(root: Path, *, create: bool) -> str | None:
     return document["recording_id"]
 
 
-def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None]:
+def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None, bool]:
     with _lock:
         if mode == "record":
             root = _run_recordings(scope)
@@ -274,22 +273,21 @@ def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None]:
         if root in scope.origins and scope.origins[root] != origin:
             raise ExecutionContractError("model recording root identity changed during invocation")
         scope.origins[root] = origin
-        if mode == "record" and (mode, root, key) not in scope.seeded:
-            # An earlier attempt of this job in the same run may have recorded the same request
-            # (a repair re-runs the job under the same run root). This invocation appends after
-            # those recordings; a path that still exists afterwards is a competing writer.
-            directory = _directory(root, scope.job_id)
-            existing = sorted(directory.glob(f"{key}.*.json")) if directory.is_dir() else []
-            scope.counts[(mode, root, key)] = max(scope.counts[(mode, root, key)], len(existing))
-            scope.seeded.add((mode, root, key))
-        sequence = scope.counts[(mode, root, key)]
-        if sequence >= _MAX_SEQUENCE:
-            raise ExecutionContractError("model recording sequence space exhausted")
-        path = _directory(root, scope.job_id) / f"{key}.{sequence:04d}.json"
-        if mode == "record" and os.path.lexists(path):
-            raise ExecutionContractError("stale model recording exists at dispatch admission")
-        scope.counts[(mode, root, key)] += 1
-        return path, sequence, origin
+        directory = _directory(root, scope.job_id)
+        while True:
+            sequence = scope.counts[(mode, root, key)]
+            if sequence >= _MAX_SEQUENCE:
+                raise ExecutionContractError("model recording sequence space exhausted")
+            path = directory / f"{key}.{sequence:04d}.json"
+            scope.counts[(mode, root, key)] += 1
+            if mode != "record" or not os.path.lexists(path):
+                return path, sequence, origin, False
+            # This run already recorded this request (an earlier attempt of the job under the same
+            # run root, re-run by a repair). A recorded result is served instead of a second live call,
+            # so a run answers each request once; a recorded error is skipped so the re-run may try
+            # the model again and append its own recording after it.
+            if "result" in _read(path):
+                return path, sequence, origin, True
 
 
 def _error_envelope(error: BaseException, *, depth: int = 0) -> dict[str, Any]:
@@ -477,8 +475,8 @@ def recorded(infer: Infer) -> Infer:
         if scope is None:
             raise ExecutionContractError("a model call outside a job unit cannot be recorded or replayed")
         key, masked = request_key(request, scope.literals)
-        path, sequence, origin = _admit(scope, mode, key)
-        if mode == "replay":
+        path, sequence, origin, recorded_result = _admit(scope, mode, key)
+        if mode == "replay" or recorded_result:
             return _replay(scope, path, key, sequence, origin, masked)
         try:
             result = infer(request, timeout_seconds=timeout_seconds)

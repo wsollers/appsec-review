@@ -237,24 +237,21 @@ def test_identical_concurrent_calls_reserve_sequence_before_completion(tmp_path,
                 for _ in range(2)] == [0, 1]
 
 
-def test_a_rerun_attempt_appends_its_recordings_after_an_earlier_attempt(tmp_path, monkeypatch):
-    """A repair re-runs a job under the same run root; its model calls for the same request must be
-    recorded after the first attempt's, not refused. Regression for smoke-cpp run 2026-11-14-0001,
-    where dependency_intelligence attempt_0002 failed with "stale model recording exists at dispatch
+def test_a_recorded_error_is_retried_live_by_a_rerun_and_appended(tmp_path, monkeypatch):
+    """A repair re-runs a job under the same run root. A request whose only recording is an error is
+    tried again and the new outcome is recorded after it. Regression for smoke-cpp run 2026-11-14-0001,
+    where dependency_intelligence attempt_0002 refused with "stale model recording exists at dispatch
     admission"."""
-    source, first = _record_one(tmp_path, monkeypatch)
+    source, first = _record_one(tmp_path, monkeypatch, error=ModelOutputError("found 0"))
     live = lambda *args, **kwargs: ModelResult({"ok": "again"}, input_tokens=1, output_tokens=1)
     monkeypatch.setenv(MODE_ENVIRONMENT, "record")
     with _scope(tmp_path, tmp_path / "runs" / "recorded"):
         result = recorded(live)(_request(tmp_path), timeout_seconds=5)
-        second_call = recorded(live)(_request(tmp_path), timeout_seconds=5)
-    assert result.proposal == {"ok": "again"} and second_call.proposal == {"ok": "again"}
+    assert result.proposal == {"ok": "again"}
     paths = sorted((source / "job_target_analysis_plan").glob("*.json"))
-    assert [path.name.rsplit(".", 2)[1] for path in paths] == ["0000", "0001", "0002"]
-    assert paths[0] == first
-    assert json.loads(paths[1].read_text())["sequence"] == 1
-    # Replay still serves the first attempt's recording for the first call.
-    assert _replay_one(tmp_path, source, monkeypatch).proposal == {"ok": True}
+    assert [path.name.rsplit(".", 2)[1] for path in paths] == ["0000", "0001"]
+    assert paths[0] == first and "error" in json.loads(first.read_text())
+    assert json.loads(paths[1].read_text())["result"]["proposal"] == {"ok": "again"}
 
 
 @pytest.mark.parametrize("mutation", [
@@ -356,14 +353,17 @@ def test_v1_success_is_readable_without_guessing_error_semantics(tmp_path, monke
             _replay_one(tmp_path, source, monkeypatch)
 
 
-def test_stale_recording_rejected_before_another_live_call(tmp_path, monkeypatch):
+def test_a_recorded_result_is_served_to_a_rerun_without_another_live_call(tmp_path, monkeypatch):
+    """A run answers each request once: a re-run attempt that repeats a recorded request receives the
+    recorded result, never a second live call, and the recording is left as it was."""
     _, path = _record_one(tmp_path, monkeypatch)
     before = path.read_bytes()
     with _scope(tmp_path, tmp_path / "runs" / "recorded"):
-        with pytest.raises(ExecutionContractError, match="stale"):
-            recorded(lambda *a, **kw: pytest.fail("stale recording reached provider"))(
-                _request(tmp_path), timeout_seconds=5)
+        result = recorded(lambda *a, **kw: pytest.fail("recorded request reached the provider"))(
+            _request(tmp_path), timeout_seconds=5)
+    assert result.proposal == {"ok": True} and result.usage_source == "replay"
     assert path.read_bytes() == before
+    assert sorted(path.parent.glob("*.json")) == [path]
 
 
 def test_publication_is_complete_and_immutable(tmp_path, monkeypatch):
