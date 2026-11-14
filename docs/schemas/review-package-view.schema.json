@@ -1,17 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-view.schema.json",
-  "title": "Review package view (package-view/5; reads /4)",
+  "title": "Review package view (package-view/6; reads /4 and /5)",
   "description": "The labelled, budgeted, model-facing view of a stored review package (review/package_view.py, review-protocol-v2.md section 4). Built at cell time and never stored as an identity; build_view validates every view against this schema. Persona and stack profile are routing fields the caller sets per cell.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "rule", "protocol", "kind", "lane", "lead_family", "persona", "stack_profile", "scope",
                "partition", "rank", "leads", "source", "neighborhood", "build", "corroboration", "tags",
                "other_context", "material_gaps", "gap_counts", "files", "omitted", "proof_obligations",
-               "graph_families", "truncation"],
+               "graph_families", "truncation", "unit_context"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-view/1"},
-    "rule": {"enum": ["appsec-review/package-view/4", "appsec-review/package-view/5"]},
+    "rule": {"enum": ["appsec-review/package-view/4", "appsec-review/package-view/5",
+                      "appsec-review/package-view/6"]},
     "protocol": {"const": "review-protocol/2"},
     "kind": {"type": ["string", "null"]},
     "lane": {"type": ["string", "null"]},
@@ -89,7 +90,7 @@
     },
     "files": {
       "type": "object",
-      "propertyNames": {"enum": ["gaps.jsonl", "corroborating_findings.jsonl"]},
+      "propertyNames": {"enum": ["gaps.jsonl", "corroborating_findings.jsonl", "unit_context.jsonl"]},
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
@@ -109,7 +110,34 @@
     },
     "proof_obligations": {"type": "array", "items": {"type": "string"}},
     "graph_families": {"type": "array", "items": {"type": "string"}},
-    "truncation": {"type": ["object", "null"]}
+    "truncation": {"type": ["object", "null"]},
+    "unit_context": {
+      "description": "Hunt packages (package-view/6, T-5000): the unit context the package references instead of embedding. Its entries are not rendered as T and O rows; they are reachable with expand on the unit_context.jsonl file, whose count, bytes and sha256 are under files. null on a finding-lead view.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "sha256", "size_bytes", "counts", "file"],
+          "properties": {
+            "schema": {"const": "appsec-review/package-unit-context/1"},
+            "sha256": {"$ref": "#/$defs/sha"},
+            "size_bytes": {"type": "integer", "minimum": 1},
+            "counts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["context_entries", "source_ids", "entity_ids"],
+              "properties": {
+                "context_entries": {"type": "integer", "minimum": 0},
+                "source_ids": {"type": "integer", "minimum": 0},
+                "entity_ids": {"type": "integer", "minimum": 0}
+              }
+            },
+            "file": {"const": "unit_context.jsonl"}
+          }
+        }
+      ]
+    }
   },
   "$defs": {
     "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

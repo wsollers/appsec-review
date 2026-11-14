@@ -9,7 +9,7 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/13`); the catalog-derived
+(`appsec-review/review-package/7`, assembly rule `assemble-review-packages/14`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -45,7 +45,8 @@ exact route registration is not proof of control enforcement.
 | Contract field | Accepted source and current query |
 |---|---|
 | `run_id`, `manifest_sha256`, `target_snapshot` | `resolve_accepted_manifest` and `load_verified_manifest` in `retrieval/core.py` and `retrieval/index.py`; verify each shard and the source snapshot before assembly. |
-| `scope`, `source_ids`, `artifact_ids` | Catalog component, source, build-unit and artifact entities; `find`, `query_artifacts`. No synthetic trust boundary: use `null` until an accepted producer provides it. |
+| `scope`, `source_ids`, `artifact_ids` | Catalog component, source, build-unit and artifact entities; `find`, `query_artifacts`. No synthetic trust boundary: use `null` until an accepted producer provides it. On a hunt package (v7) `scope` has no `source_ids`: the unit's source identities are in the referenced unit context document. |
+| `unit_context` (v7, hunt lane) | `{schema, path, sha256, size_bytes, counts}`: the hash-pinned reference to the unit's context document (`package-unit-context/1`, `unit-context/<sha256>.json` beside the packages), published once per hunted unit and listed in the manifest under `unit_contexts`. It holds the unit's `context` entries, `scope.source_ids` and unit-wide `entity_ids`; the body's `context` is empty and its `retrieval.entity_ids` are the partition's own. `null` on a finding-lead package. Consumers read the body through `resolve_package_document`, which verifies and merges the document back ([dataflow-bounded-slices.md](dataflow-bounded-slices.md), "Package, view and manifest"). |
 | `lead_menu` | `review/lead_families.py`: one versioned rule per lead family (see gate 3). Source-SAST and CodeQL reuse `normalize_reported_severity` and the accepted `scanner_correlation` lead facts of `indexing/sast.py` for suppression, duplicate and flow identities. Each lead keeps its accepted identity, scanner, rule, bounded `message`, `rule_cwe`, native severity, reported severity, `severity_rule` and `severity_basis`. `severity_record` preserves the original values, any audited assessment and reason, the effective value, and any unresolved triage gap. |
 | `lead_menu[].advisory_context` (lane A only) | `review/advisories.py` over the accepted `dependency_advisories` facts that cite the lead's observation: up to three advisories, each with the OSV summary, fixed versions and aliases; CVE ids; NVD records (status, dates, bounded description, CWEs, up to six CVSS metrics with family, version, vector, base score and severity); KEV entries (listed, date added, due date, ransomware use, name); EPSS entries (score, percentile, score date); per-join status; the snapshot id and staleness of each feed; and the fact's gaps. `null` when no accepted fact cites the lead. Reference context only (R3: indirect for every predicate). |
 | `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |

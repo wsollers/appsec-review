@@ -189,8 +189,10 @@ def _lead(assembly, fixture: FixtureRun, key: str) -> dict:
     return document
 
 
-def _native_hunt(assembly) -> dict:
-    hunts = [item.document() for item in assembly.packages
+def _native_hunt(assembly, *, stored: bool = False) -> dict:
+    # The hunt body references its unit context (schema v7); the resolved document carries the entries, the
+    # stored body is what the package schema validates. Operation-scoped hunts are a separate kind of row.
+    hunts = [item.document() if stored else item.resolved() for item in assembly.packages
              if item.kind == "hunt" and item.document()["scope"]["build_unit_id"] == "native-main"
              and not item.document()["scope"].get("operation")]
     assert len(hunts) == 1
@@ -206,17 +208,19 @@ def test_every_v4_package_validates_and_names_its_graph_families(graph_assembly)
     for package in graph_assembly.packages:
         document = package.document()
         validator.validate(document)
-        assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/6"
+        assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/7"
         assert document["retrieval"]["graph_families"] == sorted(set(document["retrieval"]["graph_families"]))
         assert "graph" in document["retrieval"]["indexes"]
-    bad = _native_hunt(graph_assembly)
+    bad = _native_hunt(graph_assembly, stored=True)
     bad["retrieval"]["graph_families"] = ["aliases"]
     with pytest.raises(jsonschema.ValidationError):
         validator.validate(bad)
-    stale = _native_hunt(graph_assembly)
+    stale = _native_hunt(graph_assembly, stored=True)
     stale["context"].append({"id": "asr:sink_site:" + "0" * 64, "kind": "sink_site", "role": "sink_class"})
     with pytest.raises(jsonschema.ValidationError):
-        validator.validate(stale)
+        validator.validate(stale)                      # a hunt body embeds no context entry at all (v7)
+    for entry in _native_hunt(graph_assembly)["context"]:
+        assert entry["role"] != "sink_class"           # the unit context carries only the schema's roles
 
 
 def test_codeql_lead_embeds_its_correlated_path_sink_guards_and_ranges(graph_fixture, graph_assembly) -> None:

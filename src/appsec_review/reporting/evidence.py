@@ -107,6 +107,15 @@ def _excerpt(source: Mapping[str, Any]) -> str:
     return ""
 
 
+def _source_count(package: Mapping[str, Any], scope: Mapping[str, Any]) -> int:
+    """Sources in scope: the body's list, or the count a hunt package's unit context reference carries."""
+    if scope.get("source_ids") is None and isinstance(package.get("unit_context"), Mapping):
+        counts = package["unit_context"].get("counts")
+        value = counts.get("source_ids") if isinstance(counts, Mapping) else None
+        return int(value) if isinstance(value, int) and not isinstance(value, bool) else 0
+    return len(_strs(scope.get("source_ids")))
+
+
 def scope_box(package: Mapping[str, Any], limits: Limits) -> Box:
     scope = package.get("scope") if isinstance(package.get("scope"), Mapping) else {}
     rows = [field("component", scope.get("component_id"), limits, mono=True),
@@ -114,7 +123,7 @@ def scope_box(package: Mapping[str, Any], limits: Limits) -> Box:
             field("build unit", scope.get("build_unit_id"), limits, mono=True),
             field("trust boundary", scope.get("trust_boundary_id"), limits, mono=True),
             field("artifacts in scope", len(_strs(scope.get("artifact_ids"))), limits),
-            field("sources in scope", len(_strs(scope.get("source_ids"))), limits)]
+            field("sources in scope", _source_count(package, scope), limits)]
     items: list[Item] = [Fields(tuple(rows))]
     obligations = _strs(package.get("proof_obligations"))
     if obligations:

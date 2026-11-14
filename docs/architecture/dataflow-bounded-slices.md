@@ -171,7 +171,7 @@ recorded file hash.
 
 ## Package, view and manifest
 
-**Assembly** (`review/packages.py`, `assemble-review-packages/13`) reads the slice inputs through
+**Assembly** (`review/packages.py`, `assemble-review-packages/14`) reads the slice inputs through
 `SliceSources`. `GraphContext.neighborhood` takes the lead's observation identity and picks the bound:
 
 - **`dataflow_path`:** `flows` are the lead's correlated paths, sorted by identity, at most
@@ -209,13 +209,47 @@ rendering, with a gap. A slice function in another file is shown only when its f
 reads back at the recorded hash; otherwise it is a gap. The view's neighborhood summary states the
 bound, the number of paths, lines and omitted lines, and each strategy's state.
 
-**Manifest:** `counts.neighborhood_bounds` counts finding-lead packages by bound. Cell receipts carry
-no package or view metadata and are unchanged.
+**Unit context reference (hunt lane, `review-package/7`, T-5000).** A hunted unit's material that is
+the same for every partition (its bounded `context` entries, its `scope.source_ids` and the
+unit-wide part of `retrieval.entity_ids`) is published once per unit as a unit context document
+(`package-unit-context/1`, `docs/schemas/review-package-unit-context.schema.json`), canonical JSON
+at `unit-context/<sha256>.json` beside `packages/`. Each hunt body carries only its partition: the
+`lead_menu`, the `partition` record, the per-lead `evidence` rows and a `unit_context` reference
+`{schema, path, sha256, size_bytes, counts}`; its `context` is `[]`, its `scope` has no
+`source_ids` and its `retrieval.entity_ids` hold only the partition's own identities (lead ids,
+artifact identities and the resolved evidence of the leads' control assessments). The
+`input_fingerprint` still covers the whole scope, every shard and the unit context hash, and the
+package id is still the hash of the body, so the reference is part of the package identity and of
+the cell reuse `basis`: a partition whose leads and unit context are unchanged keeps its basis.
+`split()` measures the partition body alone, so a menu of N leads yields
+ceil(N / `hunt_menu_partition_size`) packages unless a single partition's own leads exceed
+`max_package_bytes`. Lead-lane bodies are unchanged (`unit_context: null`): their context is per
+lead.
+
+Consumers never read a hunt body raw. `packages.resolve_package_document(path)` loads the body, reads
+the referenced document at its pinned hash and size, validates it, and merges it back
+(`merge_unit_context`: the unit's `context`, `scope.source_ids`, and the sorted union of entity ids),
+so routing, the capability grant (`job.py` lane records take `Package.resolved()` entity ids), the
+coverage adapter and the evidence report see the schema v6 identities. The view (`package-view/5`)
+shows the reference and its counts under `unit_context` and writes the entries to the
+hash-referenced `unit_context.jsonl` (listed under `files`, reachable with `expand`) instead of
+rendering them as `T` and `O` rows; the label table still knows every identity the resolved package
+names, so the citable identities are unchanged while the cell request shrinks.
+
+**Manifest:** `counts.neighborhood_bounds` counts finding-lead packages by bound. `unit_contexts`
+lists each hunted unit's context document (`unit_key`, `path`, `sha256`, `bytes`, `counts`), and each
+`packages[]` row carries `unit_context_sha256` (`null` for a finding-lead package).
+`verify_package_manifest` checks every listed document's bytes against the manifest and every hunt
+package's reference against the listed document, and refuses a package whose referenced hash does
+not match the document on disk. `publish_packages` writes the documents before the packages. Cell
+receipts carry no package or view metadata and are unchanged.
 
 **Schemas:** every view is validated against `docs/schemas/review-package-view.schema.json` when it
 is built. The manifest is validated against `docs/schemas/review-package-manifest.schema.json` before
-it is hashed, and again by `verify_package_manifest`. Both are loaded by `review/schemas.py`. A
-violation is an `IntegrityError` that blocks publication; it is never turned into a gap.
+it is hashed, and again by `verify_package_manifest`. A unit context document is validated against
+`docs/schemas/review-package-unit-context.schema.json` when it is assembled and again whenever a
+consumer loads it. All three are loaded by `review/schemas.py`. A violation is an `IntegrityError`
+that blocks publication; it is never turned into a gap.
 
 ### Tests with real producer output
 

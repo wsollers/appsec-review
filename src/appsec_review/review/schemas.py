@@ -1,8 +1,9 @@
 """Pinned JSON schemas for documents the review stage builds at run time.
 
-``review-package-view.schema.json`` covers the model-facing package view (``package_view.build_view``) and
+``review-package-view.schema.json`` covers the model-facing package view (``package_view.build_view``),
 ``review-package-manifest.schema.json`` the package manifest (``packages.assemble_packages`` and
-``verify_package_manifest``). A document that violates its schema is an ``IntegrityError``: it blocks
+``verify_package_manifest``) and ``review-package-unit-context.schema.json`` the unit context document a
+hunt package references once per unit (``packages.load_unit_context``). A document that violates its schema is an ``IntegrityError``: it blocks
 publication and is never converted into a gap.
 """
 from __future__ import annotations
@@ -21,7 +22,8 @@ from appsec_review.review.models import IntegrityError
 
 VIEW_SCHEMA_FILE = "review-package-view.schema.json"
 MANIFEST_SCHEMA_FILE = "review-package-manifest.schema.json"
-_KNOWN = frozenset({VIEW_SCHEMA_FILE, MANIFEST_SCHEMA_FILE})
+UNIT_CONTEXT_SCHEMA_FILE = "review-package-unit-context.schema.json"
+_KNOWN = frozenset({VIEW_SCHEMA_FILE, MANIFEST_SCHEMA_FILE, UNIT_CONTEXT_SCHEMA_FILE})
 
 
 def schema_path(name: str) -> Path:
@@ -53,4 +55,5 @@ def validate(name: str, document: Mapping[str, Any], what: str) -> None:
         raise IntegrityError(f"{what} violates {name} ({len(errors)} error(s)): {detail}")
 
 
-__all__ = ["MANIFEST_SCHEMA_FILE", "VIEW_SCHEMA_FILE", "schema_path", "validate", "validator"]
+__all__ = ["MANIFEST_SCHEMA_FILE", "UNIT_CONTEXT_SCHEMA_FILE", "VIEW_SCHEMA_FILE", "schema_path", "validate",
+           "validator"]

@@ -41,7 +41,7 @@ DATASETS = (
                          _A + "/shared/lead-triage/*.json",
                          _J + "/triage-cache/*.json"),
               reason="model assessments are untrusted intermediate results, not accepted findings", authority=EvidenceAuthority.PROVISIONAL),
-    artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/6",
+    artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/7",
                   "Lane A finding-lead and lane B hunt packages with their verified package manifest.",
                   artifacts=(_A + "/steps/packages/**",),
                   reason="packages are run-owned review inputs bound to one accepted manifest; consumers read "

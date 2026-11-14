@@ -6389,7 +6389,7 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/review-package/6",
+      "schema": "appsec-review/review-package/7",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
       "stage": "artifact_only",

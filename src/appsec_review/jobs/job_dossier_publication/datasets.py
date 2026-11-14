@@ -29,7 +29,7 @@ CONTRACT = JobContract(
         InputRequirement("job_inference_security_review", "lead_triage",
                          "application/json", authority=EvidenceAuthority.PROVISIONAL),
         InputRequirement("job_inference_security_review", "review_packages",
-                         "appsec-review/review-package/6", authority=EvidenceAuthority.ROUTING_CONTEXT),
+                         "appsec-review/review-package/7", authority=EvidenceAuthority.ROUTING_CONTEXT),
         InputRequirement("job_inference_security_review", "review_cells",
                          "appsec-review/cell-attempt-receipt/1", authority=EvidenceAuthority.PROVISIONAL),
         InputRequirement("job_inference_security_review", "claim_ledger",

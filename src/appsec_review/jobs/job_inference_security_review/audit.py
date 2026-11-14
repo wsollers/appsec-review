@@ -222,7 +222,7 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
                 or manifest.value["manifest_sha256"] != origin.accepted_manifest_sha256):
             raise IntegrityError("audit package manifest differs from accepted review")
         for ref in value["packages"]:
-            package = document(ref, "appsec-review/review-package/6")
+            package = document(ref, "appsec-review/review-package/7")
             identity = ref["package_id"]
             if package.value["package_id"] != identity:
                 raise IntegrityError("audit package identity changed")

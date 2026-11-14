@@ -27,6 +27,7 @@ from appsec_review.jobs.completion_contracts import nonexecution_assurance
 from appsec_review.jobs.engineering_contracts import POC_GENERATION_HANDOFF_SCHEMA, POC_GENERATION_SCHEMA
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.review.models import IntegrityError
+from appsec_review.review.packages import load_unit_context, merge_unit_context
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json
 
@@ -431,6 +432,10 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     if package is None:
         entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "the review package of the claim is not in the run")
         return entry
+    if isinstance(package.get("unit_context"), Mapping):
+        # A hunt body references its unit context once (review-package/7); the view reads the merged document.
+        package = merge_unit_context(package, load_unit_context(
+            Path(run_root) / Path(record["path"]).parent.parent, package["unit_context"]))
     sink = services.sink_resolver(package)
     if sink is None:
         entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "the review package names no function that holds the sink")

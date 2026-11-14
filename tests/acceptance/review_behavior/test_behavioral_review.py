@@ -37,7 +37,7 @@ def test_operation_accounting_and_original_evidence_survive_publication():
     manifest_ref = lane["package_manifest"]
     read_bound_json(root, manifest_ref)
     manifest = verify_package_manifest(root / manifest_ref["path"], run_root=root)
-    assert manifest["assembly_rule"] == "appsec-review/assemble-review-packages/13"
+    assert manifest["assembly_rule"] == "appsec-review/assemble-review-packages/14"
     assert all("source_ids" in unit and "coverage_scope" in unit for unit in manifest["units"])
     assert all(unit["source_ids"] or unit["lead_count"] for unit in manifest["units"])
     operations = [unit for unit in manifest["units"] if unit["coverage_scope"] == "operation"]

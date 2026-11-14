@@ -174,7 +174,9 @@ def test_assembly_names_no_vendored_file_and_records_every_exclusion_in_the_mani
     outside = _ids(fixture, VENDORED_LEADS + STYLISTIC_LEADS)
     vendored_ids = {scope.source_for(path).identity for path in VENDORED}
     for package in assembly.packages:
-        document = package.document()
+        # A hunt body references its unit context (T-5000); the resolved document carries the scope and
+        # retrieval identities the worker sees.
+        document = package.resolved()
         assert not set(package.lead_ids) & outside
         assert not set(document["scope"]["source_ids"]) & vendored_ids
         assert not set(document["retrieval"]["entity_ids"]) & (vendored_ids | outside)

@@ -199,7 +199,7 @@ def fixture(tmp_path, *, state="confirmed", red_status=CellStatus.SUCCEEDED, ver
                                   json.loads((root / ATTEMPT / "publication/findings" / f["file"]).read_bytes()))
                          for f in findings)
     package = document(root, f"{ATTEMPT}/package.json", {
-        "schema": "appsec-review/review-package/6",
+        "schema": "appsec-review/review-package/7",
         "package_id": "package-1", "scope": {"component_id": "component-1", "build_unit_id": "build-1",
                                            "operation": {"operation_id": "operation-1"}},
         "lead_menu": [{"observation_id": "lead-1"}, {"observation_id": "lead-3"}]})

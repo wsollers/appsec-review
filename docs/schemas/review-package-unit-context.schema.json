@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/review-package-unit-context.schema.json",
+  "title": "Review package unit context (package-unit-context/1)",
+  "description": "The unit-wide material of one hunted review unit, published once by assemble-review-packages/14 (review/packages.py, _Assembler.unit_context_document) under unit-context/<sha256>.json beside the packages and referenced by every hunt partition of the unit through its body's unit_context {schema, path, sha256, size_bytes, counts}. The document is canonical JSON; its identity is the SHA-256 of its bytes. It carries no run or manifest identity: the same accepted facts give the same document in any run, and the hunt body that references it pins run_id and manifest_sha256. assemble_packages validates it before publication and load_unit_context validates it again before any consumer merges it back into a package body (merge_unit_context).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "assembly_rule", "unit_key", "scope", "context", "entity_ids"],
+  "properties": {
+    "schema": {"const": "appsec-review/package-unit-context/1"},
+    "assembly_rule": {"const": "appsec-review/assemble-review-packages/14"},
+    "unit_key": {"type": "string", "minLength": 1},
+    "scope": {
+      "description": "The unit's scope without a partition key: every partition of the unit shares it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_id", "trust_boundary_id", "build_unit_id", "source_ids"],
+      "properties": {
+        "component_id": {"type": "string", "minLength": 1},
+        "trust_boundary_id": {"type": ["string", "null"]},
+        "build_unit_id": {"type": ["string", "null"]},
+        "source_ids": {"$ref": "#/$defs/identities"}
+      }
+    },
+    "context": {
+      "description": "The unit's bounded context entries, in the order the package body carried them before schema v7.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "role"],
+        "properties": {
+          "id": {"$ref": "#/$defs/identity"},
+          "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "role": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "control_assessment": {"type": "object"}
+        }
+      }
+    },
+    "entity_ids": {
+      "description": "The unit-wide retrieval grant: the unit's source files, its context entries and the resolved underlying evidence of context-level control assessments. A package's retrieval.entity_ids is the sorted union of its own identities and these.",
+      "$ref": "#/$defs/identities"
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "identity": {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"},
+    "identities": {"type": "array", "items": {"$ref": "#/$defs/identity"}, "uniqueItems": true}
+  }
+}

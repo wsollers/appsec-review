@@ -681,7 +681,7 @@ and change the settings fingerprint. Changing them reorders units and moves the 
 which reassembles hunt packages. `review-unit-rank/3` replaces raw tag counting: language, gap,
 reported and derived tags do not add operation points; multiple labels/producers at one physical
 site count once. Missing or partial evidence remains unknown rather than proving absence.
-Fresh packages use `assemble-review-packages/13` and the model-facing `package-view/5`.
+Fresh packages use `assemble-review-packages/14` and the model-facing `package-view/6`.
 Preceding publications remain readable without being reused as the new semantic output.
 Generated-map bytes remain bound through final certification. Role counts, verifier independence,
 judge policy and execution authority are unchanged; see the
@@ -695,6 +695,19 @@ When the run has accepted `graph` shards (`job_code_graph_index`):
   with a CodeQL lead, with their sink, entry point, guards and ranges; hunt packages embed the
   unit's sink and entry-point facts. `retrieval.graph_families` lists the accepted families and
   `retrieval.graph_scopes` the CodeQL scope ids they belong to.
+- **Hunt unit context (T-5000).** A hunted unit's material that every partition shares (its bounded
+  `context` entries, including the graph facts above, its source identities and the unit-wide
+  retrieval grant) is written once per unit to `assembly/unit-context/<sha256>.json`
+  (`package-unit-context/1`) and listed in the package manifest under `unit_contexts`. Each hunt
+  package body holds only its own partition and a `unit_context` reference (`path`, `sha256`,
+  `size_bytes`, `counts` of entries, files and entities), so `packages.hunt_menu_partition_size`
+  decides the package count: a unit of N leads yields ceil(N / size) packages, and
+  `packages.max_package_bytes` bounds the partition body alone. The worker's view shows the
+  reference and the counts and reaches the entries with `expand` on `unit_context.jsonl`; the
+  grant and the citable identities are those of the resolved package, so `find`, `search` and
+  citations behave as before. Smoke-cpp run `2026-11-14-0003` is the measured case: one 1,077-lead
+  unit at partition size 25 produced 505 near-cap packages of 1 to 3 leads because each body
+  carried about 59 KB of identical unit context; with the reference it produces 44.
 - **Strategies.** A hunt unit with an accepted `sink_site` family launches `sink_up`; one with an
   `entry_point` family launches `entry_down`. Without them the slot falls back to `persona_sweep`
   with a `required_source_unavailable` gap.
@@ -740,6 +753,7 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
 - **View bounds.** `max_view_bytes`, `max_view_source_lines` and `max_view_type_declarations` under
   `[jobs.job_inference_security_review.settings.packages]` bound what a cell sees. A view that omitted rows names
   them in a material gap and in `omitted`; the whole stored package, including every gap, stays hash-pinned.
+  A hunt view carries its unit context as a reference plus counts (see "Hunt unit context" above), never inline.
 - **Memo reuse.** `INFERENCE_REVIEW_CELL_COMPLETED` carries `reused` (bool), `reuse_source` (`receipt` on resume,
   `memo` on a blue result memo hit, otherwise null) and `memo` (`hit`, `miss`, `unavailable`, or null when the cell
   is not memo-eligible). Lane documents count `cells_memo_reused` and `memo_cache_unavailable` beside `cells_run`
