@@ -87,7 +87,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_inference_security_review` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_inference_security_review` | `accepted_scope` | `appsec-review/inference-review-accepted-scope/1` | handoff | optional | gap |
 | `job_inference_security_review` | `lead_triage` | `application/json` | handoff | optional | gap |
-| `job_inference_security_review` | `review_packages` | `appsec-review/review-package/6` | handoff | optional | gap |
+| `job_inference_security_review` | `review_packages` | `appsec-review/review-package/7` | handoff | optional | gap |
 | `job_inference_security_review` | `review_cells` | `appsec-review/cell-attempt-receipt/1` | handoff | optional | gap |
 | `job_inference_security_review` | `claim_ledger` | `appsec-review/ledger-event/1` | handoff | optional | gap |
 | `job_inference_security_review` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | handoff | optional | gap |
@@ -395,7 +395,7 @@ flowchart LR
   input49 -. schema .-> input_schema49
   producer50["job_inference_security_review"]
   input50["review_packages"]
-  input_schema50["appsec-review/review-package/6"]
+  input_schema50["appsec-review/review-package/7"]
   producer50 --> input50 --> job
   input50 -. schema .-> input_schema50
   producer51["job_inference_security_review"]
