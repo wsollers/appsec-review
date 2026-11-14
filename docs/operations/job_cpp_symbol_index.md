@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # cpp_symbol_index
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Recover compiler-aware symbol definitions, declarations and reference/call neighborhoods from
+accepted C/C++ compile scopes using clangd. These are navigation and cross-check facts, not
+vulnerabilities or proof that every dynamic call is known. Symbols outside accepted sources are
+counted but not indexed as source evidence.
 
 <!-- generated:begin job=job_cpp_symbol_index -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -213,3 +218,101 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [job and normalizer](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py),
+[strict YAML parser](../../src/appsec_review/jobs/job_cpp_symbol_index/clangd_yaml.py), and
+[accepted scope helpers](../../src/appsec_review/jobs/cpp_index_scopes.py).
+Tool binding omissions in the generated metadata remain
+[T-147](../TODO.md);
+the executed tool is resolved in the handler, not inferred from that table.
+
+### `load`
+
+1. Read the accepted compiled-analysis result and manifest through the
+   [input contract](../architecture/job-input-contracts.md). Require this snapshot.
+2. Verify each successful catalog's compile database and materialized source mapping. Retain
+   unsuccessful catalogs or catalogs without commands as unavailable cases, not empty scopes.
+
+### `index`
+
+1. Re-load scopes and reject changes to the planned scope-ID set. Partition compile commands by
+   declared Clang support; scopes with no supported commands become `SKIPPED_NA` without launch.
+2. In bounded parallel scope workers, check the per-scope checkpoint. Otherwise invoke
+   `tool-clangd-indexer` over rewritten accepted compile commands using `--executor=all-TUs`
+   and YAML output. [Image pinning](image-pin-verification.md) and
+   [signing](signing.md) remain shared launch gates.
+3. Compare stderr's processed translation units with the supported database, then parse only the
+   supported YAML document subset. Preserve timeout, OOM, exit, output truncation, missing units,
+   malformed document and document-cap reasons.
+4. Accept unique clangd IDs with an accepted definition or canonical declaration, preferring the
+   definition. Convert zero-based positions to accepted source locations. Count external-only
+   symbols separately; enforce symbol bounds.
+5. Link retained reference containers and targets: call-bit references become `CALLS`, others
+   `REFERENCES`. Aggregate repeated edges with occurrence counts and bounded locations; count
+   unresolved references without inventing edges. Enforce relation bounds.
+6. Publish one analysis shard per scope and save its checkpoint. Coverage is unavailable for a
+   failed exit with no symbols, partial with reasons, complete otherwise.
+
+### `acceptance`
+
+1. Compose scope shards plus unavailable-scope coverage with the upstream manifest.
+2. Write `cpp-symbol-index-summary.json`, retaining upstream identity, per-scope results, counts
+   and reasons. Item count is accepted symbols; external symbols are not included.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  cpp["accepted compiled catalogs + source maps"] --> job["job_cpp_symbol_index"]
+  job --> scopes["load.accepted_cpp"]
+  scopes --> run["index.scopes: clangd-indexer"]
+  run --> yaml["strict YAML normalization"]
+  yaml --> facts["analysis: symbols + CALLS / REFERENCES"]
+  facts --> publish["acceptance.publish_handoff"]
+  run -. "failed / truncated / missing translation units" .-> gaps["scope coverage reasons"]
+  yaml -. "malformed / capped" .-> gaps
+  gaps --> publish
+  scopes -. "changed accepted bytes" .-> stop["integrity exception"]
+```
+
+## Gaps
+
+The source emits text reasons. [Interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+wraps them as `producer_reported_gap`, normally non-retryable; this does not make them advisory.
+
+- Input absent or upstream failed: unavailable accepted catalog and no compile commands. Unsupported
+  compile units are explicit `SKIPPED_NA` decisions, not missing supported-unit failures.
+- Tooling failure: clangd timeout, OOM or nonzero exit; malformed YAML and an incomplete final
+  document also prevent trustworthy full coverage.
+- Coverage missing: processed/expected translation-unit mismatch, truncated stdout, document,
+  symbol and relation limits. External symbols and unresolved references are separate counters,
+  not automatically gap records or evidence of complete resolution.
+- Changed source/database/manifest or a matching checkpoint with missing/changed evidence is an
+  integrity exception, not a successfully published gap.
+
+Check each cause and its affected scope against the walk's user-approved expected list.
+
+## Acceptance
+
+1. **A. Inputs:** Match compiled handoff/result/manifest identities, source-map hashes and normalized
+   compile database to admitted inputs; account for supported versus skipped commands.
+2. **B. Independent comparison:** Compare clangd stderr's processed-file set with supported command
+   files. Count accepted versus external YAML symbols independently; resolve sampled declaration
+   spans against source bytes and compare call-bit references to stored edges and occurrence counts.
+3. **C. Gaps:** Group verified outcome records and compare each missing unit, parse failure or
+   truncation to raw stdout/stderr and configured bounds; record unsupported inputs separately and
+   stop for any unapproved cause.
+4. **D. Baseline:** On authorized acceptance, save the corpus namespace and `stepwise.py accept`
+   baseline with symbol/edge counts and translation-unit sets. This documentation is not live
+   clangd acceptance.
+
+## Resume and invalidation
+
+The scope checkpoint binds schema, scope/source/compile identities, normalizer, tool pin and all
+index limits except worker count. Reuse verifies its shard, execution receipt and rewritten
+database as well as accepted inputs; a matching but damaged checkpoint fails closed.
+Partial outputs can be checkpointed by this producer: unchanged inputs do not promise a retry.
+A tool/source/compile/normalizer/limit change invalidates that scope, while other scopes remain
+independent. Composition follows [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).

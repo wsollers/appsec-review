@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # clang_static_analysis
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Run clang-tidy and Clang's static analyzer over supported accepted compile units and retain
+source-bound diagnostics, notes and fix-it presence. This supplies scanner judgments for later
+review and graph corroboration, not confirmed vulnerabilities. Seeded mode covers only selected
+translation units and explicitly labels diagnostics relative to seeds and their known neighborhood.
 
 <!-- generated:begin job=job_clang_static_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -213,3 +218,103 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handler and diagnostic adapter](../../src/appsec_review/jobs/job_clang_static_analysis/job.py),
+[seed selection](../../src/appsec_review/jobs/job_clang_static_analysis/seeded.py) and
+[scope custody](../../src/appsec_review/jobs/cpp_index_scopes.py).
+
+### `load`
+
+1. Read accepted compiled-analysis catalogs and verify their manifest, compile databases, source
+   mappings and target snapshot. Preserve failed or commandless projects as unavailable cases.
+2. Freeze planned scope identities; no build is repeated by this job.
+
+### `analyze`
+
+1. Re-read and compare scope sets. Partition supported compile commands; do not launch scopes
+   containing only unsupported inputs. In seeded mode, derive an admitted seed plan and the
+   compiled-analysis neighborhood per scope.
+2. Bind scope, adapter, settings, tool and optional seed/neighborhood identities to a checkpoint.
+   Reuse only verified matching evidence. With no seeds or selected supported rows, run no engine
+   and preserve the seeded ledger's omissions.
+3. Invoke both engines through `tool-native-cpp`, each in its own scratch directory with a file-size
+   ceiling. On tool/image exception, timeout, OOM or truncated streams/output, discard that engine's
+   result and record why. A failed exit is discarded except seeded per-unit failure reports allow
+   successful units to survive.
+4. Read bounded JSON diagnostics and per-unit results. Preserve parse/diagnostic-cap reasons.
+   Resolve each diagnostic to accepted source; drop unresolved diagnostics with a reason.
+   Publish observations, accepted source entities and `OBSERVED_AT` edges, including notes,
+   reported severity and fix-it flag.
+5. In seeded mode classify placement and record failed/unresolved seeds; never claim whole-scope
+   coverage. Publish an observations shard and coverage row. Save full-mode results, but do not
+   checkpoint seeded results with engine or translation-unit failures.
+
+### `acceptance`
+
+1. Compose scope shards and unavailable-scope coverage under the
+   [retrieval manifest contract](../architecture/python-and-retrieval.md#accepted-index-sets).
+2. Publish `clang-static-analysis-summary.json` with upstream identity, per-scope results,
+   observation counts and reasons. No runnable scopes and no unavailable cases is not-applicable.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  cpp["accepted compile scopes"] --> job["job_clang_static_analysis"]
+  seeds["optional admitted seeds + neighborhood"] --> analyze["analyze.scopes"]
+  job --> analyze
+  analyze --> engines["clang-tidy + clang --analyze"]
+  engines --> mapping["bounded diagnostics + accepted source mapping"]
+  mapping --> shard["observations + seeded ledger"]
+  shard --> publish["acceptance.publish_handoff"]
+  engines -. "failure / bounds" .-> gaps["partial or unavailable coverage"]
+  mapping -. "unresolved diagnostic" .-> gaps
+  gaps --> publish
+  cpp -. "changed source or checkpoint evidence" .-> stop["integrity exception"]
+```
+
+## Gaps
+
+This producer's text reasons become `producer_reported_gap` through
+[interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope). Their
+default non-retryable metadata is not advisory classification.
+
+- Input absent/failed: unavailable compiled catalog, missing commands or upstream failure.
+  Unsupported units are `SKIPPED_NA`, not failed Clang coverage.
+- Tooling failure: unavailable tool/image, timeout, OOM, nonzero engine exit, and seeded per-unit
+  failures; malformed/missing JSON is an adapter/output failure.
+- Coverage missing: execution/output/diagnostic bounds; diagnostic path outside accepted source;
+  no seeds, unselected/unsupported seed units, missing known neighborhood and unresolved seed
+  dispositions. Seeded coverage stays partial, or unavailable when every executed engine failed.
+- Changed accepted mappings/database or matching checkpoint artifacts raises an integrity error.
+  The execution-safety policy may stop at a tool failure before the fallback gap is published.
+
+Read [per-input support](../architecture/jobs-and-runtime.md#per-input-tool-support) separately from
+coverage. None of these reasons is automatically expected in a walk.
+
+## Acceptance
+
+1. **A. Inputs:** Compare consumed compiled handoff and source/compile hashes, supported command
+   set, and, for seeded mode, seed identities and neighborhood provenance.
+2. **B. Independent comparison:** Count diagnostics in each raw engine JSON before normalization;
+   reconcile accepted versus dropped locations against source bytes, traces and fix-it flags.
+   Compare executed translation-unit lists and per-seed placement with the input plan.
+3. **C. Gaps:** Group verified canonical outcomes by code and retained reason; compare failures to
+   receipts and parser outputs, and seeded omissions to the ledger. Record the cost of any
+   user-approved expected cause.
+4. **D. Baseline:** At authorized acceptance, save `stepwise.py accept`, corpus namespace and baseline
+   with per-engine diagnostic/coverage counts and seed disposition counts. No live engine run is
+   claimed here.
+
+## Resume and invalidation
+
+Scope checkpoints include accepted source/compile identities, adapter version, central settings,
+tool identity and seeded identities. Changing engine settings, tool pin, source, compile rows,
+seeds or neighborhood invalidates the affected scope. Matching checkpoints verify referenced
+evidence; seeded failed engines are deliberately retried rather than reused. Full-mode partial
+results may be reused. Runtime unit-level reuse is separate
+([resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)).
+Generated task/tool bindings remain [T-147](../TODO.md);
+this is deterministic tool execution, not model inference.

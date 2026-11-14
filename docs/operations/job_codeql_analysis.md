@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # codeql_analysis
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Create or reuse scope-specific CodeQL databases from accepted source/build environments, execute
+configured query profiles, retain native SARIF observations and optionally export bounded graph
+facts. Scanner results are review inputs, not confirmed vulnerabilities. Zero observations,
+unavailable extractors and disabled or seed-limited exports do not establish clean or complete
+target coverage.
 
 <!-- generated:begin job=job_codeql_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -632,3 +638,136 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handler graph](../../src/appsec_review/jobs/job_codeql_analysis/job.py),
+[scope planning](../../src/appsec_review/jobs/job_codeql_analysis/planning.py),
+[SARIF normalization](../../src/appsec_review/jobs/job_codeql_analysis/sarif.py) and
+[ready-scope scheduler](../../src/appsec_review/codeql/scheduler.py).
+
+### `plan`
+
+1. Load accepted target catalog and language builds; verify their snapshot against this run and
+   the actual target fingerprint. Load the locked CodeQL assets.
+2. Resolve the configured runtime and invoke bounded extractor inventory. A runtime operational
+   failure can produce an empty inventory with a reason; invalid capability/asset identity is a
+   framework-integrity failure, not a successful empty inventory.
+3. Build scopes from accepted source, materialized build environments and exact replayable
+   commands according to language processing modes. Preserve unsuccessful sibling builds,
+   unsupported inputs, missing prerequisites/extractors and policy-disabled languages as decisions
+   or reasons. Do not silently substitute autobuild for a missing manual replay contract.
+4. Verify configured query/export assets against the lock. Plan per-scope exports separately from
+   queries. Retain required upstream handoff/manifest identities and any admitted optional siblings
+   so publication will not erase unrelated evidence.
+5. Write `plan.json` and extractor inventory; generated language/task metadata remains incomplete
+   under [T-147](../TODO.md) and [T-157](../TODO.md).
+
+### `execution`
+
+1. Preflight every required runtime environment; perform explicitly configured predecessor-database
+   import before local execution. Reserve bounded CPU/memory/staging resources per action.
+   The ready scheduler can advance one scope's queries/normalization/export without waiting for
+   every other database.
+2. For each database, resolve the scope runtime, verify a matching database checkpoint/tree, or
+   stage accepted sources/workspace and protected manual replay. Invoke database creation with
+   configured bounds. Timeout/nonzero exit yields failed database evidence; successful trees
+   are manifest-bound and checkpointed.
+3. For each query profile, skip with a named reason if database creation failed. Otherwise verify
+   a query checkpoint or copy the database for isolated query execution, select the exact
+   pack/suite, and retain execution plus bounded SARIF. Invalid/missing/oversized SARIF is failure;
+   failed bounded SARIF may be retained as incomplete native output, never successful observations.
+4. Normalize successful SARIF into observations, exact native-result selectors, source entities and
+   located supporting flow spans. Preserve unresolved locations and normalization gaps. Retain
+   execution/native provenance; zero normalized observations gets an explicit not-clean reason.
+   Publish a scope/profile observations shard, including unavailable coverage for failed queries.
+5. Independently evaluate graph export: disabled or no pack is a not-applicable export with a
+   reason; failed database skips it; seeded mode with no seeds runs nothing and records the ledger.
+   Otherwise verify a matching export checkpoint or stage the pinned export pack/database/seeds,
+   compile the custom pack through the bounded path and execute exports with row/byte bounds.
+6. Require export schema/columns/source identities and seeded reports; retain truncation and
+   unresolved seeds. Failed compile/export/output validation yields failed export coverage.
+   Save only successful database/query/export checkpoints, then publish `graph-exports.json`.
+
+### `acceptance`
+
+1. Require each normalized query to have an index or explicit failure reasons. Compose current
+   observations with verified current and retained upstream manifests; keep graph exports as
+   referenced producer artifacts rather than claiming normalized graph facts here.
+2. Finalize per-input processing decisions using actual scope outcomes and completeness. Combine
+   plan/query/export reasons, record query profile/database/reuse identities and write `summary.json`.
+3. Compute publication status from decisions, query scopes and exports. Publish observation count,
+   manifest and dispositions with an empty security-findings list.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  accepted["accepted source + build environments + replay"] --> job["job_codeql_analysis"]
+  job --> plan["plan.inventory: scopes + locked assets"]
+  plan --> db["execution.scopes: database creation / verified reuse"]
+  db --> queries["per-profile query execution"]
+  queries --> sarif["native SARIF + normalized observations"]
+  db --> export["optional bounded graph export + seeded ledger"]
+  sarif --> publish["acceptance.publish_handoff: summary + manifest"]
+  export --> publish
+  plan -. "extractor / prerequisite unavailable" .-> gaps["processing decisions + reasons"]
+  queries -. "failed / malformed / zero observations" .-> gaps
+  export -. "disabled / no seeds / failed / truncated" .-> gaps
+  gaps --> publish
+  db -. "accepted identity or checkpoint bytes changed" .-> stop["integrity exception"]
+```
+
+## Gaps
+
+The job emits legacy reasons and typed processing/export dispositions. Legacy text is wrapped as
+`producer_reported_gap` by [interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope),
+normally non-retryable; this is not advisory classification.
+
+- Input absent/unsupported: failed accepted build, no materialized environment, absent exact
+  replay command set, Rust manifest/lock prerequisites, missing extractor, unsupported source
+  languages and Swift policy/coverage limitations. Processing reason codes are not canonical
+  producer-gap codes.
+- Tooling failure: runtime/image preparation, admission timeout, database/query/export operational
+  exception or timeout/nonzero exit, custom-pack compilation failure and invalid bounded
+  SARIF/export output. Query/export skips retain the failed database cause.
+- Coverage missing: zero observations, missing verified query execution receipt, unresolved source
+  locations/flow spans, SARIF normalization bounds, export row/byte truncation and unresolved or
+  bounded seeds. Disabled/no-pack export has a reason but no source gap array; downstream graph
+  indexing still treats it as unavailable.
+- Accepted snapshot, asset lock, exact replay/workspace, database tree or matching checkpoint
+  hash mismatch raises `FrameworkIntegrityError`. Execution-safety can stop before fallback
+  publication. Never turn either condition into a completed gap-only run in an acceptance record.
+
+Inspect verified outcomes and export/processing dispositions, not just repeated summary strings.
+All expected coverage costs require the particular walk's approval.
+
+## Acceptance
+
+1. **A. Inputs:** Compare admitted catalog/build and optional sibling handoffs, source/workspace
+   manifests, replay command hashes, runtime image and query/export pack identities. Enumerate
+   planned, non-applicable and uncovered source scopes.
+2. **B. Independent comparison:** Compare raw SARIF result counts and selectors with indexed
+   observations/support spans and independently resolve source bytes. Count native export rows,
+   truncation markers and seed dispositions against export manifests; separately verify database
+   tree hashes and one executed-versus-reused receipt per applicable path.
+3. **C. Gaps:** Group verified canonical outcomes and reconcile processing decisions, failed scopes,
+   zero-result reasons and export dispositions with native receipts and the approved expected list.
+4. **D. Baseline:** On authorized acceptance save corpus namespace and `stepwise.py accept` baseline
+   with database/query/export identities, counts and coverage. No CodeQL, compilation or live
+   acceptance ran for this documentation change.
+
+## Resume and invalidation
+
+Database identity binds scope/source/build environment, exact replay, runtime/assets and relevant
+releases; its entire bounded database tree must still verify. Query identity binds database tree,
+profile material/settings and query release, so query changes need not rebuild the database.
+Export identity binds database, export pack/settings, runner/export releases and seed rows; export
+changes do not authorize reuse of incompatible query/export bytes. Normalizer-release changes
+re-index retained SARIF without requiring a new query. Missing release declarations disable
+eligible checkpoint reuse rather than guessing compatibility.
+
+Predecessor reuse is an explicit admission path, not automatic discovery. Runtime selection,
+host pins and launch verification live in [image-pin verification](image-pin-verification.md) and
+[signing](signing.md); observation retention lives in
+[native-result provenance](../architecture/job-interchange.md#native-result-and-common-observation).
