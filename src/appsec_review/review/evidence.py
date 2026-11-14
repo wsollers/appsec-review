@@ -32,11 +32,14 @@ from appsec_review.retrieval.core import RetrievalCore, RetrievalGap, RetrievalI
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (  # make_gap is re-exported for compatibility
-    MAX_GAP_REASON, Admissibility, EvidenceRelation, Gap, GapClass, IntegrityError, Predicate, RelationKind,
+    MAX_GAP_REASON, Admissibility, Claim, EvidenceRelation, Gap, GapClass, IntegrityError, Predicate, RelationKind,
     make_gap,
 )
 from appsec_review.review import admission
 from appsec_review.review.obligations import ADMISSIBILITY_RULES_VERSION
+from appsec_review.review.warrants import (
+    WARRANT_RULE_VERSION, PredicateWarrant, WarrantScope, bind_warrant_relation_id, evaluate_warrant,
+)
 EVIDENCE_RELATION_KINDS = frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES})
 SATISFYING_ADMISSIBILITY = frozenset({Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE})
 
@@ -221,19 +224,10 @@ def binary_anchor(entity: Mapping[str, Any]) -> tuple[str, str, int, int] | None
     return parsed[0], parsed[1], int(location["start_line"]), int(location["end_line"])
 
 
-def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate, kind: RelationKind,
-                     entity_id: str, producing_cell_id: str, retrieval_receipt_sha256: str | None,
-                     rule_predicates: Iterable[Predicate] = (), round: int = 0,
-                     role: str | None = None) -> EvidenceRelation | Gap:
-    """Re-resolve one citation against the accepted manifest and return a relation or gap.
-
-    ``role`` is the citing cell's role value; it only matters for a ``contradicts`` citation of a guard or range fact.
-    """
-    predicate = Predicate(predicate)
-    kind = RelationKind(kind)
-    if kind not in EVIDENCE_RELATION_KINDS:
-        raise ValueError("evidence relations are supports, contradicts, or qualifies")
-
+def _resolve_citation_entity(
+    core: RetrievalCore, *, claim_id: str, predicate: Predicate, entity_id: str,
+    rule_predicates: Iterable[Predicate], round: int,
+) -> tuple[LogicalIdentity, Mapping[str, Any], bool, str, str, str, Admissibility] | Gap:
     def gap(reason: str) -> Gap:
         return make_gap(GapClass.EVIDENCE_GAP, claim_id, reason, predicate=predicate, round=round)
 
@@ -271,6 +265,27 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
     payload = entity.get("payload") if parsed.kind in GRAPH_KINDS else None
     admissibility = classify(parsed.kind, predicate, tuple(rule_predicates),
                              payload if isinstance(payload, Mapping) else None)
+    return parsed, entity, complete, shard_id, content_sha256, locator, admissibility
+
+
+def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate, kind: RelationKind,
+                     entity_id: str, producing_cell_id: str, retrieval_receipt_sha256: str | None,
+                     rule_predicates: Iterable[Predicate] = (), round: int = 0,
+                     role: str | None = None) -> EvidenceRelation | Gap:
+    """Re-resolve one citation against the accepted manifest and return a relation or gap.
+
+    ``role`` is the citing cell's role value; it only matters for a ``contradicts`` citation of a guard or range fact.
+    """
+    predicate = Predicate(predicate)
+    kind = RelationKind(kind)
+    if kind not in EVIDENCE_RELATION_KINDS:
+        raise ValueError("evidence relations are supports, contradicts, or qualifies")
+    resolved = _resolve_citation_entity(core, claim_id=claim_id, predicate=predicate, entity_id=entity_id,
+                                        rule_predicates=rule_predicates, round=round)
+    if isinstance(resolved, Gap):
+        return resolved
+    parsed, entity, complete, shard_id, content_sha256, locator, admissibility = resolved
+    payload = entity.get("payload") if parsed.kind in GRAPH_KINDS else None
     reason: str | None = None
     if (kind is RelationKind.CONTRADICTS and predicate is Predicate.MISSING_OR_INEFFECTIVE_GUARD
             and parsed.kind in _GUARD_KINDS and admissibility is Admissibility.DIRECT_FOR_MAPPED_PREDICATE):
@@ -291,3 +306,55 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
         shard_id=shard_id, content_sha256=content_sha256, locator=locator, complete=complete,
         producing_cell_id=producing_cell_id, retrieval_receipt_sha256=retrieval_receipt_sha256, reason=reason,
     )
+
+
+def resolve_warranted_relation(
+    core: RetrievalCore, *, claim: Claim, predicate: Predicate, kind: RelationKind,
+    entity_id: str, producing_cell_id: str, retrieval_receipt_sha256: str | None,
+    rule_predicates: Iterable[Predicate] = (), round: int = 0,
+    role: str | None = None, scope: WarrantScope | None = None,
+) -> tuple[EvidenceRelation, PredicateWarrant] | Gap:
+    """Re-resolve one citation and evaluate its scoped ``predicate-warrant/1`` record (T-152).
+
+    Used only when ``warrant_policy.enabled`` is ``True``; preserves ``requested_relation`` on the
+    emitted :class:`PredicateWarrant`, downgrades unwarranted ``supports``/``contradicts`` stances to
+    ``qualifies`` with a machine reason on the emitted :class:`EvidenceRelation`, and versions the
+    relation identity under ``WARRANT_RULE_VERSION``.
+    """
+    predicate = Predicate(predicate)
+    requested_kind = RelationKind(kind)
+    if requested_kind not in EVIDENCE_RELATION_KINDS:
+        raise ValueError("evidence relations are supports, contradicts, or qualifies")
+    resolved = _resolve_citation_entity(core, claim_id=claim.claim_id, predicate=predicate, entity_id=entity_id,
+                                        rule_predicates=rule_predicates, round=round)
+    if isinstance(resolved, Gap):
+        return resolved
+    parsed, entity, complete, shard_id, content_sha256, locator, admissibility = resolved
+    warrant = evaluate_warrant(
+        core, claim=claim, predicate=predicate, requested_relation=requested_kind,
+        entity=entity, admissibility=admissibility, complete=complete, shard_id=shard_id,
+        content_sha256=content_sha256, locator=locator,
+        retrieval_receipt_sha256=retrieval_receipt_sha256, role=role, scope=scope,
+    )
+    effective_kind = warrant.effective_relation
+    reason: str | None = None
+    if effective_kind is not requested_kind:
+        reason = f"warrant_{warrant.result.value}:{warrant.reason_code.value}"[:MAX_RELATION_REASON]
+    body = {
+        "claim_id": claim.claim_id, "predicate": predicate.value,
+        "requested_kind": requested_kind.value, "kind": effective_kind.value,
+        "entity_id": parsed.value, "entity_kind": parsed.kind.value, "admissibility": admissibility.value,
+        "shard_id": shard_id, "content_sha256": content_sha256, "locator": locator, "complete": complete,
+        "producing_cell_id": producing_cell_id, "retrieval_receipt_sha256": retrieval_receipt_sha256,
+        "manifest_sha256": core.manifest_sha256, "admissibility_rules": ADMISSIBILITY_RULES_VERSION,
+        "predicate_admission": admission.VERSION, "warrant_rule": WARRANT_RULE_VERSION,
+    }
+    if reason is not None:
+        body["reason"] = reason
+    relation = EvidenceRelation(
+        relation_id=make_id("evidence_relation", 1, body), claim_id=claim.claim_id, predicate=predicate,
+        kind=effective_kind, entity_id=parsed.value, entity_kind=parsed.kind.value, admissibility=admissibility,
+        shard_id=shard_id, content_sha256=content_sha256, locator=locator, complete=complete,
+        producing_cell_id=producing_cell_id, retrieval_receipt_sha256=retrieval_receipt_sha256, reason=reason,
+    )
+    return relation, bind_warrant_relation_id(warrant, relation.relation_id)

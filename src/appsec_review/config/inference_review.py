@@ -344,6 +344,26 @@ class VerificationSettings:
                          f"{field}.require_distinct_model_for_ship_blocking"))
 
 
+@dataclass(frozen=True, slots=True)
+class WarrantPolicySettings:
+    """``settings.warrant_policy`` (T-152, ``predicate-warrants/1``).
+
+    When ``enabled`` is ``True``, re-resolved evidence citations are bound to scoped propositions and polarity
+    through :mod:`appsec_review.review.warrants`, and R5 adjudication and ``score-factors/2`` require matching
+    decisive ``PredicateWarrant`` records. ``enabled = False`` (default) preserves ``evidence-admissibility/3``,
+    ``adjudication-rules/1`` and ``score-factors/2`` unchanged.
+    """
+
+    enabled: bool = False
+
+    @classmethod
+    def from_mapping(cls, value: object, field: str) -> "WarrantPolicySettings":
+        if value is None:
+            return cls()
+        table = _table(value, field, set(), {"enabled"})
+        return cls(_bool(table.get("enabled", False), f"{field}.enabled"))
+
+
 MEMO_ROLES = ("blue_control", "blue_reachability")
 _REDIS_ENDPOINT = re.compile(r"redis://(?P<host>[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?)"
                              r":(?P<port>[1-9][0-9]{0,4})(?:/(?P<db>[0-9]|1[0-5]))?")
@@ -456,6 +476,8 @@ class InferenceSecurityReviewSettings:
     source_dispositions: SourceDispositions = SourceDispositions()
     # Lead filters (``settings.lead_filters``, T-167): stylistic rule classes that are never leads; semantic.
     lead_filters: LeadFilters = LeadFilters()
+    # Scoped proposition/polarity warrants (``settings.warrant_policy``, T-152); semantic, off by default.
+    warrant_policy: WarrantPolicySettings = WarrantPolicySettings()
     # Blue-cell result memo (``settings.result_cache``); capacity, never in the semantic view.
     result_cache: ResultCacheSettings = ResultCacheSettings()
     decision_audit: DecisionAuditSettings = DecisionAuditSettings()
@@ -730,7 +752,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                        "roles", "routing", "scoring", "poc"},
                       {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates",
                        "attack_chains", "result_cache", "decision_audit", "source_dispositions",
-                       "lead_filters"})
+                       "lead_filters", "warrant_policy"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -882,6 +904,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         source_dispositions=SourceDispositions.from_mapping(settings.get("source_dispositions"),
                                                             f"{_PREFIX}.source_dispositions"),
         lead_filters=LeadFilters.from_mapping(settings.get("lead_filters"), f"{_PREFIX}.lead_filters"),
+        warrant_policy=WarrantPolicySettings.from_mapping(settings.get("warrant_policy"),
+                                                          f"{_PREFIX}.warrant_policy"),
         result_cache=ResultCacheSettings.from_mapping(settings.get("result_cache"), f"{_PREFIX}.result_cache"),
         decision_audit=DecisionAuditSettings.from_mapping(settings.get("decision_audit"),
                                                           f"{_PREFIX}.decision_audit"),

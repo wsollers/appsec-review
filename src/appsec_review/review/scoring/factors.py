@@ -32,6 +32,9 @@ from appsec_review.review.models import ClaimState, EvidenceRelation, Predicate,
 from appsec_review.review.numeric_reasoning import (
     NUMERIC_CWE_TABLE_VERSION, RULE as NUMERIC_REASONING_RULE, SCORING_MISSING_REASON, is_numeric_weakness,
 )
+from appsec_review.review.warrants import (
+    PredicateWarrant, WarrantBasis, WarrantReasonCode, warrant_satisfies_support,
+)
 
 FACTORS_VERSION = "score-factors/2"
 
@@ -227,10 +230,19 @@ class FactorInput:
     tags: tuple[TagAssignment, ...] | None = None       # None: no accepted tag assignments supplied
     tags_unavailable_reason: str = TAGS_NOT_SUPPLIED
     kev_listed: bool | None = None
+    warrants: Mapping[str, PredicateWarrant] | None = None
 
-    def supporting_for(self, predicate: Predicate) -> tuple[EvidenceRelation, ...]:
+    def raw_supporting_for(self, predicate: Predicate) -> tuple[EvidenceRelation, ...]:
         return tuple(item for item in self.supporting
                      if item.predicate is predicate and item.kind is RelationKind.SUPPORTS)
+
+    def supporting_for(self, predicate: Predicate) -> tuple[EvidenceRelation, ...]:
+        items = self.raw_supporting_for(predicate)
+        if self.warrants is None:
+            return items
+        return tuple(item for item in items
+                     if (warrant := self.warrants.get(item.relation_id)) is not None
+                     and warrant_satisfies_support(warrant))
 
 
 def _jsonable(value: Any) -> Any:
@@ -250,18 +262,44 @@ def locator_path(locator: str) -> str | None:
 def factor_input(*, claim_id: str, adjudication_id: str, claim_state: ClaimState, weakness_cwe: str | None,
                  affected_entities: Iterable[str], predicates: Iterable[Mapping[str, Any]],
                  relations: Iterable[EvidenceRelation], source: "EvidenceSource | None" = None,
-                 kev_listed: bool | None = None) -> FactorInput:
+                 kev_listed: bool | None = None,
+                 warrants: Iterable[PredicateWarrant] | None = None) -> FactorInput:
     """Build a claim's :class:`FactorInput` from its adjudication record and projected relations.
 
     Only relations the adjudication counted as supporting enter. ``source`` re-resolves their cited
     entities and supplies accepted tag assignments; without one, payload- and tag-derived factors
-    are missing with a reason.
+    are missing with a reason. When ``warrants`` is supplied, every counted supporting relation must
+    carry a matching established support warrant, and extractors reuse those exact warrants.
     """
+    relation_list = list(relations)
+    by_rel_id = {item.relation_id: item for item in relation_list}
     counted = {relation for item in predicates for relation in item.get("supporting", ())}
-    supporting = tuple(sorted((item for item in relations if item.relation_id in counted
+    supporting = tuple(sorted((item for item in relation_list if item.relation_id in counted
                                and item.kind is RelationKind.SUPPORTS), key=lambda item: item.relation_id))
     if {item.relation_id for item in supporting} != counted:
         raise ValueError("adjudication counts a supporting relation the projection does not hold")
+    warrant_map: Mapping[str, PredicateWarrant] | None = None
+    if warrants is not None:
+        indexed: dict[str, PredicateWarrant] = {}
+        for warrant in warrants:
+            if warrant.claim_id != claim_id:
+                raise ValueError("predicate warrant belongs to a different claim")
+            existing = indexed.get(warrant.relation_id)
+            if existing is not None and existing != warrant:
+                raise ValueError("conflicting predicate warrants for the same evidence relation")
+            matched = by_rel_id.get(warrant.relation_id)
+            if matched is not None and (
+                warrant.predicate is not matched.predicate
+                or not any(ref.entity_id == matched.entity_id and ref.content_sha256 == matched.content_sha256
+                           for ref in warrant.evidence_refs)
+            ):
+                raise ValueError("predicate warrant does not match evidence relation")
+            indexed[warrant.relation_id] = warrant
+        for item in supporting:
+            bound = indexed.get(item.relation_id)
+            if bound is None or not warrant_satisfies_support(bound):
+                raise ValueError("adjudication counts a supporting relation without an established support warrant")
+        warrant_map = MappingProxyType(dict(sorted(indexed.items())))
     entities: dict[str, ResolvedEntity] = {}
     unresolved: set[str] = set()
     tags: tuple[TagAssignment, ...] | None = None
@@ -283,7 +321,8 @@ def factor_input(*, claim_id: str, adjudication_id: str, claim_state: ClaimState
     return FactorInput(claim_id=claim_id, adjudication_id=adjudication_id, claim_state=ClaimState(claim_state),
                        weakness_cwe=weakness_cwe, supporting=supporting,
                        entities=MappingProxyType(dict(sorted(entities.items()))), unresolved=tuple(sorted(unresolved)),
-                       tags=tags, tags_unavailable_reason=reason, kev_listed=kev_listed)
+                       tags=tags, tags_unavailable_reason=reason, kev_listed=kev_listed,
+                       warrants=warrant_map)
 
 
 @runtime_checkable
@@ -457,21 +496,65 @@ class GuardAbsentExtractor:
         numeric = is_numeric_weakness(data.weakness_cwe)
         candidates = []
         dropped = 0
-        for relation in data.supporting_for(Predicate.MISSING_OR_INEFFECTIVE_GUARD):
-            if _effective_guard(data, relation):
-                continue
-            if relation.entity_kind in (Family.GUARD_FACT.value, Family.RANGE_FACT.value):
-                basis = "graph_fact"
-            elif relation.entity_kind == "tool_observation":
-                basis = "tool_observation"
-            else:
-                basis = "code_evidence"
-            if numeric and basis == "code_evidence":
-                dropped += 1
-                continue
-            candidates.append((basis, relation, {"entity_kind": relation.entity_kind}))
-        if not candidates and dropped:
-            return MissingFactor(self.factor, SCORING_MISSING_REASON)
+        if data.warrants is not None:
+            for relation in data.raw_supporting_for(Predicate.MISSING_OR_INEFFECTIVE_GUARD):
+                warrant = data.warrants.get(relation.relation_id)
+                if warrant is None:
+                    continue
+                if not warrant_satisfies_support(warrant):
+                    if numeric and warrant.reason_code in {
+                        WarrantReasonCode.NUMERIC_MACHINE_FACT_REQUIRED,
+                        WarrantReasonCode.OPERAND_OR_WIDTH_MISSING,
+                        WarrantReasonCode.OPERAND_MISMATCH,
+                        WarrantReasonCode.DESTINATION_BOUND_UNPROVED,
+                    }:
+                        dropped += 1
+                    continue
+                if numeric and warrant.basis is not WarrantBasis.NUMERIC_BOUND_CHECK:
+                    dropped += 1
+                    continue
+                if relation.entity_kind in (Family.GUARD_FACT.value, Family.RANGE_FACT.value):
+                    basis = "graph_fact"
+                elif relation.entity_kind == "tool_observation":
+                    basis = "tool_observation"
+                else:
+                    basis = "code_evidence"
+                if numeric and basis == "code_evidence":
+                    dropped += 1
+                    continue
+                candidates.append((basis, relation, {"entity_kind": relation.entity_kind}))
+            if not candidates and (
+                dropped or (
+                    numeric and any(
+                        item.predicate is Predicate.MISSING_OR_INEFFECTIVE_GUARD
+                        and item.requested_relation is RelationKind.SUPPORTS
+                        and item.reason_code in {
+                            WarrantReasonCode.NUMERIC_MACHINE_FACT_REQUIRED,
+                            WarrantReasonCode.OPERAND_OR_WIDTH_MISSING,
+                            WarrantReasonCode.OPERAND_MISMATCH,
+                            WarrantReasonCode.DESTINATION_BOUND_UNPROVED,
+                        }
+                        for item in data.warrants.values()
+                    )
+                )
+            ):
+                return MissingFactor(self.factor, SCORING_MISSING_REASON)
+        else:
+            for relation in data.supporting_for(Predicate.MISSING_OR_INEFFECTIVE_GUARD):
+                if _effective_guard(data, relation):
+                    continue
+                if relation.entity_kind in (Family.GUARD_FACT.value, Family.RANGE_FACT.value):
+                    basis = "graph_fact"
+                elif relation.entity_kind == "tool_observation":
+                    basis = "tool_observation"
+                else:
+                    basis = "code_evidence"
+                if numeric and basis == "code_evidence":
+                    dropped += 1
+                    continue
+                candidates.append((basis, relation, {"entity_kind": relation.entity_kind}))
+            if not candidates and dropped:
+                return MissingFactor(self.factor, SCORING_MISSING_REASON)
         outcome = _best(self.factor, candidates, "no counted direct support on missing_or_ineffective_guard")
         if numeric and isinstance(outcome, FactorValue):
             outcome = FactorValue(outcome.factor, outcome.value, outcome.citations,
