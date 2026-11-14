@@ -393,6 +393,18 @@ def test_leases_of_the_live_dagster_dispatch_are_not_retained_leases(tmp_path):
     assert message in stopped_reasons(config, root, current_dispatch="dispatch-live")
 
 
+def test_begin_never_loads_the_whole_pipeline_log(tmp_path, monkeypatch):
+    """A begin reads one fact from the run-wide log (RUN_STARTED present?) by streaming; loading the log
+    whole killed poc_generation__begin on smoke-cpp run 2026-11-14-0003 (2.06 GB log, 5 GiB cgroup)."""
+    from appsec_review.observability.events import PipelineLog
+    config, (job,), _ = fixture(tmp_path)
+    monkeypatch.setattr(PipelineLog, "read", lambda self: pytest.fail("begin loaded the whole pipeline log"))
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    assert PipelineLog(root).contains(lambda record: record["event_type"] == "RUN_STARTED")
+    assert outcome["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+
+
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
     config, (job,), _ = fixture(tmp_path)
     monkeypatch.setenv("MODEL_TOKEN", "do-not-disclose")

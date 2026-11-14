@@ -291,6 +291,11 @@ def materialize_attempt_input_manifest(
     return destination, sha256
 
 
+# A RETRIEVAL_QUERY audit record samples this many coverage gaps, each cut to this many characters.
+AUDIT_GAP_SAMPLE = 5
+AUDIT_GAP_CHARS = 160
+
+
 class RetrievalCore:
     """Read immutable shards for exactly one accepted run and manifest set."""
 
@@ -554,11 +559,17 @@ class RetrievalCore:
     def _audit(self, tool: str, request_hash: str, filters: Mapping[str, Any], response: Mapping[str, Any]) -> None:
         invocation = _ACTIVE_MCP.get()
         event = "RETRIEVAL_SUBOP_COMPLETED" if invocation else "RETRIEVAL_QUERY"
+        # The run-wide pipeline log is read by later jobs and by reporting; an audit record stays small.
+        # The full gap list is in the response the caller received; here it is counted, hashed and sampled.
+        gaps = [str(item) for item in response["coverage_gaps"]]
         self.log.write(event, run_id=self.run_id, job_id="retrieval", trigger="mcp",
                        orchestrator="retrieval", details={
                             "mcp_tool": tool, "manifest_sha256": self.manifest_sha256,
                             "query_sha256": request_hash, "filters": filters,
-                            "result_count": len(response["results"]), "gaps": response["coverage_gaps"],
+                            "result_count": len(response["results"]),
+                            "gap_count": len(gaps),
+                            "gaps_sha256": hashlib.sha256(canonical_json(gaps)).hexdigest(),
+                            "gaps": [gap[:AUDIT_GAP_CHARS] for gap in gaps[:AUDIT_GAP_SAMPLE]],
                             "truncated": response["truncated"], "duration_ms": response["duration_ms"],
                             "parent_invocation_id": invocation.get("mcp_invocation_id") if invocation else None,
                             "mcp_session_id": invocation.get("mcp_session_id") if invocation else self.mcp_session_id,

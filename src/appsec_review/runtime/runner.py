@@ -361,8 +361,8 @@ class JobRunner:
             raise
         atomic_json(attempt_root / "claim.json", claim)
         context = self._context_from_claim(job, claim)
-        records, _ = PipelineLog(run_root).read()
-        if not any(item.get("event_type") == "RUN_STARTED" for item in records):
+        # RUN_STARTED is the log's first record; a streaming scan stops there and never loads the run-wide log.
+        if not PipelineLog(run_root).contains(lambda item: item.get("event_type") == "RUN_STARTED"):
             PipelineLog(run_root).write("RUN_STARTED", run_id=run_id, trigger=trigger,
                                         orchestrator=correlation.get("system", "application"),
                                         details={"dagster_run_id": correlation.get("run_id")})
@@ -758,10 +758,10 @@ class JobRunner:
 
     @staticmethod
     def _failure_event_exists(context: JobContext, event: str, *, step_id: str | None = None) -> bool:
-        records, _ = PipelineLog(context.run_root).read()
-        return any(record["event_type"] == event and record["job_id"] == context.config.job_id
-                   and record["attempt_id"] == context.attempt_id
-                   and (step_id is None or record.get("step_id") == step_id) for record in records)
+        return PipelineLog(context.run_root).contains(
+            lambda record: record["event_type"] == event and record["job_id"] == context.config.job_id
+            and record["attempt_id"] == context.attempt_id
+            and (step_id is None or record.get("step_id") == step_id))
 
     def _fail_attempt(self, context: JobContext, claim: Mapping[str, Any], exc: BaseException) -> None:
         def write() -> None:
