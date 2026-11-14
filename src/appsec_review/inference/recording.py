@@ -76,6 +76,7 @@ class _Scope:
     counts: Counter = field(default_factory=Counter)
     replay_root: Path | None = None
     origins: dict[Path, str | None] = field(default_factory=dict)
+    seeded: set[tuple[str, Path, str]] = field(default_factory=set)
 
 
 _scope: _Scope | None = None
@@ -273,6 +274,14 @@ def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None]:
         if root in scope.origins and scope.origins[root] != origin:
             raise ExecutionContractError("model recording root identity changed during invocation")
         scope.origins[root] = origin
+        if mode == "record" and (mode, root, key) not in scope.seeded:
+            # An earlier attempt of this job in the same run may have recorded the same request
+            # (a repair re-runs the job under the same run root). This invocation appends after
+            # those recordings; a path that still exists afterwards is a competing writer.
+            directory = _directory(root, scope.job_id)
+            existing = sorted(directory.glob(f"{key}.*.json")) if directory.is_dir() else []
+            scope.counts[(mode, root, key)] = max(scope.counts[(mode, root, key)], len(existing))
+            scope.seeded.add((mode, root, key))
         sequence = scope.counts[(mode, root, key)]
         if sequence >= _MAX_SEQUENCE:
             raise ExecutionContractError("model recording sequence space exhausted")

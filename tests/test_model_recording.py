@@ -237,6 +237,26 @@ def test_identical_concurrent_calls_reserve_sequence_before_completion(tmp_path,
                 for _ in range(2)] == [0, 1]
 
 
+def test_a_rerun_attempt_appends_its_recordings_after_an_earlier_attempt(tmp_path, monkeypatch):
+    """A repair re-runs a job under the same run root; its model calls for the same request must be
+    recorded after the first attempt's, not refused. Regression for smoke-cpp run 2026-11-14-0001,
+    where dependency_intelligence attempt_0002 failed with "stale model recording exists at dispatch
+    admission"."""
+    source, first = _record_one(tmp_path, monkeypatch)
+    live = lambda *args, **kwargs: ModelResult({"ok": "again"}, input_tokens=1, output_tokens=1)
+    monkeypatch.setenv(MODE_ENVIRONMENT, "record")
+    with _scope(tmp_path, tmp_path / "runs" / "recorded"):
+        result = recorded(live)(_request(tmp_path), timeout_seconds=5)
+        second_call = recorded(live)(_request(tmp_path), timeout_seconds=5)
+    assert result.proposal == {"ok": "again"} and second_call.proposal == {"ok": "again"}
+    paths = sorted((source / "job_target_analysis_plan").glob("*.json"))
+    assert [path.name.rsplit(".", 2)[1] for path in paths] == ["0000", "0001", "0002"]
+    assert paths[0] == first
+    assert json.loads(paths[1].read_text())["sequence"] == 1
+    # Replay still serves the first attempt's recording for the first call.
+    assert _replay_one(tmp_path, source, monkeypatch).proposal == {"ok": True}
+
+
 @pytest.mark.parametrize("mutation", [
     lambda d: d.update(job_id="other"),
     lambda d: d.update(key="0" * 64),
