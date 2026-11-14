@@ -72,7 +72,9 @@ No-seed execution is not whole-program fallback, and a seeded neighborhood is no
 
 **Publication, retrieval and non-facts**
 
-Each accepted producer publishes immutable artifacts and index identities. Availability in a
+Each accepted producer publishes immutable artifacts and index identities, re-attesting shard
+custody (`IndexBuilder.attest_existing` / `build_or_reuse`) whenever an attempt reuses a
+content-fingerprinted shard already written under `data/indices`. Availability in a
 composed manifest is not permission to read it: see
 [input contracts](job-input-contracts.md#admission-and-read-receipts) and
 [accepted index sets](python-and-retrieval.md#accepted-index-sets). Source locations bind a snapshot,
@@ -170,6 +172,8 @@ No item or known limitation automatically joins a walk's user-approved expected-
   **T-032:** remaining binary-decompilation review integration/validation boundaries.
 - **T-147, T-157:** missing exact task/dataset and language/applicability metadata; generated
   inventory cells are declarations, not execution evidence.
+- **T-160:** construction-time validation of `IndexIdentity.producer["job"]` (`job_debug_symbol_indexing`
+  now emits `producer["job"]`; synthetic test fixtures remain to migrate).
 
 The SVF aggregate propagation detail is tracked by T-159, not silently assigned to T-126 or
 repaired by this document.

@@ -400,8 +400,10 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
    evidence-collection package observations. Verify their handoff-bound artifacts and snapshot
    agreement through [input contracts](../architecture/job-input-contracts.md#admission-and-read-receipts).
 2. Construct authenticated native-file, invocation and artifact inputs, preserving target versus
-   workspace domains, backing references, exclusions and upstream partial coverage.
-3. Retain the source Syft inventory if available and collect bounded Unity inventory from accepted
+   workspace domains, backing references, exclusions and upstream partial coverage, and write the
+   protected `native_inputs` source inventory (`appsec-review/native-inputs/1`).
+3. Retain the source Syft inventory if available and collect bounded `unity_inventory`
+   (`appsec-review/unity-inventory/1`) from accepted
    catalog paths. Missing source SBOM or unmerged artifact inventory remains named coverage loss;
    changed identity/custody is not an ordinary absent-input result.
 
@@ -416,12 +418,16 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
    Conservative maximal exposure retains conflicting evidence and defaults to production when
    no recognized scope exists; that default is not observed deployment.
 3. In `resolution.curate_components`, run bounded native curation over candidate/catalog paths.
-   Optional model proposals are validated against allowed identities and bounds; unavailable or
-   rejected proposals leave named gaps, not newly authoritative package identities.
+   Evidence records match accepted catalog files by `sha256` and `upstream`, accepting a
+   discovery-filled exact-byte `backing` (`sha256` and `size_bytes` matching the catalog file)
+   when the catalog published a workspace record with `backing: null`. Optional model proposals
+   are validated against allowed identities and bounds; unavailable or rejected proposals leave
+   named gaps, not newly authoritative package identities.
 4. In `resolution.investigate_components`, choose bounded in-scope metadata paths, authenticate
    their bytes, and validate metadata claims against retained source references. Preserve unread
    files, unresolved locality, conflicting claims and invalid proposals. Publish result,
-   discovery, model-artifact manifest and usage/metrics receipts.
+   `native_inference_inputs` (`appsec-review/native-inference-artifacts/1`), protected
+   `native_inference_io` (`appsec-review/native-inference-attempt/1`) and usage/metrics receipts.
 5. In `resolution.infer_repositories`, renormalize the investigated candidates. For unresolved
    native candidates only, optionally request bounded repository inference. Require matching
    candidate/schema, supported consistent host/owner/name/URL fields, supplied evidence references
@@ -450,7 +456,9 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
 ### `publication`
 
 1. In `publication.publish_sbom`, convert accepted source Syft using the pinned converter when
-   available. Verify the converter's retained artifact, source identity and exact document bytes;
+   available, retaining protected `native_sbom_conversion` (`appsec-review/container-execution/1`)
+   over the staged Syft inventory, execution receipt and raw streams. Verify the converter's
+   retained artifact, source identity and exact document bytes;
    integrity/infrastructure exceptions stop rather than masquerading as a conversion gap.
 2. Merge native discovery and Unity enrichment into bounded SPDX 2.3. Preserve provenance and
    conflicts; apply field/package/document/schema bounds. Conversion failure may leave partial

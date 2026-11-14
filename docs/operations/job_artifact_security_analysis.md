@@ -181,7 +181,9 @@ Generated task/tool bindings remain [T-147](../TODO.md); the following follows e
    content entering the customer-artifact contract. Deduplicate build artifacts by retained
    path/hash, not by filename alone.
 3. Validate target-intake provenance against the catalog handoff, unknown scope/delivery policy and
-   retained-object custody. Preserve producer and delivery reasons; no artifacts is a named gap.
+   retained-object custody, reading bound upstream JSON artifacts with size and SHA-256 checks and
+   normalizing structured `producer-gap/1` records alongside legacy strings (`gap_text`). Preserve
+   producer and delivery reasons; no artifacts is a named gap.
    This is an [accepted-input read](../architecture/job-input-contracts.md#admission-and-read-receipts),
    not a scan of arbitrary workspace files.
 

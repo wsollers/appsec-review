@@ -297,8 +297,12 @@ truncation state, URIs, and hashes. Absolute-path tool execution can bypass a PA
 cannot bypass process-exec observation by the syscall collector.
 
 The build driver's own stdout and stderr are not storage-capped. The executor connects them
-directly to run-owned files instead of pipe-buffering the complete streams in memory, and receipts
-hash those complete files. `output_bytes` bounds only the optional in-memory preview used by
+directly to run-owned files (`O_NOFOLLOW`) instead of pipe-buffering the complete streams in memory, and receipts
+hash those complete files. Before and after each captured command, the executor strips non-regular
+entries (symlinks, FIFOs, sockets and device nodes) from `capture_root`, recording
+`capture entry was not a regular file and was removed: <name>` (up to 16 names plus an overflow
+summary) in `parse_errors`, and refuses the capture if `events.jsonl` was replaced by a
+non-regular entry. `output_bytes` bounds only the optional in-memory preview used by
 parsers and event summaries; it is recorded as `preview_limit_bytes` and never truncates or replaces
 the retained file. Failed-build diagnostics read a bounded tail from that complete file on demand.
 Wrapper-call count remains independently capped and configurable. Every retained wrapper call keeps
@@ -437,7 +441,8 @@ limits. Gitleaks scans in directory mode with JSON output, exit code `1` meaning
 `--redact=100`. Exit codes `0` and `1` are successful scanner dispositions.
 
 The full gitleaks result set drives sanitization even when the configured finding-retention cap is
-reached. The cap limits stored normalized findings; it never limits secret removal. A finding in a
+reached. Temporary scan-corpus staging preserves symlinks without following them, and redaction
+unlinks any symlinked target before writing replacement bytes. The cap limits stored normalized findings; it never limits secret removal. A finding in a
 retained process-exec event redacts that event's executable path, argv, and envp values while
 preserving valid JSONL; a finding in any file event (open, rename, link, unlink, directory change)
 redacts all of its path fields. A finding in a retained response file replaces its contents.

@@ -102,7 +102,7 @@ Unknown keys and out-of-range values fail validation before the job runs.
 | `sii.weights` | churn 0.35, frequency 0.25, entropy 0.15, complexity 0.25 | SII weights. They must name exactly the four metrics, must be non-negative, and must include at least one positive weight. |
 | `sii.complexity_metric` | `cyclomatic` | The complexity measure that enters the SII: `cyclomatic` or `cognitive`. Both are always published. |
 | `sii.tier_1_share`, `sii.tier_2_share` | `0.05`, `0.15` | Tier sizes, rounded up. |
-| `filters.*` | see TOML | Globs that exclude generated, lockfile, fixture, documentation, and vendored paths from ranking; `test` globs for production-to-test churn; `formatting_balance_tolerance`. |
+| `filters.*` | see TOML | Globs that exclude generated, lockfile, fixture, documentation, and vendored paths from ranking; `test` globs for production-to-test churn; `formatting_balance_tolerance`. Bounded POSIX glob validation and compilation (`src/appsec_review/path_globs.py`) is shared with `job_inference_security_review` `source_dispositions`. |
 | `max_changes`, `bulk_change_file_threshold` | `20000`, `500` | Walk bound, and the file count above which a change is bulk. Bulk changes are excluded from ranking. |
 | `blame_max_files`, `blame_max_file_bytes` | `50`, 1 MiB | Bounds on per-file blame. Files beyond the bound get the `blame_bound_reached` gap. |
 | `recency_half_life_days` | `90` | Half-life of the exponential decay behind `recency_weighted_churn` (1–3650). |
