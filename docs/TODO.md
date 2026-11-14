@@ -187,6 +187,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5012 | [Publish a control-report projection and render the OWASP section of the final report](#t-5012-publish-a-control-report-projection-and-render-the-owasp-section-of-the-final-report) | review | open |
 | T-5013 | [Per-language OWASP subject recognisers (alternative to T-5011, not in addition)](#t-5013-per-language-owasp-subject-recognisers-alternative-to-t-5011-not-in-addition) | review | open |
 | T-5014 | [Partition OWASP independent review into cells and build the evidence resolver once](#t-5014-partition-owasp-independent-review-into-cells-and-build-the-evidence-resolver-once) | review | open |
+| T-5015 | [Repair plans force a job whose dataset contract widened and revalidate its descendants](#t-5015-repair-plans-force-a-job-whose-dataset-contract-widened-and-revalidate-its-descendants) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2823,6 +2824,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** partition verification into cells like validation, or set the pool to 1 and build the resolver once; expose a public `RetrievalCore.payload(identity, shard)` and use it.
 - **Done when:** a unit test shows one resolver and one manifest acceptance per unit of work; no OWASP module names a private `RetrievalCore` member.
 - **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/evidence.py`, `src/appsec_review/retrieval/core.py`, `src/appsec_review/orchestration/dagster/adapter.py`.
+
+### T-5015 — Repair plans force a job whose dataset contract widened and revalidate its descendants
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** T-162 made an added dataset or input a compatible contract change, but `plan_repair` (`src/appsec_review/runtime/repair.py`, the `compatible_dataset_change` branch) only accepts it when the changed job is already decided `RUN`; when the planner would reuse the accepted attempt it refuses with "dataset contract of <job> changed but its accepted attempt would be reused". On smoke-cpp run `2026-11-14-0005` the fault-15 fix added one declaration to `job_codeql_analysis`; the in-place repair was refused, and `--force-from job_codeql_analysis` produced an admissible plan of 5 `RUN` and 37 `INVALIDATE` decisions, discarding every downstream job instead of revalidating the unchanged ones (T-161), so the recovery cost the same as a fresh run and the run was restarted from the top. (The comparison itself also had to be fixed first: recorded JSON lists versus live tuples, `ecc73ff0`.)
+- **Scope:** when `compatible_dataset_change` holds and the job is decided `REUSE`, the planner converts the decision to `RUN` with a recorded reason ("dataset contract widened") rather than refusing; descendants of a job forced this way (or by `--force-from`) follow the T-161 path (`REVALIDATE`, reused at dispatch when every pinned producer is equivalent) instead of blanket `INVALIDATE`; `review-recover.sh` gains `--force-from <job>` so the operator path does not need a hand-run `plan-repair`.
+- **Done when:** unit tests in `tests/test_repair_admission.py` show (a) an added dataset on a job that would be reused yields an admissible plan with that job `RUN` and its unchanged descendants `REVALIDATE`, (b) `--force-from` on a mid-graph job yields `RUN` for it and `REVALIDATE` (not `INVALIDATE`) for descendants whose pins are unchanged, and (c) the operator script accepts `--force-from`; a smoke run repaired in place after a declaration-only fix resumes at the changed job.
+- **Refs:** `src/appsec_review/runtime/repair.py` (`plan_repair`, `compatible_dataset_change`), `src/appsec_review/runtime/resume.py` (REVALIDATE), `scripts/review-recover.sh`, `docs/operations/recovery-repair.md`, T-161, T-162, run `2026-11-14-0005` plan `test/tmp/plan-0005-force.json` (host-local).
 
 ## Legacy backlog
 
