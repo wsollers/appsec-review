@@ -653,7 +653,12 @@ def verify_decision_audit(run_root: Path, *, accepted: Any, published: Mapping[s
                           review: Mapping[str, Any], scope: Mapping[str, Any],
                           projection: Mapping[str, Any], projection_ref: Mapping[str, str],
                           findings: Sequence[tuple[Mapping[str, str], Mapping[str, Any]]]) -> AcceptedAudit:
-    """Join a verified review to its optional sidecar without modifying public state."""
+    """Verify control inputs under the fixed default 64 MiB bootstrap bound.
+
+    A strictly validated unavailable publication returns its frozen settings without
+    opening payloads. Available audits charge all control bytes, including original
+    anchors, against their configured budget before any manifest or shard is read.
+    """
     declarations = producer_contract(Path(run_root), accepted.handoff)
     declared = next((row for row in declarations if row.output_kind == "review_audit_metadata"), None)
     if "metadata_path" not in published:
@@ -679,9 +684,6 @@ def verify_decision_audit(run_root: Path, *, accepted: Any, published: Mapping[s
     frozen = store.document(config_ref)
     settings = DecisionAuditSettings.from_mapping(
         frozen["jobs"][REVIEW_JOB]["settings"].get("decision_audit"), "frozen.decision_audit")
-    store.settings = settings
-    if store.used_bytes > settings.max_input_bytes:
-        raise AuditBoundExceeded("decision audit max_input_bytes exhausted by metadata and configuration")
     origin = expected_origin(handoff=handoff, published=published, review=review, scope=scope,
                              policy=policy_document(settings))
     publication = read_publication(metadata, expected_origin=origin, settings=settings)
@@ -693,6 +695,9 @@ def verify_decision_audit(run_root: Path, *, accepted: Any, published: Mapping[s
     if publication.manifest is None:
         return AcceptedAudit(None, None, (), (), tuple(store.receipts[key] for key in sorted(store.receipts)),
                              settings, accepted.sha256, publication.unavailable_reason)
+    store.settings = settings
+    if store.used_bytes > settings.max_input_bytes:
+        raise AuditBoundExceeded("decision audit max_input_bytes exhausted by control bootstrap")
     reference = publication.manifest
     _require(reference.path == (store.audit_root / "manifest.json").as_posix(),
              "audit manifest is outside its declared manifest location")
