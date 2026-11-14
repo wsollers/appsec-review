@@ -104,7 +104,10 @@ def test_identity_change_invalidates_exact_downstream_closure(tmp_path: Path, fi
     changed_index = 0 if field == "validator_release" else 1
     assert any(reason_label in reason for reason in downstream_plan[changed_index].reasons)
     upstream_plan = upstream.plan(first["run_id"], fingerprint)
-    assert [item.action for item in upstream_plan] == ["RUN", "INVALIDATE"]
+    # The catalog's own validator identity changed too, so it is invalidated outright; otherwise only
+    # its upstream changed and the dispatch-time check decides.
+    assert [item.action for item in upstream_plan] == [
+        "RUN", "INVALIDATE" if field == "validator_release" else "REVALIDATE"]
 
 
 def test_target_change_invalidates_entire_closure(tmp_path: Path) -> None:
@@ -191,7 +194,7 @@ def test_corrupt_or_missing_artifact_and_force_from_invalidate_downstream(tmp_pa
     plan = graph.plan(first["run_id"], source_fingerprint(target))
     assert plan[0].action == "RUN"
     assert any(f"artifact {damage if damage == 'missing' else 'changed'}" in reason for reason in plan[0].reasons), plan[0].reasons
-    assert plan[1].action == "INVALIDATE"
+    assert plan[1].action == "REVALIDATE"
 
     forced = graph.plan(first["run_id"], source_fingerprint(target), force_from="job_target_catalog")
     assert forced[0].action == "RUN"  # corruption remains truthful before the forced boundary

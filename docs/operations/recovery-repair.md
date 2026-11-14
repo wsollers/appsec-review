@@ -105,7 +105,23 @@ appsec-review resume --run-id RUN --target TARGET
 
 The plan is deterministic and contains compatibility version, old binding identity, exact
 replacement release/deployment identity, attempt snapshots, every job decision, unit checkpoint
-decisions and refusal reasons. Review it before admission. A changed job dataset contract refuses
+decisions and refusal reasons. Review it before admission. Each job decision is one of `REUSE`
+(every identity, the accepted handoff, its artifacts and every pinned upstream handoff match),
+`RUN` (something of the job's own changed, named in `reasons`), `INVALIDATE` (an ancestor will run
+and this job's own identities, configuration or accepted handoff changed too, or the plan is a
+historical, successor or deferred-fingerprint forced plan) or `REVALIDATE` (an ancestor will run but
+everything that is this job's own still verifies, so the runtime decides at dispatch). A `REVALIDATE`
+job is reused at dispatch only when, after every existing refusal has passed, each producer it pinned
+is **equivalent** to the one accepted now: the same handoff, or a newer accepted handoff whose
+evidence-body `content_sha256` equals the pinned one
+([job interchange](../architecture/job-interchange.md), "Evidence header, evidence body and the
+content identity"). One differing producer, a pin without a `content_sha256`, or a producer pinned
+but no longer supplied means the job runs. Revalidation never crosses runs. The reused attempt is not
+rewritten: its claim keeps the older pins and its citations keep resolving to those immutable
+artifacts, which stay in the run, so `latest.json` of a producer may name a newer attempt than the
+one a revalidated consumer cites; that is expected, and `revalidation.json` beside the reused attempt
+(`appsec-review/attempt-revalidation/1`: dispatch, pinned and current handoff hash per producer, the
+shared `content_sha256`, `decided_at`) and the `REVALIDATED` pipeline event record why. A changed job dataset contract refuses
 the whole plan (`unsupported dataset compatibility change for <job>`) unless the change only
 *adds* datasets or typed input requirements and leaves every other field of the contract
 identical; such a compatible widening forces that job to `RUN` and the plan stays admissible,
@@ -194,8 +210,8 @@ Dagster dispatches and worker health, including queued dispatches not yet record
 Foreign, unadmitted, stale, live or uncertain work is refused; there is no force option.
 Keep operator actions serialized; `next`, `check`, `accept`, `recover` and `rewind` share a walk lock.
 
-Only previously touched `RUN`/`INVALIDATE` decisions return to `pending` (meaning **to rerun**,
-with explicit `replays` metadata). Independent `REUSE` acceptances and untouched pending jobs
+Only previously touched `RUN`/`INVALIDATE`/`REVALIDATE` decisions return to `pending` (meaning
+**to rerun**, or to revalidate at dispatch, with explicit `replays` metadata). Independent `REUSE` acceptances and untouched pending jobs
 stay unchanged. Before resetting, immutable hash-checked evidence under
 `runs/metadata/stepwise/RUN/rewinds/PLAN_SHA/` retains the entire prior state, plan, admission
 binding, check reports, accepted normalized keys, provenance and original claims.

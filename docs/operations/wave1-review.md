@@ -116,8 +116,11 @@ appsec-review resume --run-id 2026-10-08-0001 --target targets/appsec-multi-vuln
 ```
 
 `plan-resume` is read-only apart from its audit event. It explains `REUSE`, `RUN`, and downstream
-`INVALIDATE` decisions. A job is reused only when its configuration, implementation, schema,
-validator, target, upstream handoffs, accepted handoff, and run-owned artifacts resolve and match.
+`INVALIDATE` and `REVALIDATE` decisions. A job is reused only when its configuration, implementation,
+schema, validator, target, upstream handoffs, accepted handoff, and run-owned artifacts resolve and
+match; a `REVALIDATE` job (an ancestor runs, everything of its own matches) is reused at dispatch only
+if every producer it pinned is equivalent to the one then accepted (same handoff, or equal evidence
+`content_sha256`), and runs otherwise.
 Source history analysis also re-probes the target's mainline history identity, so a rewritten
 commit message reruns it and invalidates the plan even when the tree bytes are unchanged.
 Failed and interrupted attempts remain immutable; only a validated success updates `latest.json`.

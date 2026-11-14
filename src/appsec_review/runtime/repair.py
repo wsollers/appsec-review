@@ -17,7 +17,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 from appsec_review.storage.shared import immutable_bytes, reference, safe_path, verify_reference
 
 REPAIR_SCHEMA = "appsec-review/repair-admission/1"
-PLAN_SCHEMA = "appsec-review/repair-plan/1"
+PLAN_SCHEMA = "appsec-review/repair-plan/2"  # 2: decisions may be REVALIDATE (reuse decided at dispatch)
 COMPATIBILITY = "appsec-review/same-input-contracts/1"
 PUBLICATION_PROTOCOL = "appsec-review/committed-publication/1"
 WORKER_PROTOCOL = "appsec-review/recovery-worker/1"
@@ -338,10 +338,22 @@ def forced_by_repair(run_root: Path, job_id: str, handoff: Mapping[str, Any]) ->
     decision = next((item for item in repair["decisions"] if item["job_id"] == job_id), None)
     if decision is None:
         raise ValueError("job was not included in the admitted repair graph")
-    if decision["action"] == "REUSE":
+    if decision["action"] in {"REUSE", "REVALIDATE"}:
+        # REVALIDATE defers to the dispatch-time check: the accepted attempt is reused only when every
+        # identity still matches and every pinned upstream is equivalent to the one accepted now.
         return False
     claim = read_document(safe_path(run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
     return claim.get("repair_admission_sha256") != binding["repair"]["sha256"]
+
+
+def revalidation_admitted(run_root: Path, job_id: str) -> bool:
+    """Whether the admitted repair plan decided REVALIDATE for ``job_id`` (no binding: no)."""
+    binding = current_binding(run_root)
+    if not binding or binding["repair"] is None:
+        return False
+    repair = read_document(verify_reference(run_root, binding["repair"]))
+    decision = next((item for item in repair["decisions"] if item["job_id"] == job_id), None)
+    return decision is not None and decision["action"] == "REVALIDATE"
 
 
 def check_successor(config: AppConfig, run_root: Path, envelope: Mapping[str, Any] | None) -> None:

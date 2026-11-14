@@ -85,25 +85,27 @@ def test_branch_selective_force_and_repaired_job_preserve_independent_branch(tmp
     first = graph.run(target_root=tmp_path, source_fingerprint="none")
     root = config.runtime.runs_dir / first["run_id"]
     forced = graph.plan(first["run_id"], "none", force_from="job_b")
-    assert [item.action for item in forced] == ["REUSE", "RUN", "REUSE", "INVALIDATE"]
+    assert [item.action for item in forced] == ["REUSE", "RUN", "REUSE", "REVALIDATE"]
     old = (root / "data/configuration/resolved.json").read_bytes()
     old_claim = (root / "data/jobs/job_b/attempts/attempt_0001/claim.json").read_bytes()
     (tmp_path / "release-src/job_b/job.py").write_text("VERSION = 2\n")
     write_release(tmp_path, (job.job_id for job in jobs))
     plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
     assert plan["admissible"] is True
-    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "RUN", "REUSE", "INVALIDATE"]
+    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "RUN", "REUSE", "REVALIDATE"]
     assert canonical_json(plan) == canonical_json(plan_repair(config, root, jobs, "none", dependencies=dependencies))
     with pytest.raises(ValueError, match="plan-repair"):
         graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
     binding = admit_repair(config, root, jobs, plan, dependencies=dependencies)
     assert binding["repair"]
     second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
-    assert [item["action"] for item in second["decisions"]] == ["REUSE", "RUN", "REUSE", "INVALIDATE"]
+    assert [item["action"] for item in second["decisions"]] == ["REUSE", "RUN", "REUSE", "REVALIDATE"]
+    # job_b re-ran with the same evidence, so job_d's pins are equivalent and its attempt is reused.
+    assert second["jobs"]["job_d"]["revalidation"] == "REUSE"
     assert old == (root / "data/configuration/resolved.json").read_bytes()
     assert old_claim == (root / "data/jobs/job_b/attempts/attempt_0001/claim.json").read_bytes()
     assert calls.count(("job_c", "work.only", "attempt_0001")) == 1
-    assert len(calls) == 6
+    assert len(calls) == 5
 
 
 def _published_planning_context(tmp_path, orchestration):
@@ -780,10 +782,141 @@ def test_a_rerun_producer_publishes_an_equivalent_handoff_and_descendants_inheri
     second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"], force_from="job_a")
     a2, b2 = accepted("job_a"), accepted("job_b")
     assert a2["attempt_id"] != a1["attempt_id"] and second["jobs"]["job_a"]["handoff_sha256"] != first["jobs"]["job_a"]["handoff_sha256"]
-    # Same evidence, new attempt: the file hash differs, the content identity does not; the descendant inherits it.
+    # Same evidence, new attempt: the file hash differs, the content identity does not, so the
+    # revalidated descendant keeps its accepted attempt and its older, equivalent pin.
     assert a2["content_sha256"] == a1["content_sha256"]
-    assert b2["content_sha256"] == b1["content_sha256"]
-    assert b2["upstream_handoff_sha256"] != b1["upstream_handoff_sha256"]
+    assert second["jobs"]["job_b"]["revalidation"] == "REUSE" and b2 == b1
+
+
+def _accepted_handoff_of(root, job_id):
+    pointer = json.loads((root / f"data/jobs/{job_id}/latest.json").read_bytes())
+    return json.loads((root / pointer["handoff_path"]).read_bytes())
+
+
+def test_unchanged_descendants_are_revalidated_and_reused_when_the_upstream_republishes_equivalent_evidence(tmp_path):
+    config, jobs, calls = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    dependencies = {"job_a": (), "job_b": ("job_a",), "job_c": ("job_b",)}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    before = {job_id: _accepted_handoff_of(root, job_id) for job_id in ("job_b", "job_c")}
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
+    assert plan["admissible"] is True, plan["refusals"]
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "REVALIDATE", "REVALIDATE"]
+    for item in plan["decisions"][1:]:
+        assert item["handoff_sha256"] == json.loads(
+            (root / f"data/jobs/{item['job_id']}/latest.json").read_bytes())["handoff_sha256"]
+    admit_repair(config, root, jobs, plan, dependencies=dependencies)
+    second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
+    assert [item["action"] for item in second["decisions"]] == ["RUN", "REVALIDATE", "REVALIDATE"]
+    assert second["jobs"]["job_b"]["revalidation"] == second["jobs"]["job_c"]["revalidation"] == "REUSE"
+    assert len(calls) == 4  # only job_a executed again
+    after_a = _accepted_handoff_of(root, "job_a")
+    for job_id in ("job_b", "job_c"):
+        # Not rewritten: same accepted attempt, same pins to the older (equivalent) producer attempt.
+        assert _accepted_handoff_of(root, job_id) == before[job_id]
+        assert len(list((root / f"data/jobs/{job_id}/attempts").iterdir())) == 1
+    record = json.loads((root / "data/jobs/job_b/attempts/attempt_0001/revalidation.json").read_bytes())
+    assert record["schema"] == "appsec-review/attempt-revalidation/1"
+    assert record["producers"]["job_a"]["equivalence"] == "equivalent_content"
+    assert record["producers"]["job_a"]["pinned_handoff_sha256"] == before["job_b"]["upstream_handoff_sha256"]["job_a"]
+    assert record["producers"]["job_a"]["current_handoff_sha256"] == second["jobs"]["job_a"]["handoff_sha256"]
+    assert record["producers"]["job_a"]["content_sha256"] == after_a["content_sha256"]
+    assert after_a["attempt_id"] == "attempt_0002"
+    events = [json.loads(line) for line in (root / "data/logs/pipeline.jsonl").read_text().splitlines()]
+    assert [event["job_id"] for event in events if event["event_type"] == "REVALIDATED"] == ["job_b", "job_c"]
+
+
+def test_revalidated_descendant_runs_when_the_upstream_evidence_differs(tmp_path):
+    config, jobs, calls = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    def produce_not_applicable(context):
+        calls.append(("job_a", context.unit_id, context.job.attempt_id))
+        return {"value": 7, "terminal_status": "NOT_APPLICABLE"}
+    changed = replace(jobs[0], handler=produce_not_applicable, units=(Unit("work.only", produce_not_applicable),))
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, (changed, jobs[1]), "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "REVALIDATE"]
+    admit_repair(config, root, (changed, jobs[1]), plan, dependencies=dependencies)
+    second = GraphRunner(config, (changed, jobs[1]), dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
+    assert second["jobs"]["job_b"]["revalidation"] == "RUN"
+    assert len(list((root / "data/jobs/job_b/attempts").iterdir())) == 2
+    assert not (root / "data/jobs/job_b/attempts/attempt_0001/revalidation.json").exists()
+    assert len(calls) == 4
+
+
+def test_revalidated_job_whose_own_identity_changed_is_invalidated_with_its_reason(tmp_path):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    for job_id in ("job_a", "job_b"):
+        (tmp_path / f"release-src/{job_id}/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "INVALIDATE"]
+    assert plan["decisions"][1]["reasons"][0] == "transitive downstream invalidation"
+    assert "implementation identity changed" in plan["decisions"][1]["reasons"]
+    assert plan["decisions"][1]["handoff_sha256"] is None
+
+
+def test_revalidation_requires_an_admitted_decision_and_equivalence_of_every_pin(tmp_path):
+    from appsec_review.runtime.equivalence import equivalent_upstreams
+    config, jobs, calls = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    dependencies = {"job_a": (), "job_b": (), "job_c": ("job_a", "job_b")}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    pins = json.loads((root / "data/jobs/job_c/attempts/attempt_0001/claim.json").read_bytes())["upstream_handoffs"]
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "REUSE", "REVALIDATE"]
+    admit_repair(config, root, jobs, plan, dependencies=dependencies)
+    runner = JobRunner(config)
+    rerun = runner.run(jobs[0], run_id=first["run_id"], target_root=tmp_path, source_fingerprint="none")
+    current = {**pins, "job_a": rerun["handoff_sha256"]}
+    assert current != pins
+    # The admitted REVALIDATE decision and equivalent pins reuse the attempt without an explicit flag.
+    reused = runner.begin_or_reuse_attempt(jobs[2], run_id=first["run_id"], target_root=tmp_path,
+                                           source_fingerprint="none", upstream_handoffs=current)
+    assert reused["reused"] is True and reused["attempt_id"] == "attempt_0001"
+    assert reused["upstream_handoffs"] == pins  # the claim keeps the older, equivalent pins
+    # A pin that is not equivalent (no such accepted handoff) or a missing producer means a fresh attempt.
+    assert equivalent_upstreams(root, pins, {**current, "job_b": "0" * 64}) is None
+    assert equivalent_upstreams(root, pins, {"job_a": current["job_a"]}) is None
+    assert equivalent_upstreams(root, pins, current)["job_b"]["equivalence"] == "identical_handoff"
+    before = len(calls)
+    fresh = runner.begin_or_reuse_attempt(jobs[2], run_id=first["run_id"], target_root=tmp_path,
+                                          source_fingerprint="none", upstream_handoffs={"job_a": current["job_a"]})
+    assert not fresh.get("reused") and fresh["attempt_id"] != "attempt_0001"
+    assert len(calls) == before
+
+
+def test_a_pinned_handoff_without_a_content_identity_is_never_equivalent(tmp_path):
+    from appsec_review.runtime.equivalence import equivalent_upstreams
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    pins = json.loads((root / "data/jobs/job_b/attempts/attempt_0001/claim.json").read_bytes())["upstream_handoffs"]
+    rerun = JobRunner(config).run(jobs[0], run_id=first["run_id"], target_root=tmp_path, source_fingerprint="none",
+                                  trigger="manual")
+    current = {"job_a": rerun["handoff_sha256"]}
+    assert equivalent_upstreams(root, pins, current)["job_a"]["equivalence"] == "equivalent_content"
+    # Strip the identity from the pinned (older) handoff as a handoff predating the field would lack it.
+    path = root / "data/jobs/job_a/attempts/attempt_0001/handoff.json"
+    handoff = json.loads(path.read_bytes())
+    del handoff["content_sha256"]
+    path.write_bytes(canonical_json(handoff))
+    stripped = {"job_a": __import__("hashlib").sha256(path.read_bytes()).hexdigest()}
+    assert equivalent_upstreams(root, stripped, current) is None
 
 
 def _dataset(job_id):

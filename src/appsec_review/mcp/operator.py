@@ -366,7 +366,7 @@ class OperatorMcpAdapter:
         for decision in decisions[:200]:
             if (not isinstance(decision, dict) or not isinstance(decision.get("job_id"), str)
                     or not _JOB.fullmatch(decision["job_id"])
-                    or decision.get("action") not in {"RUN", "REUSE", "INVALIDATE"}):
+                    or decision.get("action") not in {"RUN", "REUSE", "INVALIDATE", "REVALIDATE"}):
                 raise ValueError("unsupported recorded resume decision")
             item = {"job_id": decision["job_id"], "action": decision["action"]}
             digest = decision.get("handoff_sha256")

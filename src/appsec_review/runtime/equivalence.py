@@ -93,6 +93,44 @@ def pinned_upstream_content(run_root: Path, pins: Mapping[str, str]) -> dict[str
     return result
 
 
+REVALIDATION_SCHEMA = "appsec-review/attempt-revalidation/1"
+
+
+def equivalent_upstreams(run_root: Path, pinned: Mapping[str, str],
+                         current: Mapping[str, str]) -> dict[str, dict[str, Any]] | None:
+    """Per producer, whether the handoff a consumer pinned is equivalent to the one accepted now.
+
+    Equal whole-file hashes are trivially equivalent. Otherwise both handoffs must carry a
+    ``content_sha256`` and the two must be equal; a handoff without one, a producer pinned but no
+    longer supplied (or supplied but not pinned) or any differing identity means ``None``: not
+    equivalent, the consumer runs. Same run root only; the pins are resolved inside it.
+    """
+    from appsec_review.retrieval.core import RetrievalIntegrityError, _accepted_handoff
+    if set(pinned) != set(current):
+        return None
+    record: dict[str, dict[str, Any]] = {}
+    for producer in sorted(pinned):
+        pinned_sha, current_sha = str(pinned[producer]), str(current[producer])
+        entry: dict[str, Any] = {"pinned_handoff_sha256": pinned_sha, "current_handoff_sha256": current_sha}
+        if pinned_sha == current_sha:
+            entry["content_sha256"] = None
+            entry["equivalence"] = "identical_handoff"
+        else:
+            try:
+                old_handoff, _ = _accepted_handoff(run_root, producer, pinned_sha)
+                new_handoff, _ = _accepted_handoff(run_root, producer, current_sha)
+            except RetrievalIntegrityError:
+                return None  # a pin that does not resolve to exactly one accepted handoff is not equivalent
+            old_identity, new_identity = old_handoff.get("content_sha256"), new_handoff.get("content_sha256")
+            if (not isinstance(old_identity, str) or not _SHA.fullmatch(old_identity)
+                    or old_identity != new_identity):
+                return None
+            entry["content_sha256"] = old_identity
+            entry["equivalence"] = "equivalent_content"
+        record[producer] = entry
+    return record
+
+
 def handoff_content_sha256(run_root: Path, handoff: Mapping[str, Any], *, gaps: list[Any]) -> str | None:
     """The identity the runner records on an accepted handoff, or ``None`` when it cannot be transitive."""
     upstream = pinned_upstream_content(run_root, handoff.get("upstream_handoff_sha256", {}))

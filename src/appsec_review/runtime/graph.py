@@ -211,13 +211,16 @@ class GraphRunner:
                                                 "handoff_sha256": decision.handoff_sha256,
                                                 "attempt_root": str((run_root / pointer["handoff_path"]).parent)}
                         continue
-                    outcome = runner.run(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
+                    execute = runner.run_or_reuse if decision.action == "REVALIDATE" else runner.run
+                    outcome = execute(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
                         target_root=job_target, source_fingerprint=job_fingerprint,
                         upstream_handoffs=selected_upstream)
                     completed_handoffs[job.job_id] = str(outcome["handoff_sha256"])
                     if job.propagate_handoff:
                         upstream[job.job_id] = str(outcome["handoff_sha256"])
                     outcomes[job.job_id] = {"decision": decision.as_dict(), **outcome}
+                    if decision.action == "REVALIDATE":
+                        outcomes[job.job_id]["revalidation"] = "REUSE" if outcome.get("reused") else "RUN"
             except BaseException as exc:
                 PipelineLog(run_root).write("GRAPH_FAILED", run_id=run_id, level="ERROR", trigger=trigger,
                     orchestrator=dict(orchestration or {}).get("system", "application"),

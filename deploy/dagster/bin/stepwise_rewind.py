@@ -150,7 +150,7 @@ def verify_plan(run_root, state, plan, runtime):
             or [(item["job_id"], item["name"]) for item in state.jobs]
             != [(item["job_id"], item["name"]) for item in state.topology]
             or plan["dependencies"] != {item["job_id"]: item["dependencies"] for item in state.topology}
-            or any(item["action"] not in {"RUN", "INVALIDATE", "REUSE"} for item in plan["decisions"])):
+            or any(item["action"] not in {"RUN", "INVALIDATE", "REUSE", "REVALIDATE"} for item in plan["decisions"])):
         raise StateError("plan decisions/dependencies do not match the stepwise topology")
     manifest = read_document(run_root / "data/configuration/manifest.json")
     if (runtime["resolved_config_sha256"] != plan["resolved_config_sha256"]
@@ -226,7 +226,7 @@ def apply_rewind(root, path, acceptance_root, state, plan, runtime, masks):
             raise StateError("incomplete rewind conflicts with current operator state")
     verify_attempts(run_root, state, plan)
     affected = [entry["job_id"] for entry in plan["decisions"]
-                if entry["action"] in {"RUN", "INVALIDATE"}
+                if entry["action"] in {"RUN", "INVALIDATE", "REVALIDATE"}
                 and (state.job(entry["job_id"])["status"] != "pending"
                      or state.job(entry["job_id"])["dagster_run_ids"])]
     evidence = {"schema": "appsec-review/stepwise-rewind/1", "plan": plan, "binding": binding,
