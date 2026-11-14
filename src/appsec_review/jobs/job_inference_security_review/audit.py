@@ -6,9 +6,10 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
-from appsec_review.config.inference_review import DecisionAuditSettings
+from appsec_review.config.inference_review import DecisionAuditSettings, semantic_settings_sha256
 from appsec_review.review.cells import RECEIPT_SCHEMA, _RECEIPT_KEYS, _valid_reused_from
 from appsec_review.review.decision_audit import contracts as c
+from appsec_review.review.decision_audit.metadata import policy_document
 from appsec_review.review.decision_audit.projection import (
     Document, ProjectionInputs, link, project,
 )
@@ -21,7 +22,10 @@ from appsec_review.review.ledger import project as ledger_project, verify_events
 from appsec_review.review.models import CellStatus, IntegrityError
 from appsec_review.review.models import Role
 from appsec_review.review.scope import AcceptedScope
+from appsec_review.runtime.release import read_document
+from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import canonical_json
+from appsec_review.storage.shared import safe_path
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,94 @@ class AuditInputs:
     triage: Mapping[str, Any]
     additional_expected_cells: Mapping[str, str]
     verification_inputs: tuple[Mapping[str, Any], ...] = ()
+
+
+def trusted_origin(unit: UnitContext, scope: AcceptedScope, handoff: Mapping[str, Any],
+                   settings: DecisionAuditSettings) -> tuple[c.Origin, Mapping[str, Any]]:
+    """Bind the sidecar to the executing attempt, never to self-declared audit metadata.
+
+    The runner already admits this claim; compare its persisted identity to the live context
+    and frozen configuration before deriving an origin. Control reads use the existing bounded
+    readers independently of the optional projection's capacity.
+    """
+    job = unit.job
+    root = Path(job.run_root).absolute()
+    attempt = f"data/jobs/job_inference_security_review/attempts/{job.attempt_id}"
+    try:
+        if (root != root.resolve() or root.name != job.run_id or scope.run_root != root
+                or Path(job.attempt_root).absolute() != root / attempt
+                or job.config.job_id != "job_inference_security_review"):
+            raise IntegrityError("audit context has a foreign run or attempt")
+        claim_path = safe_path(root, attempt + "/claim.json")
+        manifest_path = safe_path(root, "data/configuration/manifest.json")
+        if not claim_path.is_file() or not manifest_path.is_file():
+            raise IntegrityError("audit control anchor is not a regular file")
+        claim = read_document(claim_path)
+        manifest = read_document(manifest_path)
+        expected = {
+            "schema": "appsec-review/attempt-claim/1", "run_id": job.run_id,
+            "job_id": job.config.job_id, "attempt_id": job.attempt_id, "attempt_path": attempt,
+            "repository_root": str(job.repository_root), "source_fingerprint": job.source_fingerprint,
+            "upstream_handoffs": dict(job.upstream_handoffs),
+        }
+        if any(claim.get(key) != value for key, value in expected.items()):
+            raise IntegrityError("audit attempt claim differs from executing context")
+        target = job.evidence_target_snapshot or job.source_fingerprint
+        if (claim.get("evidence_target_snapshot", claim["source_fingerprint"]) != target
+                or (scope.run_id, scope.target_snapshot) != (job.run_id, target)):
+            raise IntegrityError("audit scope differs from the claimed target")
+        manifest_path = scope.manifest_path.relative_to(root).as_posix()
+        if (job.input_manifest_path != scope.manifest_path
+                or job.input_manifest_sha256 != scope.manifest_sha256
+                or claim.get("input_manifest_path") != manifest_path
+                or claim.get("input_manifest_sha256") != scope.manifest_sha256):
+            raise IntegrityError("audit scope differs from the attempt's admitted manifest")
+        config_ref = {"path": "data/configuration/resolved.json", "sha256": claim["resolved_config_sha256"]}
+        if manifest.get("resolved_sha256") != config_ref["sha256"]:
+            raise IntegrityError("audit claim differs from frozen configuration identity")
+        reader = BoundReader(root, DecisionAuditSettings())
+        frozen = reader.json(config_ref)
+        frozen_settings = frozen["jobs"][job.config.job_id]["settings"]
+        if (frozen_settings != job.config.settings or
+                DecisionAuditSettings.from_mapping(frozen_settings.get("decision_audit"), "frozen.decision_audit")
+                != settings):
+            raise IntegrityError("audit settings differ from frozen configuration")
+        scope_ref = unit.output("scope.accept_manifest")["artifact"]
+        ledger = unit.output("publication.publish_claim_ledger")
+        package_refs = tuple(unit.output(f"packages.assemble_{lane}_packages")["artifact"] for lane in ("lead", "hunt"))
+        for ref in (scope_ref, handoff, ledger["ledger"], ledger["projection"], *package_refs):
+            if not ref["path"].startswith(attempt + "/"):
+                raise IntegrityError("audit anchor belongs to a foreign attempt")
+            safe_path(root, ref["path"])
+        accepted = reader.json(scope_ref)
+        if (accepted["schema"] != "appsec-review/inference-review-accepted-scope/1"
+                or (accepted["run_id"], accepted["target_snapshot"], accepted["manifest_sha256"],
+                    accepted["manifest_path"]) != (job.run_id, target, scope.manifest_sha256, manifest_path)):
+            raise IntegrityError("audit scope artifact differs from accepted scope")
+        body = reader.json(handoff)
+        if (body["schema"] != "appsec-review/inference-review-handoff/3"
+                or (body["run_id"], body["accepted_manifest_sha256"], body["configuration_sha256"],
+                    body["ledger_head_sha256"], body["projection_sha256"]) !=
+                (job.run_id, scope.manifest_sha256, semantic_settings_sha256(job.config.typed_settings),
+                 ledger["ledger_head_sha256"], ledger["projection"]["sha256"])):
+            raise IntegrityError("audit handoff differs from original review anchors")
+        for lane, ref in zip(("lead", "hunt"), package_refs):
+            packages = reader.json(ref)
+            key = "lead_package_manifest_sha256" if lane == "lead" else "package_manifest_sha256"
+            if (packages["schema"] != "appsec-review/inference-review-lane-packages/1"
+                    or packages["lane"] != lane or packages["package_manifest_content_sha256"] != body[key]):
+                raise IntegrityError("audit handoff differs from original package set")
+        policy = policy_document(settings)
+        origin = c.Origin(
+            job.run_id, job.attempt_id, target, scope.manifest_sha256, handoff["sha256"],
+            body["ledger_head_sha256"], body["projection_sha256"], body["package_manifest_sha256"],
+            c.HashLink(body["lead_package_manifest_sha256"], None), config_ref["sha256"],
+            c.HashLink(None, c.AbsenceReason.NOT_PRODUCED), c.HashLink(None, c.AbsenceReason.NOT_PRODUCED),
+            policy["version"], policy["sha256"])
+        audit_directory(root, job.attempt_root, origin)
+        return origin, config_ref
+    except (OSError, KeyError, TypeError, ValueError, AuditUnavailable) as exc:
+        raise IntegrityError("cannot verify decision audit publication identity") from exc
 
 
 def publish_decision_audit(*, run_root: Path, attempt_root: Path, origin: c.Origin,

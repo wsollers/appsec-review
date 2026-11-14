@@ -58,7 +58,7 @@ from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
-from . import chains, stages
+from . import audit, chains, stages
 from .datasets import CONTRACT, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
 from .teams import PackageWork, ReviewContext, lane_failure, run_lane
@@ -727,13 +727,40 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:
             gaps.append("review_incomplete: no consumer may present this review as complete")
+        scope = _scope(unit)
+        origin, config_ref = audit.trusted_origin(unit, scope, artifact, settings.decision_audit)
+        inputs = audit.AuditInputs(
+            handoff=artifact, ledger=ledger_out["ledger"], projection=ledger_out["projection"],
+            lanes=tuple(unit.output(f"{lane}_review.teams")["artifact"] for lane in ("lead", "hunt")),
+            package_sets=tuple(unit.output(f"packages.assemble_{lane}_packages")["artifact"]
+                               for lane in ("lead", "hunt")),
+            adjudications=unit.output("adjudicate.apply_policy")["artifact"],
+            scores=unit.output("scoring.score_claims")["artifact"], triage=triage_out["artifact"],
+            additional_expected_cells=chain_cells(unit),
+            verification_inputs=(config_ref, unit.output("scope.accept_manifest")["artifact"]))
+        audit_gap = False
+        try:
+            published_audit = audit.publish_decision_audit(
+                run_root=unit.job.run_root, attempt_root=unit.job.attempt_root, origin=origin, scope=scope,
+                collection=triaged_collection(unit, scope) if settings.decision_audit.enabled else None,
+                inputs=inputs, settings=settings.decision_audit)
+        except audit.AuditUnavailable as exc:
+            published_audit = audit.publish_descriptor(
+                run_root=unit.job.run_root, attempt_root=unit.job.attempt_root, origin=origin,
+                settings=settings.decision_audit, unavailable_reason=exc.reason)
+            audit_gap = exc.reason != "disabled"
+            if audit_gap:
+                gaps.append(f"decision_audit_{exc.reason}: protected audit unavailable ({str(exc)[:200]})")
+            unit.job.events.write("INFERENCE_REVIEW_DECISION_AUDIT_UNAVAILABLE",
+                                  reason=exc.reason, detail=str(exc)[:200])
         unit.job.events.write("INFERENCE_REVIEW_PUBLISHED", status=handoff["status"],
                               review_incomplete=accounting.review_incomplete, claim_count=accounting.claims_total,
                               finding_count=len(findings), ledger_head_sha256=projection.head)
         return {"schema": SCHEMA, "artifact": artifact, "status": handoff["status"],
                 "review_incomplete": accounting.review_incomplete, "ledger_head_sha256": projection.head,
                 "item_count": accounting.claims_total, "gaps": gaps,
-                "terminal_status": "SUCCEEDED" if handoff["status"] == "COMPLETE" else "COMPLETED_WITH_GAPS"}
+                "terminal_status": "SUCCEEDED" if handoff["status"] == "COMPLETE" and not audit_gap
+                else "COMPLETED_WITH_GAPS", **published_audit.unit_output()}
 
     units = (
         Unit("scope.accept_manifest", accept),
