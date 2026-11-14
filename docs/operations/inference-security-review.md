@@ -163,6 +163,11 @@ raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts;
 default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
 The overlay leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
 7 review teams.
+[`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml) is the
+capacity for a [smoke-target](test-targets.md#smoke-runs) review under `dev`: 8 review teams, the
+`inference_teams` pool at 2 so both lane units run, and prod's four I/O slots and scanner pool of 4.
+It changes no model, package or budget setting; the dev job budget (6,000,000 output tokens) still
+bounds a smoke run, and exhausting it records budget gaps, not a failure.
 Profile defaults are applied before capacity overlays, and the final resolved settings are frozen
 per run. Existing overlays are not silently overwritten.
 

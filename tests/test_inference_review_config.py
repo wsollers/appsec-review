@@ -190,6 +190,33 @@ scanner = 2
 """
 
 
+@pytest.mark.parametrize("name, teams, io_slots, scanner", [
+    ("prod-capacity-overlay.toml", None, 4, 4),
+    ("smoke-capacity-overlay.toml", 8, 4, 4),
+])
+def test_checked_in_capacity_overlays_set_only_capacity(tmp_path: Path, name: str, teams: int | None,
+                                                        io_slots: int, scanner: int) -> None:
+    """Each overlay under test/acceptance validates as capacity and lands where its documentation says:
+    the smoke overlay raises the team count and takes prod's I/O slots and scanner pool; the prod overlay
+    leaves the profile's team count alone."""
+    import tomllib
+    path = ROOT / "test" / "acceptance" / name
+    document = tomllib.loads(path.read_text(encoding="utf-8"))
+    keys = overlay_capacity_keys(document)
+    expected = {"orchestration.dagster.pools.scanner", "review_policy.resources.io_slots"}
+    if teams is not None:
+        expected |= {f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.inference_teams"}
+    assert set(keys) == expected
+    base = _variant(tmp_path / "base")
+    config = load_config(tmp_path / "base" / "appsec-review.toml", overlay=path)
+    assert _settings(config).teams.review_teams == (teams if teams is not None else _settings(base).teams.review_teams)
+    assert config.review_policy.resources.io_slots == io_slots
+    assert config.dagster.pool_limits["scanner"] == scanner
+    assert config.overlay_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+    # Capacity never reaches the semantic settings that fingerprint cells.
+    assert semantic_settings_sha256(_settings(config)) == semantic_settings_sha256(_settings(base))
+
+
 def test_capacity_overlay_is_merged_frozen_and_hashed_as_its_own_layer(tmp_path: Path) -> None:
     base = _variant(tmp_path / "base")
     config = _variant(tmp_path / "overlaid", overlay=OVERLAY)

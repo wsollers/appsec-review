@@ -101,3 +101,21 @@ git clone https://github.com/wsollers/appsec-review-smoke-guide.git ..\appsec-re
   `targets/` writable at `/opt/app/targets`, because acquisition and builds write into it.
 
 The full download steps are in the README section "Download the acceptance target".
+
+## Smoke runs
+
+A smoke review runs the checked-in `dev` profile (Haiku for every role) with the smoke capacity
+overlay, which is the only checked-in setting that differs from an ordinary dev run:
+
+```bash
+scripts/review-start.sh --target appsec-review-smoke-cpp --overlay smoke-capacity-overlay.toml
+```
+
+[`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml)
+sets 8 review teams (dev: 3), the `inference_teams` pool at 2, and prod's four I/O slots and scanner
+pool of 4. An overlay is capacity only ([inference security review](inference-security-review.md#capacity-and-local-runs)):
+it cannot change the models, the package partitioning or the job budgets, so a smoke run keeps the dev
+job budget of 6,000,000 output tokens and 200 team packages. On the cpp smoke the hunt lane declares
+about 500 packages and the budget is exhausted after roughly 1,700 model turns; the cells that follow
+record budget gaps and the handoff is `DEGRADED`, which is expected under `dev`. Capacity is excluded
+from cell fingerprints, so a run under the overlay reuses the cells of a run under `--overlay none`.

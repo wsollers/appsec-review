@@ -123,6 +123,11 @@ implied by `--profile prod`.
 Confirm the host and builder topology can support it first. A resource-budget mismatch with
 an active run or recorded lease is refused even with `--force`.
 
+For a smoke-target review (`targets/appsec-review-smoke-<lang>`, see
+[test targets](test-targets.md#smoke-runs)), select `smoke-capacity-overlay.toml`: 8 review teams
+instead of dev's 3, the prod I/O slots and scanner pool, and nothing else. It is capacity only, so a
+run under it reuses cells from a run under `none` and produces the same canonical outputs.
+
 ## Features controlled in TOML, not launch flags
 
 The checked-in defaults below come from [`appsec-review.toml`](../../appsec-review.toml).
