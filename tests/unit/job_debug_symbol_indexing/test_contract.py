@@ -176,7 +176,7 @@ def test_every_published_document_lands_inside_its_glob_with_its_declared_schema
     assert _shard_claims(index["shard_id"]) == ["normalized_symbols"]
     assert index["relative_path"] == f"data/indices/{INDEX_NAME}/{index['fingerprint']}.sqlite"
     assert (run_root / index["relative_path"]).is_file()
-    assert index["producer"] == {"job_id": JOB_ID, "compiler_target": "clang", "lane": "clang_dwarf",
+    assert index["producer"] == {"job": JOB_ID, "compiler_target": "clang", "lane": "clang_dwarf",
                                  "reader_identity": json.loads((run_root / decision["artifact"]["path"]).read_text())["reader_identity"]}
     assert published["index_manifest"]["path"] == "data/indices/manifests/debug-symbol-indexing-attempt_0001.json"
     assert not (run_root / "data/jobs/job_debug_symbol_indexing/attempts/attempt_0001/artifacts/debug-symbols/executions").exists(), \

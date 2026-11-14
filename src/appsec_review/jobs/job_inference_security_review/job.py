@@ -137,7 +137,7 @@ def _check_isolation(scope: AcceptedScope) -> None:
 def _scope(unit: UnitContext) -> AcceptedScope:
     manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     scope = accept_manifest(unit.job.run_root, manifest_path=manifest_path,
-                            manifest_sha256=manifest_sha)
+                            manifest_sha256=manifest_sha, dispositions=_settings(unit).source_dispositions)
     pinned = unit.output("scope.accept_manifest")["manifest_sha256"] if unit.unit_id != "scope.accept_manifest" else None
     if pinned is not None and scope.manifest_sha256 != pinned:
         raise IntegrityError("accepted manifest changed during the review attempt")
@@ -307,7 +307,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             return {"artifact": _write(unit, "lead-triage.json", document), "enabled": False,
                     "counts": document["counts"], "gaps": [], "terminal_status": "SUCCEEDED"}
         scope = _scope(unit)
-        collection = collect_leads(scope)
+        collection = collect_leads(scope, filters=settings.lead_filters)
         reference = load_cwe_reference(unit.job.run_root)
         guidance = load_triage_guidance(repo(unit))
         pin_bundle(unit.job.run_root, guidance.bundle, files={"prompt.md": guidance.text})
@@ -337,7 +337,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
     def triaged_collection(unit: UnitContext, scope: AcceptedScope):
         """The lead collection with the triage step's assessed severities (the scanner's own when triage is off)."""
         document = _read(unit.job.run_root, unit.output("triage.lead_severity")["artifact"])
-        return collect_leads(scope, assessments_from_document(document) if document.get("enabled") else None)
+        return collect_leads(scope, assessments_from_document(document) if document.get("enabled") else None,
+                             filters=_settings(unit).lead_filters)
 
     # packages -----------------------------------------------------------------------------------
     def assemble(lane: Lane) -> Callable[[UnitContext], Mapping[str, Any]]:

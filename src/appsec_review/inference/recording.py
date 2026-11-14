@@ -138,7 +138,9 @@ def _json_tree(value: Any) -> None:
         elif item is None or type(item) is bool:
             pass
         elif type(item) is int:
-            if not -(2 ** 63) <= item < 2 ** 63:
+            # Signed 64-bit below, unsigned 64-bit above: debug-symbol addresses are unsigned 64-bit
+            # (`appsec_review.debug_symbols.contract`) and the review tool catalog declares that bound.
+            if not -(2 ** 63) <= item < 2 ** 64:
                 raise ExecutionContractError("model recording integer exceeds its bound")
         elif type(item) is float and math.isfinite(item):
             pass
@@ -257,7 +259,7 @@ def _origin(root: Path, *, create: bool) -> str | None:
     return document["recording_id"]
 
 
-def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None]:
+def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None, bool]:
     with _lock:
         if mode == "record":
             root = _run_recordings(scope)
@@ -273,14 +275,21 @@ def _admit(scope: _Scope, mode: str, key: str) -> tuple[Path, int, str | None]:
         if root in scope.origins and scope.origins[root] != origin:
             raise ExecutionContractError("model recording root identity changed during invocation")
         scope.origins[root] = origin
-        sequence = scope.counts[(mode, root, key)]
-        if sequence >= _MAX_SEQUENCE:
-            raise ExecutionContractError("model recording sequence space exhausted")
-        path = _directory(root, scope.job_id) / f"{key}.{sequence:04d}.json"
-        if mode == "record" and os.path.lexists(path):
-            raise ExecutionContractError("stale model recording exists at dispatch admission")
-        scope.counts[(mode, root, key)] += 1
-        return path, sequence, origin
+        directory = _directory(root, scope.job_id)
+        while True:
+            sequence = scope.counts[(mode, root, key)]
+            if sequence >= _MAX_SEQUENCE:
+                raise ExecutionContractError("model recording sequence space exhausted")
+            path = directory / f"{key}.{sequence:04d}.json"
+            scope.counts[(mode, root, key)] += 1
+            if mode != "record" or not os.path.lexists(path):
+                return path, sequence, origin, False
+            # This run already recorded this request (an earlier attempt of the job under the same
+            # run root, re-run by a repair). A recorded result is served instead of a second live call,
+            # so a run answers each request once; a recorded error is skipped so the re-run may try
+            # the model again and append its own recording after it.
+            if "result" in _read(path):
+                return path, sequence, origin, True
 
 
 def _error_envelope(error: BaseException, *, depth: int = 0) -> dict[str, Any]:
@@ -468,8 +477,8 @@ def recorded(infer: Infer) -> Infer:
         if scope is None:
             raise ExecutionContractError("a model call outside a job unit cannot be recorded or replayed")
         key, masked = request_key(request, scope.literals)
-        path, sequence, origin = _admit(scope, mode, key)
-        if mode == "replay":
+        path, sequence, origin, recorded_result = _admit(scope, mode, key)
+        if mode == "replay" or recorded_result:
             return _replay(scope, path, key, sequence, origin, masked)
         try:
             result = infer(request, timeout_seconds=timeout_seconds)

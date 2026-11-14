@@ -121,6 +121,24 @@ def _merge_claim(claims: Sequence[Claim]) -> Claim:
             else "inferred", "evidence_ids": refs, "alternatives": []}
 
 
+def _evidence_matches_file(record: Mapping[str, Any], file: Mapping[str, Any]) -> bool:
+    """Whether an evidence record describes the accepted catalog file it names.
+
+    ``sha256`` and ``upstream`` must agree exactly. ``backing`` may legitimately differ in one way:
+    the accepted catalog publishes workspace records before their bytes are read, so their
+    ``backing`` is null, and the discovery reader fills an exact-byte backing on the record it reads
+    (``integration.read_native_file``), which the evidence then carries. Such a filled backing is
+    accepted only when its identity is the file's own ``sha256`` and ``size_bytes``.
+    """
+    if record["sha256"] != file["sha256"] or record["upstream"] != file["upstream"]:
+        return False
+    if record["backing"] == file["backing"]:
+        return True
+    filled = record.get("backing")
+    return (file.get("backing") is None and isinstance(filled, Mapping)
+            and (filled.get("sha256"), filled.get("size_bytes")) == (file["sha256"], file["size_bytes"]))
+
+
 class _Curation:
     def __init__(self, discovery: DiscoveryResult, files: Sequence[NativeFile],
                  bounds: NativeInferenceBounds) -> None:
@@ -173,8 +191,7 @@ class _Curation:
             if identifier in self.evidence and self.evidence[identifier] != record:
                 raise NativeInputIntegrityError("Conflicting native evidence ID")
             key = record["domain"], record["root_id"], record["path"]
-            if key in self.files and any(record[field] != self.files[key][field]
-                                         for field in ("sha256", "upstream", "backing")):
+            if key in self.files and not _evidence_matches_file(record, self.files[key]):
                 raise NativeInputIntegrityError("native evidence differs from accepted catalog")
             self.evidence[identifier] = record
             fingerprints.add(record["source_fingerprint"])

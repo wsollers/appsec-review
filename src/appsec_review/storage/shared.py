@@ -616,7 +616,9 @@ def publication_scope(context: JobContext):
     from appsec_review.container_runtime.native_client import native_engine_scope
     from appsec_review.runtime.inputs import input_read_scope
     with input_read_scope(context), \
-            review_resource_scope(context.metadata_root, context.review_policy.resources, context.events), \
+            review_resource_scope(context.metadata_root, context.review_policy.resources, context.events,
+                                  dispatch=(context.orchestration.get("run_id")
+                                            if context.orchestration.get("system") == "dagster" else None)), \
             image_builder_scope(context), \
             native_engine_scope(context), \
             review_scope(context.repository_root, context.run_root, context.target_root), validation_scope(

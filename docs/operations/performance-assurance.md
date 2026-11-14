@@ -518,6 +518,9 @@ an admission timeout is a named gap. With the image builder service enabled, ove
 the same engine is still rejected regardless of `io_slots`, and a native operator contract must
 declare the same budget.
 Persistent service/daemon overhead also consumes the aggregate budget while the service is idle.
+[`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml)
+takes the same `io_slots` and `scanner` values and raises `review_teams` to 8 for smoke-target
+reviews on the 24-CPU review host; the same shared-ledger rule applies to it.
 With even one CPU held for that lifetime inside the eight-CPU budget, an eight-CPU compiled
 database or export-compilation action cannot be admitted while the service remains alive.
 An admission timeout is missing coverage, not successful compiled analysis or an equal-coverage

@@ -246,7 +246,7 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
     builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     counts = normalize_scope(unit, scope, execution, limits, builder, shard)
-    sha = file_sha256(path) if path.exists() else builder.build()
+    sha, _ = builder.build_or_reuse()
     index = IndexIdentity("analysis", "appsec-review/retrieval-index/2", sha, fingerprint,
                           path.relative_to(unit.job.run_root).as_posix(),
                           {"job": JOB_ID, "unit": unit.unit_id, "scope_id": scope.scope_id},

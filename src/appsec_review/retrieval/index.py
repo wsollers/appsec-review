@@ -186,6 +186,44 @@ class IndexBuilder:
                                     "schema": INDEX_SCHEMA})
             return digest
 
+    def attest_existing(self, expected_sha256: str | None = None) -> str:
+        """Record custody of the already-built shard at ``self.path`` for the current attempt.
+
+        A shard reused by its content-fingerprinted path was written by an earlier attempt (or a
+        sibling unit of this dispatch). The reusing attempt verifies the bytes and records the same
+        computed receipt ``build()`` records, so the shard has a producer receipt that is
+        compatible with the current implementation. Without it, a repair admitted after an
+        implementation change finds only the original attempt's receipt, which it holds
+        incompatible, and consuming the shard through a manifest refuses. Outside an attempt (no
+        shared-store owner) or outside ``data/indices`` this only verifies the digest.
+        """
+        from appsec_review.storage.shared import current
+        if self.path.is_symlink() or not self.path.is_file():
+            raise ValueError(f"index shard to reuse is unavailable: {self.name}/{self.shard_id}")
+        digest = file_sha256(self.path)
+        if expected_sha256 is not None and digest != expected_sha256:
+            raise ValueError(f"reused index shard bytes differ from the recorded identity: {self.name}/{self.shard_id}")
+        owner = current()
+        if owner is None or not self.path.is_relative_to(owner.run_root / "data" / "indices"):
+            return digest
+        from appsec_review.observability.spans import operation_phase
+        with operation_phase("index.custody_bind"):
+            owner.named("index-shard", self.path, computed=True, expected_sha256=digest,
+                        computation={
+                            "fingerprint": self.fingerprint, "name": self.name,
+                            "shard_id": self.shard_id, "target_snapshot": self.target_snapshot,
+                            "schema": INDEX_SCHEMA})
+        return digest
+
+    def build_or_reuse(self) -> tuple[str, bool]:
+        """Reuse the shard at ``self.path`` when it exists (attesting custody), else build it.
+
+        Returns the shard digest and whether it was reused.
+        """
+        if self.path.is_file():
+            return self.attest_existing(), True
+        return self.build(), False
+
     def _place(self, source: Path, digest: str, verify: Any) -> None:
         from appsec_review.observability.spans import operation_phase
         try:

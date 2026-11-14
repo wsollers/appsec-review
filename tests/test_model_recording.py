@@ -11,6 +11,7 @@ import pytest
 from appsec_review.inference import ModelRequest, ModelResult
 from appsec_review.inference import recording
 from appsec_review.inference.recording import (
+    request_key,
     MODE_ENVIRONMENT, REPLAY_ENVIRONMENT, ModelReplayMiss, recorded, unit_scope)
 from appsec_review.inference.errors import (
     ExecutionContractError, ExecutionLimit, ModelCancelled, ModelOutputError, ModelTimeout, ProviderError,
@@ -237,6 +238,23 @@ def test_identical_concurrent_calls_reserve_sequence_before_completion(tmp_path,
                 for _ in range(2)] == [0, 1]
 
 
+def test_a_recorded_error_is_retried_live_by_a_rerun_and_appended(tmp_path, monkeypatch):
+    """A repair re-runs a job under the same run root. A request whose only recording is an error is
+    tried again and the new outcome is recorded after it. Regression for smoke-cpp run 2026-11-14-0001,
+    where dependency_intelligence attempt_0002 refused with "stale model recording exists at dispatch
+    admission"."""
+    source, first = _record_one(tmp_path, monkeypatch, error=ModelOutputError("found 0"))
+    live = lambda *args, **kwargs: ModelResult({"ok": "again"}, input_tokens=1, output_tokens=1)
+    monkeypatch.setenv(MODE_ENVIRONMENT, "record")
+    with _scope(tmp_path, tmp_path / "runs" / "recorded"):
+        result = recorded(live)(_request(tmp_path), timeout_seconds=5)
+    assert result.proposal == {"ok": "again"}
+    paths = sorted((source / "job_target_analysis_plan").glob("*.json"))
+    assert [path.name.rsplit(".", 2)[1] for path in paths] == ["0000", "0001"]
+    assert paths[0] == first and "error" in json.loads(first.read_text())
+    assert json.loads(paths[1].read_text())["result"]["proposal"] == {"ok": "again"}
+
+
 @pytest.mark.parametrize("mutation", [
     lambda d: d.update(job_id="other"),
     lambda d: d.update(key="0" * 64),
@@ -336,14 +354,17 @@ def test_v1_success_is_readable_without_guessing_error_semantics(tmp_path, monke
             _replay_one(tmp_path, source, monkeypatch)
 
 
-def test_stale_recording_rejected_before_another_live_call(tmp_path, monkeypatch):
+def test_a_recorded_result_is_served_to_a_rerun_without_another_live_call(tmp_path, monkeypatch):
+    """A run answers each request once: a re-run attempt that repeats a recorded request receives the
+    recorded result, never a second live call, and the recording is left as it was."""
     _, path = _record_one(tmp_path, monkeypatch)
     before = path.read_bytes()
     with _scope(tmp_path, tmp_path / "runs" / "recorded"):
-        with pytest.raises(ExecutionContractError, match="stale"):
-            recorded(lambda *a, **kw: pytest.fail("stale recording reached provider"))(
-                _request(tmp_path), timeout_seconds=5)
+        result = recorded(lambda *a, **kw: pytest.fail("recorded request reached the provider"))(
+            _request(tmp_path), timeout_seconds=5)
+    assert result.proposal == {"ok": True} and result.usage_source == "replay"
     assert path.read_bytes() == before
+    assert sorted(path.parent.glob("*.json")) == [path]
 
 
 def test_publication_is_complete_and_immutable(tmp_path, monkeypatch):
@@ -453,6 +474,39 @@ def test_oversized_error_evidence_is_rejected_not_silently_truncated(tmp_path, m
     assert isinstance(raised.value.__cause__, ExecutionContractError)
     assert not list((tmp_path / "runs" / "recorded" / recording.RECORDINGS /
                      "job_target_analysis_plan").glob("*.json"))
+
+
+@pytest.mark.parametrize("value", [-(2 ** 63), 0, 2 ** 63, 2 ** 64 - 1])
+def test_request_integers_span_signed_and_unsigned_64_bit(tmp_path, value):
+    """A request integer is bounded like the data it carries: signed 64-bit below, unsigned 64-bit
+    above, so a debug-symbol address (unsigned 64-bit) canonicalises."""
+    request = replace(_request(tmp_path), summary={"address": value})
+    key, masked = request_key(request)
+    assert len(key) == 64 and masked["summary"]["address"] == value
+
+
+@pytest.mark.parametrize("value", [-(2 ** 63) - 1, 2 ** 64])
+def test_request_integers_beyond_64_bits_are_explicit_contract_failures(tmp_path, value):
+    request = replace(_request(tmp_path), summary={"address": value})
+    with pytest.raises(ExecutionContractError, match="integer exceeds its bound"):
+        request_key(request)
+
+
+def test_the_debug_symbol_tool_catalog_canonicalises_in_a_review_request():
+    """Regression for smoke-cpp run 2026-11-14-0002: every inference_security_review cell failed at its
+    first turn with "model recording integer exceeds its bound", because the catalog of granted tools in
+    task_input declares the debug-symbol address maximum as 2**64 - 1."""
+    from appsec_review.debug_symbols.contract import QUERY_TOOL
+    from appsec_review.guidance.cards import review_tool_catalog
+    from appsec_review.inference import ReviewModelRequest
+    catalog = review_tool_catalog([QUERY_TOOL])
+    assert catalog[0]["parameters"]["properties"]["address"]["maximum"] == 2 ** 64 - 1
+    request = ReviewModelRequest("appsec-review/worker-turn/1", "remediation_reviewer", "generalist", "generic",
+                                 "4" * 64, "guidance", {"turn_protocol": {"tool_catalog": catalog}}, (),
+                                 "offline", "fixture", "high", 32000, 8000)
+    key, masked = request_key(request)
+    assert len(key) == 64
+    assert masked["task_input"]["turn_protocol"]["tool_catalog"][0]["name"] == QUERY_TOOL
 
 
 def test_oversized_document_and_overdeep_json_are_explicit_contract_failures(tmp_path, monkeypatch):

@@ -69,7 +69,8 @@ class ResumePlanner:
         self.propagating = propagating if propagating is not None else {
             job.job_id for job in jobs if job.propagate_handoff}
 
-    def _accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[list[str], str | None]:
+    def _accepted(self, job: Job, upstream: Mapping[str, str], *,
+                  ignore_upstream: bool = False) -> tuple[list[str], str | None]:
         contract = None
         if job.job_id == "job_target_analysis_plan":
             from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
@@ -122,6 +123,10 @@ class ResumePlanner:
                                    | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets,
                 job_contract=job.contract.document() if job.contract is not None else None)["sha256"]),
         }
+        if ignore_upstream:
+            # A descendant of a job that will run: its own identities are checked now, the pinned
+            # upstream handoffs only at dispatch, when the upstream has actually published.
+            del checks["upstream handoffs"]
         if any(value is not None for value in (job.input_identity, job.run_input_identity, job.external_input_identity)):
             target = None if self.job_fingerprint(job) == "none" else self.target_root
             checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(
@@ -192,9 +197,10 @@ class ResumePlanner:
                     break
         return reasons, handoff_hash
 
-    def accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[tuple[str, ...], str | None]:
+    def accepted(self, job: Job, upstream: Mapping[str, str], *,
+                 ignore_upstream: bool = False) -> tuple[tuple[str, ...], str | None]:
         try:
-            reasons, handoff_hash = self._accepted(job, upstream)
+            reasons, handoff_hash = self._accepted(job, upstream, ignore_upstream=ignore_upstream)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return (f"resume admission unavailable: {type(exc).__name__}: {exc}",), None
         return tuple(reasons), handoff_hash
@@ -225,9 +231,23 @@ class ResumePlanner:
             if force_from == job.job_id:
                 dirty.add(job.job_id)
                 decision = ResumeDecision(job.job_id, "RUN", ("forced rerun from named job",))
-            elif invalidated or ancestors & dirty:
+            elif invalidated:
                 dirty.add(job.job_id)
                 decision = ResumeDecision(job.job_id, "INVALIDATE", ("transitive downstream invalidation",))
+            elif ancestors & dirty:
+                # An ancestor will run, so this job's upstream pins are unknown until dispatch. When
+                # everything that is its own still verifies, the runtime decides at dispatch (REVALIDATE:
+                # reuse only if every pinned upstream is then equivalent, else run); otherwise it runs.
+                dirty.add(job.job_id)
+                reasons, handoff_hash = self.accepted(job, selected, ignore_upstream=True)
+                if reasons:
+                    decision = ResumeDecision(job.job_id, "INVALIDATE",
+                                              ("transitive downstream invalidation", *reasons))
+                else:
+                    decision = ResumeDecision(
+                        job.job_id, "REVALIDATE",
+                        ("upstream will run; own identities and accepted handoff match, reuse decided at dispatch",),
+                        handoff_hash)
             else:
                 reasons, handoff_hash = self.accepted(job, selected)
                 if reasons:

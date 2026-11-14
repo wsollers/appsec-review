@@ -832,9 +832,13 @@ def _review_start(args: argparse.Namespace) -> int:
     if configuration.is_file():
         import review_run  # the documented helper: the image pin preflight stepwise.py also runs
         try:
-            review_run.verify_build_profile_images(review_run.effective_configuration(configuration))
+            document = review_run.effective_configuration(configuration)
+            review_run.verify_build_profile_images(document)
+            codeql_warnings = review_run.verify_codeql_runtimes(document)
         except (RuntimeError, ValueError, OSError) as error:
             raise OpsError(str(error), REFUSED) from error
+        for line in codeql_warnings:
+            say(f"warning: {line}")
     else:
         say("warning: appsec-review.toml not found; skipping the image pin preflight")
     import review_run

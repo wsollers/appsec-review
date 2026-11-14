@@ -47,7 +47,9 @@ _OWNER: ContextVar[tuple["ResourceAdmission", EventLog] | None] = ContextVar(
 
 @contextmanager
 def review_resource_scope(metadata_root: Path, budget: ResourceBudget, events: EventLog, *,
-                          require_container_removal: bool = False):
+                          require_container_removal: bool = False, dispatch: str | None = None):
+    """``dispatch`` names the orchestrator dispatch whose units take leases in this scope; each lease
+    records it so the repair stop gate can tell the live dispatch's own leases from retained ones."""
     from appsec_review.config.native_dagster import native_execution_requested
 
     if type(require_container_removal) is not bool:
@@ -55,7 +57,7 @@ def review_resource_scope(metadata_root: Path, budget: ResourceBudget, events: E
     token = _OWNER.set((ResourceAdmission(
         metadata_root, budget,
         require_container_removal=(require_container_removal or native_execution_requested()
-                                   or safety.active())), events))
+                                   or safety.active()), dispatch=dispatch), events))
     try:
         yield
     finally:
@@ -289,12 +291,15 @@ def budget_conflicts(metadata_root: Path, budget: ResourceBudget) -> list[str]:
 
 class ResourceAdmission:
     def __init__(self, metadata_root: Path, budget: ResourceBudget, *,
-                 require_container_removal: bool = False):
+                 require_container_removal: bool = False, dispatch: str | None = None):
         if type(require_container_removal) is not bool:
             raise ValueError("container removal policy must be boolean")
+        if dispatch is not None and (type(dispatch) is not str or not dispatch):
+            raise ValueError("lease dispatch identity must be a non-empty string")
         self.root = metadata_root.resolve() / "resource-admission"
         self.budget = budget
         self.require_container_removal = require_container_removal
+        self.dispatch = dispatch
 
     def _check_permanent_feasibility(self, leases: dict, request: Reservation) -> None:
         persistent = [entry for entry in leases.values() if "persistent" in entry]
@@ -493,7 +498,7 @@ class ResourceAdmission:
                 if all(used[name] + value <= effective[name] for name, value in asdict(request).items()):
                     leases[lease_id] = {"pid": os.getpid(), "process_identity": process_identity(os.getpid()),
                                         "containers": [], "reservation": asdict(request),
-                                        "limits": limits, "action": action}
+                                        "limits": limits, "action": action, "dispatch": self.dispatch}
                     if self.require_container_removal:
                         leases[lease_id]["container_cleanup"] = "removed"
                     atomic_json(path, state)

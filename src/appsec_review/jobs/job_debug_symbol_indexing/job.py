@@ -624,7 +624,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
     digest = builder.build()
     identity = IndexIdentity(INDEX_NAME, INDEX_SCHEMA, digest, fingerprint,
                              path.relative_to(unit.job.run_root).as_posix(),
-                             {"job_id": JOB_ID, "compiler_target": target.value, "lane": lane,
+                             {"job": JOB_ID, "compiler_target": target.value, "lane": lane,
                               "reader_identity": reader_identity}, tuple(all_gaps), shard_id)
     raw = _artifact(unit, "raw-refs.json", {"schema": "appsec-review/debug-symbol-inputs/1",
                                          "compiler_target": target.value, "artifacts": raw_refs})

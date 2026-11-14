@@ -14,6 +14,12 @@ CWE-798, no scanner value or match ever kept) and Dockerfile/IaC misconfiguratio
 :data:`OBSERVATION_PRODUCERS` is the explicit lead decision per observation producer; an observation whose
 scanner is neither mapped nor listed as a deliberate non-lead is a named ``unmapped_observations`` gap. Dependency and artifact-scanner leads carry the bounded
 ``advisory_context`` of ``review.advisories`` (reference context only).
+
+Review scope (T-165, T-167): after normalization, a lead located in a source file whose disposition is not
+``first_party`` (``review.dispositions``), or whose observation matches a configured stylistic rule class
+(``review.lead_filters``), leaves ``LeadCollection.leads`` and is kept in ``LeadCollection.excluded`` with its
+reason. Exclusion is a scope decision recorded as ``not_admitted``; it is never a coverage gap, and the
+observation stays in the index and in scanner coverage.
 """
 from __future__ import annotations
 
@@ -34,6 +40,8 @@ from appsec_review.retrieval.observations import (
     rule_of, scanner_of,
 )
 from appsec_review.review import advisories as advisory_reference
+from appsec_review.review.dispositions import EXCLUDED_DISPOSITIONS, FIRST_PARTY
+from appsec_review.review.lead_filters import STYLISTIC, LeadFilters
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 from appsec_review.review.secret_redaction import redact_message
@@ -283,6 +291,26 @@ class Lead:
 
 
 @dataclass(frozen=True, slots=True)
+class ExcludedLead:
+    """A normalized lead the review lanes do not reason over, and why; a scope decision, never a gap."""
+
+    lead: Lead
+    reason: str                 # a non-first-party disposition (vendored, sdk, generated, test) or ``stylistic``
+    detail: str                 # the matching disposition glob or stylistic rule class
+
+    def __post_init__(self) -> None:
+        if self.reason not in EXCLUSION_REASONS:
+            raise ValueError(f"unknown lead exclusion reason: {self.reason}")
+
+    def record(self) -> dict[str, Any]:
+        return {"lead_id": self.lead.observation_id, "reason": self.reason, "detail": self.detail[:500],
+                "path": self.lead.path, "scanner": self.lead.scanner, "rule_id": self.lead.rule_id}
+
+
+EXCLUSION_REASONS = (*EXCLUDED_DISPOSITIONS, STYLISTIC)
+
+
+@dataclass(frozen=True, slots=True)
 class LeadCollection:
     leads: tuple[Lead, ...]
     gaps: tuple[ScopeGap, ...]
@@ -290,6 +318,12 @@ class LeadCollection:
     correlation_audit: Mapping[str, Any] | None
     correlation_shards: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     non_lead_counts: Mapping[str, int] = field(default_factory=dict)
+    # Leads outside the review scope (disposition or stylistic), in lead-identity order.
+    excluded: tuple[ExcludedLead, ...] = ()
+
+    def exclusion_counts(self) -> dict[str, int]:
+        found = Counter(item.reason for item in self.excluded)
+        return {reason: found[reason] for reason in EXCLUSION_REASONS}
 
     def counts(self) -> dict[str, dict[str, int]]:
         found: dict[str, Counter[str]] = {family: Counter() for family in FAMILIES}
@@ -523,11 +557,14 @@ def _compare_correlation_audit(audit: Mapping[str, Any], sast: Mapping[str, str]
                                  f"accepted observations ({value})")
 
 
-def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None = None) -> LeadCollection:
+def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None = None, *,
+                  filters: LeadFilters | None = None) -> LeadCollection:
     """Normalize every accepted lead of every family; absent families are gaps, not empty.
 
     ``triage`` (lead identity -> :class:`LeadTriage`, from ``review.lead_triage``) attaches the audited assessed
     severity of leads the scanner left ``unknown``. Without it every lead is exactly as the scanner reported it.
+    ``filters`` (``settings.lead_filters``) names the stylistic rule classes; leads outside the scope's
+    first-party disposition or matching a class go to ``LeadCollection.excluded`` (see :func:`scope_leads`).
     """
     gaps: list[ScopeGap] = []
     available: dict[str, bool] = {}
@@ -678,8 +715,37 @@ def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None 
             raise IntegrityError(f"scanner_correlation lists leads absent from accepted observations: {invented[:5]}")
     if audit is not None:
         _compare_correlation_audit(audit, sast_classified)
-    ordered = tuple(leads[key] for key in sorted(leads))
+    ordered, excluded = scope_leads(scope, (leads[key] for key in sorted(leads)), filters or LeadFilters())
     if triage is not None:
         ordered = tuple(with_triage(lead, triage.get(lead.observation_id)) for lead in ordered)
     return LeadCollection(ordered, sorted_gaps(gaps), available, audit, correlation_shards,
-                          dict(sorted(non_lead.items())))
+                          dict(sorted(non_lead.items())), excluded)
+
+
+def scope_leads(scope: AcceptedScope, leads: Iterable[Lead], filters: LeadFilters
+                ) -> tuple[tuple[Lead, ...], tuple[ExcludedLead, ...]]:
+    """Split normalized leads into the review scope and the excluded rest (T-165, T-167).
+
+    The disposition decides first: a lead located in a non-first-party file is excluded with that disposition,
+    whatever its rule. A first-party lead whose observation matches a stylistic rule class is excluded as
+    ``stylistic``. An unlocated lead has no disposition and stays in scope. Both outcomes are kept in
+    lead-identity order; nothing here is a coverage gap.
+    """
+    kept: list[Lead] = []
+    excluded: list[ExcludedLead] = []
+    for lead in leads:
+        disposition = scope.disposition_for(lead.path)
+        if disposition != FIRST_PARTY:
+            matched = scope.dispositions.matched_pattern(lead.path) if lead.path is not None else None
+            detail = (f"{lead.path} matches source_dispositions.{matched[0]} pattern {matched[1]}" if matched
+                      else f"{lead.path} is catalogued as {disposition}")
+            excluded.append(ExcludedLead(lead, disposition, detail))
+            continue
+        rule_class = filters.stylistic_class(lead.scanner, lead.native_severity, lead.rule_id)
+        if rule_class is not None:
+            excluded.append(ExcludedLead(lead, STYLISTIC, f"{lead.scanner} {lead.rule_id} (native severity "
+                                         f"{lead.native_severity}) matches lead_filters.stylistic scanner "
+                                         f"{rule_class.scanner}"))
+            continue
+        kept.append(lead)
+    return tuple(kept), tuple(excluded)

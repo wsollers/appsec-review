@@ -1,0 +1,21 @@
+# Smoke capacity overlay: the capacity a smoke-target review (docs/operations/test-targets.md) runs with
+# on a 24-CPU / 15 GiB review host. Select it per run: scripts/review-start.sh --overlay smoke-capacity-overlay.toml
+#
+# An overlay is capacity only. It may set review_teams, the result-cache placement, Dagster pool limits and the
+# host resource budget; it cannot change models, package partitioning or the job budgets, which belong to the
+# profile (docs/operations/model-profiles.md). Capacity is excluded from cell fingerprints, so runs under this
+# overlay and under `none` reuse each other's cells and produce identical canonical outputs.
+
+[jobs.job_inference_security_review.settings.teams]
+# Teams that run model turns at once. The checked-in dev value is 3; smoke-cpp run 2026-11-14-0003 measured
+# about 15 model calls a minute at 3 teams, each cell a few seconds of bookkeeping between calls.
+review_teams = 8
+
+[orchestration.dagster.pools]
+# The two lane units (lead_review.teams, hunt_review.teams) run side by side; review_teams bounds the cells.
+inference_teams = 2
+scanner = 4
+
+[review_policy.resources]
+# As prod-capacity-overlay.toml: four 2-CPU/1,536 MiB scanners at once within the 8-CPU/10 GiB budget.
+io_slots = 4

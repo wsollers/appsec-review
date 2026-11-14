@@ -12,6 +12,10 @@ read as zero. Every weight comes from :class:`~appsec_review.review.ranking.Rank
 (``settings.ranking``); retained tag-density setting names now weight deduplicated operation sites.
 Only the top ``hunt_max_units`` units receive hunt packages; every other unit is a coverage gap
 with reason ``below_hunt_cutoff``.
+
+Units are built from first-party source files only (``SourceFile.disposition``, T-165): vendored, SDK,
+generated and test files never become unit members or ``source_ids``, and the collection's leads are
+already scoped by ``lead_families.scope_leads``.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ import math
 from typing import Any
 
 from appsec_review.retrieval.model import LogicalIdentity
+from appsec_review.review.dispositions import FIRST_PARTY
 from appsec_review.review.lead_families import ADVISORY_FAMILIES, Lead, LeadCollection
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, MAX_SIGNAL_POINTS, RankWeights
 from appsec_review.review.scope import AcceptedScope, ScopeGap
@@ -216,6 +221,8 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
 
     groups: dict[tuple[str, str | None], set[str]] = defaultdict(set)
     for item in scope.source_files:
+        if item.disposition != FIRST_PARTY:
+            continue
         groups[locate(item.path)].add(item.path)
     unlocated: dict[tuple[str, str | None], list[Lead]] = defaultdict(list)
     for lead in collection.leads:

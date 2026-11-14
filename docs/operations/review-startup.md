@@ -38,6 +38,13 @@ Complete the [repository setup](../../README.md#what-you-need) and
   the bounded image builder or restricted native execution. Required derived-image work needs an
   eligible prepared image or a commissioned compatible builder; see
   [performance and assurance](performance-assurance.md#scheduling-and-limits).
+- Declare the host's preinstalled CodeQL runtimes in `deploy/dagster/host-pins.toml` when no image
+  builder is commissioned: one for the licensed source image (the extractor inventory) and one per
+  compiled build-profile image the targets use, each layered with the repository's
+  `containers/tools/codeql/Dockerfile`/`Dockerfile.source` for the effective application user (see
+  [explicit preinstalled runtimes](codeql-analysis.md#explicit-preinstalled-runtimes)). `review-start`
+  refuses a submission whose inventory image has no declaration and warns for each undeclared
+  compiled profile; without them CodeQL records `TOOLCHAIN_UNAVAILABLE` and the code graph is empty.
 
 Use the checkout that owns the running stack. Do not start a second stack or use `--force` to
 work around another session's active review.
@@ -130,6 +137,11 @@ four and keeps the selected profile's review-team count; it does not raise CPU o
 implied by `--profile prod`.
 Confirm the host and builder topology can support it first. A resource-budget mismatch with
 an active run or recorded lease is refused even with `--force`.
+
+For a smoke-target review (`targets/appsec-review-smoke-<lang>`, see
+[test targets](test-targets.md#smoke-runs)), select `smoke-capacity-overlay.toml`: 8 review teams
+instead of dev's 3, the prod I/O slots and scanner pool, and nothing else. It is capacity only, so a
+run under it reuses cells from a run under `none` and produces the same canonical outputs.
 
 ## Features controlled in TOML, not launch flags
 

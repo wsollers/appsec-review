@@ -323,10 +323,15 @@
           "feed_sync_work",
           "native_component_curation",
           "native_discovery",
+          "native_inference_inputs",
+          "native_inference_io",
+          "native_inputs",
           "native_metadata_investigation",
+          "native_sbom_conversion",
           "native_sbom_provenance",
           "native_spdx",
-          "scorecard_responses"
+          "scorecard_responses",
+          "unity_inventory"
         ]
       },
       "definition": "Package identities, advisory feeds, SBOMs and dependency provenance support bounded supply-chain reasoning.",
@@ -3864,6 +3869,156 @@
       "access": "sanitized_metadata_only",
       "authority": "producer_evidence",
       "bucket": "dependencies_and_advisories",
+      "dataset": "native_inference_inputs",
+      "description": "The discovery document each inference step read and the manifest of model artifacts it used.",
+      "family": "inventory",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/native-inference-artifacts/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
+      "dataset": "native_inference_io",
+      "description": "Immutable model requests, responses and attempt records of native component inference.",
+      "family": "inventory",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/native-inference-attempt/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
+      "dataset": "native_inputs",
+      "description": "Normalized native source inventory accepted for SBOM discovery: target paths, hashes and roots.",
+      "family": "inventory",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/native-inputs/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
       "dataset": "native_metadata_investigation",
       "description": "Root-scoped metadata proposals, verified citations, conflicts, and coverage gaps.",
       "family": "inventory",
@@ -3907,6 +4062,56 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
       "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
+      "dataset": "native_sbom_conversion",
+      "description": "Staged Syft inventory, the SPDX conversion execution receipt and its raw streams.",
+      "family": "inventory",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/container-execution/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "protected",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -4054,6 +4259,56 @@
         ]
       },
       "schema": "application/json",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
+      "dataset": "unity_inventory",
+      "description": "Unity project descriptors found in the accepted inventory.",
+      "family": "inventory",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/unity-inventory/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
       "stage": "artifact_only",
@@ -14161,10 +14416,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14235,10 +14495,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14309,10 +14574,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14383,10 +14653,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14457,10 +14732,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14531,10 +14811,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14605,10 +14890,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14679,10 +14969,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14753,10 +15048,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14827,10 +15127,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14901,10 +15206,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -14975,10 +15285,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -15049,10 +15364,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -15123,10 +15443,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -15197,10 +15522,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -15271,10 +15601,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"
@@ -15345,10 +15680,15 @@
         "job_dependency_intelligence/dependency_intelligence_handoff",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
+        "job_dependency_intelligence/native_inference_inputs",
+        "job_dependency_intelligence/native_inference_io",
+        "job_dependency_intelligence/native_inputs",
         "job_dependency_intelligence/native_metadata_investigation",
+        "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
-        "job_dependency_intelligence/scorecard_responses"
+        "job_dependency_intelligence/scorecard_responses",
+        "job_dependency_intelligence/unity_inventory"
       ],
       "unbound_producers": [
         "job_dependency_intelligence"

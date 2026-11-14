@@ -16,6 +16,8 @@ from .changelog import ChangelogLimits
 from .github import GitHubSettings
 from .git import GitLimits
 
+from appsec_review.path_globs import GLOB_PATTERN
+
 
 SII_METRICS = ("relative_churn", "revision_frequency", "author_entropy", "complexity")
 COMPLEXITY_METRICS = ("cyclomatic", "cognitive")
@@ -33,7 +35,7 @@ _CHANGELOG_BOUNDS = {
 }
 _LISTS = {"fix_labels", "security_labels"}
 _SCALARS = {"minor_author_share"}
-_GLOB = re.compile(r"[A-Za-z0-9_.*?/@+-]{1,256}")
+_GLOB = GLOB_PATTERN   # shared with the review source dispositions (path_globs.py)
 
 
 @dataclass(frozen=True, slots=True)

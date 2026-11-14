@@ -17,7 +17,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 from appsec_review.storage.shared import immutable_bytes, reference, safe_path, verify_reference
 
 REPAIR_SCHEMA = "appsec-review/repair-admission/1"
-PLAN_SCHEMA = "appsec-review/repair-plan/1"
+PLAN_SCHEMA = "appsec-review/repair-plan/2"  # 2: decisions may be REVALIDATE (reuse decided at dispatch)
 COMPATIBILITY = "appsec-review/same-input-contracts/1"
 PUBLICATION_PROTOCOL = "appsec-review/committed-publication/1"
 WORKER_PROTOCOL = "appsec-review/recovery-worker/1"
@@ -129,15 +129,22 @@ def bind_release(config: AppConfig, run_root: Path) -> dict[str, Any]:
 
 
 @contextmanager
-def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None = None):
-    """Register a worker under the same gate that excludes concurrent repair admission."""
+def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None = None,
+                 orchestration: Mapping[str, str] | None = None):
+    """Register a worker under the same gate that excludes concurrent repair admission.
+
+    ``orchestration`` is the claim correlation of the attempt being prepared; when it names a
+    Dagster dispatch, claims of that same dispatch are the live run's own and need no stop receipt.
+    """
+    current_dispatch = (orchestration.get("run_id") if orchestration is not None
+                        and orchestration.get("system") == "dagster" else None)
     from appsec_review.runtime.resources import process_identity
     from appsec_review.storage import bounded_file_lock
     token = uuid4().hex
     path = run_root / f"data/recovery/workers/{token}.json"
     record = {"schema": WORKER_PROTOCOL, "pid": os.getpid(),
               "process_identity": process_identity(os.getpid()), "status": "ACTIVE",
-              "preparing_job": preparing_job,
+              "preparing_job": preparing_job, "dispatch": current_dispatch,
               "pid_namespace": os.readlink("/proc/self/ns/pid") if os.name == "posix" else None}
     with bounded_file_lock(run_root / "data/recovery/admission.lock", 30):
         if preparing_job is not None:
@@ -146,7 +153,7 @@ def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None
                 value.get("status") == "ACTIVE" and value.get("preparing_job") == preparing_job
                 for value in (read_document(path) for path in (run_root / "data/recovery/workers").glob("*.json")))
             if prior or simultaneous:
-                reasons = stopped_reasons(config, run_root)
+                reasons = stopped_reasons(config, run_root, current_dispatch=current_dispatch)
                 if reasons:
                     raise ValueError("replacement attempt refused: " + "; ".join(reasons))
         atomic_json(path, record)
@@ -156,8 +163,14 @@ def worker_scope(config: AppConfig, run_root: Path, *, preparing_job: str | None
         atomic_json(path, {**record, "status": "EXITED"})
 
 
-def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
-    """Read-only stop inspection. Retained leases are never silently reconciled or cleared."""
+def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str | None = None) -> tuple[str, ...]:
+    """Read-only stop inspection. Retained leases are never silently reconciled or cleared.
+
+    ``current_dispatch`` names the Dagster dispatch that is executing now. Its own claims are not
+    historical and are not asked for a stop receipt (a resumed run writes its first claim before its
+    second job begins), and its own registered workers are the jobs it is running in parallel, not
+    workers that must have stopped. Every other dispatch still needs a verified stop.
+    """
     from appsec_review.config.native_dagster import native_execution_requested
     from appsec_review.runtime.resources import process_identity
     reasons = []
@@ -167,6 +180,8 @@ def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
         worker = read_document(path)
         if worker.get("schema") != WORKER_PROTOCOL or worker.get("status") not in {"ACTIVE", "EXITED"}:
             reasons.append("worker cleanup state is unknown")
+        elif worker["status"] == "ACTIVE" and current_dispatch is not None and worker.get("dispatch") == current_dispatch:
+            continue
         elif worker["status"] == "ACTIVE":
             local = process_identity(os.getpid())
             if (not local or not worker.get("process_identity")
@@ -196,7 +211,12 @@ def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
         leases = read_document(ledger)
         if leases.get("schema") != "appsec-review/resource-leases/1" or not isinstance(leases.get("leases"), dict):
             reasons.append("resource lease ledger is unsupported")
-        elif any(not entry.get("persistent") for entry in leases["leases"].values()):
+        elif any(not entry.get("persistent") and not (
+                     current_dispatch is not None and entry.get("dispatch") == current_dispatch
+                     and not entry.get("quarantine"))
+                 for entry in leases["leases"].values()):
+            # Leases the live dispatch's own units hold (its jobs run in parallel) are not retained
+            # leases of a stopped run; a quarantined lease is, whoever took it.
             reasons.append("retained host resource leases require existing cleanup verification")
     for path in sorted((run_root / "data/jobs").glob("*/attempts/*/claim.json")):
         claim = read_document(path)
@@ -207,6 +227,8 @@ def stopped_reasons(config: AppConfig, run_root: Path) -> tuple[str, ...]:
             dispatch_id = claim["orchestration"].get("run_id", "")
             if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", dispatch_id):
                 reasons.append("Dagster dispatch identity is unavailable")
+                continue
+            if current_dispatch is not None and dispatch_id == current_dispatch:
                 continue
             stopped = run_root / f"data/recovery/dispatches/{dispatch_id}.json"
             if not stopped.exists():
@@ -321,10 +343,22 @@ def forced_by_repair(run_root: Path, job_id: str, handoff: Mapping[str, Any]) ->
     decision = next((item for item in repair["decisions"] if item["job_id"] == job_id), None)
     if decision is None:
         raise ValueError("job was not included in the admitted repair graph")
-    if decision["action"] == "REUSE":
+    if decision["action"] in {"REUSE", "REVALIDATE"}:
+        # REVALIDATE defers to the dispatch-time check: the accepted attempt is reused only when every
+        # identity still matches and every pinned upstream is equivalent to the one accepted now.
         return False
     claim = read_document(safe_path(run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
     return claim.get("repair_admission_sha256") != binding["repair"]["sha256"]
+
+
+def revalidation_admitted(run_root: Path, job_id: str) -> bool:
+    """Whether the admitted repair plan decided REVALIDATE for ``job_id`` (no binding: no)."""
+    binding = current_binding(run_root)
+    if not binding or binding["repair"] is None:
+        return False
+    repair = read_document(verify_reference(run_root, binding["repair"]))
+    decision = next((item for item in repair["decisions"] if item["job_id"] == job_id), None)
+    return decision is not None and decision["action"] == "REVALIDATE"
 
 
 def check_successor(config: AppConfig, run_root: Path, envelope: Mapping[str, Any] | None) -> None:
@@ -381,6 +415,43 @@ def _planning_repair_context(config: AppConfig, run_root: Path, jobs: Sequence[J
     return context
 
 
+def compatible_dataset_change(previous: Mapping[str, Any], current: Mapping[str, Any]) -> bool:
+    """Whether a job's dataset contract only gained datasets or input requirements since ``previous``.
+
+    Narrow by design: the contract schema, job id, steps and shared namespaces must be identical,
+    every previously declared dataset must still be declared unchanged, and when the job carries a
+    typed contract every other contract field must be identical and every previous input
+    requirement must still be present. Anything else (a removed or edited dataset, a removed input,
+    a contract schema change, a changed dispatch flag) is an incompatible wire-contract change.
+    """
+    if not isinstance(previous, Mapping) or not isinstance(current, Mapping):
+        return False
+    variable = {"sha256", "datasets", "job_contract"}
+    if ({key: value for key, value in previous.items() if key not in variable}
+            != {key: value for key, value in current.items() if key not in variable}):
+        return False
+    old_datasets, new_datasets = previous.get("datasets"), current.get("datasets")
+    if not isinstance(old_datasets, list) or not isinstance(new_datasets, list):
+        return False
+    if any(item not in new_datasets for item in old_datasets):
+        return False
+    if ("job_contract" in previous) != ("job_contract" in current):
+        return False
+    if "job_contract" in current:
+        old_contract, new_contract = previous["job_contract"], current["job_contract"]
+        if not isinstance(old_contract, Mapping) or not isinstance(new_contract, Mapping):
+            return False
+        if ({key: value for key, value in old_contract.items() if key not in {"inputs", "sha256"}}
+                != {key: value for key, value in new_contract.items() if key not in {"inputs", "sha256"}}):
+            return False
+        old_inputs, new_inputs = old_contract.get("inputs"), new_contract.get("inputs")
+        if not isinstance(old_inputs, list) or not isinstance(new_inputs, list):
+            return False
+        if any(item not in new_inputs for item in old_inputs):
+            return False
+    return True
+
+
 def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str, *,
                 target_root: Path | None = None, force_from: str | None = None,
                 historical_rerun: bool = False, dependencies: Mapping[str, Sequence[str]] | None = None,
@@ -433,8 +504,14 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
                 job.job_id, sorted(set(config.job(job.job_id).steps)
                                    | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets,
                 job_contract=job.contract.document() if job.contract is not None else None)
-            if claim.get("dataset_contract", {}).get("sha256") != expected_contract["sha256"]:
-                reasons.append(f"unsupported dataset compatibility change for {job.job_id}")
+            recorded_contract = claim.get("dataset_contract", {})
+            if recorded_contract.get("sha256") != expected_contract["sha256"]:
+                decision = next(item for item in decisions if item.job_id == job.job_id)
+                if not compatible_dataset_change(recorded_contract, expected_contract):
+                    reasons.append(f"unsupported dataset compatibility change for {job.job_id}")
+                elif decision.action != "RUN":
+                    # The widened contract belongs to a fresh attempt; nothing may reuse the old one.
+                    reasons.append(f"dataset contract of {job.job_id} changed but its accepted attempt would be reused")
         from appsec_review.runtime.checkpoints import select_units
         from appsec_review.runtime.resume import job_config_sha256
         from appsec_review.runtime.dependencies import input_projection

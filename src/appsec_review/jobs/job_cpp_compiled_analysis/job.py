@@ -417,8 +417,7 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
 def _finish_index(unit: UnitContext, builder: IndexBuilder, path: Path, fingerprint: str,
                   shard: str, name: str, branch: str, gaps: list[str],
                   seeded: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
-    reused = path.exists()
-    sha = file_sha256(path) if reused else builder.build()
+    sha, reused = builder.build_or_reuse()
     producer: dict[str, Any] = {"job": "job_cpp_compiled_analysis", "unit": unit.unit_id, "branch": branch}
     if seeded is not None:
         producer["seeded"] = dict(seeded)

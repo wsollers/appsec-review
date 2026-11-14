@@ -24,6 +24,11 @@ entity insertion order, which must not change any shard or package byte. ``omit_
 reference feed unpublished (unavailable) and ``stale_feeds`` pins a feed older than its freshness
 bound; ``kev_cves``, ``nvd_records`` and ``mitre_weaknesses`` replace the fixture feed contents.
 
+``third_party`` adds two vendored C files (``third_party/zlib/inflate.c`` at the target root and
+``native/third_party/lz4/lz4.c`` inside the native component) with a high-severity Semgrep and a high-severity
+cppcheck observation located in them, a cppcheck ``style`` observation in each tree, and a cppcheck ``warning``
+in first-party ``native/src/parse.c`` (T-165 dispositions, T-167 stylistic classes).
+
 ``config`` binds the run to that configuration file (loaded under the ambient environment, so set any
 capacity overlay first) before the synthetic upstream handoff is frozen. A test that later drives the
 real runner over the run must pass the configuration it will run with: the runner refuses a run bound
@@ -56,7 +61,7 @@ from tests.fixtures import reference_feeds as feeds
 RUN_ID = "2026-10-12-0001"
 SNAPSHOT = "target-sha256:" + "7" * 64
 SHARDS = ("source", "components", "build", "semgrep", "opengrep", "codeql", "osv", "ci", "priority", "history",
-          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence", "gitleaks")
+          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence", "gitleaks", "cppcheck")
 # The seeded credential of the opt-in ``secrets`` fixture: no artifact the intake produces may contain it.
 FIXTURE_SECRET = "sk_live_9f8e7d6c5b4a39281706f5e4d3c2b1a0"
 SECRET_FILE = "native/src/config.cpp"
@@ -123,6 +128,12 @@ FILES = {
                                 "int q(int n) { return n * 4; }\n"),
     "native/src/io.c": ("C", "int r(void) {\n  return 0;\n  system(\"x\"); // nosemgrep\n}\n"),
     ".github/workflows/ci.yml": ("YAML", "on: pull_request_target\njobs:\n  b:\n    steps: []\n"),
+}
+# Opt-in ``third_party`` fixture: vendored trees at the target root and inside the native component.
+THIRD_PARTY_FILES = {
+    "third_party/zlib/inflate.c": ("C", "#include <string.h>\nint inflate(char *w) {\n  char b[4]; strcpy(b, w);\n"
+                                        "  return 0;\n}\n"),
+    "native/third_party/lz4/lz4.c": ("C", "int lz4(char *d, int n) {\n  return d[n];\n}\n"),
 }
 
 INDEXING_JOB = "job_review_data_indexing"
@@ -196,7 +207,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              mitre_weaknesses: dict[str, tuple] | None = None,
                              advisory_extra: dict[str, dict[str, Any]] | None = None,
                              secrets: bool = False, secret_extra: dict[str, Any] | None = None,
-                             config: Path | None = None) -> FixtureRun:
+                             third_party: bool = False, config: Path | None = None) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -212,6 +223,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     files = dict(FILES)
     if secrets:
         files[SECRET_FILE] = ("C++", SECRET_SOURCE)
+    if third_party:
+        files.update(THIRD_PARTY_FILES)
     for path, (_language, text) in files.items():
         (target / path).parent.mkdir(parents=True, exist_ok=True)
         (target / path).write_text(text, encoding="utf-8")
@@ -293,9 +306,27 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
         observation("sast_low", "tool-semgrep", "py.assert", "LOW", "svc/api/util.py", 1, language="Python"),
         observation("sast_unlocated", "tool-semgrep", "py.eval", "HIGH", None, 1, language="Python"),
     ]
+    semgrep_relations = [observed("sast_high", "svc/api/handler.py"), observed("sast_critical", "native/src/parse.c"),
+                         observed("sast_suppressed", "native/src/io.c")]
+    if third_party:
+        semgrep.append(observation("sast_vendored_high", "tool-semgrep", "c.strcpy", "ERROR",
+                                   "third_party/zlib/inflate.c", 3, rule_mapping={"cwe": ["CWE-120"]}, language="C"))
+        semgrep_relations.append(observed("sast_vendored_high", "third_party/zlib/inflate.c"))
     shard("semgrep", "observations", "semgrep", {**evidence, "producer": "tool-semgrep"}, semgrep,
-          [observed("sast_high", "svc/api/handler.py"), observed("sast_critical", "native/src/parse.c"),
-           observed("sast_suppressed", "native/src/io.c")])
+          semgrep_relations)
+    if third_party:
+        # cppcheck rows as the adapter indexes them: native severity error/warning/style, category source_sast.
+        shard("cppcheck", "observations", "cppcheck", {**evidence, "producer": "tool-cppcheck"}, [
+            observation("cppcheck_vendored_high", "tool-cppcheck", "arrayIndexOutOfBounds", "error",
+                        "native/third_party/lz4/lz4.c", 2, language="C"),
+            observation("cppcheck_vendored_style", "tool-cppcheck", "variableScope", "style",
+                        "third_party/zlib/inflate.c", 3, language="C"),
+            observation("cppcheck_style", "tool-cppcheck", "unusedStructMember", "style", "native/src/parse.c", 5,
+                        language="C"),
+            observation("cppcheck_medium", "tool-cppcheck", "nullPointerRedundantCheck", "warning",
+                        "native/src/parse.c", 2, language="C"),
+        ], [observed("cppcheck_vendored_high", "native/third_party/lz4/lz4.c"),
+            observed("cppcheck_style", "native/src/parse.c"), observed("cppcheck_medium", "native/src/parse.c")])
     if secrets:
         # The row shape of a real gitleaks observation (--redact; the sanitizing index blanks the rule id).
         ids["secret_key"] = _identity(EntityKind.TOOL_OBSERVATION, "secret_key")
@@ -414,6 +445,11 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             "svc/api/util.py": {"component_id": "component:0001", "language": "Python", "suppression_count": 0,
                                 "suppressions": []},
         }
+        if third_party:
+            syntax_files["third_party/zlib/inflate.c"] = {"component_id": None, "language": "C",
+                                                         "suppression_count": 0, "suppressions": []}
+            syntax_files["native/third_party/lz4/lz4.c"] = {"component_id": "component:0002", "language": "C",
+                                                           "suppression_count": 0, "suppressions": []}
         accepted = AcceptedShards(run_root, [asdict(item) for item in identities], SNAPSHOT)
         product = build_scanner_correlation(accepted, {"files": syntax_files}, [], {"menu_partition_size": 50})
         derived = to_derived(product, SNAPSHOT, 10_000)

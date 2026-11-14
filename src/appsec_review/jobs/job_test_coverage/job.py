@@ -351,7 +351,8 @@ def build_job() -> Job:
             shard_id = f"test-coverage-{value['build_unit_id']}"
             path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
             if path.exists():
-                sha = file_sha256(path)
+                sha = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
+                                   target_snapshot=unit.job.source_fingerprint, shard_id=shard_id).attest_existing()
             else:
                 builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                                        target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)

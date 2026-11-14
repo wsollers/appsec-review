@@ -87,12 +87,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `dependency_intelligence_handoff` | `acceptance` | `appsec-review/dependency-intelligence-handoff/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_component_curation` | `resolution` | `appsec-review/native-component-curation/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_discovery` | `resolution` | `appsec-review/native-discovery/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `native_inference_inputs` | `resolution` | `appsec-review/native-inference-artifacts/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `native_inference_io` | `resolution` | `appsec-review/native-inference-attempt/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_inference_metrics` | `resolution` | `appsec-review/native-inference-metrics/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `native_inputs` | `inputs` | `appsec-review/native-inputs/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_metadata_investigation` | `resolution` | `appsec-review/native-metadata-investigation/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `native_sbom_conversion` | `publication` | `appsec-review/container-execution/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_sbom_metrics` | `publication` | `appsec-review/native-sbom-metrics/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_sbom_provenance` | `publication` | `appsec-review/native-sbom-provenance/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_spdx` | `publication` | `SPDX-2.3` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `scorecard_responses` | `scorecards` | `application/json` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `unity_inventory` | `inputs` | `appsec-review/unity-inventory/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
 
@@ -333,30 +338,50 @@ flowchart LR
   output_schema3["appsec-review/native-discovery/1"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["native_inference_metrics"]
-  output_schema4["appsec-review/native-inference-metrics/1"]
+  output4["native_inference_inputs"]
+  output_schema4["appsec-review/native-inference-artifacts/1"]
   job --> output4
   output4 -. schema .-> output_schema4
-  output5["native_metadata_investigation"]
-  output_schema5["appsec-review/native-metadata-investigation/1"]
+  output5["native_inference_io"]
+  output_schema5["appsec-review/native-inference-attempt/1"]
   job --> output5
   output5 -. schema .-> output_schema5
-  output6["native_sbom_metrics"]
-  output_schema6["appsec-review/native-sbom-metrics/1"]
+  output6["native_inference_metrics"]
+  output_schema6["appsec-review/native-inference-metrics/1"]
   job --> output6
   output6 -. schema .-> output_schema6
-  output7["native_sbom_provenance"]
-  output_schema7["appsec-review/native-sbom-provenance/1"]
+  output7["native_inputs"]
+  output_schema7["appsec-review/native-inputs/1"]
   job --> output7
   output7 -. schema .-> output_schema7
-  output8["native_spdx"]
-  output_schema8["SPDX-2.3"]
+  output8["native_metadata_investigation"]
+  output_schema8["appsec-review/native-metadata-investigation/1"]
   job --> output8
   output8 -. schema .-> output_schema8
-  output9["scorecard_responses"]
-  output_schema9["application/json"]
+  output9["native_sbom_conversion"]
+  output_schema9["appsec-review/container-execution/1"]
   job --> output9
   output9 -. schema .-> output_schema9
+  output10["native_sbom_metrics"]
+  output_schema10["appsec-review/native-sbom-metrics/1"]
+  job --> output10
+  output10 -. schema .-> output_schema10
+  output11["native_sbom_provenance"]
+  output_schema11["appsec-review/native-sbom-provenance/1"]
+  job --> output11
+  output11 -. schema .-> output_schema11
+  output12["native_spdx"]
+  output_schema12["SPDX-2.3"]
+  job --> output12
+  output12 -. schema .-> output_schema12
+  output13["scorecard_responses"]
+  output_schema13["application/json"]
+  job --> output13
+  output13 -. schema .-> output_schema13
+  output14["unity_inventory"]
+  output_schema14["appsec-review/unity-inventory/1"]
+  job --> output14
+  output14 -. schema .-> output_schema14
 ```
 
 <!-- generated:end -->

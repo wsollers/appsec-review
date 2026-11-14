@@ -57,6 +57,7 @@ from appsec_review.indexing.store import ShardSet, shard_key
 from appsec_review.retrieval.model import LogicalIdentity
 from appsec_review.retrieval.observations import REPORTED_SEVERITIES, SEVERITY_ORDER
 from appsec_review.review import advisories as advisory_reference
+from appsec_review.review.dispositions import DISPOSITION_RULE, FIRST_PARTY
 from appsec_review.review.fact_summary import SUMMARY_RULE, summarize_fact
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, LeadCollection, collect_leads
@@ -1145,6 +1146,9 @@ class _Assembler:
             if lead.path and lead.start_line:
                 self.at_location[(lead.path, lead.start_line)].append(lead)
         self.collection = collection
+        # Source identities outside the first-party disposition: no hunt menu or hunt scope may name one.
+        self.outside_scope_ids = frozenset(item.identity for item in scope.source_files
+                                           if item.disposition != FIRST_PARTY)
         self.correlation_hashes = tuple(sorted(str(item["sha256"]) for item in collection.correlation_shards))
         self.extra_gaps: list[ScopeGap] = []
         self.cwe_reference = cwe_reference
@@ -1505,6 +1509,13 @@ class _Assembler:
         unit = ranked.unit
         menu = [(lead, *self._locate(lead)[:2]) for lead in unit.leads]
         menu.sort(key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
+        # First-party scope gate (T-165): the menu and the package scope hold only first-party leads and files.
+        outside = sorted(lead.observation_id for lead, *_ in menu
+                         if self.scope.disposition_for(lead.path) != FIRST_PARTY)
+        outside_sources = sorted(set(unit.source_ids) & self.outside_scope_ids)
+        if outside or outside_sources:
+            raise IntegrityError(f"hunt unit {unit.key} reaches outside the first-party scope: leads={outside[:5]} "
+                                 f"sources={outside_sources[:5]}")
         bound = self.settings.max_context_entries
         budget = bound - len({(item.role, item.id) for item in unit.context})
         graph_context, graph_omitted = ([], 0) if unit.operation else self.graph.unit_context(unit.paths, budget)
@@ -1663,7 +1674,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     collection = collection if collection is not None else collect_leads(scope)
     collection = LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
                                 collection.gaps, collection.available, collection.correlation_audit,
-                                collection.correlation_shards, collection.non_lead_counts)
+                                collection.correlation_shards, collection.non_lead_counts,
+                                tuple(sorted(collection.excluded, key=lambda item: item.lead.observation_id)))
     graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
     admitted = admitted_leads(collection, settings)
@@ -1709,13 +1721,20 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "schema": MANIFEST_SCHEMA, "assembly_rule": ASSEMBLY_RULE, "package_schema": PACKAGE_SCHEMA,
         "run_id": scope.run_id, "manifest_sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot,
         "settings": settings.record(), "graph_settings": asdict(graph_settings),
-        "admission": [{"lead_id": lead.observation_id, "effective_severity": lead.effective_severity,
-                       "status": "admitted" if lead.observation_id in admitted_ids else "not_admitted",
-                       "reasons": admission_reasons(lead, settings),
-                       "residual_coverage": "review_pending" if lead.observation_id in admitted_ids
-                       else "exploration_reserve_cutoff" if admission_reasons(lead, settings)
-                       else "outside_admission_policy"}
-                      for lead in sorted(collection.leads, key=lambda item: item.observation_id)],
+        "admission": sorted([
+            *({"lead_id": lead.observation_id, "effective_severity": lead.effective_severity,
+               "status": "admitted" if lead.observation_id in admitted_ids else "not_admitted",
+               "reasons": admission_reasons(lead, settings),
+               "residual_coverage": "review_pending" if lead.observation_id in admitted_ids
+               else "exploration_reserve_cutoff" if admission_reasons(lead, settings)
+               else "outside_admission_policy"} for lead in collection.leads),
+            # Leads outside the review scope (T-165 dispositions, T-167 stylistic classes): not admitted
+            # by scope, with the reason; the observation remains scanner coverage, never a gap.
+            *({"lead_id": item.lead.observation_id, "effective_severity": item.lead.effective_severity,
+               "status": "not_admitted", "reasons": [], "residual_coverage": "outside_review_scope",
+               "exclusion": item.reason, "exclusion_detail": item.detail[:500]} for item in collection.excluded)],
+            key=lambda entry: entry["lead_id"]),
+        "source_dispositions": scope.dispositions.record(),
         "rules": {"families": dict(FAMILY_RULES), "rank": RANK_RULE, "obligations": OBLIGATION_RULE,
                   "neighborhood": NEIGHBORHOOD_RULE, "slice": SLICE_RULE},
         "inputs": ShardSet.identities(scope.shards), "evidence_map_sha256": sha256_hex(scope.evidence_map()),
@@ -1730,6 +1749,9 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "cwe_reference": cwe_reference.record() if cwe_reference is not None else None,
         "counts": {"leads": collection.counts(), "admitted": admitted_counts, "kev_admitted": kev_admitted,
                    "non_lead_observations": dict(collection.non_lead_counts),
+                   "dispositions": {"rule": DISPOSITION_RULE, "files": scope.disposition_counts(),
+                                    "leads": {FIRST_PARTY: len(collection.leads),
+                                              **collection.exclusion_counts()}},
                    "packages": {"finding_lead": sum(1 for item in packages if item.kind == "finding_lead"),
                                 "hunt": sum(1 for item in packages if item.kind == "hunt")},
                    "units": {"total": len(ranked), "hunted": len(hunted), "below_cutoff": len(cutoff_gaps)},

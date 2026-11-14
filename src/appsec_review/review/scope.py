@@ -18,6 +18,7 @@ from typing import Any
 from appsec_review.indexing.store import ShardSet, shard_key, shard_summary
 from appsec_review.retrieval.core import RetrievalGap, resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
+from appsec_review.review.dispositions import DISPOSITIONS, DISPOSITION_RULE, FIRST_PARTY, SourceDispositions
 from appsec_review.review.identity import make_id
 from appsec_review.review.models import Gap, GapClass, IntegrityError
 from appsec_review.storage import file_sha256
@@ -190,6 +191,8 @@ class SourceFile:
     path: str
     identity: str
     language: str | None
+    # Source disposition (review/dispositions.py): first_party unless a configured glob names it otherwise.
+    disposition: str = FIRST_PARTY
 
 
 def _root_of(value: Any) -> str:
@@ -228,6 +231,9 @@ class AcceptedScope:
     freshness: Mapping[str, str]
     gaps: tuple[ScopeGap, ...]
     _sha: Mapping[tuple[str, str], str] = field(default_factory=dict, repr=False)
+    # The configured source dispositions the scope was accepted under; paths outside the catalog are
+    # classified by the same globs, so a lead located anywhere gets exactly one disposition.
+    dispositions: SourceDispositions = field(default_factory=SourceDispositions)
 
     @property
     def store(self) -> ShardSet:
@@ -258,6 +264,18 @@ class AcceptedScope:
             if item.path == path:
                 return item
         return None
+
+    def disposition_for(self, path: str | None) -> str:
+        """Disposition of a target-relative path: the catalog's source file, else the configured globs."""
+        source = self.source_for(path)
+        return source.disposition if source is not None else self.dispositions.classify(path)
+
+    def disposition_counts(self) -> dict[str, int]:
+        """Accepted source files per disposition; every disposition is listed, zero included."""
+        counts = {name: 0 for name in DISPOSITIONS}
+        for item in self.source_files:
+            counts[item.disposition] = counts.get(item.disposition, 0) + 1
+        return counts
 
     @property
     def index_names(self) -> tuple[str, ...]:
@@ -293,6 +311,8 @@ class AcceptedScope:
             "build_units": [{"build_unit_id": item.build_unit_id, "root": item.root, "identity": item.identity,
                              "languages": list(item.languages)} for item in self.build_units],
             "languages": dict(sorted(languages.items())),
+            "source_dispositions": {"rule": DISPOSITION_RULE, "files": self.disposition_counts(),
+                                    "patterns": self.dispositions.record()},
             "reference_freshness": dict(sorted(self.freshness.items())),
             "indexes": list(self.index_names), "query_sets": list(self.query_sets),
             "gaps": [gap.record() for gap in self.gaps],
@@ -356,8 +376,14 @@ def _coverage(store: ShardSet, name: str, shards: tuple[Mapping[str, Any], ...])
 
 
 def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
-                    manifest_sha256: str | None = None) -> AcceptedScope:
-    """Verify the run's accepted index set and build its evidence map (gates 1 and 2)."""
+                    manifest_sha256: str | None = None,
+                    dispositions: SourceDispositions | None = None) -> AcceptedScope:
+    """Verify the run's accepted index set and build its evidence map (gates 1 and 2).
+
+    ``dispositions`` (``settings.source_dispositions``) classifies every accepted source file; without it
+    every file is first-party, the library default.
+    """
+    policy = dispositions if dispositions is not None else SourceDispositions()
     run_root = Path(run_root).resolve()
     manifest_path, manifest_sha, manifest = _verified(run_root, manifest_path, manifest_sha256)
     snapshot = str(manifest.get("target_snapshot", ""))
@@ -387,7 +413,7 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
         path = (row["location"] or {}).get("path") or row["payload"].get("path") or row["native_id"]
         language = row["payload"].get("language")
         sources.setdefault(str(path), SourceFile(str(path), row["identity"],
-                                                 str(language) if language else None))
+                                                 str(language) if language else None, policy.classify(str(path))))
 
     freshness = {name: by_name[name].state for name in REFERENCE_QUERY_SETS}
     gaps: list[ScopeGap] = [gap for item in producers for gap in item.gaps]
@@ -403,4 +429,4 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
         build_units=tuple(units[key] for key in sorted(units)),
         source_files=tuple(sources[key] for key in sorted(sources)), producers=producers,
         freshness=freshness, gaps=sorted_gaps(gaps),
-        _sha={shard_key(shard): str(shard["sha256"]) for shard in shards})
+        _sha={shard_key(shard): str(shard["sha256"]) for shard in shards}, dispositions=policy)

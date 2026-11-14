@@ -224,6 +224,35 @@ class PipelineLog:
         records, valid_length = _valid_lines(payload)
         return records, valid_length != len(payload)
 
+    def iterate(self):
+        """Yield the complete, sequence-valid records one at a time, never holding the log in memory.
+
+        The run-wide log grows with every job (smoke-cpp run 2026-11-14-0003 reached 2.06 GB); a
+        consumer that needs one fact about it must stream. A torn trailing line is ignored, as in
+        :meth:`read`; a malformed complete record or a sequence break is an error, as there.
+        """
+        if not self.path.exists():
+            return
+        expected = 1
+        offset = 0
+        with self.path.open("rb") as stream:
+            for line in stream:
+                if not line.endswith(b"\n"):
+                    return
+                try:
+                    record = json.loads(line)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ValueError(f"malformed complete pipeline log record at byte {offset}") from exc
+                if not isinstance(record, dict) or record.get("sequence") != expected:
+                    raise ValueError(f"invalid pipeline log sequence at byte {offset}")
+                expected += 1
+                offset += len(line)
+                yield record
+
+    def contains(self, predicate) -> bool:
+        """Whether any complete record satisfies ``predicate``; stops at the first match."""
+        return any(predicate(record) for record in self.iterate())
+
     def follow(self, cursor: EventCursor | None = None, *, max_records: int = 256,
                max_bytes: int = 1024 * 1024) -> EventPage:
         """Read a bounded page; never advance past a torn or invalid complete record.

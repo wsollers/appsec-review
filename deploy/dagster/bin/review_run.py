@@ -208,6 +208,57 @@ def verify_build_profile_images(document: dict, *, runner=subprocess.run) -> Non
         raise RuntimeError("project build image preflight failed; " + "; ".join(mismatches))
 
 
+# Build profiles whose language CodeQL analyses in build mode (planning.py language_modes defaults).
+CODEQL_BUILD_PROFILES = ("native", "java", "go", "dotnet")
+
+
+def verify_codeql_runtimes(document: dict, *, runner=subprocess.run) -> list[str]:
+    """Refuse a review whose CodeQL inventory cannot run; return warnings for undeclared build environments.
+
+    With no ``[review_policy.image_builder]`` the derive path (``preinstalled_undeclared = "derive"``) is
+    unavailable and every CodeQL environment needs an exact ``preinstalled_runtimes`` declaration in
+    ``deploy/dagster/host-pins.toml`` for the effective application user. The source (inventory)
+    image without one leaves CodeQL entirely dead (``pinned runtime did not report the required
+    extractor`` on every language), so that is refused before submission; a compiled build profile
+    without one is reported, because only the target decides whether that profile is used.
+    smoke-cpp runs 2026-11-13-0001 to 2026-11-14-0003 recorded exactly this gap for three hours each.
+    """
+    from appsec_review.container_runtime.identity import application_runtime_user
+    codeql = document["jobs"].get("job_codeql_analysis", {}).get("settings", {})
+    if not codeql.get("enabled") or document.get("review_policy", {}).get("image_builder") is not None:
+        return []
+    user = application_runtime_user(str(codeql["runtime_user"]))
+    declarations = [item for item in codeql.get("preinstalled_runtimes", ()) if item.get("runtime_user") == user]
+
+    def declared(image_id: str) -> str | None:
+        matches = [item for item in declarations if item.get("build_image_id") == image_id]
+        if len(matches) != 1:
+            return f"no preinstalled runtime declaration for {image_id} and user {user}"
+        runtime_id = matches[0]["runtime_image_id"]
+        inspected = runner(["docker", "image", "inspect", runtime_id, "--format", "{{.Id}}"],
+                           cwd=ROOT, capture_output=True, text=True, timeout=60, check=False)
+        actual = inspected.stdout.strip() if inspected.returncode == 0 else "unavailable"
+        return None if actual == runtime_id else f"declared runtime image {runtime_id} resolved {actual}"
+
+    remedy = ("; no bounded image builder is configured, so declare the runtime in deploy/dagster/host-pins.toml "
+              "(docs/operations/codeql-analysis.md, Explicit preinstalled runtimes)")
+    problem = declared(str(codeql["source_image_id"]))
+    if problem is not None:
+        raise RuntimeError(f"CodeQL runtime preflight failed for the inventory image {codeql['source_image_tag']}: "
+                           f"{problem}{remedy}")
+    warnings = []
+    profiles = document["jobs"].get("job_project_build", {}).get("settings", {}).get("profiles", {})
+    for name in CODEQL_BUILD_PROFILES:
+        profile = profiles.get(name)
+        if not profile:
+            continue
+        problem = declared(str(profile["image_id"]))
+        if problem is not None:
+            warnings.append(f"CodeQL will record TOOLCHAIN_UNAVAILABLE for the {name} build profile "
+                            f"{profile['tag']}: {problem}{remedy}")
+    return warnings
+
+
 def get_run(url: str, run_id: str) -> dict:
     request = Request(url, data=json.dumps({"query": QUERY, "variables": {"runId": run_id}}).encode(),
                       headers={"Content-Type": "application/json"})

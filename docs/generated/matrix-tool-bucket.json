@@ -257,7 +257,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "binary_hardening.blint_scan"
         }
@@ -408,7 +408,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "configuration.checkov_scan"
         }
@@ -547,7 +547,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.cppcheck_scan"
         }
@@ -668,7 +668,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "secrets.gitleaks_scan"
         }
@@ -723,7 +723,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.gosec_scan"
         }
@@ -856,7 +856,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "vulnerability_matching.grype_scan"
         }
@@ -911,7 +911,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "configuration.hadolint_scan"
         }
@@ -1040,7 +1040,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.mobsfscan_scan"
         }
@@ -1141,7 +1141,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.opengrep_scan"
         }
@@ -1208,7 +1208,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "vulnerability_matching.osv_scanner_scan"
         }
@@ -1263,7 +1263,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.phpcs_scan"
         }
@@ -1318,7 +1318,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.phpstan_scan"
         }
@@ -1373,7 +1373,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.pmd_scan"
         }
@@ -1428,7 +1428,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.psalm_scan"
         }
@@ -1557,7 +1557,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.semgrep_scan"
         }
@@ -1618,7 +1618,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.shellcheck_scan"
         }
@@ -1693,7 +1693,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "source_sast.spotbugs_scan"
         }
@@ -1896,7 +1896,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "software_inventory.syft_scan"
         }
@@ -1986,7 +1986,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "configuration.trivy_scan"
         }
@@ -2061,7 +2061,7 @@
         {
           "job": "job_evidence_collection",
           "job_enabled": true,
-          "line": 1310,
+          "line": 1313,
           "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
           "task": "configuration.zizmor_scan"
         }

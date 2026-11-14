@@ -129,10 +129,20 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
         assert raw and raw[0].read_bytes() == b""
 
 
+def _upstream_gaps(no_artifacts: bool, gap_records: bool) -> list:
+    """The language-build handoff's gaps: free text, or producer-gap/1 records as the job publishes today."""
+    if not no_artifacts:
+        return []
+    if gap_records:
+        from appsec_review.interchange import producer_gap
+        return [producer_gap("producer_reported_gap", "no produced artifacts", unit_id="acceptance.publish_handoff")]
+    return ["no produced artifacts"]
+
+
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
              duplicate_artifact: bool = False, no_artifacts: bool = False,
              name: str = "module.wasm", kind: str = "wasm-module", declared_releases: bool = True,
-             artifacts_factory=None, seed_accepted: bool = False):
+             artifacts_factory=None, seed_accepted: bool = False, gap_records: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if declared_releases:
@@ -178,7 +188,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
         "source_fingerprint": fingerprint, "upstream_project_build_handoff_sha256": "c" * 64,
         "receipts": [] if no_artifacts else [{"build_unit_id": "build-unit-fixture", "family": "wasm", "fingerprint": "d" * 64,
                       "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": artifacts}],
-        "gaps": ["no produced artifacts"] if no_artifacts else []}
+        "gaps": _upstream_gaps(no_artifacts, gap_records)}
     indexing_document = {"schema": "appsec-review/artifact-indexing/1", "source_fingerprint": fingerprint,
         "artifact_shard_count": 0 if no_artifacts else 1, "reused_shard_count": 0,
         "artifact_count": len(artifacts), "gaps": ["no produced artifacts"] if no_artifacts else [],
@@ -204,6 +214,22 @@ def test_no_artifacts_is_a_named_gap_with_verified_empty_index(tmp_path: Path) -
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert accepted["artifact_count"] == accepted["observation_count"] == 0
+    assert "no target or produced artifacts were available for artifact security analysis" in accepted["gaps"]
+
+
+def test_producer_gap_records_from_upstream_handoffs_are_read_as_text(tmp_path: Path) -> None:
+    """The language-build handoff publishes producer-gap/1 records; the load step must not treat them as strings.
+
+    Regression for the 2026-11-13 smoke-cpp run, whose load.accepted_artifacts failed with
+    ``TypeError: unhashable type: 'dict'`` when it deduplicated record gaps with ``dict.fromkeys``.
+    """
+    config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path, no_artifacts=True, gap_records=True)
+    outcome = recorded_graph(config, [build_job()], run_id).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_artifact_security_analysis(run_root)
+    assert all(isinstance(gap, str) for gap in accepted["gaps"])
+    assert "no produced artifacts" in accepted["gaps"]
     assert "no target or produced artifacts were available for artifact security analysis" in accepted["gaps"]
 
 

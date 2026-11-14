@@ -172,6 +172,11 @@ raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts;
 default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
 The overlay leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
 7 review teams.
+[`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml) is the
+capacity for a [smoke-target](test-targets.md#smoke-runs) review under `dev`: 8 review teams, the
+`inference_teams` pool at 2 so both lane units run, and prod's four I/O slots and scanner pool of 4.
+It changes no model, package or budget setting; the dev job budget (6,000,000 output tokens) still
+bounds a smoke run, and exhausting it records budget gaps, not a failure.
 Profile defaults are applied before capacity overlays, and the final resolved settings are frozen
 per run. Existing overlays are not silently overwritten.
 
@@ -243,6 +248,60 @@ connect_timeout_seconds = 0.5                   # 0.05..10; connect and socket t
   call that produced the result. A pointer that fails any check is a miss. The checks are: another
   cell in this run, matching hash, succeeded, not itself a memo reuse, same model and guidance, and
   revalidated citations.
+
+## Review scope: source dispositions and stylistic observations
+
+The review lanes reason only over **first-party** code, the code the target's developers own and can
+change. Every accepted source file gets one disposition at `scope.accept_manifest`: `first_party`,
+`vendored`, `sdk`, `generated` or `test`, derived from the target-relative POSIX globs under
+`[jobs.job_inference_security_review.settings.source_dispositions]` (T-165). The classes are tested in
+that order and the first match wins; an unmatched path, and a lead with no location, is first-party.
+Glob semantics are those of the source-history filters (`src/appsec_review/path_globs.py`): `**/`
+spans directories and a pattern without `/` matches the file name at any depth.
+
+```toml
+[jobs.job_inference_security_review.settings.source_dispositions]
+vendored = ["**/third_party/**", "**/vendor/**", "**/node_modules/**", "**/external/**", "**/extern/**"]
+sdk = ["**/sdk/**", "**/sdks/**"]
+generated = ["**/generated/**", "**/gen/**", "*.pb.go", "*_pb2.py", "*.pb.cc", "*.pb.h", "*.min.js"]
+test = ["**/test/**", "**/tests/**", "**/spec/**", "**/__tests__/**", "test_*", "*_test.*", "*Test.java"]
+```
+
+The effect is a scope decision, never a coverage gap:
+
+- `collect_leads` normalizes every observation as before, then `lead_families.scope_leads` moves a lead
+  located in a non-first-party file to `LeadCollection.excluded` with the disposition as its reason.
+  Excluded leads are never triaged, admitted to lane A or listed in a hunt menu.
+- `build_units` partitions first-party files only; a vendored file inside a component never becomes a
+  unit member or a hunt package `scope.source_ids` entry, and `_Assembler.hunts` fails the membership
+  gate if one ever does.
+- Scanners, indexes and `job_dependency_intelligence` still cover the whole target. The vendored code
+  remains queryable evidence and inventoried as a dependency; T-166 checks whether first-party code
+  reaches vendored code named by an advisory. `[exclusions]` is the separate, blunter tool that removes
+  paths from analysis altogether.
+
+Stylistic observations are filtered the same way (T-167). A rule class under
+`[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]` names a scanner (id or glob) and
+the native severities and/or rule-id globs of its style, readability, performance or portability checks;
+a first-party observation matching a class is recorded as `not_admitted` with reason `stylistic`. The
+shipped default names cppcheck `style`, `performance`, `portability` and `information` (the
+`unusedStructMember`, `variableScope`, `constVariablePointer`, `constParameterPointer` and
+`unreadVariable` family). The observation stays in the observations index and in scanner coverage. The
+`appsec-review.review-signal.sink.*` Semgrep rules are sink nominations, kept as `info` hunt hints and
+not stylistic; Semgrep rule metadata is not indexed, so a Semgrep class names rule ids.
+
+```toml
+[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]
+scanner = "tool-cppcheck"
+native_severities = ["style", "performance", "portability", "information"]
+```
+
+Both tables are semantic: changing them changes the lead set, the units and every fingerprint derived
+from the settings. A run shows what was left out in the package manifest: `admission` lists every
+excluded lead as `not_admitted` with `residual_coverage: outside_review_scope` and `exclusion` naming
+the disposition or `stylistic`; `counts.dispositions.files` counts accepted source files per disposition
+and `counts.dispositions.leads` counts leads kept (`first_party`) and excluded per reason;
+`source_dispositions` records the globs. The accepted-scope evidence map carries the same file counts.
 
 ## Opt-in medium/low exploration
 

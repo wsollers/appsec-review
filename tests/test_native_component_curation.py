@@ -521,6 +521,36 @@ def test_input_integrity_failure_occurs_before_model_call(damage):
         run(inputs, lambda *_: pytest.fail("invalid inputs reached model"))
 
 
+def test_reader_filled_evidence_backing_is_accepted_when_catalog_backing_is_null():
+    """The accepted catalog lists workspace files with a null backing; the discovery reader fills the
+    exact-byte backing on the record it reads and the evidence carries it. Regression for the
+    smoke-cpp run 2026-11-13-0001, which failed curate_components with "native evidence differs
+    from accepted catalog" on every workspace header and license file."""
+    discovery, files = discover({"include/alpha.h": "// header"}, domain="workspace", root_id="build-unit-1")
+    assert all(row["backing"] is not None for row in discovery["evidence"] if row["domain"] == "workspace")
+    catalog = [{**file, "backing": None} for file in files]
+    result = run((discovery, catalog), None)
+    assert result["schema"] == CURATION_SCHEMA
+    assert len(result["components"]) == 1
+
+
+def test_evidence_backing_with_another_identity_is_still_rejected():
+    discovery, files = discover({"include/alpha.h": "// header"}, domain="workspace", root_id="build-unit-1")
+    catalog = [{**file, "backing": None} for file in files]
+    renamed = {}
+    for row in discovery["evidence"]:
+        if row["domain"] == "workspace":
+            old = row["evidence_id"]
+            row["backing"] = {"path": "data/other", "sha256": "b" * 64, "size_bytes": 1}
+            row["evidence_id"] = renamed[old] = evidence_identity(row)
+    text = canonical_json(discovery).decode()
+    for old, new in renamed.items():
+        text = text.replace(old, new)
+    import json
+    with pytest.raises(NativeInputIntegrityError, match="differs from accepted catalog"):
+        run((json.loads(text), catalog), None)
+
+
 def test_callback_payload_mutation_does_not_mutate_input_or_accepted_context():
     inputs = discover({"include/alpha.h": "// header"})
 

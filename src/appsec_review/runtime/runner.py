@@ -228,7 +228,7 @@ class JobRunner:
             run_id, run_root = self.runs.create(now or datetime.now(timezone.utc))
         else:
             run_root = self.runs.resolve(run_id)
-        with worker_scope(self.config, run_root, preparing_job=job.job_id):
+        with worker_scope(self.config, run_root, preparing_job=job.job_id, orchestration=orchestration):
             return self._begin_attempt(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
                                        now=now, target_root=target_root, source_fingerprint=source_fingerprint,
                                        upstream_handoffs=upstream_handoffs)
@@ -361,8 +361,8 @@ class JobRunner:
             raise
         atomic_json(attempt_root / "claim.json", claim)
         context = self._context_from_claim(job, claim)
-        records, _ = PipelineLog(run_root).read()
-        if not any(item.get("event_type") == "RUN_STARTED" for item in records):
+        # RUN_STARTED is the log's first record; a streaming scan stops there and never loads the run-wide log.
+        if not PipelineLog(run_root).contains(lambda item: item.get("event_type") == "RUN_STARTED"):
             PipelineLog(run_root).write("RUN_STARTED", run_id=run_id, trigger=trigger,
                                         orchestrator=correlation.get("system", "application"),
                                         details={"dagster_run_id": correlation.get("run_id")})
@@ -386,6 +386,7 @@ class JobRunner:
 
     def begin_or_reuse_attempt(self, job: Job, **kwargs: Any) -> Mapping[str, Any]:
         run_id = kwargs.get("run_id")
+        revalidate = bool(kwargs.pop("revalidate", False))
         upstream = dict(kwargs.get("upstream_handoffs") or {})
         source_fingerprint = str(kwargs.get("source_fingerprint", "none"))
         self._check_target_inputs(job, kwargs.get("target_root"), source_fingerprint)
@@ -409,12 +410,44 @@ class JobRunner:
                 self.config, run_root, (job,), source_fingerprint,
                 target_root=kwargs.get("target_root"),
                 orchestration=kwargs.get("orchestration")).accepted(job, upstream)
+            revalidation = None
+            if (reasons == ("upstream handoffs identity changed",) and handoff_hash is not None
+                    and job.job_id != "job_target_analysis_plan"):
+                # Only the pins differ and every existing refusal passed. Under a REVALIDATE decision the
+                # accepted attempt is reused when each pinned upstream is equivalent to the one accepted now.
+                from appsec_review.runtime.repair import revalidation_admitted
+                if revalidate or revalidation_admitted(run_root, job.job_id):
+                    from appsec_review.runtime.equivalence import equivalent_upstreams
+                    pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
+                    pinned = json.loads(safe_path(run_root, pointer["handoff_path"]).read_text(encoding="utf-8"))
+                    if file_sha256(safe_path(run_root, pointer["handoff_path"])) != handoff_hash:
+                        raise ValueError("accepted handoff changed during reuse admission")
+                    revalidation = equivalent_upstreams(run_root, pinned["upstream_handoff_sha256"], upstream)
+                    if revalidation is not None:
+                        reasons = ()
             if not reasons and handoff_hash is not None:
                 pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
                 handoff_path = safe_path(run_root, pointer["handoff_path"])
                 if file_sha256(handoff_path) != handoff_hash:
                     raise ValueError("accepted handoff changed during reuse admission")
                 handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+                if revalidation is not None:
+                    # The reused attempt is not rewritten: its claim keeps the older pins, which still resolve
+                    # to immutable artifacts in this run; the record beside it says why latest.json of a
+                    # producer names a newer attempt than the one this consumer cites.
+                    required_upstream = dict(handoff["upstream_handoff_sha256"])
+                    from appsec_review.runtime.equivalence import REVALIDATION_SCHEMA
+                    record = {"schema": REVALIDATION_SCHEMA, "run_id": str(run_id), "job_id": job.job_id,
+                              "attempt_id": handoff["attempt_id"],
+                              "dispatch": dict(kwargs.get("orchestration") or {}),
+                              "producers": revalidation,
+                              "decided_at": datetime.now(timezone.utc).isoformat()}
+                    atomic_json(handoff_path.parent / "revalidation.json", record)
+                    PipelineLog(run_root).write(
+                        "REVALIDATED", run_id=str(run_id), job_id=job.job_id, attempt_id=handoff["attempt_id"],
+                        trigger=str(kwargs.get("trigger", "manual")),
+                        orchestrator=dict(kwargs.get("orchestration") or {}).get("system", "application"),
+                        details={"handoff_sha256": handoff_hash, "producers": revalidation})
                 original_claim_path = f"{handoff['resolving_paths']['attempt']}/claim.json"
                 original_claim_reference = next(
                     (item for item in handoff["artifacts"] if item["path"] == original_claim_path), None)
@@ -539,7 +572,8 @@ class JobRunner:
     def execute_or_reuse_unit(self, job: Job, claim: Mapping[str, Any], unit_id: str) -> Mapping[str, Any]:
         try:
             from appsec_review.runtime.repair import worker_scope
-            with worker_scope(self.config, self.runs.resolve(str(claim["run_id"]))):
+            with worker_scope(self.config, self.runs.resolve(str(claim["run_id"])),
+                              orchestration=claim.get("orchestration")):
                 return self._execute_or_reuse_unit(job, claim, unit_id)
         except BaseException as exc:
             try:
@@ -724,10 +758,10 @@ class JobRunner:
 
     @staticmethod
     def _failure_event_exists(context: JobContext, event: str, *, step_id: str | None = None) -> bool:
-        records, _ = PipelineLog(context.run_root).read()
-        return any(record["event_type"] == event and record["job_id"] == context.config.job_id
-                   and record["attempt_id"] == context.attempt_id
-                   and (step_id is None or record.get("step_id") == step_id) for record in records)
+        return PipelineLog(context.run_root).contains(
+            lambda record: record["event_type"] == event and record["job_id"] == context.config.job_id
+            and record["attempt_id"] == context.attempt_id
+            and (step_id is None or record.get("step_id") == step_id))
 
     def _fail_attempt(self, context: JobContext, claim: Mapping[str, Any], exc: BaseException) -> None:
         def write() -> None:
@@ -804,6 +838,14 @@ class JobRunner:
         if accepted:
             handoff["resolving_paths"]["result"] = attempt + "/result.json"
         handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
+        if accepted:
+            # Evidence-body identity (docs/architecture/job-interchange.md): absent, never guessed, when a
+            # pinned upstream predates it, so equivalence stays transitive.
+            from appsec_review.runtime.equivalence import handoff_content_sha256
+            identity = handoff_content_sha256(context.run_root, handoff, gaps=list(outcomes.get("gaps", [])),
+                                              unit_outputs=dict(result.get("outputs", {})))
+            if identity is not None:
+                handoff["content_sha256"] = identity
         if (context.config.job_id in {"job_target_analysis_plan", "job_build_environment_analysis"}
                 and len(canonical_json(handoff)) > 32 * 1024 * 1024):
             raise ValueError("planning/environment handoff exceeds its bounded accepted reader")
@@ -867,7 +909,8 @@ class JobRunner:
 
     def finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
         from appsec_review.runtime.repair import worker_scope
-        with worker_scope(self.config, self.runs.resolve(str(claim["run_id"]))):
+        with worker_scope(self.config, self.runs.resolve(str(claim["run_id"])),
+                          orchestration=claim.get("orchestration")):
             return self._finalize_attempt(job, claim)
 
     def _finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -1078,4 +1121,15 @@ class JobRunner:
         claim = self.begin_attempt(job, run_id=run_id, trigger=trigger, orchestration=orchestration, now=now,
                                    target_root=target_root, source_fingerprint=source_fingerprint,
                                    upstream_handoffs=upstream_handoffs)
+        return complete(self, job, claim)
+
+    def run_or_reuse(self, job: Job, **kwargs: Any) -> Mapping[str, Any]:
+        """The dispatch-time half of a ``REVALIDATE`` decision, in process.
+
+        Reuse the accepted attempt when every identity matches and every pinned upstream is
+        equivalent to the one accepted now (``begin_or_reuse_attempt`` with ``revalidate``), else run.
+        """
+        from appsec_review.runtime.launch import complete
+
+        claim = self.begin_or_reuse_attempt(job, revalidate=True, **kwargs)
         return complete(self, job, claim)

@@ -629,6 +629,13 @@ def test_limits_timeout_audit_redaction_and_concurrent_reads(tmp_path: Path) -> 
     assert len(json.dumps(response).encode()) <= 1600
     log_text = (runs / RUN_ID / "data" / "logs" / "pipeline.jsonl").read_text(encoding="utf-8")
     assert "verysecretsearch" not in log_text and "query_sha256" in log_text
+    audits = [json.loads(line)["details"] for line in log_text.splitlines()
+              if json.loads(line)["event_type"] == "RETRIEVAL_QUERY"]
+    # The audit record is bounded: a count, a hash and a short sample of the gaps, never the whole list
+    # (smoke-cpp run 2026-11-14-0003 wrote 73,378 of these at ~28 KB each and reached a 2.06 GB log).
+    assert audits and all(set(item) >= {"gap_count", "gaps_sha256", "gaps"} for item in audits)
+    assert all(len(item["gaps"]) <= 5 and all(len(gap) <= 160 for gap in item["gaps"]) for item in audits)
+    assert all(item["gap_count"] >= len(item["gaps"]) and len(item["gaps_sha256"]) == 64 for item in audits)
     concurrent = RetrievalCore(runs, RUN_ID)
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda _: concurrent.find(kind="symbol"), range(24)))

@@ -85,25 +85,27 @@ def test_branch_selective_force_and_repaired_job_preserve_independent_branch(tmp
     first = graph.run(target_root=tmp_path, source_fingerprint="none")
     root = config.runtime.runs_dir / first["run_id"]
     forced = graph.plan(first["run_id"], "none", force_from="job_b")
-    assert [item.action for item in forced] == ["REUSE", "RUN", "REUSE", "INVALIDATE"]
+    assert [item.action for item in forced] == ["REUSE", "RUN", "REUSE", "REVALIDATE"]
     old = (root / "data/configuration/resolved.json").read_bytes()
     old_claim = (root / "data/jobs/job_b/attempts/attempt_0001/claim.json").read_bytes()
     (tmp_path / "release-src/job_b/job.py").write_text("VERSION = 2\n")
     write_release(tmp_path, (job.job_id for job in jobs))
     plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
     assert plan["admissible"] is True
-    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "RUN", "REUSE", "INVALIDATE"]
+    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "RUN", "REUSE", "REVALIDATE"]
     assert canonical_json(plan) == canonical_json(plan_repair(config, root, jobs, "none", dependencies=dependencies))
     with pytest.raises(ValueError, match="plan-repair"):
         graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
     binding = admit_repair(config, root, jobs, plan, dependencies=dependencies)
     assert binding["repair"]
     second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
-    assert [item["action"] for item in second["decisions"]] == ["REUSE", "RUN", "REUSE", "INVALIDATE"]
+    assert [item["action"] for item in second["decisions"]] == ["REUSE", "RUN", "REUSE", "REVALIDATE"]
+    # job_b re-ran with the same evidence, so job_d's pins are equivalent and its attempt is reused.
+    assert second["jobs"]["job_d"]["revalidation"] == "REUSE"
     assert old == (root / "data/configuration/resolved.json").read_bytes()
     assert old_claim == (root / "data/jobs/job_b/attempts/attempt_0001/claim.json").read_bytes()
     assert calls.count(("job_c", "work.only", "attempt_0001")) == 1
-    assert len(calls) == 6
+    assert len(calls) == 5
 
 
 def _published_planning_context(tmp_path, orchestration):
@@ -327,6 +329,80 @@ def test_legacy_terminal_status_is_not_proof_that_workers_stopped(tmp_path, stat
     assert "historical worker stop state is unknown" in stopped_reasons(config, root)
     with pytest.raises(ValueError, match="historical worker stop state is unknown"):
         JobRunner(config).begin_attempt(job, run_id=root.name)
+
+
+def test_claim_of_the_live_dagster_dispatch_needs_no_stop_receipt(tmp_path):
+    """A resumed Dagster dispatch writes its first job's claim before its second job begins; that
+    claim is the live run's own, not a historical dispatch that needs verify-repair-stop. Regression
+    for smoke-cpp run 2026-11-13-0001, whose resume refused at image_pin_verification__begin."""
+    from appsec_review.runtime.repair import WORKER_PROTOCOL
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    live = root / "data/jobs/job_fixture/attempts/attempt_0002"
+    atomic_json(live / "claim.json", {
+        "run_id": root.name, "job_id": job.job_id, "attempt_id": "attempt_0002",
+        "worker_protocol": WORKER_PROTOCOL, "orchestration": {"system": "dagster", "run_id": "dispatch-live"}})
+    atomic_json(live / "status.json", {"status": "SUCCEEDED"})
+    message = "Dagster dispatch stop requires verify-repair-stop, not just a failed step"
+    assert message in stopped_reasons(config, root)
+    assert message not in stopped_reasons(config, root, current_dispatch="dispatch-live")
+    JobRunner(config).begin_attempt(job, run_id=root.name,
+                                    orchestration={"system": "dagster", "run_id": "dispatch-live"})
+    with pytest.raises(ValueError, match="verify-repair-stop"):
+        JobRunner(config).begin_attempt(job, run_id=root.name,
+                                        orchestration={"system": "dagster", "run_id": "dispatch-other"})
+
+
+def test_parallel_workers_of_the_live_dagster_dispatch_are_not_stopped_workers(tmp_path):
+    """Jobs of one dispatch run in parallel; a rerun with prior attempts must not refuse a job's
+    begin because a sibling job of the same dispatch is active. Regression for smoke-cpp run
+    2026-11-13-0001, dispatch abd5d04f, which refused build_environment_analysis__begin and
+    source_history_analysis__begin with "a registered worker is still active"."""
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    live = {"system": "dagster", "run_id": "dispatch-live"}
+    with worker_scope(config, root, preparing_job="job_sibling", orchestration=live):
+        assert "a registered worker is still active" in stopped_reasons(config, root)
+        assert "a registered worker is still active" not in stopped_reasons(config, root, current_dispatch="dispatch-live")
+        JobRunner(config).begin_attempt(job, run_id=root.name, orchestration=live)
+        with pytest.raises(ValueError, match="registered worker is still active"):
+            JobRunner(config).begin_attempt(job, run_id=root.name,
+                                            orchestration={"system": "dagster", "run_id": "dispatch-other"})
+
+
+def test_leases_of_the_live_dagster_dispatch_are_not_retained_leases(tmp_path):
+    """Sibling jobs of one dispatch hold resource leases while they run; a rerun job's begin must not
+    read them as leases a stopped run left behind. Regression for smoke-cpp run 2026-11-14-0001,
+    dispatch 94d89f59, which refused three begins with "retained host resource leases require
+    existing cleanup verification"."""
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    ledger = config.runtime.metadata_dir / "resource-admission/leases.json"
+    lease = {"pid": 1, "process_identity": "x", "containers": [], "reservation": {"cpu": 1, "memory_mb": 1},
+             "limits": {"cpu": 1, "memory_mb": 1, "io_slots": 1}, "action": "scan", "dispatch": "dispatch-live"}
+    atomic_json(ledger, {"schema": "appsec-review/resource-leases/1", "leases": {"a": lease}})
+    message = "retained host resource leases require existing cleanup verification"
+    assert message in stopped_reasons(config, root)
+    assert message not in stopped_reasons(config, root, current_dispatch="dispatch-live")
+    assert message in stopped_reasons(config, root, current_dispatch="dispatch-other")
+    atomic_json(ledger, {"schema": "appsec-review/resource-leases/1",
+                         "leases": {"a": {**lease, "quarantine": "cleanup uncertain"}}})
+    assert message in stopped_reasons(config, root, current_dispatch="dispatch-live")
+
+
+def test_begin_never_loads_the_whole_pipeline_log(tmp_path, monkeypatch):
+    """A begin reads one fact from the run-wide log (RUN_STARTED present?) by streaming; loading the log
+    whole killed poc_generation__begin on smoke-cpp run 2026-11-14-0003 (2.06 GB log, 5 GiB cgroup)."""
+    from appsec_review.observability.events import PipelineLog
+    config, (job,), _ = fixture(tmp_path)
+    monkeypatch.setattr(PipelineLog, "read", lambda self: pytest.fail("begin loaded the whole pipeline log"))
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    assert PipelineLog(root).contains(lambda record: record["event_type"] == "RUN_STARTED")
+    assert outcome["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
 
 
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
@@ -722,6 +798,244 @@ def test_shared_producer_change_invalidates_its_real_consumer_not_an_independent
     decisions = graph.plan(first["run_id"], "none")
     assert [item.action for item in decisions] == ["RUN", "RUN", "REUSE"]
     assert any("cached computation from job_a" in reason for reason in decisions[1].reasons)
+
+
+def test_a_rerun_producer_publishes_an_equivalent_handoff_and_descendants_inherit_the_identity(tmp_path):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    def accepted(job_id):
+        pointer = json.loads((root / f"data/jobs/{job_id}/latest.json").read_bytes())
+        return json.loads((root / pointer["handoff_path"]).read_bytes())
+    a1, b1 = accepted("job_a"), accepted("job_b")
+    assert len(a1["content_sha256"]) == 64 and len(b1["content_sha256"]) == 64
+    assert a1["content_sha256"] != b1["content_sha256"]
+    second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"], force_from="job_a")
+    a2, b2 = accepted("job_a"), accepted("job_b")
+    assert a2["attempt_id"] != a1["attempt_id"] and second["jobs"]["job_a"]["handoff_sha256"] != first["jobs"]["job_a"]["handoff_sha256"]
+    # Same evidence, new attempt: the file hash differs, the content identity does not, so the
+    # revalidated descendant keeps its accepted attempt and its older, equivalent pin.
+    assert a2["content_sha256"] == a1["content_sha256"]
+    assert second["jobs"]["job_b"]["revalidation"] == "REUSE" and b2 == b1
+
+
+def _accepted_handoff_of(root, job_id):
+    pointer = json.loads((root / f"data/jobs/{job_id}/latest.json").read_bytes())
+    return json.loads((root / pointer["handoff_path"]).read_bytes())
+
+
+def test_unchanged_descendants_are_revalidated_and_reused_when_the_upstream_republishes_equivalent_evidence(tmp_path):
+    config, jobs, calls = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    dependencies = {"job_a": (), "job_b": ("job_a",), "job_c": ("job_b",)}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    before = {job_id: _accepted_handoff_of(root, job_id) for job_id in ("job_b", "job_c")}
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
+    assert plan["admissible"] is True, plan["refusals"]
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "REVALIDATE", "REVALIDATE"]
+    for item in plan["decisions"][1:]:
+        assert item["handoff_sha256"] == json.loads(
+            (root / f"data/jobs/{item['job_id']}/latest.json").read_bytes())["handoff_sha256"]
+    admit_repair(config, root, jobs, plan, dependencies=dependencies)
+    second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
+    assert [item["action"] for item in second["decisions"]] == ["RUN", "REVALIDATE", "REVALIDATE"]
+    assert second["jobs"]["job_b"]["revalidation"] == second["jobs"]["job_c"]["revalidation"] == "REUSE"
+    assert len(calls) == 4  # only job_a executed again
+    after_a = _accepted_handoff_of(root, "job_a")
+    for job_id in ("job_b", "job_c"):
+        # Not rewritten: same accepted attempt, same pins to the older (equivalent) producer attempt.
+        assert _accepted_handoff_of(root, job_id) == before[job_id]
+        assert len(list((root / f"data/jobs/{job_id}/attempts").iterdir())) == 1
+    record = json.loads((root / "data/jobs/job_b/attempts/attempt_0001/revalidation.json").read_bytes())
+    assert record["schema"] == "appsec-review/attempt-revalidation/1"
+    assert record["producers"]["job_a"]["equivalence"] == "equivalent_content"
+    assert record["producers"]["job_a"]["pinned_handoff_sha256"] == before["job_b"]["upstream_handoff_sha256"]["job_a"]
+    assert record["producers"]["job_a"]["current_handoff_sha256"] == second["jobs"]["job_a"]["handoff_sha256"]
+    assert record["producers"]["job_a"]["content_sha256"] == after_a["content_sha256"]
+    assert after_a["attempt_id"] == "attempt_0002"
+    events = [json.loads(line) for line in (root / "data/logs/pipeline.jsonl").read_text().splitlines()]
+    assert [event["job_id"] for event in events if event["event_type"] == "REVALIDATED"] == ["job_b", "job_c"]
+
+
+@pytest.mark.parametrize("output", [{"value": 7, "terminal_status": "NOT_APPLICABLE"}, {"value": 8}],
+                         ids=["interchange-key", "unit-result-only"])
+def test_revalidated_descendant_runs_when_the_upstream_evidence_differs(tmp_path, output):
+    config, jobs, calls = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    def produce_not_applicable(context):
+        calls.append(("job_a", context.unit_id, context.job.attempt_id))
+        return dict(output)
+    changed = replace(jobs[0], handler=produce_not_applicable, units=(Unit("work.only", produce_not_applicable),))
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, (changed, jobs[1]), "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "REVALIDATE"]
+    admit_repair(config, root, (changed, jobs[1]), plan, dependencies=dependencies)
+    second = GraphRunner(config, (changed, jobs[1]), dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"])
+    assert second["jobs"]["job_b"]["revalidation"] == "RUN"
+    assert len(list((root / "data/jobs/job_b/attempts").iterdir())) == 2
+    assert not (root / "data/jobs/job_b/attempts/attempt_0001/revalidation.json").exists()
+    assert len(calls) == 4
+
+
+def test_revalidated_job_whose_own_identity_changed_is_invalidated_with_its_reason(tmp_path):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    for job_id in ("job_a", "job_b"):
+        (tmp_path / f"release-src/{job_id}/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "INVALIDATE"]
+    assert plan["decisions"][1]["reasons"][0] == "transitive downstream invalidation"
+    assert "implementation identity changed" in plan["decisions"][1]["reasons"]
+    assert plan["decisions"][1]["handoff_sha256"] is None
+
+
+def test_revalidation_requires_an_admitted_decision_and_equivalence_of_every_pin(tmp_path):
+    from appsec_review.runtime.equivalence import equivalent_upstreams
+    config, jobs, calls = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    dependencies = {"job_a": (), "job_b": (), "job_c": ("job_a", "job_b")}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    pins = json.loads((root / "data/jobs/job_c/attempts/attempt_0001/claim.json").read_bytes())["upstream_handoffs"]
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    plan = plan_repair(config, root, jobs, "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "REUSE", "REVALIDATE"]
+    admit_repair(config, root, jobs, plan, dependencies=dependencies)
+    runner = JobRunner(config)
+    rerun = runner.run(jobs[0], run_id=first["run_id"], target_root=tmp_path, source_fingerprint="none")
+    current = {**pins, "job_a": rerun["handoff_sha256"]}
+    assert current != pins
+    # The admitted REVALIDATE decision and equivalent pins reuse the attempt without an explicit flag.
+    reused = runner.begin_or_reuse_attempt(jobs[2], run_id=first["run_id"], target_root=tmp_path,
+                                           source_fingerprint="none", upstream_handoffs=current)
+    assert reused["reused"] is True and reused["attempt_id"] == "attempt_0001"
+    assert reused["upstream_handoffs"] == pins  # the claim keeps the older, equivalent pins
+    # A pin that is not equivalent (no such accepted handoff) or a missing producer means a fresh attempt.
+    assert equivalent_upstreams(root, pins, {**current, "job_b": "0" * 64}) is None
+    assert equivalent_upstreams(root, pins, {"job_a": current["job_a"]}) is None
+    assert equivalent_upstreams(root, pins, current)["job_b"]["equivalence"] == "identical_handoff"
+    before = len(calls)
+    fresh = runner.begin_or_reuse_attempt(jobs[2], run_id=first["run_id"], target_root=tmp_path,
+                                          source_fingerprint="none", upstream_handoffs={"job_a": current["job_a"]})
+    assert not fresh.get("reused") and fresh["attempt_id"] != "attempt_0001"
+    assert len(calls) == before
+
+
+def test_a_pinned_handoff_without_a_content_identity_is_never_equivalent(tmp_path):
+    from appsec_review.runtime.equivalence import equivalent_upstreams
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    pins = json.loads((root / "data/jobs/job_b/attempts/attempt_0001/claim.json").read_bytes())["upstream_handoffs"]
+    rerun = JobRunner(config).run(jobs[0], run_id=first["run_id"], target_root=tmp_path, source_fingerprint="none",
+                                  trigger="manual")
+    current = {"job_a": rerun["handoff_sha256"]}
+    assert equivalent_upstreams(root, pins, current)["job_a"]["equivalence"] == "equivalent_content"
+    # Strip the identity from the pinned (older) handoff as a handoff predating the field would lack it.
+    path = root / "data/jobs/job_a/attempts/attempt_0001/handoff.json"
+    handoff = json.loads(path.read_bytes())
+    del handoff["content_sha256"]
+    path.write_bytes(canonical_json(handoff))
+    stripped = {"job_a": __import__("hashlib").sha256(path.read_bytes()).hexdigest()}
+    assert equivalent_upstreams(root, stripped, current) is None
+
+
+def _dataset(job_id):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.storage.shared import RECEIPT_SCHEMA
+    return artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=(f"data/jobs/{job_id}/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+
+
+def _contract(**fields):
+    from appsec_review.runtime.contracts import JobContract
+    return JobContract(**fields)
+
+
+def _input(producer):
+    from appsec_review.interchange import HANDOFF_SCHEMA
+    from appsec_review.runtime.contracts import InputRequirement
+    return InputRequirement(producer=producer, output_kind="handoff", schema=HANDOFF_SCHEMA)
+
+
+@pytest.mark.parametrize("change", ["added-dataset", "added-input"])
+def test_compatible_dataset_contract_widening_forces_only_the_changed_job(tmp_path, change):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b", "job_c"))
+    dependencies = {"job_a": (), "job_b": ("job_a",), "job_c": ()}
+    before = replace(jobs[1], contract=_contract()) if change == "added-input" else jobs[1]
+    graph = GraphRunner(config, (jobs[0], before, jobs[2]), dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    after = (replace(before, contract=_contract(inputs=(_input("job_a"),))) if change == "added-input"
+             else replace(before, datasets=(_dataset("job_b"),)))
+    plan = plan_repair(config, root, (jobs[0], after, jobs[2]), "none", dependencies=dependencies)
+    assert plan["admissible"] is True, plan["refusals"]
+    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "RUN", "REUSE"]
+    assert "dataset contract identity changed" in plan["decisions"][1]["reasons"]
+    assert canonical_json(plan) == canonical_json(
+        plan_repair(config, root, (jobs[0], after, jobs[2]), "none", dependencies=dependencies))
+
+
+@pytest.mark.parametrize("change", ["removed-dataset", "edited-dataset", "removed-input", "changed-flag",
+                                    "contract-added"])
+def test_incompatible_dataset_contract_change_refuses_the_plan(tmp_path, change):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    if change == "removed-dataset":
+        before, after = replace(jobs[1], datasets=(_dataset("job_b"),)), jobs[1]
+    elif change == "edited-dataset":
+        before = replace(jobs[1], datasets=(_dataset("job_b"),))
+        after = replace(jobs[1], datasets=(replace(_dataset("job_b"), description="Edited"),))
+    elif change == "removed-input":
+        before = replace(jobs[1], contract=_contract(inputs=(_input("job_a"),)))
+        after = replace(jobs[1], contract=_contract())
+    elif change == "changed-flag":
+        before = replace(jobs[1], contract=_contract())
+        after = replace(jobs[1], contract=_contract(propagate_handoff=False))
+    else:
+        before, after = jobs[1], replace(jobs[1], contract=_contract())
+    first = GraphRunner(config, (jobs[0], before), dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    plan = plan_repair(config, root, (jobs[0], after), "none", dependencies=dependencies)
+    assert plan["admissible"] is False
+    assert "unsupported dataset compatibility change for job_b" in plan["refusals"]
+    assert not any("job_a" in refusal for refusal in plan["refusals"])
+    with pytest.raises(ValueError, match="repair refused"):
+        admit_repair(config, root, (jobs[0], after), plan, dependencies=dependencies)
+
+
+def test_widened_dataset_contract_refuses_a_plan_that_would_reuse_the_old_attempt(tmp_path, monkeypatch):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ()}
+    first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    widened = replace(jobs[1], datasets=(_dataset("job_b"),))
+    # Even a planner that overlooked the contract change cannot admit reuse of the narrower attempt.
+    original = ResumePlanner._accepted
+    def overlooking(self, job, upstream, *args, **kwargs):
+        reasons, handoff_hash = original(self, job, upstream, *args, **kwargs)
+        return [reason for reason in reasons if reason != "dataset contract identity changed"], handoff_hash
+    monkeypatch.setattr(ResumePlanner, "_accepted", overlooking)
+    plan = plan_repair(config, root, (jobs[0], widened), "none", dependencies=dependencies)
+    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "REUSE"]
+    assert plan["admissible"] is False
+    assert "dataset contract of job_b changed but its accepted attempt would be reused" in plan["refusals"]
 
 
 def test_named_cache_cannot_hide_an_incompatible_producer_as_legacy(tmp_path):

@@ -60,8 +60,19 @@ change independently:
   --exec dagster code-server start ...`: after the image gate passes, the launch step verifies the
   mounted runtime assets and catalogs, writes the manifest to `/var/dagster/release/` (the
   `dagster-storage` volume; `APPSEC_REVIEW_RELEASE_MANIFEST` points every service and every
-  `docker compose exec` CLI command at it) and execs the code server. Changes when any file in the
-  release closure changes.
+  `docker compose exec` CLI command at it) and execs the code server. The manifest's `files` and
+  `sha256` change when any file in the release closure changes; a job's `implementation` and
+  `validation` identity changes only when its own closure does: the job package, every other job
+  package it imports, the `appsec_review` modules under `common` it transitively imports (with
+  their enclosing packages' `__init__`), every non-Python `common` file, the validators and the
+  scripts. A module whose `appsec_review` import the static walk cannot resolve to a release file,
+  or that imports dynamically (`importlib.import_module`, `__import__`), keeps the whole `common`
+  set for that job. A shared module that imports job packages (the registry, dataset tables)
+  contributes only itself: it does not make every job depend on every other job. The shared import
+  graph is dense, so most jobs still reach most shared modules (on 2026-11-13 each of the 47 jobs
+  reached 533 to 579 of the 715 `common` files); the gain is that modules no job imports (operator
+  tooling, the CLI, acceptance helpers, 95 modules) no longer re-identify every job, and a change
+  to one job package re-identifies only that job and the jobs that import it.
 
 Signed-module enforcement over the mount:
 
