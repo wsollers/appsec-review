@@ -25,6 +25,21 @@ classification and graph context route work; they do not prove control outcomes.
 precedes review data indexing, package assembly, hunting, red/blue review and independent
 verification. Prioritization and tagging do not depend on OWASP.
 
+With the collation pass (T-5008, [design](../architecture/collation-pass.md)) the workbench no
+longer classifies components itself: it reads the component's `target:*` class and facet tags
+from the accepted `tags` index, derives the control roles from them, and gates applicability on
+the class. A component that is not `target:web-api` gets every selected ASVS control as
+`not_applicable` with the target-class citation, one that is not `target:mobile` likewise for
+MASVS; such a component produces no batch, no `OWASP_WORKER_STARTED` event and no
+`control_evidence` fact, and the job ends `SUCCEEDED` with a not-applicable ledger when the pinned
+catalogs report no gap of their own. This is implemented: `classify_components` reads the tags,
+`build_applicability` applies the class gate first (`applicability-rules/2`, rows carry
+`target_classes` and `target_class_citations`), `target-class-ledger.json` records the per-family
+verdict per component, and a component without a `target:*` tag is `cannot_determine` for every
+control and is not dispatched. Review data indexing projects no `not_applicable` row into
+`control_evidence`. The handoff's `gaps` are missing coverage (catalog and result gaps); the method
+limitations stay under `limitations`.
+
 Direct CLI `start`, `resume` and `plan-resume` also select security tagging and OWASP after
 prioritization/code-graph indexing and before review data indexing. Normal enabled-job filtering
 applies: OWASP is selected by default, and `resume`/`plan-resume --force-from` can name tagging
@@ -56,7 +71,7 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 | `masvs_profile` | `L2` | `L1`, `L2` | Local aliases, both selecting all 24 MASVS 2 controls; not upstream levels |
 | `max_batch_size` | 12 | 1–64 | Control-component rows per batch |
 | `max_components_per_batch` | 5 | 1–16 | Distinct components per batch |
-| `max_components` | 128 | 1–128 | Components accepted for classification |
+| `max_components` | 128 | 1–128 | Components accepted for tag-based classification |
 | `max_discovery_files` | 512 | 1–4096 | Candidate accepted source files per component; omission counts remain explicit |
 | `max_discovery_bytes` | 8388608 | 1–16777216 | Total accepted source bytes inspected per component |
 | `max_evidence_per_component` | 60 | 1–200 | Accepted evidence/routing bounds; omissions remain named |
@@ -101,7 +116,8 @@ Inspect these run-owned paths after a run:
 - `data/indexes/owasp/accepted.json`: accepted immutable shard manifest, mode, upstream identity
   and resolved `assessment_bounds`;
 - `data/indexes/owasp/receipts/<semantic-key>.json`: shared-namespace model receipts;
-- the attempt's `artifacts/owasp-workbench/`: selection, classification, applicability, batches,
+- the attempt's `artifacts/owasp-workbench/`: selection, classification (from collation tags),
+  `target-class-ledger.json`, applicability, batches,
   model results, independent review, join, publication and metrics; and
 - `data/logs/pipeline.jsonl`: task/worker lifecycle, correlated model attempts, reuse and expansion
   dispositions; and

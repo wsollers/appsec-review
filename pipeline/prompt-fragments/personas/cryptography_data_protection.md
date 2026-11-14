@@ -1,7 +1,7 @@
 ---
 id: cryptography_data_protection
-version: 1
-covers: ["cwe:200", "cwe:208", "cwe:209", "cwe:256", "cwe:259", "cwe:295", "cwe:311", "cwe:312", "cwe:319", "cwe:321", "cwe:323", "cwe:326", "cwe:327", "cwe:328", "cwe:329", "cwe:330", "cwe:338", "cwe:532", "cwe:759", "cwe:760", "cwe:798", "cwe:916", "cwe:1240", "func:crypto:*", "func:secrets:*", "func:telemetry:*", "data:*"]
+version: 2
+covers: ["cwe:200", "cwe:208", "cwe:209", "cwe:256", "cwe:259", "cwe:295", "cwe:311", "cwe:312", "cwe:319", "cwe:321", "cwe:323", "cwe:326", "cwe:327", "cwe:328", "cwe:329", "cwe:330", "cwe:338", "cwe:532", "cwe:759", "cwe:760", "cwe:798", "cwe:916", "cwe:1240", "func:crypto:*", "func:secrets:*", "func:telemetry:*", "data:*", "role:crypto", "asset:keys", "asset:pii", "role:logging"]
 standards: ["cwe", "capec", "attack", "asvs5", "masvs2"]
 max_tokens: 1500
 ---

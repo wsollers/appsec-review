@@ -187,6 +187,15 @@ facts, and normalized build-command facts. Lead packages include source/componen
 under the same context bounds as hunt packages. Missing facts select a generic profile with a
 routing gap; a language alone is not evidence that a managed-language scope is a service.
 
+The collation pass (T-5008, [design](../architecture/collation-pass.md)) changes what a hunt unit
+carries and how it is routed: the unit context gains the unit's facet tags, its component's
+target class and facet-derived hunt obligations; `route_stack` reads `mechanism:*` facets so a
+managed-language scope with an HTTP or RPC listener selects its service stack without a
+`component:*` tag; personas may cover facets; `hunt_panel` tries `entry_down` first on a
+`trust:user-tainted` unit; and `ranking.facet_exposure`/`ranking.facet_trust` weight exposed,
+tainted units (`review-unit-rank/4`). All of these are implemented; the hunt view shows the facets,
+target classes and derived obligations under `facets` as closed ids.
+
 Teams run package-local follow-up rounds up to `rounds.max_rounds`. Each round applies the existing
 deterministic R5 evidence policy and R6 verifier-independence checks to accumulated evidence.
 `known_claims` contains only supported/confirmed claims; `variant` hunting is enabled from round 1
@@ -678,7 +687,7 @@ signal (a missing producer or feed) still contributes nothing, whatever its weig
 
 The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
 and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
-which reassembles hunt packages. `review-unit-rank/3` replaces raw tag counting: language, gap,
+which reassembles hunt packages. `review-unit-rank/4` replaces raw tag counting: language, gap,
 reported and derived tags do not add operation points; multiple labels/producers at one physical
 site count once. Missing or partial evidence remains unknown rather than proving absence.
 Fresh packages use `assemble-review-packages/14` and the model-facing `package-view/6`.
@@ -698,7 +707,7 @@ When the run has accepted `graph` shards (`job_code_graph_index`):
 - **Hunt unit context (T-5000).** A hunted unit's material that every partition shares (its bounded
   `context` entries, including the graph facts above, its source identities and the unit-wide
   retrieval grant) is written once per unit to `assembly/unit-context/<sha256>.json`
-  (`package-unit-context/1`) and listed in the package manifest under `unit_contexts`. Each hunt
+  (`package-unit-context/2`) and listed in the package manifest under `unit_contexts`. Each hunt
   package body holds only its own partition and a `unit_context` reference (`path`, `sha256`,
   `size_bytes`, `counts` of entries, files and entities), so `packages.hunt_menu_partition_size`
   decides the package count: a unit of N leads yields ceil(N / size) packages, and

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-unit-context.schema.json",
-  "title": "Review package unit context (package-unit-context/1)",
+  "title": "Review package unit context (package-unit-context/2)",
   "description": "The unit-wide material of one hunted review unit, published once by assemble-review-packages/14 (review/packages.py, _Assembler.unit_context_document) under unit-context/<sha256>.json beside the packages and referenced by every hunt partition of the unit through its body's unit_context {schema, path, sha256, size_bytes, counts}. The document is canonical JSON; its identity is the SHA-256 of its bytes. It carries no run or manifest identity: the same accepted facts give the same document in any run, and the hunt body that references it pins run_id and manifest_sha256. assemble_packages validates it before publication and load_unit_context validates it again before any consumer merges it back into a package body (merge_unit_context).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "assembly_rule", "unit_key", "scope", "context", "entity_ids"],
+  "required": ["schema", "assembly_rule", "unit_key", "scope", "context", "facets", "entity_ids"],
   "properties": {
-    "schema": {"const": "appsec-review/package-unit-context/1"},
+    "schema": {"const": "appsec-review/package-unit-context/2"},
     "assembly_rule": {"const": "appsec-review/assemble-review-packages/14"},
     "unit_key": {"type": "string", "minLength": 1},
     "scope": {
@@ -34,6 +34,49 @@
           "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
           "role": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
           "control_assessment": {"type": "object"}
+        }
+      }
+    },
+    "facets": {
+      "description": "unit-facets/1 (T-5008, docs/architecture/collation-pass.md): the unit's collation facet tags, the union over its source files and component, each with its strongest basis, distinct-subject count and the tag-assignment ids and entity identities it rests on, plus the component's target classes. Routing data, never evidence; the ids are traceable through the tags index.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "obligation_rule", "tags", "target_classes", "obligations"],
+      "properties": {
+        "rule": {"const": "appsec-review/unit-facets/2"},
+        "obligation_rule": {"const": "appsec-review/hunt-facet-obligations/1"},
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tag", "namespace", "basis", "subjects", "assignment_ids", "entity_ids"],
+            "properties": {
+              "tag": {"type": "string", "pattern": "^(role|exposure|trust|mechanism|asset|state):[a-z0-9][a-z0-9.-]*$"},
+              "namespace": {"enum": ["role", "exposure", "trust", "mechanism", "asset", "state"]},
+              "basis": {"enum": ["derived", "declared", "invoked", "reported", "confirmed"]},
+              "subjects": {"type": "integer", "minimum": 1},
+              "assignment_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "minItems": 1},
+              "entity_ids": {"$ref": "#/$defs/identities"}
+            }
+          }
+        },
+        "target_classes": {
+          "type": "array", "uniqueItems": true,
+          "items": {"enum": ["target:web-api", "target:mobile", "target:cli", "target:library", "target:build-tooling", "target:test-only"]}
+        },
+        "obligations": {
+          "description": "hunt-facet-obligations/1: the closed hunt obligations the unit's facets derive, each naming the facet tags it rests on. Bounded questions for the hunt, never findings.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["obligation", "basis_tags"],
+            "properties": {
+              "obligation": {"enum": ["authentication_enforced", "session_lifecycle", "input_validation", "authorization_checked", "secret_handling", "deserialization_safety", "storage_query_safety", "crypto_misuse", "path_and_file_handling", "logging_hygiene"]},
+              "basis_tags": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(role|exposure|trust|mechanism|asset|state):[a-z0-9][a-z0-9.-]*$"}}
+            }
+          }
         }
       }
     },

@@ -2,7 +2,7 @@
 
 An operation unit binds an original source site and its generated boundary context, when supplied.
 Fallback units retain stable sorted source ranges so seeded operations cannot hide unmodeled code.
-Units are ranked by ``review-unit-rank/3`` from the signals that are available: review
+Units are ranked by ``review-unit-rank/4`` from the signals that are available: review
 prioritization (LPS), source-history instability (SII), hotspots, distinct security-operation sites,
 medium/low/info lead hints, and the reference context of the unit's dependency/artifact advisories:
 ``advisory_kev`` (``RankWeights.advisory_kev`` points when any advisory is KEV-listed) and
@@ -33,8 +33,10 @@ from appsec_review.review.scope import AcceptedScope, ScopeGap
 from appsec_review.review.behavior import Operation, opportunity_sites
 
 
-RANK_RULE = "appsec-review/review-unit-rank/3"
-SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints", "advisory_kev", "advisory_epss")
+RANK_RULE = "appsec-review/review-unit-rank/4"
+SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints", "advisory_kev", "advisory_epss", "facets")
+# Collation facets (T-5008) that weight a unit: the file is reachable by clients or carries their data.
+FACET_SIGNAL_TAGS = {"exposure:client-facing": "facet_exposure", "trust:user-tainted": "facet_trust"}
 # Default reference-context weights (points of the 0-1000 signal scale), kept as names for callers.
 # KEV is a binary catalog fact; EPSS percentile is scaled. Both are deliberately below a full LPS/SII
 # signal: they order hunting, they are not evidence that the target is affected.
@@ -50,8 +52,8 @@ SIGNAL_CONTEXT_ROLES = frozenset({COVERAGE_ROLE, PROFILE_ROLE, DEPENDENCY_ROLE, 
 # Ranked-selection producers publish only selected items: no record for a unit is unknown, not zero.
 # Exhaustive producers (tags, normalized leads) make an absent record a true zero.
 _SIGNAL_PRODUCERS = {"lps": "review_prioritization", "sii": "source_history", "hotspot": "source_history",
-                     "tag_density": "security_tagging"}
-_EXHAUSTIVE = frozenset({"tag_density", "lead_hints"})
+                     "tag_density": "security_tagging", "facets": "security_tagging"}
+_EXHAUSTIVE = frozenset({"tag_density", "lead_hints", "facets"})
 
 
 def _engineering_context(scope: AcceptedScope
@@ -265,12 +267,16 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
             sources = sorted({source.identity for path in members if (source := scope.source_for(path))})
             signals: list[Signal] = []
             member_set = set(members)
-            for signal in ("lps", "sii", "hotspot", "tag_density"):
+            for signal in ("lps", "sii", "hotspot", "tag_density", "facets"):
                 producer = _SIGNAL_PRODUCERS[signal]
                 if not scope.producer(producer).shards:
                     signals.append(Signal(signal, None, "producer_unavailable"))
                     continue
                 matched = [row for row in rows[signal] if row["path"] in member_set]
+                if signal == "facets":
+                    # Collation is exhaustive over first-party files: no facet row is a true zero.
+                    signals.append(Signal(signal, _facet_points(matched, weights), None))
+                    continue
                 context.extend(context_entry(row["identity"], row["role"], row["shard_sha256"]) for row in matched)
                 if signal == "tag_density":
                     sites = opportunity_sites(matched)
@@ -332,6 +338,10 @@ def _operation_units(scope: AcceptedScope, units: list[ReviewUnit], operations: 
                           if row["path"] == operation.path and row["value"] is not None]
                 signals.append(Signal(signal.signal, max(values), None) if values
                                else Signal(signal.signal, None, signal.reason or "no_record"))
+            elif signal.signal == "facets":
+                signals.append(Signal("facets", _facet_points(
+                    [row for row in signal_rows["facets"] if row["path"] == operation.path], weights), None)
+                               if signal.value is not None else signal)
             elif signal.signal == "lead_hints":
                 hints = {"medium": weights.lead_hint_medium, "low": weights.lead_hint_low, "info": weights.lead_hint_info}
                 signals.append(Signal("lead_hints", min(weights.lead_hints_max, sum(
@@ -384,9 +394,17 @@ def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead],
     return kev, epss
 
 
+def _facet_points(rows: Iterable[Mapping[str, Any]], weights: RankWeights) -> int:
+    """Points for the exposure and trust facets present on the rows' files, capped at the signal scale."""
+    present = {str(row.get("tag")) for row in rows}
+    return min(MAX_SIGNAL_POINTS, sum(getattr(weights, weight) for tag, weight in FACET_SIGNAL_TAGS.items()
+                                      if tag in present))
+
+
 def _signal_rows(scope: AcceptedScope, weights: RankWeights = DEFAULT_RANK_WEIGHTS
                  ) -> dict[str, list[dict[str, Any]]]:
-    rows: dict[str, list[dict[str, Any]]] = {signal: [] for signal in ("lps", "sii", "hotspot", "tag_density")}
+    rows: dict[str, list[dict[str, Any]]] = {signal: [] for signal in ("lps", "sii", "hotspot", "tag_density",
+                                                                     "facets")}
     store = scope.store
     for shard in scope.producer("review_prioritization").shards:
         for row in store.entities((shard,), kinds=("priority_item",)):
@@ -410,6 +428,10 @@ def _signal_rows(scope: AcceptedScope, weights: RankWeights = DEFAULT_RANK_WEIGH
             rows["tag_density"].append({"identity": row["identity"], "path": _path(row), "role": "tag",
                                         "value": None, "payload": row["payload"],
                                         "shard_sha256": scope.shard_sha256(shard)})
+            name = row.get("name")  # the tag; the payload copy may be redacted by the index sanitizer
+            if isinstance(name, str) and name in FACET_SIGNAL_TAGS:
+                rows["facets"].append({"identity": row["identity"], "path": _path(row), "role": "tag",
+                                       "value": None, "tag": name, "shard_sha256": scope.shard_sha256(shard)})
     for values in rows.values():
         values.sort(key=lambda item: (str(item["path"]), item["identity"]))
     return rows

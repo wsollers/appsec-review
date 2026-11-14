@@ -49,6 +49,8 @@ SPECIALIZED_WORKERS = {
     "native_metadata": Worker("job_dependency_intelligence", "native_sbom_investigator",
         "native_metadata_investigation", "appsec-review/native-metadata-proposal/1", "native_source_ref",
         "native_dependency_analyst", "native-sbom-investigation"),
+    "unit_purpose": Worker("job_security_tagging", "unit_purpose_collator", "unit_purpose_collation",
+        "appsec-review/unit-purpose-proposal/1", "cited_line", skill="unit-purpose-collation"),
     "poc_writer": Worker("job_poc_generation", "poc_writer", "write_poc_function",
         "appsec-review/poc-writer-answer/1", "poc_source_location", skill="poc-writer"),
     "remediation_writer": Worker("job_remediation_planning", "remediation_writer", "remediation_proposal",

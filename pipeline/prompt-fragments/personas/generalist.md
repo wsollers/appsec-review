@@ -1,7 +1,7 @@
 ---
 id: generalist
-version: 1
-covers: ["func:ai:*"]
+version: 2
+covers: ["func:ai:*", "role:config", "role:test"]
 standards: ["cwe", "capec", "attack", "asvs5", "top10-2025"]
 max_tokens: 1500
 ---

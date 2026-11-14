@@ -109,9 +109,12 @@ strings and MASTG mappings are not runtime transport proof.
 
 Input discovery walks bounded **accepted indices**, not the target tree during inference.
 Component tag-cloud counts are distinct-subject lower bounds; missing tags are unknown, never
-proof of absence. Classification retains confidence, ambiguity, citations and coverage limitations.
-Technical `not_applicable` requires positive classification evidence and a reason; absence is
-`cannot_determine`, not N/A.
+proof of absence. Classification (`component-classification/2`) reads the component's `target:*`
+class and facet tags from the accepted `tags` index ([collation pass](collation-pass.md), T-5008);
+the workbench has no classifier of its own. It retains confidence, citations (tag identities and
+assignment ids) and coverage limitations. A control family applies only to a component whose class
+admits it (ASVS: `target:web-api`; MASVS: `target:mobile`); technical `not_applicable` cites the
+class assignment, and a component with no class is `cannot_determine`, not N/A, and is not dispatched.
 
 Typed references bind run, target, component, build/environment, accepted producer/index membership,
 content/file hashes, span and custody. The application re-resolves citations and binds them to the

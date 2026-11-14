@@ -116,6 +116,7 @@ crosswalk are pinned by path and SHA-256 under `jobs.job_security_tagging.settin
 | Family | Namespace | Catalog / authority | Pinned today |
 | --- | --- | --- | --- |
 | Code facts | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang`, `gap` | Local vocabulary file. `component` reuses the workbench `COMPONENT_ROLES`. | Yes (local file, SHA-256 pinned) |
+| Code facts (collation) | `role`, `exposure`, `trust`, `mechanism`, `asset`, `state`, `target` | Local vocabulary file; values and derivation in [collation-pass.md](collation-pass.md) (T-5008). `target` is `derived` only. | Yes (local file, SHA-256 pinned) |
 | Controls | `asvs5` | OWASP ASVS 5.0.0 | Yes (complete pinned catalog; tags are not assessment proof) |
 | Controls | `masvs2` | OWASP MASVS 2.1.0 | Yes (complete pinned catalog; tags are not assessment proof) |
 | Controls | `nist53r5` | NIST SP 800-53 Rev. 5 (OSCAL catalog) | Proposed |

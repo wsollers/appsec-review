@@ -1,7 +1,7 @@
 ---
 id: network_api_surface
-version: 1
-covers: ["cwe:346", "cwe:441", "cwe:444", "cwe:601", "cwe:918", "cwe:942", "cwe:1021", "cwe:1385", "func:net:*", "func:exec:ipc"]
+version: 2
+covers: ["cwe:346", "cwe:441", "cwe:444", "cwe:601", "cwe:918", "cwe:942", "cwe:1021", "cwe:1385", "func:net:*", "func:exec:ipc", "mechanism:*", "exposure:client-facing"]
 standards: ["cwe", "capec", "attack", "asvs5", "api-top10-2023", "top10-2025"]
 max_tokens: 1500
 ---

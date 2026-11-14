@@ -23,6 +23,7 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 | [Clang static analysis](clang-static-analysis.md) | scanners and evidence collection | current |
 | [Code-graph precomputation for direct review evidence](code-graph-precomputation.md) | code intelligence | historical |
 | [Code intelligence](code-intelligence.md) | code intelligence | current |
+| [Collation pass: facet tags for first-party units before hunting](collation-pass.md) | review inference and guidance | current |
 | [Cross-language CodeQL architecture](cross-language-codeql.md) | code intelligence | current |
 | [Dataflow-bounded package slices](dataflow-bounded-slices.md) | code intelligence | current |
 | [Build-bound debug-symbol indexing](debug-symbol-indexing.md) | code intelligence | current |

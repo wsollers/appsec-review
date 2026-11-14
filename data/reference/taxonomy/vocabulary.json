@@ -133,6 +133,56 @@
         "lang:swift", "lang:shell", "lang:powershell"
       ]
     },
+    "role": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived", "reported"], "rollup": "self",
+      "note": "Collation facet (docs/architecture/collation-pass.md, T-5008): the security-relevant job a first-party file or component does. Routing data, never evidence.",
+      "terms": [
+        "role:auth", "role:session", "role:authorization", "role:input-parsing", "role:serialization",
+        "role:crypto", "role:storage", "role:logging", "role:config", "role:build-glue", "role:test"
+      ]
+    },
+    "exposure": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived"], "rollup": "self",
+      "note": "Collation facet: who can reach the code. Derived from mechanism facets; never a deployment claim.",
+      "terms": ["exposure:client-facing", "exposure:internal", "exposure:operator-only", "exposure:build-time"]
+    },
+    "trust": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived"], "rollup": "self",
+      "note": "Collation facet: whose data flows through the code. trust:none is reserved and never assigned deterministically.",
+      "terms": ["trust:user-tainted", "trust:partner-tainted", "trust:trusted", "trust:none"]
+    },
+    "mechanism": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived"], "rollup": "self",
+      "note": "Collation facet: the channel through which the code is reached.",
+      "terms": [
+        "mechanism:networked-listener", "mechanism:rpc", "mechanism:http", "mechanism:ipc", "mechanism:file",
+        "mechanism:cli"
+      ]
+    },
+    "asset": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived", "reported"], "rollup": "self",
+      "note": "Collation facet: what is at stake in the code.",
+      "terms": ["asset:credentials", "asset:session-tokens", "asset:pii", "asset:keys", "asset:money"]
+    },
+    "state": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["declared", "invoked", "derived"], "rollup": "self",
+      "note": "Collation facet: what the code keeps between calls. state:session reconciles the T-5008 scope list with its done-when.",
+      "terms": ["state:stateful", "state:cache", "state:persistent-store", "state:session"]
+    },
+    "target": {
+      "family": "code_facts", "status": "active", "catalog": "local",
+      "bases": ["derived"], "rollup": "self",
+      "note": "Collation target class per component, derived from facet tags; gates OWASP control-family applicability.",
+      "terms": [
+        "target:web-api", "target:mobile", "target:cli", "target:library", "target:build-tooling", "target:test-only"
+      ]
+    },
     "gap": {
       "family": "gap", "status": "active", "catalog": "local",
       "bases": ["reported"], "rollup": "domain",

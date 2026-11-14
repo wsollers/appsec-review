@@ -1457,6 +1457,22 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             inventory_max_file_bytes=inventory_file_bytes,
             build_outputs=build_output_policy if job_id in BUILD_OUTPUT_JOBS else None,
         )
+    tagging_job = jobs.get("job_security_tagging")
+    if tagging_job is not None:
+        # Collation pass (T-5008): one source-disposition table. The tagging job inherits the inference
+        # review's T-165 globs unless it names an identical table; the resolved table is frozen with the run.
+        from dataclasses import replace as _replace
+        from .collation import parse_collation_settings
+        review_job = jobs.get("job_inference_security_review")
+        inherited = review_job.settings.get("source_dispositions") if review_job is not None else None
+        tagging_settings = dict(tagging_job.settings)
+        collation_table = dict(tagging_settings.get("collation") or {})
+        typed_collation = parse_collation_settings(collation_table, inherited_dispositions=inherited)
+        collation_table["source_dispositions"] = {
+            key: value for key, value in typed_collation.source_dispositions.record().items() if key != "rule"}
+        tagging_settings["collation"] = collation_table
+        jobs["job_security_tagging"] = _replace(tagging_job, settings=MappingProxyType(tagging_settings),
+                                                typed_settings=typed_collation)
     openvex_job = jobs.get("job_openvex_export")
     if openvex_job is not None and openvex_job.settings["enabled"]:
         for prerequisite in ("job_final_publication_gate", "job_inference_security_review"):

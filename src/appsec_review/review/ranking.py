@@ -1,4 +1,4 @@
-"""Lane B review-unit rank weights (``review-unit-rank/3``), typed and validated.
+"""Lane B review-unit rank weights (``review-unit-rank/4``), typed and validated.
 
 The weights turn each accepted rank signal into integer points on the 0-1000 signal scale. They are
 semantic configuration (``jobs.job_inference_security_review.settings.ranking``): they change which
@@ -27,6 +27,8 @@ class RankWeights:
       capped at ``lead_hints_max``.
     - ``advisory_kev``: points when any of the unit's advisories is CISA KEV-listed.
     - ``advisory_epss``: points for an EPSS percentile of 1.0; the unit's highest percentile scales it.
+    - ``facet_exposure`` / ``facet_trust``: points when a collation facet (T-5008) marks a file of the
+      unit ``exposure:client-facing`` / ``trust:user-tainted``; routing weight, never evidence.
     """
 
     lps: int = 1000
@@ -40,6 +42,8 @@ class RankWeights:
     lead_hints_max: int = 1000
     advisory_kev: int = 250
     advisory_epss: int = 250
+    facet_exposure: int = 50
+    facet_trust: int = 50
 
     def __post_init__(self) -> None:
         for item in fields(self):

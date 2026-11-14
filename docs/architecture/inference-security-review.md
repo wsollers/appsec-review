@@ -605,7 +605,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   - hotspots;
   - distinct evidenced security-operation sites, not raw tag counts;
   - medium, low, and info leads, which also appear on the hunt menu as hints;
-  - advisory reference signals (`review-unit-rank/3`): `advisory_kev` is 250 points when any
+  - advisory reference signals (`review-unit-rank/4`): `advisory_kev` is 250 points when any
     dependency/artifact advisory in the unit is KEV-listed, and `advisory_epss` is the unit's highest
     EPSS percentile times 250. A unit with no advisory lead scores a true zero; an advisory whose KEV
     or EPSS feed was unavailable makes the signal `unknown` (`feed_unavailable`), never zero. Both
@@ -632,7 +632,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   The weights reach `review/units.py` through `PackageSettings.rank_weights`. They are recorded in
   the package manifest's `settings` and are semantic settings, so they enter every fingerprint
   derived from the settings. Changing a weight changes the order, not the rule, so `RANK_RULE`
-  stays `review-unit-rank/3`.
+  stays `review-unit-rank/4`, which adds the `facets` signal (`facet_exposure`, `facet_trust`;
+  [collation pass](collation-pass.md)).
 
   The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
   is a `coverage_gap` with reason `below_hunt_cutoff`.

@@ -39,6 +39,7 @@ from appsec_review.config.inference_review import InferenceSecurityReviewSetting
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
 from appsec_review.guidance.routing import unit_sources
 from appsec_review.guidance.routing import rank_personas
+from appsec_review.jobs.job_security_tagging.taxonomy import FACET_NAMESPACES
 from appsec_review.inference import ModelRequest, ModelResult, ReviewModelRequest
 from appsec_review.inference.execution import CallContext
 from appsec_review.inference.recording import MODE_ENVIRONMENT
@@ -766,6 +767,7 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
         tag = "cwe:" + cwe.split("-", 1)[-1].lstrip("0")
         tags[tag] = tags.get(tag, 0.0) + 1.0
     subject = sorted(tag for tag in tags if tag.startswith(("infra:", "func:")))
+    facets = sorted(tag for tag in tags if tag.split(":", 1)[0] in FACET_NAMESPACES)
     components = sorted(tag for tag in tags if tag.startswith("component:"))
     build_facts: set[str] = set()
     interfaces: set[str] = set()
@@ -793,11 +795,12 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
         build_facts.add("wasm")
         fact_refs.add(build["ref"])
     stack = route_stack(languages=languages, components=components, build_facts=build_facts,
-                        interfaces=interfaces, subject_tags=subject)
+                        interfaces=interfaces, subject_tags=subject, facet_tags=facets)
     gaps: list[Gap] = []
     if stack.get("routing_gap"):
         gaps.append(make_gap(GapClass.ROUTING_GAP, f"{work.package_id}:routing:stack", stack.get("reason", "")))
     routing: dict[str, Any] = {"stack": stack["stack"], "stack_basis": stack["basis"], "tags": sorted(tags),
+                               "facets": facets,
                                "round": work.round_index, "fact_refs": sorted(fact_refs),
                                "exploration": _exploratory(work)}
     if work.lane is Lane.LEAD:

@@ -11,7 +11,7 @@ from appsec_review.config import load_config
 from appsec_review.jobs.job_owasp_control_assessment import build_job
 from appsec_review.owasp_workbench import (
     WorkbenchIndex, assess_batch, build_applicability, build_finding_packages,
-    characterize_components, compose, control_records, deterministic_join,
+    classify_components, compose, control_records, deterministic_join,
     fingerprint_inputs, load_catalogs, partition_work, publish_manifest, publish_shard,
     select_profiles, standards_manifest, verify_results,
 )
@@ -42,15 +42,24 @@ def citation(name: str) -> dict:
             "lines": [1, 2]}
 
 
+# Collation facets (T-5008) as the tags index projects them; a target class is derived, a facet declared.
+WEB = ["target:web-api", "mechanism:http", "role:auth", "role:storage"]
+ANDROID = ["target:mobile", "component:android-mobile"]
+
+
 def component(component_id: str, tags: list[str], paths: list[str] | None = None) -> dict:
+    routing = [{"identity": f"asr:tag_assignment:{index:064x}", "kind": "tag_assignment", "index": "tags",
+                "name": tag, "tag": tag, "basis": "derived" if tag.startswith("target:") else "declared",
+                "subject": {"kind": "component", "logical_id": component_id, "assignment_id": f"tag:{tag}"},
+                "usage": "routing_only"} for index, tag in enumerate(tags)]
     return {"target_id": "target-1", "project_id": "project-1", "component_id": component_id,
             "paths": paths or [f"{component_id}/main.txt"], "languages": [], "frameworks": [],
-            "tags": tags, "evidence": [citation(f"component:{component_id}")]}
+            "tags": [], "evidence": [citation(f"component:{component_id}")], "routing_context": routing}
 
 
 def prepared(components: list[dict], *, dynamic: bool = False):
     catalogs = load_catalogs(ROOT, sources())
-    classifications = characterize_components(components)
+    classifications = classify_components(components)
     selection = select_profiles(catalogs, asvs_level=2, masvs_profile="L2")
     rows = build_applicability(catalogs, classifications, selection, dynamic_authorized=dynamic)
     return catalogs, classifications, selection, rows
@@ -98,7 +107,7 @@ def test_job_topology_exposes_independent_validation_cells_and_join_barrier() ->
 
 
 def test_non_mobile_target_receives_no_applicable_masvs_controls() -> None:
-    _, _, _, rows = prepared([component("server", ["server", "api"])])
+    _, _, _, rows = prepared([component("server", WEB)])
     masvs = [row for row in rows if row["standard"] == "MASVS"]
     assert masvs and {row["outcome"] for row in masvs} == {"not_applicable"}
     assert all(row["evidence"] and row["reason"] for row in masvs)
@@ -107,8 +116,8 @@ def test_non_mobile_target_receives_no_applicable_masvs_controls() -> None:
 
 def test_mixed_target_routes_asvs_and_masvs_to_different_components() -> None:
     _, _, _, rows = prepared([
-        component("api", ["server", "api"]),
-        component("android", ["android"], ["mobile/AndroidManifest.xml", "mobile/Main.kt"]),
+        component("api", WEB),
+        component("android", ANDROID, ["mobile/AndroidManifest.xml", "mobile/Main.kt"]),
     ], dynamic=True)
     applicable = {(row["standard"], row["component_id"]) for row in rows if row["outcome"] == "applicable"}
     assert ("ASVS", "api") in applicable and ("MASVS", "android") in applicable
@@ -122,14 +131,14 @@ def test_ambiguous_component_routes_cannot_determine_not_na() -> None:
 
 
 def test_dynamic_obligation_is_explicit_missing_evidence() -> None:
-    _, _, _, rows = prepared([component("android", ["android"], ["AndroidManifest.xml"])])
+    _, _, _, rows = prepared([component("android", ANDROID, ["AndroidManifest.xml"])])
     network = next(row for row in rows if row["control_id"] == "MASVS-NETWORK-1")
     assert network["outcome"] == "unsupported_missing_evidence"
     assert network["gaps"]
 
 
 def test_batch_limits_assignment_and_exact_dispatch_accounting() -> None:
-    _, _, _, rows = prepared([component("api", ["server", "api"])])
+    _, _, _, rows = prepared([component("api", WEB)])
     work = partition_work(rows, ROOT, max_batch_size=1, max_components=1)
     assert all(len(batch["row_ids"]) <= 1 and len(batch["component_ids"]) <= 1
                for batch in work["batches"])
@@ -169,7 +178,7 @@ def _packages(catalogs, classifications, selection, rows, *, contradictory=False
 
 
 def test_worker_failure_becomes_gap_siblings_survive_and_failed_batch_resumes() -> None:
-    catalogs, classifications, selection, rows = prepared([component("api", ["server", "api"])])
+    catalogs, classifications, selection, rows = prepared([component("api", WEB)])
     work, packages = _packages(catalogs, classifications, selection, rows)
     assert len(work["batches"]) >= 2
     failed = assess_batch(work["batches"][0], packages[work["batches"][0]["batch_id"]], fail=True)
@@ -181,7 +190,7 @@ def test_worker_failure_becomes_gap_siblings_survive_and_failed_batch_resumes() 
 
 
 def test_conflicts_preserved_and_elevated_model_claim_requires_independent_review() -> None:
-    catalogs, classifications, selection, rows = prepared([component("api", ["server", "api"])])
+    catalogs, classifications, selection, rows = prepared([component("api", WEB)])
     work, packages = _packages(catalogs, classifications, selection, rows, contradictory=True)
     batch = work["batches"][0]
     result = assess_batch(batch, packages[batch["batch_id"]], worker=lambda _package: {
@@ -196,7 +205,7 @@ def test_conflicts_preserved_and_elevated_model_claim_requires_independent_revie
 
 
 def test_join_is_complete_exactly_once_and_rejects_duplicate() -> None:
-    catalogs, classifications, selection, rows = prepared([component("api", ["server", "api"])])
+    catalogs, classifications, selection, rows = prepared([component("api", WEB)])
     work, packages = _packages(catalogs, classifications, selection, rows)
     batch_results = [assess_batch(batch, packages[batch["batch_id"]]) for batch in work["batches"]]
     verified = verify_results(batch_results)
@@ -237,7 +246,7 @@ def test_run_isolated_scoped_index_retrieval_and_pagination(tmp_path: Path) -> N
 
 def test_selective_invalidation_after_one_component_change() -> None:
     catalogs, classifications, selection, rows = prepared([
-        component("api-a", ["server", "api"]), component("api-b", ["server", "api"])])
+        component("api-a", WEB), component("api-b", WEB)])
     work = partition_work(rows, ROOT)
     manifest = standards_manifest(catalogs)
     args = dict(standards=manifest, selection=selection, rows=rows, batches=work["batches"],
@@ -245,7 +254,7 @@ def test_selective_invalidation_after_one_component_change() -> None:
                 guidance_bundle_sha256="c" * 64, model_identity={"model": "fake"},
                 parser_versions={"rules": "1"})
     before = fingerprint_inputs(classifications=classifications, **args)
-    changed_input = [component("api-a", ["server", "api", "auth"]), component("api-b", ["server", "api"])]
+    changed_input = [component("api-a", [*WEB, "role:crypto"]), component("api-b", WEB)]
     _, changed_classifications, changed_selection, changed_rows = prepared(changed_input)
     changed_work = partition_work(changed_rows, ROOT)
     after = fingerprint_inputs(classifications=changed_classifications, standards=manifest,
@@ -267,7 +276,7 @@ def test_central_log_redacts_queries_and_secrets(tmp_path: Path) -> None:
 
 
 def test_finding_packages_are_bounded_and_do_not_embed_target_tree() -> None:
-    catalogs, classifications, selection, rows = prepared([component("api", ["server", "api"])])
+    catalogs, classifications, selection, rows = prepared([component("api", WEB)])
     work, packages = _packages(catalogs, classifications, selection, rows)
     package = next(iter(packages.values()))[0]
     assert "control" in package and "component" in package and "proof_obligations" in package

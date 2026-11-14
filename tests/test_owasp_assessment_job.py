@@ -29,6 +29,9 @@ ROOT = Path(__file__).parents[1]
 
 def accepted_fixture(path, *, source=None, extra_files=None, **kwargs):
     source = source or "import db\ndef get(q):\n    return db.raw('SELECT name FROM users WHERE id = ' + q)\n"
+    # T-5008: the workbench reads the target class from the collation facets; the fixture's svc component
+    # is an HTTP login route (target:web-api) unless a test says otherwise.
+    kwargs.setdefault("facets", True)
     with patch.dict(builder.FILES, {"svc/api/handler.py": ("Python", source), **(extra_files or {})}):
         return builder.build_accepted_index_set(path, omit_feeds=builder.FEEDS, **kwargs)
 
@@ -592,7 +595,9 @@ def test_model_or_guidance_policy_change_invalidates_actual_model_receipts(tmp_p
 
 
 def test_runtime_obligations_stay_unresolved_even_when_dynamic_is_authorized(tmp_path):
-    fixture = accepted_fixture(tmp_path, extra_files={
+    # T-5008: the mobile class comes from the collation tags (component:android-mobile, target:mobile),
+    # not from a manifest path.
+    fixture = accepted_fixture(tmp_path, facets="android", extra_files={
         "native/app.kt": ("Kotlin", "class App\n"),
         "native/AndroidManifest.xml": ("XML", "<manifest package=\"example.fixture\" />\n"),
     })

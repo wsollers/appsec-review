@@ -1,7 +1,7 @@
 ---
 id: filesystem_resources
-version: 1
-covers: ["cwe:22", "cwe:23", "cwe:36", "cwe:59", "cwe:73", "cwe:276", "cwe:367", "cwe:377", "cwe:379", "cwe:400", "cwe:404", "cwe:434", "cwe:552", "cwe:732", "cwe:770", "cwe:772", "func:fs:*", "func:data:file-upload"]
+version: 2
+covers: ["cwe:22", "cwe:23", "cwe:36", "cwe:59", "cwe:73", "cwe:276", "cwe:367", "cwe:377", "cwe:379", "cwe:400", "cwe:404", "cwe:434", "cwe:552", "cwe:732", "cwe:770", "cwe:772", "func:fs:*", "func:data:file-upload", "mechanism:file", "state:persistent-store"]
 standards: ["cwe", "capec", "attack", "asvs5"]
 max_tokens: 1500
 ---

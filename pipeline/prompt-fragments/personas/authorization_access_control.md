@@ -1,7 +1,7 @@
 ---
 id: authorization_access_control
-version: 1
-covers: ["cwe:269", "cwe:284", "cwe:285", "cwe:425", "cwe:566", "cwe:639", "cwe:862", "cwe:863", "cwe:915", "func:authz:*"]
+version: 2
+covers: ["cwe:269", "cwe:284", "cwe:285", "cwe:425", "cwe:566", "cwe:639", "cwe:862", "cwe:863", "cwe:915", "func:authz:*", "role:authorization"]
 standards: ["cwe", "capec", "attack", "asvs5", "api-top10-2023", "top10-2025"]
 max_tokens: 1500
 ---
