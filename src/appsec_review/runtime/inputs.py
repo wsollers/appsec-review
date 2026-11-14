@@ -15,7 +15,7 @@ from threading import RLock
 from typing import Any, Callable, Iterator, Mapping, ParamSpec, TypeVar
 
 from appsec_review.runtime.contracts import (
-    CoveragePolicy, InputChannel, InputRequirement, JobContract, MissingPolicy,
+    Availability, CoveragePolicy, InputChannel, InputRequirement, JobContract, MissingPolicy,
 )
 from appsec_review.runtime.datasets import DatasetDeclaration, read_dataset_contract, shard_owner
 from appsec_review.storage import file_sha256
@@ -166,14 +166,16 @@ def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
                 available = True
             else:
                 declaration = declarations[requirement.producer].get(requirement.output_kind)
-                if declaration is None or declaration.schema != requirement.schema:
-                    raise ValueError(f"producer output contract mismatch: {requirement.producer}/{requirement.output_kind}")
-                if declaration.authority is None or declaration.authority != requirement.authority:
-                    raise ValueError(f"producer evidence authority mismatch: {requirement.producer}/{requirement.output_kind}")
-                # Declaration compatibility is distinct from produced availability. The accepted
-                # producer's artifacts/shards, not graph ancestry, establish an emitted dataset.
-                available = _has_output(context.run_root, handoff, declaration,
-                                        tuple(declarations[requirement.producer].values()))
+                # Only explicit compatibility admits historical declaration absence. It grants no
+                # read permission and never bypasses a present declaration's schema or authority.
+                if declaration is not None or requirement.availability is not Availability.WHEN_DECLARED:
+                    if declaration is None or declaration.schema != requirement.schema:
+                        raise ValueError(f"producer output contract mismatch: {requirement.producer}/{requirement.output_kind}")
+                    if declaration.authority is None or declaration.authority != requirement.authority:
+                        raise ValueError(f"producer evidence authority mismatch: {requirement.producer}/{requirement.output_kind}")
+                    # The accepted producer's artifacts/shards establish produced availability.
+                    available = _has_output(context.run_root, handoff, declaration,
+                                            tuple(declarations[requirement.producer].values()))
             row.update(handoff_sha256=context.upstream_handoffs[requirement.producer],
                        attempt_id=handoff["attempt_id"], target_snapshot=handoff["target_snapshot"],
                        coverage=dict(handoff["coverage"]))

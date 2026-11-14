@@ -36,6 +36,7 @@ class Availability(StrEnum):
     REQUIRED = "required"
     OPTIONAL = "optional"
     WHEN_ENABLED = "when_producer_enabled"
+    WHEN_DECLARED = "when_output_declared"
 
 
 class MissingPolicy(StrEnum):
@@ -74,6 +75,9 @@ class InputRequirement:
                 raise ValueError(f"invalid input {name}")
         if self.availability is Availability.REQUIRED and self.missing is not MissingPolicy.REJECT:
             raise ValueError("required inputs must reject absence")
+        if self.availability is Availability.WHEN_DECLARED and (
+                self.channel is not InputChannel.HANDOFF or self.output_kind == "handoff"):
+            raise ValueError("when_output_declared requires a non-envelope handoff dataset")
         if self.channel is not InputChannel.HANDOFF and self.coverage is not CoveragePolicy.ALLOW_PARTIAL:
             raise ValueError("coverage guarantees require an accepted producer coverage contract")
 
