@@ -40,3 +40,4 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 | [Profile data and dependency exposure implementation](profile-data-and-dependency-exposure-implementation.md) | scanners and evidence collection | historical |
 | [Second-opinion brief: review protocol v2, the judge role and PoC generation](review-protocol-second-opinion-brief.md) | review inference and guidance | historical |
 | [Scanner launch reduction: design](scanner-launch-reduction-design.md) | scanners and evidence collection | historical |
+| [Appsec-review system review, 2026-11-13](system-review-2026-11-13.md) | overview | current |

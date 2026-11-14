@@ -2427,6 +2427,14 @@
       "subsystem": "scanners and evidence collection"
     },
     {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/system-review-2026-11-13.md",
+      "reason": "Keep the dated eighteen-component system review record, source-backed findings, and verification limits.",
+      "subsystem": "overview"
+    },
+    {
       "decision_record": false,
       "disposition": "generated",
       "kind": "generated",
