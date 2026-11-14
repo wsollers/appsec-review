@@ -2150,6 +2150,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "process",
+      "path": "docs/processes/system-review-prompt.md",
+      "reason": "Keep System review: the orchestrator prompt and component map as a bounded procedure, assigning every registered job to one review component.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
       "path": "docs/processes/test-tier-walk-prompt.md",
       "reason": "Keep Test-tier walk: the per-job session brief (T-113) as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
       "subsystem": "testing and operations"
