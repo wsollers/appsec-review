@@ -108,4 +108,3 @@ def test_codeql_preflight_requires_the_declared_runtime_image_to_exist_locally()
     other_user = {"build_image_id": SOURCE_ID, "runtime_image_id": SOURCE_RUNTIME, "runtime_user": "7:7"}
     with pytest.raises(RuntimeError, match="no preinstalled runtime declaration"):
         review_run.verify_codeql_runtimes(_codeql_document([other_user]), runner=_present(SOURCE_RUNTIME))
-
