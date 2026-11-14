@@ -79,7 +79,7 @@ def test_extraction_publishes_normalized_records_without_private_or_asserted_ide
     (index,) = run.result["indexes"]
     assert index["name"] == "debug_symbols" and index["schema"] == INDEX_SCHEMA and index["shard_id"] == "symbols-clang_dwarf"
     assert index["fingerprint"] == run.result["input_fingerprint"] and index["gaps"] == ()
-    assert index["producer"]["job_id"] == "job_debug_symbol_indexing" and index["producer"]["lane"] == "clang_dwarf"
+    assert index["producer"]["job"] == "job_debug_symbol_indexing" and index["producer"]["lane"] == "clang_dwarf"
     rows = payloads(run.context, run.result)
     assert sorted(row["record_kind"] for row in rows) == ["compilation_unit", "symbol", "type_layout"]
     function = next(row for row in rows if row["native_key"] == "fn:1")

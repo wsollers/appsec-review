@@ -22,7 +22,7 @@ def _stale_symbol_shard(run_root):
     builder = IndexBuilder(path, name=INDEX_NAME, fingerprint="9" * 64, target_snapshot=SNAPSHOT, shard_id="symbols-old")
     builder.add_coverage("old", "complete")
     return IndexIdentity(INDEX_NAME, INDEX_SCHEMA, builder.build(), "9" * 64, path.relative_to(run_root).as_posix(),
-                         {"job_id": "job_debug_symbol_indexing"}, (), "symbols-old")
+                         {"job": "job_debug_symbol_indexing"}, (), "symbols-old")
 
 
 @pytest.fixture

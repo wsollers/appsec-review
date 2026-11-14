@@ -214,7 +214,7 @@ def test_routes_publish_normalized_evidence_and_preserve_upstream(tmp_path, targ
     manifest = json.loads((context.run_root / publication["index_manifest"]["path"]).read_text())
     assert {(item["name"], item["sha256"]) for item in manifest["indexes"] if item["name"] != "debug_symbols"} == {
         (item.name, item.sha256) for item in upstream}
-    assert raw["producer"]["job_id"] == job.job_id
+    assert raw["producer"]["job"] == job.job_id
     assert any("source" in gap for gap in publication["gaps"])
     events = [json.loads(line) for line in context.events.path.read_text().splitlines()]
     debug_events = [event for event in events if event["event"].startswith("DEBUG_SYMBOL_")]
