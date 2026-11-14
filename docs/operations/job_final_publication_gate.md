@@ -29,8 +29,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_publication_gate/job.py#L123) |
-| `gate` | `gate.classify` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_publication_gate/job.py#L116) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_publication_gate/job.py#L131) |
+| `gate` | `gate.classify` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_publication_gate/job.py#L124) |
 | `load` | `load.verify_review` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_publication_gate/job.py#L64) |
 
 ### Accepted input declarations
@@ -48,6 +48,12 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_inference_security_review` | `claim_ledger` | `appsec-review/ledger-event/1` | handoff | optional | gap |
 | `job_inference_security_review` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | handoff | optional | gap |
 | `job_inference_security_review` | `scores_and_findings` | `appsec-review/finding-package/2` | handoff | optional | gap |
+| `job_inference_security_review` | `review_audit_metadata` | `appsec-review/review-audit-publication/1` | handoff | when_output_declared | gap |
+| `job_inference_security_review` | `review_decision_audit` | `appsec-review/review-audit-manifest/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_decisions` | `appsec-review/review-decision/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_verification_coverage` | `appsec-review/verification-coverage/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_decision_bases` | `appsec-review/decision-basis/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_audit_continuations` | `application/x-ndjson` | handoff | when_output_declared | not_applicable |
 | `job_poc_generation` | `handoff` | `appsec-review/job-handoff/2` | handoff | when_producer_enabled | reject |
 | `job_poc_generation` | `poc_generation_summary` | `appsec-review/poc-generation-handoff/2` | handoff | optional | gap |
 | `job_poc_generation` | `poc_writer_cells` | `appsec-review/poc-writer-receipt/1` | handoff | optional | gap |
@@ -58,6 +64,22 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_remediation_validation` | `handoff` | `appsec-review/job-handoff/2` | handoff | when_producer_enabled | reject |
 | `job_remediation_validation` | `remediation_validation_summary` | `appsec-review/remediation-validations/1` | handoff | optional | gap |
 | `job_remediation_validation` | `remediation_validation_receipts` | `appsec-review/remediation-validation/1` | handoff | optional | gap |
+| `job_artifact_security_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_artifact_security_analysis` | `artifact_security_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_ci_configuration_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_ci_configuration_analysis` | `ci_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_clang_static_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_clang_static_analysis` | `clang_static_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_codeql_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_codeql_analysis` | `codeql_observations` | `appsec-review/codeql-sarif-normalizer/3` | handoff | optional | gap |
+| `job_cpp_compiled_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_cpp_compiled_analysis` | `infer_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_evidence_collection` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_evidence_collection` | `static_tool_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_post_build_security_assessment` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_post_build_security_assessment` | `build_security` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_review_data_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_review_data_indexing` | `precomputed_products` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 
 ### Published dataset declarations
 
@@ -78,7 +100,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that`<br>`tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket`<br>`tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps` |
+| unit | `tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that`<br>`tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket`<br>`tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps`<br>`tests/unit/review_decision_audit_wiring/test_classification.py`<br>`tests/unit/review_decision_audit_wiring/test_gate_handler.py` |
 
 ### Dagster placement
 
@@ -146,56 +168,166 @@ flowchart LR
   input_schema10["appsec-review/finding-package/2"]
   producer10 --> input10 --> job
   input10 -. schema .-> input_schema10
-  producer11["job_poc_generation"]
-  input11["handoff"]
-  input_schema11["appsec-review/job-handoff/2"]
+  producer11["job_inference_security_review"]
+  input11["review_audit_metadata"]
+  input_schema11["appsec-review/review-audit-publication/1"]
   producer11 --> input11 --> job
   input11 -. schema .-> input_schema11
-  producer12["job_poc_generation"]
-  input12["poc_generation_summary"]
-  input_schema12["appsec-review/poc-generation-handoff/2"]
+  producer12["job_inference_security_review"]
+  input12["review_decision_audit"]
+  input_schema12["appsec-review/review-audit-manifest/1"]
   producer12 --> input12 --> job
   input12 -. schema .-> input_schema12
-  producer13["job_poc_generation"]
-  input13["poc_writer_cells"]
-  input_schema13["appsec-review/poc-writer-receipt/1"]
+  producer13["job_inference_security_review"]
+  input13["review_decisions"]
+  input_schema13["appsec-review/review-decision/1"]
   producer13 --> input13 --> job
   input13 -. schema .-> input_schema13
-  producer14["job_poc_generation"]
-  input14["poc_reproducers"]
-  input_schema14["appsec-review/poc-provenance/2"]
+  producer14["job_inference_security_review"]
+  input14["review_verification_coverage"]
+  input_schema14["appsec-review/verification-coverage/1"]
   producer14 --> input14 --> job
   input14 -. schema .-> input_schema14
-  producer15["job_remediation_planning"]
-  input15["handoff"]
-  input_schema15["appsec-review/job-handoff/2"]
+  producer15["job_inference_security_review"]
+  input15["review_decision_bases"]
+  input_schema15["appsec-review/decision-basis/1"]
   producer15 --> input15 --> job
   input15 -. schema .-> input_schema15
-  producer16["job_remediation_planning"]
-  input16["remediation_planning_summary"]
-  input_schema16["appsec-review/remediation-planning/1"]
+  producer16["job_inference_security_review"]
+  input16["review_audit_continuations"]
+  input_schema16["application/x-ndjson"]
   producer16 --> input16 --> job
   input16 -. schema .-> input_schema16
-  producer17["job_remediation_planning"]
-  input17["remediation_proposals"]
-  input_schema17["appsec-review/remediation-plan/1"]
+  producer17["job_poc_generation"]
+  input17["handoff"]
+  input_schema17["appsec-review/job-handoff/2"]
   producer17 --> input17 --> job
   input17 -. schema .-> input_schema17
-  producer18["job_remediation_validation"]
-  input18["handoff"]
-  input_schema18["appsec-review/job-handoff/2"]
+  producer18["job_poc_generation"]
+  input18["poc_generation_summary"]
+  input_schema18["appsec-review/poc-generation-handoff/2"]
   producer18 --> input18 --> job
   input18 -. schema .-> input_schema18
-  producer19["job_remediation_validation"]
-  input19["remediation_validation_summary"]
-  input_schema19["appsec-review/remediation-validations/1"]
+  producer19["job_poc_generation"]
+  input19["poc_writer_cells"]
+  input_schema19["appsec-review/poc-writer-receipt/1"]
   producer19 --> input19 --> job
   input19 -. schema .-> input_schema19
-  producer20["job_remediation_validation"]
-  input20["remediation_validation_receipts"]
-  input_schema20["appsec-review/remediation-validation/1"]
+  producer20["job_poc_generation"]
+  input20["poc_reproducers"]
+  input_schema20["appsec-review/poc-provenance/2"]
   producer20 --> input20 --> job
   input20 -. schema .-> input_schema20
+  producer21["job_remediation_planning"]
+  input21["handoff"]
+  input_schema21["appsec-review/job-handoff/2"]
+  producer21 --> input21 --> job
+  input21 -. schema .-> input_schema21
+  producer22["job_remediation_planning"]
+  input22["remediation_planning_summary"]
+  input_schema22["appsec-review/remediation-planning/1"]
+  producer22 --> input22 --> job
+  input22 -. schema .-> input_schema22
+  producer23["job_remediation_planning"]
+  input23["remediation_proposals"]
+  input_schema23["appsec-review/remediation-plan/1"]
+  producer23 --> input23 --> job
+  input23 -. schema .-> input_schema23
+  producer24["job_remediation_validation"]
+  input24["handoff"]
+  input_schema24["appsec-review/job-handoff/2"]
+  producer24 --> input24 --> job
+  input24 -. schema .-> input_schema24
+  producer25["job_remediation_validation"]
+  input25["remediation_validation_summary"]
+  input_schema25["appsec-review/remediation-validations/1"]
+  producer25 --> input25 --> job
+  input25 -. schema .-> input_schema25
+  producer26["job_remediation_validation"]
+  input26["remediation_validation_receipts"]
+  input_schema26["appsec-review/remediation-validation/1"]
+  producer26 --> input26 --> job
+  input26 -. schema .-> input_schema26
+  producer27["job_artifact_security_analysis"]
+  input27["handoff"]
+  input_schema27["appsec-review/job-handoff/2"]
+  producer27 --> input27 --> job
+  input27 -. schema .-> input_schema27
+  producer28["job_artifact_security_analysis"]
+  input28["artifact_security_observations"]
+  input_schema28["appsec-review/retrieval-index/2"]
+  producer28 --> input28 --> job
+  input28 -. schema .-> input_schema28
+  producer29["job_ci_configuration_analysis"]
+  input29["handoff"]
+  input_schema29["appsec-review/job-handoff/2"]
+  producer29 --> input29 --> job
+  input29 -. schema .-> input_schema29
+  producer30["job_ci_configuration_analysis"]
+  input30["ci_observations"]
+  input_schema30["appsec-review/retrieval-index/2"]
+  producer30 --> input30 --> job
+  input30 -. schema .-> input_schema30
+  producer31["job_clang_static_analysis"]
+  input31["handoff"]
+  input_schema31["appsec-review/job-handoff/2"]
+  producer31 --> input31 --> job
+  input31 -. schema .-> input_schema31
+  producer32["job_clang_static_analysis"]
+  input32["clang_static_observations"]
+  input_schema32["appsec-review/retrieval-index/2"]
+  producer32 --> input32 --> job
+  input32 -. schema .-> input_schema32
+  producer33["job_codeql_analysis"]
+  input33["handoff"]
+  input_schema33["appsec-review/job-handoff/2"]
+  producer33 --> input33 --> job
+  input33 -. schema .-> input_schema33
+  producer34["job_codeql_analysis"]
+  input34["codeql_observations"]
+  input_schema34["appsec-review/codeql-sarif-normalizer/3"]
+  producer34 --> input34 --> job
+  input34 -. schema .-> input_schema34
+  producer35["job_cpp_compiled_analysis"]
+  input35["handoff"]
+  input_schema35["appsec-review/job-handoff/2"]
+  producer35 --> input35 --> job
+  input35 -. schema .-> input_schema35
+  producer36["job_cpp_compiled_analysis"]
+  input36["infer_observations"]
+  input_schema36["appsec-review/retrieval-index/2"]
+  producer36 --> input36 --> job
+  input36 -. schema .-> input_schema36
+  producer37["job_evidence_collection"]
+  input37["handoff"]
+  input_schema37["appsec-review/job-handoff/2"]
+  producer37 --> input37 --> job
+  input37 -. schema .-> input_schema37
+  producer38["job_evidence_collection"]
+  input38["static_tool_observations"]
+  input_schema38["appsec-review/retrieval-index/2"]
+  producer38 --> input38 --> job
+  input38 -. schema .-> input_schema38
+  producer39["job_post_build_security_assessment"]
+  input39["handoff"]
+  input_schema39["appsec-review/job-handoff/2"]
+  producer39 --> input39 --> job
+  input39 -. schema .-> input_schema39
+  producer40["job_post_build_security_assessment"]
+  input40["build_security"]
+  input_schema40["appsec-review/retrieval-index/2"]
+  producer40 --> input40 --> job
+  input40 -. schema .-> input_schema40
+  producer41["job_review_data_indexing"]
+  input41["handoff"]
+  input_schema41["appsec-review/job-handoff/2"]
+  producer41 --> input41 --> job
+  input41 -. schema .-> input_schema41
+  producer42["job_review_data_indexing"]
+  input42["precomputed_products"]
+  input_schema42["appsec-review/retrieval-index/2"]
+  producer42 --> input42 --> job
+  input42 -. schema .-> input_schema42
   output0["publication_gate_decisions"]
   output_schema0["appsec-review/final-publication-gate/2"]
   job --> output0

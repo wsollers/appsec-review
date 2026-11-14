@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from appsec_review.review.decision_audit import contracts as audit_contracts
+from appsec_review.review.decision_audit.reader import AcceptedAudit
 from appsec_review.review.models import IntegrityError
 
 LIMITATION_ORDER = (
@@ -18,7 +20,35 @@ LIMITATION_ORDER = (
     "withheld_packages", "possible_duplicates", "remediation_planning_not_run", "remediation_validation_not_run",
     "attack_chain_composition_not_run", "poc_lane_not_run", "dossiers_not_run",
     "poc_generation_gap", "attack_chains_gap", "remediation_planning_gap", "remediation_validation_gap", "dossiers_gap",
+    "decision_audit_not_run", "decision_audit_unavailable", "decision_audit_partial", "decision_audit_scope",
     "compile_only_nonexecution")
+
+
+def decision_audit_summary(audit: AcceptedAudit | None, handoff_sha256: str) -> dict[str, Any]:
+    """Only closed availability and population labels may leave the private typed sidecar."""
+    if not isinstance(audit, AcceptedAudit) or audit.accepted_handoff_sha256 != handoff_sha256:
+        raise IntegrityError("gate requires a typed decision audit bound to its accepted review")
+    if audit.available:
+        if (not isinstance(audit.manifest, audit_contracts.AuditManifest)
+                or not isinstance(audit.reference, audit_contracts.ManifestRef)
+                or audit.unavailable_reason is not None or not audit.settings.enabled):
+            raise IntegrityError("gate received an incoherent available decision audit")
+        audit.reference.verify(audit.manifest, expected_origin=audit.manifest.origin)
+        incomplete = {row.population.value for row in audit.manifest.coverage
+                      if row.expected is None or row.omitted or row.unavailable != 0}
+        if audit.lead_membership_unavailable:
+            incomplete.add(audit_contracts.Population.PROPOSALS.value)
+    else:
+        if (audit.reference is not None or audit.records or audit.continuations
+                or audit.unavailable_reason not in {"disabled", "legacy_unrecorded", "capacity_exceeded",
+                                                    "input_unavailable"}
+                or (audit.unavailable_reason == "disabled" and audit.settings.enabled)
+                or (audit.unavailable_reason in {"capacity_exceeded", "input_unavailable"}
+                    and not audit.settings.enabled)):
+            raise IntegrityError("gate received an incoherent unavailable decision audit")
+        incomplete = set()
+    return {"available": audit.available, "unavailable_reason": audit.unavailable_reason,
+            "incomplete_populations": sorted(incomplete)}
 
 
 def withheld_reasons(package: Mapping[str, Any], attachments: Mapping[str, Any]) -> list[str]:
@@ -138,6 +168,26 @@ def limitations(verified: Mapping[str, Any], packages: Sequence[Mapping[str, Any
         elif record["disposition"] == "GAP":
             add(f"{name}_gap", "gap", f"{name}: {record['reason']}",
                 max(1, record["gap_count"] + record["omitted_count"]))
+    audit = verified.get("_decision_audit", {"available": False, "unavailable_reason": "legacy_unrecorded",
+                                           "incomplete_populations": []})
+    if not audit["available"]:
+        reason = audit["unavailable_reason"]
+        if reason in {"disabled", "legacy_unrecorded"}:
+            statement = ("Disabled by the run's frozen policy." if reason == "disabled" else
+                         "The historical accepted review did not produce decision audit records.")
+            add("decision_audit_not_run", "not_run", f"Decision audit: {statement} Audit coverage is unavailable.")
+        else:
+            add("decision_audit_unavailable", "gap",
+                f"Decision audit is unavailable ({reason}); no complete decision trace is certified.", 1)
+    else:
+        populations = audit["incomplete_populations"]
+        if populations:
+            add("decision_audit_partial", "gap",
+                "Decision audit has omitted, unavailable or unknown coverage in population classes: "
+                + ", ".join(populations) + ". The count is affected population classes, not mixed record units.",
+                len(populations))
+        add("decision_audit_scope", "notice", "Decision audit availability describes model-free decision traceability, "
+            "not complete investigation, independent verification or target safety.")
     add("compile_only_nonexecution", "notice", "PoC functions, negative controls and remediation regressions were "
         "not executed by policy. Compile checks are not runtime reproduction; build checks do not resolve findings.")
     return [found[identity] for identity in LIMITATION_ORDER if identity in found]

@@ -65,8 +65,11 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         started = time.monotonic()
         settings = _settings(unit)
         schemas = SchemaSet(repo(unit) / SCHEMA_DIRECTORY)
-        verified = load_accepted_review(unit.job.run_root, schemas, max_packages=settings.max_packages)
+        verified = load_accepted_review(unit.job.run_root, schemas, max_packages=settings.max_packages,
+                                        include_decision_audit=True)
         document = verified.document
+        document["_decision_audit"] = classifier.decision_audit_summary(
+            verified.decision_audit, document["inputs"]["job_handoff"]["sha256"])
         configuration_sha = resolved_configuration_identity(unit.job.run_root)
         configuration_path = unit.job.run_root / "data" / "configuration" / "resolved.json"
         configuration = json.loads(configuration_path.read_text(encoding="utf-8"))
@@ -83,8 +86,13 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         if "job_poc_generation" in upstream:
             enabled["poc_generation"] = True
         document.update(verify_attachments(unit.job.run_root, document, repository_root=repo(unit), enabled=enabled))
-        document["bindings"].append({"path": configuration_path.relative_to(unit.job.run_root).as_posix(),
-                                     "sha256": configuration_sha})
+        configuration_ref = {"path": configuration_path.relative_to(unit.job.run_root).as_posix(),
+                             "sha256": configuration_sha}
+        bound_configuration = [ref for ref in document["bindings"] if ref["path"] == configuration_ref["path"]]
+        require(all(ref["sha256"] == configuration_sha for ref in bound_configuration),
+                "frozen configuration has a conflicting certified binding")
+        if not bound_configuration:
+            document["bindings"].append(configuration_ref)
         poc = document["capabilities"]["poc_generation"]
         if "job_poc_generation" in upstream:
             require(poc["handoff"] is not None and poc["handoff"]["sha256"] == upstream["job_poc_generation"],

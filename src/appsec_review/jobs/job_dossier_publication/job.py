@@ -11,7 +11,7 @@ from appsec_review.jobs.completion_contracts import (
     DOSSIER_PUBLICATION_HANDOFF_SCHEMA, DOSSIER_PUBLICATION_JOB, DOSSIER_PUBLICATION_SCHEMA, DossierKind,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
-from appsec_review.reporting.dossiers import DossierLimits, build_dossier
+from appsec_review.reporting.dossiers import DossierLimits, audit_relation_ids, build_dossier
 from appsec_review.reporting.dossier_render import render_dossier
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -45,7 +45,7 @@ def _write(unit: UnitContext, name: str, document: Any) -> dict[str, str]:
 
 def _accepted_review(root: Path, schemas: SchemaSet, *, max_packages: int):
     from appsec_review.jobs.accepted_review import load_accepted_review
-    return load_accepted_review(root, schemas, max_packages=max_packages)
+    return load_accepted_review(root, schemas, max_packages=max_packages, include_decision_audit=True)
 
 
 def _core(root: Path, manifest: Mapping[str, str]):
@@ -100,9 +100,14 @@ def _chains(root: Path, document: Mapping[str, Any], finding: Mapping[str, Any],
 
 
 def _excerpts(core: Any, relations: list[Mapping[str, Any]], finding: Mapping[str, Any],
-              settings: DossierPublicationSettings) -> tuple[list[Mapping[str, Any]], list[str]]:
+              settings: DossierPublicationSettings, *, audit_relations: frozenset[str] = frozenset()
+              ) -> tuple[list[Mapping[str, Any]], list[str]]:
     cited = set(finding.get("direct_evidence", ())) | set(finding.get("analyst_assessed_evidence", ()))
-    identities = sorted({row["entity_id"] for row in relations if row["relation_id"] in cited})
+    if not audit_relations <= {row["relation_id"] for row in relations}:
+        raise IntegrityError("dossier audit excerpt names an unaccepted relation")
+    original = {row["entity_id"] for row in relations if row["relation_id"] in cited}
+    additional = {row["entity_id"] for row in relations if row["relation_id"] in audit_relations}
+    identities = [*sorted(original), *sorted(additional - original)]
     rows, gaps = [], []
     for identity in identities[:settings.max_source_excerpts]:
         response = core.read_excerpt(identity=identity, context_lines=2)
@@ -134,7 +139,8 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
         settings = _settings(unit)
         verified = review_loader(unit.job.run_root, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
                                  max_packages=settings.max_packages)
-        document = load_inputs(unit.job.run_root, verified.document, settings)
+        document = load_inputs(unit.job.run_root, verified.document, settings,
+                               decision_audit=getattr(verified, "decision_audit", None))
         unit.job.events.write(
             "DOSSIER_INPUTS_VERIFIED", finding_packages=len(verified.document["packages"]),
             confirmed_findings=sum(row["state"] == "confirmed" for row in verified.document["packages"]),
@@ -149,6 +155,14 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
         root = unit.job.run_root
         document = read_bound_json(root, unit.output("load.verify_inputs")["artifact"])
         verify_snapshot(root, document, settings)
+        audit = None
+        if "decision_audit" in document or "decision_audit_unavailable_reason" in document:
+            from appsec_review.review.decision_audit.reader import load_decision_audit
+            audit = load_decision_audit(root, max_packages=settings.max_packages)
+            reference = None if audit.reference is None else audit.reference.to_dict()
+            if (reference != document.get("decision_audit")
+                    or audit.unavailable_reason != document.get("decision_audit_unavailable_reason")):
+                raise IntegrityError("dossier decision audit changed after input verification")
         verified = document["verified_review"]
         findings = {row["finding_package_id"]: row for row in verified["packages"]}
         claims = {row["claim_id"]: row for row in document["projection"]["claims"]}
@@ -165,7 +179,9 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
         for kind, key in selected:
             finding = findings[key]
             relations = document["projection"]["relations"].get(finding["claim_id"], [])
-            sources, source_gaps = _excerpts(core, relations, finding, settings)
+            sources, source_gaps = _excerpts(
+                core, relations, finding, settings,
+                audit_relations=frozenset() if audit is None else audit_relation_ids(audit, finding))
             poc = pocs.get(key)
             if poc is not None:
                 source_gaps.extend(poc.get("gap_ids", poc.get("gaps", ())))
@@ -186,7 +202,7 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
                 run_id=root.name, kind=kind, finding=finding, claim=claims[finding["claim_id"]],
                 relations=relations, excerpts=sources, poc=poc, poc_source=poc_source,
                 remediation=_remediation(root, document, key, settings),
-                chains=_chains(root, document, finding, settings), gaps=source_gaps, limits=limits,
+                chains=_chains(root, document, finding, settings), gaps=source_gaps, limits=limits, decision_audit=audit,
                 provenance={**document["upstream"], "finding_artifact": {"path": finding["path"], "sha256": finding["sha256"]},
                             "projection": verified["inputs"]["projection"],
                             "ledger_head_sha256": verified["review"]["ledger_head_sha256"],

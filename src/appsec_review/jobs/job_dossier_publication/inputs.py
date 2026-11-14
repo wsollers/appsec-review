@@ -14,6 +14,7 @@ from appsec_review.jobs.completion_contracts import (
 )
 from appsec_review.jobs.engineering_contracts import POC_GENERATION_HANDOFF_SCHEMA, POC_GENERATION_SCHEMA
 from appsec_review.review.models import IntegrityError
+from appsec_review.review.decision_audit.reader import AcceptedAudit
 from appsec_review.reporting.dossiers import POC_STATUSES
 from .settings import DossierPublicationSettings
 
@@ -120,7 +121,8 @@ def accepted_producer(root: Path, job: str, review: Mapping[str, str], findings:
             "artifact": dict(publication["artifact"]), "document": document}
 
 
-def load_inputs(root: Path, verified: Mapping[str, Any], settings: DossierPublicationSettings) -> dict[str, Any]:
+def load_inputs(root: Path, verified: Mapping[str, Any], settings: DossierPublicationSettings, *,
+                decision_audit: AcceptedAudit | None = None) -> dict[str, Any]:
     if verified["run_id"] != root.name:
         raise IntegrityError("dossier accepted review belongs to another run")
     findings = {row["finding_package_id"]: row for row in verified["packages"]}
@@ -158,7 +160,13 @@ def load_inputs(root: Path, verified: Mapping[str, Any], settings: DossierPublic
     upstream = {"review_handoff": dict(review_ref),
                 **{UPSTREAM_KEYS[job]: None if producer is None else producer["handoff"]
                    for job, producer in producers.items()}}
-    return {"schema": "appsec-review/dossier-inputs/1", "run_id": root.name,
+    audit = {}
+    if decision_audit is not None:
+        if decision_audit.available:
+            audit = {"decision_audit": decision_audit.reference.to_dict()}
+        elif decision_audit.reads:
+            audit = {"decision_audit_unavailable_reason": decision_audit.unavailable_reason}
+    return {"schema": "appsec-review/dossier-inputs/1", "run_id": root.name, **audit,
             "verified_review": dict(verified), "projection": projection, "source_manifest": manifest,
             "producers": producers, "upstream": upstream, "attack_chain_manifest": chain_ref, "chains": chains}
 

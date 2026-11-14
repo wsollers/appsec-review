@@ -2855,6 +2855,16 @@ workers = 2
 name = "inference_security_review"
 workers = 8
 
+# Model-free protected projection. Frozen configurations without this table remain audit-unavailable.
+[jobs.job_inference_security_review.settings.decision_audit]
+enabled = true
+max_input_bytes = 67108864
+max_records = 100000
+shard_records = 5000
+shard_bytes = 8388608
+page_size = 50
+max_page_size = 200
+
 [jobs.job_inference_security_review.settings.rounds]
 max_rounds = 3
 stable_rounds_required = 1

@@ -688,8 +688,14 @@
           "remediation_proposals",
           "remediation_validation_receipts",
           "remediation_validation_summary",
+          "review_audit_continuations",
+          "review_audit_metadata",
           "review_cells",
+          "review_decision_audit",
+          "review_decision_bases",
+          "review_decisions",
           "review_packages",
+          "review_verification_coverage",
           "scores_and_findings",
           "tag_assignments",
           "tagging_documents",
@@ -5787,6 +5793,106 @@
     },
     {
       "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "review_products",
+      "dataset": "review_audit_continuations",
+      "description": "Manifest-bound closed source/relation reference continuation rows.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_inference_security_review",
+      "producer_languages": {
+        "basis": "job_inference_security_review: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "application/x-ndjson",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "review_products",
+      "dataset": "review_audit_metadata",
+      "description": "Accepted audit availability, frozen projection policy and manifest binding.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_inference_security_review",
+      "producer_languages": {
+        "basis": "job_inference_security_review: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/review-audit-publication/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
       "authority": "provisional",
       "bucket": "review_products",
       "dataset": "review_cells",
@@ -5829,6 +5935,156 @@
         ]
       },
       "schema": "appsec-review/cell-attempt-receipt/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "review_products",
+      "dataset": "review_decision_audit",
+      "description": "Exact protected audit shard membership, source identities and population coverage.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_inference_security_review",
+      "producer_languages": {
+        "basis": "job_inference_security_review: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/review-audit-manifest/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "review_products",
+      "dataset": "review_decision_bases",
+      "description": "Exact finding/claim/adjudication decision bases including noncounted counterevidence.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_inference_security_review",
+      "producer_languages": {
+        "basis": "job_inference_security_review: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/decision-basis/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "review_products",
+      "dataset": "review_decisions",
+      "description": "Bounded lead, proposal, cell and claim stage decisions with original provenance.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_inference_security_review",
+      "producer_languages": {
+        "basis": "job_inference_security_review: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/review-decision/1",
       "sensitivity": "sensitive",
       "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
       "stage": "protected",
@@ -5882,6 +6138,56 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
       "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "review_products",
+      "dataset": "review_verification_coverage",
+      "description": "Separate observed verifier blindness, diversity and evidence-support coverage.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_inference_security_review",
+      "producer_languages": {
+        "basis": "job_inference_security_review: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/verification-coverage/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_inference_security_review.datasets",
+      "stage": "protected",
       "store": "retrieval",
       "target_access": "accepted_evidence"
     },
@@ -18801,8 +19107,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -18909,8 +19221,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19017,8 +19335,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19125,8 +19449,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19233,8 +19563,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19341,8 +19677,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19449,8 +19791,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19557,8 +19905,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19665,8 +20019,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19773,8 +20133,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19881,8 +20247,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -19989,8 +20361,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -20097,8 +20475,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -20205,8 +20589,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -20313,8 +20703,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -20421,8 +20817,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
@@ -20529,8 +20931,14 @@
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
         "job_inference_security_review/lead_triage",
+        "job_inference_security_review/review_audit_continuations",
+        "job_inference_security_review/review_audit_metadata",
         "job_inference_security_review/review_cells",
+        "job_inference_security_review/review_decision_audit",
+        "job_inference_security_review/review_decision_bases",
+        "job_inference_security_review/review_decisions",
         "job_inference_security_review/review_packages",
+        "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",

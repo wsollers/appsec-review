@@ -10,20 +10,22 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## Status, scope and non-goals
 
-**Implementation authorized; runtime slice not yet delivered.** Written 2026-11-13 against code
+**T-150 is implemented; later policy slices remain proposals.** The original design was written against code
 `5926171238607e27a948bc7d40ce190a853b3d0c`; the
 [source-backed review](../reviews/2026-11-13-triage-verifier-review.md) records the
 shared-working-tree limitation and evidence. Frontmatter status means this is the
-current proposal, not that the proposed runtime exists. Scheduling/progress belongs
+current design, not that every proposed runtime exists. Scheduling/progress belongs
 only in [the TODO registry](../TODO.md).
 
-The 2026-11-13 sync checkpoint adds only the reviewed pure
+The 2026-11-13 sync checkpoint added only the reviewed pure
 [record contract](../../src/appsec_review/review/decision_audit/contracts.py),
 [closed schema](../schemas/review-decision-audit.schema.json) and focused unit regressions.
-It does not change configuration defaults, register audit outputs or consumers, add audit reads,
-or wire runtime publication. T-150 remains in progress while the producer/consumer slice is
-reviewed. Later evidence-adjudication and hunt-allocation changes are to be opt-in, as selected
-by the user; integration and acceptance execution remain prohibited for this implementation.
+It did not change configuration defaults, register audit outputs or consumers, add audit reads,
+or wire runtime publication. The later T-150 source boundary and verification are recorded
+[below](#t-150-implementation-record). This implementation does not establish review efficacy or
+claim that any live run produced an audit. Later evidence-adjudication and hunt-allocation changes
+remain opt-in, as selected by the user; integration and acceptance execution remain prohibited
+for this implementation.
 
 T-146 landed before this registry handoff at main
 `2612ee80f305970707520ad92774d1e1c1336c1c`. Its
@@ -48,6 +50,72 @@ Improve the usefulness of review decisions without widening model authority:
 
 ## 1. Product and authority model
 
+### T-150 implementation decisions, 2026-11-13
+
+The user authorized chunked implementation with unit coverage and final code review before
+commit/push, and explicitly prohibited integration and acceptance execution. The first wave is
+the behavior-preserving T-150 foundation; the other proposed policy changes are not activated
+by these decisions.
+
+For later evidence-adjudication and hunt-allocation waves, the user explicitly selected
+**implement as opt-in**, preserving current defaults until separately authorized efficacy
+validation. Implementing those policies does not authorize activating them or running
+integration, acceptance or live evaluation.
+
+1. **One decision authority.** Produce model-free audit projections from accepted review inputs
+   and existing ledger/cell/lead records. Do not change admission, claim state, evidence policy,
+   scores, role counts, ship-block status or judge/PoC eligibility.
+2. **Closed shared contracts first.** Use versioned, independently validated decision,
+   verification-coverage, decision-basis and manifest records with canonical content identities.
+   Preserve original run/attempt/lead/proposal/claim/cell identities and exact input references;
+   never synthesize a claim identity for a rejected or capped proposal.
+3. **Protected allowlisted data.** Project bounded redacted fields and references, never raw
+   prompts, transcripts or arbitrary worker dictionaries. Counterevidence remains labelled by
+   its existing role and admissibility; its inclusion in an audit does not make it direct proof.
+4. **Existing lifecycle.** Publish through declared datasets and the existing job/attempt
+   machinery. Readers verify accepted publication pins, hashes, scope and record membership.
+   The existing handoff publication creates the audit after writing the original inner review
+   handoff, under the attempt's separate `artifacts/decision-audit/` subtree. Its generic unit
+   output retains the existing `metadata_path` control field, pointing to protected
+   `publication.json`. Explicit `audit_metadata_artifact`, `audit_artifacts` and
+   `audit_source_artifacts` references make the runner pin the sidecar and its attempt-owned
+   source closure: the artifact collector does not open referenced JSON to discover nested
+   sources. Upstream inputs remain observed reads, not re-owned outputs.
+   The descriptor binds the audit manifest and frozen policy;
+   the audit binds the inner handoff and ledger. An unpinned metadata path is never readable.
+   The runner's control allowlist is unchanged. This avoids
+   a hash cycle, overlapping dataset ownership, a new task, or changes to existing finding/
+   inner-handoff bytes merely to attach the audit. The final gate retains every certified
+   read and inserts the frozen-configuration binding idempotently; a conflicting digest
+   fails rather than being overwritten.
+5. **Explicit compatibility.** Historical absence is an unavailable audit capability with its
+   reason. Do not fabricate old reads, rewrite accepted artifacts or silently reinterpret old
+   schema/policy identities. New records have their own closed schemas and fingerprints.
+   An absent decision-audit settings table disables the optional publication for frozen
+   configurations. New shipped configuration enables the projection. Audit bounds remain in
+   full resolved configuration and the audit policy hash, but are excluded from model-cell/
+   lane/round semantic fingerprints and are not permitted capacity-overlay settings.
+   Audit origin uses the full frozen resolved-configuration digest from the attempt claim/
+   accepted wrapper, not the inner handoff's model-semantic digest. Readers independently
+   derive origin from the accepted wrapper, scope, handoff and frozen settings. No exact
+   aggregate guidance/implementation digest is currently commissioned for this sidecar:
+   those links explicitly say not produced; opaque implementation labels are not hashed
+   and presented as measured source identity.
+   The explicit `when_output_declared` input mode admits historical dataset-declaration
+   absence without changing ordinary optional/required behavior. Present declarations must
+   still match schema and known authority; admitted absence never permits reading
+   undeclared bytes. Old serialized job-contract field shapes and hashes remain unchanged.
+6. **Bounded operator/application consumers.** Start with a declared accepted-artifact reader
+   and fixed query templates plus the existing protected dossier. No new worker/MCP grant,
+   arbitrary SQL, target traversal or blind-verifier access to prior decision narratives/labels.
+7. **Separate future semantics.** T-152 owns warrants, T-153 owns semantic request resolution,
+   and T-156 owns delivered-span/question-coverage receipts. References to unavailable future
+   products remain explicitly absent; T-150 does not duplicate or pretend to implement them.
+8. **Reviewed chunks.** Each isolated chunk supplies actual-logic unit regressions and changed
+   line/branch coverage. The coordinator reviews each contract/chunk before local commits and
+   reviews the combined code before serialized main integration and the requested push.
+   Integration, acceptance, live models, target execution and deployment reload remain unrun.
+
 The first delivery is a **deterministic decision-audit projection**, not a new reviewer
 or new truth store. It joins accepted lead collection/admission, protected cell results,
 lane triage/accounting, canonical relations, adjudications, scores and final publication.
@@ -56,36 +124,48 @@ it never produces an empty successful population.
 TRI-A references HUNT-C's operation/question coverage and transport receipts; it does
 not produce a second copy of those receipts or infer delivery from package membership.
 
-At design-review time bucket names were provisional. T-129 has since published the
-[canonical taxonomy](../intelligence-buckets.json): the proposal's **review_claims**
-grouping corresponds to **review_products**, while offline measurements remain **metrics**.
-The pure-contract checkpoint declares no audit datasets and changes no bucket mappings.
-Future concrete output kinds must be mapped when their producer declarations land;
-bucket membership never grants a worker or MCP capability.
+T-129 released the [canonical taxonomy](../intelligence-buckets.json) after the initial review.
+The runtime-neutral checkpoint added no audit datasets. The six declared output kinds belong to **review_products**, retaining their protected
+disposition, operational authority and sanitized-metadata-only inventory route. Offline
+measurements remain **metrics**. Future warrant/obligation products are still proposals,
+not produced datasets. Bucket membership never grants a worker or MCP capability.
 
 ### Product routes
 
-The dataset IDs and new protected query route in this table are **proposed**. They are
-names to register during implementation, not current typed declarations.
+The table distinguishes declared T-150 interfaces from future T-152/T-153 proposals.
+A declaration is not evidence that a run produced, consumed or accepted the product;
+delivery state remains in T-150 and its implementation verification record.
 
 | Product / conceptual group | Producer and concrete publication route | Index / retrieval route | Consumer and decision benefit | Evidence ceiling |
 | --- | --- | --- | --- | --- |
-| Decision audit / review_claims | Inference publication emits proposed review_decisions JSONL plus manifest under its attempt's publish_handoff directory | Initially bound artifact reader; subsequently a protected SQLite audit artifact, not a globally granted evidence shard | Operator, lead adapter, final gate; explain every admitted/unadmitted/proposal-only/claim outcome | Derived decision record, never new source evidence |
-| Predicate warrants and verification coverage / review_claims | Inference relation resolution/adjudication emits proposed predicate_warrants and verification_coverage artifacts, referenced by audit rows | Same protected audit route, indexed by claim/predicate/evidence identity | Adjudicator, scorer, independent verifier's own evidence evaluation, operator | Only application-validated commissioned facts can support R5; audit row itself cannot |
-| Evidence obligations and resolutions / review_claims | Inference package rounds and ledger seal emit proposed evidence_obligations artifact, bound to existing request/claim IDs | Same protected audit route; in-package application supplies only admitted requests to later rounds | Existing red/blue follow-up capability; operator locates the next missing fact | Question/resolution metadata; never an instruction to run a new tool |
-| Decision basis in developer briefs / review_claims | Finding attachment and accepted-review projection; existing dossier/gate/report producers bind it | Protected dossier detail plus sanitized final summaries; no new public raw-evidence endpoint | Developer, remediation planner for confirmed findings; preserve relevant counterevidence and limits | Immutable accepted decision plus original citations; not a new claim state |
+| Decision audit / review_products | Declared review_decisions JSONL, review_decision_audit manifest and review_audit_metadata descriptor under attempt/artifacts/decision-audit | Bounded accepted-artifact reader and fixed operator query templates; no globally granted evidence shard | Operator and final gate; lead-adapter completion remains T-077; explain admitted/unadmitted/proposal-only/claim outcomes and omissions | Derived decision record, never new source evidence |
+| Verification coverage / review_products | Declared review_verification_coverage rows referenced by the audit manifest | Protected accepted-artifact route by claim/cell/evidence identity | Operator and authorized application readers; separate blindness, diversity and support completeness | Observed verification metadata, not new proof or a vote |
+| Predicate warrants / proposed review_products placement | Proposed predicate_warrants from T-152 relation resolution/adjudication | Future protected references; no new worker query grant | Adjudicator, scorer and verifier's own evidence evaluation | Only application-validated commissioned facts can support R5; audit row itself cannot |
+| Evidence obligations and resolutions / proposed review_products placement | Proposed T-153 evidence_obligations artifact, bound to existing request/claim IDs | Protected route; in-package application supplies only admitted requests to later rounds | Existing red/blue follow-up capability; operator locates the next missing fact | Question/resolution metadata; never an instruction to run a new tool |
+| Decision basis in developer briefs / review_products | Declared review_decision_bases; existing dossier/gate bind exact accepted finding/claim references | Protected dossier detail plus sanitized bindings; no new public raw-evidence endpoint | Developer and authorized application readers; preserve counterevidence and limits | Immutable accepted decision plus original citations; not a new claim state |
+| Reference continuations / review_products | Declared review_audit_continuations JSONL, bound by field and manifest | Validated with the complete bundle before consumption | Authorized readers retain complete provenance beyond inline bounds | References retain original authority; continuation storage adds none |
 | Outcome attribution / metrics | Offline finding adapters emit a versioned operator metric document with source-product hashes | Existing offline snapshot/history/scorecard paths; no worker input | Operator and independent evaluator; measure loss, confusion and cost | Derived measurements and externally admitted labels, never evidence for adjudication |
 | Stratified audit/evaluation manifest / metrics | Offline evaluator exports population/selection/label bindings | Protected operator artifact, intentionally excluded from review capabilities | Human annotators and experiment analysis; estimate dismissal misses without tuning on holdout | Independent labels stay outside the review run's readable scope |
 
-The audit SQLite artifact should be built from immutable JSONL, versioned and hash-bound.
-It is a **proposed protected application query adapter**, not a new member of
+The first implementation uses bounded, hash-bound artifact readers and fixed query templates;
+the earlier SQLite materialization option is not a requirement or a new storage service.
+This is a **protected application query adapter**, not a new member of
 `retrieval/index.py::INDEX_NAMES` granted to all roles. Queries are fixed templates:
-lead trace, claim decision basis, predicate coverage, open obligations and bounded
-stage/family populations. Exact accepted handoff pin and caller authorization are required.
+`lead_trace`, `claim_basis`, `verification_coverage` and `population`. Population filters are
+stage and producing role; coverage filters are claim and predicate. Open-obligation and
+family-specific queries remain future proposals, not implemented templates.
+Exact accepted handoff pin and caller authorization are required.
 It must use declared consumption and actual read receipts, never discover another job's
 latest publication. T-129 records this distinct route truthfully.
 The query materialization exposes allowlisted, redacted decision metadata and resolving
 references, not raw worker-response text or an arbitrary protected-stream reader.
+
+Audit consumers also need explicit permissions for original scanner/control source shards,
+not just the inference sidecar. Their bounded canonical source selection does not widen
+the shared source-context defaults or PoC/remediation/worker/MCP access. An explicitly
+supplied review handoff closes only declared original-producer inputs at that review's
+exact pins; conflicting lineages fail. The existing untagged standalone selector still
+selects current accepted pointers and does not promise automatic stale-review reconciliation.
 
 The blind verifier must **not** receive the audit's red/blue positions, judge verdict,
 prior verifier answer or independent labels. It gets original admitted evidence and
@@ -94,20 +174,27 @@ A/B view. Later packages may not query audit content to evade current cross-pack
 seed/referral limits. Bounded retrieval for operators and final consumers is valuable
 without silently increasing worker capabilities.
 
-## 2. Proposed record contracts and identities
+## 2. Record contracts and proposed extensions
 
-All new schemas below are **fenced design examples**. They do not exist at the inspected
-base. Names/versions must be allocated and registered with closed validators before
-publication. The field contracts below are normative for the proposed slices.
+The examples below retain the original design, not executable payload fixtures. The four
+T-150 families now have closed [codecs](../../src/appsec_review/review/decision_audit/contracts.py)
+and a [schema](../schemas/review-decision-audit.schema.json); those definitions, rather than
+the early examples, are authoritative for implemented fields and invariants. The separate
+[publication descriptor](../schemas/review-audit-publication.schema.json) binds availability
+and frozen policy. Warrants, obligation resolution and stratified evaluation remain proposals
+owned by T-152, T-153 and T-154.
 
 ```text
-PROPOSED schema families, NOT registered:
+T-150 closed schema families:
 appsec-review/review-decision/1
-appsec-review/predicate-warrant/1
 appsec-review/verification-coverage/1
-appsec-review/evidence-obligation/1
 appsec-review/decision-basis/1
 appsec-review/review-audit-manifest/1
+appsec-review/review-audit-publication/1
+
+PROPOSED schema families, NOT registered:
+appsec-review/predicate-warrant/1
+appsec-review/evidence-obligation/1
 appsec-review/stratified-review-audit/1
 ```
 
@@ -133,9 +220,9 @@ canonical claim IDs and offline root-cause fingerprints. Record `origin_proposal
 before exact merging; semantic duplicate nominations require independent review.
 Never silently split/merge historical findings under a new projection version.
 
-Do not introduce a handoff hash cycle: pre-handoff artifacts bind the ledger and inputs;
-the handoff references their manifest. A downstream overlay can add the accepted
-handoff hash without mutating those artifacts.
+T-150 avoids a handoff hash cycle by writing the original inner review handoff first.
+The sidecar binds that handoff and original sources; the existing accepted wrapper then
+pins both. No downstream overlay rewrites either artifact.
 
 ### 2.2 Lead and proposal decision
 
@@ -171,10 +258,15 @@ handoff hash without mutating those artifacts.
 }
 ```
 
-Closed `stage` values: collection, severity_triage, admission, package_assembly,
+Closed `stage` values: collection, severity_triage, admission, package_assembly, cell_execution,
 red_discovery, proposal_normalization, claim_cap, blue_review, independent_verification,
 judge_review, adjudication, scoring and publication. Use stage-specific outcome enums,
 not new producer terminal statuses or new claim states.
+
+The separate cell_execution stage copies the original CellStatus and nondeciding actor_role.
+It requires the original cell identity, carries no deciding roles/row and never turns a successful
+red cell into a proposal/no-claim conclusion or a successful judge into a verdict. Semantic
+decision rows remain distinct; expected-cell coverage counts unique cells, not decision rows.
 
 Red outcomes include proposed, explicit_no_claim, blocked, invalid, timed_out,
 not_launched and proposal_rejected. Preserve original raw outcome and its cell receipt
@@ -356,7 +448,7 @@ remains an integrity failure. T-146/T-076 own the wider actionability brief.
 
 ## 3. Bounds, redaction, invalidation and coverage
 
-### Proposed defaults, subject to configuration review
+### T-150 bounds and future evaluation constraints
 
 - Projection is model-free. Page size 50, maximum 200; request filters must constrain
   run/attempt and a lead/claim/predicate or named bounded population.
@@ -366,6 +458,17 @@ remains an integrity failure. T-146/T-076 own the wider actionability brief.
 - Each decision has at most 2,000 characters of protected explanation and 256 inline
   relation/request references. Excess references use hash-bound continuation shards
   and explicit omission counts in bounded views, not silent truncation.
+- Typed `decision_audit` defaults bound unique input bytes to 64 MiB and records to
+  100,000. The frozen setting, not a local capacity overlay or today's configuration,
+  controls the sidecar. Missing inputs or exhausted publication capacity produce a
+  reasoned unavailable descriptor, not a successful empty audit.
+- Readers authenticate the descriptor, full frozen configuration and original scope/
+  handoff/projection anchors under a fixed 64 MiB control-bootstrap ceiling. A valid
+  unavailable descriptor returns its frozen settings and certified reads without opening
+  audit payloads, even when its optional audit budget is smaller than those controls.
+  An available audit charges all bootstrap bytes against that configured budget before
+  reading its manifest, shards or continuations. Malformed, foreign, unpinned or changed
+  controls fail in either case; unavailability is not an integrity-error fallback.
 - No added model calls for projection/metrics. Obligation reconciliation uses the
   already bounded relation set. Any lookup beyond it consumes existing retrieval
   budgets. Candidate setting names belong in typed central configuration, not prompts.
@@ -407,11 +510,11 @@ that require a location disclose their narrower eligible denominator.
 | Metrics | Consume stage records and separate judge dissent, verifier refutation and confirmation coverage | T-071/T-077; retain completed triage/severity/outcome formulas |
 | Testing | Real deterministic parsers/joins/warrants with external boundaries faked; labelled offline experiments | Existing focused review/finding tests plus independent fixtures; no implicit live tier |
 
-T-129 is **nonblocking documentation mapping and reconciliation**, not an implementation
-prerequisite. Implement and register concrete typed datasets, closed schemas and accepted
-read routes in their owning runtime contracts and reconcile those exact identities with
-the released T-129 mapping. Do not omit local dataset/route documentation or treat a
-taxonomy entry as runtime authority.
+T-129 is **nonblocking documentation mapping and reconciliation**, not a runtime prerequisite.
+Its canonical mapping now covers the six declared T-150 products under review_products.
+Register any future concrete datasets, schemas and accepted read routes with their owning
+contracts and update that single mapping, rather than inventing new conceptual bucket names.
+Do not treat a taxonomy entry as runtime authority.
 Dependency-intelligence and hunting enhancements should
 supply their existing lead/operation/evidence identities and producer coverage through
 these interfaces. Neither subsystem supplies a correctness label. Do not duplicate
@@ -578,6 +681,9 @@ unlabelled cases; reports pair effectiveness, coverage, uncertainty and known co
 
 ### Unit and offline contracts
 
+This is the validation plan for all four slices, not a claim that the future warrant,
+obligation or labelled-evaluation cases are implemented by T-150.
+
 Author independent tests using real changed logic, sorted parametrization and
 per-test budgets under ten seconds. Before implementation handoff, run only the
 affected files shuffled and with bounded parallelism through the repository harness
@@ -618,14 +724,90 @@ fresh repeated model series, private holdout use, fix recheck or canary requires
 own user authorization, corpus access and predeclared budget. Compile-only artifacts
 remain non-runtime proof.
 
-### Decisions required before activation
+### Decisions for later policy activation
 
 1. Approve precise predicate-warrant policies and the narrow initial family coverage;
    do not broaden direct evidence through prose.
-2. Approve the protected audit adapter's callers and redaction/retention ceilings,
-   with no blind-verifier access to prior positions.
+2. Approve any additional audit-adapter callers or redaction/retention changes.
+   T-150's host-operator, dossier and gate readers grant no blind-verifier access.
 3. Agree evaluation strata, independent labels, non-inferiority margins and known-cost
    treatment before any model-panel or admission-policy experiment.
-4. Reconcile concrete schemas/dataset names and T-146/T-129 interfaces during serialized
+4. Reconcile future schemas/dataset names and T-146/T-129 interfaces during serialized
    integration. No change here authorizes changing role counts, public finding policy,
    target state or live execution.
+
+## T-150 implementation record
+
+The complete runtime/test source boundary is
+`08d50a742aa52f0a2c574243c2d10fbb50d646fa`, incorporating the committed main documentation
+boundary `adc9853a5ce050f4b44193bd90cabdb56469f755`. Source identity is separate from main
+integration, deployment, image identity and evidence that a review actually ran.
+
+Implemented surfaces are the [projection and immutable publisher](../../src/appsec_review/review/decision_audit/publication.py),
+[inference publication adapter](../../src/appsec_review/jobs/job_inference_security_review/audit.py),
+[accepted reader](../../src/appsec_review/review/decision_audit/reader.py),
+[fixed queries](../../src/appsec_review/review/decision_audit/query.py), existing protected dossier
+and final gate. The [operator command](../operations/finding-metrics.md#9-inspect-a-protected-decision-audit)
+exposes those verified products without dispatching a review or granting worker tools.
+
+`cell_execution` records actual cell status, not a proposal, no-claim answer or verdict.
+Producing roles remain distinct from roles decisive for the recorded adjudication row.
+Proposal identities are receipt-path/local-ID pairs; lead traces require exact original
+membership and cannot borrow another cell's proposals. An authoritative empty collection
+is zero; missing historical collection evidence is unknown. Counterevidence and judge
+dissent stay separate from original supporting proof and cannot alter claim or score state.
+
+Final-gate limitations distinguish disabled/historical `not_run`, fresh unavailable or
+partial audit gaps, and scope limitations. Population-class counts are not added together
+as if leads, cells and decisions shared a denominator. The private audit summary does not
+become a new public `/2` field; certified bindings are retained and reverified.
+
+Focused source records include reviewed producer `c57327418c8f581cba620f512955be2b54d5b59a`,
+consumer `cc03cf42b5caa9aa60a77d6c908cc148fa9e37a9`, wiring
+`5cf9b33325c1a1f21fb5485b351b8d946c6e2b80`, control-budget correction
+`248c2d7f4fec618b0378af8e2e45297128b541bd`, cold-import correction
+`7f1ce25a48a44a7f3eb82712cf8703ce69e186cb`, explicit historical-admission API
+`f72460e4cc8a75ed7753321b195af4bc147fcb93` and original-source permissions
+`303976afd5a548b3976a01ea879dcd840048cb03`. The source boundary above adds the actual
+six-input consumer adoption and legacy dossier regressions.
+
+The earlier combined gate at `b954c4c49f2586aadae63bfd84ed52d0bcf02e6f` passed 1,076
+unit cases in 315.17 seconds, with no case over ten seconds. It covered all 1,721 added
+executable lines and 660/662 changed branch edges relative to the synchronized main boundary.
+Two focused legacy-dossier cases subsequently covered both remaining edges; all eight
+cold-import cases passed in 4.90 seconds. Separate source-permission and admission gates
+passed 35 and 127 cases, and the actual consumer-contract adoption passed 20 cases.
+These counts overlap; they are not summed as distinct cases.
+
+The final focused command for the complete source boundary is:
+
+```bash
+mapfile -t audit_tests < <(git ls-files 'tests/unit/review_decision_audit*/test_*.py')
+COVERAGE_FILE=test/tmp/t150-final-unit.coverage scripts/run-tests.sh \
+  --expect-tests 1245 --max-tests 1245 --timeout-seconds 600 \
+  --parallel --test-workers 2 --shuffle-seed 1510 --coverage appsec_review -- \
+  tests/test_000_unit_environment_guard.py tests/test_job_contracts.py \
+  "${audit_tests[@]}" \
+  tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket
+```
+
+Result: **1,245 passed in 333.20 seconds**, with no failures, skips or case over ten
+seconds. Relative to the synchronized main boundary, all **1,752/1,752 added executable
+lines and 676/676 changed branch edges** were covered. This is changed-code coverage,
+not a whole-application coverage or review-quality claim. The fixed report is
+`test/tmp/reports/tests-custom-20261113-215432-427067-30991.json`; its matching coverage,
+JUnit and timing artifacts remain under `test/tmp/`.
+
+Integration, acceptance, joined producer-to-consumer pipeline execution, live models,
+target execution and deployment/reload are **NOT RUN**. The four previously observed
+whole-team unit cases over ten seconds remain the T-113 owner's fixture-cost work; they
+were not rerun or counted as compliant.
+
+The documentation/TODO gate recorded **119 passed, one failed and one existing T-148
+archive-citation skip in 10.65 seconds**, with no slow cases. The single failure,
+`tests/docs/test_docs_links.py::test_current_and_available_historical_links_resolve`,
+checks unchanged links to the user-owned `targets/appsec-multi-vuln` README and project
+matrix: both exist in main but are absent from this isolated checkout. No target is acquired,
+copied or modified to make that check pass. Generated-document checks and scoped
+metadata/link/identifier checks for the changed documents pass; whole-repository source
+coverage for archived citations remains the named T-148 gap.

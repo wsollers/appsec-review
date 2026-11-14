@@ -206,8 +206,14 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `attack_chains` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `claim_ledger` | `publication` | `appsec-review/ledger-event/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `lead_triage` | `triage` | `application/json` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_audit_continuations` | `publication` | `application/x-ndjson` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_audit_metadata` | `publication` | `appsec-review/review-audit-publication/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `review_cells` | `lead_review` | `appsec-review/cell-attempt-receipt/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_decision_audit` | `publication` | `appsec-review/review-audit-manifest/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_decision_bases` | `publication` | `appsec-review/decision-basis/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_decisions` | `publication` | `appsec-review/review-decision/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `review_packages` | `packages` | `appsec-review/review-package/6` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `review_verification_coverage` | `publication` | `appsec-review/verification-coverage/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `scores_and_findings` | `publication` | `appsec-review/finding-package/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -556,7 +562,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/acceptance/test_prompt_competence.py::test_live_prompt_competence`<br>`tests/acceptance/review_behavior/test_behavioral_review.py` |
 | integration | `tests/integration/test_review_consumer_acceptance.py`<br>`tests/integration/review_behavior/test_package_join.py` |
 | live | None declared |
-| unit | `tests/unit/review_behavior/test_contract_and_view.py`<br>`tests/unit/review_behavior/test_handler_wiring.py`<br>`tests/unit/review_behavior/test_coverage.py`<br>`tests/unit/review_behavior/test_model_context.py`<br>`tests/unit/review_behavior/test_operations.py`<br>`tests/unit/review_behavior/test_publication_bindings.py`<br>`tests/unit/observability_findings/test_actionability_evidence.py`<br>`tests/review/test_discovery_competence.py`<br>`tests/review/test_prompt_competence.py`<br>`tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free`<br>`tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota`<br>`tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema`<br>`tests/test_inference_fixture_contracts.py` |
+| unit | `tests/unit/review_behavior/test_contract_and_view.py`<br>`tests/unit/review_behavior/test_handler_wiring.py`<br>`tests/unit/review_behavior/test_coverage.py`<br>`tests/unit/review_behavior/test_model_context.py`<br>`tests/unit/review_behavior/test_operations.py`<br>`tests/unit/review_behavior/test_publication_bindings.py`<br>`tests/unit/observability_findings/test_actionability_evidence.py`<br>`tests/review/test_discovery_competence.py`<br>`tests/review/test_prompt_competence.py`<br>`tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free`<br>`tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota`<br>`tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema`<br>`tests/test_inference_fixture_contracts.py`<br>`tests/unit/review_decision_audit_producer/test_adapter.py`<br>`tests/unit/review_decision_audit_producer/test_bounds.py`<br>`tests/unit/review_decision_audit_producer/test_capture.py`<br>`tests/unit/review_decision_audit_producer/test_integrity.py`<br>`tests/unit/review_decision_audit_producer/test_projection.py`<br>`tests/unit/review_decision_audit_producer/test_publication.py`<br>`tests/unit/review_decision_audit_producer/test_review_fixes.py`<br>`tests/unit/review_decision_audit_wiring/test_inference_handler.py`<br>`tests/unit/review_decision_audit_wiring/test_origin.py` |
 
 ### Dagster placement
 
@@ -1310,18 +1316,42 @@ flowchart LR
   output_schema3["application/json"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["review_cells"]
-  output_schema4["appsec-review/cell-attempt-receipt/1"]
+  output4["review_audit_continuations"]
+  output_schema4["application/x-ndjson"]
   job --> output4
   output4 -. schema .-> output_schema4
-  output5["review_packages"]
-  output_schema5["appsec-review/review-package/6"]
+  output5["review_audit_metadata"]
+  output_schema5["appsec-review/review-audit-publication/1"]
   job --> output5
   output5 -. schema .-> output_schema5
-  output6["scores_and_findings"]
-  output_schema6["appsec-review/finding-package/2"]
+  output6["review_cells"]
+  output_schema6["appsec-review/cell-attempt-receipt/1"]
   job --> output6
   output6 -. schema .-> output_schema6
+  output7["review_decision_audit"]
+  output_schema7["appsec-review/review-audit-manifest/1"]
+  job --> output7
+  output7 -. schema .-> output_schema7
+  output8["review_decision_bases"]
+  output_schema8["appsec-review/decision-basis/1"]
+  job --> output8
+  output8 -. schema .-> output_schema8
+  output9["review_decisions"]
+  output_schema9["appsec-review/review-decision/1"]
+  job --> output9
+  output9 -. schema .-> output_schema9
+  output10["review_packages"]
+  output_schema10["appsec-review/review-package/6"]
+  job --> output10
+  output10 -. schema .-> output_schema10
+  output11["review_verification_coverage"]
+  output_schema11["appsec-review/verification-coverage/1"]
+  job --> output11
+  output11 -. schema .-> output_schema11
+  output12["scores_and_findings"]
+  output_schema12["appsec-review/finding-package/2"]
+  job --> output12
+  output12 -. schema .-> output_schema12
 ```
 
 <!-- generated:end -->

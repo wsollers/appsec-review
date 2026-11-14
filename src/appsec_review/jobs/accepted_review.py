@@ -17,6 +17,7 @@ from appsec_review.jobs.bound_artifacts import read_bound_json, resolve_bound
 from appsec_review.jobs.job_inference_security_review import stages
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review import ship_block
+from appsec_review.review.decision_audit.reader import AcceptedAudit, verify_decision_audit
 from appsec_review.review.ledger import project
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.packages import verify_package_manifest
@@ -34,6 +35,7 @@ class VerifiedReview:
     """The re-verified, projected accepted state the classifier works from."""
 
     document: dict[str, Any]
+    decision_audit: AcceptedAudit | None = None
 
 
 def _require(condition: bool, message: str) -> None:
@@ -172,8 +174,9 @@ def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review
     return bindings
 
 
-def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: int) -> VerifiedReview:
-    """Verify the accepted review and project the fields the gate and report need."""
+def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: int,
+                         include_decision_audit: bool = False) -> VerifiedReview:
+    """Verify accepted review state; protected audit consumption requires an explicit caller opt-in."""
     run_root = Path(run_root).resolve()
     try:
         accepted = accepted_handoff(run_root, REVIEW_JOB)
@@ -327,7 +330,15 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
         "gap_ids": list(review["gap_ids"]),
         "bindings": [{"path": path, "sha256": digest} for path, digest in sorted(bindings)],
     }
-    return VerifiedReview(document)
+    if not include_decision_audit:
+        return VerifiedReview(document)
+    audit = verify_decision_audit(
+        run_root, accepted=accepted, published=published, review=review, scope=scope,
+        projection=ledger.to_json(), projection_ref=projection_ref, findings=findings)
+    # Gate projections may discard the typed sidecar, but never its certified byte bindings.
+    bindings.update((row.path, row.sha256) for row in audit.reads)
+    document["bindings"] = [{"path": path, "sha256": digest} for path, digest in sorted(bindings)]
+    return VerifiedReview(document, audit)
 
 
 __all__ = ["REVIEW_JOB", "VerifiedReview", "load_accepted_review",

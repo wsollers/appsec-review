@@ -2950,8 +2950,16 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/review-audit-publication.schema.json",
+      "reason": "Keep the closed audit availability and frozen-policy metadata contract aligned with accepted control-field transport.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/review-decision-audit.schema.json",
-      "reason": "Keep the reviewed pure decision-audit codec contract; runtime publication and consumer wiring remain T-150 work.",
+      "reason": "Keep the reviewed decision-audit codec, identity and continuation constraints distinct from T-150 runtime publication and consumer wiring.",
       "subsystem": "review inference and guidance"
     },
     {
