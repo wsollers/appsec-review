@@ -11,14 +11,15 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## As built today
 
-**Source boundary:** this description was checked against implementation commit
-`80e04db89504a4b9f276aa1e336ad703235dd10c`, with the same-domain job documentation through
-`73bd86f53dd5adaa5338b320dff4c67fd7198ef6`. The frontmatter retains the documentation program's
-existing reconciliation watermark. Later Wave1a repair and
-[T-150](../TODO.md#t-150-publish-complete-protected-review-decision-products) coordination is future
-reconciliation context, not implementation incorporated into this worktree. No later checkpoint
-is assumed landed. This is a source description, not new compiler, image, Dagster or live-review
-validation.
+**Source boundary:** the implementation inspected at
+`80e04db89504a4b9f276aa1e336ad703235dd10c` is reconciled here with verified Wave1a boundary
+`45e7dc8ca1bda41ecf41eaab8bf067563bbf47c0`, whose production repair is
+`9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16`. The acquisition and debug-decision declaration
+corrections below are present; their payload writers are unchanged. The frontmatter retains
+the documentation program's existing reconciliation watermark.
+[T-150](../TODO.md#t-150-publish-complete-protected-review-decision-products) remains unlanded
+in this worktree and is not included in this implementation description. This reconciliation
+performed documentation checks, not new compiler, image, Dagster or live-review validation.
 
 The subsystem turns an explicit target selection into an accepted source inventory, planning
 decisions and build evidence. Its useful result is not merely “the build passed”: it identifies
@@ -42,6 +43,16 @@ in the manifest; per-pass actions/timestamps go to a verification sidecar, so re
 alone does not invalidate intake. Git transport/hook/filter restrictions and credential handling
 belong to [acquisition operations](../operations/target-acquisition.md#safety). Acquisition uses
 configured host tools and network transports; it is not a scanner-container operation.
+
+Wave1a [acquisition declarations](../../src/appsec_review/jobs/job_target_acquisition/datasets.py)
+now distinguish `target_acquisition_plan` at selection, `target_acquisition_result` at
+acquisition and final `target_acquisition` at publication, all using
+`appsec-review/target-acquisition-job/2`. The separate `target_acquisition_system_manifest`
+declaration describes the existing exact-byte system-manifest copy under
+`appsec-review/target-system-acquisition/1`. This corrects artifact ownership, not payload
+generation. The existing review-data-indexing requirement for `target_acquisition` aligns to
+the final schema; it gains no read authority for the split plan/result/system-manifest datasets.
+Intake's external acquisition records retain their own schemas and channel.
 
 Intake freezes the configuration/target binding and optional external binary-publication
 identities. Its raw snapshot includes regular non-VCS target bytes and symlink identities even
@@ -241,6 +252,14 @@ details. The generated job blocks describe possible work, not observed execution
 
 The downstream rows are interfaces, not an expansion of this subsystem's build authority.
 Source/index resolving mechanisms remain in [Python and retrieval](python-and-retrieval.md).
+
+Wave1a also aligns the [debug decision declaration](../../src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py)
+and six existing consumers' `target_decision` requirements to
+`appsec-review/debug-symbol-decision/2`, matching the unchanged writer. Those consumers are
+`job_codeql_analysis`, `job_document_issue_analysis`, `job_inference_security_review`,
+`job_review_data_indexing`, `job_review_package_assembly` and `job_security_tagging`.
+This is schema alignment, not a new consumer or read permission. The
+[canonical debug-symbol page](../operations/job_debug_symbol_indexing.md) remains the process reference.
 
 ## Dataflow
 
