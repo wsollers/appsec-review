@@ -284,7 +284,8 @@
         "tests/unit/job_language_build/test_php_installed.py",
         "tests/unit/job_language_build/test_python.py",
         "tests/unit/job_language_build/test_rust.py",
-        "tests/unit/job_language_build/test_wasm.py"
+        "tests/unit/job_language_build/test_wasm.py",
+        "tests/unit/job_language_build/test_upstream_gap_contract.py"
       ],
       "integration": [
         "tests/integration/job_language_build/test_language_build_graph.py",
@@ -295,7 +296,8 @@
         "tests/integration/job_language_build/test_php_graph.py",
         "tests/integration/job_language_build/test_python_graph.py",
         "tests/integration/job_language_build/test_rust_graph.py",
-        "tests/integration/job_language_build/test_wasm_graph.py"
+        "tests/integration/job_language_build/test_wasm_graph.py",
+        "tests/integration/job_language_build/test_elf_host.py"
       ],
       "acceptance": [
         "tests/acceptance/job_project_build/test_family_project_builds.py"

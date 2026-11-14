@@ -30,26 +30,26 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L2051) |
-| `execute` | `execute.dotnet` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.go` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.java` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.native` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.node` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.php` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.python` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.rust` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `execute` | `execute.wasm` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1951) |
-| `iterations` | `iterations.dispatch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1849) |
-| `load` | `load.dotnet` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.go` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.java` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.node` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.php` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.python` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.rust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
-| `load` | `load.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1861) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L2084) |
+| `execute` | `execute.dotnet` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.go` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.java` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.native` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.node` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.php` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.python` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.rust` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `execute` | `execute.wasm` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1980) |
+| `iterations` | `iterations.dispatch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1876) |
+| `load` | `load.dotnet` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.go` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.java` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.node` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.php` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.python` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.rust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
+| `load` | `load.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_language_build/job.py#L1888) |
 
 ### Accepted input declarations
 
@@ -100,9 +100,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | `tests/acceptance/job_project_build/test_family_project_builds.py` |
-| integration | `tests/integration/job_language_build/test_language_build_graph.py`<br>`tests/integration/job_language_build/test_native_outputs_graph.py`<br>`tests/integration/job_language_build/test_go_graph.py`<br>`tests/integration/job_language_build/test_jvm_graph.py`<br>`tests/integration/job_language_build/test_node_graph.py`<br>`tests/integration/job_language_build/test_php_graph.py`<br>`tests/integration/job_language_build/test_python_graph.py`<br>`tests/integration/job_language_build/test_rust_graph.py`<br>`tests/integration/job_language_build/test_wasm_graph.py` |
+| integration | `tests/integration/job_language_build/test_language_build_graph.py`<br>`tests/integration/job_language_build/test_native_outputs_graph.py`<br>`tests/integration/job_language_build/test_go_graph.py`<br>`tests/integration/job_language_build/test_jvm_graph.py`<br>`tests/integration/job_language_build/test_node_graph.py`<br>`tests/integration/job_language_build/test_php_graph.py`<br>`tests/integration/job_language_build/test_python_graph.py`<br>`tests/integration/job_language_build/test_rust_graph.py`<br>`tests/integration/job_language_build/test_wasm_graph.py`<br>`tests/integration/job_language_build/test_elf_host.py` |
 | live | `tests/acceptance/job_language_build/test_live_build_toolchains.py`<br>`tests/acceptance/job_language_build/test_live_gradle_provenance.py` |
-| unit | `tests/unit/job_language_build/test_contract.py`<br>`tests/unit/job_language_build/test_job_graph.py`<br>`tests/unit/job_language_build/test_job_helpers.py`<br>`tests/unit/job_language_build/test_receipts_and_paths.py`<br>`tests/unit/job_language_build/test_build_output_mapping.py`<br>`tests/unit/job_language_build/test_build_output_scope.py`<br>`tests/unit/job_language_build/test_captured_build_reconciliation.py`<br>`tests/unit/job_language_build/test_elf.py`<br>`tests/unit/job_language_build/test_go.py`<br>`tests/unit/job_language_build/test_go_build_facts.py`<br>`tests/unit/job_language_build/test_go_dependency_output_filtering.py`<br>`tests/unit/job_language_build/test_go_vendored.py`<br>`tests/unit/job_language_build/test_gradle_provenance.py`<br>`tests/unit/job_language_build/test_jvm.py`<br>`tests/unit/job_language_build/test_native_layout.py`<br>`tests/unit/job_language_build/test_native_outputs.py`<br>`tests/unit/job_language_build/test_node.py`<br>`tests/unit/job_language_build/test_node_dependency_output_filtering.py`<br>`tests/unit/job_language_build/test_node_installed.py`<br>`tests/unit/job_language_build/test_node_scripts.py`<br>`tests/unit/job_language_build/test_output_attribution.py`<br>`tests/unit/job_language_build/test_php.py`<br>`tests/unit/job_language_build/test_php_dependency_output_filtering.py`<br>`tests/unit/job_language_build/test_php_installed.py`<br>`tests/unit/job_language_build/test_python.py`<br>`tests/unit/job_language_build/test_rust.py`<br>`tests/unit/job_language_build/test_wasm.py` |
+| unit | `tests/unit/job_language_build/test_contract.py`<br>`tests/unit/job_language_build/test_job_graph.py`<br>`tests/unit/job_language_build/test_job_helpers.py`<br>`tests/unit/job_language_build/test_receipts_and_paths.py`<br>`tests/unit/job_language_build/test_build_output_mapping.py`<br>`tests/unit/job_language_build/test_build_output_scope.py`<br>`tests/unit/job_language_build/test_captured_build_reconciliation.py`<br>`tests/unit/job_language_build/test_elf.py`<br>`tests/unit/job_language_build/test_go.py`<br>`tests/unit/job_language_build/test_go_build_facts.py`<br>`tests/unit/job_language_build/test_go_dependency_output_filtering.py`<br>`tests/unit/job_language_build/test_go_vendored.py`<br>`tests/unit/job_language_build/test_gradle_provenance.py`<br>`tests/unit/job_language_build/test_jvm.py`<br>`tests/unit/job_language_build/test_native_layout.py`<br>`tests/unit/job_language_build/test_native_outputs.py`<br>`tests/unit/job_language_build/test_node.py`<br>`tests/unit/job_language_build/test_node_dependency_output_filtering.py`<br>`tests/unit/job_language_build/test_node_installed.py`<br>`tests/unit/job_language_build/test_node_scripts.py`<br>`tests/unit/job_language_build/test_output_attribution.py`<br>`tests/unit/job_language_build/test_php.py`<br>`tests/unit/job_language_build/test_php_dependency_output_filtering.py`<br>`tests/unit/job_language_build/test_php_installed.py`<br>`tests/unit/job_language_build/test_python.py`<br>`tests/unit/job_language_build/test_rust.py`<br>`tests/unit/job_language_build/test_wasm.py`<br>`tests/unit/job_language_build/test_upstream_gap_contract.py` |
 
 ### Dagster placement
 
@@ -344,6 +344,13 @@ default false. Nested failed/blocked receipts and processing `GAP` dispositions 
 status-derived retry accounting. Inspect the canonical outcomes rather than labeling all
 build gaps either retryable or advisory.
 
+Canonical upstream causes retain their identity, code, unit/scope, retryability and evidence
+references through receipt and control propagation. Cause groups are validated before merging;
+identical records are deduplicated without discarding distinct or conflicting causes. The first
+readable reason is presentation only, not a replacement for the retained causes. Malformed
+records and foreign-unit re-declarations remain accounting failures. Legacy text keeps its
+registered representation until the normal publication boundary.
+
 | Boundary | Source-derived omissions or failures |
 | --- | --- |
 | Dispatch/controller | Missing immutable image/release/refinement/product evidence; unsupported/unresolved topology; unavailable dependency; selected policy/capability gaps; retained upstream preparation failure. |
@@ -353,6 +360,10 @@ build gaps either retryable or advisory.
 | Output/enforcement | Artifact bounds, unresolved source/output/delivery mapping, missing expected outputs, invalid native target proof or compiler profile, unsupported native product closure, and processing artifact-validation/evidence gaps. |
 
 These are reason families emitted by the linked adapters, not invented producer-gap codes.
+The `appsec-review/elf-loader-dependencies/3` reader accepts string tables across adjacent
+loadable mappings only when their virtual coverage and file bytes are contiguous. Gaps,
+BSS-only tails, overlapping mappings, overflow and unbacked bytes remain unparseable coverage,
+not resolved dependency evidence.
 Absent supported work may be `NOT_APPLICABLE`; a Windows-only or otherwise unsupported planned
 unit can still carry named coverage loss. Accepted input bytes are not new compiler outputs.
 Source drift, corrupt retained captures/manifests, recipe identity mismatches and invalid shared
@@ -391,3 +402,8 @@ their specialized toolchain/provenance/layout or producer selections and upstrea
 Incomplete capture is not checkpointed as complete evidence. Whole-job admission rechecks
 topology and immutable artifacts under
 [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+
+The ELF parser identity labels freshly interpreted facts; it does not itself invalidate the
+generic private receipt cache, whose key does not include that label. Reused receipts may retain
+older loader facts. This repair neither reparses nor purges stored receipts, and unit validation
+does not establish that reuse across a parser change is appropriate.

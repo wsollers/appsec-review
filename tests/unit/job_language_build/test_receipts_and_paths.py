@@ -21,7 +21,7 @@ from appsec_review.storage import canonical_json, file_sha256
 
 # --- receipts ----------------------------------------------------------------------------------------
 
-def test_upstream_build_failure_receipt_names_the_unit_the_failing_job_and_the_first_reason() -> None:
+def test_upstream_build_failure_receipt_preserves_causes_and_displays_the_first_reason() -> None:
     probe = {"build_unit_id": "build-unit-" + "a" * 20, "family": "go", "root": "svc", "build_system": "go",
              "terminal_status": "FAILED", "gaps": ["build-unit-" + "a" * 20 + ": build-unit-" + "a" * 20 + ": go build exited 2",
                                                   "second reason"]}
@@ -29,7 +29,10 @@ def test_upstream_build_failure_receipt_names_the_unit_the_failing_job_and_the_f
     assert receipt["schema"] == RECEIPT_SCHEMA and receipt["terminal_status"] == "BLOCKED"
     assert receipt["upstream_failure"] == {"job_id": "job_project_build", "terminal_status": "FAILED",
                                            "reason": "go build exited 2"}
-    assert receipt["gaps"] == ["go build unit at svc was not built: job_project_build reported FAILED: go build exited 2"]
+    assert receipt["gaps"] == [
+        "go build unit at svc was not built: job_project_build reported FAILED: go build exited 2",
+        "go build unit at svc was not built: job_project_build reported FAILED: second reason",
+    ]
     assert receipt["upstream_handoff_sha256"] == "6" * 64 and receipt["workspace"] is None
     assert (receipt["artifacts"], receipt["commands"], receipt["processing_decisions"]) == ([], [], [])
     bare = upstream_build_failure_receipt({"build_unit_id": "build-unit-" + "b" * 20, "family": "native"}, {})

@@ -17,7 +17,7 @@ import struct
 from typing import Any, BinaryIO
 
 
-PARSER_IDENTITY = "appsec-review/elf-loader-dependencies/2"
+PARSER_IDENTITY = "appsec-review/elf-loader-dependencies/3"
 _PT_LOAD, _PT_DYNAMIC, _PT_INTERP = 1, 2, 3
 _DT_NULL, _DT_NEEDED, _DT_STRTAB, _DT_STRSZ = 0, 1, 5, 10
 _DT_SONAME, _DT_RPATH, _DT_RUNPATH = 14, 15, 29
@@ -135,15 +135,40 @@ def _terminated(data: bytes, what: str) -> str:
 
 
 def _file_offset(image: Image, address: int, size: int, what: str) -> int:
-    """Translate a virtual range to file bytes; it must lie wholly in one segment's file image."""
-    for segment in image.segments:
-        if (segment.kind == _PT_LOAD and segment.address <= address and
-                address + size <= segment.address + segment.file_size):
-            return segment.offset + address - segment.address
-    raise ValueError(
-        f"ELF {what} is not backed by the file bytes of one loadable segment; "
-        "not mapped by a loadable segment"
+    """Translate a complete virtual range only when its load mappings give contiguous file bytes."""
+    failure = (
+        f"ELF {what} is not backed by the file bytes of one loadable segment "
+        "or a contiguous sequence; not mapped by a loadable segment"
     )
+    limit = 1 << (64 if image.wide else 32)
+    end = address + size
+    if address < 0 or size <= 0:
+        raise ValueError(f"{failure}: invalid virtual range")
+    if address >= limit or end > limit:
+        raise ValueError(f"{failure}: requested range overflows ELF address space")
+    cursor, base = address, None
+    loads = sorted((item for item in image.segments if item.kind == _PT_LOAD and item.file_size),
+                   key=lambda item: item.address)
+    for segment in loads:
+        segment_end = segment.address + segment.file_size
+        if segment_end <= address or segment.address >= end:
+            continue
+        if segment_end > limit or segment.address + segment.memory_size > limit:
+            raise ValueError(f"{failure}: load range overflows ELF address space")
+        if segment.offset < 0 or segment.offset + segment.file_size > image.file_size:
+            raise ValueError(f"{failure}: load file range is out of bounds")
+        start, stop = max(address, segment.address), min(end, segment_end)
+        if start != cursor:
+            raise ValueError(f"{failure}: load coverage has a gap or overlap")
+        offset = segment.offset + start - segment.address
+        if base is None:
+            base = offset
+        elif offset != base + start - address:
+            raise ValueError(f"{failure}: noncontiguous file mapping")
+        cursor = stop
+    if base is None or cursor != end or base + size > image.file_size:
+        raise ValueError(f"{failure}: virtual range includes unbacked bytes")
+    return base
 
 
 def loader_facts(path: Path) -> dict[str, Any]:

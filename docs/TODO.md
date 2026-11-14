@@ -2599,7 +2599,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   schema mismatch, and job_target_catalog is blocked on the typed-gap migration in T-055.
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
-  Next: job_debug_symbol_indexing.
+  The remaining 29-job inventory is paused for approved bounded repair waves. Wave 1a
+  (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
+  The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
+  shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
+  These are production-repair gates, not completed T-113 recertifications: original stashes
+  remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,

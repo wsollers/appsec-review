@@ -40,6 +40,7 @@ from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, SCOPE_FIELDS, apply_scope
 from appsec_review.jobs.job_project_build import load_accepted_builds
 from appsec_review.jobs.job_project_build.enforcement import gap_text, unique_gaps
+from appsec_review.interchange import validate_unit_output
 from appsec_review.jobs.job_project_build.job import (
     _node_recipe_restores_dependencies, _normalized_argv, _probe_environment, _safe_root,
 )
@@ -724,12 +725,25 @@ def _platform_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: 
             "executor_identity": EXECUTOR_IDENTITY, "capture_identity": dotnet.CAPTURE_IDENTITY}
 
 
+def _receipt_gaps(*groups: Any) -> list[Any]:
+    """Validate each JSON wire cause group before merging, retaining legacy text diagnostics."""
+    merged = []
+    for values in groups:
+        gaps = json.loads(canonical_json(values))
+        validate_unit_output({"gaps": gaps}, unit_id="job_language_build")
+        validate_unit_output(
+            {"gaps": [gap for gap in gaps if isinstance(gap, Mapping)]},
+            unit_id="job_language_build", strict_gaps=True)
+        merged.extend(gaps)
+    return unique_gaps(merged)
+
+
 def _unavailable_dotnet_receipt(unit: UnitContext, probe: Mapping[str, Any],
                                 accepted: Mapping[str, Any]) -> dict[str, Any]:
     root = str(probe.get("root", "."))
     projects, topology_gaps, platform_gaps = dotnet.selected_project_topology(
         unit.job.run_root, probe)
-    gaps = list(dict.fromkeys([*topology_gaps, *platform_gaps, *probe.get("gaps", ())]))
+    gaps = _receipt_gaps(topology_gaps, platform_gaps, probe.get("gaps", ()))
     status = "NOT_APPLICABLE" if platform_gaps else "BLOCKED"
     fingerprint = hashlib.sha256(canonical_json({
         "schema": RECEIPT_SCHEMA, "target": unit.job.source_fingerprint,
@@ -758,23 +772,33 @@ def upstream_build_failure_receipt(probe: Mapping[str, Any], accepted: Mapping[s
 
     The unit was planned but never dispatched, so nothing downstream can analyze it; the receipt
     keeps it visible as a named gap (unit, upstream failure and failing job) instead of letting
-    the lane read as not applicable.
+    the lane read as not applicable. Canonical causes retain their identities; every legacy text
+    diagnostic keeps the contextual failure wording, with only the first reason used for display.
     """
     build_unit_id = str(probe.get("build_unit_id"))
     status = str(probe.get("terminal_status") or "UNKNOWN")
-    reasons = [str(value) for value in probe.get("gaps", ()) if value]
-    reason = reasons[0] if reasons else "no reason recorded"
+    causes = _receipt_gaps(probe.get("gaps", ()))
     prefix = f"{build_unit_id}: "
-    while reason.startswith(prefix):
-        reason = reason[len(prefix):]
+
+    def display(value):
+        reason = gap_text(value)
+        while reason.startswith(prefix):
+            reason = reason[len(prefix):]
+        return reason
+
+    reason = display(causes[0]) if causes else "no reason recorded"
+    gaps = unique_gaps(
+        value if isinstance(value, Mapping) else
+        f"{probe.get('family')} build unit at {probe.get('root', '.')} was not built: "
+        f"job_project_build reported {status}: {display(value)}"
+        for value in causes or ["no reason recorded"])
     return {"schema": RECEIPT_SCHEMA, "build_unit_id": build_unit_id, "family": probe.get("family"),
             "root": probe.get("root", "."), "build_system": probe.get("build_system"),
             "upstream_handoff_sha256": accepted.get("project_build_handoff_sha256"),
             "workspace": None, "artifacts": [], "commands": [], "processing_decisions": [],
             "upstream_failure": {"job_id": "job_project_build", "terminal_status": status, "reason": reason},
             "terminal_status": "BLOCKED",
-            "gaps": [f"{probe.get('family')} build unit at {probe.get('root', '.')} was not built: "
-                     f"job_project_build reported {status}: {reason}"]}
+            "gaps": gaps}
 
 
 def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
@@ -1787,12 +1811,15 @@ def iteration_controller(unit: UnitContext):
     from appsec_review.jobs.build_iterations import selected_revisions
     graph, dispatches, overrides = selected_revisions(unit.job.run_root, accepted, dispatches)
     selected, skipped = [], []
+    failed_probes = {item["build_unit_id"]: item for item in accepted.get("probe_receipts", ())
+                     if item.get("terminal_status") not in _PROBE_NOT_NEEDED}
     for family in accepted.get("images", {}).values():
         for preparation in family.get("entries", ()):
             if preparation.get("terminal_status") != "SUCCEEDED":
+                probe = failed_probes.get(preparation["action"]["build_unit_id"], {})
                 skipped.append(upstream_build_failure_receipt({
                     **preparation["action"], "terminal_status": preparation["terminal_status"],
-                    "gaps": preparation.get("gaps", ())}, accepted))
+                    "gaps": _receipt_gaps(preparation.get("gaps", ()), probe.get("gaps", ()))}, accepted))
     typed = unit.job.config.typed_settings
     configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
     for dispatch in dispatches:
@@ -1927,16 +1954,18 @@ def build_job(*, executor_factory=None) -> Job:
                              [f"{build_decision.reason_code.value}: build execution was not available"]),
                 })
         selected = runnable
-        gaps = [f"{item.get('build_unit_id')}: " + "; ".join(item.get("gaps", ()))
-                for item in unavailable]
+        gaps = [gap if isinstance(gap, Mapping) else f"{item.get('build_unit_id')}: {gap}"
+                for item in unavailable
+                for gap in _receipt_gaps(item.get("gaps", ())) or ["no reason recorded"]]
         if family == "wasm":
             gaps.extend(f"{item['build_unit_id']}: no configured WebAssembly producer matched accepted recipe"
                         for item, producer in wasm_selected if producer is None and
                         (item["family"] == "wasm" or any(str(value).lower().endswith(".wasm")
                          for value in item["recipe"].get("expected_outputs", ()))))
-        gaps.extend(f"{item['build_unit_id']}: {gap}" for item in non_run_receipts
-                    for gap in item.get("gaps", ()))
-        gaps.extend(f"{item['build_unit_id']}: {gap}" for item in upstream_failed for gap in item["gaps"])
+        gaps.extend(gap if isinstance(gap, Mapping) else f"{item['build_unit_id']}: {gap}"
+                    for item in [*non_run_receipts, *upstream_failed]
+                    for gap in _receipt_gaps(item.get("gaps", ())))
+        gaps = unique_gaps(gaps)
         return {"dispatches": selected, "unavailable": unavailable, "accepted": accepted,
                 "non_run_receipts": [*non_run_receipts, *upstream_failed],
                 "engine_receipts": ([dict(item) for item in accepted.get("probe_receipts", ())
@@ -1954,8 +1983,10 @@ def build_job(*, executor_factory=None) -> Job:
             receipts = [dict(item) for item in unit.output("iterations.dispatch")["receipts"]
                         if item.get("family") == family]
             receipts.extend(loaded.get("engine_receipts", ()))
-            gaps = [gap if isinstance(gap, Mapping) else f"{item['build_unit_id']}: {gap}"
-                    for item in receipts for gap in [*item.get("gaps", ()), *item.get("delivery_gaps", ())]]
+            gaps = unique_gaps(
+                gap if isinstance(gap, Mapping) else f"{item['build_unit_id']}: {gap}"
+                for item in receipts
+                for gap in _receipt_gaps(item.get("gaps", ()), item.get("delivery_gaps", ())))
             return {"receipts": receipts, "receipt_count": len(receipts), "gaps": gaps,
                     "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
                                        "SUCCEEDED" if receipts else "NOT_APPLICABLE"}
@@ -2039,11 +2070,13 @@ def build_job(*, executor_factory=None) -> Job:
                                        for value in terminal_decisions
                                        if value.get("disposition") == "GAP"]
                     completed[key] = {**receipt,
-                        "gaps": list(dict.fromkeys([*receipt.get("gaps", ()), *processing_gaps])),
+                        "gaps": _receipt_gaps(receipt.get("gaps", ()), processing_gaps),
                         "processing_decisions": terminal_decisions}
             pending.difference_update(ready)
         receipts = [completed[key] for key in sorted(completed)]
-        gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value.get("gaps", ())]
+        gaps = unique_gaps(
+            gap if isinstance(gap, Mapping) else f"{value['build_unit_id']}: {gap}"
+            for value in receipts for gap in _receipt_gaps(value.get("gaps", ())))
         return {"receipts": receipts, "receipt_count": len(receipts), "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if receipts else "NOT_APPLICABLE"}
       return execute
