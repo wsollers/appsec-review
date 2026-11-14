@@ -1,7 +1,7 @@
 ---
 title: "owasp_control_assessment"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_owasp_control_assessment"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # owasp_control_assessment
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Assess selected OWASP control/component proof obligations against bounded, accepted evidence and
+publish exactly-once scoped results. Source-subject conclusions are not whole-component safety,
+runtime/manual evidence or compliance certification. Qualification fixtures remain explicitly
+synthetic and cannot produce lead-eligible customer findings; assessment uses independent review
+and preserves dissent.
 
 <!-- generated:begin job=job_owasp_control_assessment -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -806,3 +812,184 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) composes the
+[workbench engine](../../src/appsec_review/owasp_workbench/engine.py),
+[assessment validator](../../src/appsec_review/owasp_workbench/assessment.py) and
+[evidence resolver](../../src/appsec_review/owasp_workbench/evidence.py).
+
+### `standards_selection`
+
+1. In `standards_selection.ingest_catalogs`, load pinned standards and retain source identity,
+   version and fixture limitations. Assessment mode refuses abridged qualification catalogs.
+2. In `standards_selection.select_profiles`, select ASVS/MASVS controls under the frozen profile
+   policy and retain the selection fingerprint; taxonomy/reference catalogs are not target proof.
+
+### `characterization`
+
+1. In `characterization.load_inputs`, require explicit run-owned fixture inputs only in
+   qualification mode. Assessment rejects that fixture and verifies accepted manifest/target
+   identity instead.
+2. Select bounded accepted components, source subjects and evidence. Record discovery, ownership,
+   language, byte, subject and excerpt omissions without converting missing evidence into N/A.
+3. In `characterization.classify_components`, derive roles from accepted metadata and eligible
+   routing tags. Retain ambiguity when unresolved. The handler does not pass the helper's optional
+   inference callback; component classification is deterministic here.
+
+### `applicability`
+
+1. In `applicability.build_matrix`, create selected control/component rows with explicit reasons
+   and citations. Positive N/A needs evidence; uncertain routing alone is not N/A.
+2. In assessment mode require a reviewed versioned proof procedure and usable source subjects.
+   Missing procedures and unavailable environment-bound runtime/manual adapters become
+   `unsupported_missing_evidence`; source-supported routing uncertainty can remain conditional.
+3. Retain the applicability fingerprint and outcome partition.
+
+### `batching`
+
+1. In `batching.partition_work`, group dispatchable rows by compatible control/domain/evidence
+   and deterministic role/persona assignment under batch/component bounds.
+2. In `batching.build_packages`, assemble subject-bound obligations, original evidence and
+   prohibited conclusions. Retain subject/evidence omissions and pin the selected guidance bundle.
+
+### `validation`
+
+1. Assign batches deterministically by position modulo four to `validation.cell_01`,
+   `validation.cell_02`, `validation.cell_03` and `validation.cell_04`.
+2. Commission only the bounded admitted batch prefix. Every unlaunched batch still returns
+   accounted unresolved rows with the explicit batch-cap reason.
+3. In assessment mode run the control assessor over supported obligations with bounded in-process
+   evidence retrieval. Validate citations, subject scope and closed proposals. Missing evidence,
+   failed worker or assumed prerequisites cannot yield a satisfied control.
+4. In qualification mode use the synthetic path, retaining qualification-only status; it is not
+   an alternate way to obtain assessed target evidence.
+
+### `verification`
+
+1. In `verification.independent_review`, start a fresh reviewer context with original evidence
+   and obligations, not the worker's answer or transcript.
+2. Resolve and validate both sets of proof obligations. A satisfied proposal requires agreeing
+   independent assessment; otherwise downgrade it to `cannot_verify`.
+3. Preserve disagreements and adverse hypotheses separately. Observation state is provisional/
+   awaiting verification, not an inference-review confirmed finding. Retain worker/reviewer
+   attempt and reuse counts, citations and unresolved obligations.
+
+### `join`
+
+1. In `join.deterministic_join`, require one terminal result per dispatchable applicability row,
+   no duplicate/out-of-selection results, and none for nondispatchable rows.
+2. Preserve applicability, execution, control status, verification, coverage, observations and
+   limitations as separate fields. Do not equate completion with satisfaction.
+
+### `publication`
+
+1. In `publication.publish_indexes`, bind standards, selection, classifications, applicability,
+   batches, retrieval/configuration, guidance, model and parser identities.
+2. Publish immutable standards, component, applicability, validation-work, finding-package and
+   control-result shards, with a manifest binding accepted upstream evidence.
+3. In `publication.publish_handoff`, write `owasp_documents` with exact selected/joined accounting,
+   catalog/selected/dispatched/assessed/reviewed/unresolved coverage counts and model telemetry.
+   Model investigations retain their protected receipts separately. Preserve the source-scope
+   and runtime/manual limitations, even if all launched workers returned answers.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_owasp_control_assessment"] --> standards["standards_selection"]
+  job --> inputs["characterization.load_inputs"]
+  inputs --> classify["characterization.classify_components"]
+  standards --> app["applicability.build_matrix"]
+  classify --> app
+  app --> partition["batching.partition_work"]
+  partition --> packages["batching.build_packages"]
+  packages --> cells["validation.cell_01 / validation.cell_02 / validation.cell_03 / validation.cell_04"]
+  cells --> verify["verification.independent_review"]
+  verify --> join["join.deterministic_join"]
+  join --> indexes["publication.publish_indexes"]
+  indexes --> pub["publication.publish_handoff"]
+  pub --> data["owasp_workbench / owasp_documents / owasp_model_receipts"]
+  app -. "unsupported / unresolved" .-> gaps["row gaps"]
+  cells -. "failed / capped" .-> gaps
+  gaps --> join
+  join -. "duplicate / missing / foreign row" .-> reject["reject publication"]
+```
+
+`standards_selection` contains the two units described above. All evidence access remains within
+[accepted input admission](../architecture/job-input-contracts.md#admission-and-read-receipts)
+and [bounded retrieval](../architecture/python-and-retrieval.md#query-boundary).
+
+## Gaps
+
+This workbench emits domain strings in row results, evidence, limitations and the result artifact,
+not custom producer-gap codes. It does not assign retryability. Some unit returns expose only
+status/counts, so do not equate handler `gap_count` with the canonical outcome count: inspect both
+the [verified outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+and bound workbench result.
+
+| Actual reason family | Scope and cost |
+| --- | --- |
+| Pinned abridged fixture; synthetic qualification input | Standards/input mode cannot establish customer target safety. Assessment rejects fixtures. |
+| Unresolved component purpose/trust role or applicability | Component/control routing remains uncertain. |
+| No reviewed versioned proof procedure; dynamic/runtime/manual evidence not authorized or no accepted environment-bound adapter | Control dimension unsupported, not satisfied or N/A by absence. |
+| Discovery scan/file/byte caps; ambiguous/conflicting/unresolved ownership or location; unsupported language; Python parse failure; subject/evidence bounds | Named component/file/subject population omitted, with known or explicitly unknown counts. |
+| Source lines outside the subject, excerpt/character caps, structured metadata and routing-only evidence notices | The evidence establishes only its stated scope; tags/priority/graph context are not control proof. |
+| Worker failed; `batch not launched: max_batches cap; row remains accounted and unresolved` | Failed/capped batch still needs terminal rows. |
+| `worker: <status>`, `reviewer: <status>` | Missing evidence, transport, timeout, invalid answer or bounded protocol failure; inspect the retained model receipt. |
+| `model did not return this obligation` or the unsupported obligation's own reason | Exact obligation remains unassessed. |
+| Authentic evidence does not concern the named subject; incomplete/redacted/ambiguous evidence; complete function does not resolve external authorization policy/middleware/identity/guard prerequisites | Citation-check reasons are retained with their exception type. A genuine location does not establish a different subject or a missing control prerequisite. |
+| Material prerequisites assumed/requested; satisfied proposal has unresolved proof requirements; adverse proposal lacks subject-bound contradiction evidence | Proposition is downgraded to `cannot_verify`. |
+| Material obligations unresolved; admissible evidence conflict; elevated observation lacks independent verification | No safe/unsafe conclusion; dissent and provisional observations remain visible. |
+| Source procedures establish only named subjects; runtime/manual ingestion and live-model efficacy are separate unpassed gates | Standing result limitations, not claims that those checks ran. |
+
+Duplicate/missing join rows, bad accepted hashes, incompatible modes and schema violations fail
+the job; they are not successful coverage. Check the real target and the walk's expected cause
+list before accepting any coverage cost. [T-001](../TODO.md) names the remaining language/control,
+environment-bound runtime/manual and live-model efficacy acceptance work; catalog completeness
+does not close it.
+
+## Acceptance
+
+1. **A. Inputs:** Compare pinned standards/profile selection, accepted manifest/target, component
+   citations and mode with the claim and result. Record all discovery/subject/batch bounds and
+   confirm qualification inputs were not admitted to assessment.
+2. **B. Independent comparison:** Independently count selected catalog controls and component/
+   control row identities. Reconcile dispatchable, nondispatchable, capped and joined rows exactly
+   once; compare subject spans and evidence hashes with accepted sources. Separately count
+   worker attempts, independent-review attempts, satisfied/adverse/unresolved obligations and
+   lead-eligible provisional observations.
+3. **C. Gaps:** Group canonical outcomes and reconcile the bound result's row/evidence/standing
+   limitations without double counting. Record unknown omitted-subject counts honestly, distinguish
+   routing N/A from unsupported evidence, and stop on unexpected causes.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   catalog/selection, row IDs, subject fingerprints, model receipts and coverage partitions.
+   Qualification and assessment baselines are not interchangeable.
+
+## Resume and invalidation
+
+The assessment receipt key binds mode, semantic packages, guidance hash, model policy,
+result-rule version and typed limits. Reuse rebinds every cited reference and revalidates the
+proposal; changed scope/content denies reuse. Worker and reviewer roles have distinct guidance
+and receipt identities. Component classification, applicability and validation-work fingerprints
+support scoped shard reuse; global inputs bind standards, retrieval/configuration and parsers.
+Changed controls, subjects or evidence invalidate their dependent batches, not unrelated results.
+[Runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability) and external feed
+identity still apply; artifact-bearing unit checkpoints are not generally portable.
+
+## Model usage
+
+Only [control_assessor](../generated/guidance.md#roles-control_assessor) and
+[independent_reviewer](../generated/guidance.md#roles-independent_reviewer) are model-dispatched
+here. The deterministic domain mapping selects from
+[authentication_session](../generated/guidance.md#personas-authentication_session),
+[authorization_access_control](../generated/guidance.md#personas-authorization_access_control),
+[cryptography_data_protection](../generated/guidance.md#personas-cryptography_data_protection),
+[api_web](../generated/guidance.md#personas-api_web), [mobile_platform](../generated/guidance.md#personas-mobile_platform),
+[build_supply_chain](../generated/guidance.md#personas-build_supply_chain) and
+[deployment_operations](../generated/guidance.md#personas-deployment_operations), or no mapped
+persona. These viewpoints focus the supplied obligation, not the evidence grant. Classification,
+applicability, evidence validation and final joining remain deterministic. See
+[worker contracts](../architecture/worker-prompt-contracts.md#dispatch-inventory) and
+[guidance provenance](../architecture/guidance-procedures.md#selection-and-provenance).

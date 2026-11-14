@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # review_data_indexing
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Reconcile accepted producer datasets, build bounded cross-domain links and stage-1 query products,
+and publish a queryable inventory with coverage matrices. The inventory distinguishes declared,
+available, consumed and cited evidence. Derived facts are not scanner findings, and an audit
+violation blocks index acceptance rather than becoming a successful empty inventory.
 
 <!-- generated:begin job=job_review_data_indexing -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -50,7 +55,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_image_pin_verification` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_image_pin_verification` | `image_pin_verification` | `appsec-review/image-pin-verification/1` | handoff | optional | gap |
 | `job_target_acquisition` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
-| `job_target_acquisition` | `target_acquisition` | `appsec-review/target-acquisition-job/1` | handoff | optional | gap |
+| `job_target_acquisition` | `target_acquisition` | `appsec-review/target-acquisition-job/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -114,7 +119,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_debug_symbol_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `normalized_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `symbol_coverage` | `appsec-review/debug-symbol-coverage/1` | handoff | optional | gap |
-| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/1` | handoff | optional | gap |
+| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `raw_artifact_refs` | `appsec-review/debug-symbol-inputs/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `reader_executions` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `debug_symbol_summary` | `appsec-review/debug-symbol-indexing/1` | handoff | optional | gap |
@@ -266,7 +271,7 @@ flowchart LR
   input4 -. schema .-> input_schema4
   producer5["job_target_acquisition"]
   input5["target_acquisition"]
-  input_schema5["appsec-review/target-acquisition-job/1"]
+  input_schema5["appsec-review/target-acquisition-job/2"]
   producer5 --> input5 --> job
   input5 -. schema .-> input_schema5
   producer6["job_artifact_indexing"]
@@ -586,7 +591,7 @@ flowchart LR
   input68 -. schema .-> input_schema68
   producer69["job_debug_symbol_indexing"]
   input69["target_decision"]
-  input_schema69["appsec-review/debug-symbol-decision/1"]
+  input_schema69["appsec-review/debug-symbol-decision/2"]
   producer69 --> input69 --> job
   input69 -. schema .-> input_schema69
   producer70["job_debug_symbol_indexing"]
@@ -1044,3 +1049,165 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+See the [handler](../../src/appsec_review/jobs/job_review_data_indexing/job.py),
+[inventory audit](../../src/appsec_review/indexing/inventory.py) and
+[derived-shard publication](../../src/appsec_review/indexing/derive.py).
+
+### `load`
+
+1. In `load.accepted_inputs`, verify the accepted retrieval manifest and target snapshot.
+   Reconcile registered jobs, frozen configuration, dispatch classes, disabled jobs and downstream
+   consumers; load only the active upstream handoffs.
+2. Restore accepted shards omitted by an upstream manifest rewrite, verifying every restored hash.
+   Retain conflicting shard identities for the audit rather than choosing an arbitrary winner.
+3. Record declarations, consumption contracts, unit states, feed pin/freshness identities and
+   accepted OWASP status in `accepted_input_summary`.
+
+### `links`
+
+1. In `links.cross_domain`, select only the shards each explicit link rule declares.
+2. Derive bounded relationships, retaining exact versus ambiguous joins and source provenance.
+   Publish one immutable fingerprinted shard per rule with its gaps and counts.
+
+### `precompute`
+
+1. Dispatch the configured units `precompute.build_provenance`, `precompute.artifact_inventory`,
+   `precompute.dependency_advisories`, `precompute.scanner_correlation`, `precompute.ci_trust`,
+   `precompute.history_context`, `precompute.control_evidence`, `precompute.reference_intelligence`,
+   `precompute.symbol_links` and `precompute.document_context`.
+2. For each product, select its declared shards, link families, feed pins and optional OWASP
+   manifest; bind the rule version and fact limit. Preserve unavailable/partial source status.
+3. Add source-matched scanner menu accounting, history metric vectors or safe build/capture facts
+   only in their respective product handlers. Bind their extra inputs and bounds to reuse.
+4. Build or reverify the immutable derived shard and receipt. Publish facts with provenance,
+   counts and coverage; do not rerun raw tools or parse arbitrary unbound scanner output.
+
+### `fts`
+
+1. In `fts.image_validation`, collect this job's link and product shards.
+2. When commissioned, require the pinned FTS image and perform bounded text-index rebuilding/
+   cross-checking. Retain the receipt and actual `verified`, `disabled`, `skipped`, `unavailable`
+   or `mismatch` status. In `required` mode, skipped/unavailable/mismatched validation raises
+   after retaining its receipt. Disabled validation is a named gap, not image verification.
+
+### `audit`
+
+1. In `audit.inventory`, compare accepted files, shard owners, registered dataset declarations,
+   configured steps and consumption records under the bounded run-file inventory.
+2. Retain the audit report before deciding acceptance. Registry/configuration mismatch,
+   undeclared output ownership and other audit violations raise an error and block publication.
+3. Return only a passed audit with its warnings as coverage gaps; do not reclassify a failed
+   inventory as partial success.
+
+### `matrix`
+
+1. In `matrix.coverage`, reconcile source languages, build units, product states and producer/
+   consumer cells with actual input observations.
+2. Keep availability, accepted supply and reads distinct. Record input-source discrepancies and
+   graph/query follow-up limitations; a topology edge is not proof of consumption.
+
+### `publish`
+
+1. In `publish.inventory_index`, merge audited producer rows with this job's completed outputs.
+   Build inventory entities, audit facts and coverage cells from the verified records.
+2. Fingerprint inventory/audit/matrix/FTS content, publish the immutable inventory shard, and
+   assemble a combined manifest from accepted, restored, link and product shards.
+3. Verify the manifest and publish `dataset_inventory`, matrices and references. Retain each
+   noncomplete product disposition in the handoff summary.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_review_data_indexing"] --> load["load.accepted_inputs"]
+  load --> input["accepted_input_summary"]
+  input --> links["links.cross_domain"]
+  links --> linkdata["cross_domain_links"]
+  linkdata --> pre["precompute"]
+  pre --> products["precomputed_products"]
+  pre --> receipts["derived_checkpoints"]
+  products --> fts["fts.image_validation"]
+  fts --> ftso["fts_image_validation"]
+  ftso --> audit["audit.inventory"]
+  audit --> auditdata["dataset_audit_report"]
+  auditdata --> matrix["matrix.coverage"]
+  matrix --> matrices["coverage_matrices"]
+  matrices --> publish["publish.inventory_index"]
+  publish --> inventory["dataset_inventory"]
+  pre -. "partial / unavailable" .-> gaps["product gaps"]
+  gaps --> publish
+  audit -. "audit violations" .-> reject["reject publication"]
+```
+
+The `precompute` node is the ten exact units listed above, not a new task. Retrieval uses
+[bounded query products](../architecture/python-and-retrieval.md#query-boundary); authority comes
+from [input admission and read receipts](../architecture/job-input-contracts.md#admission-and-read-receipts).
+FTS execution follows [host/image pins](image-pin-verification.md#the-gate) and
+[signing](signing.md#container-images).
+
+## Gaps
+
+This producer still uses legacy strings without a supplied retryability/advisory classification.
+Resolve [canonical outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+back to the named product/link/audit/FTS receipt rather than treating strings as new gap codes.
+
+| Emitted source/reason family | Scope and interpretation |
+| --- | --- |
+| `restored dropped shard` | Manifest reconciliation repaired availability from an accepted handoff; inspect the original loss, not a new scanner result. |
+| `links/<rule>`: link bound, artifact catalog unavailable, `stale_source_hash`, `missing_source_map`, `conflicting_artifact_mapping`, unmatched build artifacts | Rule-selected relationship populations; a missing/ambiguous join is not an exact link. |
+| `links/<rule>`: `uncertain_package_identity`, `unavailable_language_or_scope`, no accepted Tree-sitter shards, history shards unavailable, source-to-build mapping unavailable outside C/C++ | Limited identity/language/capture support; inspect link basis rather than inferring reachability. |
+| `no <query_set> fact was derivable`, unavailable input statements, inherited index/shard coverage and `truncated` bounds | Empty or bounded products are not complete coverage. |
+| Build/artifact `missing_capture`, `ambiguous_producing_action`, `missing_source_map`, no catalogued produced artifact, exec-event/per-action command bounds and unbound protected capture | Provenance gaps; exact argv/environment remain protected rather than being exposed as safe facts. |
+| Dependency/reference `unresolved_dependency_identity`, `feed_unavailable`, `stale_feed`, `identity_mismatch`, `uncertain_package_identity`, `applicability_unverified`, `no_cve_identity` | Package/advisory matches are qualified; inspect OSV version-decision reasons and feed-specific prefixes. |
+| `nvd_rejected_cve`, CVE alias/pair bounds, missing CAPEC/ATT&CK normalization and discarded weakness identifiers | Pinned reference intelligence has missing or rejected dimensions, not a clean dependency conclusion. |
+| Scanner coverage, unlocated observations, `conflicting_locations` and menu/fact bounds | Lead correlation does not establish a source path or vulnerability by proximity. |
+| CI-to-build mapping unavailable; history signals/change-context unavailable, missing/ambiguous source binding | No inferred deployment or history evidence beyond the accepted mapping. |
+| OWASP `assessment_unavailable`, `validator_gap` | Qualification-only, empty or nonresolving control evidence cannot become assessed target proof. |
+| Symbol no-linked-syntax/ambiguous/unavailable-link reasons and unresolved overload/template/indirect-dispatch limitation | Symbol context is not a resolved call graph. |
+| No accepted OpenAPI declaration/DFD boundary; document relation/fact bounds | Target-document context is incomplete and is never behavioral proof. |
+| FTS disabled, no published shard, export skipped, capability probe unready, unavailable/invalid/unreadable report | Inspect the FTS receipt. Skipped export includes sensitive key/value text, nonlogical paths, conflicting identity and text/record/stream bounds. |
+| FTS record-count/input-hash mismatch or probe term returning different identities | Image cross-check did not verify; `required` mode fails. |
+| `unreferenced_index_files`, `attempt_provenance_unavailable`, `upstream_not_run` | Actual inventory warning codes; audit violations instead fail the unit. |
+| Input-source matrix discrepancies | Declared/available/read dimensions disagree and require investigation. |
+| `<query_set>: partial` or `<query_set>: unavailable` | Handoff summaries of product coverage, not additional independent failures. |
+
+These families come from [link rules](../../src/appsec_review/indexing/links.py),
+[product constructors](../../src/appsec_review/indexing/products.py),
+[build-capture facts](../../src/appsec_review/indexing/build_facts.py) and the
+[FTS validator](../../src/appsec_review/indexing/fts_worker.py). Preserve the complete emitted
+reason and scope in the walk record; a shared prefix does not erase individual coverage costs.
+
+Known absent exact task/dataset publication bindings remain [T-147](../TODO.md).
+Deferred consumers and protected decision products remain [T-149/T-150](../TODO.md);
+this inventory does not create their future readers or grants.
+
+## Acceptance
+
+1. **A. Inputs:** Compare active producer pins, manifests, restored-shard hashes, registry/
+   configuration membership, feed identities and input observations with the claim. Separate
+   disabled/downstream jobs from active producer omissions.
+2. **B. Independent comparison:** Independently enumerate accepted handoff artifact/shard
+   identities and declared datasets, then compare inventory ownership and dispositions.
+   Reconcile per-product source/fact counts, exact/ambiguous links, scanner menu membership and
+   safe build-command origins. Compare FTS receipt counts with selected shard text and
+   producer/consumer cells with actual read receipts.
+3. **C. Gaps:** Group canonical outcomes and reconcile them with underlying product, FTS and
+   audit receipts. Record restored shards separately from missing coverage; any audit violation
+   or unexpected discrepancy stops acceptance.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   dataset identities/dispositions, manifest hash, product fingerprints and coverage matrices.
+   Distinguish changed feeds/rules from newly read evidence on subsequent comparisons.
+
+## Resume and invalidation
+
+`publish_derived` fingerprints selected input identities, target snapshot, rule/version and
+bounds. Link and product shards can be reused independently: a changed feed or OWASP manifest
+invalidates products that bind it, not every unrelated product. Scanner correlation additionally
+binds syntax/dispositions/menu size; build provenance binds capture events and command bounds.
+The inventory binds row, audit, matrix and FTS digests. Shared receipt/reference verification
+still applies, along with [runtime configuration/release admission](../architecture/jobs-and-runtime.md#wave-1-resumability)
+and external feed identity. Artifact-bearing unit outputs are not portable failed-attempt
+checkpoints. No model is dispatched.

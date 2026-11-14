@@ -1,7 +1,7 @@
 ---
 title: "poc_generation"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_poc_generation"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # poc_generation
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Generate bounded PoC and negative-control functions for explicitly admitted judge-qualified review
+candidates, then validate policy and compile them against an accepted native build workspace.
+Nothing is linked into an executable or run. `compile_verified` means compile checks passed,
+not exploit reproduction; compile failure neither refutes the finding nor changes its state.
 
 <!-- generated:begin job=job_poc_generation -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -484,3 +489,156 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_poc_generation/job.py) uses the typed
+[candidate verifier](../../src/appsec_review/jobs/job_poc_generation/candidates.py),
+[AST policy](../../src/appsec_review/jobs/job_poc_generation/policy.py) and
+[compile checks](../../src/appsec_review/jobs/job_poc_generation/buildcheck.py).
+
+### `load`
+
+1. In `load.verify_inputs`, reverify the accepted review, required candidate field, package/basis
+   identities and explicit upstream pin. Missing candidate field is not an empty candidate list.
+2. Order confirmed candidates before supported candidates, then by claim ID. Plan the bounded
+   prefix and retain every omitted claim. Record accepted language-build identity when available.
+3. Write the immutable input snapshot and retain candidate-bound/build-availability reasons.
+   Required handoff admission can reject before these handler-level availability checks.
+
+### `plan`
+
+1. In `plan.briefs`, check configured judge verdict and usable entry/path/trigger basis.
+2. Require the accepted review package, resolving sink function and accepted build source.
+   Unsupported build mapping is `not_applicable`; missing proof/package/sink is
+   `insufficient_evidence`.
+3. Build a bounded source/declaration/compile-context brief. If no basis entry/path identity
+   resolves in the package view, do not commission a writer.
+
+### `write`
+
+1. In `write.poc_writer`, commission only nonterminal plans under the bounded worker pool.
+2. Load the job's pinned writer guidance and use in-process retrieval from the accepted workspace/
+   header/declaration view. The writer returns two functions or an allowed decline, not tools.
+3. Validate response shape and retain receipt, guidance identity, answer/decline and failure reason.
+   No pending plans means no model invocation.
+
+### `validate`
+
+1. In `validate.policy`, preserve prior terminal outcomes and writer declines.
+2. Assemble generated source and run answer/file validators. Violations yield `policy_denied`.
+3. Prepare bounded scratch input and obtain a reduced Clang AST in the accepted pinned build
+   image. Unavailable validators yield `artifact_generated`; parse failure yields `compile_failed`.
+4. Check function/call/trigger policy against the accepted brief. Retain violations, AST and
+   unchecked-trigger qualifications; only policy-passing candidates proceed to compilation.
+   Accepted-byte integrity errors propagate, and scratch is removed.
+
+### `compile`
+
+1. In `compile.build_check`, retain earlier terminal outcomes; prepare fresh scratch for admitted
+   source only.
+2. Run syntax, plain-object and sanitizer-object checks using the safe accepted compile context,
+   and check undefined symbols. Never link the functions or run generated code.
+3. Retain actual command/result diagnostics and object/symbol identities. Tool/workspace
+   unavailability limits assurance to generated artifacts; clean scratch afterward.
+
+### `package`
+
+1. In `package.files`, emit exactly one candidate row for each planned claim, preserving state,
+   judge verdict, finding hash and PoC-basis hash.
+2. Where a source-bearing status permits, write immutable source, policy, compile and provenance
+   files. Bind brief/package/source/settings/guidance/model/build/image identities.
+3. Keep unavailable or declined outcomes without pretending they have source or successful checks.
+
+### `publish`
+
+1. In `publish.publish_handoff`, rehash all loaded bindings and require the accepted review pointer
+   to remain unchanged.
+2. Assemble ordered candidate rows, every omitted claim and exact by-status counts; validate the
+   summary schema and explicit nonexecution assurance.
+3. Publish the immutable summary reference. Carry bounded-admission and unsuccessful-assurance
+   reasons without promoting supported candidates into confirmed findings.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_poc_generation"] --> load["load.verify_inputs"]
+  review["job_inference_security_review / scores_and_findings"] --> load
+  load --> plan["plan.briefs"]
+  build["job_language_build / build_workspaces"] --> plan
+  plan --> writer["write.poc_writer"]
+  writer --> cells["poc_writer_cells"]
+  cells --> policy["validate.policy"]
+  policy --> compile["compile.build_check"]
+  compile --> files["package.files"]
+  files --> source["poc_reproducers"]
+  source --> publish["publish.publish_handoff"]
+  publish --> summary["poc_generation_summary"]
+  plan -. "unusable / not applicable" .-> terminal["candidate terminal outcome"]
+  policy -. "policy denied / unavailable" .-> terminal
+  compile -. "compile failed" .-> terminal
+  terminal --> files
+  load -. "accepted evidence mismatch" .-> reject["reject publication"]
+```
+
+Input access follows [typed admission](../architecture/job-input-contracts.md#admission-and-read-receipts).
+Compiler execution uses [host/image pins](image-pin-verification.md#the-gate) and
+[signing](signing.md#container-images); the writer's source view is a
+[bounded retrieval](../architecture/python-and-retrieval.md#query-boundary) boundary.
+
+## Gaps
+
+The summary uses legacy strings with no producer-level retryability classification. Candidate
+statuses below are payload values, not additions to the closed producer terminal-status enum.
+See [canonical outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+| Emitted reason/status | Scope and walk cost |
+| --- | --- |
+| `candidate_bound_reached` | Exact omitted claim IDs were not attempted. |
+| `accepted_build_unavailable` | Planning cannot obtain usable accepted build context; missing required admission still fails. |
+| `insufficient_evidence` | Unusable basis, missing package/sink, unresolved identities or unusable writer answer. |
+| `not_applicable` | Configured verdict/build/language boundary or writer decline; retained candidate outcome, not automatically a summary gap. |
+| `unsafe_to_attempt`, `policy_denied` | Allowed decline or deterministic policy refusal. |
+| `artifact_generated` | Source exists but validators/build checks were unavailable; inspect retained reason and row gaps. |
+| `compile_failed` | Generated functions failed parse/compile/symbol checks; not a refutation of the original claim. |
+| Brief/retrieval and unchecked-trigger limitations | Inspect retained brief/validation/compile records even when compilation succeeds. |
+
+`GAP_NO_CANDIDATES` exists as a constant but this handler does not emit it: an explicitly empty
+candidate list publishes zero candidates without inventing that gap. Hash/admission failures
+block publication. No candidate status means runtime verification.
+Separately authorized dynamic-evidence production remains [T-026](../TODO.md), not a permission
+to run these generated functions; this job's compile-only policy is unchanged.
+
+## Acceptance
+
+1. **A. Inputs:** Compare review/build pins, candidate membership, judge/basis records, finding/
+   package hashes and accepted compile/image identities. Confirm no target checkout was used as
+   a substitute for run-owned source.
+2. **B. Independent comparison:** Independently enumerate review PoC candidates and reconcile
+   planned outcomes plus omitted IDs. Compare every source-bearing candidate's source/policy/
+   AST/compile/symbol receipts and by-status counts. Verify compile-only commands and explicit
+   nonexecution flags; supported finding state must remain supported.
+3. **C. Gaps:** Group canonical outcomes and map them to candidate/omission reasons and retained
+   brief/compile qualifications. Distinguish unsupported, policy-denied, unavailable and failed
+   compilation. Stop on unexpected causes; do not call failed compilation evidence of safety.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   candidate partition, basis/source/receipt hashes and status counts. Record runtime reproduction
+   as not performed, including for compile-verified candidates.
+
+## Resume and invalidation
+
+There is no standalone PoC result cache. [Runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability)
+binds accepted review/build, configuration, target/input and component identities. Candidate
+provenance additionally pins basis, package, brief, source, settings, guidance and image.
+A changed verdict, source/compile context, writer or validator setting invalidates downstream
+PoC artifacts without modifying the finding. Scratch stages are recreated, immutable candidate
+files are not overwritten, and artifact-bearing unit results are not portable checkpoints.
+
+## Model usage
+
+Only [poc_writer](../generated/guidance.md#roles-poc_writer) is selected here, with no persona
+or stack. It proposes functions within the supplied evidence/build brief and can decline;
+deterministic policy/compiler code owns acceptance. `poc_designer` and `poc_verifier` are not
+dispatched by this job. See [worker contracts](../architecture/worker-prompt-contracts.md#dispatch-inventory)
+and [guidance selection](../architecture/guidance-procedures.md#selection-and-provenance).

@@ -1,7 +1,7 @@
 ---
 title: "review_prioritization"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_review_prioritization"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # review_prioritization
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Rank accepted source files and functions for review using deterministic complexity, boundary,
+dependency, semantic-path and history signals. A high score means “review first,” never
+“vulnerable.” Missing features remain missing and reduce feature coverage rather than quietly
+becoming zero-valued evidence that code is safe.
 
 <!-- generated:begin job=job_review_prioritization -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -279,3 +284,124 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_review_prioritization/job.py) uses the explicit
+[scoring rule](../../src/appsec_review/jobs/job_review_prioritization/scoring.py), accepted syntax
+and source custody; it does not dispatch an LLM despite the score's historical name.
+
+### `load`
+
+1. In `load.accepted_inputs`, verify accepted intake, catalog and Tree-sitter results and require
+   their source snapshots to agree with the job fingerprint.
+2. Verify source backing and collect optional scanner, CodeQL and history handoff identities.
+   Retain policy exclusions, including disabled-language coverage, rather than inventing syntax.
+
+### `extract`
+
+1. In `extract.syntax_metrics`, reserve bounded resources and stream accepted syntax rows by file.
+   Enforce file, byte, function and signal bounds. Resolve source bytes before deriving function
+   spans, SLOC, cyclomatic/cognitive measures, suppressions and behavior signals.
+2. Retain parse errors, unsupported constructs, absent/truncated AST and unscored languages.
+   Keep error-propagation contributions explicit; do not silently substitute lexical guesses
+   for accepted tree structure.
+3. In `extract.dependency_graph`, derive bounded import relationships and afferent/efferent
+   coupling. Mark unresolved/dynamic imports as lower-bound context.
+4. In `extract.semantic_evidence`, normalize accepted Semgrep signals and CodeQL paths against
+   accepted file identities and bounded flow steps. A path not bound to accepted files contributes
+   a gap, not an accepted semantic signal.
+
+### `prioritize`
+
+1. In `prioritize.score`, join syntax, coupling, semantic evidence and available history metrics.
+   Keep unavailable semantic/history dimensions null and retain their disposition.
+2. Normalize each available feature to a zero-anchored mid-rank percentile in the configured
+   population, separately for file and function items. Compute the weighted mean over available
+   features and record the share of configured weight actually covered.
+3. Order by descending score, boundary count and feature coverage, then stable source/name
+   tie-breakers. Select file and function prefixes under the shared index ceiling; retain the
+   full ranking document.
+
+### `publish`
+
+1. In `publish.index_priority`, fingerprint syntax, dependency, semantic and ranking artifacts,
+   settings and rule identities. Build or reuse the immutable `priority` shard.
+2. Add selected priority items, bounded resolving evidence and dependency context, preserving
+   location/mapping identities. Record a dependency-context cap rather than silently claiming
+   the full graph was indexed.
+3. Verify and publish the combined manifest and `prioritization_documents` summary. Report total
+   ranked counts separately from indexed prefixes and retain every extraction/history gap.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_review_prioritization"] --> load["load.accepted_inputs"]
+  tree["job_tree_sitter_ast / tree_sitter_ast"] --> load
+  source["job_target_catalog / source_files"] --> load
+  load --> syntax["extract.syntax_metrics"]
+  syntax --> deps["extract.dependency_graph"]
+  syntax --> semantic["extract.semantic_evidence"]
+  deps --> score["prioritize.score"]
+  semantic --> score
+  score --> index["publish.index_priority"]
+  index --> handoff["publish.publish_handoff"]
+  handoff --> items["priority_items"]
+  handoff --> docs["prioritization_documents"]
+  syntax -. "bounds / absent AST / parse errors" .-> gaps["gaps"]
+  score -. "history or feature coverage missing" .-> gaps
+  gaps --> handoff
+  load -. "source identity mismatch" .-> reject["reject publication"]
+```
+
+See [accepted input receipts](../architecture/job-input-contracts.md#admission-and-read-receipts)
+and the [location contract](../architecture/python-and-retrieval.md#identity-and-location-contract).
+Retrieval exposure of a rank does not upgrade it to finding evidence.
+
+## Gaps
+
+These handler/helper reasons are legacy strings without producer-supplied retryability
+classification. They are not new `producer-gap/1` codes; use
+[canonical outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+| Reason family | Scope and walk interpretation |
+| --- | --- |
+| Delivery-policy and disabled Swift gaps; `language_not_scored` | Source population excluded or unsupported; absence of rank has no safety meaning. |
+| `file_byte_bound_reached`, `file_bound_reached`, `function_bound_reached`, `signals_truncated` | Named file or bounded extraction population omitted. |
+| `ast_unavailable`, `ast_truncated`, `parse_errors`, `unsupported_construct`, `parse_error` | Syntax/function metrics incomplete or qualified. |
+| `unresolved_or_dynamic_imports`, `import_record_bound_reached` | Coupling is a lower bound, not a complete dependency graph. |
+| `semgrep_review_signals_unavailable`, Semgrep review signal without category or location, `semgrep_signal_not_bound_to_accepted_file`; inherited `semgrep` reasons | Scanner signal unavailable, incomplete or rejected at file association. |
+| `semantic_paths_unavailable`, `semantic_paths_partial`, `semantic_path_step_bound_reached`, `semantic_path_flow_boundaries_unavailable`, `semantic_paths_truncated`, semantic path not bound to accepted files | CodeQL path coverage unavailable, capped, missing flow boundaries or outside accepted file identities. |
+| `history_hotspots_unavailable` | History decision/source does not supply usable hotspot metrics. |
+| `dependency_graph_context_bound_reached` | Published retrieval context is smaller than the dependency graph. |
+
+Source/hash disagreement and incompatible input snapshots fail the job. Missing-feature lists and
+`feature_coverage` must be inspected alongside gaps; a score alone conceals what was not measured.
+Named approximation work remains [T-031](../TODO.md): resolved call targets, fuller import
+resolution, API diffs, conditional/macro flow and additional language mappings.
+
+## Acceptance
+
+1. **A. Inputs:** Compare intake/catalog/AST snapshot identities and optional scanner/history pins
+   with the claim and summary. Record scored-language and delivery-scope populations and bounds.
+2. **B. Independent comparison:** Count eligible accepted source files and AST function spans,
+   partitioning scored, skipped and capped cases. Independently recompute representative metrics
+   from accepted syntax/source and percentile/weight calculations from the full ranking population.
+   Compare ranked totals with indexed prefix counts and resolving evidence, not just top scores.
+3. **C. Gaps:** Group canonical outcomes by cause and map path/function reasons to omissions,
+   missing features and lower-bound coupling. Unexpected loss or unscored target language stops
+   the walk unless its cost was explicitly accepted.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   source/rule hashes, rank population, ranked/indexed counts and feature-coverage distributions.
+   Compare rule/settings changes separately from target changes.
+
+## Resume and invalidation
+
+The priority-shard fingerprint binds the four computation artifacts, target snapshot, settings,
+score/rule identities, accepted Tree-sitter parser, language/delivery mapping and import-graph
+mapping. An upstream syntax, semantic or history change changes its inputs; a weight or selection
+change invalidates ranking/index publication without requiring scanner reruns.
+[Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) additionally pins
+configuration, component and handoff identities. Artifact-bearing intermediate results are not
+portable failed-attempt checkpoints.

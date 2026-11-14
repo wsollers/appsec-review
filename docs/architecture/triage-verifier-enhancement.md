@@ -10,12 +10,20 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## Status, scope and non-goals
 
-**Implementation authorized on 2026-11-13; not yet delivered.** Written against code
+**Implementation authorized on 2026-11-13; runtime slice not yet delivered.** Written against code
 `5926171238607e27a948bc7d40ce190a853b3d0c`; the
 [source-backed review](../reviews/2026-11-13-triage-verifier-review.md) records the
 shared-working-tree limitation and evidence. Frontmatter status means this is the
 current design, not that the proposed runtime exists. Scheduling/progress belongs
 only in [the TODO registry](../TODO.md).
+
+The 2026-11-13 sync checkpoint adds only the reviewed pure
+[record contract](../../src/appsec_review/review/decision_audit/contracts.py),
+[closed schema](../schemas/review-decision-audit.schema.json) and focused unit regressions.
+It does not change configuration defaults, register audit outputs or consumers, add audit reads,
+or wire runtime publication. T-150 remains in progress while the producer/consumer slice is
+reviewed. Later evidence-adjudication and hunt-allocation changes are to be opt-in, as selected
+by the user; integration and acceptance execution remain prohibited for this implementation.
 
 T-146 landed before this registry handoff at main
 `2612ee80f305970707520ad92774d1e1c1336c1c`. Its
@@ -107,7 +115,8 @@ TRI-A references HUNT-C's operation/question coverage and transport receipts; it
 not produce a second copy of those receipts or infer delivery from package membership.
 
 T-129 released the [canonical taxonomy](../intelligence-buckets.json) after the initial review.
-The six declared T-150 output kinds belong to **review_products**, retaining their protected
+The runtime-neutral checkpoint added no audit datasets. The six output kinds now declared in
+this implementation branch belong to **review_products**, retaining their protected
 disposition, operational authority and sanitized-metadata-only inventory route. Offline
 measurements remain **metrics**. Future warrant/obligation products are still proposals,
 not produced datasets. Bucket membership never grants a worker or MCP capability.
@@ -469,6 +478,7 @@ T-129 is **nonblocking documentation mapping and reconciliation**, not a runtime
 Its canonical mapping now covers the six declared T-150 products under review_products.
 Register any future concrete datasets, schemas and accepted read routes with their owning
 contracts and update that single mapping, rather than inventing new conceptual bucket names.
+Do not treat a taxonomy entry as runtime authority.
 Dependency-intelligence and hunting enhancements should
 supply their existing lead/operation/evidence identities and producer coverage through
 these interfaces. Neither subsystem supplies a correctness label. Do not duplicate

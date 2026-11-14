@@ -2959,7 +2959,7 @@
       "disposition": "keep",
       "kind": "schema",
       "path": "docs/schemas/review-decision-audit.schema.json",
-      "reason": "Keep the protected decision, verification, basis and manifest contracts with their identity and continuation constraints.",
+      "reason": "Keep the reviewed decision-audit codec, identity and continuation constraints distinct from T-150 runtime publication and consumer wiring.",
       "subsystem": "review inference and guidance"
     },
     {

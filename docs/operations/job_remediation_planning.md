@@ -1,7 +1,7 @@
 ---
 title: "remediation_planning"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_remediation_planning"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # remediation_planning
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Create bounded, inert remediation proposals for the accepted review's confirmed findings only.
+Each proposal describes the violated/corrected invariant, exact source edits and a separate safe
+regression specification. Planning neither applies a patch to the target nor proves a fix;
+supported findings stay outside remediation intake even when they have PoC documentation.
 
 <!-- generated:begin job=job_remediation_planning -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -451,3 +456,114 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+See the [handler](../../src/appsec_review/jobs/job_remediation_planning/job.py),
+[source reader](../../src/appsec_review/jobs/job_remediation_planning/inputs.py) and
+[proposal/patch validators](../../src/appsec_review/jobs/job_remediation_planning/contracts.py).
+
+### `load`
+
+1. In `load.verify_inputs`, verify the accepted review and bounded package set.
+2. Select exactly the confirmed partition, sort by claim/package identity and reject state/
+   partition disagreement. Record confirmed, bounded-admission and supported-excluded counts.
+3. Write an immutable input snapshot; a missing required review is admission failure, not empty
+   remediation success.
+
+### `assess`
+
+1. In `assess.propose`, account for every confirmed candidate, including rows beyond the candidate
+   bound as `capped`. Resolve its direct evidence relations from the accepted projection.
+2. For usable evidence, map accepted locations to run-owned build source. Require index and build
+   hashes to agree, enforce relation/file/byte bounds and retain source omissions.
+3. Commission the bounded writer with finding identity, source/evidence and invariant/patch/
+   regression-specification response fields. Allow retrieval only from already admitted source
+   files; retain the model/guidance/answer receipt.
+4. Validate closed output, evidence IDs and exact patch scope. Retain `manual_design_required`
+   or `insufficient_evidence` rather than repairing an invalid answer into a proposal.
+5. Write immutable source context, writer receipt, optional patch and verified plan with
+   nonexecution assurance. Record a candidate gap for every non-`proposal_generated` outcome.
+
+### `acceptance`
+
+1. In `acceptance.publish_handoff`, reload the accepted review and verify it has not changed;
+   rehash its bindings.
+2. Require the ordered outcome finding triples to equal the confirmed candidate intake exactly.
+   Reverify each plan/schema and nested patch reference.
+3. Publish `remediation_planning_summary` and aggregate row gaps. An empty confirmed intake is
+   `SKIPPED_NA`; it does not assert that the review has no supported or unresolved issues.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_remediation_planning"] --> load["load.verify_inputs"]
+  review["job_inference_security_review / scores_and_findings"] --> load
+  load --> assess["assess.propose"]
+  builds["job_language_build / build_workspaces"] --> assess
+  assess --> proposals["remediation_proposals"]
+  proposals --> accept["acceptance.publish_handoff"]
+  accept --> summary["remediation_planning_summary"]
+  assess -. "capped / manual_design_required / insufficient_evidence" .-> gaps["gap_ids"]
+  gaps --> accept
+  assess -. "accepted source hash disagreement" .-> reject["reject publication"]
+  accept -. "intake partition changed" .-> reject
+```
+
+The [accepted-input contract](../architecture/job-input-contracts.md#admission-and-read-receipts)
+and [retrieval boundary](../architecture/python-and-retrieval.md#query-boundary) restrict source
+access. Scheduling after PoC does not make PoC evidence a prerequisite or grant: plan provenance
+currently records `poc_handoff = null`.
+
+## Gaps
+
+Rows and plans use legacy strings without a producer-level retryability classification.
+[Canonical conversion](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+does not make their prefixes new gap codes.
+
+| Emitted cause or outcome | Scope and cost |
+| --- | --- |
+| `remediation_planning:<claim>:capped` / reason `candidate_bound_reached` | Confirmed finding was not commissioned. |
+| `remediation_planning:<claim>:manual_design_required` or `insufficient_evidence` | No valid exact proposal; inspect the retained row/model reason. |
+| `confirmed_finding_has_no_resolving_evidence`, writer failure/budget/schema reason, `invalid_patch` | Candidate could not produce a validated proposal. Integrity exceptions still propagate. |
+| `source_location_unavailable`, `run_owned_source_unavailable` | Relation/path lacks usable accepted source. |
+| `source_file_bound_reached`, `source_byte_bound_reached`, `evidence_relation_bound_reached` | Source context is bounded, not whole-finding verification. |
+| `source_encoding_unsupported` | Named source is not usable UTF-8. |
+
+Failed scope/hash verification is not manual-design success. Expected limitations must be recorded
+with their cost; no source retryability field implies no automatic advisory classification.
+
+## Acceptance
+
+1. **A. Inputs:** Compare the accepted review pin, confirmed partition, finding triples and direct
+   relation IDs with the input snapshot. Verify each supplied source hash against both accepted
+   location and run-owned build manifest.
+2. **B. Independent comparison:** Independently count confirmed intake and supported exclusions;
+   require exactly one outcome per confirmed identity, including capped rows. Compare proposed
+   old bytes/offsets and new-file absence proofs with accepted source, and check cited relations
+   and regression specifications against the finding's invariant without applying the patch.
+3. **C. Gaps:** Group canonical outcomes and resolve row reasons/source gaps. Separate no confirmed
+   intake from missing evidence or a failed writer. Record proposal/manual/capped counts and stop
+   on unexpected causes.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   intake identities, proposal/patch hashes, outcome partition and source/guidance receipt hashes.
+   Record that runtime remediation validation has not been established.
+
+## Resume and invalidation
+
+No separate proposal semantic cache is implemented. [Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability)
+requires exact review/build input, configuration and component identities; proposal provenance
+additionally records settings, source context, guidance and writer receipt hashes. A changed
+confirmed finding, source baseline or writer contract invalidates the plan, not the original
+review state. Existing attempt-owned files are refused rather than overwritten, and artifact
+results are not portable failed-attempt checkpoints.
+
+## Model usage
+
+The selected [remediation_writer](../generated/guidance.md#roles-remediation_writer) produces
+the proposal, not a verdict that the finding is fixed. The specialized-worker selector assigns
+no persona or stack; it uses the job-bound role and registered invariant-analysis procedure.
+Its in-process protocol permits bounded source retrieval and a closed final answer, not shell
+tools or patch execution. See [worker contracts](../architecture/worker-prompt-contracts.md#dispatch-inventory)
+and [guidance selection](../architecture/guidance-procedures.md#selection-and-provenance).

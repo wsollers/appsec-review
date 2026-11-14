@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # code_graph_index
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Normalize accepted CodeQL exports into bounded, source-resolving graph facts, cross-check them
+against independent native producers, and correlate scanner code flows. The graph supplies
+review context, not vulnerability findings. Missing exports, incomplete neighborhoods and absent
+secondary evidence cannot become negative evidence; disagreement removes direct eligibility
+rather than being resolved by majority vote.
 
 <!-- generated:begin job=job_code_graph_index -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -401,3 +407,124 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handler graph](../../src/appsec_review/jobs/job_code_graph_index/job.py),
+[scope/publication helpers](../../src/appsec_review/jobs/job_code_graph_index/scopes.py),
+[normalizer](../../src/appsec_review/graph/normalize.py) and
+[producer neighborhoods](../../src/appsec_review/jobs/job_code_graph_index/producers.py).
+
+### `load`
+
+1. Read accepted CodeQL graph-export records and the accepted retrieval manifest. Verify the
+   catalog release pin, export/source identities and source files for successful scopes.
+2. Assign secondary clangd, LLVM IR, Clang AST and SVF shards, analyzer observations, scanner
+   observations and optional priority context to matching scopes. Restore missing secondary
+   shards only through their own accepted producer handoffs, not arbitrary files.
+3. Bind those shard references and scope/export/release/settings identities. Reuse scope
+   checkpoints only when required graph/validation releases are declared and output hashes verify.
+
+### `normalize`
+
+1. For unreused scopes with successful exports, validate bounded export documents and map rows
+   against accepted source bytes and catalog classifications.
+2. Build call sites, sinks, entry points, flow summaries, dataflow paths, guards and ranges,
+   retaining ambiguity, unresolved operands, language-specific unavailability and truncation.
+   Enforce path/step/text bounds; do not promote post-dominating-only checks to guarding predicates.
+3. Write a normalized stage with facts, symbols, relations and per-family coverage. Failed or
+   absent exports skip this stage, not the later unavailable-family publication.
+
+### `crosscheck`
+
+1. Read that stage and independent call producers. Compare supported call locations/targets;
+   preserve agree, disagree, partial and not-covered states and secondary-only sites.
+2. Apply analyzer sink corroboration when available, then SVF cross-checking. Only appropriately
+   closed-world/complete points-to evidence can contradict a graph claim; open-world absence is
+   not a refutation.
+3. Record disagreements and secondary-only coverage, update family coverage and write the
+   crosschecked stage. Do not equate exact symbol linking with independent security validation.
+
+### `correlate`
+
+1. Reuse a valid completed scope when possible. For an unavailable export, publish no graph facts
+   and one unavailable row per family plus a database card.
+2. Otherwise correlate tool-observation code flows against the graph; use optional priority only
+   as context. Retain broken/unindexed flow reasons with a bounded diagnostic list, and apply
+   seeded coverage limits.
+3. Publish one graph shard per family, database card and bounded producer-neighborhood shard.
+   Neighborhoods retain IR flow, analyzer diagnostics, linked clangd symbols and optional seeded
+   CPG function facts; they are partial when populated, unavailable otherwise. Save the scope checkpoint.
+
+### `acceptance`
+
+1. Re-verify the current manifest and ensure every consumed secondary/analyzer/observation/priority
+   shard is still present or explicitly restored. Missing consumed identities is an integrity error.
+2. Replace this producer's shards, compose restored shards and publish the verified manifest plus
+   `code-graph-summary.json`, with family coverage counts and scope/database/fact/reuse counts.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  exports["accepted CodeQL exports + sources + catalog"] --> job["job_code_graph_index"]
+  job --> normalize["normalize.scopes"]
+  normalize --> cross["crosscheck.scopes"]
+  secondary["clangd / LLVM IR / Clang AST / SVF + analyzer shards"] --> cross
+  cross --> correlate["correlate.scopes"]
+  observations["accepted scanner flows + optional priority"] --> correlate
+  correlate --> output["family shards + database cards + producer neighborhoods"]
+  output --> publish["acceptance.publish_handoff"]
+  normalize -. "unmapped / bounded / unsupported family" .-> gaps["family coverage"]
+  cross -. "disagree / secondary-only" .-> gaps
+  correlate -. "broken flow / export unavailable" .-> gaps
+  gaps --> publish
+  job -. "pin or consumed-shard mismatch" .-> stop["integrity exception"]
+```
+
+## Gaps
+
+The producer emits legacy reasons/status summaries; [interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+wraps reasons as `producer_reported_gap`, normally non-retryable, not advisory.
+
+- Input absent/failed: `export_unavailable`, missing secondary producer/neighborhood output and
+  missing source/priority coverage. An unavailable export produces no positive family facts.
+- Coverage missing: inexact/macro/unmapped locations; unclassified sinks/sources; unavailable or
+  truncated operand text; unknown sink-operand constraint; post-dominating-only checks; unsupported
+  or non-integral ranges; unresolved indirect calls; limited flow summaries; truncated path steps,
+  ambiguous step locations, unmatched sources and omitted paths.
+- Independent disagreement: `cross_check_disagreements`, `svf_cross_check_disagreements`,
+  `secondary_only`; unresolvable clangd references and per-edge location omissions are retained.
+- Correlation/neighborhood loss: `sarif_correlation_broken`, missing flow indices, producer not
+  run, and bounded flow/diagnostic/symbol/CPG/trace/related-symbol rows. Inspect shard coverage as
+  well as top-level outcome reasons.
+- Export hash/source/cross-scope/catalog-pin errors or disappearance of consumed shards raise an
+  integrity exception. They are not successful graph coverage gaps.
+
+Known limitations still require the walk's explicit expected-cause decision.
+
+## Acceptance
+
+1. **A. Inputs:** Compare CodeQL handoff/export manifests, catalog release and every consumed
+   shard identity with admitted handoffs/read receipts; verify scope assignment and restoration.
+2. **B. Independent comparison:** Count native export rows versus accepted/dropped facts per family;
+   resolve sampled spans against source bytes. Independently compare a call against clangd/IR and
+   a closed-world SVF result, and trace one SARIF code flow to graph relations. Count unavailable
+   family rows and bounded neighborhood rows separately.
+3. **C. Gaps:** Group verified outcomes, reconcile family and neighborhood coverage with export
+   truncations, disagreement states and broken-flow records, then check the walk's approved list.
+4. **D. Baseline:** On authorized acceptance save corpus namespace and `stepwise.py accept` baseline
+   with scope/family counts, export/shard identities and cross-check states. This page asserts no
+   live graph acceptance.
+
+## Resume and invalidation
+
+Scope identity binds snapshot, language/root/build unit, database/export identity/status/reasons,
+seeds, file identities, catalog/column/normalizer releases, rules/settings/tool version and all
+secondary/analyzer/observation/priority shard references. A changed input rebuilds only affected
+scopes. Unlike accepted-input corruption, an unverifiable matching **local output checkpoint**
+is discarded with its own shard files and rebuilt by `reuse_checkpoint`; it is never republished.
+No CodeQL queries or models execute in this job. Shared composition is in
+[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
+Generated task/language bindings remain
+[T-147](../TODO.md) and [T-157](../TODO.md).

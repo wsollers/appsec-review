@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # svf_alias_analysis
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Compute bounded points-to sets, indirect-call targets and memory-object relationships from
+accepted native compile/link inputs for independent graph cross-checking. These are facts about
+the analyzed bitcode, not findings. Open-world modules, incomplete sites and truncated target sets
+cannot justify negative claims about aliases or callees outside the modeled program.
 
 <!-- generated:begin job=job_svf_alias_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -213,3 +218,103 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handler and record normalization](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py),
+[module planning](../../src/appsec_review/jobs/job_svf_alias_analysis/planning.py) and
+[accepted-scope execution](../../src/appsec_review/jobs/cpp_index_scopes.py).
+
+### `load`
+
+1. Verify the accepted compiled-analysis handoff/result, source maps, compile databases and
+   snapshot. Retain unavailable catalogs and commandless projects separately.
+2. Freeze runnable scope identities; this producer does not acquire new sources or rebuild the
+   accepted language-build result.
+
+### `analyze`
+
+1. Re-load scopes and reject plan changes. Filter unsupported compile inputs; scopes with no
+   supported commands are `SKIPPED_NA`.
+2. Build bounded modules from supported compile commands and normalized link commands. Preserve
+   link-unit membership and open-world reasons; unlinked translation units remain separate.
+   Record omitted trailing modules when the module bound is reached.
+3. Check a scope checkpoint; otherwise invoke `tool-svf` with a bounded plan document and
+   per-module output ceiling. Read bounded run-result JSON only after successful execution.
+   Retain compile-to-bitcode failures; unavailable image, timeout, OOM, size limit or bad result
+   leaves affected modules unavailable.
+4. For each planned module, require an analyzed outcome, an in-scratch output path and a valid
+   bounded driver document. Reject missing/failed/escaping/malformed output for that module.
+5. Map pointer sites and indirect calls to accepted source locations; count outside-source sites
+   instead of giving them locations. Preserve target/object sets, truncation, incomplete reasons,
+   module closed-world state and unmodeled externals. Add bounded memory-object relations.
+6. Write an analysis shard with per-module coverage and counts; no modules yields unavailable
+   coverage. Save the scope checkpoint, including failed or partial scope results.
+
+### `acceptance`
+
+1. Compose analysis shards and unavailable-scope coverage into a verified manifest.
+2. Publish `svf-alias-analysis-summary.json` with record, module and closed-world-module counts.
+   No runnable or unavailable cases is not-applicable; aggregate scope gaps prevent success.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  cpp["accepted compile + link databases"] --> job["job_svf_alias_analysis"]
+  job --> plan["analyze.scopes: plan_modules"]
+  plan --> svf["tool-svf: bitcode + module analysis"]
+  svf --> normalize["accepted-source points-to / indirect calls / memory objects"]
+  normalize --> shard["analysis shard + per-module coverage"]
+  shard --> publish["acceptance.publish_handoff"]
+  plan -. "module bound / open world" .-> gaps["coverage reasons"]
+  svf -. "missing bitcode / failed / malformed output" .-> gaps
+  gaps --> publish
+  cpp -. "changed accepted evidence" .-> stop["integrity exception"]
+```
+
+## Gaps
+
+Text reasons are wrapped as `producer_reported_gap` by
+[interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope), normally
+with non-retryable metadata. This is not an advisory classification.
+
+- Input absent/failed: unavailable accepted catalog, no commands or no compile units to analyze.
+- Tooling failure: unavailable image, timeout/OOM/nonzero exit, output limit, invalid run-result
+  envelope, compile units without bitcode, unanalyzed module outcomes, missing/escaping/invalid
+  module output or malformed driver document.
+- Coverage missing: module/site/indirect-call/memory-object limits, missing bitcode, lossy debug
+  upgrades and open-world reasons such as unlinked units, dynamic loading or unmodeled externals.
+  Per-site incomplete flags and outside-accepted-source counters must be inspected too.
+- In the current [scope loop](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L324),
+  normalization reasons are written into module coverage but are not all appended to the
+  top-level gap list. Aggregate publication can therefore understate those reasons; compare
+  coverage rows and per-scope status, not only the summary count.
+- Changed accepted sources/database or damaged matching checkpoint evidence raises an exception,
+  not a successful unavailable publication.
+
+The walk must separately approve any expected coverage loss.
+
+## Acceptance
+
+1. **A. Inputs:** Match consumed compiled handoff, source/compile/link identities and supported
+   command set to admitted pins; independently enumerate planned versus omitted modules.
+2. **B. Independent comparison:** Compare native module JSON's points-to objects, indirect targets,
+   bitcode-production outcomes and closed-world flags with indexed rows. Verify sampled locations
+   against source bytes and independently count outside-source and truncated sites.
+3. **C. Gaps:** Group verified canonical outcomes, then reconcile module coverage rows and scope
+   terminal statuses for reasons omitted from aggregate gaps. Compare each cause with receipts,
+   native output and the walk's approved list.
+4. **D. Baseline:** At authorized acceptance save `stepwise.py accept`, corpus namespace and baseline
+   with module identities, closed-world counts and coverage reasons. This page does not claim
+   live SVF acceptance.
+
+## Resume and invalidation
+
+Checkpoint identity includes scope/source/compile state, link commands, adapter, settings and tool
+identity. A changed link topology invalidates that scope even with unchanged source. Matching
+checkpoints verify retained artifacts and index metadata; they may retain failed/partial results,
+so an unchanged retry need not rerun SVF. Manifest composition follows
+[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
+Task binding omissions remain [T-147](../TODO.md);
+no model makes the points-to decisions.

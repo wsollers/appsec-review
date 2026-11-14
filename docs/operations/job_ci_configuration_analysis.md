@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # ci_configuration_analysis
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Identify accepted CI definitions, run applicable provider linters and structural rules, and
+correlate exact duplicate observations into canonical CI records. The job answers which
+configuration concerns have bounded source support, not whether a pipeline is exploitable or a
+repository is secure. Its canonical “findings” are correlated scanner/rule judgments; the handoff's
+security-findings list remains empty.
 
 <!-- generated:begin job=job_ci_configuration_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -183,3 +189,145 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handler graph](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py),
+[discovery](../../src/appsec_review/jobs/job_ci_configuration_analysis/discovery.py) and
+[structural rules](../../src/appsec_review/jobs/job_ci_configuration_analysis/static_rules.py).
+The job declares strict structured gaps; generated task bindings remain [T-147](../TODO.md).
+
+### `ci_discovery`
+
+1. Verify the accepted target catalog and snapshot through
+   [job input contracts](../architecture/job-input-contracts.md); use its enumerated files,
+   not repository-wide discovery outside that inventory.
+2. Identify and bound CI definitions, then sort by provider/path. The discovery bound emits
+   `truncated` records. Publish definition catalog and provider classification.
+3. Carry discovery gap records as classification payload without re-declaring them in the unit's
+   gap array, so the control layer counts each cause once.
+
+### `ci_analysis`
+
+1. Select definitions per provider/tool spec. No definitions is not-applicable without gaps;
+   inputs outside an external linter's declared support are skipped before image resolution.
+2. Run GitHub zizmor/actionlint and provider-specific Checkov frameworks where configured.
+   Resolve pinned offline images; unavailable resolution emits retryable `producer_blocked`.
+   Execute per definition with bounded container policy, accepting the adapter's diagnostic
+   exit convention. Failed invocation/timeout/OOM emits `producer_failed`.
+3. Parse native output with tool-specific mappings. Zizmor spans and Checkov source-range
+   reconstruction retain exact or ambiguous mapping provenance; malformed native output emits
+   `parser_error`, not a clean empty result.
+4. For static specs, read bounded UTF-8 definitions and run source structural rules. Jenkins and
+   TeamCity use structural analysis, not target-language execution. Unreadable/invalid text emits
+   `parser_error`; file bounds emit `producer_reported_gap`. Other-provider discovery without a
+   configured linter emits `producer_reported_gap`.
+5. Cap observations with `truncated`, redact credential-like message values, and retain raw
+   observations plus execution identities. External gaps with no records mean failed scan;
+   otherwise reasons make it partial.
+
+### `ci_normalization`
+
+1. Read and verify each raw artifact, normalize source ranges and identity fields, and derive
+   deterministic observation IDs. Deduplicate exact IDs, preserving raw and duplicate counts.
+2. Publish normalized observations. Normalization's own success does not erase the scan outcome:
+   scan status and gap records travel in payload fields rather than being declared a second time.
+
+### `ci_enrichment`
+
+1. Read accepted definitions within the file-byte/UTF-8 bounds and derive structural stage/job/step
+   hierarchy. Over-bound files emit `producer_reported_gap`; unreadable hierarchy emits `parser_error`.
+2. Publish `hierarchy.json`. Later enrichment uses the latest preceding node of each kind in the
+   same path; this is structural context, not proof of CI runtime control flow.
+
+### `ci_observation_publication`
+
+1. Enrich normalized records with pipeline/workflow and hierarchy context. Map retained locations
+   against source bytes while preserving mapping confidence and ambiguity.
+2. Write one observations shard per provider/tool with scan coverage: complete for successful scan,
+   unavailable for failed/not-applicable scan, partial otherwise. Publication's own status remains
+   success, carrying scan gaps only as payload.
+
+### `ci_correlation`
+
+1. Group only exact provider/path/range/category/message matches; ambiguous mappings must also
+   match provenance and byte ranges. Do not merge merely similar wording or neighboring spans.
+2. Publish `canonical-findings.json` plus an evidence shard linking canonical records to their
+   observation IDs/tool lists. Duplicate count is an accounting fact, not confidence in exploitability.
+
+### `ci_coverage`
+
+1. Join discovery, scan and hierarchy gaps by stable gap ID; publish `coverage.json` with provider
+   counts, tool statuses and skipped-input accounting. Do not re-declare joined records.
+2. Replace this producer's prior shards in the verified upstream manifest and publish `handoff.json`
+   with coverage/canonical-record references, finding count and an empty security-findings list.
+   Publication succeeds on its own terms; originating unit gaps determine job coverage.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  catalog["accepted target catalog"] --> job["job_ci_configuration_analysis"]
+  job --> discovery["ci_discovery: definitions + providers"]
+  discovery --> scan["ci_analysis: external linters / static rules"]
+  scan --> normalize["ci_normalization"]
+  discovery --> hierarchy["ci_enrichment: hierarchy"]
+  normalize --> index["ci_observation_publication"]
+  hierarchy --> index
+  index --> correlate["ci_correlation: exact canonical records"]
+  correlate --> publish["ci_coverage: coverage + handoff + manifest"]
+  discovery -. truncated .-> gaps["origin-owned producer-gap records"]
+  scan -. "blocked / failed / parse / unsupported / bounded" .-> gaps
+  hierarchy -. "parse / file bound" .-> gaps
+  gaps --> publish
+  catalog -. "invalid accepted identity" .-> stop["integrity exception"]
+```
+
+## Gaps
+
+These are actual `producer-gap/1` records from the
+[handler helpers](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L91), not inferred
+codes. Their semantics follow [interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+- `producer_blocked`, retryable **true**: unavailable pinned offline image; tooling failure
+  requiring operator action.
+- `producer_failed`, retryable **false**: failed/exceptional linter invocation, timeout, OOM or
+  unacceptable exit. Non-retryable here is **not advisory**.
+- `parser_error`, retryable **false**: malformed linter output, invalid source-range reconstruction
+  or unreadable/invalid UTF-8 static/hierarchy input.
+- `truncated`, retryable **false**: discovery definition or observation cap; coverage missing.
+- `producer_reported_gap`, retryable **false**: file/hierarchy byte bound or discovery without
+  enabled provider linter; coverage missing or present-but-unsupported capability.
+
+No definitions and declared unsupported inputs are not-applicable/skip decisions, not linter
+failures. Changed own artifact hashes and unusable internal commands raise
+`CiConfigurationAnalysisFailed`; accepted-input integrity failures also stop, rather than producing
+successful gap artifacts. Execution-safety may stop before a tool fallback is published.
+Known causes still need the particular walk's user-approved expected classification.
+
+## Acceptance
+
+1. **A. Inputs:** Compare admitted catalog pin and definition paths/hashes, provider assignment and
+   supported input decisions; match actual linter image and argv receipts to selected definitions.
+2. **B. Independent comparison:** Independently count provider definitions and native linter records;
+   inspect structural rule spans against source bytes. Recalculate exact correlation groups and
+   duplicate counts, including two ambiguous mappings that must remain distinct. Compare hierarchy
+   attachment to source ordering, not assumed pipeline execution semantics.
+3. **C. Gaps:** Read verified outcomes and compare unique gap IDs to `coverage.json`; each originating
+   cause should occur once despite normalization/index joins. Reconcile failed tools, bounds and
+   unsupported providers with raw evidence and the approved expected list.
+4. **D. Baseline:** At authorized acceptance save `stepwise.py accept`, corpus namespace and baseline
+   with definition/observation/canonical counts, mapping identities and gap IDs. This page asserts
+   no live CI linter acceptance.
+
+## Resume and invalidation
+
+This job has no bespoke external-linter checkpoint; replay follows
+[runtime unit receipts](../architecture/jobs-and-runtime.md#wave-1-resumability).
+Observation fingerprints bind snapshot, normalized artifact, hierarchy, provider/tool/framework,
+ruleset, settings and parser/normalizer/mapping identities. Canonical evidence fingerprints bind
+the exact correlation document. Changed definitions, hierarchy, mappings or rules must not be
+treated as unchanged observations. Fresh unit execution builds the shards; a matching filename
+alone is not a scanner execution receipt. Shared [image pins](image-pin-verification.md),
+[signing](signing.md) and [retrieval manifests](../architecture/python-and-retrieval.md#accepted-index-sets)
+remain independent verification boundaries.

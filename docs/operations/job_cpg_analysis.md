@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # cpg_analysis
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Retain a bounded Joern CPG for accepted native scopes and, in seeded mode, expose the bounded
+per-function export that was actually produced. A retained CPG binary is not usable CPG/PDG
+coverage, a security observation, or a finding. The producer deliberately publishes a blocked
+evidence marker and zero security observations even when a CPG exists.
 
 <!-- generated:begin job=job_cpg_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -213,3 +218,100 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [job](../../src/appsec_review/jobs/job_cpg_analysis/job.py),
+[seeded execution](../../src/appsec_review/jobs/job_cpg_analysis/seeded.py) and
+[export reader](../../src/appsec_review/jobs/job_cpg_analysis/export.py).
+
+### `load`
+
+1. Read and verify accepted compiled-analysis scopes, compile databases, materialized sources and
+   manifest via [scope helpers](../../src/appsec_review/jobs/cpp_index_scopes.py).
+2. Require the current target snapshot and retain unavailable cases. Do not repair or rebuild them.
+
+### `generate`
+
+1. Re-read scopes and reject a changed plan. If disabled, launch nothing and return named disabled
+   coverage for existing scopes. This describes the handler if dispatched; scheduling enablement
+   is separate from the in-job flag.
+2. If enabled, plan optional seeds and run bounded scope workers. No seeds, or no supported selected
+   rows, yields a seeded ledger and blocked shard without running a container.
+3. Verify a matching checkpoint or invoke `tool-joern` c2cpg on the accepted source root and
+   rewritten compile database. Enforce `max_cpg_bytes` with `RLIMIT_FSIZE` at limit plus one;
+   discard partial, oversized, empty or non-regular output. Record timeout, OOM and nonzero exits.
+4. Retain a valid CPG and its manifest, accepted database, receipt and resource-limit disposition.
+   Always carry `JOERN_GAP`: generation alone is not the missing general CPG/PDG export pipeline.
+5. In seeded mode with a valid CPG, run the separate export command with per-file limits. Reject
+   failed/missing export output; parse bounded CSV into `cpg-export.json`, retaining per-function
+   facts and gaps, then discard raw export intermediates.
+6. Publish a blocked evidence entity with zero observations. Exported functions add AST-node
+   facts and partial coverage; otherwise coverage is unavailable. Attach seeded ledger/selection
+   reasons. Do not checkpoint a failed seeded build; ordinary generated results can be checkpointed.
+
+### `acceptance`
+
+1. Compose scope shards and disabled/unavailable coverage; verify the full manifest.
+2. Publish `cpg-analysis-summary.json` with scope, disabled and generated-CPG counts. Observation
+   and item counts remain zero. Existing scopes always finish with gaps; no scopes/cases is
+   not-applicable.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  cpp["accepted C++ scopes"] --> job["job_cpg_analysis"]
+  job --> enabled{"generate.scopes: enabled?"}
+  enabled -->|yes, selected input| cpg["c2cpg: bounded cpg.bin + manifest"]
+  cpg -->|seeded only| export["bounded export: cpg-export.json"]
+  export --> shard["observations shard: blocked marker + optional function facts"]
+  cpg --> shard
+  enabled -. "disabled / no seeds" .-> gaps["unavailable coverage + ledger"]
+  cpg -. "failed / too large / no general export" .-> gaps
+  export -. "failed / malformed / bounded" .-> gaps
+  gaps --> publish["acceptance.publish_handoff"]
+  shard --> publish
+```
+
+## Gaps
+
+`JOERN_GAP`, `JOERN_DISABLED`, seeded export-scope/no-export/no-seed messages, selection omissions
+and tool reasons are **legacy text**, not canonical gap-code names. The
+[interchange layer](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+wraps them as `producer_reported_gap` with default non-retryable metadata, not an advisory waiver.
+
+- Coverage missing: disabled analysis, retained binary without general source-mapped CPG/PDG
+  export, seeded-only extent, absent seeds, unsupported selected units and export parser bounds.
+- Tooling failure: CPG/export timeout, OOM, exit failure, missing/empty output, file-size ceiling,
+  missing export directory or unusable CSV. Partial CPG bytes are discarded, not evidence.
+- Input absent/failed: upstream unavailable catalogs and commandless scopes. Changed accepted
+  source/database or mismatched matching-checkpoint manifest raises an integrity exception.
+
+The permanent-looking limitation is still a cost that a specific walk must explicitly approve.
+
+## Acceptance
+
+1. **A. Inputs:** Compare compiled handoff, scope/database/source identities, enabled flag and
+   optional seed plan with admitted inputs and actual execution receipts.
+2. **B. Independent comparison:** Hash and size-check retained CPG bytes against the manifest and
+   limit disposition. In seeded mode compare bounded export function rows with indexed facts.
+   Verify zero security observations and distinguish blocked markers from exported functions.
+3. **C. Gaps:** Group verified outcomes and compare disabled/no-seed scopes, discarded binaries,
+   export failures and inherited unavailable cases to receipts and ledgers. Reconcile all causes
+   with the walk's approved expected list.
+4. **D. Baseline:** On authorized acceptance, record corpus namespace and `stepwise.py accept`
+   baseline with generated/exported/disabled counts and coverage. No CPG or live acceptance was
+   produced by this documentation change.
+
+## Resume and invalidation
+
+The scope checkpoint binds accepted scope/database, container database hash, adapter/argv,
+tool identity, CPG byte ceiling and seeded identities. Reuse validates receipt, database and CPG
+manifest agreement, the retained file boundary and indexed artifacts. Failed seeded builds are
+not reused; unseeded gap-bearing results may be. Disabled work must not reuse enabled success as
+coverage. [Image pins](image-pin-verification.md) and [signing](signing.md) are shared gates.
+The [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py) is authoritative where legacy
+operations prose says all export is absent: seeded per-function export exists, general CPG/PDG
+coverage does not. Generated bindings remain
+[T-147](../TODO.md).

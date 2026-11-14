@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # review_package_assembly
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Turn the final accepted indexed evidence into immutable scanner-lead, hunt-menu and document-hunt
+packages. This job establishes bounded membership and resolving context, not findings. Its
+`review_packages` are upstream routing material; the inference job subsequently assembles its own
+lane-specific review packages and adjudicates claims separately.
 
 <!-- generated:begin job=job_review_package_assembly -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -91,7 +96,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_debug_symbol_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `normalized_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `symbol_coverage` | `appsec-review/debug-symbol-coverage/1` | handoff | optional | gap |
-| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/1` | handoff | optional | gap |
+| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `raw_artifact_refs` | `appsec-review/debug-symbol-inputs/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `reader_executions` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `debug_symbol_summary` | `appsec-review/debug-symbol-indexing/1` | handoff | optional | gap |
@@ -508,7 +513,7 @@ flowchart LR
   input60 -. schema .-> input_schema60
   producer61["job_debug_symbol_indexing"]
   input61["target_decision"]
-  input_schema61["appsec-review/debug-symbol-decision/1"]
+  input_schema61["appsec-review/debug-symbol-decision/2"]
   producer61 --> input61 --> job
   input61 -. schema .-> input_schema61
   producer62["job_debug_symbol_indexing"]
@@ -898,3 +903,93 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_review_package_assembly/job.py) calls
+[review_packages.py](../../src/appsec_review/review_packages.py).
+
+### `publication`
+
+1. In `publication.publish_packages`, resolve the accepted manifest and require its target
+   snapshot to match the job. Verify that the accepted review-data-indexing handoff binds that
+   manifest or its recorded upstream lineage.
+2. Read accepted scanner-correlation and document-context facts. Validate scanner/menu accounting
+   before assembling anything; unresolved identities or malformed membership fail rather than
+   becoming fabricated empty packages.
+3. Emit one `finding_lead` package per admitted scanner lead and one `hunt` package per bounded
+   menu partition. Preserve high/critical and unknown-severity accounting, continuation partitions,
+   original observations and source locations. Attach only matching metrics, build facts, safe
+   commands, tags and compiled-function context.
+4. Emit one `document_hunt` package per accepted document-context fact. Keep its anchor and at
+   most 63 additional document records, with an explicit omission count and implementation-mapping
+   obligation. Document statements remain hypotheses.
+5. Validate package membership and schema, write the validated admission projection, then publish
+   canonical package files and manifest under the manifest's content hash.
+6. Reverify exact directory membership, bytes, package identities, input manifest, counts, menu
+   membership and coverage-gap union. Publish all file references; the output validator repeats
+   these receipt checks before acceptance.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_review_package_assembly"] --> publish["publication.publish_packages"]
+  index["job_review_data_indexing / precomputed_products"] --> publish
+  context["priority / tags / source / analysis"] --> publish
+  publish --> kinds["finding_lead / hunt / document_hunt"]
+  kinds --> output["review_packages"]
+  publish -. "missing matching context or document bound" .-> gaps["coverage_gaps"]
+  gaps --> output
+  publish -. "membership / lineage / hash mismatch" .-> reject["reject publication"]
+```
+
+Manifest selection and retrieval use the
+[accepted index-set contract](../architecture/python-and-retrieval.md#accepted-index-sets).
+The [input contract](../architecture/job-input-contracts.md#admission-and-read-receipts)
+is the authority boundary, not the mere availability of a shard.
+
+## Gaps
+
+Package gap objects contain producer, scope, state and reason; handler outputs carry their IDs
+as legacy strings. They supply no retryable/advisory classification. Their IDs are not new
+canonical codes; see [outcome conversion](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+| Producer / reason family | Scope and cost |
+| --- | --- |
+| Inherited shard gaps and noncomplete coverage rows | Original index/shard area remains incomplete. |
+| `scanner_correlation`: no accepted scanner-correlation facts | Source-SAST input unavailable; document hunts have no scanner lead. |
+| `function_scope`: unresolved or ambiguous source function | Lead-to-function association is not established. |
+| `build_provenance`: ambiguous build context, no source-matched safe build-action facts, or no safe compile command explicitly naming the source | No inferred compile authority or fabricated command. |
+| `history_context`: no source-matched accepted metric vector | Ranking/history context absent for the package's paths. |
+| `security_tagging`: no accepted matching tag assignment | Routing context absent, not absence of security behavior. |
+| `compiled_analysis`: no accepted matching Clang function declaration | Native function context unavailable. |
+| `document_context`: inherited reasons, document grant bound, or route/boundary not mapped to a unique implementation component | Document evidence remains bounded and unmapped; not behavioral proof. |
+
+These are coverage costs to reconcile with walk terms. Invalid manifest membership, altered files
+or unaccepted document anchors fail publication instead of producing successful coverage.
+
+## Acceptance
+
+1. **A. Inputs:** Compare the claim's review-data-indexing pin, manifest lineage, target snapshot
+   and shard identities with package-manifest bindings. Record the frozen page bound.
+2. **B. Independent comparison:** Independently count scanner leads, menu partitions and
+   document-context facts from their accepted shards. Compare `finding_lead`, `hunt`,
+   `document_hunt`, high/critical and unknown counts; compare every menu's observation IDs and
+   next partition. Verify package files exactly match the manifest and sample source/build
+   attachments against accepted evidence.
+3. **C. Gaps:** Resolve canonical outcome IDs to the deduplicated package-gap union. Separate
+   absent context, ambiguous mapping and actual truncation. An empty scanner set or unmapped
+   document is not a clean finding set; unexpected causes stop the walk.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   manifest/content hashes, package-kind counts, menu memberships and omitted document counts.
+   Record any quantity not independently compared as not verified.
+
+## Resume and invalidation
+
+Package identity includes accepted manifest/shards, partition, entity context and assembly rule.
+The admission projection additionally binds run ID, manifest hash and page size; published files
+are content-addressed and reverified, never edited in place. A changed input manifest, membership
+rule or page bound requires new packages. [Runtime resume](../architecture/jobs-and-runtime.md#wave-1-resumability)
+still requires exact configuration/component/upstream identities; this artifact-bearing unit is
+not a portable failed-attempt checkpoint. No model is dispatched.

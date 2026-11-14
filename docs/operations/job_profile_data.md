@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # profile_data
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Turn execution-profile files explicitly retained by accepted builds into ranked hotspot context:
+which named functions accumulated the reported samples or event costs? This job neither runs the
+target nor converts opaque profiles. Hotness is not a vulnerability, defect probability, proof of
+reachability in another workload, or a verified source location.
 
 <!-- generated:begin job=job_profile_data -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -192,3 +197,108 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_profile_data/job.py) and
+[parsers](../../src/appsec_review/jobs/job_profile_data/parsers.py) define this path; task/tool
+binding omissions in the generated inventory remain [T-147](../TODO.md).
+
+### `load`
+
+1. Read the accepted catalog publication, language-build receipts and artifact-index publication
+   through the [input contract](../architecture/job-input-contracts.md#admission-and-read-receipts).
+   Verify bound artifacts, schema and snapshot agreement; an integrity error stops the job.
+2. Retain the three handoff hashes, catalog fingerprint and artifact-index manifest. Do not discover
+   extra profiles by walking a target or workspace.
+
+### `normalize`
+
+1. Sort receipts by build-unit identity; select only artifacts whose kind is `execution-profile`,
+   sort by path/hash and cap their count. Missing candidates produce `missing_profile_data` text.
+2. Reject invalid origin or changed file identity. Skip duplicate path/hash pairs or oversized
+   files with explicit reasons. Detect exactly one supported text format: folded stacks, perf-script,
+   Callgrind or LLVM sample text. Ambiguous formats and opaque gmon, pprof and LLVM binary formats
+   remain unparsed reports, not empty successful profiles.
+3. Parse within input-line, line-byte, frame and normalized-row bounds. Malformed input is a gap;
+   preserve parser truncation and unresolved symbol/source/line reasons. Attach report hash, build
+   unit, origin and context-only semantics to each row.
+4. Rank rows within each build unit by descending count, then event, symbol, module, source, line
+   and report hash. Record `hotness_population`; no rows means unavailable, rows plus gaps partial.
+   The ordering does not make different events or workloads statistically comparable.
+
+### `index`
+
+1. Verify the inherited manifest; replace only prior `profile-data-` analysis shards.
+2. Fingerprint each build unit's report identities with snapshot, parser, normalizer, mapping and
+   upstream manifest. Reuse an existing fingerprint-addressed file or write hotspot entities and
+   one profile-data coverage row. Rows carry names and optional reported paths, not source citations.
+3. Write and verify the composed `profile-data-<attempt>.json` retrieval manifest.
+
+### `acceptance`
+
+1. Publish `accepted-profile-data.json` with upstream hashes, parser identities, normalized build
+   units, context-only interpretation, gaps and manifest reference.
+2. Count normalized rows, not reports. Return completed-with-gaps if any reason exists; otherwise
+   success with units, or not-applicable with none.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  inputs["accepted catalog + build receipts + artifact-index manifest"] --> job["job_profile_data"]
+  job --> load["load.accepted_inputs"]
+  load --> normalize["normalize.profile_data: bounded text parsers"]
+  normalize --> rows["ranked context-only rows"]
+  rows --> index["index.profile_data: analysis shards"]
+  index --> publish["acceptance.publish_handoff: profile_data_handoff"]
+  normalize -. "absent / unsupported / bounded / malformed" .-> gaps["legacy reasons + coverage"]
+  gaps --> publish
+  load -. "identity mismatch" .-> stop["integrity exception; no successful publication"]
+```
+
+## Gaps
+
+These are producer text reasons, not source-emitted canonical codes. The
+[interchange conversion](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+wraps them as `producer_reported_gap` with default non-retryable metadata; that is **not** an advisory
+classification or permission to accept missing coverage.
+
+- Input absent: `missing_profile_data`; a receipt without profiles is not evidence that execution
+  was cold. No receipts follows the explicit not-applicable branch.
+- Input present but unsupported: `unsupported_profile_format`, `ambiguous_profile_format`,
+  `ambiguous_profile_identity`; no converter is launched.
+- Coverage missing or failed: `artifact_count_truncation`, `artifact_byte_bound`,
+  `profile_row_truncation`, parser `row_truncation` and `frame_truncation`, `ambiguous_symbol`,
+  `ambiguous_source`, `ambiguous_line`, and `malformed_profile`. Malformed includes invalid UTF-8,
+  NULs, overlong lines, invalid counts and empty/unrecognized sample structures.
+- Invalid origin, missing/escaping/symlinked report, changed hash or accepted snapshot disagreement
+  raises `ProfileIntegrityError`; it is not an accepted gap document.
+
+Each observed cause must be checked against the particular walk's approved list, with the lost
+workload or sample population recorded.
+
+## Acceptance
+
+1. **A. Inputs:** Compare the three consumed handoff hashes and every report path/hash/origin with
+   admitted build receipts; confirm no unlisted profile was ingested.
+2. **B. Independent comparison:** In a separately inspected retained report, sum named sample
+   counts or Callgrind event costs and compare symbol/event rows, rank tie-breaks and population.
+   Count omitted frames/lines independently; compare report hashes. Record unverified workloads.
+3. **C. Gaps:** Group the verified outcomes' canonical records by code and retained reason; compare
+   unsupported-format and truncated-row counts with actual report bytes, then the approved expected
+   causes. Missing profiles are not zero hotness.
+4. **D. Baseline:** On an authorized walk, save acceptance with `stepwise.py accept`; record corpus
+   namespace, baseline, report identities, row counts, ranks and gaps for the next diff. No live
+   acceptance is asserted here.
+
+## Resume and invalidation
+
+There is no converter or model checkpoint. Runtime unit reuse follows
+[jobs and runtime](../architecture/jobs-and-runtime.md#wave-1-resumability). Per-unit shard identity
+binds snapshot, report paths/hashes, parser/normalizer/mapping identities and upstream artifact
+manifest. Changed reports or those identities rebuild the affected shard. The local index
+fingerprint does **not** explicitly include ingestion bounds; do not assume changing a bound alone
+invalidates an existing shard (see `index` in the handler). Existing files are hashed, not reparsed
+before local reuse. The accepted loader verifies the publication, semantic tag and complete
+[retrieval manifest](../architecture/python-and-retrieval.md#accepted-index-sets).

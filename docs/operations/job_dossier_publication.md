@@ -1,7 +1,7 @@
 ---
 title: "dossier_publication"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_dossier_publication"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # dossier_publication
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Produce protected developer dossiers for every accepted confirmed finding and, separately, every
+accepted PoC outcome. Rendering preserves evidence, qualification, remediation and chain context;
+it neither confirms supported findings nor converts compile-only artifacts into runtime proof.
+The final publication gate certifies these dossiers later; dossiers do not consume that gate.
 
 <!-- generated:begin job=job_dossier_publication -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -498,3 +503,109 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_dossier_publication/job.py),
+[input verifier](../../src/appsec_review/jobs/job_dossier_publication/inputs.py) and
+[renderer](../../src/appsec_review/reporting/dossier_render.py) define this path.
+
+### `load`
+
+1. In `load.verify_inputs`, verify the accepted review, package partition and projection.
+   Require exact claim, finding-package and content-hash identities.
+2. Load optional accepted PoC, planning and validation summaries. Verify their review binding,
+   item/gap counts, nested references and nonexecution assurance; validation must name the
+   accepted planning handoff. Require remediation attachments to concern confirmed findings.
+3. Bind the review's source manifest and attack-chain manifest. Write the attempt-owned input
+   snapshot; malformed or changed accepted evidence fails the unit.
+
+### `dossiers`
+
+1. In `dossiers.create`, reverify the snapshot. Form a sorted set of
+   `(confirmed_finding, finding_package_id)` and `(poc, finding_package_id)` candidates.
+   Split at the dossier bound and retain the remainder as explicit omissions.
+2. Resolve only cited direct or analyst-assessed relation identities through bounded
+   `read_excerpt`. Record unavailable, truncated and capped excerpts. Read bounded PoC text
+   without executing it; attach matching remediation and chain qualifications.
+3. Build the bounded dossier projection, including evidence and text truncation records.
+   Render deterministic JSON and escaped LaTeX into a new item directory.
+4. If PDF is commissioned, run the pinned LaTeX renderer and retain its execution receipt.
+   Publish a PDF only for successful real output; otherwise retain `render_failed` or
+   `latex_only` with a reason. A pin/integrity failure is not downgraded into rendering success.
+5. Write the dossier summary with admitted, rendered/failed/LaTeX-only and omitted counts.
+
+### `acceptance`
+
+1. In `acceptance.publish_handoff`, reverify accepted pointers, all bound inputs and dossier
+   JSON/LaTeX/PDF/receipt references.
+2. Require items plus omissions to partition the exact expected kind/finding pairs, without
+   duplicates. Require PDF presence to agree with `rendered` and receipt/model identities to agree.
+3. Publish the immutable summary reference and aggregate gaps; a partition or reference mismatch
+   rejects publication.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_dossier_publication"] --> load["load.verify_inputs"]
+  review["job_inference_security_review / scores_and_findings"] --> load
+  attachments["job_poc_generation / poc_generation_summary"] --> load
+  remediation["job_remediation_planning / remediation_planning_summary"] --> load
+  validation["job_remediation_validation / remediation_validation_summary"] --> load
+  load --> create["dossiers.create"]
+  create --> accept["acceptance.publish_handoff"]
+  create -. "source / render / dossier cap" .-> gaps["gaps and omitted"]
+  gaps --> accept
+  accept --> out["dossier_publications"]
+  accept -. "identity or partition mismatch" .-> reject["reject publication"]
+```
+
+Source excerpts use [accepted retrieval](../architecture/python-and-retrieval.md#query-boundary).
+The renderer obeys [image and host pins](image-pin-verification.md#the-gate) and
+[signing policy](signing.md#container-images). A scheduling edge is not an
+[input grant](../architecture/job-input-contracts.md#admission-and-read-receipts).
+
+## Gaps
+
+These are source-emitted legacy strings, with no producer-level retryable/advisory field.
+Use [canonical outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope),
+not a repeated count of summary strings.
+
+| Reason family | Scope and interpretation |
+| --- | --- |
+| `source_excerpt_unavailable`, `source_excerpt_truncated`, `source_excerpt_cap` | Cited identity or dossier source budget; missing context remains missing. |
+| `poc_assurance_limited`, `poc_source_cap`, `poc_source_unavailable` | Candidate status or generated source; compilation and readable text do not prove execution. |
+| Inherited finding/PoC gaps | Exact finding or candidate; preserve their original limitations. |
+| `dossier_cap` | Kind/finding pairs in `omitted`, never silently dropped. |
+| `dossier_pdf_disabled_by_policy` | `latex_only`, no PDF was commissioned. |
+| `dossier_render_failed`, `dossier_renderer_unavailable` | Render execution or renderer availability; JSON/LaTeX may survive but no successful PDF is asserted. |
+
+Projection truncation/redaction records are additional limits to inspect, not invented gap codes.
+All candidate/producer integrity failures stop publication. A nonretryable canonical record is
+not permission to accept the cost without the walk's expected-gap decision.
+
+## Acceptance
+
+1. **A. Inputs:** Compare admitted review and optional producer hashes with the loaded snapshot;
+   verify validation-to-planning binding, source-manifest identity and exact finding triples.
+2. **B. Independent comparison:** Count confirmed packages in the accepted review and candidate
+   outcomes in the accepted PoC summary independently of the dossier summary. Their kind/finding
+   union must equal items plus omissions. Compare per-kind/per-status totals; verify PDFs only
+   exist for `rendered`, and compare rendered excerpts with cited accepted bytes.
+3. **C. Gaps:** Group canonical outcomes and reconcile each with item gap lists, omissions,
+   rendering receipts and truncation records. Record the cost of absent PDF/source context;
+   unexpected causes stop the walk.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace,
+   recording the kind/finding partition, input and rendering identities and status counts.
+   Later comparisons must not equate changed rendering with changed claim state.
+
+## Resume and invalidation
+
+There is no dossier-specific semantic cache. The [runtime admission key](../architecture/jobs-and-runtime.md#wave-1-resumability)
+binds accepted handoffs, source/configuration and implementation/validation identities.
+The dossier records additionally pin settings, source manifest and renderer/template/image
+identities. Changed optional producers, finding bytes or rendering settings invalidate downstream
+dossiers; the inputs are reverified both before creation and before publication. Item directories
+are immutable, not overwrite-in-place recovery targets; artifact-bearing units are not portable
+failed-attempt checkpoints. The handler is deterministic and dispatches no model.
