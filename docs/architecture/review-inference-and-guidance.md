@@ -10,9 +10,11 @@ last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 
 ## As built today
 
-This view is reconciled to `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including T-150's
-model-free protected audit producer and opted-in application readers. Later warrant, obligation,
-allocation and efficacy proposals remain separate from this implemented traceability boundary.
+This view reflects the current source tree, including T-150's
+model-free protected audit producer and opted-in application readers, T-165's first-party
+`source_dispositions` scope classification, and T-167's deterministic stylistic/readability
+lead filter (`lead_filters.stylistic`). Later warrant, obligation,
+allocation and efficacy proposals remain separate from these implemented boundaries.
 
 ### Context is not proof
 
@@ -44,6 +46,14 @@ Several producers help decide where to look without deciding what is vulnerable:
 
 The [behavior-oriented package assembler](../../src/appsec_review/review/packages.py) prefers
 accepted operation anchors while retaining bounded path fallback and below-cutoff accounting.
+Manifest acceptance classifies every cataloged source file under configured `source_dispositions`
+(`test`, `vendored`, `generated`, `example` or `first_party`, evaluated in precedence order via
+shared POSIX `path_globs`). Deep hunt unit assembly restricts candidate units to `first_party`
+sources, and lead scoping excludes observations on non-`first_party` files or configured
+`lead_filters.stylistic` rules (`outside_review_scope` with explicit `exclusion` provenance,
+`source_dispositions` and `counts.dispositions` in the package manifest) without deleting
+upstream scanner records; see
+[review scope](../operations/inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations).
 Operation-only investigation is not whole-file coverage. Generated questions and evidence requests
 remain questions until original evidence is retrieved and admitted for the relevant predicate.
 
@@ -181,6 +191,11 @@ owns the detailed origin, budget, continuation and compatibility rules.
   T-150 subsequently implements the bounded audit foundation; the
   [implementation decisions](triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)
   keep later semantic-policy proposals separate.
+- **2026-11-13 — First-party review scope and stylistic lead filter:**
+  [T-165](../TODO.md) and [T-167](../TODO.md) keep non-`first_party` sources (`test`, `vendored`,
+  `generated`, `example`) and configured stylistic/readability rules (`lead_filters.stylistic`) out
+  of deep red/blue/verifier cells while recording every exclusion under `outside_review_scope` and
+  `counts.dispositions` ([review scope](../operations/inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
 
 ## Named gaps
 
@@ -195,6 +210,7 @@ These are pointers into the [single TODO registry](../TODO.md), not a second bac
 | T-149 | Scoped dependency-decision consumption beyond current inventory/context. |
 | T-151, T-152, T-153 | Operation coverage obligations, scoped proposition/polarity binding and verified evidence-request resolution. |
 | T-154, T-155, T-156 | Labelled stage-loss audit, fair bounded hunt allocation and execution-bound investigation/omission receipts. |
+| T-165, T-166, T-167 | Catalog-fact disposition derivation and `smoke-cpp` live measurement (`T-165`, `T-167`), plus index-backed first-party reachability (`used` / `not_used` / `unknown`) for vendored CVEs and findings (`T-166`). |
 
 T-150's implemented audit preserves unavailable and incomplete populations; it is not live
 efficacy proof or closure of the remaining evidence/coverage tasks. Raw recordings are still a

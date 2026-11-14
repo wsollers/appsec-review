@@ -1366,15 +1366,18 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
 ### `scope`
 
 1. In `scope.accept_manifest`, verify the accepted retrieval manifest and every bound shard.
-   Reject evaluator-root input and remove target-owned agent-guidance identities from cell scope.
+   Reject evaluator-root input, remove target-owned agent-guidance identities from cell scope, and
+   classify each accepted source file's `disposition` (`test`, `vendored`, `generated`, `example`
+   or `first_party`) against `settings.source_dispositions`.
 2. In `scope.assemble_scope`, retain components, source/build languages, evidence-map identity and
    upstream scope gaps. Freeze the manifest hash for all subsequent work.
 
 ### `triage`
 
-1. In `triage.lead_severity`, leave reported scanner severity intact. If configured off, publish
-   the disabled triage record without invoking a model.
-2. Otherwise collect unknown-severity leads, resolve bounded accepted source lines and run the
+1. In `triage.lead_severity`, apply `scope_leads` (`source_dispositions` and
+   `lead_filters.stylistic`) before model triage and leave reported scanner severity intact. If
+   configured off, publish the disabled triage record without invoking a model.
+2. Otherwise collect in-scope unknown-severity leads, resolve bounded accepted source lines and run the
    audited severity triager with pinned CWE context and guidance.
 3. Reuse only valid triage receipts. Unresolved leads stay unknown with a named coverage gap;
    triage affects routing, not claim confirmation.
@@ -1382,7 +1385,11 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
 ### `packages`
 
 1. In `packages.assemble_lead_packages` and `packages.assemble_hunt_packages`, assemble the
-   same accepted scope into separate lane manifests and select each lane's packages.
+   same accepted scope into separate lane manifests and select each lane's packages. Hunt unit
+   assembly restricts candidate units to `first_party` files; lead assembly records observations on
+   non-`first_party` files and `lead_filters.stylistic` rules under `outside_review_scope` with
+   explicit `exclusion` provenance, `source_dispositions` and `counts.dispositions`
+   ([review scope](inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
 2. Bind bounded source slices, lead-family admission, operation questions and any admitted
    generated model context. Routing context does not replace original source/tool evidence.
 3. Rank lead packages by effective severity and hunt packages by unit position; retain caps,
@@ -1556,10 +1563,12 @@ remain separate operation/evidence/coverage and stage-loss work.
 ## Acceptance
 
 1. **A. Inputs:** Compare claim pins and accepted manifest/shards with scope and both lane package
-   manifests. Verify evidence-rule, guidance, CWE/reference and any generated-model bindings;
-   distinguish supplied context from actual cell read receipts.
-2. **B. Independent comparison:** Independently enumerate accepted scanner leads, admission
-   partitions, hunt units/operation anchors and expected cells. Reconcile launched/reused/
+   manifests, including frozen `source_dispositions` and `lead_filters` snapshots. Verify
+   evidence-rule, guidance, CWE/reference and any generated-model bindings; distinguish supplied
+   context from actual cell read receipts.
+2. **B. Independent comparison:** Independently enumerate accepted scanner leads, `counts.dispositions`,
+   `outside_review_scope` exclusions (`test`, `vendored`, `generated`, `example`, `stylistic`),
+   admission partitions, `first_party` hunt units/operation anchors and expected cells. Reconcile launched/reused/
    unlaunched/terminal cells, no-claim work, proposals, duplicates and ledger claims. Resolve
    sampled finding predicates to original source/tool artifacts, recompute adjudication and
    scoring/ship-block partitions, and verify supported versus confirmed versus PoC-candidate

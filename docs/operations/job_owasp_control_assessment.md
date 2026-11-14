@@ -993,7 +993,9 @@ The [handler](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) 
 
 1. In `characterization.load_inputs`, require explicit run-owned fixture inputs only in
    qualification mode. Assessment rejects that fixture and verifies accepted manifest/target
-   identity instead.
+   identity across the job's declared upstream contract (including optional binary-evidence,
+   CI-configuration, change-context, debug-symbol, profile-data and test-coverage producers so
+   every embedded manifest shard has an admitted producer declaration, [T-162](../TODO.md)).
 2. Select bounded accepted components, source subjects and evidence. Record discovery, ownership,
    language, byte, subject and excerpt omissions without converting missing evidence into N/A.
 3. In `characterization.classify_components`, derive roles from accepted metadata and eligible

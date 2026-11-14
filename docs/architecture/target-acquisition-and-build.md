@@ -11,9 +11,12 @@ last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 
 ## As built today
 
-**Source boundary:** `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including Wave1a's corrected
-acquisition/debug declarations and Wave1b's canonical build-cause preservation and bounded ELF
-reader. The [language job](../operations/job_language_build.md) distinguishes ELF fact provenance
+**Source boundary:** includes Wave1a's corrected
+acquisition/debug declarations, Wave1b's canonical build-cause preservation and bounded ELF
+reader, `/3`-only `build-image-repair` proposal validation, host capture non-regular-entry
+stripping and `O_NOFOLLOW` stream custody in `build_executor.py`, and reused-shard custody
+re-attestation (`IndexBuilder.attest_existing`) on JVM build indexes. The
+[language job](../operations/job_language_build.md) distinguishes ELF fact provenance
 from private-cache invalidation. T-150's protected audit now exists downstream, without changing
 acquisition/build decisions. This reconciliation performs documentation checks, not new compiler,
 image, Dagster or live-review validation.

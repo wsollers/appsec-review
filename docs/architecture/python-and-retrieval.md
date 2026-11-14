@@ -32,7 +32,14 @@ indexing has both admitted catalog/source inputs and build-produced inputs; it i
 to one language-build handoff.
 
 An accepted manifest verifies and composes physical shard identities and upstream references.
-It does not prove that every declared producer ran, every language is covered or every artifact
+When a later attempt reuses a content-fingerprinted shard already present under `data/indices`,
+`IndexBuilder.attest_existing` / `build_or_reuse` verifies the shard's embedded schema, name,
+fingerprint, snapshot and shard id and re-attests custody (`index-shard`, `computed=True`) under
+the reusing attempt so repair-admitted implementations carry a compatible producer receipt at
+manifest publication. Every runtime-consumed shard attributes ownership through
+`IndexIdentity.producer["job"]` (`job_debug_symbol_indexing` now emits `producer["job"]`;
+construction-time enforcement across test fixtures remains [T-164](../TODO.md)).
+An accepted manifest does not prove that every declared producer ran, every language is covered or every artifact
 is queryable. Raw/protected payloads and sanitized inventory metadata have distinct access
 boundaries. Producer-local coverage and canonical outcomes must be inspected together; an empty
 query is not a clean-coverage result.
@@ -98,7 +105,8 @@ Every MCP transport call records exactly one `MCP_TOOL_STARTED`/`MCP_TOOL_COMPLE
 `find`/`trace` work used by `read_excerpt` and `resolve_evidence` is recorded as child
 `RETRIEVAL_SUBOP_COMPLETED` spans with the top-level invocation id, so tool-use metrics do not
 double-count. Direct core calls retain `RETRIEVAL_QUERY`. Events store hashes, filters, counts,
-gaps, truncation, and duration; they never store query or source text.
+bounded gap summaries (`gap_count`, `gaps_sha256`, and at most five 160-character gap samples),
+truncation, and duration; they never store query or source text.
 
 Keep the adapter in the main package until a distinct privilege boundary, dependency conflict,
 independent scaling/restart need, or external versioned consumer is demonstrated.

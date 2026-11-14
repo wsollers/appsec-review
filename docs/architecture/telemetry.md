@@ -13,7 +13,8 @@ last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 run/job/attempt/step/task correlation. Details may add Dagster run/node, producer/tool invocation,
 index shard, MCP session/invocation, model invocation, or finding-package identities.
 
-The writer is process-safe and crash-recovering. It bounds depth, collection size, strings, and total
+The writer is process-safe and crash-recovering; `PipelineLog.iterate()` and `PipelineLog.contains()`
+stream complete sequence-valid lines rather than loading multi-gigabyte logs into memory. It bounds depth, collection size, strings, and total
 record bytes. Credentials, secret-like values, prompts, responses, raw model output, source text,
 and query text are redacted. Telemetry uses request, guidance, reason, evidence, and artifact hashes.
 Where a job explicitly needs raw provider or tool output for diagnosis, it stores bounded bytes as a
@@ -23,10 +24,13 @@ central event stream, and credentials remain prohibited.
 Lifecycle families are:
 
 - `RUN_*`, `GRAPH_*`, `JOB_*`, `STEP_*`, and `TASK_*` start and terminal events, including duration,
-  reuse, disposition, and `COMPLETED_WITH_GAPS` where applicable.
+  reuse, `REVALIDATED` (dispatch-time equivalent-upstream reuse), disposition, and
+  `COMPLETED_WITH_GAPS` where applicable.
 - `TOOL_INVOCATION_STARTED/COMPLETED` for scanners and external tools, with immutable tool identity,
   retry, duration, result/gap counts, truncation, disposition, and error class.
-- `MCP_TOOL_STARTED/COMPLETED` for transport calls and `RETRIEVAL_SUBOP_COMPLETED` for child spans.
+- `MCP_TOOL_STARTED/COMPLETED` for transport calls and `RETRIEVAL_QUERY` /
+  `RETRIEVAL_SUBOP_COMPLETED` for retrieval calls and child spans (recording `gap_count`,
+  `gaps_sha256`, and at most five 160-character gap samples rather than unbounded gap arrays).
 - `MODEL_CALL_STARTED/COMPLETED` around actual inference dispatches, including target analysis
   planning, post-build security assessment, OWASP worker/independent assessment and review cells,
   with

@@ -28,8 +28,16 @@ Prepared and reused dispatch claims are verified against persisted identities in
 modes, with managed authentication in addition. Repeated finalization reuses an already accepted
 publication only after revalidating its immutable handoff bytes and binding.
 
-The generic resume planner walks jobs in graph order. Once a job cannot be reused, it schedules that
-job and invalidates its semantic-input downstream closure, not unrelated scheduling-only branches.
+The generic resume planner walks jobs in graph order. When a job cannot be reused, it schedules
+that job (`RUN`) and evaluates only its semantic-input downstream closure, not unrelated
+scheduling-only branches. Under an ordinary resume or repair plan, a downstream consumer whose own
+identities, configuration, dataset contract, and accepted handoff still verify is planned as
+`REVALIDATE` (`INVALIDATE` is emitted when its own checks also fail, or under forced, historical,
+or deferred-fingerprint invalidation). At dispatch (except `job_target_analysis_plan`), a
+`REVALIDATE` job is reused if every pinned producer is the same handoff or carries an equal
+`content_sha256` ([`appsec-review/handoff-content/2`](job-interchange.md#evidence-header-evidence-body-and-the-content-identity)),
+writing `revalidation.json` (`appsec-review/attempt-revalidation/1`) beside the reused attempt and
+emitting `REVALIDATED`; otherwise it runs.
 The [typed job input and dispatch contract](job-input-contracts.md) on each factory's `Job` is the
 authority for accepted producer/output/schema requirements, dispatch class and target access.
 It never treats time as proof of freshness.
@@ -169,7 +177,9 @@ Every job and unit event is mirrored through one process-safe writer to
 `runs/<run-id>/data/logs/pipeline.jsonl`, while attempt-local event logs remain available. Sequence
 allocation and append occur under the same kernel lock. Records have bounded/redacted details, and a
 torn final line is truncated under that lock before the next append, preserving a readable total
-order after a writer crash.
+order after a writer crash. `PipelineLog.iterate()` and `PipelineLog.contains()` stream complete
+sequence-valid lines so attempt startup and failure checks never load multi-gigabyte logs into
+memory.
 
 The runtime composes each job from one handler and explicit input/output validator lists. Specific
 jobs do not subclass the runtime and cannot replace its attempt, status, logging, or publication
