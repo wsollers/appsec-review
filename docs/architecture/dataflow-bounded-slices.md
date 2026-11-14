@@ -171,7 +171,7 @@ recorded file hash.
 
 ## Package, view and manifest
 
-**Assembly** (`review/packages.py`, `assemble-review-packages/12`) reads the slice inputs through
+**Assembly** (`review/packages.py`, `assemble-review-packages/13`) reads the slice inputs through
 `SliceSources`. `GraphContext.neighborhood` takes the lead's observation identity and picks the bound:
 
 - **`dataflow_path`:** `flows` are the lead's correlated paths, sorted by identity, at most
@@ -199,7 +199,7 @@ Slice gaps become package gaps with producer `dataflow_slice`. Their state is:
 Under `max_package_bytes`, the slice's lowest-precision lines are trimmed before neighborhood rows,
 and the trimmed lines are counted in `omitted.lines`.
 
-**View** (`review/package_view.py`, `package-view/4`): under the `dataflow_path` bound, the `S` source
+**View** (`review/package_view.py`, `package-view/5`): under the `dataflow_path` bound, the `S` source
 section shows one `slice` row per slice function. Each row contains only the slice's lines, with
 `...| n line(s) elided` markers between runs and per-line `reasons`. The lead's line is always shown,
 and secret redaction applies as before.

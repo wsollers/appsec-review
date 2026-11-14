@@ -14,11 +14,11 @@ from the repository root.
 
 ## Environment
 
-- The validator, evaluation harness, and tests need PyYAML. Install the project extra into the
-  project virtual environment: `python -m pip install -e ".[rulepacks]"`. The extra pins
-  `PyYAML==6.0.3`, the version locked for the Dagster image. The review runtime does not need it;
-  the evidence job verifies hashes and reads engine JSON. Without the extra, the rule-pack tests
-  skip with an explicit reason.
+- The validator, evaluation harness and tests need PyYAML. The existing `rulepacks` extra
+  retains `PyYAML==6.0.3`, which is also a base application dependency; a correctly restored
+  checkout environment already has it. The evidence job itself verifies rule hashes and reads
+  engine JSON rather than loading
+  pack YAML. A missing dependency is an environment/coverage gap, not a passed rule-pack check.
 - Semgrep CE and OpenGrep are **not** project dependencies. Do not install them into the project
   virtual environment: production runs them in the pinned `tool-semgrep` and `tool-opengrep`
   images. For local evaluation, provide the exact versions pinned in `rules/sei-cert/pack.json`

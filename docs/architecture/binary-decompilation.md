@@ -72,7 +72,7 @@ indexes it, and review workers retrieve and cite it.
  2. appsec-review binary-decompile  -->  verify file SHA-256 and size
                                          stage a copy as the only file under /target
                                          resolve the tool-ghidra tag to its local image ID
-                                         and verify that ID's signature (refuse if unsigned)
+                                         and apply the configured image-signature policy
                                          docker run tool-ghidra (no network, read-only, non-root,
                                                                  raised memory/CPU/time)
                                            analyzeHeadless: import -> auto-analysis
@@ -81,7 +81,7 @@ indexes it, and review workers retrieve and cite it.
                                          publish  data/binary-decompilation/<sha256>/<identity16>/
                                          point    data/binary-decompilation/<sha256>/current.json
  3. appsec-review binary-decompile
-      --verify-only                 -->  verify the current image's signature, then
+      --verify-only                 -->  apply the current image-signature policy, then
                                          re-hash the publication for that image
 
  review submission (implemented)
@@ -163,7 +163,7 @@ packaging limits, and the smoke and security probes run under them.
 
 The pre-run command raises **only capacity** (memory, CPUs, PIDs, time) from the typed
 configuration, by handing `ContainerExecutor` a copy of the catalog entry with those four fields
-replaced. Network (`none`), user (`10001:10001`), read-only root, the read-only target mount, the
+replaced. Network (`none`), effective non-root application UID/GID, read-only root, the read-only target mount, the
 single writable scratch mount, dropped capabilities, and `no-new-privileges` come from the same
 executor and are unchanged. The effective limits are recorded in the execution receipt and copied
 into the manifest. This follows the CodeQL precedent, whose runtime also sets its own memory.
@@ -353,8 +353,8 @@ consumes each configured binary's publication through three stages.
 
 ### Index: `job_binary_evidence_indexing`
 
-The job depends on `job_target_catalog` (and so on the accepted intake) and runs in the CLI graph
-after `job_cpg_analysis` and in the Dagster wave-1 topology. Its evidence is the accepted intake
+The job declares accepted intake and target-catalog inputs; enabled direct/Dagster placement is
+projected from those typed contracts, not a required Joern predecessor. Its evidence is the accepted intake
 handoff: it re-verifies each frozen publication, and refuses one whose manifest hash, identity, or
 binary hash differs from what intake recorded. Its contract also requires the accepted
 `job_target_catalog` envelope, whose pinned retrieval manifest the binary shards are composed onto;
@@ -382,8 +382,9 @@ Bounds are central settings under `[jobs.job_binary_evidence_indexing.settings]`
 `max_strings_per_binary`, `max_string_xrefs`, `max_string_chars`, `max_entity_text_bytes`). Each
 truncation, unresolved or unaddressed call, publication gap, incomplete publication coverage,
 unavailable binary, and managed-code program is a named coverage gap, and the job ends
-`COMPLETED_WITH_GAPS`. With no configured binaries the job publishes an empty, `NOT_APPLICABLE`
-shard set, and the composed review index is unchanged.
+`COMPLETED_WITH_GAPS`. With no configured binaries it returns `NOT_APPLICABLE` and publishes no
+binary-function facts; the shared scope publisher can still add a coverage-only shard. See the
+[canonical job page](../operations/job_binary_evidence_indexing.md) for counts and composition.
 
 **Managed-code routing.** When the publication's coverage marks managed code, the job indexes no
 pseudo-C for it and records a gap naming the suitable decompiler: ILSpy for CIL, jadx or CFR for
@@ -402,8 +403,9 @@ hash and function address as its payload (`binary_anchor`). A `binary_import` or
 or a function Ghidra did not decompile, becomes the gap "binary-derived evidence must cite binary
 hash, function address and pseudo-C line".
 
-**Existing binary lanes** (BLint, Syft, Grype, cve-bin-tool) can run on the same file and join on
-its SHA-256.
+**Existing artifact lanes** (BLint, Syft and Grype when enabled/applicable) can inspect accepted
+artifact bytes and retain their SHA-256. The cve-bin-tool scanner adapter remains deferred
+([T-102](../TODO.md)); an available database builder is not an implemented scan lane.
 
 ### Reviewing a binary with no source tree (designed, not implemented)
 
@@ -503,11 +505,13 @@ not measure efficacy on C++, on large binaries, or on Windows binaries.
 - **No source scanners run on the output**, by decision 1.
 - **Large binaries are unmeasured.** The defaults (8 GiB, 4 CPUs, 2 hours) are starting values, not
   tuned ones. All tables are loaded into memory during normalization.
-- **Image id is host-local.** The catalog does not pin `image_id`, so two hosts that build the
-  image produce different identities for the same binary. Because it is unpinned,
-  `signing sign-image --all-pinned` skips it; the operator signs the tag explicitly (see
-  [`../operations/signing.md`](../operations/signing.md)).
-- **Linux hosts:** files the container writes belong to uid 10001. Removal of the staging
+- **Image id is host-local.** The recipe catalog and host-observed binding are separate; frozen
+  host pins provide the expected image ID. Follow
+  [image-pin verification](../operations/image-pin-verification.md), not a catalog `image_id`
+  edit. Signing enforcement is configured (`disabled` by default, `required` to fail closed);
+  this feature does not impose a new signing requirement. See
+  [signing](../operations/signing.md) for explicit verification and signing commands.
+- **Linux hosts:** files the container writes use the effective runtime UID/GID. Removal of the staging
   directory is best effort and may leave residue under `.staging/`.
 - **Concurrency:** two simultaneous runs for the same binary are not locked against each other.
   Each publishes atomically, and the later one replaces the earlier identical publication.
@@ -525,4 +529,5 @@ and PDB inputs, managed-code routing) are implemented. Remaining, tracked in
    bounds.
 3. The binary-only target kind designed above.
 4. A managed-code decompiler lane.
-5. Advisory scan of the image, a single `base-jdk`, and a pinned catalog `image_id`.
+5. Advisory scan of the image and a single `base-jdk`; host-observed IDs already belong in the
+   separate host-pin workflow rather than the recipe catalog.

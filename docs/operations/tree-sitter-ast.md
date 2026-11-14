@@ -11,8 +11,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 Build `appsec-review/tool-tree-sitter:1.0.0` only after acquiring the ignored Linux asset cache as
 documented in `containers/tools/tree-sitter/README.md`. The build must use the tracked
 `assets.lock.json`, the digest-pinned base, `--pull=false`, `--network none`, and
-`--provenance=false`. Record the final local image ID in `containers/catalog.toml` before running
-the job.
+`--provenance=false`. Record the final local image ID through the host-owned pin workflow,
+not in the recipe catalog; see [image-pin verification](image-pin-verification.md).
 
 A rebuilt offline image from this context supports C, C++, C#, Go, Java, JavaScript, Kotlin, PHP,
 PowerShell, Python, Ruby, Rust, Shell, TSX, and TypeScript. Shell files use the hash-locked upstream Bash grammar.
@@ -20,8 +20,11 @@ Swift and any other cataloged language without a lock remain explicit `UNAVAILAB
 dispositions; operators must not interpret those gaps as clean coverage.
 
 The standalone `tree_sitter_ast` Dagster job is the manual dispatch path. In the review graph it
-runs after accepted intake/catalog planning and independently from build, compiled AST/IR, SAST,
-and inference branches. CodeQL waits for its accepted handoff before composing the later retrieval
+runs from admitted intake/catalog inputs, with an admitted language-build lane for generated
+sources when available. It does not consume compiled AST/IR, SAST or inference results.
+Enabled scheduling follows the typed contracts, not an unconditional claim of independence from
+language builds. The [canonical job page](job_tree_sitter_ast.md) supplies the generated input
+and placement declarations. CodeQL waits for its accepted handoff before composing the later retrieval
 view. Dagster maps accepted scopes concurrently; application receipts, immutable shards, the
 accepted handoff, and the central run log remain authoritative.
 
@@ -40,14 +43,14 @@ The host adds projections using existing pinned grammar output, so no grammar/im
 new asset pin is required. Swift stays unavailable; PowerShell and Shell currently expose raw AST
 only. Reusing an old scope fingerprint cannot skip the new projection version.
 
-Live acceptance must verify the cataloged image ID, run with network disabled and the target mounted
+Live acceptance must verify the frozen host-bound image ID, run with network disabled and the target mounted
 read-only, parse the multi-project/multi-language fixture, publish at least one searchable AST shard,
 and demonstrate that an injected sibling grammar failure produces `COMPLETED_WITH_GAPS` while the
 successful shard remains accepted.
 
 If every runnable scope reports container exit 1, inspect a scope's protected raw stderr. A
 `PermissionError` for `/scratch/request.json` indicates a stale producer that did not make the
-atomic request readable by uid 10001. Current producers set the scope directory to `0733` and the
+atomic request readable by the effective application/container UID. Current producers set the scope directory to `0733` and the
 completed request to `0644` before starting the network-disabled container. Keeping the owner-write
 bit avoids Docker Desktop input/output errors caused by Windows read-only file attributes while the
 container user still has read-only access.

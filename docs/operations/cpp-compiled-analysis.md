@@ -9,7 +9,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 # C/C++ compiled-analysis operations
 
 `job_cpp_compiled_analysis` consumes the accepted `job_language_build` handoff and discovers native
-projects from successful generic build receipts at any normalized target-relative root. There is no
+projects from accepted generic build receipts at any normalized target-relative root, retaining
+unsuccessful planned projects as blocked coverage. There is no
 repository-specific project list, required `projects/` prefix, or expected count. Each project keeps
 the generic build-unit identity and
 independent checkpoints inside project-batched graph tasks.
@@ -33,8 +34,10 @@ see [`cpp-index-jobs.md`](cpp-index-jobs.md). The separate cross-language `job_c
 evidence for this and every other supported language; see
 [`codeql-analysis.md`](codeql-analysis.md). The pipeline never runs target executables or tests.
 
-CMake supplies `compile_commands.json` directly. Other native systems must supply an accepted
-compile database or an equivalent future generic capture adapter; missing capture is a named gap.
+Materialized native receipts must bind a capture-backed `native_compile_database`; a build-system
+`compile_commands.json` alone is not the current admission contract. Mixed-family native components
+use their captured database through the same analysis path. Missing capture on a materialized
+native receipt is rejected; an explicitly empty capture produces blocked coverage.
 Compiler logs are not heuristically parsed. Normalization accepts only bounded compilation
 semantics needed by Clang replay, removes output/dependency-generation actions, maps source paths,
 and binds every unit to the case, source snapshot, command hash, compiler image, and source hash.
@@ -52,10 +55,11 @@ others and records one gap per failed unit: a missing header is named
 the exit code and the first compiler error line. A missing header is never read as an empty or
 clean unit.
 
-A build or analysis-tool failure is returned as a terminal gap. Sibling projects and branches keep
-running, and their immutable shards remain usable. Corrupt source mappings, escaped paths, changed
-artifact hashes, malformed compile databases, duplicate shards, or invalid manifests are framework
-integrity failures and stop publication.
+Ordinary build or analysis-tool failures have branch/project gap fallbacks; an active
+execution-safety stop can prevent those fallbacks from publishing. Corrupt source mappings,
+escaped paths, changed artifact hashes, duplicate shards and invalid manifests stop publication.
+Malformed produced compile databases have an explicit `INVALID_COMPILE_DATABASE` fallback, rather
+than being uniformly classified as accepted-input integrity exceptions.
 
 ## Infer decision
 
@@ -106,9 +110,10 @@ Joern is deprecated and shipped disabled (`jobs.job_cpg_analysis.settings.enable
 is absent from the default graph; `job_clang_static_analysis` and `job_cpp_symbol_index` are the
 consumers of this handoff that run by default. When enabled, the independent `job_cpg_analysis` consumes this job's
 accepted handoff, runs the pinned `tool-joern` c2cpg frontend per accepted project, and retains each
-CPG as run-owned evidence. Until bounded CPG/PDG export, source mapping, functional fixtures, and
-security acceptance exist, it publishes a `BLOCKED` shard with zero observations and `unavailable`
-coverage per project. See [`cpp-index-jobs.md`](cpp-index-jobs.md) and
+CPG as run-owned evidence. General CPG/PDG coverage is still unavailable: the shard retains a
+`BLOCKED` evidence marker and zero security observations. The enabled seeded path can additionally
+publish bounded per-function export facts with partial coverage; retaining a CPG binary alone does
+not provide those facts. See [`cpp-index-jobs.md`](cpp-index-jobs.md) and
 `containers/tools/joern/README.md`.
 
 ## Seeded mode
@@ -122,7 +127,7 @@ function and attached to the matching flow row as `source_cfg` (short circuits, 
 destructors as blocks; blocks carry no line numbers, named `source_cfg_no_block_lines`; overloads are
 `source_cfg_ambiguous`; a failed replay is `source_cfg_unavailable` and costs only the CFG). Bounds are in
 `[jobs.job_cpp_compiled_analysis.settings.seeded_bounds]` (`function_limit`, `unit_limit`, `block_limit`,
-`include_scan_files`); every bound hit is a named gap. Zero seeds is a clean skip with a gap and the job
+`include_scan_files`); every bound hit is a named gap. Zero seeds is a nonexecuted scope with a gap and the job
 is `COMPLETED_WITH_GAPS`; a failed replay is a gap on the seeds that unit carried. `mode = "whole_program"`
 keeps the previous behavior. The `native.py` change alters the `tool-native-cpp` image identity: rebuild
 and re-pin it. Contract: `docs/architecture/seeded-neighborhoods.md`.
@@ -151,8 +156,11 @@ planning. Incomplete branches that are not checkpointable carry `disposition = "
 accepted-attempt reuse. Checkpointable seeded coverage limitations remain reusable; the summary's
 disposition map is unchanged.
 
-Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
-reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
+Use the admitted recovery path for the same frozen application run. Re-executing preparation
+recreates the case root, including its local branch checkpoints; branch reuse therefore depends on
+the prepared case surviving. The [canonical job page](job_cpp_compiled_analysis.md) records these
+selective boundaries and the distinction between branch-declared gaps and shard coverage.
+Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
 executor, capture, and handoff identities. An Infer image or adapter change affects Infer
 fingerprints only; a compile identity invalidates the dependent compiled, AST, IR, Infer, and binary
 branches, and, through the accepted scope identity, the independent clangd and Joern jobs. Cross-language CodeQL has its own database and query checkpoints.
