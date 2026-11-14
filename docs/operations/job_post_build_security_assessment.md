@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # post_build_security_assessment
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Relate accepted build commands and produced binary metadata to deterministic hardening checks,
+then optionally ask a bounded model to explain evidence-backed concerns. This answers which
+protections were requested or observed for a particular build family and artifact, not whether a
+binary is exploitable or the source is secure. Unknown, unsupported and family-inapplicable checks
+are not passes; model validation labels remain observations rather than final security findings.
 
 <!-- generated:begin job=job_post_build_security_assessment -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -305,3 +311,184 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+Source: [handler graph](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py),
+[inspection/rules/inference validation](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py)
+and [family expectations](../../src/appsec_review/jobs/job_post_build_security_assessment/hardening.py).
+The job reads binaries as bytes; it does not execute them or launch a new native build.
+
+### `load`
+
+1. Read the accepted compiled-analysis result and manifest; require the current snapshot.
+   Retain successful catalogs and unavailable cases separately.
+2. If admitted language-build output exists, add successful non-native family cases with native
+   binary artifacts or wheel members, excluding native-component cases already covered by the
+   C/C++ lane. Exclude managed PE assemblies from native AOT expectations.
+3. Missing admitted language-build output is a named load gap; it means non-native family coverage
+   was not inspected, not that no such binary exists.
+
+### `provenance`
+
+1. Process sorted cases independently. Not-applicable and blocked cases still write hash-bound
+   empty provenance documents so later stages can bind absence without inventing evidence.
+2. For native cases, prefer accepted protected compile commands; otherwise read retained compile
+   and link rows. Preserve missing exact argv, linker/archiver capture, per-action environment,
+   execution receipt and timing/exit facts as reasons.
+3. Keep protected raw commands separate from sanitized searchable argv. Normalize action/toolchain
+   facts and declared/discovered inputs; distinguish action-level timing from whole-build fallback.
+4. Verify cataloged artifact bytes, then inspect supported candidates in the run-owned build
+   directory within the local size policy. Associate producing actions by the implemented output
+   mapping and retain unresolved attribution; `relationships_exact` is a producer field, not a
+   stronger independent guarantee than that mapping.
+5. For family cases, verify receipt artifacts and extract only bounded selected binary members
+   of wheels into run-owned paths, retaining archive/member identity. No captured native actions
+   means family hardening expectations, not fabricated C flags.
+
+### `inspection`
+
+1. Inspect retained artifacts using bounded ELF, PE/COFF, Mach-O, archive and other format readers.
+   Preserve unsupported or malformed formats and missing semantic decoding.
+2. Join bounded retained native nm/readelf records by binary hash where available; do not invoke
+   those tools again here. Missing pinned ELF observation remains a gap.
+3. Publish `binary-inspections.json` with inspected counts, raw binary hashes, parser identity,
+   extracted facts and reasons. A retained file is not proof every binary property was decoded.
+
+### `deterministic`
+
+1. Evaluate supported compiler/flag and binary-format rules with action/artifact evidence IDs.
+   Flag-driven native/mixed cases differ from no-compile-action family cases.
+2. Use documented family expectations where applicable. Required protections are tested against
+   observed facts; not-offered or undocumented family defaults yield not-applicable with rationale,
+   not a pass. Missing applicable facts yield unknown.
+3. Publish `deterministic-results.json` with pass/fail/unknown/not-applicable counts and rule version.
+   Applicable unknown checks add a reason; a failing check is a judgment, not a tooling gap by itself.
+
+### `inference`
+
+1. Assemble registered guidance and a structured request containing normalized actions, inspected
+   artifacts, deterministic checks and admitted evidence IDs. Keep target/raw command text outside
+   the worker's authority.
+2. For a not-applicable case, publish zero-call results. For no actions/artifacts, an over-budget
+   request, disabled model or absent injected client, publish zero-call results with reasons.
+3. Otherwise run bounded inference/retries. Validate proposal shape and observation count, require
+   supplied evidence IDs and a resolvable known deterministic check/scope, and reject unusable
+   observations. Exhausted retries becomes a named failure.
+4. Label accepted observations confirmed for a failing related check, refuted for a passing check,
+   otherwise unvalidated. This is the validator's deterministic-check comparison, not independent
+   proof of every sentence in the model's claim. Publish request/guidance/model identities,
+   call counts, rejections and `inference-results.json`.
+
+### `index`
+
+1. Bind protected-command references, binary hashes, tool identities, rule/parser/normalizer,
+   model/guidance identity and upstream manifest into a per-case shard fingerprint.
+2. Build or reuse a `build_security` shard with actions, compile units, artifacts, archive members,
+   loader dependencies, deterministic checks and validated model observations.
+3. Add source/compile/link/dependency and observed-at relationships only where this producer resolves
+   endpoints. Preserve per-case coverage reasons. Loader dependency names are not verified resolved
+   package versions, and model observation counts are not finding counts.
+
+### `publication`
+
+1. Replace inherited `build_security` indices with this attempt's case shards, preserve other
+   index names and verify the composed manifest.
+2. Publish `post-build-security-summary.json` with case/shard counts and rule/parser/normalizer
+   identities. Its gap list joins indexed-case reasons; load-only gaps remain in the originating
+   unit's canonical outcome rather than necessarily appearing in this narrower summary.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  cpp["accepted compiled catalogs"] --> job["job_post_build_security_assessment"]
+  family["admitted language-build binaries / wheel members"] --> job
+  job --> provenance["provenance.native_units: protected + sanitized commands"]
+  provenance --> inspect["inspection.native_units: bounded binary facts"]
+  inspect --> checks["deterministic.native_units"]
+  provenance --> checks
+  checks --> model["inference.native_units: optional bounded proposals"]
+  model --> index["index.native_units: build_security shards"]
+  checks --> index
+  index --> publish["publication.publish_handoff"]
+  provenance -. "missing capture / attribution / artifact" .-> gaps["case reasons"]
+  inspect -. "unsupported / malformed / incomplete decoding" .-> gaps
+  model -. "disabled / unavailable / bounded / rejected" .-> gaps
+  gaps --> publish
+  job -. "missing family handoff" .-> loadgap["load-unit canonical outcome"]
+```
+
+## Gaps
+
+This legacy producer emits text reasons. [Interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+wraps them as `producer_reported_gap`, normally non-retryable; that is not advisory classification.
+
+- Input absent/failed: unavailable compiled catalog, missing admitted family handoff, missing
+  compile/link/action execution provenance, no parseable argv, absent per-action environment or
+  timing/exit data, missing/changed cataloged artifacts and unresolved producing actions.
+- Present but unsupported: unsupported format, LLVM bitcode semantic decoding, link-map dialect,
+  COFF symbol/directive semantics, detailed Mach-O decoding, PE load-configuration protection
+  details and empty/unsupported archive member table.
+- Coverage missing: wheel member/count/byte limits, binary inspection bounds, unresolved ELF
+  dynamic strings, unavailable/truncated PE directories, missing/invalid retained nm/readelf output,
+  applicable unknown deterministic checks and bounded model input.
+- Tooling/model failure: archive read or malformed binary parsing, disabled/unavailable inference,
+  no build evidence to assess, exhausted model retries and rejected observations.
+
+The [legacy provenance code](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L188)
+currently records some changed artifact identities as reasons and omits those artifacts. Do not
+describe those branches as fail-closed exceptions. By contrast, accepted handoff/manifest integrity
+errors from the shared reader and invalid required internal artifacts can raise before publication.
+This distinction describes existing behavior, not an endorsement of accepting damaged inputs.
+No gap is automatically expected for a particular walk.
+
+## Acceptance
+
+1. **A. Inputs:** Compare admitted compiled/language handoff pins, catalog/source/binary hashes,
+   protected-command references and wheel-member provenance. Confirm managed PE and native-component
+   routing, and account for load-only family coverage loss.
+2. **B. Independent comparison:** Independently inspect sanitized flags against protected argv
+   without copying secrets; compare binary header/protection facts to retained tool-native output
+   or a separate format inspection. Recalculate deterministic status counts by family and verify
+   model evidence IDs, related check and validation label. Count unresolved artifact/action links.
+3. **C. Gaps:** Group verified canonical outcomes across all stages, not just the final case
+   summary. Reconcile parser/tool/model limitations and unknown checks with exact inputs and the
+   walk's approved expected list.
+4. **D. Baseline:** At authorized acceptance save `stepwise.py accept`, corpus namespace and baseline
+   with action/binary/check identities, family decisions, model provenance and coverage. No live
+   binary/model acceptance is asserted here.
+
+## Resume and invalidation
+
+Case-stage reuse follows [runtime receipts](../architecture/jobs-and-runtime.md#wave-1-resumability).
+Local shard reuse hashes protected commands, binary contents, tool identities, parser/normalizer/
+rule versions, model identity including guidance hash, guidance identity and upstream manifest.
+The [fingerprint helper](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py#L830)
+does not hash the actual inference-result document or every stage artifact; matching model
+configuration is not proof of an identical new model response. Reconcile retained `source_artifacts`
+with any reused shard rather than claiming response-sensitive invalidation.
+
+The final summary is intentionally narrower than the union of originating unit outcomes; read the
+verified outcome artifact for admission. Source metadata also contains fixed producer/configuration
+labels in indexed binary/model payloads; use actual case and execution provenance rather than
+assuming every family was built with those labels. Generated task/dataset binding and applicability
+limitations remain [T-147](../TODO.md) and [T-157](../TODO.md). Shared manifest and launch semantics
+live in [retrieval](../architecture/python-and-retrieval.md#accepted-index-sets),
+[image pins](image-pin-verification.md) and [signing](signing.md).
+
+## Model usage
+
+The [build security assessor role](../generated/guidance.md#roles-build_security_assessor) interprets
+the supplied deterministic checks and build evidence; the
+[build supply-chain persona](../generated/guidance.md#personas-build_supply_chain) focuses that
+interpretation on provenance, build flags and delivered binary properties. Neither can change a
+check's deterministic result or authorize new builds, scans or source reads. Disabled/unavailable
+inference leaves deterministic assessment intact but incomplete inferential coverage explicit.
+
+The real request and evidence validator are in the
+[inference handler](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L572)
+and [validation helper](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py#L790).
+Hash-pinned assembly follows [worker contracts](../architecture/worker-prompt-contracts.md#publication-and-compatibility)
+and [guidance selection](../architecture/guidance-procedures.md#selection-and-provenance);
+budgets, models and retries stay in central configuration.
