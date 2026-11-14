@@ -473,8 +473,9 @@ def test_source_reference_collisions_and_foreign_bindings_fail_closed() -> None:
         context(relations=(relation(), replace(relation(), actor_role=Role.BLUE_TEAM_REFUTER)))
     with pytest.raises(IntegrityError, match="proposal identities"):
         replace(context(), origin_proposals=(replace(source(), record_id=link()),))
-    with pytest.raises(IntegrityError, match="origin proposal identities"):
-        replace(context(), origin_proposals=(source("same"), source("same", path="audit/other.json")))
+    with pytest.raises(IntegrityError, match="source record references"):
+        replace(context(), origin_proposals=(
+            source("same"), source("same", uses=(c.EvidenceUse.AVAILABLE,))))
     with pytest.raises(IntegrityError, match="duplicate"):
         replace(context(), sources=(source(), source()))
 
@@ -821,15 +822,41 @@ def test_continued_deciding_roles_and_proposals_keep_their_original_identity() -
     manifest, shards = single_bundle(record)
     c.validate_bundle(manifest, shards, expected_origin=origin(), continuations={ref.path: (rel,)},
                       manifest_reference=c.ManifestRef.of("audit/manifest.json", manifest))
-    proposal = source("proposal-1", path="audit/original.json")
+    proposal = source("proposal-1")
     proposal_ref = c.make_continuation(c.ReferenceField.ORIGIN_PROPOSALS, "audit/proposals.jsonl", (proposal,),
                                        origin=origin(), claim_id=link("claim-1"))
     record = replace(decision(), context=replace(context(), continuations=(proposal_ref,)))
     manifest, shards = single_bundle(record)
-    with pytest.raises(IntegrityError, match="continued origin proposal identities"):
+    with pytest.raises(IntegrityError, match="source record references"):
         c.validate_bundle(manifest, shards, expected_origin=origin(),
                           manifest_reference=c.ManifestRef.of("audit/manifest.json", manifest),
                           continuations={proposal_ref.path: (proposal,)})
+
+
+@pytest.mark.parametrize("continued", [False, True], ids=["inline", "continued"])
+@pytest.mark.parametrize("same_bytes", [False, True], ids=["distinct-bytes", "same-bytes"])
+def test_original_proposal_ids_are_local_to_their_receipts(continued: bool, same_bytes: bool) -> None:
+    first = source("p1", path="audit/cell-a.json")
+    second = source("p1", path="audit/cell-b.json")
+    if same_bytes:
+        second = replace(second, sha256=first.sha256)
+    ctx = replace(context(), subject=replace(subject(), cell_id=link(), proposal_ref=link()),
+                  origin_proposals=(first,) if continued else (first, second))
+    continuation_rows = {}
+    if continued:
+        ref = c.make_continuation(c.ReferenceField.ORIGIN_PROPOSALS, "audit/proposals.jsonl",
+                                  (second,), origin=origin(), claim_id=link("claim-1"))
+        ctx = replace(ctx, continuations=(ref,))
+        continuation_rows[ref.path] = (second,)
+    record = replace(decision(), context=ctx, stage=c.Stage.PROPOSAL_NORMALIZATION, outcome="merged")
+    assert_typed_tree(record, c.from_document(record.to_dict(), expected_origin=origin()))
+    manifest, shards = single_bundle(record)
+    c.validate_bundle(manifest, shards, expected_origin=origin(), continuations=continuation_rows,
+                      manifest_reference=c.ManifestRef.of("audit/manifest.json", manifest))
+    originals = [*record.context.origin_proposals,
+                 *(item for rows in continuation_rows.values() for item in rows)]
+    assert {(item.path, item.record_id.value) for item in originals} == {
+        ("audit/cell-a.json", "p1"), ("audit/cell-b.json", "p1")}
 
 
 def test_future_continuations_cannot_contradict_an_explicit_absence() -> None:
