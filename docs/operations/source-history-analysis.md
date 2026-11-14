@@ -77,8 +77,10 @@ Discovery is bounded to 4,096 catalog roots/first-level entries and 256 actual s
 bound leaves explicit coverage gaps rather than silently declaring the remainder covered.
 
 For an acquired component, history follows the first-parent chain ending at its **pinned acquired
-revision**, not a different local `main` tip. For a direct checkout, it uses `main`, else `master`,
-else `HEAD`. Binding compares the reviewed bytes with that source's selected revision:
+revision**, not a different local `main` tip. For a direct checkout, it anchors at resolved
+`HEAD`; only an unresolved `HEAD` falls back to a known mainline tip, recording
+`head_unresolved_using_mainline`. See the [canonical job process](job_source_history_analysis.md#process).
+Binding compares the reviewed bytes with that source's selected revision:
 
 - files that differ from it are reported as `working_tree_divergent`, and get no line history,
   symbols, or complexity; and
