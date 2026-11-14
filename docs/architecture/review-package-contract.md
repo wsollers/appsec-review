@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_artifact_security_analysis", "job_ci_configuration_analysis", "job_code_graph_index", "job_cpg_analysis", "job_dependency_intelligence", "job_document_issue_analysis", "job_inference_security_review", "job_profile_data", "job_review_package_assembly", "job_svf_alias_analysis", "job_test_coverage"]
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Review package and finding-lead contract
 

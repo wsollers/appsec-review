@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_dependency_intelligence", "job_inference_security_review", "job_model_connectivity", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_project_build", "job_review_intake", "job_target_analysis_plan"]
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Model profiles: dev, prod, copilot-dev and copilot-prod
 

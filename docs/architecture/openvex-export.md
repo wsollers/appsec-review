@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_openvex_export", "job_poc_generation", "job_review_intake", "job_target_acquisition"]
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # OpenVEX findings export
 
