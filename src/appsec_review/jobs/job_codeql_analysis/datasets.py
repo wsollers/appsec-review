@@ -32,6 +32,11 @@ DATASETS = (
                   "CodeQL plan, extractor inventory and per-scope summary.",
                   artifacts=(_A + "/artifacts/codeql/*.json", _A + "/steps/plan/tasks/inventory/inventory/*.json"),
                   reason="scope dispositions are published as observation-shard coverage"),
+    artifact_only("codeql_cache_initialization", "execution", "codeql", "appsec-review/codeql-cache-initialization/1",
+                  "The run's record of initialising the shared CodeQL compile-cache volume (identity, creation time, "
+                  "runtime user) and its initialisation lock; written once per run by the executor.",
+                  artifacts=("data/codeql/cache-initialization/*.json", "data/codeql/cache-initialization/*.lock"),
+                  reason="run-owned bookkeeping of a host volume; nothing in it is target evidence"),
     protected("codeql_scope_material", "execution", "codeql", "application/octet-stream",
               "CodeQL databases, staged workspaces, raw SARIF, replay commands and execution streams.",
               # Every scope subtree except exports/ (owned by codeql_graph_export): a tree claim on
