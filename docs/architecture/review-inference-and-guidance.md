@@ -10,12 +10,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## As built today
 
-This view starts from runtime source at `80e04db89504a4b9f276aa1e336ad703235dd10c`;
-the relevant handlers remain unchanged through `dd6e025ce82a69d4b755a013e78723b2eb3ee772`,
-which also contains T-150's pure contracts but not its production wiring.
-The metadata watermark remains the repository's existing reconciliation value. A later main
-landing must be reconciled against its exact source, not a planned contract or a conversation.
-In particular, T-150's complete protected decision products are not implemented at this boundary.
+This view is reconciled to `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including T-150's
+model-free protected audit producer and opted-in application readers. Later warrant, obligation,
+allocation and efficacy proposals remain separate from this implemented traceability boundary.
 
 ### Context is not proof
 
@@ -149,6 +146,21 @@ configuration and measured implementation identities. Path-coupled ledger/artifa
 not portable failed-attempt checkpoints. The job pages below describe their narrower reuse
 boundaries; no cache hit licenses new scope or closes an unresolved gap.
 
+### Protected decision traceability
+
+After writing the original inner handoff, inference publication projects existing lead/proposal,
+cell-execution, verification and decision-basis records into a separate protected sidecar.
+The accepted outer publication pins its descriptor, payload and attempt-owned source closure.
+The projection makes no new model calls and changes no claim, score, ship-block or PoC decision.
+Its full frozen-config/policy identity is separate from model-semantic settings.
+
+Gate and dossier readers explicitly verify the complete bundle and declared original source
+permissions. Historical absent declarations can yield `legacy_unrecorded`; a present wrong
+schema/authority or unbound metadata is an integrity failure. Operator queries use fixed bounded
+templates. None of these surfaces grants a worker, blind verifier or MCP client raw audit access.
+The [implemented audit contract](triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)
+owns the detailed origin, budget, continuation and compatibility rules.
+
 ## Decisions
 
 - **2026-10-28 — Completion reconciliation:** the
@@ -166,7 +178,9 @@ boundaries; no cache hit licenses new scope or closes an unresolved gap.
 - **2026-11-13 — Decision-product review:** the
   [source-bounded triage/verifier review](../reviews/2026-11-13-triage-verifier-review.md#3-strengths-and-source-backed-gaps)
   distinguishes existing stage artifacts from complete decision products and semantic warrants.
-  Its proposed work is not silently described here as landed implementation.
+  T-150 subsequently implements the bounded audit foundation; the
+  [implementation decisions](triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)
+  keep later semantic-policy proposals separate.
 
 ## Named gaps
 
@@ -178,13 +192,13 @@ These are pointers into the [single TODO registry](../TODO.md), not a second bac
 | T-015, T-031 | Package-slice evaluation and prioritization approximations. |
 | T-026, T-108 | Separately authorized dynamic evidence and the missing deployment-inventory producer. |
 | T-074, T-076, T-077 | Live fix re-check wiring, complete actionability fields and lead-stage attribution. |
-| T-149, T-150 | Scoped dependency-decision consumption and complete protected review decision products. |
+| T-149 | Scoped dependency-decision consumption beyond current inventory/context. |
 | T-151, T-152, T-153 | Operation coverage obligations, scoped proposition/polarity binding and verified evidence-request resolution. |
 | T-154, T-155, T-156 | Labelled stage-loss audit, fair bounded hunt allocation and execution-bound investigation/omission receipts. |
 
-T-150's pure contract module is present, but no prospective audit sidecar, reader, worker input or
-MCP grant is asserted to exist. Production reconciliation requires the exact source landing; existing
-ledger/cell artifacts must not be renamed into that promised product.
+T-150's implemented audit preserves unavailable and incomplete populations; it is not live
+efficacy proof or closure of the remaining evidence/coverage tasks. Raw recordings are still a
+separate optional, bounded facility.
 
 ## Jobs and pages
 

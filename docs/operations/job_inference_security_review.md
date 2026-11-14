@@ -1474,8 +1474,17 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
    Preserve pending/unrated decisions. Separately select PoC candidates from eligible judge
    verdicts, configured technical-severity ratings and bases with resolving entry/path identities;
    neither selection nor judge agreement confirms a claim.
-5. Publish the immutable handoff with both lane-manifest hashes, ledger/projection, coverage,
-   scores, findings, chain manifest, triage summary and gaps. Integrity failures prevent publication.
+5. Write the original inner review handoff with both lane-manifest hashes, ledger/projection,
+   coverage, scores, findings, chain manifest, triage summary and gaps.
+6. Verify the executing attempt, accepted scope and full frozen-configuration identity.
+   Project the protected decision audit from the existing lead, proposal, cell, adjudication
+   and finding records without another model call or changes to the original decisions.
+   Cell execution is its own stage; an execution result is not a fabricated semantic verdict.
+7. Publish the audit descriptor, manifest, bounded record shards and reference continuations
+   under `artifacts/decision-audit/`. Return the existing `metadata_path` plus explicit artifact
+   and attempt-owned source pins for common publication; upstream reads are not re-owned outputs.
+   Disabled or capacity/input-unavailable projection produces a policy-bound unavailable
+   descriptor, never invented records. Integrity failures reject the outer job publication.
 
 ## Dataflow
 
@@ -1497,6 +1506,11 @@ flowchart LR
   complete --> ledger["publication.publish_claim_ledger"]
   ledger --> publish["publication.publish_handoff"]
   publish --> outputs["claim_ledger / scores_and_findings / attack_chains"]
+  publish --> audit["Model-free decision audit after original inner handoff"]
+  audit --> auditout["Protected descriptor / manifest / records / continuations"]
+  auditout --> readers["Opted-in gate / dossier; bounded operator CLI"]
+  audit -. "capacity or missing input" .-> unavailable["Policy-bound unavailable descriptor"]
+  audit -. "integrity failure" .-> reject
   lead -. "cell / evidence / budget gaps" .-> gaps["ledger gaps"]
   hunt -. "coverage / routing gaps" .-> gaps
   gaps --> complete
@@ -1524,6 +1538,7 @@ for producer counting and the bound ledger for detailed cell/claim/predicate cov
 | `score_gap` | Missing provider/factor evidence; do not map unrated to low severity. |
 | `chain_gap` | Chain proposal/challenge/weakest-link coverage is qualified or incomplete. |
 | `lead_triage`, `cwe_reference`, lane gap counts, `review_incomplete`, accounting violations, non-`COMPLETE` status | Handler summaries of unresolved severity/reference/lane/completeness facts; resolve to underlying receipts, not duplicate gap counts. |
+| `decision_audit_capacity_exceeded`, `decision_audit_input_unavailable` | Protected trace projection is unavailable; the handler retains a descriptor and reports the limitation without changing existing finding decisions. |
 
 The taxonomy also contains PoC-policy/execution and blocking integrity/publication classes; their
 existence does not mean this job ran PoCs. Integrity errors block publication rather than being
@@ -1532,10 +1547,11 @@ active, failure reporting raises `ReviewStopped` rather than continuing through 
 lane-failure gap branch. Cancellation/admission refusal is not successful coverage.
 Every unexpected canonical or ledger cause stops the walk.
 
-At this pinned source, [T-150](../TODO.md) remains the complete protected decision-product work:
-do not infer a comprehensive protected decision-audit dataset, reader or verifier grant from
-the existing ledger/cell artifacts. [T-151–T-156](../TODO.md) name remaining operation/evidence/
-coverage and stage-loss obligations; completion accounting alone does not establish those goals.
+[T-150](../TODO.md) is implemented as protected operational traceability, not new evidence or a
+worker/MCP grant. Policy-disabled audit publication is explicitly unavailable but adds no audit
+failure gap. Historical missing declarations are `legacy_unrecorded` to opted-in consumers;
+present invalid declarations or unbound bytes fail verification. [T-151–T-156](../TODO.md)
+remain separate operation/evidence/coverage and stage-loss work.
 
 ## Acceptance
 
@@ -1547,7 +1563,9 @@ coverage and stage-loss obligations; completion accounting alone does not establ
    unlaunched/terminal cells, no-claim work, proposals, duplicates and ledger claims. Resolve
    sampled finding predicates to original source/tool artifacts, recompute adjudication and
    scoring/ship-block partitions, and verify supported versus confirmed versus PoC-candidate
-   memberships without using an answer key.
+   memberships without using an answer key. Compare each audit population's expected, emitted,
+   omitted and unavailable accounting separately against those original inputs and confirm that
+   audit projection did not alter findings, scores or eligibility.
 3. **C. Gaps:** Group canonical outcomes and then ledger gaps by class/subject/predicate; compare
    coverage-matrix cells, omissions and incomplete ratio with independent input counts.
    `EMPTY` or `DEGRADED` is not clean. Record every accepted cost and stop on unexpected causes.
@@ -1571,6 +1589,13 @@ own accepted-source/reference/guidance-bound reuse. Chains, accounting and publi
 reverified against sealed shards. [Runtime resume](../architecture/jobs-and-runtime.md#wave-1-resumability)
 still binds upstream/configuration/component identities; path-coupled ledger/artifact outputs are
 not portable failed-attempt checkpoints.
+
+Audit settings have their own frozen policy identity and are excluded from model-cell/lane/round
+semantic settings. They still belong to the full resolved configuration; this is not permission
+to change an existing run's bounds. The sidecar binds the original inner handoff and original
+source references, while the common accepted publication pins the sidecar and its source closure.
+The [audit contract](../architecture/triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)
+owns the detailed origin, budget and compatibility rules.
 
 ## Model usage
 

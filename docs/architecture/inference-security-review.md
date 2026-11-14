@@ -43,11 +43,11 @@ in [guidance procedures](guidance-procedures.md) and [red discovery output](red-
 The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
 its document hunts are not yet consumed by the inference review job.
 
-Current source reconciliation through `dd6e025ce82a69d4b755a013e78723b2eb3ee772` is summarized
+Current source reconciliation through `d622f50750ae0c1583d6dac5a0acb0643ea18bcc` is summarized
 in [review inference and guidance](review-inference-and-guidance.md) and the
-[authored job page](../operations/job_inference_security_review.md). T-150 adds pure
-decision-audit contracts/validators at this boundary, not a production audit writer, sidecar or
-new worker/MCP grant. Historical readiness decisions and the wider unimplemented designs below
+[authored job page](../operations/job_inference_security_review.md). T-150 now publishes and
+verifies protected decision-audit sidecars through explicit operator/gate/dossier readers, without
+new worker/MCP grants or changes to original findings and scores. Historical readiness decisions and the wider unimplemented designs below
 remain records of their original scope, not claims that those stages execute today.
 
 ## Purpose and governing decisions

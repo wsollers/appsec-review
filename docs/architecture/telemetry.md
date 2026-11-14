@@ -372,8 +372,9 @@ Raw SARIF/tool observations are not finding counts. `finding_states` counts emit
 Use the implemented [finding-metrics domain](finding-metrics.md) for accepted report membership,
 labelled triage effectiveness and lifecycle comparisons. Its independent labels and retained
 evidence remain necessary; neither observation volume nor a model's dismissal establishes a
-true/false label. Remaining complete stage attribution and decision products are T-077/T-150
-in the [single TODO registry](../TODO.md), not a new backlog here.
+true/false label. T-150's protected decision audit is now implemented, but it does not turn
+lifecycle events into truth labels or complete every lead-stage adapter. T-077 retains that
+remaining attribution scope in the [single TODO registry](../TODO.md).
 
 For fleet/control-plane state, `python deploy/dagster/bin/run_report.py` reports the live Dagster
 run list alongside bounded slow-operation rankings collected from available summaries. It separates

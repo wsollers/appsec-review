@@ -11,16 +11,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## As built today
 
-**Source boundary:** the implementation inspected at
-`80e04db89504a4b9f276aa1e336ad703235dd10c` is reconciled here with verified Wave1a boundary
-`45e7dc8ca1bda41ecf41eaab8bf067563bbf47c0`, whose production repair is
-`9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16`. The acquisition and debug-decision declaration
-corrections below are present; their payload writers are unchanged. The frontmatter retains
-the documentation program's existing reconciliation watermark.
-[T-150](../TODO.md#t-150-publish-complete-protected-review-decision-products) subsequently landed
-pure contracts at `dd6e025ce82a69d4b755a013e78723b2eb3ee772`; its production audit wiring is
-not implemented at this boundary and changes no acquisition/build behavior here. This reconciliation
-performed documentation checks, not new compiler, image, Dagster or live-review validation.
+**Source boundary:** `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including Wave1a's corrected
+acquisition/debug declarations and Wave1b's canonical build-cause preservation and bounded ELF
+reader. The [language job](../operations/job_language_build.md) distinguishes ELF fact provenance
+from private-cache invalidation. T-150's protected audit now exists downstream, without changing
+acquisition/build decisions. This reconciliation performs documentation checks, not new compiler,
+image, Dagster or live-review validation.
 
 The subsystem turns an explicit target selection into an accepted source inventory, planning
 decisions and build evidence. Its useful result is not merely “the build passed”: it identifies

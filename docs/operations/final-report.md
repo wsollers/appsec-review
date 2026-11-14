@@ -120,6 +120,12 @@ rather than a separately discovered job. Capability status is not a finding stat
 
 ### Limitations
 
+T-150 adds sanitized decision-audit availability, incomplete-population and scope limitations.
+The gate verifies the protected audit and retains certified read hashes; the report still reads
+only the gate snapshot. It does not publish raw audit narratives or change finding, score,
+ship-block or PoC decisions. See [the canonical gate](job_final_publication_gate.md#gaps) for
+the exact limitation IDs; the public gate/report schemas remain `/2`.
+
 Each limitation is a `limitation_id`, a `kind` and a statement. `gap` limitations make the gate
 status `PUBLISHABLE_WITH_LIMITATIONS` and the job `COMPLETED_WITH_GAPS`; `not_run` limitations name a
 disabled-by-policy capability and never change either. `compile_only_nonexecution` is a notice.

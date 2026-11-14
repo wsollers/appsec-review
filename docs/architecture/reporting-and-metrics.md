@@ -10,10 +10,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## As built today
 
-This view starts from runtime source at `80e04db89504a4b9f276aa1e336ad703235dd10c`;
-the relevant handlers remain unchanged through `dd6e025ce82a69d4b755a013e78723b2eb3ee772`.
-T-150's pure contracts are present there, but its production decision products are not.
-The existing reconciliation watermark is unchanged.
+This view is reconciled to `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including T-150's
+protected decision-audit readers and dossier projection. Public gate/report schemas and finding
+decisions are unchanged; traceability is not a new finding state or quality label.
 
 ### Certification precedes presentation
 
@@ -144,8 +143,15 @@ ledger, package and recording material as HTML/LaTeX into an explicit output dir
 [Its reader](../../src/appsec_review/reporting/sources.py) records missing/unreadable artifacts
 as presentation gaps and can select matching attempt files rather than an accepted snapshot.
 Treat diagnostic renderings of model recordings as private, not as the sanitized public report.
-That tolerant diagnostic view is not the final gate's fail-closed certification, nor the complete
-protected decision-audit product reserved by T-150.
+That tolerant diagnostic view is not the final gate's fail-closed certification or the
+[accepted protected audit](triage-verifier-enhancement.md#product-routes).
+
+The gate opts into full audit/source verification but exports only sanitized availability,
+partial-population limitations and certified bindings. Disabled and legacy-unrecorded audits
+remain explicit. Available payloads are fully verified before projection; bounded presentation
+does not permit partial verification. Dossiers retain the accepted decision basis and distinguish
+support, opposition, qualification and noncounted citations. Audit inclusion does not promote
+counterevidence or judge dissent into support.
 
 The separate [telemetry renderer](../../src/appsec_review/reporting/telemetry_render.py) writes
 a receipted operational report. Its [input loader](../../src/appsec_review/reporting/telemetry/inputs.py)
@@ -174,7 +180,8 @@ None of these presentation paths establishes new finding, coverage or runtime-pr
 - **2026-11-13 — Attribution and stage loss:** the
   [triage/verifier review](../reviews/2026-11-13-triage-verifier-review.md#3-strengths-and-source-backed-gaps)
   records the incomplete decision trail and misleading judge/verifier attribution boundary.
-  Proposed fixes are not assumed landed in this view.
+  T-150's bounded protected trace is now implemented; later labelled evaluation and execution-bound
+  coverage proposals remain separate.
 
 ## Named gaps
 
@@ -186,11 +193,11 @@ the limits relevant to interpreting reports.
 | T-061, T-067, T-074 | Real fix-verification efficacy, fix-pair corpus/holdout and live re-check wiring. |
 | T-071 | Remaining model-specific integrity measurements and honest attribution of verifier/judge outcomes. |
 | T-076, T-077 | Complete developer-actionability fields and stage-attributed lead records. |
-| T-150, T-154, T-156 | Complete protected decision products, labelled stage-loss audit and execution-bound coverage receipts. |
+| T-154, T-156 | Labelled stage-loss audit and execution-bound coverage receipts. |
 
-No new T-150 audit output, CLI surface, reader or grant is described as implemented at the pinned
-source boundary. Later reconciliation must use the exact landing. Existing diagnostic renderers,
-triage accounting and protected dossiers are not substitutes for that unfinished contract.
+The [operator decision-audit CLI](../operations/finding-metrics.md) uses the implemented accepted
+reader and fixed templates; it is not a worker/MCP grant. Audit records preserve original policy
+attribution, not independent truth labels or proof that every investigation was complete.
 The implemented metric families recorded as done under T-062, T-064, T-065, T-066, T-068 and
 T-069 are not reopened here; missing operator inputs make a measurement unavailable, not its
 implementation absent.

@@ -77,6 +77,14 @@ checkout, determines an older run's configuration.
 
 ## Required retained evidence
 
+The T-150 decision audit is an explicit protected input, verified with its original source
+permissions and exact accepted pins. Dossiers can include its bounded decision basis and
+verification limits, with opposing, qualifying and noncounted citations kept distinct from
+support. Historical absence remains explicit; unbound or malformed present audit data fails.
+The [canonical job page](job_dossier_publication.md) describes verification and excerpt ordering;
+the [audit contract](../architecture/triage-verifier-enhancement.md#product-routes) owns its
+protected route. No raw conversation or new worker/MCP grant is added.
+
 | Record | Operational meaning |
 | --- | --- |
 | Accepted input references | Review/job/ledger/manifest and exact claim/finding package/hash bindings; accepted optional producer handoffs, frozen settings and tool/guidance identities. No later `latest.json` discovery after certification. |

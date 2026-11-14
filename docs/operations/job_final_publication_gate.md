@@ -346,13 +346,18 @@ See the [handler](../../src/appsec_review/jobs/job_final_publication_gate/job.py
 
 1. In `load.verify_review`, reverify the accepted review from bound bytes, including ledger,
    projection, packages, scores, evidence and coverage; enforce the package bound.
+   Explicitly verify the protected decision audit and its declared original scanner/control
+   sources, retaining all certified read pins. Historical declaration absence is
+   `legacy_unrecorded` through `when_output_declared`; a present wrong schema/authority fails.
 2. Read and bind the frozen configuration. Determine enabled completion producers from it;
    attack-chain work is always part of the accepted review. An explicit PoC upstream pin also
    commissions that otherwise optional producer.
 3. Verify attachments and their exact review/finding identities. Reject missing enabled producer
    handoffs under the typed contract and reject corrupt, mismatched or unbound attachments.
    Disabled producers are not silently discovered as evidence.
-4. Write the verified snapshot with capabilities, attachments and every binding.
+4. Write the verified snapshot with capabilities, attachments, every binding and only a sanitized
+   audit availability/population summary. Add the frozen-configuration binding idempotently;
+   conflicting hashes fail rather than being overwritten.
 
 ### `gate`
 
@@ -362,7 +367,8 @@ See the [handler](../../src/appsec_review/jobs/job_final_publication_gate/job.py
    `verification_backlog`. Reject a package outside its accepted partition.
 3. Count exact, disjoint buckets. Derive ordered limitations from review/lane completeness,
    ledger gaps, coverage, scores, independence, duplicate pairs and completion capability status.
-   Keep `gap`, `not_run` and `notice` distinct.
+   Add audit availability/partial-population limitations without exposing raw audit narratives
+   or changing finding, score, ship-block or PoC decisions. Keep `gap`, `not_run` and `notice` distinct.
 
 ### `acceptance`
 
@@ -377,6 +383,7 @@ See the [handler](../../src/appsec_review/jobs/job_final_publication_gate/job.py
 flowchart LR
   job["job_final_publication_gate"] --> load["load.verify_review"]
   review["job_inference_security_review / scores_and_findings"] --> load
+  audit["Protected audit + declared original source pins"] --> load
   artifacts["job_dossier_publication / dossier_publications"] --> load
   load --> classify["gate.classify"]
   classify --> buckets["publishable / verification_backlog / withheld"]
@@ -408,6 +415,9 @@ no source-supplied retryability classification. See
 | `poc_generation_gap`, `attack_chains_gap`, `remediation_planning_gap`, `remediation_validation_gap`, `dossiers_gap` | Accepted completion capability has gaps/omissions. |
 | `poc_lane_not_run`, `attack_chain_composition_not_run`, `remediation_planning_not_run`, `remediation_validation_not_run`, `dossiers_not_run` | `not_run` limitations when the capability is policy-skipped; not converted to handler gaps. |
 | `compile_only_nonexecution` | Notice: generated PoCs, controls and remediation regressions were not executed. |
+| `decision_audit_not_run` | Policy-disabled or historical unrecorded audit; a `not_run` limitation, not a clean trace. |
+| `decision_audit_unavailable`, `decision_audit_partial` | Capacity/input limitation or incomplete populations. Partial counts are affected population classes, not a sum of unlike records. |
+| `decision_audit_scope` | Notice: traceability is not complete investigation, independent verification or target safety. |
 
 Withheld reasons are `poc_outcome_unavailable` and `attack_chain_unavailable`. Corrupt referenced
 bytes or failed enabled-input admission are errors, not withheld-success substitutes.
@@ -415,11 +425,13 @@ bytes or failed enabled-input admission are errors, not withheld-success substit
 ## Acceptance
 
 1. **A. Inputs:** Compare the claim's review and commissioned-producer pins with verified handoffs;
-   verify frozen configuration, explicit PoC admission and the complete attachment binding set.
+   verify frozen configuration, explicit PoC admission, the complete attachment binding set and
+   accepted audit/source read pins.
 2. **B. Independent comparison:** Independently enumerate the accepted review's confirmed and
    supported partitions. Reconcile every finding-package ID into exactly one gate bucket, compare
    hashes and unchanged state/score/ship-block values, and resolve each withheld reason against the
-   accepted PoC/chain manifests.
+   accepted PoC/chain manifests. Compare the sanitized audit limitations with the verified
+   population accounting while confirming unchanged public finding decisions.
 3. **C. Gaps:** Group verified canonical outcomes and compare limitation IDs/counts with ledger
    gaps, coverage rows, score absence and completion omissions. Record `not_run` and notices
    separately; stop for unconfirmed expected causes.
@@ -435,3 +447,5 @@ Changing review evidence, commissioned producer identity or enablement requires 
 unchanged upstream computation need not be rerun just to rebuild this projection. The publication
 unit rechecks the snapshot rather than trusting its earlier classification. Artifact-bearing
 results are not portable failed-attempt checkpoints.
+The public gate/report schema remains `/2`; audit data adds certified bindings and sanitized
+limitations, not a new finding state or a public audit-record endpoint.

@@ -59,9 +59,13 @@ successes. [Repair admission](../operations/recovery-repair.md) handles an expli
 implementation change without rewriting earlier attempts. Mutable pointers, workspaces and
 controller state are not themselves immutable evidence.
 
-The pure review decision-audit contracts landed at the pinned source boundary, but that does not
-establish production sidecars, consumers or a retrieval grant. [T-150](../TODO.md) remains the
-implementation authority; review/reporting pages distinguish its proposal from accepted outputs.
+T-150 now publishes a protected audit after the original inner review handoff, using the existing
+control fields and explicit artifact/source pins rather than widening the control allowlist.
+The gate/dossier opt into full verification with declared original source permissions.
+`when_output_declared` permits historical declaration absence, never a mismatched present
+declaration or an undeclared read. Fixed control bootstrap and configured payload budgets remain
+separate; [the audit contract](triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)
+records their exact scope. No worker/MCP authority is added.
 
 ## Decisions
 
@@ -79,8 +83,8 @@ implementation authority; review/reporting pages distinguish its proposal from a
 - [T-159](../TODO.md) owns SVF module-level partial reasons that do not reach the root canonical
   outcome projection. The module rows remain present; this is an accounting boundary gap,
   not evidence that all SVF coverage was lost.
-- [T-150](../TODO.md) tracks protected decision-audit production/consumption beyond the landed
-  pure contracts. Its planned products do not widen control-key or worker authority.
+- [T-152, T-153 and T-156](../TODO.md) retain the unimplemented warrant, semantic-resolution and
+  execution-coverage boundaries beyond T-150's implemented audit.
 
 ## Jobs and pages
 

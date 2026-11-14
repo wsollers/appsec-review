@@ -526,22 +526,31 @@ The [handler](../../src/appsec_review/jobs/job_dossier_publication/job.py),
 
 1. In `load.verify_inputs`, verify the accepted review, package partition and projection.
    Require exact claim, finding-package and content-hash identities.
-2. Load optional accepted PoC, planning and validation summaries. Verify their review binding,
+2. Explicitly opt into the accepted decision-audit reader. Verify its complete protected bundle
+   and original scanner/control source permissions, retaining actual read pins in the snapshot.
+   `when_output_declared` admits historical declaration absence, not undeclared reads or
+   present schema/authority mismatches.
+3. Load optional accepted PoC, planning and validation summaries. Verify their review binding,
    item/gap counts, nested references and nonexecution assurance; validation must name the
    accepted planning handoff. Require remediation attachments to concern confirmed findings.
-3. Bind the review's source manifest and attack-chain manifest. Write the attempt-owned input
+4. Bind the review's source manifest and attack-chain manifest. Write the attempt-owned input
    snapshot; malformed or changed accepted evidence fails the unit.
 
 ### `dossiers`
 
-1. In `dossiers.create`, reverify the snapshot. Form a sorted set of
+1. In `dossiers.create`, reverify the snapshot and audit reference/unavailability against the
+   accepted reader. Form a sorted set of
    `(confirmed_finding, finding_package_id)` and `(poc, finding_package_id)` candidates.
    Split at the dossier bound and retain the remainder as explicit omissions.
-2. Resolve only cited direct or analyst-assessed relation identities through bounded
-   `read_excerpt`. Record unavailable, truncated and capped excerpts. Read bounded PoC text
+2. Resolve cited direct or analyst-assessed relations first, followed by additional original
+   relations from the verified decision basis, through bounded `read_excerpt`.
+   Keep opposing, qualifying and noncounted relations distinct from supporting evidence.
+   Record unavailable, truncated and capped excerpts. Read bounded PoC text
    without executing it; attach matching remediation and chain qualifications.
 3. Build the bounded dossier projection, including evidence and text truncation records.
-   Render deterministic JSON and escaped LaTeX into a new item directory.
+   Include the verified decision basis, original-policy attribution and verification limits
+   without raw conversations or a new finding state. Render deterministic JSON and escaped LaTeX
+   into a new item directory.
 4. If PDF is commissioned, run the pinned LaTeX renderer and retain its execution receipt.
    Publish a PDF only for successful real output; otherwise retain `render_failed` or
    `latex_only` with a reason. A pin/integrity failure is not downgraded into rendering success.
@@ -562,6 +571,7 @@ The [handler](../../src/appsec_review/jobs/job_dossier_publication/job.py),
 flowchart LR
   job["job_dossier_publication"] --> load["load.verify_inputs"]
   review["job_inference_security_review / scores_and_findings"] --> load
+  audit["Protected decision audit + declared original source pins"] --> load
   attachments["job_poc_generation / poc_generation_summary"] --> load
   remediation["job_remediation_planning / remediation_planning_summary"] --> load
   validation["job_remediation_validation / remediation_validation_summary"] --> load
@@ -594,17 +604,23 @@ not a repeated count of summary strings.
 | `dossier_render_failed`, `dossier_renderer_unavailable` | Render execution or renderer availability; JSON/LaTeX may survive but no successful PDF is asserted. |
 
 Projection truncation/redaction records are additional limits to inspect, not invented gap codes.
+Audit absence is an explicit decision-basis availability reason, not proof that no opposing
+evidence exists. An available audit is fully verified before bounded presentation; malformed,
+unbound or over-budget reads fail rather than rendering a partly verified success.
 All candidate/producer integrity failures stop publication. A nonretryable canonical record is
 not permission to accept the cost without the walk's expected-gap decision.
 
 ## Acceptance
 
 1. **A. Inputs:** Compare admitted review and optional producer hashes with the loaded snapshot;
-   verify validation-to-planning binding, source-manifest identity and exact finding triples.
+   verify validation-to-planning binding, source-manifest identity, exact finding triples and
+   audit/source read pins.
 2. **B. Independent comparison:** Count confirmed packages in the accepted review and candidate
    outcomes in the accepted PoC summary independently of the dossier summary. Their kind/finding
    union must equal items plus omissions. Compare per-kind/per-status totals; verify PDFs only
-   exist for `rendered`, and compare rendered excerpts with cited accepted bytes.
+   exist for `rendered`, and compare rendered excerpts with cited accepted bytes. Check that
+   audit decisions bind the same finding bytes and that counterevidence/noncounted citations
+   did not become new supporting evidence.
 3. **C. Gaps:** Group canonical outcomes and reconcile each with item gap lists, omissions,
    rendering receipts and truncation records. Record the cost of absent PDF/source context;
    unexpected causes stop the walk.
@@ -621,3 +637,5 @@ identities. Changed optional producers, finding bytes or rendering settings inva
 dossiers; the inputs are reverified both before creation and before publication. Item directories
 are immutable, not overwrite-in-place recovery targets; artifact-bearing units are not portable
 failed-attempt checkpoints. The handler is deterministic and dispatches no model.
+Audit availability, policy and certified source bindings are rechecked as inputs, not trusted
+merely because an earlier dossier rendered successfully.
