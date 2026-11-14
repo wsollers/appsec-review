@@ -243,3 +243,51 @@ def identifier_errors(text: str, inventory: dict, *, planning_registry: bool = F
         if category and token not in known[category]:
             errors.append(f"unknown {category} identifier: {token}")
     return sorted(set(errors))
+
+
+def authored_job_errors(text: str, job_id: str, job: dict) -> list[str]:
+    """Check the authored page boundary; source accuracy remains a source-review obligation."""
+    metadata, body = frontmatter(text)
+    errors = []
+    if metadata.get("jobs") != [job_id] or metadata.get("kind") != "operations":
+        errors.append("canonical job page must name exactly its job")
+    blocks = list(BLOCK.finditer(body))
+    if len(blocks) != 1 or blocks[0][1] != job_id:
+        errors.append("expected exactly one matching generated job block")
+    authored = BLOCK.sub("", body)
+    if "the authored process and acceptance description are tracked by" in authored:
+        errors.append("generated-page placeholder has not been replaced")
+    lines = authored.splitlines()
+    visible = prose(authored, inline=False).splitlines()
+    starts = [(index, match[1]) for index, line in enumerate(visible)
+              if (match := re.fullmatch(r"## (.+)", line))]
+    sections = {}
+    for position, (start, name) in enumerate(starts):
+        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+        if name in sections:
+            errors.append(f"duplicate authored section: {name}")
+        sections[name] = "\n".join(lines[start + 1:end]).strip()
+    required = {"Purpose", "Process", "Dataflow", "Gaps", "Acceptance", "Resume and invalidation"}
+    if job["model_configuration"] or job["specialized_workers"]:
+        required.add("Model usage")
+    for name in sorted(required):
+        if not sections.get(name):
+            errors.append(f"missing authored section: {name}")
+    process = sections.get("Process", "")
+    step_headers = list(re.finditer(r"(?m)^### `([^`]+)`\s*$", process))
+    if {match[1] for match in step_headers} != set(job["steps"]):
+        errors.append("Process must have one exact step heading per configured step")
+    if len(step_headers) != len(job["steps"]):
+        errors.append("Process repeats or omits a configured step")
+    for position, match in enumerate(step_headers):
+        end = step_headers[position + 1].start() if position + 1 < len(step_headers) else len(process)
+        if not re.search(r"(?m)^\d+\. ", process[match.end():end]):
+            errors.append(f"step lacks numbered pseudocode: {match[1]}")
+    dataflow = sections.get("Dataflow", "")
+    if "```mermaid" not in dataflow or job_id not in dataflow:
+        errors.append("Dataflow must contain an authored Mermaid view naming the job")
+    acceptance = sections.get("Acceptance", "")
+    for label in ("A. Inputs", "B. Independent comparison", "C. Gaps", "D. Baseline"):
+        if not re.search(rf"\*\*{re.escape(label)}:?\*\*", acceptance):
+            errors.append(f"Acceptance must state the charter check: {label}")
+    return errors
