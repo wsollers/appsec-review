@@ -811,3 +811,31 @@ matrix: both exist in main but are absent from this isolated checkout. No target
 copied or modified to make that check pass. Generated-document checks and scoped
 metadata/link/identifier checks for the changed documents pass; whole-repository source
 coverage for archived citations remains the named T-148 gap.
+
+### Post-landing downstream fixture correction, 2026-11-14
+
+The original focused gate omitted `tests/test_downstream_input_contracts.py`. Its
+pre-audit synthetic review publisher inherited every dataset from the current registry
+without producing an audit descriptor, so five dossier/gate cases correctly failed
+the declared-publication guard after T-150 landed. All five reproduced on
+`24484feb670ee694d18d7476ff5ba25c04b00f28` in 15.11 seconds, with no slow cases.
+
+The shared fixture now explicitly declares its seven pre-audit output capabilities.
+It remains a legacy accepted review, not a claim that the current inference publisher
+produced an audit. The duplicate declaration-filtering workaround in the audit consumer
+fixture was removed. Two new real typed-runner cases prove that gate and dossier
+consumers still reject a producer that declares audit metadata but omits publication.
+No production code, publication guard or source permission was changed.
+
+```bash
+scripts/run-tests.sh --expect-tests 44 --max-tests 44 --timeout-seconds 180 \
+  --parallel --test-workers 2 --shuffle-seed 1551 -- \
+  tests/test_000_unit_environment_guard.py tests/test_downstream_input_contracts.py \
+  tests/unit/review_decision_audit/test_datasets.py \
+  tests/unit/review_decision_audit_consumers/test_accepted_review.py \
+  tests/unit/review_decision_audit_consumers/test_reader_edges.py::test_new_declared_audit_missing_metadata_is_not_legacy
+```
+
+Result: **44 passed in 44.85 seconds**, with no failures, skips or case over ten seconds.
+The report is `test/tmp/reports/tests-custom-20261114-113616-609700-97527.json`.
+Integration, acceptance, live and deployment checks remain **NOT RUN**.
