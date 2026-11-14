@@ -64,7 +64,10 @@ recheck. Truncated/incomplete resolution cannot satisfy an obligation. Advisory/
 reference context and tags remain indirect. The
 [obligation policy](../../src/appsec_review/review/obligations.py) chooses required predicates by
 claim family; it does not demand a source-to-sink path for every secret, configuration or
-dependency claim.
+dependency claim. [Predicate warrants](../../src/appsec_review/review/warrants.py)
+(`predicate-warrant/1`, [T-152](../TODO.md)) check that re-resolved evidence binds to the claim's
+scoped subject, sink, operand and build configuration across both guard polarities before wiring
+into adjudication.
 
 ### Guidance is selected data, not authority
 

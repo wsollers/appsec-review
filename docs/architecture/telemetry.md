@@ -14,7 +14,9 @@ run/job/attempt/step/task correlation. Details may add Dagster run/node, produce
 index shard, MCP session/invocation, model invocation, or finding-package identities.
 
 The writer is process-safe and crash-recovering; `PipelineLog.iterate()` and `PipelineLog.contains()`
-stream complete sequence-valid lines rather than loading multi-gigabyte logs into memory. It bounds depth, collection size, strings, and total
+stream complete sequence-valid lines rather than loading multi-gigabyte logs into memory (reporting
+consumers that still call `PipelineLog.read()` and per-run log-size bounds remain
+[T-5001](../TODO.md)). It bounds depth, collection size, strings, and total
 record bytes. Credentials, secret-like values, prompts, responses, raw model output, source text,
 and query text are redacted. Telemetry uses request, guidance, reason, evidence, and artifact hashes.
 Where a job explicitly needs raw provider or tool output for diagnosis, it stores bounded bytes as a
