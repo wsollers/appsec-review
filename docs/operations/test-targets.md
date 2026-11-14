@@ -119,3 +119,10 @@ job budget of 6,000,000 output tokens and 200 team packages. On the cpp smoke th
 about 500 packages and the budget is exhausted after roughly 1,700 model turns; the cells that follow
 record budget gaps and the handoff is `DEGRADED`, which is expected under `dev`. Capacity is excluded
 from cell fingerprints, so a run under the overlay reuses the cells of a run under `--overlay none`.
+
+CodeQL coverage of a smoke needs the host's preinstalled CodeQL runtimes declared for the source image
+and for the build profile the smoke compiles with (`native` for cpp; `java`, `go` and `dotnet` for
+those smokes), as [review startup](review-startup.md#before-the-first-launch) describes; `review-start`
+refuses or warns before submission when they are missing. The first three cpp smoke runs
+(`2026-11-13-0001` to `2026-11-14-0003`) ran without them and recorded `TOOLCHAIN_UNAVAILABLE`, an
+empty code graph and no CodeQL leads.

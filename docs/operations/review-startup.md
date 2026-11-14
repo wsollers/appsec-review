@@ -28,6 +28,13 @@ Complete the [repository setup](../../README.md#what-you-need) and
   the bounded image builder or restricted native execution. Required derived-image work needs an
   eligible prepared image or a commissioned compatible builder; see
   [performance and assurance](performance-assurance.md#scheduling-and-limits).
+- Declare the host's preinstalled CodeQL runtimes in `deploy/dagster/host-pins.toml` when no image
+  builder is commissioned: one for the licensed source image (the extractor inventory) and one per
+  compiled build-profile image the targets use, each layered with the repository's
+  `containers/tools/codeql/Dockerfile`/`Dockerfile.source` for the effective application user (see
+  [explicit preinstalled runtimes](codeql-analysis.md#explicit-preinstalled-runtimes)). `review-start`
+  refuses a submission whose inventory image has no declaration and warns for each undeclared
+  compiled profile; without them CodeQL records `TOOLCHAIN_UNAVAILABLE` and the code graph is empty.
 
 Use the checkout that owns the running stack. Do not start a second stack or use `--force` to
 work around another session's active review.
