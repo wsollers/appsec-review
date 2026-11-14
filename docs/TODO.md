@@ -181,6 +181,12 @@ until each is rewritten into the entry format when it is next touched.
 | T-5006 | [Carry OWASP verdict dispositions into leads and stop projecting unassessed rows into packages](#t-5006-carry-owasp-verdict-dispositions-into-leads-and-stop-projecting-unassessed-rows-into-packages) | review | open |
 | T-5007 | [Reconcile OWASP documentation, role text and tool advertisement with the code](#t-5007-reconcile-owasp-documentation-role-text-and-tool-advertisement-with-the-code) | review | open |
 | T-5008 | [Collation pass: facet-tag first-party units before hunting and route the review on the tags](#t-5008-collation-pass-facet-tag-first-party-units-before-hunting-and-route-the-review-on-the-tags) | review | in-progress |
+| T-5009 | [Project only assessed, subject-bound OWASP rows into control_evidence and package context](#t-5009-project-only-assessed-subject-bound-owasp-rows-into-controlevidence-and-package-context) | review | open |
+| T-5010 | [Publish per-component languages and frameworks from the target catalog](#t-5010-publish-per-component-languages-and-frameworks-from-the-target-catalog) | topology | open |
+| T-5011 | [Attach routed ASVS controls as control_gap hunt obligations for web and API components](#t-5011-attach-routed-asvs-controls-as-controlgap-hunt-obligations-for-web-and-api-components) | review | open |
+| T-5012 | [Publish a control-report projection and render the OWASP section of the final report](#t-5012-publish-a-control-report-projection-and-render-the-owasp-section-of-the-final-report) | review | open |
+| T-5013 | [Per-language OWASP subject recognisers (alternative to T-5011, not in addition)](#t-5013-per-language-owasp-subject-recognisers-alternative-to-t-5011-not-in-addition) | review | open |
+| T-5014 | [Partition OWASP independent review into cells and build the evidence resolver once](#t-5014-partition-owasp-independent-review-into-cells-and-build-the-evidence-resolver-once) | review | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2763,6 +2769,60 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** (1) extend the closed tag vocabulary (`src/appsec_review/jobs/job_security_tagging/taxonomy.py`, the pinned vocabulary and capability-rules files) with facets `role` (auth, session, authorization, input-parsing, serialization, crypto, storage, logging, config, build-glue, test), `exposure` (client-facing, internal, operator-only, build-time), `trust` (user-tainted, partner-tainted, trusted, none), `mechanism` (networked-listener, rpc, http, ipc, file, cli), `asset` (credentials, session-tokens, pii, keys, money) and `state` (stateful, cache, persistent-store), each assignment carrying a basis and an evidence span as the taxonomy requires; (2) a deterministic collation step after security tagging and before package assembly that assigns facet tags per first-party unit and file from catalog facts, build receipts, symbol and syntax indexes, graph entry/sink classes, protocol and framework library use, and README/docstring text, published as a `tags`-family shard; (3) an optional, bounded, recorded model pass (one call per first-party unit, closed schema, every claim citing a source line or a deterministic tag; off by default under a typed setting) that fills `role`, `asset` and a one-paragraph stated purpose; (4) consumers: the unit context carries the unit's facet tags and purpose once, hunt packages derive tag-driven obligations (an `auth` + `client-facing` + `user-tainted` unit gets authentication, session and input-handling obligations), persona and stack routing and lead admission read the facets, the OWASP workbench reads the tags and deletes its own classifier, and a target class per component (web_api, mobile, cli, library, build_tooling, test_only) gates OWASP applicability; (5) documentation: an architecture page for the collation pass and updates to `docs/operations/security-tagging.md`, `docs/operations/inference-security-review.md` and `docs/operations/owasp-control-assessment.md`. Tags are routing data, never evidence: a claim still cites source lines, and a wrong tag may only misroute.
 - **Done when:** unit tests show (a) a fixture unit with an HTTP route handler reading a request body and a session store gets `role:auth`, `exposure:client-facing`, `trust:user-tainted`, `mechanism:http`, `state:session` with a basis and evidence span each, and a CLI `main` reading argv gets `mechanism:cli`, `trust:user-tainted`, `exposure:operator-only`; (b) the hunt package for the first unit carries the derived obligations and its unit context carries the tags and purpose; (c) the OWASP applicability step classifies a `lang:cpp` + `mechanism:cli` component as not applicable with tag citations and the HTTP unit as `web_api`, with the workbench's own classifier removed; (d) the taxonomy hash and `tests/test_skill_separation.py` still pass; and a cpp smoke review publishes facet tags for every first-party file, which the user checks against the smoke fixture's known file purposes.
 - **Refs:** `src/appsec_review/jobs/job_security_tagging/` (taxonomy, producers, job), `src/appsec_review/owasp_workbench/engine.py`, `src/appsec_review/review/packages.py` (`_Assembler.hunts`, unit context), `src/appsec_review/review/units.py`, `src/appsec_review/guidance/routing.py`, `pipeline/guidance/registry.json`, `docs/reviews/owasp-value-review-2026-11-14.md`, `docs/reviews/owasp-process-review-2026-11-14.md`, T-5002, T-5003, T-5006, T-165.
+
+### T-5009 — Project only assessed, subject-bound OWASP rows into control_evidence and package context
+
+- **State:** open
+- **Area:** review
+- **Why:** Change 1 of `docs/reviews/owasp-value-review-2026-11-14.md` (F10): on smoke-cpp run `2026-11-14-0003` the `control_evidence` precomputed set held 277 facts, all `not_assessed` (273) or `cannot_verify` (4) without a subject, and five of them were copied into each of the 562 review packages (7.9 MB; 21 % of hunt-package bytes and 62 % of lead-package bytes), each saying no reviewed proof procedure exists.
+- **Scope:** `indexing/products.py` `_build_control_evidence` skips rows whose `control_status` is `not_assessed` or whose obligations are empty; `review/packages.py` scopes `control_context` by component and source id.
+- **Done when:** a fixture control-result shard with 273 `not_assessed`, 4 subject-less `cannot_verify` and 1 `not_satisfied` row with a subject yields 1 fact; a package for that subject's file carries 1 entry and a package for another file carries 0.
+- **Refs:** `src/appsec_review/indexing/products.py`, `src/appsec_review/review/packages.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`; T-5006 (verdict dispositions), T-5008 (target-class gate).
+
+### T-5010 — Publish per-component languages and frameworks from the target catalog
+
+- **State:** open
+- **Area:** topology
+- **Why:** Change 4 of `docs/reviews/owasp-value-review-2026-11-14.md`: the `components` payload on run `2026-11-14-0003` held only `root`, `manifest` and `component_id`, so every classifier downstream (OWASP, routing, the T-5008 collation pass) starts from nothing the catalog already knows.
+- **Scope:** `job_target_catalog` publishes `languages` (with file counts) and `frameworks` (from manifests and lockfiles via `cataloging.py` ecosystem detection) in each `components` entity payload; schema and dataset declaration updated.
+- **Done when:** the topology monorepo fixture yields a Python component with `languages: [{python: n}]` and `frameworks: [flask]`, and a C component with `frameworks: []`; the components index shard validates.
+- **Refs:** `src/appsec_review/jobs/job_target_catalog/`, `src/appsec_review/jobs/cataloging.py`, T-5008.
+
+### T-5011 — Attach routed ASVS controls as control_gap hunt obligations for web and API components
+
+- **State:** open
+- **Area:** review
+- **Why:** Change 6 of `docs/reviews/owasp-value-review-2026-11-14.md` (the proposed home of the model call): for `web_api` components the standalone assessor and blinded reviewer duplicate what the hunt lane's red, blue, verifier and judge cells already do, with their own evidence packages (F1), pools (F12) and Python-only recognisers; the hunt package of a tagged entry-point unit can carry the control's obligation instead and be reviewed with the same syntax and graph tools as everything else.
+- **Scope:** for components the T-5008 target class marks `web_api`, package assembly attaches the routed ASVS control's obligation (invariant, prerequisites, criteria from `owasp_workbench/obligations.py`) to hunt packages of units tagged `surface:entry:http-*`; the red cell's turn contract gains a `control_status` field; the judge's accepted claim carries the control id; the workbench records the outcome as a `control-result` row. The standalone assessor path stays for the four Python procedures until this path is proven on `smoke-python`.
+- **Done when:** a hunt package for a route unit carries exactly one control obligation and its serialised request stays under the configured input budget; an accepted `not_satisfied` claim produces a `control-report/1` row with `path:lines`; a unit without an entry tag carries no control obligation.
+- **Refs:** `src/appsec_review/review/packages.py`, `src/appsec_review/owasp_workbench/obligations.py`, `src/appsec_review/jobs/job_inference_security_review/teams.py`, `src/appsec_review/guidance/routing.py` (`hunt_panel`), T-5008, T-5002.
+
+### T-5012 — Publish a control-report projection and render the OWASP section of the final report
+
+- **State:** open
+- **Area:** review
+- **Why:** Change 7 of `docs/reviews/owasp-value-review-2026-11-14.md`: the final report has no OWASP section to receive a result, and `control-results.json` holds matrix rows rather than developer-facing findings (section 5 of the review lists what a result must contain: control id, first-party `path:lines`, verdict, agreement, what to change).
+- **Scope:** the workbench publishes a `control-report/1` projection with exactly the `satisfied`/`not_satisfied` rows (control, subject `path:lines`, verdict, reviewer agreement, change) plus one coverage line per applicable family and one not-applicable sentence naming the basis tags; `reporting/` renders it and nothing else from the workbench.
+- **Done when:** a result set with one `not_satisfied` and 276 other rows renders one finding line and one coverage sentence; a `not_applicable` ledger renders one sentence naming the basis tags.
+- **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/`, `src/appsec_review/reporting/`, `docs/operations/final-report.md`, T-5008.
+
+### T-5013 — Per-language OWASP subject recognisers (alternative to T-5011, not in addition)
+
+- **State:** open
+- **Area:** review
+- **Why:** Change 10 of `docs/reviews/owasp-value-review-2026-11-14.md`: the four proof procedures recognise Python route decorators, SQL calls and password checks only (`owasp_workbench/subject_selection.py`), so no target this host reviews reaches a model call; if the hunt-lane path (T-5011) is rejected, the recognisers need the other languages.
+- **Scope:** route decorators, SQL calls and password checks for Java, JavaScript/TypeScript, Go, PHP, Ruby and C# in `subject_selection.py`, each with the subject acceptance tests extended per language. Open only if T-5011 is not taken.
+- **Done when:** `tests/unit/job_owasp_control_assessment/test_subject_selection.py` covers each added language with a positive and a negative fixture.
+- **Refs:** `src/appsec_review/owasp_workbench/subject_selection.py`, T-5011.
+
+### T-5014 — Partition OWASP independent review into cells and build the evidence resolver once
+
+- **State:** open
+- **Area:** review
+- **Why:** F12 and F13 of `docs/reviews/owasp-process-review-2026-11-14.md`: one `independent_review` unit reviews all batches serially, rebuilding an `EvidenceResolver` and re-accepting the manifest per batch (`job.py:247-270`), while the Dagster pool `owasp_verification = 2` suggests parallel work; `evidence.py:134` reaches into `RetrievalCore._database`.
+- **Scope:** partition verification into cells like validation, or set the pool to 1 and build the resolver once; expose a public `RetrievalCore.payload(identity, shard)` and use it.
+- **Done when:** a unit test shows one resolver and one manifest acceptance per unit of work; no OWASP module names a private `RetrievalCore` member.
+- **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/evidence.py`, `src/appsec_review/retrieval/core.py`, `src/appsec_review/orchestration/dagster/adapter.py`.
 
 ## Legacy backlog
 
