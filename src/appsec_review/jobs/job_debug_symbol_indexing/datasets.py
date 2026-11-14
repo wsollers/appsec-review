@@ -13,7 +13,7 @@ DATASETS = (
                   artifacts=(_A + "/artifacts/debug-symbols/coverage.json",),
                   reason="coverage rows are also published in the normalized symbol shard",
                   route="query_debug_symbols mode=coverage"),
-    artifact_only("target_decision", "decide", "configuration", "appsec-review/debug-symbol-decision/1",
+    artifact_only("target_decision", "decide", "configuration", "appsec-review/debug-symbol-decision/2",
                   "Persisted immutable compiler-target route and its input fingerprint.",
                   artifacts=(_A + "/artifacts/debug-symbols/decision.json",),
                   reason="routing metadata; normalized records are indexed separately"),

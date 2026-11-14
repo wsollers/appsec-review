@@ -148,7 +148,8 @@
         "tests/unit/job_debug_symbol_indexing/test_normalize.py",
         "tests/unit/job_debug_symbol_indexing/test_publish.py",
         "tests/unit/job_debug_symbol_indexing/test_accepted_loader.py",
-        "tests/unit/job_debug_symbol_indexing/test_metrics.py"
+        "tests/unit/job_debug_symbol_indexing/test_metrics.py",
+        "tests/unit/runtime/test_wave1a_contracts.py"
       ],
       "integration": [
         "tests/integration/job_debug_symbol_indexing/test_debug_symbol_indexing_graph.py",
@@ -498,7 +499,8 @@
       "unit": [
         "tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets",
         "tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories",
-        "tests/test_target_acquisition.py::test_url_and_path_safety_primitives"
+        "tests/test_target_acquisition.py::test_url_and_path_safety_primitives",
+        "tests/unit/runtime/test_wave1a_contracts.py"
       ],
       "integration": [],
       "acceptance": [],

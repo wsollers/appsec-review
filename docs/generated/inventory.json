@@ -1104,6 +1104,9 @@
       "tag_assignments",
       "tagging_documents",
       "target_acquisition",
+      "target_acquisition_plan",
+      "target_acquisition_result",
+      "target_acquisition_system_manifest",
       "target_artifact_inputs",
       "target_decision",
       "target_documents",
@@ -1460,7 +1463,6 @@
       "appsec-review/dataset-inventory-row/1",
       "appsec-review/dataset-inventory/1",
       "appsec-review/debug-symbol-coverage/1",
-      "appsec-review/debug-symbol-decision/1",
       "appsec-review/debug-symbol-decision/2",
       "appsec-review/debug-symbol-execution-plan/2",
       "appsec-review/debug-symbol-indexing/1",
@@ -1928,7 +1930,6 @@
       "appsec-review/tag-taxonomy-identity/1",
       "appsec-review/tag-vocabulary/1",
       "appsec-review/target-acquisition-failure/1",
-      "appsec-review/target-acquisition-job/1",
       "appsec-review/target-acquisition-job/2",
       "appsec-review/target-acquisition/1",
       "appsec-review/target-analysis-plan/1",
@@ -2219,7 +2220,6 @@
       "dataset-inventory-row/1",
       "dataset-inventory/1",
       "debug-symbol-coverage/1",
-      "debug-symbol-decision/1",
       "debug-symbol-decision/2",
       "debug-symbol-execution-plan/2",
       "debug-symbol-indexing/1",
@@ -2782,7 +2782,6 @@
       "tag-taxonomy-identity/1",
       "tag-vocabulary/1",
       "target-acquisition-failure/1",
-      "target-acquisition-job/1",
       "target-acquisition-job/2",
       "target-acquisition/1",
       "target-analysis-plan/1",
@@ -4796,6 +4795,9 @@
       "tag_assignments": "review_products",
       "tagging_documents": "review_products",
       "target_acquisition": "source_snapshot",
+      "target_acquisition_plan": "source_snapshot",
+      "target_acquisition_result": "source_snapshot",
+      "target_acquisition_system_manifest": "source_snapshot",
       "target_artifact_inputs": "artifacts_and_binary",
       "target_decision": "symbols_and_calls",
       "target_documents": "documents_and_retrieval",
@@ -10416,7 +10418,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -10916,7 +10918,7 @@
           "job_change_context_analysis"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "50e4462c909bd8e3c3ece093a763a6ef96e1c237badc06a45122e8d7b7f53efd",
+        "sha256": "c444d78db628f615a32dd14761b750915796dbc1d95ded2b99008fab822efe39",
         "target_access": "checkout"
       },
       "dagster": {
@@ -13444,7 +13446,7 @@
           "reason": "routing metadata; normalized records are indexed separately",
           "required": false,
           "route_gap": null,
-          "schema": "appsec-review/debug-symbol-decision/1",
+          "schema": "appsec-review/debug-symbol-decision/2",
           "sensitivity": "internal",
           "shard_prefixes": [],
           "shard_suffixes": [],
@@ -13587,7 +13589,8 @@
           "tests/unit/job_debug_symbol_indexing/test_normalize.py",
           "tests/unit/job_debug_symbol_indexing/test_publish.py",
           "tests/unit/job_debug_symbol_indexing/test_accepted_loader.py",
-          "tests/unit/job_debug_symbol_indexing/test_metrics.py"
+          "tests/unit/job_debug_symbol_indexing/test_metrics.py",
+          "tests/unit/runtime/test_wave1a_contracts.py"
         ]
       },
       "workers": 2
@@ -15196,7 +15199,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -15984,7 +15987,7 @@
           "job_review_package_assembly"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "7d6fcb823e42703198579d528acc7e6eb9103d5d862c628fe884a382038faefb",
+        "sha256": "9f2c2a28b70f33029c212b4b5957f49ebb186408766a292c552ec9c4269cd8e1",
         "target_access": "checkout"
       },
       "dagster": {
@@ -19784,7 +19787,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -20572,7 +20575,7 @@
           "job_document_issue_analysis"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "0ce153c753bd87caa3a71f2f16b8406ea967e6cbad79d9d3c5e453c848c31c58",
+        "sha256": "d42296f7a57aa87b43e152fd193c33083d40fac9c4178533cb4e0f6be1dd2327",
         "target_access": "accepted_evidence"
       },
       "dagster": {
@@ -30261,7 +30264,7 @@
             "missing": "gap",
             "output_kind": "target_acquisition",
             "producer": "job_target_acquisition",
-            "schema": "appsec-review/target-acquisition-job/1"
+            "schema": "appsec-review/target-acquisition-job/2"
           },
           {
             "authority": "producer_evidence",
@@ -30901,7 +30904,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -31755,7 +31758,7 @@
           "job_threat_model_generation"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "00cd11a0f218d8cd3a3099bdad03220e98d90c38f01cd04ae5db825f44e8d7c2",
+        "sha256": "9b3c55419323bf16bc8b23cd5a7a682897d105b6147e06fcb229ea5793ccaae8",
         "target_access": "checkout"
       },
       "dagster": {
@@ -33394,7 +33397,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -34162,7 +34165,7 @@
           "job_review_data_indexing"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "ef9614d75ac1f3d72624f12be7b06a26c053038f208de483f447314f35c2cc4a",
+        "sha256": "15246526eeb45a86ed89318c3527b60fc1b5f4a701d8bd8358b3a9db5bf43c02",
         "target_access": "checkout"
       },
       "dagster": {
@@ -35776,7 +35779,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -36426,7 +36429,7 @@
           "job_code_graph_index"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "496e774deb793f6f87b1c1bddf851998547b03fac159e1a9e31a5fa94f553391",
+        "sha256": "834d873db26aaa6ecee5d7cb2ee1ccbf67168427448c490db84dfdeadace2aa0",
         "target_access": "checkout"
       },
       "dagster": {
@@ -38030,9 +38033,6 @@
       "datasets": [
         {
           "artifacts": [
-            "data/jobs/job_target_acquisition/attempts/*/steps/selection/tasks/resolve_system/target-acquisition-plan.json",
-            "data/jobs/job_target_acquisition/attempts/*/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",
-            "data/jobs/job_target_acquisition/attempts/*/steps/acquisition/tasks/acquire_components/system-manifest.json",
             "data/jobs/job_target_acquisition/attempts/*/steps/publication/tasks/publish_handoff/target-acquisition-handoff.json"
           ],
           "authority": "operational",
@@ -38049,11 +38049,86 @@
           "reason": "source provenance of the review target; intake binds the composed tree fingerprint",
           "required": false,
           "route_gap": null,
-          "schema": "appsec-review/target-acquisition-job/1",
+          "schema": "appsec-review/target-acquisition-job/2",
           "sensitivity": "internal",
           "shard_prefixes": [],
           "shard_suffixes": [],
           "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_target_acquisition/attempts/*/steps/selection/tasks/resolve_system/target-acquisition-plan.json"
+          ],
+          "authority": "operational",
+          "description": "Frozen configuration and selected component specifications for the requested review system.",
+          "disposition": "artifact_only",
+          "family": "configuration",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "target_acquisition_plan",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "source provenance of the review target; intake binds the composed tree fingerprint",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/target-acquisition-job/2",
+          "sensitivity": "internal",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "selection",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_target_acquisition/attempts/*/steps/acquisition/tasks/acquire_components/target-acquisition-result.json"
+          ],
+          "authority": "operational",
+          "description": "Component acquisition or re-verification result, including scoped failures and non-applicability.",
+          "disposition": "artifact_only",
+          "family": "configuration",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "target_acquisition_result",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "source provenance of the review target; intake binds the composed tree fingerprint",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/target-acquisition-job/2",
+          "sensitivity": "internal",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "acquisition",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
+            "data/jobs/job_target_acquisition/attempts/*/steps/acquisition/tasks/acquire_components/system-manifest.json"
+          ],
+          "authority": "operational",
+          "description": "Exact-byte copy of the verified composed-system acquisition manifest, when available.",
+          "disposition": "artifact_only",
+          "family": "configuration",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "target_acquisition_system_manifest",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "source provenance of the review target; intake binds the composed tree fingerprint",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/target-system-acquisition/1",
+          "sensitivity": "internal",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "acquisition",
           "store": "retrieval"
         }
       ],
@@ -38148,7 +38223,8 @@
         "unit": [
           "tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets",
           "tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories",
-          "tests/test_target_acquisition.py::test_url_and_path_safety_primitives"
+          "tests/test_target_acquisition.py::test_url_and_path_safety_primitives",
+          "tests/unit/runtime/test_wave1a_contracts.py"
         ]
       },
       "workers": 1
@@ -42561,7 +42637,7 @@
   "source_hashes": {
     "appsec-review.toml": "5d686b523b888ae6cd41ff16cf52499554789bf45245c44402cb19f8a03657b1",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
-    "docs/intelligence-buckets.json": "524ce752d42ecc17614c6216883215d303dafabdb912b587765ae87ea5720f84",
+    "docs/intelligence-buckets.json": "56b0f40b701417b78590a048fa14b215633a45753bce01280991d5fb9cff2c3d",
     "pipeline/guidance/registry.json": "77cef0f167f4a5541dc597eae24c80d02be352ae0e4090c50918353eb3872146",
     "src/appsec_review/__init__.py": "e8ee360d5e72b7f3ad9bf9b84ca9b734b76a9f9d2cf9730e4eabb11121ce692c",
     "src/appsec_review/__main__.py": "6eb6f048c25e857f17755bbc341b70b7184cb4026b743fba3eaecc6951f65fc3",
@@ -42778,7 +42854,7 @@
     "src/appsec_review/jobs/job_code_graph_index/producers.py": "7403abc9a1853c46666175cccf9ad2322b68f1f25e469f63c84f11e427014fbb",
     "src/appsec_review/jobs/job_code_graph_index/scopes.py": "3a97a6c72e081bf17d71f60de3da4e3d48d1963e1a2d38a5aae21617a2d6eee5",
     "src/appsec_review/jobs/job_codeql_analysis/__init__.py": "98bb3ee7784db54c122b3456fe82af9a66bd58e2b1c6bb7bef2db063ce6c1578",
-    "src/appsec_review/jobs/job_codeql_analysis/datasets.py": "6f67626e761ade5ee847e887e278bb326a88920984b94d1ac78e26c36d0a1273",
+    "src/appsec_review/jobs/job_codeql_analysis/datasets.py": "13e11ebd8b0cfd428e0797f5809c272a82311a2fecb188c61b253726a7034b78",
     "src/appsec_review/jobs/job_codeql_analysis/job.py": "64d9eefcc44580d77748478838c8a5b8c7c2d472da3169f7e2798f383980cbbf",
     "src/appsec_review/jobs/job_codeql_analysis/planning.py": "540dc5bd4ea418e7055a998984e20be6c772e288cc0d507c652c093e241690c6",
     "src/appsec_review/jobs/job_codeql_analysis/sarif.py": "c4d1ca86083a022b5de0c21158c1b2c4ed8175505533727fad53cbb3f2d08ea6",
@@ -42798,7 +42874,7 @@
     "src/appsec_review/jobs/job_cpp_symbol_index/datasets.py": "1faeb466a2e99272737f91eed89b2c812f0286cf9ebc3a1798f825ed5102963b",
     "src/appsec_review/jobs/job_cpp_symbol_index/job.py": "a5d9a7a090ea704cf99fb7ea211f645e0f42e4c2215c3ef191072a39e1e2c9da",
     "src/appsec_review/jobs/job_debug_symbol_indexing/__init__.py": "a201b30da0557e62e2bc2c96f9df525d58ee47c45b5f42328d480c664d7d68e4",
-    "src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py": "1938fd27e62fa7d32673c41510980b64a3fb895a92ae33da2e6e9f0a5f74535f",
+    "src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py": "d2913462961d365ce8eb79f06d8443aae9b8d53c3e668710193bf9f8ac27e775",
     "src/appsec_review/jobs/job_debug_symbol_indexing/job.py": "6c17d1f04471962a89fd6f8a065531ba6b78ad2dd673a644f8ad63e1f10cdc4c",
     "src/appsec_review/jobs/job_dependency_intelligence/__init__.py": "0ead53d2147f344c6505df9e72b80ef1a7d50a568099519795f82a642177d662",
     "src/appsec_review/jobs/job_dependency_intelligence/curation.py": "5571ef255e8c4b142b8bc173d2c4bca5a658c021a63a256b1bfa55e9cdf0cbac",
@@ -42818,7 +42894,7 @@
     "src/appsec_review/jobs/job_dependency_intelligence/scorecard.py": "c3348cc045c968ed67e544d454d89a31c0dd78cb82cff8e82450a09e5d210caf",
     "src/appsec_review/jobs/job_dependency_intelligence/unity.py": "1fcf3a8e35568f376a941b9350fdd9beadd2d0d4afddcfe0116bc7fa64f37c32",
     "src/appsec_review/jobs/job_document_issue_analysis/__init__.py": "e3bc474a66954c0e9699a7accf8e02c1ac505c2caecd7bf92781c7929831a1cf",
-    "src/appsec_review/jobs/job_document_issue_analysis/datasets.py": "fe18dd3f7a2d6cd783375490aead11c7ff0c6c80a31489193f1a72600254d56c",
+    "src/appsec_review/jobs/job_document_issue_analysis/datasets.py": "f7183a7f825cfb027713594a793e9aa68acb4eceaa9b2a0f13e19514d3e892c3",
     "src/appsec_review/jobs/job_document_issue_analysis/job.py": "8c970238c5e46e8d27f44aed414b2ca95173f16aefbb438f6c14587198da856a",
     "src/appsec_review/jobs/job_dossier_publication/__init__.py": "8def940a5d45905271521f85772625fdb078502fc35e501c4deea29aaa3561f2",
     "src/appsec_review/jobs/job_dossier_publication/datasets.py": "8343afa4dece46c7d940416542dde9c8d253f10c6bd24820f58f7a6db43e06ed",
@@ -42849,7 +42925,7 @@
     "src/appsec_review/jobs/job_image_pin_verification/pins.py": "4ea6ffcd81475a35e75bde7316360a4f68eeb37ddccb630847bed6b1cbc8e9ab",
     "src/appsec_review/jobs/job_inference_security_review/__init__.py": "056c3c7d7e437b22762e7fe9b79d47560bf191833d6833acd2d2c6c8bd70da5a",
     "src/appsec_review/jobs/job_inference_security_review/chains.py": "8fcd6acc7d207c7a69e051c5780ab559f16e1bb228b7b3149d0ba9a1a090e319",
-    "src/appsec_review/jobs/job_inference_security_review/datasets.py": "554454fbc84859d854d37c9a00711fbfc908b55ecba82b0c858aa61ecf0406d2",
+    "src/appsec_review/jobs/job_inference_security_review/datasets.py": "2dce6824249a62f3038c6b7ec3894dbf8a030a7cc030d604d970664c3f3aefb0",
     "src/appsec_review/jobs/job_inference_security_review/job.py": "e937a28617bce38900fe40b34514709f9033c23980def2493765ed6fb142ab1d",
     "src/appsec_review/jobs/job_inference_security_review/schemas.py": "3202bd3e0bb796c0fa07d15d0b6e753932a1d505a3b20021ebe6fa0c3f357fc9",
     "src/appsec_review/jobs/job_inference_security_review/stages.py": "fa372ba201bc6fa0f426d98d11771bb6e35b3e7be024f61c1688cf1c9774b976",
@@ -42936,13 +43012,13 @@
     "src/appsec_review/jobs/job_remediation_validation/job.py": "9c6d3f53488492c9ac32910fa23e419992ba6f9b405df44c395e5735911c3447",
     "src/appsec_review/jobs/job_remediation_validation/workspace.py": "7a623c2a3d3a88b9890778a794fea09151b2851bf2ca4f997917d1e8d0c7801f",
     "src/appsec_review/jobs/job_review_data_indexing/__init__.py": "243c1472b698aed19a118291be135e69f5673485d8fe8816051e25150fbc2f7d",
-    "src/appsec_review/jobs/job_review_data_indexing/datasets.py": "4eb5c471b9f6bd652d5e1101a0da36967fcb2c486e420550de6e5e80a57dda31",
+    "src/appsec_review/jobs/job_review_data_indexing/datasets.py": "7cbe578466be9d58ca0e962b660a5a5202f9a49ff2f40ec7374d5d65545cda6b",
     "src/appsec_review/jobs/job_review_data_indexing/job.py": "4745572d52071c389242f890a106b6bb428c94cfaa31bda50b4cffcd0d523940",
     "src/appsec_review/jobs/job_review_intake/__init__.py": "863e4573f521f8e5e5b5637625050398bc540b3a8bceb1112c2fc34c7e24517e",
     "src/appsec_review/jobs/job_review_intake/datasets.py": "b814fe373bd8496e4e5ac8c79958995ffd3c543827ce50eb41c4edbdcd33e684",
     "src/appsec_review/jobs/job_review_intake/job.py": "03744f205cf2c336b39a88bdd518ec31549fb51e94679bccb9c088905c5c1c18",
     "src/appsec_review/jobs/job_review_package_assembly/__init__.py": "e3bc474a66954c0e9699a7accf8e02c1ac505c2caecd7bf92781c7929831a1cf",
-    "src/appsec_review/jobs/job_review_package_assembly/datasets.py": "6ce25391c2ec6ae578425a5567c8abdee72d9e0e494e9311b66fc5ac6642db5f",
+    "src/appsec_review/jobs/job_review_package_assembly/datasets.py": "98fdcb4fd016e9c8f73a8970b9b7c1387dcfff74e95441bb724557bc0bd28802",
     "src/appsec_review/jobs/job_review_package_assembly/job.py": "3ec99b1872679967bb8fab2d90e7a8eb70ce8bd069672b0ae085062a6d65d5b9",
     "src/appsec_review/jobs/job_review_prioritization/__init__.py": "4d420119be59bf2a0666b4d4cb50d5a786def45cd653246a8d9619e89814ee52",
     "src/appsec_review/jobs/job_review_prioritization/complexity.py": "a0fa35e8e6f659248b4818b5a0c608070f52fa587d29f640942605d4e6c02827",
@@ -42965,7 +43041,7 @@
     "src/appsec_review/jobs/job_security_tagging/__init__.py": "c28f4149db2367adb500c3fa9a6f39bf46b843d12724a2c4860f24da27abce3b",
     "src/appsec_review/jobs/job_security_tagging/cloud.py": "b8d954dcddbaabc05a8e24c01834d55ca072bf5951dc07927fe5923b7c1afda8",
     "src/appsec_review/jobs/job_security_tagging/crosswalk.py": "b1ed87218dac72f4b7950e35dfaa76a7cdd975da0807c9154d1ac3bc4e0868fa",
-    "src/appsec_review/jobs/job_security_tagging/datasets.py": "dd4f7991fb2b39523201bd4c46c4d9e7e262fd5c7ed7a02e594e441193431901",
+    "src/appsec_review/jobs/job_security_tagging/datasets.py": "f05bcb7a2ad7d3e8393abcf1207c231135c5ac3641a1e3eefe893e876d232b87",
     "src/appsec_review/jobs/job_security_tagging/job.py": "d6d824c88bb2689f8f14ac3f4f55313023b6e76db8d00a02d643e49d0d57268c",
     "src/appsec_review/jobs/job_security_tagging/producers.py": "b87ea5b02a6ef78400ccbc68c1bdd2e83925af9aec8054541a2ea3ae1f5d0842",
     "src/appsec_review/jobs/job_security_tagging/taxonomy.py": "94db37515f349d07d727d18f8559aab7428f429bc8300bd1a0de1051fc835328",
@@ -42989,7 +43065,7 @@
     "src/appsec_review/jobs/job_svf_alias_analysis/job.py": "481004ce05cfa0428729c9a0d1e080c400c45d41dea99096da77c6bcb570e850",
     "src/appsec_review/jobs/job_svf_alias_analysis/planning.py": "3457d5f59c2730b0157ab85648bfebde7c674047bfda591a7a71beffb0db71ae",
     "src/appsec_review/jobs/job_target_acquisition/__init__.py": "e3bc474a66954c0e9699a7accf8e02c1ac505c2caecd7bf92781c7929831a1cf",
-    "src/appsec_review/jobs/job_target_acquisition/datasets.py": "10f2b153b99b277ebcab53f55453b1bc2bf54c8924c5087dc8d05700c701d7ba",
+    "src/appsec_review/jobs/job_target_acquisition/datasets.py": "872269ec92b71e6fd73aa7d38132a24b11168e0122b964916cd229dfb853ef07",
     "src/appsec_review/jobs/job_target_acquisition/job.py": "bc0f6addfd8fbbf4303788ef006254144567f8533406d57bdef018ee7f94b0cf",
     "src/appsec_review/jobs/job_target_analysis_plan/__init__.py": "d390930ae002bbc3ac9456b9523179a8fd132d484a9548a1ebec1bd250ad3d33",
     "src/appsec_review/jobs/job_target_analysis_plan/datasets.py": "b6f5aea56dcace2f9756f5f754b5df3fea3b3db2a7719cb127c041362c20b1a1",
@@ -43306,7 +43382,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "96a9d1292c11f0c47427fdd80e9036afee7a50339825602fd93e0e9697cf491e"
+    "tests/job-test-map.json": "c201a92c5f45b5ad66a4bc57ba485dec0833c782d54353c0e7b0ae44453edc48"
   },
   "tool_policy": {
     "disable_grype": true,

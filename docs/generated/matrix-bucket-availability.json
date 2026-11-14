@@ -917,7 +917,10 @@
           "components",
           "review_intake",
           "source_files",
-          "target_acquisition"
+          "target_acquisition",
+          "target_acquisition_plan",
+          "target_acquisition_result",
+          "target_acquisition_system_manifest"
         ]
       },
       "definition": "Acquisition identities, accepted source bytes and component catalogs establish what repository snapshot is in scope.",
@@ -8232,7 +8235,145 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/target-acquisition-job/1",
+      "schema": "appsec-review/target-acquisition-job/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_target_acquisition.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "none"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "source_snapshot",
+      "dataset": "target_acquisition_plan",
+      "description": "Frozen configuration and selected component specifications for the requested review system.",
+      "family": "configuration",
+      "gap": [],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_target_acquisition",
+      "producer_languages": {
+        "basis": "job_target_acquisition: typed contract.target_access=none; target-independent job",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/target-acquisition-job/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_target_acquisition.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "none"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "source_snapshot",
+      "dataset": "target_acquisition_result",
+      "description": "Component acquisition or re-verification result, including scoped failures and non-applicability.",
+      "family": "configuration",
+      "gap": [],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_target_acquisition",
+      "producer_languages": {
+        "basis": "job_target_acquisition: typed contract.target_access=none; target-independent job",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/target-acquisition-job/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_target_acquisition.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "none"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "operational",
+      "bucket": "source_snapshot",
+      "dataset": "target_acquisition_system_manifest",
+      "description": "Exact-byte copy of the verified composed-system acquisition manifest, when available.",
+      "family": "configuration",
+      "gap": [],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_target_acquisition",
+      "producer_languages": {
+        "basis": "job_target_acquisition: typed contract.target_access=none; target-independent job",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/target-system-acquisition/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_target_acquisition.datasets",
       "stage": "artifact_only",
@@ -9037,7 +9178,7 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/debug-symbol-decision/1",
+      "schema": "appsec-review/debug-symbol-decision/2",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_debug_symbol_indexing.datasets",
       "stage": "artifact_only",
@@ -21983,7 +22124,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22054,7 +22198,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22125,7 +22272,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22196,7 +22346,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22267,7 +22420,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22338,7 +22494,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22409,7 +22568,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22480,7 +22642,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22551,7 +22716,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22622,7 +22790,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22693,7 +22864,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22764,7 +22938,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22835,7 +23012,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22906,7 +23086,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -22977,7 +23160,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -23048,7 +23234,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [
@@ -23119,7 +23308,10 @@
         ],
         "state": "partial",
         "values": [
-          "job_target_acquisition/target_acquisition"
+          "job_target_acquisition/target_acquisition",
+          "job_target_acquisition/target_acquisition_plan",
+          "job_target_acquisition/target_acquisition_result",
+          "job_target_acquisition/target_acquisition_system_manifest"
         ]
       },
       "gap": [

@@ -54,7 +54,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `raw_artifact_refs` | `extract` | `appsec-review/debug-symbol-inputs/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `reader_executions` | `extract` | `appsec-review/container-execution/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `symbol_coverage` | `extract` | `appsec-review/debug-symbol-coverage/1` | artifact_only | Not indexed | `coverage`, `query_debug_symbols` |
-| `target_decision` | `decide` | `appsec-review/debug-symbol-decision/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `target_decision` | `decide` | `appsec-review/debug-symbol-decision/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
 
@@ -69,7 +69,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_debug_symbol_indexing/test_debug_symbol_indexing_graph.py`<br>`tests/integration/job_debug_symbol_indexing/test_debug_symbol_execution.py`<br>`tests/integration/job_debug_symbol_indexing/test_debug_symbol_end_to_end.py`<br>`tests/integration/job_artifact_indexing/test_artifact_indexing_scale.py` |
 | live | None declared |
-| unit | `tests/unit/job_debug_symbol_indexing/test_contract.py`<br>`tests/unit/job_debug_symbol_indexing/test_job_graph.py`<br>`tests/unit/job_debug_symbol_indexing/test_workflow.py`<br>`tests/unit/job_debug_symbol_indexing/test_settings.py`<br>`tests/unit/job_debug_symbol_indexing/test_host_bindings.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_inputs.py`<br>`tests/unit/job_debug_symbol_indexing/test_decision.py`<br>`tests/unit/job_debug_symbol_indexing/test_probe_and_privacy.py`<br>`tests/unit/job_debug_symbol_indexing/test_sources.py`<br>`tests/unit/job_debug_symbol_indexing/test_source_bounds.py`<br>`tests/unit/job_debug_symbol_indexing/test_extract.py`<br>`tests/unit/job_debug_symbol_indexing/test_normalize.py`<br>`tests/unit/job_debug_symbol_indexing/test_publish.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_loader.py`<br>`tests/unit/job_debug_symbol_indexing/test_metrics.py` |
+| unit | `tests/unit/job_debug_symbol_indexing/test_contract.py`<br>`tests/unit/job_debug_symbol_indexing/test_job_graph.py`<br>`tests/unit/job_debug_symbol_indexing/test_workflow.py`<br>`tests/unit/job_debug_symbol_indexing/test_settings.py`<br>`tests/unit/job_debug_symbol_indexing/test_host_bindings.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_inputs.py`<br>`tests/unit/job_debug_symbol_indexing/test_decision.py`<br>`tests/unit/job_debug_symbol_indexing/test_probe_and_privacy.py`<br>`tests/unit/job_debug_symbol_indexing/test_sources.py`<br>`tests/unit/job_debug_symbol_indexing/test_source_bounds.py`<br>`tests/unit/job_debug_symbol_indexing/test_extract.py`<br>`tests/unit/job_debug_symbol_indexing/test_normalize.py`<br>`tests/unit/job_debug_symbol_indexing/test_publish.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_loader.py`<br>`tests/unit/job_debug_symbol_indexing/test_metrics.py`<br>`tests/unit/runtime/test_wave1a_contracts.py` |
 
 ### Dagster placement
 
@@ -158,7 +158,7 @@ flowchart LR
   job --> output4
   output4 -. schema .-> output_schema4
   output5["target_decision"]
-  output_schema5["appsec-review/debug-symbol-decision/1"]
+  output_schema5["appsec-review/debug-symbol-decision/2"]
   job --> output5
   output5 -. schema .-> output_schema5
 ```

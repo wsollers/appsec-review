@@ -37,7 +37,10 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `target_acquisition` | `publication` | `appsec-review/target-acquisition-job/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `target_acquisition` | `publication` | `appsec-review/target-acquisition-job/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `target_acquisition_plan` | `selection` | `appsec-review/target-acquisition-job/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `target_acquisition_result` | `acquisition` | `appsec-review/target-acquisition-job/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `target_acquisition_system_manifest` | `acquisition` | `appsec-review/target-system-acquisition/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
 
@@ -52,7 +55,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets`<br>`tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories`<br>`tests/test_target_acquisition.py::test_url_and_path_safety_primitives` |
+| unit | `tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets`<br>`tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories`<br>`tests/test_target_acquisition.py::test_url_and_path_safety_primitives`<br>`tests/unit/runtime/test_wave1a_contracts.py` |
 
 ### Dagster placement
 
@@ -66,9 +69,21 @@ Declared predecessors: `job_image_pin_verification`.
 flowchart LR
   job["job_target_acquisition"]
   output0["target_acquisition"]
-  output_schema0["appsec-review/target-acquisition-job/1"]
+  output_schema0["appsec-review/target-acquisition-job/2"]
   job --> output0
   output0 -. schema .-> output_schema0
+  output1["target_acquisition_plan"]
+  output_schema1["appsec-review/target-acquisition-job/2"]
+  job --> output1
+  output1 -. schema .-> output_schema1
+  output2["target_acquisition_result"]
+  output_schema2["appsec-review/target-acquisition-job/2"]
+  job --> output2
+  output2 -. schema .-> output_schema2
+  output3["target_acquisition_system_manifest"]
+  output_schema3["appsec-review/target-system-acquisition/1"]
+  job --> output3
+  output3 -. schema .-> output_schema3
 ```
 
 <!-- generated:end -->

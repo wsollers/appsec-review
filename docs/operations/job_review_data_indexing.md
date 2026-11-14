@@ -50,7 +50,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_image_pin_verification` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_image_pin_verification` | `image_pin_verification` | `appsec-review/image-pin-verification/1` | handoff | optional | gap |
 | `job_target_acquisition` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
-| `job_target_acquisition` | `target_acquisition` | `appsec-review/target-acquisition-job/1` | handoff | optional | gap |
+| `job_target_acquisition` | `target_acquisition` | `appsec-review/target-acquisition-job/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -114,7 +114,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_debug_symbol_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `normalized_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `symbol_coverage` | `appsec-review/debug-symbol-coverage/1` | handoff | optional | gap |
-| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/1` | handoff | optional | gap |
+| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `raw_artifact_refs` | `appsec-review/debug-symbol-inputs/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `reader_executions` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `debug_symbol_summary` | `appsec-review/debug-symbol-indexing/1` | handoff | optional | gap |
@@ -266,7 +266,7 @@ flowchart LR
   input4 -. schema .-> input_schema4
   producer5["job_target_acquisition"]
   input5["target_acquisition"]
-  input_schema5["appsec-review/target-acquisition-job/1"]
+  input_schema5["appsec-review/target-acquisition-job/2"]
   producer5 --> input5 --> job
   input5 -. schema .-> input_schema5
   producer6["job_artifact_indexing"]
@@ -586,7 +586,7 @@ flowchart LR
   input68 -. schema .-> input_schema68
   producer69["job_debug_symbol_indexing"]
   input69["target_decision"]
-  input_schema69["appsec-review/debug-symbol-decision/1"]
+  input_schema69["appsec-review/debug-symbol-decision/2"]
   producer69 --> input69 --> job
   input69 -. schema .-> input_schema69
   producer70["job_debug_symbol_indexing"]

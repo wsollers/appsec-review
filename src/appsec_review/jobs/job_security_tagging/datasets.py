@@ -151,7 +151,7 @@ CONTRACT = JobContract(
         InputRequirement("job_debug_symbol_indexing", "symbol_coverage",
                          "appsec-review/debug-symbol-coverage/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_debug_symbol_indexing", "target_decision",
-                         "appsec-review/debug-symbol-decision/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         "appsec-review/debug-symbol-decision/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_debug_symbol_indexing", "raw_artifact_refs",
                          "appsec-review/debug-symbol-inputs/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_debug_symbol_indexing", "reader_executions",
