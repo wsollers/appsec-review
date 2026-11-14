@@ -365,7 +365,12 @@ The three view bounds live next to the package bounds:
    by `max_package_bytes`; `next_partition` names the following partition key. Context beyond
    `max_context_entries`, or beyond the byte bound of a single-lead package, is omitted with a
    `truncated` gap and `omitted_context`. Leads are never truncated: a package that cannot fit
-   one lead without context blocks the membership gate with an integrity failure.
+   one lead without context blocks the membership gate with an integrity failure. Units, menus and
+   `scope.source_ids` hold first-party source files only (`SourceFile.disposition`,
+   `settings.source_dispositions`, T-150); a lead located in a vendored, SDK, generated or test file,
+   or matching a stylistic rule class (`settings.lead_filters`, T-152), is listed in the manifest's
+   `admission` as `not_admitted` with `residual_coverage: outside_review_scope` and its `exclusion`
+   reason, counted under `counts.dispositions`, and never a gap.
 5. Form the expected set `E` of all admitted leads (by severity or KEV listing), including
    suppressed and duplicate IDs, and `F` from finding-lead packages. Require `E ⊆ F` per family and
    severity, exactly one package

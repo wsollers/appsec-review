@@ -18,6 +18,8 @@ from typing import Any, Literal, Mapping
 from appsec_review.review.models import Role
 from appsec_review.review.ranking import RankWeights
 from appsec_review.review.lead_families import FAMILIES as LEAD_FAMILIES
+from appsec_review.review.dispositions import SourceDispositions
+from appsec_review.review.lead_filters import LeadFilters
 from appsec_review.review.lead_triage_settings import TriageSettings
 from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLES, RedOutputLimits
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
@@ -409,6 +411,11 @@ class InferenceSecurityReviewSettings:
     # PoC candidates the handoff lists (review-judge-and-poc.md section 4); semantic.
     poc_candidates: PocCandidateSettings = PocCandidateSettings()
     attack_chains: AttackChainSettings = AttackChainSettings()
+    # Source dispositions (``settings.source_dispositions``, T-150): which accepted source files the review
+    # lanes reason over; semantic. Absent means every file is first-party.
+    source_dispositions: SourceDispositions = SourceDispositions()
+    # Lead filters (``settings.lead_filters``, T-152): stylistic rule classes that are never leads; semantic.
+    lead_filters: LeadFilters = LeadFilters()
     # Blue-cell result memo (``settings.result_cache``); capacity, never in the semantic view.
     result_cache: ResultCacheSettings = ResultCacheSettings()
 
@@ -680,7 +687,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
                                        "roles", "routing", "scoring", "poc"},
                       {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates",
-                       "attack_chains", "result_cache"})
+                       "attack_chains", "result_cache", "source_dispositions", "lead_filters"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -824,5 +831,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         triage=triage,
         poc_candidates=PocCandidateSettings.from_mapping(settings.get("poc_candidates"), f"{_PREFIX}.poc_candidates"),
         attack_chains=AttackChainSettings.from_mapping(settings.get("attack_chains")),
+        source_dispositions=SourceDispositions.from_mapping(settings.get("source_dispositions"),
+                                                            f"{_PREFIX}.source_dispositions"),
+        lead_filters=LeadFilters.from_mapping(settings.get("lead_filters"), f"{_PREFIX}.lead_filters"),
         result_cache=ResultCacheSettings.from_mapping(settings.get("result_cache"), f"{_PREFIX}.result_cache"),
     )
