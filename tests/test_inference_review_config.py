@@ -360,6 +360,64 @@ def test_capacity_keys_are_excluded_from_the_semantic_view(tmp_path: Path) -> No
     assert base.as_document()["teams"]["review_teams"] == 3   # the full view still carries capacity
 
 
+# ---------------------------------------------------------------- review scope (T-150, T-152)
+
+
+def test_source_dispositions_and_stylistic_classes_load_from_the_repository_defaults() -> None:
+    settings = _settings(load_config(ROOT / "appsec-review.toml"))
+    dispositions = settings.source_dispositions
+    assert "**/third_party/**" in dispositions.vendored and "**/node_modules/**" in dispositions.vendored
+    assert dispositions.classify("third_party/zlib/inflate.c") == "vendored"
+    assert dispositions.classify("native/third_party/lz4/tests/t.c") == "vendored"   # vendored wins over test
+    assert dispositions.classify("src/sdk/client.cs") == "sdk"
+    assert dispositions.classify("proto/api_pb2.py") == "generated"
+    assert dispositions.classify("svc/tests/test_api.py") == "test"
+    assert dispositions.classify("svc/api/handler.py") == "first_party" and dispositions.classify(None) == "first_party"
+    [cppcheck] = settings.lead_filters.stylistic
+    assert cppcheck.scanner == "tool-cppcheck"
+    assert cppcheck.native_severities == ("style", "performance", "portability", "information")
+    assert settings.lead_filters.stylistic_class("tool-cppcheck:2.14", "style", "unusedStructMember") is cppcheck
+    assert settings.lead_filters.stylistic_class("tool-cppcheck", "error", "nullPointer") is None
+    assert settings.lead_filters.stylistic_class("tool-semgrep", "INFO", "appsec-review.review-signal.sink.x") is None
+    document = settings.as_document()
+    assert document["source_dispositions"]["vendored"] == list(dispositions.vendored)
+    assert document["lead_filters"]["stylistic"][0]["native_severities"] == ["style", "performance",
+                                                                           "portability", "information"]
+    with pytest.raises(AttributeError):
+        dispositions.vendored = ()  # type: ignore[misc]
+
+
+def test_review_scope_settings_are_semantic(tmp_path: Path) -> None:
+    base = _settings(_variant(tmp_path / "base"))
+    fewer = _settings(_variant(tmp_path / "fewer", ('vendored = ["**/third_party/**", ', 'vendored = [')))
+    no_style = _settings(_variant(tmp_path / "style", (
+        'native_severities = ["style", "performance", "portability", "information"]',
+        'native_severities = ["performance", "portability", "information"]')))
+    assert "**/third_party/**" not in fewer.source_dispositions.vendored
+    assert semantic_settings_sha256(fewer) != semantic_settings_sha256(base)
+    assert semantic_settings_sha256(no_style) != semantic_settings_sha256(base)
+    assert semantic_settings_view(base)["settings"]["source_dispositions"]["sdk"] == ["**/sdk/**", "**/sdks/**"]
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ('sdk = ["**/sdk/**", "**/sdks/**"]', 'sdk = ["**/sdk/**", "**/sdks/**"]\nfirst_party = ["src/**"]',
+     "source_dispositions has unknown settings: first_party"),
+    ('sdk = ["**/sdk/**", "**/sdks/**"]', 'sdk = ["/abs/sdk/**"]', "source_dispositions.sdk must be a list"),
+    ('sdk = ["**/sdk/**", "**/sdks/**"]', 'sdk = ["**/sdk/**", "**/sdk/**"]', "source_dispositions.sdk repeats"),
+    ('sdk = ["**/sdk/**", "**/sdks/**"]', 'sdk = "**/sdk/**"', "source_dispositions.sdk must be a list"),
+    ('native_severities = ["style", "performance", "portability", "information"]', 'native_severities = []',
+     "name native_severities or rule_ids"),
+    ('scanner = "tool-cppcheck"\nnative_severities', 'scanner = "tool-cppcheck"\ncategory = "style"\nnative_severities',
+     r"lead_filters.stylistic\[0\] has unknown settings: category"),
+    ('[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]\nscanner = "tool-cppcheck"',
+     '[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]\nscanner = ""',
+     "scanner must be a scanner id or glob"),
+])
+def test_review_scope_settings_are_validated(tmp_path: Path, old: str, new: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _variant(tmp_path, (old, new))
+
+
 # ---------------------------------------------------------------- result memo
 
 MEMO = f"{SECTION}.result_cache]"

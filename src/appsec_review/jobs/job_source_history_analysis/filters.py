@@ -7,9 +7,10 @@ category, and the matching pattern are still published so the exclusion stays au
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from functools import lru_cache
 import re
 from typing import Any
+
+from appsec_review.path_globs import compile_glob, matches
 
 from .settings import FilterRules
 
@@ -24,36 +25,8 @@ _FORMATTING_WORDS = re.compile(
     r"line endings?|indentation)\b", re.I)
 
 
-@lru_cache(maxsize=4096)
-def _compiled(pattern: str) -> re.Pattern[str]:
-    """Translate a POSIX glob: ``**/`` spans directories, ``*`` and ``?`` stay inside one segment.
-
-    A pattern without ``/`` matches the file name at any depth, like ``.gitignore``.
-    """
-    if "/" not in pattern:
-        pattern = "**/" + pattern
-    output, index = [], 0
-    while index < len(pattern):
-        if pattern.startswith("**/", index):
-            output.append("(?:[^/]+/)*")
-            index += 3
-        elif pattern.startswith("**", index):
-            output.append(".*")
-            index += 2
-        elif pattern[index] == "*":
-            output.append("[^/]*")
-            index += 1
-        elif pattern[index] == "?":
-            output.append("[^/]")
-            index += 1
-        else:
-            output.append(re.escape(pattern[index]))
-            index += 1
-    return re.compile("".join(output))
-
-
-def matches(path: str, pattern: str) -> bool:
-    return _compiled(pattern).fullmatch(path) is not None
+# The glob semantics are shared with the review source dispositions (path_globs.py).
+_compiled = compile_glob
 
 
 def path_exclusion(path: str, rules: FilterRules) -> dict[str, str] | None:

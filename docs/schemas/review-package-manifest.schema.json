@@ -6,7 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "assembly_rule", "package_schema", "run_id", "manifest_sha256", "target_snapshot",
-               "settings", "graph_settings", "admission", "rules", "inputs", "evidence_map_sha256", "packages",
+               "settings", "graph_settings", "admission", "source_dispositions", "rules", "inputs", "evidence_map_sha256", "packages",
                "units", "gaps", "cwe_reference", "counts", "audit"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-manifest/1"},
@@ -40,8 +40,27 @@
           "effective_severity": {"$ref": "#/$defs/severity"},
           "status": {"enum": ["admitted", "not_admitted"]},
           "reasons": {"type": "array", "items": {"type": "string"}},
-          "residual_coverage": {"enum": ["review_pending", "exploration_reserve_cutoff", "outside_admission_policy"]}
+          "residual_coverage": {"enum": ["review_pending", "exploration_reserve_cutoff", "outside_admission_policy",
+                                         "outside_review_scope"]},
+          "exclusion": {
+            "description": "Only for a lead outside the review scope: its non-first-party disposition (T-150) or stylistic (T-152).",
+            "enum": ["vendored", "sdk", "generated", "test", "stylistic"]
+          },
+          "exclusion_detail": {"type": "string", "maxLength": 500}
         }
+      }
+    },
+    "source_dispositions": {
+      "description": "The source-disposition globs the scope was accepted under (SourceDispositions.record, T-150).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "vendored", "sdk", "generated", "test"],
+      "properties": {
+        "rule": {"const": "appsec-review/source-disposition/1"},
+        "vendored": {"$ref": "#/$defs/patterns"},
+        "sdk": {"$ref": "#/$defs/patterns"},
+        "generated": {"$ref": "#/$defs/patterns"},
+        "test": {"$ref": "#/$defs/patterns"}
       }
     },
     "rules": {
@@ -124,13 +143,24 @@
     "counts": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["leads", "admitted", "kev_admitted", "non_lead_observations", "packages", "units",
+      "required": ["leads", "admitted", "kev_admitted", "non_lead_observations", "dispositions", "packages", "units",
                    "neighborhood_bounds"],
       "properties": {
         "leads": {"$ref": "#/$defs/family_severity_counts"},
         "admitted": {"$ref": "#/$defs/family_severity_counts"},
         "kev_admitted": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
         "non_lead_observations": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+        "dispositions": {
+          "description": "Accepted source files per disposition, and leads kept in scope (first_party) or excluded per reason (a disposition or stylistic).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule", "files", "leads"],
+          "properties": {
+            "rule": {"const": "appsec-review/source-disposition/1"},
+            "files": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+            "leads": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}}
+          }
+        },
         "packages": {
           "type": "object",
           "additionalProperties": false,
@@ -187,6 +217,7 @@
   },
   "$defs": {
     "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "patterns": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 256}},
     "count": {"type": "integer", "minimum": 0},
     "rule": {"type": "string", "pattern": "^appsec-review/[a-z0-9-]+(/[a-z0-9_-]+)*/[0-9]+$"},
     "severity": {"enum": ["critical", "high", "medium", "low", "info", "unknown"]},
