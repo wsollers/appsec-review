@@ -386,7 +386,9 @@ Native Windows limitations:
   login is separate.
 - The direct CLI and `containers/build-all.ps1` work from PowerShell, with Docker Desktop running
   the Linux containers.
-- Windows-native target analysis is design work only; see T-042 and T-049 in
+- Windows-native target coverage and restricted-executor commissioning remain adapter-specific;
+  a working PowerShell orchestrator does not prove them. See the
+  [Windows host contract](docs/architecture/windows-host-runner.md) and T-042/T-049 in
   [`docs/TODO.md`](docs/TODO.md).
 
 ## Download the acceptance target

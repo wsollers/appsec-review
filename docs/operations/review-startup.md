@@ -8,18 +8,20 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Starting an appsec review: features and flags
 
-**For a full review, use `scripts/review-start` to launch Dagster's `wave1_review`.**
+**For a Dagster-managed review, use `scripts/review-start` to launch `wave1_review`.**
 You do not need to enable each scanner or language on the command line: the catalog and analysis
 plan select applicable work from the enabled jobs. Choose the target, model profile, and any
-optional features before launch. The direct `appsec-review start` command is a smaller, linear
-review route, not a replacement for every Dagster branch.
+optional features before launch. The direct `appsec-review start` command uses the same enabled
+semantic graph in a deterministic linear order; its operator/deployment route differs from
+Dagster's guarded submission and concurrent scheduling.
 
 ## Before the first launch
 
 Complete the [repository setup](../../README.md#what-you-need) and
 [Dagster deployment setup](../../deploy/dagster/README.md) first:
 
-- Install Python 3.11+, the package in this checkout's own virtual environment, Docker and Compose.
+- Use the documented Python 3.12 baseline, the package in this checkout's own virtual environment,
+  Docker and Compose; [T-160](../TODO.md) records the advertised >=3.11 renderer limitation.
   Bootstrap the deployment before using the stack scripts.
 - Sign in to Claude for `dev`/`prod`, or configure the
   [separate Copilot login](model-profiles.md#copilot-with-a-separate-github-identity) for
@@ -75,17 +77,19 @@ scripts/review-watch.sh --run DAGSTER_UUID
 ```
 
 If a stack is already running with a different target, recording mode, or provider family, use
-`stack-restart` with the intended settings after its reviews are terminal. Use `stack-rebuild`
-instead when the installed application, base TOML, or profile files changed: those files are baked
-into the deployment image. A restart alone does not update them.
+`stack-restart` with the intended settings after its reviews are terminal. Application source,
+base TOML and profiles are mounted, not baked into the tooling image: use the measured-source
+reload path for those changes. Use `stack-rebuild` only for changed tooling, dependencies or the
+verifier. Configuration changes still require a fresh authorized run, not mutation of an old one.
 
 **On an already prepared stack with the correct defaults, no launch flags are required:**
 `.\scripts\review-start.ps1 -Wsl` or `scripts/review-start.sh` is enough. Explicit target and profile
 options make the intended review easier to verify. Launch returns after submission and a bounded
 wait for the application id, not after review completion.
 
-Just before it submits, `review-start` checks the model login with the same one-word probe
-`stack-start` uses. If the login does not answer (most often an expired Claude token), the launch
+Just before submission, `review-start` performs the provider-specific probe used by `stack-start`:
+a one-word Claude request or the Copilot account/model-catalog check without inference.
+If the probe fails (for example an expired Claude token), the launch
 is refused with exit 3 and nothing is recorded: no submission intent, no Dagster run. Refresh the
 login as the message says (on WSL and Linux: `claude -p "ok"` on the host) and start the review
 again. See [safety rule 7](operator-scripts.md#safety-rules).
@@ -98,6 +102,7 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | --- | --- | --- |
 | `-Target your-app` | `--target your-app` | Uses the running container's target when omitted; the checked-in fallback is `appsec-multi-vuln`. Accepts a name under `targets/` or its container path. This checks the target; it does not switch the stack. A different target requires `stack-restart --target` first. |
 | `-Profile prod` | `--profile prod` | New runs inherit the container's profile (`dev` if unset). Choose `prod` or `copilot-prod` explicitly for production models/budgets. A same-family profile change is per run; changing Claude/Copilot family requires a stack restart. |
+| `-CompilerTarget clang\|msvc` | `--compiler-target clang\|msvc` | Selects the frozen native debug-symbol lane; default `clang`. Resume restores the recorded choice. This does not provision a compiler or select the build-host OS. |
 | `-Overlay none` | `--overlay none` | New runs inherit the container's capacity overlay. `none` explicitly disables it for this run. A file must be under `test/acceptance`; it may change review-team count, Dagster pools, and `review_policy.resources.*`, not models, assurance, or feature gates. |
 | `-Recording off` | `--recording off` | Inherits the container's model recording mode; unset means off. Choices: `off`, `record`, `replay`. Must match the container, so change it with `stack-restart --recording` first. Replay also needs a replay directory that the standard Compose deployment does not pass; use the [local parity procedure](../processes/local-dagster-parity.md), not this launch sequence, for replay. |
 | `-StopOnFirstError` | `--stop-on-first-error` | **Off by default.** Fresh runs only. Freezes a no-retry safety policy that closes admission on the first unexpected failure. Requires matching deployed code and Linux peer-authenticated Unix sockets; native-broker cancellation is not commissioned for this mode. See [first-error policy](operator-scripts.md#opt-in-first-error-policy). |
@@ -110,14 +115,9 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | `-Wsl`, `-Distro NAME` | Not applicable | PowerShell routing to the WSL stack; default distribution is `Ubuntu-24.04` unless inferred from the chosen WSL checkout path. |
 | `-Help` | `--help` | Show the script's current option list. |
 
-Profile choices:
-
-| Profile | Provider and purpose |
-| --- | --- |
-| `dev` | Claude Haiku 5.5, smaller development budgets; default. |
-| `prod` | Claude Sonnet 5.5 with Opus 5.5 verifier/judge and larger production budgets. |
-| `copilot-dev` | Haiku 5.5 through the separately authenticated Copilot SDK, with dev limits. |
-| `copilot-prod` | Sonnet 5.5 with Opus 5.5 verifier/judge through Copilot, with prod limits. |
+Profile choices are `dev`, `prod`, `copilot-dev` and `copilot-prod`. The
+[profile guide](model-profiles.md) and checked-in profile TOMLs own their exact provider, model,
+reasoning and budget selections rather than a second version table here.
 
 Both production profiles admit all generated team packages rather than imposing the dev
 200-package ceiling. Token, turn, query, time and concurrency limits still apply. Production
@@ -136,17 +136,19 @@ an active run or recorded lease is refused even with `--force`.
 The checked-in defaults below come from [`appsec-review.toml`](../../appsec-review.toml).
 Edit the existing setting in central configuration before creating a new run; do not add a
 duplicate TOML table. Neither a prompt nor `--overlay` can enable these features. For Dagster,
-commit configuration changes and rebuild the deployment before launch. Historical runs keep
+integrate the configuration change and reload the measured source before a fresh launch. Historical runs keep
 their frozen configuration.
 
 | Feature | Checked-in default / setting | What you need to do |
 | --- | --- | --- |
 | Applicable static scanners, builds, artifact analysis, CodeQL, code-graph/index creation, inference review and final publication | Included automatically when enabled and applicable. CodeQL has `jobs.job_codeql_analysis.settings.enabled = true`. | No per-tool launch flags. Supply the images, metadata and build prerequisites; missing or failed coverage remains a named gap, not a clean result. |
 | Source history and acquired review metadata | Local Git discovery is automatic; `jobs.job_source_history_analysis.settings.github.enabled = "auto"`. | No second repository-wiring flag for `start --system` or `start --target`. GitHub enrichment needs an eligible identity and the configured token; explicit `false` denies it. Acquired review records are reused by default unless change-context review policy denies or overrides them. See [source-history operations](source-history-analysis.md). |
-| Full assessment branches | Dagster includes CI configuration analysis, post-build security assessment, OWASP control assessment and security tagging. | Use `review-start` / `wave1_review`; these branches are absent from the direct CLI graph. |
+| Full assessment branches | Both drivers include enabled CI configuration analysis, post-build security assessment, OWASP control assessment and security tagging. | Choose the direct or Dagster route for its execution/operations boundary, not different semantic job membership. |
 | ASan/UBSan rebuild evidence | `jobs.job_sanitizer_build.settings.enabled = true` | No opt-in needed. Rebuilds accepted native units; does **not** execute produced binaries. See [sanitizer builds](sanitizer-build.md). |
 | SVF points-to cross-checks | `jobs.job_svf_alias_analysis.settings.enabled = false` | Set `true` and provision the pinned SVF image and accepted C/C++ inputs. See [SVF analysis](svf-alias-analysis.md). |
-| PoC unit-test generation | `jobs.job_poc_generation.settings.enabled = false` | Set `true` for automatic inclusion, or dispatch it manually on a finished run as shown below. This generates and compile-checks bounded test functions; it does **not** link or execute them. See [PoC generation](poc-generation.md). |
+| PoC unit-test generation | `jobs.job_poc_generation.settings.enabled = true` for new runs | Automatic pre-gate inclusion; historical disabled runs remain disabled. This generates and compile-checks bounded test functions, never linking or executing them. See [PoC generation](poc-generation.md). |
+| Remediation and dossiers | Planning, nonexecuting validation and dossier publication are enabled for new runs. | They precede the final gate; validation requires planning. Frozen historical configurations are unchanged. See [remediation](remediation.md) and [dossiers](dossier-publication.md). |
+| OpenVEX export | `jobs.job_openvex_export.settings.enabled = true` for new runs | Independent model-free post-gate export; not a report prerequisite or authorization to disclose findings. See [OpenVEX operations](openvex-export.md). |
 | Medium/low scanner-lead exploration | `jobs.job_inference_security_review.settings.lanes.exploration_enabled = false`; `exploration_reserve = 1` | Set `exploration_enabled = true` in the selected runtime profile or base configuration; choose the reserve within existing budgets. Does not admit informational leads or change unknown-severity handling. See [exploration admission](inference-security-review.md#opt-in-mediumlow-exploration). |
 | Grype scanning | `tools.disable_grype = true` | Set `false` to restore normal applicability; still requires Syft SBOM and offline database prerequisites. See [static analysis](static-analysis.md). |
 | Swift execution | `tools.enable_swift = false` | Set `true` only to remove the policy gate. This does not supply a Swift grammar or a supported macOS CodeQL executor; unsupported lanes remain gaps. See [Swift policy](swift-execution-policy.md). |
@@ -156,11 +158,13 @@ their frozen configuration.
 | End-of-review telemetry PDF | `reporting.telemetry_report.enabled = true`; `render_pdf = true` | No opt-in needed. Written best effort to `runs/<id>/data/telemetry/report/` on every terminal path; a rendering failure is a receipt gap, not a run failure. See [telemetry report](telemetry-report.md). |
 | Pre-run third-party binary decompilation | No configured binaries by default. | Configure authorized binaries under `binary_decompilation.binaries`, then run `appsec-review binary-decompile` **before submission**. This is separate from the graph; see [binary decompilation](binary-decompilation.md). |
 
-Optional manual PoC generation uses the application id and the run's matching configuration.
-Republish the final report afterwards to include its accepted outcomes:
+A deliberately disabled historical PoC job can use the explicit manual route with the application
+id and matching frozen configuration. Admit that output through a fresh final gate before
+republishing the report; rerunning the report alone cannot discover it:
 
 ```powershell
 appsec-review --profile prod run job_poc_generation --run-id 2026-10-21-0007 --upstream-from-run
+appsec-review --profile prod run job_final_publication_gate --run-id 2026-10-21-0007 --upstream-from-run --admit-manual-poc
 appsec-review --profile prod run job_final_report_publication --run-id 2026-10-21-0007 --upstream-from-run
 ```
 
@@ -176,7 +180,8 @@ From the repository root with this checkout's virtual environment active:
 appsec-review --profile prod start --target .\targets\your-app
 ```
 
-`start` requires `--target` and allocates its own application run id. Global `--profile` and
+`start` requires exactly one of `--target` or a configured `--system` and allocates its own
+application run id. Global `--profile` and
 `--config PATH-OR-FILE-URI` go **before** `start`; `--config` defaults to `appsec-review.toml`.
 `APPSEC_REVIEW_PROFILE` supplies the profile when `--profile` is omitted, otherwise `dev` is used.
 The direct CLI can load a capacity overlay through `APPSEC_REVIEW_CONFIG_OVERLAY`, but it has no
@@ -191,7 +196,7 @@ appsec-review --profile prod resume --run-id 2026-10-21-0007 --target .\targets\
 
 Both accept `--force-from JOB_ID` to invalidate reuse from an enabled graph job onward.
 `appsec-review run JOB_ID` dispatches one job; it does not start the full review.
-See [the direct graph and its omissions](../../README.md#run-a-review).
+See [the shared graph and execution routes](../../README.md#run-a-review).
 
 ## After submission
 

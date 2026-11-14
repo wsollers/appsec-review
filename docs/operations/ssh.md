@@ -13,8 +13,9 @@ hygiene"). An agent session that lives on the Windows side and drives the WSL ch
 `wsl -d <distro> -e bash -c '...'` pays for every call with a process spawn and breaks on shell
 quoting: a heredoc or a Python snippet inside the single-quoted `bash -c` string dies on the first
 apostrophe, writes over `\\wsl.localhost\...` need a prior read, and background commands die with
-the shell. The fix is to run the session **inside** WSL, as an SSH session that the Claude desktop
-app starts on a saved connection. This page is the setup, once per Windows host.
+the shell. The fix is to run the session **inside** WSL, for example through a saved SSH connection
+in a supporting desktop client. This page describes host setup; client UI and authentication
+features are separate from this repository's implementation.
 
 The testing protocol requires the connectivity check in [section 4](#4-verify-before-a-session-relies-on-it)
 before a session that drives WSL starts work
@@ -46,8 +47,9 @@ Either quote it the PowerShell way or omit `-N` and press Enter at both passphra
 ssh-keygen -t ed25519 -f C:/Users/<user>/.ssh/id_ed25519 -N '""'
 ```
 
-A key without a passphrase is what lets the desktop app connect unattended; keep the private key
-on this machine only.
+Passphrase and SSH-agent support depend on the client. Choose the user's intended key/agent
+setup and verify that the client can use it; this example is not a requirement to remove an
+existing key's passphrase. Keep the private key on its owning machine.
 
 ## 3. Authorize the key in the distro and name the connection
 
@@ -91,11 +93,13 @@ command before the check.
 
 ## 5. Register the connection in the desktop app
 
-The app does not read `~/.ssh/config`. In the New session picker, add an SSH connection with the
-same values: host `localhost`, port `2222`, the WSL user, the key file, and the checkout as the
-default folder (`/home/<wsl user>/projects/appsec-review`). Name it `wsl-<hostname>` so the alias
-and the app agree. A session started on that connection runs natively in WSL: Linux paths, no
-quoting layer, and the app's own linking, messaging and sidebar still work. Claude Code itself is
-installed in the distro with its native installer (`~/.local/bin/claude`); the version the Dagster
-stack mounts for model jobs (`APPSEC_CLAUDE_BINARY` in `deploy/dagster/.env`) is a separate pin
-and is not changed by upgrading the CLI.
+Register or import the connection using the client's documented UI; the existence of
+`~/.ssh/config` alone does not prove the client uses it. Use the same host `localhost`, port
+`2222`, WSL user, key/agent and checkout folder (`/home/<wsl user>/projects/appsec-review`).
+Name it `wsl-<hostname>` so the alias and client agree, then verify the new session's Linux
+working directory and checkout identity.
+
+The interactive coding client and the provider executable used by Dagster model jobs are
+separate installations/selections. For a Claude deployment,
+`APPSEC_CLAUDE_BINARY` in `deploy/dagster/.env` identifies the configured host executable;
+upgrading an interactive client does not establish which executable the stack mounts.

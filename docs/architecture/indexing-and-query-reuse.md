@@ -50,8 +50,9 @@ metadata get an explicit unavailable-provenance projection, not invented native 
 **Default rule:** every gathered or generated dataset gets a run-owned inventory record and
 coverage disposition. Index its safe, bounded identities, facets, locations, relationships, and
 summaries if they can affect review decisions. Precompute expensive cross-dataset joins and graph
-questions. Retain raw binaries, bulky logs, credentials, exact build environments, and model
-transcripts only as protected artifacts; index their sanitized metadata and provenance. An
+questions. Raw binaries, bulky logs, exact build environments and model recordings, when
+retained by an authorized producer, remain protected; index only their sanitized metadata and
+provenance. This is not a request to collect operator credentials. An
 indexable dataset without a queryable representation or an explicit exception is a publication
 gap, not silent success.
 
@@ -64,7 +65,7 @@ gap, not silent success.
 | C/C++ compiled syntax | `job_cpp_compiled_analysis`, `analysis` AST shard | selected Clang AST records | resolved definitions, references, template and macro origin links |
 | C/C++ symbol graph | `job_cpp_symbol_index`, `analysis` | accepted clangd symbols, `CALLS` and `REFERENCES` | bridge symbols to syntax, IR, CPG, and priority items |
 | LLVM IR | `job_cpp_compiled_analysis`, `analysis` IR shard | function definitions and uniquely resolved direct `CALLS` with TU-level ambiguous locations | cross-check input for CodeQL call-site facts only ([code graph](code-graph-precomputation.md) D1); CFG/def-use extraction is out of scope |
-| Joern CPG | `job_cpg_analysis`, run-owned artifact and unavailable observation shard | retained binary CPG; no retrievable nodes or edges | none in the code-graph batch: Joern is not a graph producer until an exporter exists |
+| Joern CPG | `job_cpg_analysis`, retained artifacts and scope-specific indexes | selected seeded execution can export bounded nodes/edges; deprecated or unavailable scopes retain coverage | See the [canonical producer](../operations/job_cpg_analysis.md); bounded CPG output is not general graph completeness or the primary CodeQL graph-fact contract |
 | CodeQL flows | `job_codeql_analysis` observations; `job_review_prioritization`, `priority` | SARIF paths, ordered source-resolved `review_flow_step` nodes and `FLOWS_TO` edges | the primary producer of every code-graph fact family through a hash-pinned export pack; SARIF steps correlated to exported paths ([code graph](code-graph-precomputation.md)) |
 | History and ranking | `job_source_history_analysis`, `job_change_context_analysis`, `job_review_prioritization` | metrics, SII, ranked hotspot items, evidence, one-hop import context | bounded graph context package per selected hotspot |
 
@@ -93,13 +94,15 @@ reused; a new copy of the same evidence is unnecessary.
 | Security tags and review-priority scores | tagging and prioritization | `tags`, `priority`; `query_hotspots` | link tag rationale and ranked items to exact supporting identities and coverage gaps |
 | NVD, OSV, MITRE, CISA KEV, FIRST EPSS, CVE tool database and other reference feeds | third-party sync | verified global feed snapshots with hash-pinned `index/*.sqlite` lookups (`nvd`, `osv`, `mitre`, `kev`, `epss`), outside the run manifest | pin feed snapshot per run with per-feed freshness bounds; join advisory/weakness facets to observed target packages/findings as reference context, never as target evidence |
 | API contracts, deployment topology, tests, docs, dynamic traces | bounded OpenAPI, test and doc records indexed; exact route and boundary context derived; other formats planned or partly scanner-observed | `documents`, `precomputed/document_context`, and scattered source/scanner observations | distinguish declared, intent, computed, and observed evidence; derive route and boundary context without claiming enforcement |
-| Run logs, raw tool outputs, exact environment, model transcripts, credentials | runtime and tool jobs | protected run-owned artifacts | only sanitized status, hashes, durations, producer and coverage enter retrieval; never index secret or raw model content |
+| Run logs, raw tool outputs, exact environment and optional model recordings | runtime and tool jobs | retained sensitive payloads are protected; operator credentials are not gathered for retrieval | only sanitized status, hashes, durations, producer and coverage enter retrieval; never index secrets or raw conversations |
 
 ### Input-source and retrieval matrix
 
-This matrix is exhaustive for the job families in the current registry/configuration and
-the planned input families named in the review architecture. It describes logical datasets,
-not every file emitted by a tool. `Current` means an accepted index/query path exists today;
+This design-family overview includes implemented and planned inputs, not an exhaustive current
+dataset declaration list. The [generated inventory](../generated/inventory.json) and
+[availability matrix](../generated/matrix-bucket-availability.md) own that projection and its
+unknown cells. The table describes logical families, not every emitted file. `Current` denotes
+an implemented path within the stated scope, not observed execution in a run;
 `extend` means a producer exists but the listed links or product do not; `planned` means the
 input producer is not built. The emitted-dataset audit below remains the enforcement mechanism
 for every configured step, language, scanner and newly added output, so this table cannot become
@@ -111,7 +114,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Resolved TOML, model/tool/guidance identities, target fingerprint; `job_review_intake` | Bind run, enabled lanes and provenance | Extend: sanitized configuration identity, lane status, hash and gap; raw secrets/guidance protected | `review_package` coverage/basis | `coverage`/dataset catalog; no retrieval skill |
 | System acquisition manifest, component pins and acquisition gaps; `job_target_acquisition` | Bind a multi-component review system to hash-pinned component identities before intake | Artifact only: run-owned copy of the system manifest and acquisition result; component gaps reach coverage | None | `coverage`; no skill |
 | Source snapshot bytes, paths, hashes; `job_target_catalog` | Resolve every cited location | Current `source` identities/excerpts; extend exact links to all representations | `symbol_links`, `hotspot_context` | `core`; no skill |
-| Repository partitions, languages, projects, components and dependencies; `job_target_catalog` | Scope review and language routing | Current `components`, `analysis`, `build`; audit project/build-unit edges | `artifact_inventory`, `review_package` | `core`; existing `target-analysis-planning` skill is for operator planning only |
+| Repository partitions, languages, projects, components and dependencies; `job_target_catalog` | Scope review and language routing | Current `components`, `analysis`, `build`; audit project/build-unit edges | `artifact_inventory`, `review_package` | `core`; `target-analysis-planning` is registered model-side guidance, not operator authority |
 | Build recipes, compile database, dependency manifests; catalog/plan | Select tools, units and package identities | Current catalog/build facts; extend normalized manifest and build-target edges | `build_provenance`, `artifact_inventory` | `core`, `query_artifacts`; planning skill only |
 | Analysis-plan proposals and routing; `job_target_analysis_plan` | Choose bounded producer work | Current `analysis`; index accepted rationale, scope and skipped lanes | `review_package` coverage | `coverage`, `core`; planning skill only |
 | Static build-environment declarations; `job_build_environment_analysis` | Advisory environment and configuration coverage | Artifact only: redacted bounded declarations, not recipe-enforced proof | None | `coverage`; sanitized inventory metadata only |
@@ -120,7 +123,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Review/deployment external facts and co-change/test association; `job_change_context_analysis` | Process anomalies and change context | Current `history`/priority facts; extend source/build/deployment identities | `history_context`, `ci_trust` | `query_change_context`, `QP`; no skill |
 | Tree-sitter CST/AST; `job_tree_sitter_ast` | Syntax, symbols, boundaries and complexity basis | Current bounded `analysis` nodes/spans; extend stable symbols and parse gaps; no graph facts are derived from syntax | `symbol_links`, `hotspot_context` | `core`, `QP`; no skill |
 | Cyclomatic, cognitive, coupling, taint-proximity and LPS features; `job_review_prioritization` | Rank review attention | Current `priority`; extend metric provenance and package vectors | `hotspot_context`, `review_package` | `query_hotspots`, `QP`; no skill |
-| Project build probes/repairs; `job_project_build` | Establish build feasibility and selected recipe | Current `build`; extend repair decisions, failed scopes and sanitized provenance | `build_provenance` | `query_build_security`, `coverage`; existing `build-image-repair` skill is operator-only |
+| Project build probes/repairs; `job_project_build` | Establish build feasibility and selected recipe | Current `build`; extend repair decisions, failed scopes and sanitized provenance | `build_provenance` | `query_build_security`, `coverage`; `build-image-repair` is a dormant model-side contract, not a dispatched project-build worker |
 | Compile/link/archive commands, file accesses, env and toolchains; `job_language_build` | Reproduce source→artifact provenance and security flags | Current `build`/`build_security`; extend ordered redacted argv facts and allowlisted env classes; exact argv/env protected | `build_provenance`, `ci_trust`, `review_package` | `query_build_security`, `QP`; no worker skill |
 | Language package-manager metadata and SBOM inputs; `job_language_build`/artifact jobs | Dependency identity and lock resolution | Current build/artifact/package facets; audit each ecosystem and version resolution | `artifact_inventory`, `dependency_advisories` | `query_artifacts`, `QP`; no skill |
 | Files produced by builds: native, archives, packages, bytecode, assemblies, WASM; `job_artifact_indexing` | Artifact membership and source/build binding | Current `artifacts`; extend member/symbol/action links | `artifact_inventory`, `build_provenance` | `query_artifacts`, `QP`; no skill |
@@ -135,10 +138,10 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | SVF points-to over linked `-O0` bitcode; `job_svf_alias_analysis` (opt-in) | Bounded points-to sets of dereferenced, compared and passed pointers; indirect-call target sets; per-module closed-world state | Current `analysis` (`points_to_set`, `indirect_call_targets`); cross-check input for indirect `call_site` and pointer `guard_fact` facts ([`svf-alias-producer.md`](svf-alias-producer.md)) | cross-check of the `graph` index | `core`, `query_code_graph`; no skill |
 | ASan/UBSan-instrumented native rebuild; `job_sanitizer_build` | Hash-bound catalog of instrumented outputs with the sanitizer runtime evidence read from each ELF, for a later execution stage | Artifact only: protected workspaces and a sanitized handoff summary; nothing is indexed as text ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)) | none | `coverage`; no skill |
 | Compile-checked proof-of-concept unit-test functions; `job_poc_generation` (default enabled for new configurations) | Protected developer reproducers; final report receives only certified status/function-name/file refs | Artifact-only `/2` summary; protected writer cells and immutable `package.files` attempt-owned source/compile/README/provenance; never indexed as text, linked or executed ([operations](../operations/poc-generation.md)) | none | `coverage`; no general retrieval grant |
-| Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
+| Joern CPG; `job_cpg_analysis` | Retained CPG and bounded seeded context | Publication depends on selected scope; no general CPG/PDG completeness claim | none | Accepted scoped indexes and coverage as declared by the canonical job; no new skill |
 | Ghidra decompilation publications of configured third-party binaries; `job_review_intake` freezes them, `job_binary_evidence_indexing` indexes them | Review code that ships without source: functions, import callers, call neighbourhoods and strings | Current bounded `binary` shards (`binary_function`, `binary_call_site`, `binary_import`, `binary_string`; `CALLS`/`CONTAINS`/`REFERENCES`); pseudo-C detached into the run and cited by binary hash, function address and line ([`binary-decompilation.md`](binary-decompilation.md)) | none | `core`, `coverage`; registered `binary-evidence` runtime skill attached only when a binary shard exists |
 | CodeQL database and SARIF paths; `job_codeql_analysis`, `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; accepted per-scope/per-family `graph` shards via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
-| Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
+| Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; registered model-side `post-build-security-assessment` guidance remains bounded by the worker contract |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
 | Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | `query_observations`, `QP`; no skill |
 | Source SAST: Semgrep, Opengrep, gosec, mobsfscan, ShellCheck, phpcs, PHPStan, Psalm, SpotBugs, cppcheck, PMD; `job_evidence_collection` | Candidate defects, including High/Critical lead menu | Current observations; extend native/normalized severity, suppression, duplicate and membership audit | `scanner_correlation`, `review_package`, `hotspot_context` | `query_observations` for exact severity/scanner filters; `QP`; no skill |
@@ -149,7 +152,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Blint binary scan; `job_evidence_collection` | Binary hardening leads | Current observations; link exact produced artifact | `scanner_correlation`, `artifact_inventory` | `query_artifacts`, `query_observations`; no skill |
 | OWASP catalogs, applicability, validators and assessments; `job_owasp_control_assessment` | Control coverage and evidence obligations | Current workbench shards; extend links to findings/tests | `control_evidence`, `review_package` | `query_owasp_workbench`, `QP`; no skill |
 | Taxonomy, crosswalk and assignments; `job_security_tagging` | Security facets and review routing | Current `tags`; retain assignment basis and gaps | `scanner_correlation`, `hotspot_context` | `core`, `QP`; no skill |
-| Generated DFD and threat model; `job_threat_model_generation` (default disabled) | Routing context for a reviewer: processes, flows, trust boundaries, candidate threats, unknowns and the input ledger | Artifact only: canonical JSON documents and generated views; never indexed, never a supplied `dfd` or `threat_model` | None | `coverage`; sanitized inventory metadata only |
+| Generated DFD and threat model; `job_threat_model_generation` (default disabled) | Routing context: processes, flows, trust boundaries, candidate threats, unknowns and input ledger | Artifact-only generated documents, distinct from externally supplied designs; an admitted candidate model can feed bounded review-behavior routing | None | Sanitized inventory metadata and the explicit application reader; no raw worker retrieval grant |
 | NVD feed; `job_third_party_data_sync.nvd_sync` | CVE/CVSS/advisory reference | Current: hash-pinned `index/nvd.sqlite` (CVE id → description, CWE ids, CVSS metrics, `vulnStatus`, dates, raw hash) built deterministically from the metadata layers; pinned per run and joined by CVE id | `dependency_advisories` (implemented), `reference_intelligence` | `QP` or typed reference query if exact filters exceed it; no skill |
 | CISA KEV catalog; `job_third_party_data_sync.kev_sync` | Known-exploited listing | Current: hash-pinned `index/kev.sqlite` (CVE id, vendor/product, name, date added, due date, ransomware use, catalog version); pinned per run (freshness 7 days) | `dependency_advisories` (implemented); lane A KEV admission and lane B rank | `QP`; no skill |
 | FIRST EPSS daily scores; `job_third_party_data_sync.epss_sync` | Exploitation probability | Current: hash-pinned `index/epss.sqlite` (CVE id, EPSS, percentile, score date, model version); pinned per run (freshness 3 days) | `dependency_advisories` (implemented); lane B rank | `QP`; no skill |
@@ -161,10 +164,10 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Unit-test source and Postman collections; `job_target_catalog`, `job_review_data_indexing` | Developer intent and request examples | Current bounded `documents` and `document_context`; exact route joins are review context, assertions do not prove enforcement | Current `document_context`; later `review_package` nominations | `search`, `find`, `read_excerpt`, `query_precomputed`; no skill |
 | Markdown under `docs/`, including design, STRIDE and DFD; `job_target_catalog`, `job_review_data_indexing` | Stated architecture and trust boundaries | Current bounded `documents` and `document_context`; target text remains untrusted intent | Current `document_context`; later `review_package` nominations | `search`, `find`, `read_excerpt`, `query_precomputed`; no skill |
 | Target-owned agent guidance; planned doc index | Owner statements only, never instructions | Planned `docs` with `target_guidance` flag and quarantine | None beyond nomination | `search` only if scope permits; no skill |
-| Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; `tool-sqlite-fts` image | Nominate exact identities for later resolution | Current in-process FTS5; registered image can build/validate bounded FTS5 document shards when a producer is wired | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
+| Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; `tool-sqlite-fts` image | Nominate exact identities for later resolution | Current in-process FTS5 and the configured review-data-indexing image-validation step | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
 | Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `review_package`; observed-path facts would join the `graph` index as their own producer | Planned `query_observations`/typed trace query if acquired; no skill |
-| Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
-| Normalized claims, reviews, adjudication, PoC receipts and final finding packages; `job_inference_security_review` (slice 1), future publication | Review decisions and final evidence | Extend: run-owned typed claim ledger, finding/score packages and handoff (slice 1); PoC receipts planned; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
+| Runtime logs, raw tool output, exact argv/env and optional model recordings; runtime/all jobs | Audit producer status and failures | Retained sensitive artifacts remain protected; only safe status, hashes, producer and gap metadata indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
+| Normalized claims, review decisions, PoC receipts and final finding packages; review, PoC and publication jobs | Decisions and final evidence | Run-owned ledger, finding/score products, protected compile-only PoC outputs and accepted publications; these are not a general finding/scoring retrieval index | `review_package` input remains separate from final evidence closure | Explicit accepted readers and declared sanitized views; no inferred raw-content grant |
 | Attack chains; `job_inference_security_review` | Pre-seal continuity/challenge/accounting context | Protected accepted manifest/artifacts in the single ledger; five native continuity dimensions, empty commissioned producer allowlist by default | No new query set | Bounded existing `trace` over accepted native facts; no narrative-to-proof conversion |
 | Remediation plans for confirmed findings; `job_remediation_planning` | Inert exact byte-edit proposals and separate safe regression specifications | Artifact-only summary; protected proposals/source/receipts; exact confirmed-only intake and accepted native custody, no PoC context in this slice | None | Accepted artifact refs, not a new inference corpus or worker skill |
 | Remediation validation results; `job_remediation_validation` | Selected static/semantic/native syntax assurance, never a verified fix | Artifact-only summary; protected exact applicability, baseline/patched syntax and cleanup receipts; runtime regression never performed | None | Accepted artifact refs; `native_syntax` only initially, unsupported scope remains manual |
@@ -182,18 +185,20 @@ already inventory later accepted outputs: downstream manifests/gate certificatio
 them directly. `3f28d871` extends `DOWNSTREAM_JOBS` to planning/validation/dossiers for active
 pre-review acceptance exclusions, without filtering `registry_providers`' complete file-ownership
 and dataset-declaration contracts needed by resume auditing. Process metrics are also a separate regenerable operator view, not an eighteenth
-index or a new admissibility route. Exact tools, shard owners, 126 declared datasets and current
-gaps are enumerated in the [dossier inventory](dossier-data-inventory.md).
+index or a new admissibility route. Current tool/dataset declarations are in the generated
+inventory; the [dossier inventory](dossier-data-inventory.md) preserves its original
+revision-specific design and integration record, not the current dataset count.
 
 In this document "MCP endpoint" means a typed retrieval tool (see [`retrieval-surfaces.md`](retrieval-surfaces.md)). A
 retrieval tool is justified only when `core`, an existing domain query, and `QP` cannot give a
 bounded typed answer. `query_observations` (implemented) is the endpoint for scanner severity,
 suppression, rule, provider and location filters; it keeps tool findings distinct from confirmed
 findings. Other named planned endpoints above are conditional on their producers.
-Skills are operator procedures, not a way to provide target facts to review workers. New sources
-do not require new skills by default; add one only for a repeated operator workflow with its own
-validation steps. Worker access remains through accepted indices and packages, read with the retrieval
-tools (in-process for a review cell, over MCP for an external client).
+Development skills and registered runtime-worker guidance have different audiences; see
+[guidance procedures](guidance-procedures.md) and the [generated registry](../generated/guidance.md).
+A runtime skill is guidance, not target evidence or permission, and registration alone does not
+establish dispatch. Worker evidence access remains through admitted inputs and bounded retrieval,
+in-process for review cells and over MCP for external clients.
 
 An implementation task must enumerate actual artifacts and handoffs for every enabled job. Each
 dataset gets `producer`, `scope`, `schema`, `hash`, `snapshot`, sensitivity, disposition
@@ -258,12 +263,12 @@ MCP opens accepted shards read-only. The registered `tool-sqlite-fts:1.0.0` imag
 **offline index-build and validation worker** for bounded sanitized text streams. It builds the
 same `search_fts(identity, name, path, text)` FTS5 table and `unicode61` tokenizer used by the
 in-process builder. It also stores input SHA-256, record count, schema and SQLite version in
-metadata. The tested image ID is pinned in `containers/catalog.toml`; the image uses the pinned
-`base-python` runtime with SQLite 3.40.1 and built-in FTS5. Its manifest records provenance and
+metadata. The recipe is declared in the catalog; its observed image ID comes from host bindings.
+The image's recipe owns its Python/SQLite versions. Its manifest records provenance and
 the no-network runtime policy with a read-only root and target mount. The image is not a search server and does not replace
-the accepted manifest or MCP access checks. The tool currently produces an FTS-only database;
-no production indexing job consumes it yet. A producer must be wired through typed configuration
-and a versioned shard publisher before its output can be accepted for MCP retrieval.
+the accepted manifest or MCP access checks. The tool produces an FTS-only database used by
+`fts.image_validation` for a bounded cross-check. That result is a validation receipt, not a
+replacement for the canonical shards built in-process.
 
 The producer first emits a bounded, sanitized document stream with stable entity IDs, safe text,
 facets, source/artifact location and upstream hashes. The tool image builds or validates the FTS
@@ -275,9 +280,9 @@ hashes enter the shard fingerprint. FTS is a **nomination** layer; exact `find`/
 source/artifact resolution still establish facts. FTS never indexes raw secrets, exact env/argv,
 protected logs, model transcripts or target guidance as instructions.
 
-The image passed a live FTS5 build/verify fixture and catalog startup/security checks. Verify
-schema compatibility and deterministic outputs at the producer boundary when wiring it into a
-job; until then, the in-process builder remains the current path. Precompute corpus statistics,
+The original image record reports its live FTS5 build/verify fixture and catalog checks; this
+page does not revalidate that image. The in-process builder remains the accepted-shard producer
+and the image performs the configured validation cross-check. Precompute corpus statistics,
 safe term/facet dictionaries and exact
 entity-to-document links where they improve candidate retrieval; do not precompute LLM answers
 or treat a search rank as evidence.
@@ -477,7 +482,7 @@ names or inspects raw run directories.
 `job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
 publishes the accepted inventory before `job_review_package_assembly`. Implemented:
 
-- **Inventory and audit.** All 38 currently registered jobs declare datasets in their own
+- **Inventory and audit.** Registered jobs declare datasets in their own
   `datasets.py`. The registry/configuration equality check, rather than this prose count, is the
   acceptance authority.
   The audit compares declarations with the resolved configuration, accepted handoffs, every
@@ -502,29 +507,31 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
   `build_provenance` adds safe ordered command and environment facts per build action.
 - **Language and build-unit matrices** are published as coverage cells: source and Tree-sitter per
   catalogued language; compiled/clangd only for C/C++ with accepted shards (partial extraction);
-  Joern always `unavailable` (binary artifact only); CodeQL only where an accepted shard exists.
+  broader CPG graph coverage remains distinct from any bounded seeded CPG records;
+  CodeQL only where an accepted shard exists.
   The `code_graph` lane reads only accepted `graph` shards of `job_code_graph_index` and their
   per-family coverage rows: `complete` only when all seven fact families are complete,
   `unavailable` (with the basis) when no accepted `graph` shard exists or every family is
   unavailable, `partial` otherwise. Each cell lists its per-family states.
 - **SQLite FTS image.** The in-process FTS5 builder remains the only producer of accepted shards.
   `fts.image_validation` rebuilds this job's link and product shard text with the pinned
-  `tool-sqlite-fts:1.0.0` image (image ID verified against the catalog pin, FTS5 probe, record
+  `tool-sqlite-fts:1.0.0` image (image ID verified against the frozen host binding, FTS5 probe, record
   count, input hash and probe-term equality) and keeps the result as a validation receipt only.
 
 Remaining gaps after this batch:
 
-- Code-graph production is implemented for the configured C/C++ export pack. Other configured
-  languages publish explicit unavailable family coverage until their export packs (present under
-  `rules/codeql-graph-export/`) are configured and lock-pinned. The
+- Code-graph production follows the configured, lock-pinned language export packs, not only
+  C/C++. Actual per-language execution and acceptance remain separate from declared support;
+  see the [code-intelligence view](code-intelligence.md) and its named verification gaps. The
   seven former graph query sets remain retired from `QUERY_SETS`; `query_precomputed` rejects their
   names, and `query_code_graph` is the only graph query surface. The follow-up list
   (`GRAPH_FOLLOW_UP` in `job_review_data_indexing/job.py`) names only `hotspot_context`,
   `review_package`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure` and
   `test_intent` as `pending_follow_up`; the two graph-dependent rows carry accepted per-language
   `code_graph` lane states.
-- Joern CPG remains a binary artifact; no CPG graph coverage is claimed, and the code-graph plan
-  does not use it.
+- A retained CPG binary alone is not graph coverage. The optional seeded producer can publish
+  bounded context without establishing general CPG/PDG completeness or a primary CodeQL-style
+  graph-fact producer.
 - Source-to-build-action mapping exists only through captured compile commands (`source_input`
   tokens) and C/C++ compile databases; captured file-access inventories are protected and not
   normalized.

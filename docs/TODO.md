@@ -706,12 +706,18 @@ until each is rewritten into the entry format when it is next touched.
     Observed image IDs belong in host bindings, not the tracked catalog.
   - Correct `buildenv-native-toolchain`'s purpose description: Java, Android and .NET images
     do not all inherit that image. README corrections do not change the authoritative catalog.
+  - Reconcile the cve-bin-tool maintenance builder's legacy `image`/optional `image_id` pair
+    with host-owned bindings. Its unpinned Docker path can build a missing image and skips
+    signature verification for that newly built output; document this existing commissioning
+    boundary without instructing operators to store observed IDs in tracked TOML.
   - Dagster: orchestration is a deployment concern; do not restore its archived image.
 - **Done when:** each bullet is either closed or promoted to its own T-item.
 - **Refs:** `containers/README.md`, `containers/buildenv/README.md`, T-051,
   `containers/catalog.toml`, `tests/live/test_svf_live.py`,
   `src/appsec_review/jobs/job_dossier_publication/job.py`,
-  `src/appsec_review/reporting/dossier_render.py`.
+  `src/appsec_review/reporting/dossier_render.py`,
+  `src/appsec_review/jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`,
+  `docs/operations/signing.md`.
 
 ### T-051 — Host-local image pins: bind the observed image ID into the run
 

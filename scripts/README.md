@@ -44,8 +44,8 @@ Source-backed not-applicable states are distinct from missing information, which
 [T-147](../docs/TODO.md) or [T-157](../docs/TODO.md). Configured candidates, input compatibility
 and registry eligibility are not observed execution, language coverage or issued capabilities.
 
-Operator scripts for the review host. Every script exists as a bash script (`<name>.sh`, Linux and
-WSL) and a PowerShell twin (`<name>.ps1`) with the same options (`--kebab-case` in bash,
+The paired operator entrypoints below have a bash script (`<name>.sh`, Linux and WSL) and a
+PowerShell twin (`<name>.ps1`) with corresponding options (`--kebab-case` in bash,
 `-PascalCase` in PowerShell). Run any of them with `--help` / `-Help` for the full option list.
 Run them from any directory; they find the checkout themselves.
 
@@ -60,10 +60,10 @@ Logic: `deploy/dagster/bin/ops.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start.sh` / `.ps1` | Start (and if needed build) the Dagster stack, then check health, the Claude overlay and model connectivity. |
+| `stack-start.sh` / `.ps1` | Start the Dagster stack, building only when requested or on the supported unpinned first-launch path; check health, the selected provider overlay and connectivity. |
 | `stack-stop.sh` / `.ps1` | Stop the containers, keeping volumes; refuses while a run is active unless `--force`; `--purge-volumes --yes` removes data. |
 | `stack-restart.sh` / `.ps1` | Stop and start the stack, or reload every Dagster image service (`--code-location-only`), keeping PostgreSQL. |
-| `stack-rebuild.sh` / `.ps1` | Build the image and recreate the stack with the Claude overlay. |
+| `stack-rebuild.sh` / `.ps1` | Build the tooling image and recreate the stack with its selected provider overlay; source-only changes use reload instead. |
 | `stack-status.sh` / `.ps1` | One-screen status: containers, health, compose files, image, active runs, disk. |
 | `stack-logs.sh` / `.ps1` | Show one service's container logs. |
 
@@ -86,7 +86,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `run-readiness.sh` / `.ps1` | One-time preparation of a review host (T-057 Phase 0, `run-readiness.md` steps 1–5): preconditions (`default` Docker context, ext4 checkout, clean tree, OpenSSL 3, `.venv`), operator key + committed trust anchor + host trust directory, validate/build/smoke/report every image, host re-pin as its own commit, sign every pinned image, compile the CodeQL packs. Stops at the first failing step; `--from STEP` / `--only STEP` resume; `--dry-run` prints every command. Never pushes. On Windows always runs in WSL. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-readiness). |
+| `run-readiness.sh` / `.ps1` | Operator host preparation (T-057 Phase 0): check daemon/checkout/environment, prepare operator key and committed public anchor, validate/build/smoke/report images, write ignored host bindings without a pin commit, sign pinned images and compile CodeQL packs. Stops at the first failure; `--from STEP` / `--only STEP` select work; `--dry-run` prints commands. Never pushes. On Windows it delegates to WSL. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-readiness). |
 | `compile-codeql-queries.sh` / `.ps1` | Compile, one pack at a time, the CodeQL packs that are not precompiled (the graph-export packs registered with `warm = true` in `rules/registry.toml`) into the shared compile-cache volume review runs mount. Skips the image's standard query packs and the CERT pack, which ship precompiled `.qlx`. Options: `--language`, `--ram` (default 7000 MB), `--threads` (default 8), `--dry-run`, `--allow-concurrent`. Run it after a CodeQL image/release change or any graph-export QL change, before review runs. Wraps `containers/build.py query-packs --warm`. Details: [`docs/operations/codeql-analysis.md`](../docs/operations/codeql-analysis.md#compiling-codeql-queries). |
 
 ## Development
@@ -100,6 +100,6 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | File | Purpose |
 | --- | --- |
-| `lib/common.sh` | Sourced by the bash scripts: locates the checkout and a Python 3.11+ interpreter (`APPSEC_PYTHON`, the checkout's `.venv`, the main checkout's `.venv`, then `python3`) and runs `ops.py`. |
+| `lib/common.sh` | Locates the checkout and interpreter (`APPSEC_PYTHON`, its `.venv`, the main checkout's `.venv`, then `python3`/`python`). Automatic candidates require >=3.11; an explicit `APPSEC_PYTHON` is used directly. The compatibility fallback is not permission to test with another checkout's environment. |
 | `lib/common.ps1` | Dot-sourced by the PowerShell twins: finds the checkout (`APPSEC_REPO_ROOT`, the current directory, then the script location), translates paths for WSL and runs `ops.py` or the bash twin. |
 | `known-failures.txt` | Pytest node ids that fail without this repository's changes; `run-tests` reports them as known. One `<node id> \| <reason>` per line. |

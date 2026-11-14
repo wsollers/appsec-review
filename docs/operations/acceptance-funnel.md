@@ -85,6 +85,13 @@ controls, whole-file cases; the paper's Table 3 rows are shown beside ours by pr
 
 ### Manual validation (user-owned)
 
+The following is the retained implementation-time validation plan, not current permission to
+publish repositories or run acceptance. Its original publication/baseline statements describe
+that checkpoint; current fixture provenance is in [test targets](test-targets.md), and a new
+validation follows the [walk charter](../processes/walk-charter.md).
+
+<!-- historical:begin -->
+
 None of these has been run by the implementing agents.
 
 1. **Publish case-094.** In WSL, from the linked repositories:
@@ -133,3 +140,5 @@ None of these has been run by the implementing agents.
    Compare `codeql`, `cppcheck`, `semgrep` and `clang-static-analyzer` with the paper rows shown beside them
    (CodeQL 2.20.1 45 TP / 49 FP, Cppcheck 2.13 19 / 9, Clang Analyzer 18.1.3 13 / 2). Our tool versions and
    rule sets differ, so a large move between runs of ours is the regression signal, not distance from the paper.
+
+<!-- historical:end -->

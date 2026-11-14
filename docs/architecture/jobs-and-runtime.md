@@ -89,8 +89,10 @@ Python static procedures, separate blinded reviewer, provisional result boundary
 unresolved coverage.
 
 A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
-enabled. `false` makes the job transparent: it is absent from direct and Dagster graphs, takes no
-inputs, publishes no handoff or artifacts, and is excluded from the run inventory. Nested feature
+enabled. `false` removes the job from automatic direct/Dagster graph dispatch and makes its
+scheduling vertex transparent. That dispatch does no new work for it; registered ownership and
+historical attempt files remain accounted for by inventory. Explicitly supported manual routes,
+such as disabled PoC admission, have separate rules. Nested feature
 flags such as `settings.model.enabled` or `settings.github.enabled` control only that feature and do
 not suppress the containing job. An enabled job is dispatched normally and must satisfy its full
 input, output, tool, and acceptance contracts.
@@ -157,8 +159,9 @@ accepted job receipts correctly remain linked to their original launch.
 A job may also declare a cheap, deterministic `input_identity` probe for inputs the target
 fingerprint deliberately excludes. The runner records the probe value in the claim and handoff, and
 the resume planner re-probes it against the graph target; a mismatch reruns the job and invalidates
-its downstream closure. `job_source_history_analysis` uses it for the mainline commit, object
-format, and shallow boundary, because `.git` is outside the source fingerprint.
+its downstream closure. `job_source_history_analysis` uses its history probe for selected
+repository roots, resolved Git identity, object format, shallow boundary and configuration,
+because `.git` is outside the ordinary source fingerprint.
 
 ## Global events
 

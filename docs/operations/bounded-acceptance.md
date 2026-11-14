@@ -43,7 +43,8 @@ Parameterized selections must collect and pass every matching parameter case.
 
 ## Select and inspect a profile
 
-Use the checkout's own Python 3.11+ virtual environment with its test dependencies installed.
+Use the checkout's own environment with its test dependencies installed. Python 3.12 is the
+documented baseline; [T-160](../TODO.md) records the advertised-minimum renderer limitation.
 Acceptance refuses a virtual environment borrowed from another checkout. Process cases also
 require the pinned Dagster host dependencies, including when those cases are selected by `quick`.
 Follow repository host policy: use Linux or a Linux-filesystem WSL checkout by default; native
@@ -61,7 +62,8 @@ scripts/run-tests.sh --acceptance signals --workers 1
 scripts/run-tests.sh --acceptance review --workers 1
 ```
 
-Remove `-DryRun` / `--dry-run` to execute the inspected selection. Dry run prints JSON containing
+Only after explicit user authorization, remove `-DryRun` / `--dry-run` to execute the inspected
+selection. A dry-run result is not execution permission. Dry run prints JSON containing
 `profile`, `nodes`, `workers`, `deadline_seconds`, `case_deadline_seconds`, `strict` and
 `implemented`; it neither establishes prerequisite availability nor demonstrates coverage.
 

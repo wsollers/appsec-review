@@ -11,8 +11,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 The gateway selects exactly one **application run**, even when that run has not reached index
 acceptance. Accepted-evidence queries still require verified acceptance; operator inspection never
 turns missing state into accepted evidence. It does not build indexes, execute recovery, or change a
-run. It is for external clients; the review cells (red, blue, verifier, hunter) do not use it and have
-no tools, because the application runs their retrieval requests in-process (see
+run. It is for external clients; review cells (red, blue, verifier, hunter) do not use this
+transport or gain ambient CLI tools. The application executes their bounded retrieval requests
+in-process (see
 [`../architecture/retrieval-surfaces.md`](../architecture/retrieval-surfaces.md)).
 
 Start it over stdio:
@@ -113,8 +114,10 @@ A historical plan may be stale. No plan is manufactured when no planner event ex
 The plan provides actual CLI entry points and `tests/test_wave1_resume.py` as a baseline regression
 reference. The exact repair-specific unit selectors, build failure context, candidate, prepared
 image and replay references still require operator selection; the service cannot invent them.
-`plan-resume` itself emits telemetry and requires an explicit target/system, so it is deliberately
-not executed by this read-only service. Recipe replay, promotion, job execution and restarts remain
+`plan-resume` requires an explicit target/system and computes fresh decisions; the graph's
+read-only planning path suppresses the planner event, so calling it does not create a
+`RESUME_PLANNED` record for this tool to inspect. The service reads an existing execution-planner
+event rather than invoking that CLI. Recipe replay, promotion, job execution and restarts remain
 separately authorized manual operations.
 
 Development procedures are canonical in
