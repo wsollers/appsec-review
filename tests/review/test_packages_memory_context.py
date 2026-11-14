@@ -153,7 +153,7 @@ def test_any_scanners_cpp_lead_gets_the_svf_records_at_its_line_and_their_object
     fixture, ids = memory_fixture
     assembly = assemble_packages(accept_manifest(fixture.run_root))
     document = _lead(assembly, fixture, "sast_critical")   # a Semgrep strcpy lead at parse.c:3
-    assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/6"
+    assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/7"
     assert _roles(document, MEMORY_ROLES) == {"points_to": {ids["dst"], ids["src"]}, "memory_object": {ids["obj"]}}
     assert _gaps(document, SVF_PRODUCER) == []
     assert {ids["dst"], ids["src"], ids["obj"]} <= set(document["retrieval"]["entity_ids"])

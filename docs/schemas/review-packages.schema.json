@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-packages.schema.json",
-  "title": "Pre-adjudication review packages: document packages version 3, inference review packages version 4",
+  "title": "Pre-adjudication review packages: document packages version 3, inference review packages version 7",
   "oneOf": [
     {
       "$ref": "#/$defs/document_finding_lead"
@@ -1853,7 +1853,6 @@
         "trust_boundary_id",
         "build_unit_id",
         "partition_key",
-        "source_ids",
         "artifact_ids"
       ],
       "properties": {
@@ -1878,6 +1877,7 @@
           "minLength": 1
         },
         "source_ids": {
+          "description": "The package's source identities. Present on a finding-lead package; absent on a hunt package, whose unit-wide source identities live in the referenced unit context document (schema v7).",
           "$ref": "#/$defs/inference_identities"
         },
         "artifact_ids": {
@@ -2061,11 +2061,12 @@
         "proof_obligations",
         "retrieval",
         "coverage_gaps",
-        "truncation"
+        "truncation",
+        "unit_context"
       ],
       "properties": {
         "schema": {
-          "const": "appsec-review/review-package/6"
+          "const": "appsec-review/review-package/7"
         },
         "kind": {
           "enum": [
@@ -2108,10 +2109,68 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/12"
+          "const": "appsec-review/assemble-review-packages/13"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"
+        },
+        "unit_context": {
+          "description": "Schema v7 (T-5000), hunt lane: the hash-pinned reference to the unit's context document (package-unit-context/1), published once per hunted unit under unit-context/<sha256>.json beside the packages and holding the unit's context entries, source identities and unit-wide retrieval entity ids. null on a finding-lead package. Consumers merge the document back with review/packages.py merge_unit_context.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "schema",
+                "path",
+                "sha256",
+                "size_bytes",
+                "counts"
+              ],
+              "properties": {
+                "schema": {
+                  "const": "appsec-review/package-unit-context/1"
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "^unit-context/[0-9a-f]{64}\\.json$"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/inference_sha"
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "counts": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "context_entries",
+                    "source_ids",
+                    "entity_ids"
+                  ],
+                  "properties": {
+                    "context_entries": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "source_ids": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "entity_ids": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          ]
         },
         "partition": {
           "type": "object",
@@ -2245,6 +2304,14 @@
             "rank": {
               "type": "null"
             },
+            "unit_context": {
+              "type": "null"
+            },
+            "scope": {
+              "required": [
+                "source_ids"
+              ]
+            },
             "partition": {
               "properties": {
                 "number": {
@@ -2297,6 +2364,20 @@
             },
             "rank": {
               "$ref": "#/$defs/inference_rank"
+            },
+            "unit_context": {
+              "type": "object"
+            },
+            "scope": {
+              "not": {
+                "required": [
+                  "source_ids"
+                ]
+              }
+            },
+            "context": {
+              "description": "Empty: a hunt package's context entries live in its unit context document.",
+              "maxItems": 0
             },
             "lead_menu": {
               "items": {

@@ -1,4 +1,4 @@
-"""The model-facing package view (``package-view/4``) and package neighborhood (``package-neighborhood/3``)."""
+"""The model-facing package view (``package-view/5``) and package neighborhood (``package-neighborhood/3``)."""
 from __future__ import annotations
 
 import json

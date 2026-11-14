@@ -50,7 +50,8 @@ where = ["src"]
 [tool.setuptools.data-files]
 "share/appsec-review/schemas" = ["docs/schemas/review-packages.schema.json",
                                  "docs/schemas/review-package-view.schema.json",
-                                 "docs/schemas/review-package-manifest.schema.json"]
+                                 "docs/schemas/review-package-manifest.schema.json",
+                                 "docs/schemas/review-package-unit-context.schema.json"]
 "share/appsec-review/schemas/openvex-export" = ["docs/schemas/openvex-export/*.json"]
 "share/appsec-review/schemas/openvex-export/upstream" = ["docs/schemas/openvex-export/upstream/*"]
 "share/appsec-review/schemas/final-report" = ["docs/schemas/final-report/*.json"]

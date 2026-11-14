@@ -383,7 +383,7 @@ def test_the_view_shows_only_slice_lines_with_elisions_and_the_lead_line(dataflo
     fixture, ids, _scope, assembly, core = dataflow
     package = _package(assembly, fixture, "sast_critical")
     view = build_view(package, core, LIMITS)
-    assert view.document["rule"] == VIEW_RULE == "appsec-review/package-view/4"
+    assert view.document["rule"] == VIEW_RULE == "appsec-review/package-view/5"
     rows = [row for row in view.document["source"] if row["role"] == "slice"]
     by_ref = {row["ref"]: row for row in rows}
     p_row = by_ref[ids["p"]]

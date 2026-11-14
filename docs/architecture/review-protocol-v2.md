@@ -63,7 +63,7 @@ a wrong one fatal.
 
 The package keeps its hash-pinned identity and reuse basis. Its model-facing view is organized into
 labelled sections. Ids are shortened here. Every built view is validated against
-[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/4`).
+[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/5`).
 
 ```json
 {

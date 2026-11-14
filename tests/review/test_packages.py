@@ -212,7 +212,7 @@ def test_partitioned_hunt_menus_cover_every_lead_exactly_once(fixture) -> None:
 def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(fixture) -> None:
     scope = accept_manifest(fixture.run_root)
     capped = assemble_packages(scope, PackageSettings(max_context_entries=1))
-    truncated = [item.document() for item in capped.packages if item.document()["truncation"]["omitted_context"]]
+    truncated = [item.resolved() for item in capped.packages if item.document()["truncation"]["omitted_context"]]
     assert truncated
     for document in truncated:
         # Neighborhood rows are bounded by the code-graph settings, not by ``max_context_entries``.

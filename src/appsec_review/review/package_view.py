@@ -1,4 +1,4 @@
-"""The model-facing view of a review package (``package-view/4``, review-protocol-v2.md section 4).
+"""The model-facing view of a review package (``package-view/5``, review-protocol-v2.md section 4).
 
 The stored package is hash-pinned and keeps every identity and every gap. A review cell is shown a *view* of
 it, built at cell time and never stored as an identity: labelled sections (``L`` lead, ``S`` source, ``K`` sink,
@@ -18,6 +18,11 @@ application assigns in a fixed order, so one package always yields the same labe
   build unit, file or sink are shown inline as ``X`` labels. Every stored gap is accounted: inline plus file.
 * The view has a byte budget. Rows are dropped from the least valuable section first, counted in ``omitted`` and
   named by a ``truncated`` ``X`` label; ``expand`` (or the typed tools) reaches whatever was omitted.
+* A hunt package references its unit's context once (``unit_context``, schema v7, T-5000) instead of embedding it.
+  The view shows that reference (schema, hash, size and counts) under ``unit_context`` and writes the entries to
+  the hash-referenced ``unit_context.jsonl`` (counted under ``files``, reachable with ``expand``) rather than
+  rendering them as ``T`` and ``O`` rows. The identities stay citable: the label table knows every identity the
+  resolved package names.
 
 Guard rows repeat what a ``guard_fact`` states (``review.fact_summary``); a view never says a guard is adequate.
 """
@@ -37,7 +42,7 @@ from appsec_review.review.schemas import VIEW_SCHEMA_FILE, validate as validate_
 from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
-VIEW_RULE = "appsec-review/package-view/4"
+VIEW_RULE = "appsec-review/package-view/5"
 GAP_VIEW_RULE = "appsec-review/package-gap-view/1"
 PROTOCOL = "review-protocol/2"
 MAX_INLINE_GAPS = 12
@@ -51,7 +56,8 @@ DECLARATION_KINDS = frozenset({"CXXRecordDecl", "RecordDecl", "EnumDecl", "Typed
 # Sections trimmed first when the view exceeds its byte budget; the lead, source and sinks are never trimmed.
 TRIM_ORDER = ("other", "tags", "memory", "corroboration", "callees", "callers", "flows", "entries", "guards",
               "ranges")
-_FILE_ROWS = ("gaps.jsonl", "corroborating_findings.jsonl")
+UNIT_CONTEXT_FILE = "unit_context.jsonl"
+_FILE_ROWS = ("gaps.jsonl", "corroborating_findings.jsonl", UNIT_CONTEXT_FILE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -429,12 +435,18 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
     neighborhood_refs |= {nb["build"]["ref"]} if nb.get("build") else set()
     neighborhood_refs |= {nb["function"]["symbol"]} if nb.get("function") else set()
     lead_refs = {lead["ref"] for lead in leads}
-    tag_refs, memory, other = [], [], []
+    # A hunt package's context is unit-wide and referenced once (T-5000): it goes to a file, not into rows.
+    unit_reference = package.get("unit_context") if isinstance(package.get("unit_context"), Mapping) else None
+    tag_refs, memory, other, unit_rows = [], [], [], []
     for entry in package.get("context", ()):
         ref, role = entry["id"], entry["role"]
         if ref in neighborhood_refs or ref in lead_refs:
             continue
-        if entry["kind"] == "tag_assignment":
+        if unit_reference is not None:
+            unit_rows.append({"ref": ref, "role": role, "kind": entry["kind"],
+                              **({"control_assessment": entry["control_assessment"]}
+                                 if entry.get("control_assessment") is not None else {})})
+        elif entry["kind"] == "tag_assignment":
             tag_refs.append(ref)
         elif role in {"points_to", "indirect_call", "memory_object"}:
             memory.append({"ref": ref, "role": role, "kind": entry["kind"]})
@@ -536,7 +548,8 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         corroborating_rows = [dict(item) for item in inline_rest]
         files: dict[str, tuple[Mapping[str, Any], ...]] = {}
         file_index: dict[str, Any] = {}
-        for name, items in (("gaps.jsonl", file_gaps), ("corroborating_findings.jsonl", corroborating_rows)):
+        for name, items in (("gaps.jsonl", file_gaps), ("corroborating_findings.jsonl", corroborating_rows),
+                            (UNIT_CONTEXT_FILE, unit_rows)):
             if items:
                 files[name] = tuple(items)
                 data = file_bytes(items)
@@ -556,6 +569,9 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
             "proof_obligations": list(package.get("proof_obligations", ())),
             "graph_families": list((package.get("retrieval") or {}).get("graph_families", ())),
             "truncation": package.get("truncation"),
+            "unit_context": ({"schema": unit_reference["schema"], "sha256": unit_reference["sha256"],
+                              "size_bytes": unit_reference["size_bytes"], "counts": dict(unit_reference["counts"]),
+                              "file": UNIT_CONTEXT_FILE} if unit_reference is not None else None),
         }
         return document, labels, files
 
@@ -578,5 +594,5 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         packaged_refs=frozenset({*(package.get("retrieval") or {}).get("entity_ids", ()), *lead_refs}))
 
 
-__all__ = ["GAP_VIEW_RULE", "PROTOCOL", "PackageView", "VIEW_RULE", "VIEW_SCHEMA", "ViewLimits", "build_view",
-           "file_bytes", "is_material_gap"]
+__all__ = ["GAP_VIEW_RULE", "PROTOCOL", "PackageView", "UNIT_CONTEXT_FILE", "VIEW_RULE", "VIEW_SCHEMA", "ViewLimits",
+           "build_view", "file_bytes", "is_material_gap"]

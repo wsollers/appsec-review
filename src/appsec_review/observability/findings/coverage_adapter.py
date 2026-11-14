@@ -244,6 +244,13 @@ def _packages(run_root: Path, triage: Mapping[str, Any]) -> list[dict[str, Any]]
                                           "sha256": entry["sha256"]})
         scope = body.get("scope") if isinstance(body, Mapping) else None
         sources = scope.get("source_ids") if isinstance(scope, Mapping) else None
+        reference = body.get("unit_context") if isinstance(body, Mapping) else None
+        if sources is None and isinstance(reference, Mapping):
+            # A hunt package (schema v7) references its unit's sources once; read them at the pinned hash.
+            unit = read_bound_json(run_root, {"path": (directory.parent / str(reference["path"])).as_posix(),
+                                              "sha256": reference["sha256"]})
+            unit_scope = unit.get("scope") if isinstance(unit, Mapping) else None
+            sources = unit_scope.get("source_ids") if isinstance(unit_scope, Mapping) else None
         if not isinstance(sources, list) or not all(isinstance(item, str) for item in sources):
             raise ValueError(f"package {entry['package_id']} names no scope sources")
         packages.append({"package_id": str(entry["package_id"]), "source_ids": sorted(sources)})

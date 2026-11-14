@@ -95,7 +95,7 @@ def test_units_below_cutoff_become_named_gaps(scope) -> None:
     assert assembly.manifest["counts"]["units"] == {"total": 4, "hunted": 1, "below_cutoff": 3}
     assert sum(1 for gap in assembly.manifest["gaps"] if gap["reason"].startswith(CUTOFF_REASON)) == 3
     assert [item["hunted"] for item in assembly.manifest["units"]] == [True, False, False, False]
-    document = hunts[0].document()
+    document = hunts[0].resolved()                  # the hunt body references its unit context (schema v7)
     assert document["rank"]["position"] == 1 and document["lane"] == "hunt"
     assert {entry["role"] for entry in document["context"]} >= {"priority", "history", "hotspot", "tag",
                                                                "component", "build_unit"}

@@ -33,6 +33,17 @@ and the calls between the paths' functions only, plus a composed ``slice`` (``re
 path's lines. Without a correlated path it keeps the call-depth neighborhood and names a
 ``dataflow_slice`` ``dataflow_path_unavailable`` gap. The manifest counts packages by bound.
 
+Schema v7 (T-5000) stops embedding unit-wide material in every hunt partition. ``_Assembler.hunts``
+publishes each hunted unit's context entries, source identities and unit-wide retrieval entity ids
+once as a *unit context document* (``package-unit-context/1``, canonical JSON under
+``unit-context/<sha256>.json`` beside the packages, listed in the manifest under ``unit_contexts``).
+A hunt body carries only its partition (``lead_menu``, partition record, per-lead evidence) plus a
+``unit_context`` reference ``{schema, path, sha256, size_bytes, counts}``; its ``context`` is empty,
+its ``scope`` has no ``source_ids`` and its ``retrieval.entity_ids`` hold only the partition's own
+identities. Consumers read the stored body through :func:`resolve_package_document`, which verifies
+the referenced document and merges it back, so the citable identities are those of schema v6.
+``finding_lead`` bodies are unchanged (``unit_context`` is ``null``): their context is per lead.
+
 Packages are canonical JSON. ``package_id`` is the kind plus the SHA-256 of the canonical body
 without ``package_id``; arrays sort by stable identity; nothing time- or order-dependent enters a
 package. Reassembly from the same accepted inputs is byte-identical. A missing producer is a
@@ -68,7 +79,9 @@ from appsec_review.review.neighborhood import (
 )
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
-from appsec_review.review.schemas import MANIFEST_SCHEMA_FILE, validate as validate_schema
+from appsec_review.review.schemas import (
+    MANIFEST_SCHEMA_FILE, UNIT_CONTEXT_SCHEMA_FILE, validate as validate_schema,
+)
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 from appsec_review.review.slicing import anchors as slice_anchors
 from appsec_review.review.slicing.compose import compose as compose_slice
@@ -89,8 +102,10 @@ from appsec_review.storage import atomic_bytes, file_sha256
 from appsec_review.storage.atomic import canonical_json
 
 
-PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/12"
+PACKAGE_SCHEMA = "appsec-review/review-package/7"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/13"
+UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/1"
+UNIT_CONTEXT_DIRECTORY = "unit-context"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -222,6 +237,39 @@ class PackageSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class UnitContext:
+    """A hunted unit's context published once (``package-unit-context/1``) and referenced by its partitions."""
+
+    unit_key: str
+    document: Mapping[str, Any]
+    body: bytes
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(self.body).hexdigest()
+
+    @property
+    def path(self) -> str:
+        """Path relative to the assembly directory, the parent of ``packages/``."""
+        return f"{UNIT_CONTEXT_DIRECTORY}/{self.sha256}.json"
+
+    @property
+    def counts(self) -> dict[str, int]:
+        return {"context_entries": len(self.document["context"]),
+                "source_ids": len(self.document["scope"]["source_ids"]),
+                "entity_ids": len(self.document["entity_ids"])}
+
+    def reference(self) -> dict[str, Any]:
+        """The hash-pinned reference a hunt body carries in place of the unit-wide material."""
+        return {"schema": UNIT_CONTEXT_SCHEMA, "path": self.path, "sha256": self.sha256,
+                "size_bytes": len(self.body), "counts": self.counts}
+
+    def entry(self) -> dict[str, Any]:
+        return {"unit_key": self.unit_key, "schema": UNIT_CONTEXT_SCHEMA, "path": self.path,
+                "sha256": self.sha256, "bytes": len(self.body), "counts": self.counts}
+
+
+@dataclass(frozen=True, slots=True)
 class Package:
     package_id: str
     kind: str
@@ -231,18 +279,30 @@ class Package:
     lead_ids: tuple[str, ...]
     unit_key: str | None
     body: bytes
+    # The unit context document a hunt body references; ``None`` for a finding-lead package.
+    unit_context: UnitContext | None = None
 
     @property
     def sha256(self) -> str:
         return hashlib.sha256(self.body).hexdigest()
 
     def document(self) -> dict[str, Any]:
+        """The stored body exactly as published (a hunt body carries the ``unit_context`` reference)."""
         return json.loads(self.body)
+
+    def resolved(self) -> dict[str, Any]:
+        """The body with its unit context merged back (what every consumer reads; see
+        :func:`merge_unit_context`)."""
+        document = self.document()
+        if self.unit_context is None:
+            return document
+        return merge_unit_context(document, self.unit_context.document)
 
     def entry(self) -> dict[str, Any]:
         return {"package_id": self.package_id, "kind": self.kind, "lane": self.lane,
                 "lead_family": self.lead_family, "partition_key": self.partition_key, "unit_key": self.unit_key,
-                "lead_count": len(self.lead_ids), "sha256": self.sha256, "bytes": len(self.body)}
+                "lead_count": len(self.lead_ids), "sha256": self.sha256, "bytes": len(self.body),
+                "unit_context_sha256": self.unit_context.sha256 if self.unit_context is not None else None}
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,10 +310,62 @@ class Assembly:
     packages: tuple[Package, ...]
     manifest: Mapping[str, Any]
     gaps: tuple[ScopeGap, ...]
+    unit_contexts: tuple[UnitContext, ...] = ()
 
     @property
     def manifest_bytes(self) -> bytes:
         return canonical_json(self.manifest)
+
+
+def merge_unit_context(document: Mapping[str, Any], unit_document: Mapping[str, Any]) -> dict[str, Any]:
+    """A hunt body with its referenced unit context merged back into the schema v6 shape.
+
+    ``context`` becomes the unit's entries, ``scope.source_ids`` the unit's source identities and
+    ``retrieval.entity_ids`` the sorted union of the partition's own identities and the unit's. The
+    ``unit_context`` reference stays, so a view can show the reference instead of the entries.
+    """
+    reference = document.get("unit_context")
+    if not isinstance(reference, Mapping):
+        return dict(document)
+    if unit_document.get("schema") != UNIT_CONTEXT_SCHEMA:
+        raise IntegrityError("unsupported package unit context schema")
+    scope = document["scope"]
+    unit_scope = unit_document["scope"]
+    if any(scope.get(key) != unit_scope.get(key) for key in ("component_id", "trust_boundary_id", "build_unit_id")):
+        raise IntegrityError("package unit context names another unit scope")
+    retrieval = {**document["retrieval"],
+                 "entity_ids": sorted({*document["retrieval"]["entity_ids"], *unit_document["entity_ids"]})}
+    return {**document, "scope": {**scope, "source_ids": list(unit_scope["source_ids"])},
+            "context": [dict(item) for item in unit_document["context"]], "retrieval": retrieval}
+
+
+def load_unit_context(assembly_dir: Path, reference: Mapping[str, Any]) -> dict[str, Any]:
+    """Read and verify the unit context document a hunt body references (hash, size and schema)."""
+    if reference.get("schema") != UNIT_CONTEXT_SCHEMA:
+        raise IntegrityError("unsupported package unit context schema")
+    path = Path(assembly_dir) / str(reference["path"])
+    if not path.is_file() or file_sha256(path) != reference["sha256"]:
+        raise IntegrityError(f"package unit context does not match its reference: {reference.get('sha256')}")
+    body = path.read_bytes()
+    if len(body) != reference["size_bytes"]:
+        raise IntegrityError("package unit context size does not match its reference")
+    document = json.loads(body.decode("utf-8"))
+    validate_schema(UNIT_CONTEXT_SCHEMA_FILE, document, "package unit context")
+    return document
+
+
+def resolve_package_document(package_path: Path) -> dict[str, Any]:
+    """A stored package read for consumption: the body, with a hunt body's unit context verified and merged.
+
+    ``package_path`` is ``<assembly>/packages/<package_id>.json``; the unit context lives under the same
+    assembly directory. A finding-lead body is returned as stored.
+    """
+    package_path = Path(package_path)
+    document = json.loads(package_path.read_text(encoding="utf-8"))
+    reference = document.get("unit_context")
+    if not isinstance(reference, Mapping):
+        return document
+    return merge_unit_context(document, load_unit_context(package_path.parent.parent, reference))
 
 
 def admission_reasons(lead: Lead, settings: PackageSettings) -> list[str]:
@@ -1144,6 +1256,7 @@ class _Assembler:
         self.collection = collection
         self.correlation_hashes = tuple(sorted(str(item["sha256"]) for item in collection.correlation_shards))
         self.extra_gaps: list[ScopeGap] = []
+        self.unit_contexts: dict[str, UnitContext] = {}
         self.cwe_reference = cwe_reference
         self.reference_weaknesses = _reference_weaknesses(scope)
         self.graph = GraphContext(scope)
@@ -1319,7 +1432,12 @@ class _Assembler:
                context: list[ContextEntry], obligations: Iterable[Predicate], gaps: Iterable[ScopeGap],
                truncation: Mapping[str, Any], graph_families: Iterable[str] = (),
                graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = (),
-               neighborhood: Mapping[str, Any] | None = None) -> tuple[str, bytes]:
+               neighborhood: Mapping[str, Any] | None = None,
+               unit_context: UnitContext | None = None) -> tuple[str, bytes]:
+        """Render one package body. With ``unit_context`` (hunt lane) the unit-wide material is referenced,
+        not embedded: the body's ``context`` is empty, its ``scope`` omits ``source_ids`` and its
+        ``retrieval.entity_ids`` exclude the identities the unit context document lists. The fingerprint
+        still covers the whole scope, every shard and the unit context hash."""
         leads = sorted(menu, key=lambda item: (SEVERITY_ORDER[item[0].effective_severity], item[0].observation_id))
         lead_ids = sorted(item[0].observation_id for item in leads)
         artifact_records = {
@@ -1342,6 +1460,9 @@ class _Assembler:
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
                            *(item.id for item in context), *artifact_refs,
                            *(item["source_identity"] for item in underlying)})
+        if unit_context is not None:
+            unit_entities = set(unit_context.document["entity_ids"])
+            entities = [item for item in entities if item not in unit_entities]
         shard_hashes = sorted({*(item[0].shard_sha256 for item in leads),
                                *(item.shard_sha256 for item in context if item.shard_sha256), *graph_shards,
                                *(item["publication"]["sha256"] for item in underlying),
@@ -1362,12 +1483,15 @@ class _Assembler:
                                             "neighborhood": NEIGHBORHOOD_RULE, "fact_summary": SUMMARY_RULE,
                                             "build_summary": BUILD_RULE},
             "cwe_reference": self.cwe_reference.record() if self.cwe_reference is not None else None,
-            "caps": self.settings.record(), "graph_caps": asdict(self.graph_settings)})
+            "caps": self.settings.record(), "graph_caps": asdict(self.graph_settings),
+            "unit_context_sha256": unit_context.sha256 if unit_context is not None else None})
+        body_scope = dict(scope_record) if unit_context is None else {
+            key: value for key, value in scope_record.items() if key != "source_ids"}
         body = {
             "schema": PACKAGE_SCHEMA, "kind": kind, "lane": "lead" if kind == "finding_lead" else "hunt",
             "lead_family": lead_family, "run_id": self.scope.run_id, "manifest_sha256": self.scope.manifest_sha256,
             "target_snapshot": self.scope.target_snapshot, "input_fingerprint": fingerprint,
-            "assembly_rule": ASSEMBLY_RULE, "scope": dict(scope_record),
+            "assembly_rule": ASSEMBLY_RULE, "scope": body_scope,
             "partition": {"number": partition[0], "count": partition[1]}, "rank": rank,
             "persona": None, "stack_profile": None,
             "lead_menu": [{**lead_record(*item, weaknesses=self.weaknesses(item[0]),
@@ -1377,7 +1501,8 @@ class _Assembler:
                               if artifact_records[item[0].observation_id] else {})}
                           for item in leads],
             "evidence": sorted((_evidence(item[0]) for item in leads), key=lambda value: value["entity_id"]),
-            "context": [item.record() for item in context],
+            "context": [item.record() for item in context] if unit_context is None else [],
+            "unit_context": unit_context.reference() if unit_context is not None else None,
             "neighborhood": dict(neighborhood) if neighborhood is not None
             else empty_record(self.graph_settings.max_call_depth),
             "proof_obligations": sorted(item.value for item in obligations),
@@ -1498,6 +1623,27 @@ class _Assembler:
                        None, body)
 
     # Lane B ---------------------------------------------------------------------------------------
+    def unit_context_document(self, unit: Any, context: list[ContextEntry]) -> UnitContext:
+        """The unit-wide material of one hunted unit, published once and referenced by every partition.
+
+        ``entity_ids`` are the identities every partition of the unit grants: the unit's source files,
+        its context entries and the resolved underlying evidence of context-level control assessments.
+        """
+        assessments = [item.control_assessment for item in context if item.control_assessment is not None]
+        underlying = [item for assessment in assessments for item in assessment["evidence"] if item["resolved"]]
+        # Pure content, with no run or manifest identity: the same accepted facts give the same document
+        # and reference in any run. The hunt body that references it pins run_id and manifest_sha256.
+        document = {
+            "schema": UNIT_CONTEXT_SCHEMA, "assembly_rule": ASSEMBLY_RULE, "unit_key": unit.key,
+            "scope": {"component_id": unit.component_id, "trust_boundary_id": unit.trust_boundary_id,
+                      "build_unit_id": unit.build_unit_id, "source_ids": list(unit.source_ids)},
+            "context": [item.record() for item in context],
+            "entity_ids": sorted({*unit.source_ids, *(item.id for item in context),
+                                  *(item["source_identity"] for item in underlying)}),
+        }
+        validate_schema(UNIT_CONTEXT_SCHEMA_FILE, document, "package unit context")
+        return UnitContext(unit.key, document, canonical_json(document))
+
     def hunts(self, ranked: RankedUnit) -> list[Package]:
         unit = ranked.unit
         menu = [(lead, *self._locate(lead)[:2]) for lead in unit.leads]
@@ -1523,13 +1669,11 @@ class _Assembler:
                         "artifact_ids": sorted({identity for lead in unit.leads for identity, role in lead.related
                                                 if role == "artifact"})}
         rank = ranked.rank_record()
-        byte_omitted_controls = 0
-
-        def control_gaps() -> list[ScopeGap]:
-            return ([ScopeGap("owasp_control", unit.key, "truncated",
-                f"{byte_omitted_controls} control context entries exceeded max_package_bytes="
-                f"{self.settings.max_package_bytes}; all control rows remain in the pinned OWASP workbench")]
-                if byte_omitted_controls else [])
+        # The unit-wide material is published once (T-5000); every partition references it by hash, so
+        # the byte cap below applies to the partition's own body and a menu of N leads yields
+        # ceil(N / hunt_menu_partition_size) packages unless one partition's own leads exceed the cap.
+        unit_context = self.unit_context_document(unit, context)
+        self.unit_contexts[unit.key] = unit_context
 
         def render(chunk: list, number: int, count: int) -> tuple[str, bytes]:
             key = f"{unit.key}#{number:05d}"
@@ -1540,29 +1684,16 @@ class _Assembler:
                     "artifact_ids": sorted({identity for lead, *_ in chunk for identity, role in lead.related
                                             if role == "artifact"})},
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
-                gaps=[*gaps, *graph_gaps, *missing, *control_gaps()],
+                gaps=[*gaps, *graph_gaps, *missing],
                 truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": following},
                 graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
-                neighborhood=neighborhood)
+                neighborhood=neighborhood, unit_context=unit_context)
 
         def split(chunk: list) -> list[list]:
-            nonlocal omitted, byte_omitted_controls
             _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
             if len(body) <= self.settings.max_package_bytes:
                 return [chunk]
             if len(chunk) <= 1:
-                # Splitting leads cannot reduce component-wide control context. Apply the same
-                # explicit byte-bound qualification as lane A, without removing authoritative rows.
-                while len(body) > self.settings.max_package_bytes:
-                    candidates = [i for i, entry in enumerate(context) if entry.control_assessment is not None]
-                    if not candidates:
-                        break
-                    context.pop(max(candidates, key=lambda i: self._context_order(context[i])))
-                    omitted += 1
-                    byte_omitted_controls += 1
-                    _identity, body = render(chunk, 99_997, 99_999)
-                if len(body) <= self.settings.max_package_bytes:
-                    return [chunk]
                 raise IntegrityError(f"hunt partition of {unit.key} exceeds max_package_bytes with a single lead; "
                                      "the membership gate is blocked")
             middle = len(chunk) // 2
@@ -1571,14 +1702,15 @@ class _Assembler:
         size = self.settings.hunt_menu_partition_size
         chunks = [chunk for offset in range(0, max(1, len(menu)), size)
                   for chunk in split(menu[offset:offset + size])]
-        self.extra_gaps.extend((*gaps, *control_gaps()))
+        self.extra_gaps.extend(gaps)
         packages = []
         for number, chunk in enumerate(chunks):
             package_id, body = render(chunk, number, len(chunks))
             if len(body) > self.settings.max_package_bytes:
                 raise IntegrityError(f"hunt partition of {unit.key} exceeds max_package_bytes after numbering")
             packages.append(Package(package_id, "hunt", "hunt", None, f"{unit.key}#{number:05d}",
-                                    tuple(sorted(item[0].observation_id for item in chunk)), unit.key, body))
+                                    tuple(sorted(item[0].observation_id for item in chunk)), unit.key, body,
+                                    unit_context))
         return packages
 
 
@@ -1705,6 +1837,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                   "neighborhood": NEIGHBORHOOD_RULE, "slice": SLICE_RULE},
         "inputs": ShardSet.identities(scope.shards), "evidence_map_sha256": sha256_hex(scope.evidence_map()),
         "packages": [package.entry() for package in packages],
+        "unit_contexts": [assembler.unit_contexts[key].entry() for key in sorted(assembler.unit_contexts)],
         "units": [{"unit_key": item.unit.key, **item.rank_record(), "hunted": item.unit.key in hunted_keys,
                    "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ()))}
                   for item in ranked],
@@ -1722,7 +1855,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     }
     validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
     document["content_sha256"] = sha256_hex(document)
-    return Assembly(tuple(packages), document, gaps)
+    return Assembly(tuple(packages), document, gaps,
+                    tuple(assembler.unit_contexts[key] for key in sorted(assembler.unit_contexts)))
 
 
 def _reference_weaknesses(scope: AcceptedScope) -> dict[str, tuple[str | None, str | None]]:
@@ -1741,6 +1875,13 @@ def _reference_weaknesses(scope: AcceptedScope) -> dict[str, tuple[str | None, s
 def publish_packages(assembly: Assembly, out_dir: Path) -> Path:
     """Write package bytes and the manifest under a run-owned directory, then verify them."""
     out_dir = Path(out_dir)
+    for unit_context in assembly.unit_contexts:
+        path = out_dir / unit_context.path
+        if path.is_file():
+            if path.read_bytes() != unit_context.body:
+                raise IntegrityError(f"published unit context differs from its reassembly: {unit_context.unit_key}")
+            continue
+        atomic_bytes(path, unit_context.body)
     for package in assembly.packages:
         path = out_dir / "packages" / f"{package.package_id}.json"
         if path.is_file():
@@ -1767,12 +1908,33 @@ def verify_package_manifest(manifest_path: Path) -> dict[str, Any]:
         raise IntegrityError("package manifest content hash mismatch")
     document["content_sha256"] = claimed
     validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
+    assembly_dir = manifest_path.parent
+    unit_contexts: dict[str, Mapping[str, Any]] = {}
+    for entry in document["unit_contexts"]:
+        reference = {"schema": entry["schema"], "path": entry["path"], "sha256": entry["sha256"],
+                     "size_bytes": entry["bytes"]}
+        if entry["path"] != f"{UNIT_CONTEXT_DIRECTORY}/{entry['sha256']}.json":
+            raise IntegrityError(f"unit context path is not content-addressed: {entry['unit_key']}")
+        unit_document = load_unit_context(assembly_dir, reference)
+        if unit_document["unit_key"] != entry["unit_key"]:
+            raise IntegrityError(f"unit context does not match the manifest: {entry['unit_key']}")
+        unit_contexts[entry["sha256"]] = unit_document
     for entry in document["packages"]:
-        path = manifest_path.parent / "packages" / f"{entry['package_id']}.json"
+        path = assembly_dir / "packages" / f"{entry['package_id']}.json"
         if not path.is_file() or file_sha256(path) != entry["sha256"]:
             raise IntegrityError(f"package bytes do not match the manifest: {entry['package_id']}")
         body = json.loads(path.read_text(encoding="utf-8"))
         package_id = body.pop("package_id")
         if package_id != entry["package_id"] or package_id != f"{body['kind']}-{sha256_hex(body)}":
             raise IntegrityError(f"package identity does not match its body: {entry['package_id']}")
+        reference = body.get("unit_context")
+        if (reference is None) != (entry["unit_context_sha256"] is None) or (
+                reference is not None and reference["sha256"] != entry["unit_context_sha256"]):
+            raise IntegrityError(f"package unit context reference does not match the manifest: {entry['package_id']}")
+        if reference is not None:
+            if reference["sha256"] not in unit_contexts:
+                raise IntegrityError(f"package references an unlisted unit context: {entry['package_id']}")
+            # The package's own pin: the referenced bytes must hash to the reference and merge cleanly.
+            load_unit_context(assembly_dir, reference)
+            merge_unit_context({**body, "package_id": package_id}, unit_contexts[reference["sha256"]])
     return document

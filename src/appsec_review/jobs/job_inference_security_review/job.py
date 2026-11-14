@@ -45,7 +45,8 @@ from appsec_review.review.lead_triage import (
 from appsec_review.review.ledger import LedgerWriter, project
 from appsec_review.review.models import CellStatus, ChainStatus, ClaimState, IntegrityError, Lane, Predicate
 from appsec_review.review.packages import (
-    ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
+    ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, resolve_package_document,
+    verify_package_manifest,
 )
 from appsec_review.review.references import load_cwe_reference
 from appsec_review.review.result_cache import cache_from_settings
@@ -210,8 +211,9 @@ def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[Packa
         path = Path(run_root) / record["path"]
         if not path.is_file() or file_sha256(path) != record["sha256"]:
             raise IntegrityError(f"review package changed after assembly: {record['package_id']}")
+        # A hunt body references its unit context; the work item carries the verified, merged document.
         works.append(PackageWork(record["package_id"], Lane(record["lane"]), record["sha256"],
-                                 json.loads(path.read_text(encoding="utf-8")), tuple(record["rank"]),
+                                 resolve_package_document(path), tuple(record["rank"]),
                                  record["basis"], tuple(record["entities"]), record["unit_key"]))
     return works
 
@@ -357,7 +359,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly")
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]
-            entities = {package.package_id: tuple(sorted(set(package.document()["retrieval"]["entity_ids"]) - excluded))
+            # The grant is the resolved package's identities: a hunt body's own plus its unit context's (T-5000).
+            entities = {package.package_id: tuple(sorted(set(package.resolved()["retrieval"]["entity_ids"]) - excluded))
                         for package in mine}
             membership = _membership(scope, {item for values in entities.values() for item in values})
             positions = {unit_row["unit_key"]: unit_row["position"] for unit_row in assembly.manifest["units"]}

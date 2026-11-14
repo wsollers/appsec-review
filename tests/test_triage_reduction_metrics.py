@@ -85,7 +85,7 @@ def _write_fixture_manifest(assembly_dir: Path, scenario: Scenario) -> tuple[dic
         entries.append({"package_id": package_id, "kind": body["kind"], "lane": body["lane"], "lead_family": family,
                         "partition_key": family or "hunt", "unit_key": unit_key,
                         "lead_count": len(body["lead_menu"]), "sha256": file_sha256(path),
-                        "bytes": path.stat().st_size})
+                        "bytes": path.stat().st_size, "unit_context_sha256": None})
         return package_id
 
     packaged = [lead for lead in scenario.leads if lead.admitted and lead.packaged]
@@ -116,6 +116,8 @@ def _write_fixture_manifest(assembly_dir: Path, scenario: Scenario) -> tuple[dic
                   "neighborhood": NEIGHBORHOOD_RULE, "slice": SLICE_RULE},
         "inputs": [], "evidence_map_sha256": sha256_hex({}),
         "packages": sorted(entries, key=lambda entry: entry["package_id"]),
+        # Manifest v7 rows pin a hunt package's unit context; this fixture hunt body carries none (T-5000).
+        "unit_contexts": [],
         "units": [{"unit_key": "unit-1", "position": 1, "unit_count": 1, "score": 1.0, "rule": RANK_RULE,
                    "basis": [], "hunted": True, "lead_count": 0, "package_ids": [hunt_id]}],
         "gaps": [], "cwe_reference": None,

@@ -2,16 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-manifest.schema.json",
   "title": "Review package manifest (review-package-manifest/1)",
-  "description": "The manifest assemble-review-packages/12 publishes beside the package bytes (review/packages.py). assemble_packages validates the document before hashing it, and verify_package_manifest validates it again before any consumer reads a package.",
+  "description": "The manifest assemble-review-packages/13 publishes beside the package bytes (review/packages.py). assemble_packages validates the document before hashing it, and verify_package_manifest validates it again before any consumer reads a package. unit_contexts lists the unit context documents (package-unit-context/1) that the hunt packages reference once per unit; the verifier checks each document's bytes and every hunt package's reference against this list.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "assembly_rule", "package_schema", "run_id", "manifest_sha256", "target_snapshot",
                "settings", "graph_settings", "admission", "rules", "inputs", "evidence_map_sha256", "packages",
-               "units", "gaps", "cwe_reference", "counts", "audit"],
+               "unit_contexts", "units", "gaps", "cwe_reference", "counts", "audit"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-manifest/1"},
-    "assembly_rule": {"const": "appsec-review/assemble-review-packages/12"},
-    "package_schema": {"const": "appsec-review/review-package/6"},
+    "assembly_rule": {"const": "appsec-review/assemble-review-packages/13"},
+    "package_schema": {"const": "appsec-review/review-package/7"},
     "run_id": {"type": "string", "minLength": 1},
     "manifest_sha256": {"$ref": "#/$defs/sha"},
     "target_snapshot": {"type": ["string", "null"]},
@@ -67,7 +67,7 @@
         "type": "object",
         "additionalProperties": false,
         "required": ["package_id", "kind", "lane", "lead_family", "partition_key", "unit_key", "lead_count",
-                     "sha256", "bytes"],
+                     "sha256", "bytes", "unit_context_sha256"],
         "properties": {
           "package_id": {"type": "string", "pattern": "^(finding_lead|hunt)-[0-9a-f]{64}$"},
           "kind": {"enum": ["finding_lead", "hunt"]},
@@ -77,7 +77,37 @@
           "unit_key": {"type": ["string", "null"]},
           "lead_count": {"$ref": "#/$defs/count"},
           "sha256": {"$ref": "#/$defs/sha"},
-          "bytes": {"type": "integer", "minimum": 1}
+          "bytes": {"type": "integer", "minimum": 1},
+          "unit_context_sha256": {
+            "description": "The sha256 of the unit context document a hunt package references; null for a finding-lead package.",
+            "oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha"}]
+          }
+        }
+      }
+    },
+    "unit_contexts": {
+      "description": "One entry per hunted unit: the unit context document (package-unit-context/1) its hunt packages reference, content-addressed under unit-context/<sha256>.json beside the packages.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unit_key", "schema", "path", "sha256", "bytes", "counts"],
+        "properties": {
+          "unit_key": {"type": "string", "minLength": 1},
+          "schema": {"const": "appsec-review/package-unit-context/1"},
+          "path": {"type": "string", "pattern": "^unit-context/[0-9a-f]{64}\\.json$"},
+          "sha256": {"$ref": "#/$defs/sha"},
+          "bytes": {"type": "integer", "minimum": 1},
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["context_entries", "source_ids", "entity_ids"],
+            "properties": {
+              "context_entries": {"$ref": "#/$defs/count"},
+              "source_ids": {"$ref": "#/$defs/count"},
+              "entity_ids": {"$ref": "#/$defs/count"}
+            }
+          }
         }
       }
     },
