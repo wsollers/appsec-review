@@ -39,6 +39,12 @@ def test_the_registry_is_the_only_todo_file() -> None:
     assert offenders == [], offenders
 
 
+# Two id ranges, each sequential with no gaps: T-001 upward is shared by every machine that pushes to
+# origin; T-5000 upward is allocated by the review host's sessions (user decision, 2026-11-14), so the
+# two machines never allocate the same number while their work is in flight.
+SECOND_RANGE_START = 5000
+
+
 def test_ids_are_unique_sequential_and_indexed() -> None:
     text = REGISTRY.read_text(encoding="utf-8")
     index_start = text.index("\n## Index\n")
@@ -47,7 +53,11 @@ def test_ids_are_unique_sequential_and_indexed() -> None:
     ids = [entry_id for entry_id, _ in entries]
     assert len(ids) == len(set(ids)), "duplicate TODO id"
     numbers = sorted(int(entry_id[2:]) for entry_id in ids)
-    assert numbers == list(range(1, len(numbers) + 1)), "ids must be sequential from T-001 with no gaps"
+    shared = [number for number in numbers if number < SECOND_RANGE_START]
+    local = [number for number in numbers if number >= SECOND_RANGE_START]
+    assert shared == list(range(1, len(shared) + 1)), "shared ids must be sequential from T-001 with no gaps"
+    assert local == list(range(SECOND_RANGE_START, SECOND_RANGE_START + len(local))), \
+        f"second-range ids must be sequential from T-{SECOND_RANGE_START} with no gaps"
     rows = INDEX_ROW.findall(text[index_start:body_start])
     indexed = {entry_id: (title, anchor, area, state) for entry_id, title, anchor, area, state in rows}
     assert set(indexed) == set(ids), "index rows and entries must name the same ids"

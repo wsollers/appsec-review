@@ -10,7 +10,11 @@ last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 
 This is the only TODO file in the repository (`AGENTS.md`, "Deferred work and TODOs"). Every
 deferred item has a stable id `T-NNN`, a state, and an observable "done when". Ids are never
-reused or renumbered; closing an item changes its state, it does not delete the entry. A task doc
+reused or renumbered; closing an item changes its state, it does not delete the entry. Ids come in
+two ranges, each sequential with no gaps: `T-001` upward is shared by every machine that pushes to
+origin, and `T-5000` upward is allocated by the review host's sessions (decided 2026-11-14 after
+locally allocated ids collided with published ones), so concurrent machines never take the same
+number. A task doc
 under `docs/tasks/` that works an item names its id in its first paragraph; a `TODO` comment in
 code names an id or does not exist.
 
@@ -168,6 +172,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-165 | [Review only first-party code: vendored, SDK and generated paths leave the review lanes](#t-165-review-only-first-party-code-vendored-sdk-and-generated-paths-leave-the-review-lanes) | review | in-progress |
 | T-166 | [Verify whether first-party code uses vendored code named by a CVE or finding](#t-166-verify-whether-first-party-code-uses-vendored-code-named-by-a-cve-or-finding) | evidence | open |
 | T-167 | [Stylistic observations are not security leads](#t-167-stylistic-observations-are-not-security-leads) | review | in-progress |
+| T-5001 | [Bound the run-wide pipeline log and stream its reporting consumers](#t-5001-bound-the-run-wide-pipeline-log-and-stream-its-reporting-consumers) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2667,6 +2672,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** a typed list of stylistic rule classes under `[jobs.job_inference_security_review.settings.lead_filters]` (`review/lead_filters.py`): each names a scanner (id or glob) and the native severities and/or rule-id globs of its non-security checks. At lead collection (`lead_families.scope_leads`) a first-party observation matching a class is recorded as `not_admitted` with reason `stylistic`, never as a gap; it stays in the observations index and counts toward scanner coverage, and the package manifest records the count under `counts.dispositions.leads.stylistic`. Shipped default: cppcheck `style`, `performance`, `portability`, `information`. Semgrep and OpenGrep rule `metadata.category` is not carried into the indexed observation by `job_evidence_collection`, so a Semgrep class can only name rule ids; the `appsec-review.review-signal.sink.*` rules are sink nominations the hunt lane uses as hints and are deliberately not classified as stylistic.
 - **Done when:** a unit test over a fixture with cppcheck `style`, `warning` and `error` observations shows the `style` row recorded as `not_admitted`/`stylistic` with no lead, unit entry or hunt-menu entry, the `warning` and `error` rows still leads, and the configuration validated and frozen into the resolved settings (done on branch `first-party-scope`, `tests/review/test_first_party_scope.py`, `tests/test_inference_review_config.py`); a cpp smoke review under `dev` records the stylistic count in the package manifest and the hunt menus hold no cppcheck `style` rows.
 - **Refs:** `src/appsec_review/review/lead_filters.py`, `src/appsec_review/review/lead_families.py` (`scope_leads`), `appsec-review.toml` (`[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]`), `src/appsec_review/jobs/job_evidence_collection/adapters.py` (`_cppcheck_parser`, `_semgrep_parser`), `docs/operations/inference-security-review.md` ("Review scope"), T-165.
+
+### T-5001 — Bound the run-wide pipeline log and stream its reporting consumers
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** On smoke-cpp run `2026-11-14-0003` `data/logs/pipeline.jsonl` reached 2.06 GB (81,656 records): 73,378 `RETRIEVAL_QUERY` audit records carried the full coverage-gap list (about 28 KB each). `poc_generation__begin` parsed the whole log to find RUN_STARTED and was OOM-killed at 4.6 GiB in the 5 GiB code-location cgroup (fault 13, fixed in `cd28ce80`: the begin path streams through `PipelineLog.contains` and the audit record is bounded to a count, a hash and a five-gap sample). `observability/telemetry.py` `_aggregate_run_metrics` and `reporting/telemetry/inputs.py` still call `PipelineLog.read()`, which parses the entire log into memory and validates every record; on a log of that size the final-report jobs hit the same limit. Nothing bounds the log's growth per run.
+- **Scope:** (1) make the two reporting consumers stream (`PipelineLog.iterate`) and aggregate incrementally, keeping only the records each aggregate needs; (2) give the log a per-run byte budget or per-event-type sampling for high-volume audit events (`RETRIEVAL_QUERY`, `RETRIEVAL_SUBOP_COMPLETED`, `OPERATION_PROGRESS`), recorded as an explicit telemetry gap when applied, never silently; (3) a unit test that aggregates a synthetic log larger than the allowed working set without holding it in memory.
+- **Done when:** `grep -rn "PipelineLog(.*).read()" src/` names no reporting consumer; a unit test feeds a multi-hundred-megabyte synthetic log through the aggregation with bounded memory (measured with `tracemalloc` peak); a cpp smoke run's `pipeline.jsonl` stays under a documented budget and its final report publishes.
+- **Refs:** `src/appsec_review/observability/events.py` (`PipelineLog.read`, `iterate`, `contains`), `src/appsec_review/observability/telemetry.py` (`_aggregate_run_metrics`), `src/appsec_review/reporting/telemetry/inputs.py`, `src/appsec_review/retrieval/core.py` (`_audit`), `src/appsec_review/runtime/runner.py`, `tests/unit/observability/test_pipeline_log_streaming.py`.
 
 ## Legacy backlog
 

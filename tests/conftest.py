@@ -38,6 +38,11 @@ def _require_pytest_scratch_path(*, option: str, value: str | Path, invocation_d
 def pytest_configure(config: pytest.Config) -> None:
     """Fail before tests can populate disposable directories outside test/tmp."""
 
+    # Run directories must be application-private: storage.admission refuses a group- or
+    # world-writable run root ("admission requires application-owned, non-shared directory
+    # custody"). A host umask of 0002 (WSL's default) made every tmp_path run root 775 and failed
+    # 145 tests per run on HAL5000 for weeks as a "baseline". The harness owns its umask.
+    os.umask(0o022)
     config.addinivalue_line(
         "markers",
         "requires_target(name): needs the local checkout targets/<name>; skipped when it is absent",
