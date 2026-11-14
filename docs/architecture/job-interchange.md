@@ -195,7 +195,7 @@ a content-identity change** and must come with a note in this section (and a new
 `handoff-content` schema id). Interim rule: artifact identity by content pairs and attempt-path
 normalisation stand in for artifacts referenced by content hash throughout the body.
 
-Content-identity changes: `handoff-content/1` hashed only the `outputs` projection, so a unit whose
+Content-identity changes: <!-- historical:begin -->`handoff-content/1`<!-- historical:end --> hashed only the `outputs` projection, so a unit whose
 evidence lives in its result document alone (no interchange output keys) hashed equal across
 different results; `/2` adds `unit_outputs`. Handoffs carrying a `/1` identity are never equivalent
 to `/2` ones because the hashes differ.
