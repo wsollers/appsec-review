@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_codeql_analysis", "job_evidence_collection", "job_review_prioritization", "job_source_history_analysis", "job_tree_sitter_ast"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # Review prioritization
 

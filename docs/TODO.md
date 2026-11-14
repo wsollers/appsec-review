@@ -4,7 +4,7 @@ kind: "process"
 subsystem: "testing and operations"
 status: "current"
 jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_image_pin_verification", "job_language_build", "job_model_connectivity", "job_post_build_security_assessment", "job_project_build", "job_remediation_validation", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_third_party_data_sync", "job_threat_model_generation"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # TODO registry
 
@@ -130,9 +130,9 @@ until each is rewritten into the entry format when it is next touched.
 | T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | done (2026-11-13, docs/docs-ledger.json) |
 | T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | done (2026-11-13, docs/generated/inventory.json) |
 | T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | done (2026-11-13, docs/intelligence-buckets.json) |
-| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | open |
-| T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
-| T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | blocked |
+| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | done (2026-11-14, docs/docs-sync.json) |
+| T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | done (2026-11-14, docs/architecture/testing.md) |
+| T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | done (2026-11-14, docs/architecture/README.md) |
 | T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
 | T-134 | [Smoke targets: one minimal buildable repository per language, plus the guide](#t-134-smoke-targets-one-minimal-buildable-repository-per-language-plus-the-guide) | testing | done (2026-11-13, nine repositories and the guide published at v1.0.0; see T-135 to T-145 and docs/operations/test-targets.md) |
 | T-135 | [Create the C and C++ smoke target appsec-review-smoke-cpp](#t-135-create-the-c-and-c-smoke-target-appsec-review-smoke-cpp) | testing | done (2026-11-13, appsec-review-smoke-cpp v1.0.0 = bededb650d0c; Syft gap recorded in the guide) |
@@ -2039,7 +2039,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-130 — Author job operations pages around the generated contracts
 
-- **State:** open
+- **State:** done (2026-11-14, docs/docs-sync.json)
 - **Area:** pipeline
 - **Blocked by:** T-129
 - **Blocks:** T-131
@@ -2053,6 +2053,9 @@ until each is rewritten into the entry format when it is next touched.
   Explain model-backed jobs' role and persona choices through links to generated guidance.
   Link shared mechanisms to one canonical architecture or operations page, creating missing
   pages rather than duplicating facts. Leave the T-113 walk's current job page untouched.
+  Completion reconciles the canonical job pages and current legacy documentation through
+  `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including Wave1b and T-150. Later source
+  changes are outside this bounded pass; the watermark does not claim them.
 - **Done when:** the job-page set matches the ledger and job map, the Stage 2 tests pass,
   `docs/docs-sync.json` names the reconciled commit, and the current T-113 job page is unchanged.
   Each page's acceptance section describes checks; this work runs no integration, acceptance
@@ -2063,7 +2066,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-131 — Document the forward testing contract and its enforcement
 
-- **State:** blocked
+- **State:** done (2026-11-14, docs/architecture/testing.md)
 - **Area:** testing
 - **Blocked by:** T-130
 - **Blocks:** T-132
@@ -2085,7 +2088,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-132 — Write current-state subsystem architecture dives
 
-- **State:** blocked
+- **State:** done (2026-11-14, docs/architecture/README.md)
 - **Area:** pipeline
 - **Blocked by:** T-131
 - **Blocks:** T-133
@@ -2110,7 +2113,8 @@ until each is rewritten into the entry format when it is next touched.
 - **Area:** pipeline
 - **Blocked by:** T-132
 - **Why:** duplicate and obsolete non-decision documents remain after current pages exist;
-  removing them must not discard decision history or break navigation.
+  removing them must not discard decision history or break navigation. The user decision
+  required before Stage 7 remains outstanding.
 - **Scope:** Stage 7. Stop for the user's decision before deletions, then apply the ledger's
   approved `merge-into` and `retire` dispositions. Delete only non-decision records whose
   ledger reason supports retirement. Leave a one-line pointer for one release after a merge

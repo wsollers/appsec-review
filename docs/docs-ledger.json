@@ -10,98 +10,98 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/README.md",
-      "reason": "Reconcile Container packaging with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/analysis/binary/README.md",
-      "reason": "Reconcile Binary-analysis replacements with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/analysis/native/README.md",
-      "reason": "Reconcile Native-analysis capabilities with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/bases/jre/README.md",
-      "reason": "Reconcile jre base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/bases/php/README.md",
-      "reason": "Reconcile php base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/bases/python/README.md",
-      "reason": "Reconcile python base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/bases/ubuntu/README.md",
-      "reason": "Reconcile ubuntu base image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/build-assets/README.md",
-      "reason": "Reconcile Build assets with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/buildenv/README.md",
-      "reason": "Reconcile Build environments with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/buildenv/native-toolchain/README.md",
-      "reason": "Reconcile Shared native toolchain with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/buildenv/rust-wasm/README.md",
-      "reason": "Reconcile Rust and WebAssembly build image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/buildenv/typescript/README.md",
-      "reason": "Reconcile Node/TypeScript build image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
@@ -122,274 +122,274 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/report/latex/README.md",
-      "reason": "Reconcile LaTeX report renderer (`tool-report-latex`) with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/services/garnet/README.md",
-      "reason": "Reconcile Garnet result cache: Windows Nano Server image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/actionlint/README.md",
-      "reason": "Reconcile actionlint tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/blint/README.md",
-      "reason": "Reconcile blint tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/checkov/README.md",
-      "reason": "Reconcile checkov tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/clang-static-analysis/README.md",
-      "reason": "Reconcile Clang static-analysis tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/clangd-indexer/README.md",
-      "reason": "Reconcile tool-clangd-indexer: pinned clangd static indexer with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/codeql/README.md",
-      "reason": "Reconcile CodeQL images with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/cppcheck/README.md",
-      "reason": "Reconcile cppcheck tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/ghidra/README.md",
-      "reason": "Reconcile tool-ghidra: pinned Ghidra headless decompilation closure with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/git/README.md",
-      "reason": "Reconcile git tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/gitleaks/README.md",
-      "reason": "Reconcile gitleaks tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/gosec/README.md",
-      "reason": "Reconcile gosec tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/grype/README.md",
-      "reason": "Reconcile grype tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/hadolint/README.md",
-      "reason": "Reconcile hadolint tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/infer/README.md",
-      "reason": "Reconcile infer tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/joern/README.md",
-      "reason": "Reconcile tool-joern: pinned Joern/c2cpg runtime closure with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/mobsfscan/README.md",
-      "reason": "Reconcile mobsfscan tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/native-cpp/README.md",
-      "reason": "Reconcile native-cpp tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/opengrep/README.md",
-      "reason": "Reconcile opengrep tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/osv-scanner/README.md",
-      "reason": "Reconcile osv-scanner tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/phpcs/README.md",
-      "reason": "Reconcile phpcs tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/phpstan/README.md",
-      "reason": "Reconcile phpstan tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/pmd/README.md",
-      "reason": "Reconcile pmd tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/psalm/README.md",
-      "reason": "Reconcile psalm tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/semgrep/README.md",
-      "reason": "Reconcile semgrep tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/shellcheck/README.md",
-      "reason": "Reconcile shellcheck tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/spotbugs/README.md",
-      "reason": "Reconcile spotbugs tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/sqlite-fts/README.md",
-      "reason": "Reconcile sqlite-fts tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/svf/README.md",
-      "reason": "Reconcile SVF points-to tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/syft/README.md",
-      "reason": "Reconcile syft tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/tree-sitter/README.md",
-      "reason": "Reconcile Tree-sitter parser image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/trivy/README.md",
-      "reason": "Reconcile trivy tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "containers/tools/zizmor/README.md",
-      "reason": "Reconcile zizmor tool image with its image recipe and catalog, linking generated tool facts instead of duplicating them.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
@@ -402,10 +402,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/SEI-CERT.md",
-      "reason": "Reconcile the SEI CERT coverage overview with the registered rule-pack facts and preserve links to the official standards.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -418,10 +418,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "process",
       "path": "docs/agent-reader.md",
-      "reason": "Update navigation to the generated index and canonical pages without introducing repository-agent rules.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
@@ -434,50 +434,50 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/binary-decompilation.md",
-      "reason": "Separate the current Third-party binary decompilation with Ghidra view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/bounded-acceptance.md",
-      "reason": "Reconcile Bounded acceptance architecture with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/bounded-worker-execution.md",
-      "reason": "Reconcile Shared bounded model execution with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/build-environments-and-execution-capture.md",
-      "reason": "Separate the current Build environments, execution capture, and secret scanning view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/build-topology-and-iterations.md",
-      "reason": "Separate the current Target build topology and bounded iterations view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/change-context-analysis.md",
-      "reason": "Reconcile Change-context analysis with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -491,10 +491,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/clang-static-analysis.md",
-      "reason": "Reconcile Clang static analysis with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -524,18 +524,18 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/dataflow-bounded-slices.md",
-      "reason": "Reconcile Dataflow-bounded package slices with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/debug-symbol-indexing.md",
-      "reason": "Separate the current Build-bound debug-symbol indexing view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
@@ -548,18 +548,18 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/dependency-intelligence.md",
-      "reason": "Reconcile Dependency intelligence with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/deployment-image-and-source-mount.md",
-      "reason": "Separate the current Deployment image and source mount view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
@@ -572,10 +572,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/document-evidence-analysis.md",
-      "reason": "Reconcile Target document analysis and finding handoff with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -588,18 +588,18 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/engineering-security-signals.md",
-      "reason": "Separate the current Engineering security signals view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/evidence-completion-and-remediation.md",
-      "reason": "Separate the current Evidence completion and remediation view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -612,10 +612,10 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/finding-metrics.md",
-      "reason": "Separate the current Finding metrics view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
@@ -628,10 +628,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/guidance-procedures.md",
-      "reason": "Reconcile Role-selected review procedures with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -644,58 +644,58 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/indexing-and-query-reuse.md",
-      "reason": "Separate the current Review data indexing and reusable retrieval products view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/inference-security-review.md",
-      "reason": "Separate the current Near-terminal inference security review view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/job-consumer-read-paths.md",
-      "reason": "Reconcile Job consumer read-path inventory with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/job-input-contracts.md",
-      "reason": "Reconcile Job input and dispatch contracts with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/job-interchange.md",
-      "reason": "Reconcile Job interchange and native-result provenance with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/jobs-and-runtime.md",
-      "reason": "Reconcile Jobs and runtime with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/native-build-output-discovery.md",
-      "reason": "Separate the current Native build-output discovery and named build-output exclusions view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -708,42 +708,42 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/openvex-export.md",
-      "reason": "Separate the current OpenVEX findings export view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/owasp-control-workbench.md",
-      "reason": "Reconcile OWASP control-assessment workbench with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/profile-data.md",
-      "reason": "Reconcile Profile-data ingestion with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/python-and-retrieval.md",
-      "reason": "Reconcile Python and retrieval architecture with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/red-discovery-output.md",
-      "reason": "Reconcile Red discovery output contract with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -756,10 +756,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/retrieval-surfaces.md",
-      "reason": "Reconcile Retrieval surfaces: tools, MCP, review cells, and skills with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
@@ -780,26 +780,26 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/review-package-contract.md",
-      "reason": "Reconcile Review package and finding-lead contract with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/review-prioritization.md",
-      "reason": "Reconcile Review prioritization with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/review-protocol-v2.md",
-      "reason": "Separate the current Review protocol v2: the model-facing layer view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -820,42 +820,42 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/security-tag-taxonomy.md",
-      "reason": "Separate the current Security tag taxonomy view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/seeded-codeql-neighborhoods.md",
-      "reason": "Separate the current Seeded CodeQL neighborhoods view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/seeded-neighborhoods.md",
-      "reason": "Separate the current Seeded neighborhoods (all producers) view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/sei-cert-rule-pack.md",
-      "reason": "Reconcile SEI CERT rule pack with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/source-history-analysis.md",
-      "reason": "Separate the current Source history analysis view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -876,18 +876,18 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/telemetry.md",
-      "reason": "Reconcile Telemetry and derived metrics with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/test-coverage-ingestion.md",
-      "reason": "Reconcile Test-coverage ingestion with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -900,10 +900,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/testing.md",
-      "reason": "State the forward T-113 testing contract in T-131 and distinguish every enforced rule from a named enforcement gap.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
@@ -916,10 +916,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/tree-sitter-ast.md",
-      "reason": "Reconcile Tree-sitter AST production with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
@@ -932,10 +932,10 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/windows-host-runner.md",
-      "reason": "Separate the current Windows host build runner view from its preserved decisions and link the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -948,10 +948,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/architecture/worker-prompt-contracts.md",
-      "reason": "Reconcile Effective worker prompt contracts with its implementation and link generated facts from the subsystem dive in T-132.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -996,18 +996,18 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "architecture",
       "path": "docs/deployment-inventory.md",
-      "reason": "Reconcile the static deployment inventory with its implementation and link its T-108 job-publication gap.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "process",
       "path": "docs/development/quality-gates.md",
-      "reason": "Reconcile the quality-gate procedure with its scripts and link the testing contract without adding new agent rules.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
@@ -1164,194 +1164,194 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/acceptance-funnel.md",
-      "reason": "Reconcile Reading the per-defect funnel with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/artifact-indexing.md",
-      "reason": "Reconcile Produced-artifact indexing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/artifact-security-analysis.md",
-      "reason": "Reconcile Produced-artifact security analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/binary-decompilation.md",
-      "reason": "Reconcile Binary decompilation: running Ghidra before a review with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/bounded-acceptance.md",
-      "reason": "Reconcile Bounded integration acceptance with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/build-environment-analysis.md",
-      "reason": "Reconcile Static build-environment analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/change-context-analysis.md",
-      "reason": "Reconcile Change-context analysis operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/ci-configuration-analysis.md",
-      "reason": "Reconcile Operating CI configuration analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/clang-static-analysis.md",
-      "reason": "Reconcile Operating Clang static analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/code-graph-index.md",
-      "reason": "Reconcile Code-graph index with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/codeql-analysis.md",
-      "reason": "Reconcile Cross-language CodeQL analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/cpp-compiled-analysis.md",
-      "reason": "Reconcile C/C++ compiled-analysis operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/cpp-index-jobs.md",
-      "reason": "Reconcile C/C++ index jobs: clangd symbol index and Joern CPG with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/debug-symbol-indexing.md",
-      "reason": "Reconcile Debug-symbol indexing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/dependency-intelligence.md",
-      "reason": "Reconcile Operating dependency intelligence with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/document-issue-analysis.md",
-      "reason": "Reconcile Document issue analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/dossier-publication.md",
-      "reason": "Reconcile Dossier publication operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/final-report.md",
-      "reason": "Reconcile Operating the final publication gate and the final report with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/finding-metrics.md",
-      "reason": "Reconcile Finding metrics: operator guide with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/glasswing-experiments.md",
-      "reason": "Reconcile Glasswing quality experiments with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/guidance-evaluation.md",
-      "reason": "Reconcile Evaluating review guidance with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/image-pin-verification.md",
-      "reason": "Reconcile Image-pin verification and host bindings with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/inference-security-review.md",
-      "reason": "Reconcile Inference security review operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job-test-selection.md",
-      "reason": "Reconcile Job-focused test selection with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
@@ -1732,346 +1732,346 @@
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/language-build.md",
-      "reason": "Reconcile Generic language-build operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/lead-severity-triage.md",
-      "reason": "Reconcile Lead severity triage with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/metrics.md",
-      "reason": "Reconcile Review metrics with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/model-profiles.md",
-      "reason": "Reconcile Model profiles: dev, prod, copilot-dev and copilot-prod with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/native-sbom.md",
-      "reason": "Reconcile Native SPDX inventory with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/openvex-export.md",
-      "reason": "Reconcile OpenVEX findings export with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/operator-scripts.md",
-      "reason": "Reconcile Operator scripts with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/owasp-control-assessment.md",
-      "reason": "Reconcile Operating the OWASP control-assessment stage with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/performance-assurance.md",
-      "reason": "Reconcile Performance and customer-evidence assurance with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/poc-generation.md",
-      "reason": "Reconcile Operating proof-of-concept generation with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/post-build-security-assessment.md",
-      "reason": "Reconcile Post-build security assessment with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/profile-data.md",
-      "reason": "Reconcile Operating profile-data ingestion with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/project-build.md",
-      "reason": "Reconcile Project-build operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/quality-and-retention.md",
-      "reason": "Reconcile Operational status, cost provenance, quality trends and retention with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/recovery-repair.md",
-      "reason": "Reconcile Recovery and repair admission with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/remediation.md",
-      "reason": "Reconcile Remediation planning and bounded validation with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/report-rendering.md",
-      "reason": "Reconcile Report rendering (PDF and single-page HTML) with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/retrieval-mcp.md",
-      "reason": "Reconcile Operating the read-only operator MCP gateway with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/review-data-indexing.md",
-      "reason": "Reconcile Operating review-data indexing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/review-prioritization.md",
-      "reason": "Reconcile Review prioritization operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/review-startup.md",
-      "reason": "Reconcile Starting an appsec review: features and flags with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/run-readiness.md",
-      "reason": "Reconcile Run readiness: preparing a host for review runs with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/sanitizer-build.md",
-      "reason": "Reconcile Operating the sanitizer build with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/security-tagging.md",
-      "reason": "Reconcile Operating the security-tagging stage with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/sei-cert-rule-pack.md",
-      "reason": "Reconcile Operating the SEI CERT rule pack with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/signing.md",
-      "reason": "Reconcile Container image and Python module signing with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/source-history-analysis.md",
-      "reason": "Reconcile Source history analysis operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/ssh.md",
-      "reason": "Reconcile SSH from Windows into the WSL checkout with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/static-analysis.md",
-      "reason": "Reconcile Deterministic static-analysis evidence collection with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/svf-alias-analysis.md",
-      "reason": "Reconcile Operating SVF points-to analysis with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/swift-execution-policy.md",
-      "reason": "Reconcile Swift execution policy with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/target-acquisition.md",
-      "reason": "Reconcile Target acquisition with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/target-analysis-planning.md",
-      "reason": "Reconcile Target analysis planning operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/telemetry-report.md",
-      "reason": "Reconcile End-of-review telemetry report (LaTeX/PDF) with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/test-coverage-ingestion.md",
-      "reason": "Reconcile Operating test-coverage ingestion with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/test-targets.md",
-      "reason": "Reconcile Test targets: where to get the repositories with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/third-party-data-sync.md",
-      "reason": "Reconcile Third-party data synchronization with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/threat-model-generation.md",
-      "reason": "Reconcile Generated DFD and threat model with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/tree-sitter-ast.md",
-      "reason": "Reconcile Tree-sitter AST operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/unity-build.md",
-      "reason": "Reconcile Unity discovery, inventory and builds with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/wasm-build.md",
-      "reason": "Reconcile WebAssembly output-family build operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/wave1-review.md",
-      "reason": "Reconcile Wave 1 review operations with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     },
     {
       "decision_record": true,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/wsl-native-docker.md",
-      "reason": "Reconcile Native WSL Docker: migration lessons with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
     },
     {
@@ -3404,10 +3404,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "scripts/README.md",
-      "reason": "Reconcile the script index with current wrappers and link the operator runbooks rather than duplicate their procedures.",
+      "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
     }
   ],

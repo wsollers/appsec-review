@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_ci_configuration_analysis", "job_dependency_intelligence", "job_evidence_collection", "job_post_build_security_assessment", "job_profile_data", "job_test_coverage"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # Scanners and evidence collection
 

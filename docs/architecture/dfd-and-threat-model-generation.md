@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "historical"
 jobs: ["job_artifact_indexing", "job_change_context_analysis", "job_ci_configuration_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpp_compiled_analysis", "job_dependency_intelligence", "job_document_issue_analysis", "job_evidence_collection", "job_final_report_publication", "job_inference_security_review", "job_language_build", "job_owasp_control_assessment", "job_review_data_indexing", "job_review_package_assembly", "job_review_prioritization", "job_security_tagging", "job_source_history_analysis", "job_target_catalog", "job_threat_model_generation", "job_tree_sitter_ast"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # Generated data-flow diagram and threat model
 

@@ -4,7 +4,7 @@ kind: "schema"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_remediation_planning", "job_remediation_validation"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # Remediation artifact contracts
 

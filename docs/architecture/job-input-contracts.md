@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "runtime interchange"
 status: "current"
 jobs: ["job_artifact_indexing", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_ci_configuration_analysis", "job_evidence_collection", "job_language_build", "job_project_build", "job_target_catalog", "job_third_party_data_sync"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # Job input and dispatch contracts
 

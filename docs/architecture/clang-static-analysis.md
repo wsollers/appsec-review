@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_clang_static_analysis", "job_cpp_compiled_analysis"]
-last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
 ---
 # Clang static analysis
 
