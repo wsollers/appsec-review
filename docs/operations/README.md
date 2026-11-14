@@ -87,9 +87,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [artifact_indexing](job_artifact_indexing.md) | runtime interchange | current |
 | [artifact_security_analysis](job_artifact_security_analysis.md) | runtime interchange | current |
 | [binary_evidence_indexing](job_binary_evidence_indexing.md) | runtime interchange | current |
-| [build_environment_analysis](job_build_environment_analysis.md) | runtime interchange | current |
-| [build_iteration](job_build_iteration.md) | runtime interchange | current |
-| [change_context_analysis](job_change_context_analysis.md) | runtime interchange | current |
+| [build_environment_analysis](job_build_environment_analysis.md) | target acquisition and build | current |
+| [build_iteration](job_build_iteration.md) | target acquisition and build | current |
+| [change_context_analysis](job_change_context_analysis.md) | scanners and evidence collection | current |
 | [ci_configuration_analysis](job_ci_configuration_analysis.md) | runtime interchange | current |
 | [clang_static_analysis](job_clang_static_analysis.md) | runtime interchange | current |
 | [code_graph_index](job_code_graph_index.md) | runtime interchange | current |
@@ -99,34 +99,34 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [cpp_symbol_index](job_cpp_symbol_index.md) | runtime interchange | current |
 | [debug_symbol_indexing](job_debug_symbol_indexing.md) | runtime interchange | current |
 | [dependency_intelligence](job_dependency_intelligence.md) | runtime interchange | current |
-| [document_issue_analysis](job_document_issue_analysis.md) | runtime interchange | current |
-| [dossier_publication](job_dossier_publication.md) | runtime interchange | current |
+| [document_issue_analysis](job_document_issue_analysis.md) | review inference and guidance | current |
+| [dossier_publication](job_dossier_publication.md) | reporting and metrics | current |
 | [evidence_collection](job_evidence_collection.md) | runtime interchange | current |
-| [final_publication_gate](job_final_publication_gate.md) | runtime interchange | current |
-| [final_report_publication](job_final_report_publication.md) | runtime interchange | current |
-| [image_pin_verification](job_image_pin_verification.md) | runtime interchange | current |
+| [final_publication_gate](job_final_publication_gate.md) | reporting and metrics | current |
+| [final_report_publication](job_final_report_publication.md) | reporting and metrics | current |
+| [image_pin_verification](job_image_pin_verification.md) | images and deployment | current |
 | [inference_security_review](job_inference_security_review.md) | runtime interchange | current |
-| [language_build](job_language_build.md) | runtime interchange | current |
-| [model_connectivity](job_model_connectivity.md) | runtime interchange | current |
-| [openvex_export](job_openvex_export.md) | runtime interchange | current |
+| [language_build](job_language_build.md) | target acquisition and build | current |
+| [model_connectivity](job_model_connectivity.md) | review inference and guidance | current |
+| [openvex_export](job_openvex_export.md) | reporting and metrics | current |
 | [owasp_control_assessment](job_owasp_control_assessment.md) | runtime interchange | current |
 | [poc_generation](job_poc_generation.md) | runtime interchange | current |
 | [post_build_security_assessment](job_post_build_security_assessment.md) | runtime interchange | current |
 | [profile_data](job_profile_data.md) | runtime interchange | current |
-| [project_build](job_project_build.md) | runtime interchange | current |
+| [project_build](job_project_build.md) | target acquisition and build | current |
 | [remediation_planning](job_remediation_planning.md) | runtime interchange | current |
 | [remediation_validation](job_remediation_validation.md) | runtime interchange | current |
 | [review_data_indexing](job_review_data_indexing.md) | runtime interchange | current |
-| [review_intake](job_review_intake.md) | runtime interchange | current |
+| [review_intake](job_review_intake.md) | target acquisition and build | current |
 | [review_package_assembly](job_review_package_assembly.md) | runtime interchange | current |
 | [review_prioritization](job_review_prioritization.md) | runtime interchange | current |
 | [sanitizer_build](job_sanitizer_build.md) | runtime interchange | current |
 | [security_tagging](job_security_tagging.md) | runtime interchange | current |
-| [source_history_analysis](job_source_history_analysis.md) | runtime interchange | current |
+| [source_history_analysis](job_source_history_analysis.md) | scanners and evidence collection | current |
 | [svf_alias_analysis](job_svf_alias_analysis.md) | runtime interchange | current |
 | [target_acquisition](job_target_acquisition.md) | runtime interchange | current |
-| [target_analysis_plan](job_target_analysis_plan.md) | runtime interchange | current |
-| [target_catalog](job_target_catalog.md) | runtime interchange | current |
+| [target_analysis_plan](job_target_analysis_plan.md) | target acquisition and build | current |
+| [target_catalog](job_target_catalog.md) | target acquisition and build | current |
 | [test_coverage](job_test_coverage.md) | runtime interchange | current |
 | [third_party_data_sync](job_third_party_data_sync.md) | runtime interchange | current |
 | [threat_model_generation](job_threat_model_generation.md) | runtime interchange | current |
