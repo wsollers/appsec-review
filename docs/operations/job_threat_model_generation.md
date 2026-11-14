@@ -1,7 +1,7 @@
 ---
 title: "threat_model_generation"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_threat_model_generation"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,13 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # threat_model_generation
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Derive an evidence-linked DFD and candidate threat questions from accepted structure and interaction
+facts. Outputs are artifact-only routing context, not findings or proof that mitigations are
+absent; candidate mitigation state remains `not_examined`. This deterministic slice is disabled
+by default. The current inference behavior loader can use an admitted generated model as routing
+context, but must return to original evidence to establish claim predicates.
 
 <!-- generated:begin job=job_threat_model_generation -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -199,3 +205,132 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_threat_model_generation/job.py) uses
+[bounded index views](../../src/appsec_review/threat_model/index_view.py), not a checkout or model.
+The consumer boundary is explicit in [review behavior context](../../src/appsec_review/review/behavior.py).
+
+### `load`
+
+1. In `load.accepted_inputs`, verify the three reference-data files and require an authenticated
+   evidence target snapshot. Record run/attempt/snapshot/reference hashes in the origin.
+2. Open declared inputs not read by either fact lane to record their input-ledger states.
+   Record the unregistered deployment-inventory producer and an `input_unavailable` gap.
+3. Write attempt-owned canonical working records; missing or changed admitted bytes fail.
+
+### `facts`
+
+1. In `facts.structure`, hold the configured resource reservation while reading bounded catalog,
+   artifact and build evidence. Derive process/structure facts with provenance, input counts and
+   explicit unknowns; do not infer deployed architecture merely from a directory name.
+2. In `facts.interactions`, read eligible graph entry/sink, syntax-call and priority-signal rows
+   using the pinned interaction catalog. Retain evidence basis and location limitations.
+3. Each lane reports only its own unavailable/partial inputs, truncations, empty result and
+   provenance/location gaps. Write immutable working references for later assembly.
+
+### `assembly`
+
+1. In `assembly.dfd`, recheck reference hashes and join both lanes into elements, flows,
+   boundaries, entry points, actors and unknowns.
+2. Apply deterministic identity/merge and bound rules, retaining stronger evidence first.
+   Record truncated flow/entry populations instead of claiming a complete DFD.
+
+### `threats`
+
+1. In `threats.enumerate`, match the assembled model to pinned threat templates/crosswalks.
+2. Keep bounded candidate questions with cited evidence and unexamined mitigations. Record
+   a reached threat bound; do not convert template applicability into a confirmed finding.
+
+### `validation`
+
+1. In `validation.resolve_citations`, resolve cited identities against admitted inputs.
+2. Remove records with no resolving support and demote them to `citation_unresolved` unknowns;
+   propagate dependent removals without reporting the same causing gap repeatedly.
+3. Write the validated assembly and remaining threats, with citation and demotion counts.
+
+### `publication`
+
+1. In `publication.render`, render Markdown/Mermaid from validated records and joined prior gaps.
+   If the rendering bound is reached, add its truncation gap and rerender so the view names it.
+2. In `publication.publish_handoff`, assemble DFD, threat-model, evidence and result documents;
+   validate schemas, cross-references, counts and artifact bindings.
+3. Re-render all views and compare exact bytes with the earlier output. Reject changed working
+   files or nonpure document assembly. Write final canonical documents and artifact references.
+   The final unit returns no duplicate gaps: originating units already reported each one.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_threat_model_generation"] --> load["load.accepted_inputs"]
+  catalog["job_target_catalog / build_units / components / source_files"] --> load
+  load --> structure["facts.structure"]
+  load --> interactions["facts.interactions"]
+  structure --> assembly["assembly.dfd"]
+  interactions --> assembly
+  assembly --> threats["threats.enumerate"]
+  threats --> resolve["validation.resolve_citations"]
+  resolve --> render["publication.render"]
+  render --> publish["publication.publish_handoff"]
+  publish --> dfd["generated_dfd"]
+  publish --> tm["generated_threat_model"]
+  publish --> evidence["generated_model_evidence"]
+  publish --> views["generated_model_views"]
+  publish --> result["threat_model_documents"]
+  load -. "input_unavailable" .-> gaps["producer-gap/1"]
+  resolve -. "location_unresolved" .-> gaps
+  gaps --> result
+  publish -. "schema / reference / rerender failure" .-> reject["reject publication"]
+```
+
+Each input read follows [accepted-upstream admission](../architecture/job-input-contracts.md#admission-and-read-receipts);
+index custody is described in [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
+No model, scanner, network or target execution is commissioned.
+
+## Gaps
+
+This job sets strict gaps. The [constructors](../../src/appsec_review/threat_model/view.py)
+use real `producer-gap/1` codes, all with `retryable = false` here. Re-running this consumer over
+the same accepted inputs cannot repair upstream coverage. **Nonretryable does not mean advisory.**
+See [canonical gap semantics](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+| Code | Scope and walk meaning |
+| --- | --- |
+| `input_unavailable` | Absent, disabled or unregistered producer; includes deployment inventory on every current execution. [T-108](../TODO.md) names that producer gap. |
+| `output_missing` | Declared producer/dataset published no material. |
+| `producer_reported_gap` | Dataset accepted with partial upstream coverage; readable, not complete. |
+| `truncated` | Named query, process/entry/flow/threat bound or `publication.max_render_nodes`. |
+| `empty_result` | Structure/interactions lane read inputs but established no facts. |
+| `provenance_unavailable` | Structure names/paths were redacted or truncated by the index; affected processes are identified by record instead of name. |
+| `location_unresolved` | Interaction fact lacks a usable location, or final cited record is demoted. |
+
+Reference-data corruption, admitted-input tampering, malformed working records and invalid final
+documents fail publication. The always-present deployment gap means the current job cannot be
+accepted as complete coverage even though the final publishing unit itself returns `SUCCEEDED`.
+
+## Acceptance
+
+1. **A. Inputs:** Compare claim pins and input-ledger states/hashes with accepted catalog, artifact,
+   build, graph, syntax and priority inputs. Verify target snapshot and three reference hashes;
+   distinguish declared-but-unread rows from records actually read.
+2. **B. Independent comparison:** Independently count relevant accepted structure/interaction
+   rows and resolve sample DFD elements, flows and entry points to them. Reconcile retained,
+   capped and demoted records with model counts. Verify evidence-set membership, unexamined
+   mitigation state and byte-identical fresh rendering of views.
+3. **C. Gaps:** Group verified outcomes by the seven codes above, preserving originating unit and
+   scope. Compare the joined result without double counting. Record the deployment gap's cost;
+   stop for any unexpected cause rather than treating `retryable = false` as acceptance.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace, with
+   origin hashes, ledger states/read counts, model identities, unknowns and demotions.
+   A later comparison must name changed evidence, reference data or bounds.
+
+## Resume and invalidation
+
+[Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) binds resolved
+configuration, contract, target snapshot, releases and admitted upstream digests. A repaired
+producer changes its pin and invalidates this consumer without rerunning unrelated producers.
+Reference hashes are checked repeatedly within the attempt. Working artifacts are path/hash-bound
+to that attempt, so failed-attempt unit portability does not permit copying them into another
+attempt. Reference, schema or render changes require fresh validation and view comparison.

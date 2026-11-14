@@ -1,7 +1,7 @@
 ---
 title: "inference_security_review"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_inference_security_review"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,14 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # inference_security_review
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Investigate scanner leads and bounded hunt opportunities through separate review teams, then
+publish an auditable claim ledger, scored finding packages, coverage and attack-chain outcomes.
+Scanner assertions, priority, tags, document hypotheses and generated threat maps do not establish
+claim predicates by themselves. Deterministic evidence/adjudication rules distinguish supported
+from confirmed findings; publication, scoring, judge agreement and compile-only PoC eligibility
+are separate decisions.
 
 <!-- generated:begin job=job_inference_security_review -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -1318,3 +1325,243 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+See the [job handler](../../src/appsec_review/jobs/job_inference_security_review/job.py),
+[team handler](../../src/appsec_review/jobs/job_inference_security_review/teams.py),
+[deterministic stages](../../src/appsec_review/jobs/job_inference_security_review/stages.py) and
+[adjudication table implementation](../../src/appsec_review/review/adjudication.py).
+
+### `scope`
+
+1. In `scope.accept_manifest`, verify the accepted retrieval manifest and every bound shard.
+   Reject evaluator-root input and remove target-owned agent-guidance identities from cell scope.
+2. In `scope.assemble_scope`, retain components, source/build languages, evidence-map identity and
+   upstream scope gaps. Freeze the manifest hash for all subsequent work.
+
+### `triage`
+
+1. In `triage.lead_severity`, leave reported scanner severity intact. If configured off, publish
+   the disabled triage record without invoking a model.
+2. Otherwise collect unknown-severity leads, resolve bounded accepted source lines and run the
+   audited severity triager with pinned CWE context and guidance.
+3. Reuse only valid triage receipts. Unresolved leads stay unknown with a named coverage gap;
+   triage affects routing, not claim confirmation.
+
+### `packages`
+
+1. In `packages.assemble_lead_packages` and `packages.assemble_hunt_packages`, assemble the
+   same accepted scope into separate lane manifests and select each lane's packages.
+2. Bind bounded source slices, lead-family admission, operation questions and any admitted
+   generated model context. Routing context does not replace original source/tool evidence.
+3. Rank lead packages by effective severity and hunt packages by unit position; retain caps,
+   exclusions, missing strategy/specialist inputs and fallback scope.
+4. Bind package content, dependency shard identities, assembly/admissibility/predicate-policy
+   versions and accepted CWE set. Missing/stale CWE reference retains a fallback gap.
+
+### `lead_review`
+
+1. In `lead_review.teams`, commission packages in canonical order under the run-wide team semaphore,
+   lane allocation and job/package budgets.
+2. Run the three red-team lenses, normalize proposals and evidence, and apply package-local
+   admission/caps. Re-resolve every cited relation through its capability.
+3. For each admitted claim, run control and reachability refuters plus a blind independent
+   verifier with only the claim identity and original admissible context.
+4. For policy-selected claims, run judges over anonymized, deterministically ordered red/blue
+   positions. Judges record verdicts and relations but do not set claim state.
+5. Account for bounded rounds, follow-up evidence requests, unlaunched work and every terminal
+   cell. Seal the lane ledger and retained PoC bases/chain seeds. Handled failures can become
+   gaps only while the runtime permits continuation; integrity failures propagate.
+
+### `hunt_review`
+
+1. In `hunt_review.teams`, use the bounded `(strategy, persona)` hunt panel instead of the lead
+   lane's red lenses. Keep operation/site scope and routing/coverage gaps explicit.
+2. Normalize discovered hypotheses and apply hunt admission before launching the same blue,
+   blind-verifier and selected-judge sequence.
+3. Record explored, omitted, failed and no-claim work without claiming whole-file coverage.
+   Seal the independent lane shard; the two lane units may execute concurrently.
+
+### `merge`
+
+1. In `merge.claims`, verify both lane shards and package/entity memberships.
+2. Merge normalized claims deterministically, recording duplicate proposal counts, possible
+   duplicates, scope entities and verifier-independence records. Do not merge claims merely
+   because their prose sounds similar.
+
+### `adjudicate`
+
+1. In `adjudicate.apply_policy`, require the merged ledger head to match the verified projection.
+2. Apply the ordered policy: duplicate, out-of-scope, unresolved contradiction, direct
+   contradiction, fully satisfied required predicates with independent verification, partial
+   support, or insufficient evidence.
+3. Only the full direct-predicate/independence condition yields `confirmed`. Partial support is
+   `supported`; missing direct evidence and unresolved contradictions remain explicit gaps.
+   Judge verdicts do not override this table.
+4. Append deterministic transitions/adjudications to a sealed ledger shard.
+
+### `scoring`
+
+1. In `scoring.score_claims`, score supported/confirmed claims with registered deterministic
+   providers using re-resolved evidence factors and accepted tags.
+2. Keep unknown factors, provider gaps and pinned CWE-class impact/reference limitations.
+   Advisory CVSS/KEV context is not a target-specific exploit assessment; EPSS is not a scoring input.
+3. Retain score packages and ledger events. A score does not alter claim state or fill missing
+   evidence; final ship-block policy is evaluated separately.
+
+### `attack_chains`
+
+1. In `attack_chains.compose_candidates`, assemble bounded chain proposals from adjudicated
+   claims, score-qualified candidates and retained chain seeds.
+2. In `attack_chains.refute_edges`, challenge the connecting assumptions and evidence.
+3. In `attack_chains.verify_weakest_links`, independently check weakest links and produce terminal
+   decisions, artifacts and a protected manifest. Keep chain qualification and component-claim
+   states distinct; account for bounds, missing evidence and failed cells.
+
+### `completeness`
+
+1. In `completeness.audit`, record below-cutoff units, producer gaps, lead admission omissions and
+   CWE-reference limitations.
+2. Reconcile expected cells, terminal records and claims against the merged ledger. Prove exact
+   chain-cell accounting separately, then exclude chain cells and chain gaps from base-review
+   completeness. Compute the hunt coverage matrix and incomplete-gap ratio; a violated account
+   is not clean completion.
+3. Verify chain publication and pin ledger/projection hashes. Emit `COMPLETE`, `DEGRADED` or
+   `EMPTY` review status from accounting, not from whether any model returned plausible prose.
+
+### `publication`
+
+1. In `publication.publish_claim_ledger`, reverify accepted scope, package manifests, sealed
+   shards and retained cell receipts. Require audited ledger/projection hashes to agree and
+   write canonical ledger and projection bytes.
+2. In `publication.publish_handoff`, re-audit exact accounting and require the published ledger
+   bytes to reproduce from its shards. Validate findings/scores/coverage/chain references.
+3. Publish finding packages only for supported/confirmed claims; label supported packages
+   `not_independently_confirmed`. Partition confirmed packages into remediation intake and
+   supported packages into verification backlog.
+4. Evaluate ship-block policy from accepted state, scores, references and verifier distinctness.
+   Preserve pending/unrated decisions. Separately select PoC candidates from eligible judge
+   verdicts, configured technical-severity ratings and bases with resolving entry/path identities;
+   neither selection nor judge agreement confirms a claim.
+5. Publish the immutable handoff with both lane-manifest hashes, ledger/projection, coverage,
+   scores, findings, chain manifest, triage summary and gaps. Integrity failures prevent publication.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_inference_security_review"] --> scope["scope.accept_manifest / scope.assemble_scope"]
+  indexes["job_review_data_indexing / precomputed_products"] --> scope
+  scope --> triage["triage.lead_severity"]
+  triage --> lp["packages.assemble_lead_packages"]
+  triage --> hp["packages.assemble_hunt_packages"]
+  lp --> lead["lead_review.teams"]
+  hp --> hunt["hunt_review.teams"]
+  lead --> merge["merge.claims"]
+  hunt --> merge
+  merge --> policy["adjudicate.apply_policy"]
+  policy --> score["scoring.score_claims"]
+  score --> chains["attack_chains"]
+  chains --> complete["completeness.audit"]
+  complete --> ledger["publication.publish_claim_ledger"]
+  ledger --> publish["publication.publish_handoff"]
+  publish --> outputs["claim_ledger / scores_and_findings / attack_chains"]
+  lead -. "cell / evidence / budget gaps" .-> gaps["ledger gaps"]
+  hunt -. "coverage / routing gaps" .-> gaps
+  gaps --> complete
+  publish -. "integrity / accounting failure" .-> reject["reject publication"]
+```
+
+`attack_chains` contains the three exact units described above. Cell capabilities enforce
+[accepted input/read boundaries](../architecture/job-input-contracts.md#admission-and-read-receipts)
+and [bounded retrieval](../architecture/python-and-retrieval.md#query-boundary).
+Generated maps can suggest questions but cannot satisfy predicates merely by being accepted.
+
+## Gaps
+
+Review ledger gaps use the domain `GapClass` taxonomy; they are **not** `producer-gap/1` code
+values. Handler summaries still use legacy strings without a supplied retryability field.
+Use [canonical outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
+for producer counting and the bound ledger for detailed cell/claim/predicate coverage.
+
+| Emitted class or summary | Scope and walk meaning |
+| --- | --- |
+| `worker_gap`, `schema_error`, `authority_error`, `budget_gap` | Failed, invalid, refused or unlaunched cell/claim; terminal accounting does not mean investigation succeeded. |
+| `routing_gap`, `coverage_gap` | Missing stack/persona/source strategy, specialist, below-hunt cutoff, admission omission, bounded rounds/follow-ups or upstream coverage. |
+| `evidence_gap` | Unresolved/ambiguous citation, missing direct predicate evidence or unresolved contradiction. |
+| `independence_gap` | Required verification independence was not established. |
+| `score_gap` | Missing provider/factor evidence; do not map unrated to low severity. |
+| `chain_gap` | Chain proposal/challenge/weakest-link coverage is qualified or incomplete. |
+| `lead_triage`, `cwe_reference`, lane gap counts, `review_incomplete`, accounting violations, non-`COMPLETE` status | Handler summaries of unresolved severity/reference/lane/completeness facts; resolve to underlying receipts, not duplicate gap counts. |
+
+The taxonomy also contains PoC-policy/execution and blocking integrity/publication classes; their
+existence does not mean this job ran PoCs. Integrity errors block publication rather than being
+accepted coverage. With the opt-in [first-error execution controller](../../src/appsec_review/runtime/execution_safety.py)
+active, failure reporting raises `ReviewStopped` rather than continuing through the ordinary
+lane-failure gap branch. Cancellation/admission refusal is not successful coverage.
+Every unexpected canonical or ledger cause stops the walk.
+
+At this pinned source, [T-150](../TODO.md) remains the complete protected decision-product work:
+do not infer a comprehensive protected decision-audit dataset, reader or verifier grant from
+the existing ledger/cell artifacts. [T-151–T-156](../TODO.md) name remaining operation/evidence/
+coverage and stage-loss obligations; completion accounting alone does not establish those goals.
+
+## Acceptance
+
+1. **A. Inputs:** Compare claim pins and accepted manifest/shards with scope and both lane package
+   manifests. Verify evidence-rule, guidance, CWE/reference and any generated-model bindings;
+   distinguish supplied context from actual cell read receipts.
+2. **B. Independent comparison:** Independently enumerate accepted scanner leads, admission
+   partitions, hunt units/operation anchors and expected cells. Reconcile launched/reused/
+   unlaunched/terminal cells, no-claim work, proposals, duplicates and ledger claims. Resolve
+   sampled finding predicates to original source/tool artifacts, recompute adjudication and
+   scoring/ship-block partitions, and verify supported versus confirmed versus PoC-candidate
+   memberships without using an answer key.
+3. **C. Gaps:** Group canonical outcomes and then ledger gaps by class/subject/predicate; compare
+   coverage-matrix cells, omissions and incomplete ratio with independent input counts.
+   `EMPTY` or `DEGRADED` is not clean. Record every accepted cost and stop on unexpected causes.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   both package-manifest hashes, ledger/projection heads, finding/score/chain identities,
+   lane/cell partitions and coverage. Record unverified investigation quality separately;
+   a structural accounting pass is not findings-quality validation.
+
+## Resume and invalidation
+
+Package reuse basis binds semantic package content, only its dependency shards, assembly rules
+and evidence/admissibility/predicate policies. The [cell fingerprint](../../src/appsec_review/review/cells.py)
+adds lane, claim, role/persona/stack/strategy, task input, round/delta, readable evidence,
+guidance, model, capabilities, budgets, output schema and validator versions. Retry/concurrency
+settings are deliberately not cell identity inputs.
+
+Cell reuse revalidates evidence and receipts; changed package evidence or guidance invalidates
+dependent cells rather than unrelated packages. Blue-cell memoization is a separate bounded
+facility, not permission to share prior answers with blind verifiers or judges. Triage has its
+own accepted-source/reference/guidance-bound reuse. Chains, accounting and publication are
+reverified against sealed shards. [Runtime resume](../architecture/jobs-and-runtime.md#wave-1-resumability)
+still binds upstream/configuration/component identities; path-coupled ledger/artifact outputs are
+not portable failed-attempt checkpoints.
+
+## Model usage
+
+[lead_triager](../generated/guidance.md#roles-lead_triager) uses
+[generalist](../generated/guidance.md#personas-generalist) for unknown-severity routing.
+[red_team_analyst](../generated/guidance.md#roles-red_team_analyst) uses the package's routed
+persona/stack for lead lenses; [hypothesis_hunter](../generated/guidance.md#roles-hypothesis_hunter)
+uses deterministic strategy/persona panel pairs for hunts. Selection follows accepted CWE/tags,
+languages and available sources, not an arbitrary “security reviewer” persona.
+
+[blue_team_refuter](../generated/guidance.md#roles-blue_team_refuter) challenges effective controls
+and reachability. [independent_verifier](../generated/guidance.md#roles-independent_verifier)
+uses a fresh blind context; model distinctness is measured separately.
+[adjudication_judge](../generated/guidance.md#roles-adjudication_judge) uses the generalist
+viewpoint to assess anonymized positions, without state authority.
+[attack_chain_analyst](../generated/guidance.md#roles-attack_chain_analyst) proposes bounded
+compositions, with refuter/verifier challenges; all three chain roles select generalist/generic
+context. Adjudication, scoring and completeness are
+deterministic despite similarly named registry roles.
+
+Exact personas and strategies are recorded in routing/cell receipts and selected through
+[guidance procedures](../architecture/guidance-procedures.md#selection-and-provenance).
+The [worker contract](../architecture/worker-prompt-contracts.md#dispatch-inventory) and cell
+capability, not role prose, determine available evidence and permitted operations.

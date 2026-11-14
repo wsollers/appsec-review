@@ -1,7 +1,7 @@
 ---
 title: "security_tagging"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_security_tagging"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # security_tagging
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Publish evidence-bound security routing tags and a tag-cloud view from accepted source, graph,
+observation and coverage records. An observed or invoked capability is not a vulnerability;
+a crosswalk-derived tag means applicable, not present or satisfied. The handoff deliberately
+publishes an empty `security_findings` list.
 
 <!-- generated:begin job=job_security_tagging -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -840,3 +845,132 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+See the [handler](../../src/appsec_review/jobs/job_security_tagging/job.py),
+[collectors](../../src/appsec_review/jobs/job_security_tagging/producers.py),
+[taxonomy validator](../../src/appsec_review/jobs/job_security_tagging/taxonomy.py) and
+[crosswalk evaluator](../../src/appsec_review/jobs/job_security_tagging/crosswalk.py).
+
+### `taxonomy`
+
+1. In `taxonomy.load_taxonomy`, verify configured vocabulary, capability-rule and crosswalk file
+   hashes. Reject unknown settings, invalid bounds or incompatible taxonomy.
+2. Record identities, namespace status and crosswalk count. Proposed/fixture namespaces do not
+   acquire active or authoritative status merely by being loaded.
+
+### `scope`
+
+1. In `scope.resolve_inputs`, verify the accepted index manifest and target fingerprint.
+2. Resolve project/component subjects under explicit ownership rules, recording bounded component
+   coverage and a component-topology hash. Freeze manifest, topology and ownership identities.
+
+### `collection`
+
+1. In `collection.source_facts`, collect catalog language/path facts and eligible graph entry/sink
+   facts. For invoked tags, verify graph schema, admissibility, mapped class, exact source span
+   and component ownership; reject or qualify nonresolving facts with named reasons.
+2. In `collection.observation_facts`, map only configured producer/rule combinations and bounded
+   observations. Preserve reported weakness/severity basis; do not turn a scanner assertion into
+   independent confirmation.
+3. In `collection.coverage_gaps`, turn noncomplete upstream coverage and missing required index
+   families into reported gap tags. Merge duplicate assignment identities and enforce the
+   assignment ceiling; overflow fails rather than silently dropping tags.
+
+### `crosswalk`
+
+1. In `crosswalk.apply_crosswalk`, group observed inputs only by the rule's supported scope:
+   same subject, component, project or supported CI-job context.
+2. Emit derived tags with rule identity and `derived_from` inputs. If a resulting namespace uses
+   a catalog fixture, emit `gap:catalog-fixture`; do not present the fixture as a live feed.
+
+### `integrity`
+
+1. In `integrity.validate_assignments`, merge collectors and derived records.
+2. Validate namespace/basis rules and assignment identity; every derived input must exist and
+   every nonderived assignment must cite evidence. Compute basis/family counts only after this check.
+
+### `publication`
+
+1. In `publication.publish_index`, write immutable family shards with assignment, subject and
+   derivation relationships. Bind taxonomy, topology, input manifest and content fingerprints;
+   verify the combined manifest.
+2. In `publication.publish_tag_cloud`, roll up distinct subjects/components and strongest
+   assignment basis, not raw hit count. Retain the vocabulary's namespace rollup gaps.
+3. In `publication.publish_handoff`, join standing and collector/rollup gaps, gap tags, counts,
+   ownership policy and artifact references. Publish routing facts, never security findings.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_security_tagging"] --> tax["taxonomy.load_taxonomy"]
+  tax --> scope["scope.resolve_inputs"]
+  source["job_target_catalog / source_files"] --> scope
+  graph["job_code_graph_index / code_graph_facts"] --> scope
+  scope --> src["collection.source_facts"]
+  scope --> obs["collection.observation_facts"]
+  scope --> cov["collection.coverage_gaps"]
+  src --> cross["crosswalk.apply_crosswalk"]
+  obs --> cross
+  cov --> cross
+  cross --> valid["integrity.validate_assignments"]
+  valid --> idx["publication.publish_index"]
+  valid --> cloud["publication.publish_tag_cloud"]
+  idx --> pub["publication.publish_handoff"]
+  cloud --> pub
+  pub --> tags["tag_assignments"]
+  pub --> docs["tagging_documents"]
+  src -. "ineligible / unlocated / bounded" .-> gaps["gaps"]
+  gaps --> pub
+  valid -. "basis or derivation invalid" .-> reject["reject publication"]
+```
+
+Tag lookup follows [accepted retrieval](../architecture/python-and-retrieval.md#query-boundary);
+the [typed input contract](../architecture/job-input-contracts.md#admission-and-read-receipts)
+does not grant authority merely because tags share a combined manifest.
+
+## Gaps
+
+Source constructors emit legacy strings and gap tags, not bespoke canonical codes or retryability
+classifications. Interpret their canonical projection through
+[interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+| Source reason family | Scope and cost |
+| --- | --- |
+| Component, source-file and observation bound messages | Named shard population was capped. |
+| Disabled Swift and `language has no lang tag mapping` | Language facts are unsupported or policy-excluded. |
+| `graph-capability:missing_graph`, `producer_coverage`, `producer_fact_gap`, `entity_bound`, `missing_site_facts` | Graph capability coverage is incomplete or absent. |
+| `graph-capability:conflicting_fact`, `malformed_fact`, `ineligible_fact`, `unsupported_language`, `unmapped_class` | Named fact cannot supply an invoked tag. |
+| `graph-capability:source_unresolved`, `source_span_mismatch`, `component_scope_disagreement`, `component_ownership` | Exact source/ownership association failed or is ambiguous/unowned. |
+| Required index unavailable; upstream coverage gap tags | Missing evidence family or inherited producer coverage, not negative security evidence. |
+| Standing invoked-capability, deferred MITRE crosswalk and unimplemented crosswalk-scope statements | Only eligible mapped graph classes are covered; `taint_path`, `iac_resource`, `k8s_object` and `container_stage` scopes are not implemented. |
+| `gap:catalog-fixture` and `<namespace>: <rollup_gap>` | Inspect fixture assignments and namespace rollup limitations; these views are not complete external taxonomy coverage. |
+
+Invalid taxonomy hashes, assignment basis/derivation, accepted-manifest changes and assignment
+overflow are failures, not advisory gaps.
+
+## Acceptance
+
+1. **A. Inputs:** Compare claim/manifest pins, vocabulary/rules/crosswalk hashes and component
+   ownership/topology identity. Record the eligible input populations and collector bounds.
+2. **B. Independent comparison:** Independently enumerate accepted graph entry/sink facts,
+   source-file rows and observation rule matches. Trace sampled assignments to original
+   evidence and exact spans; compare deduplicated assignment IDs, basis/family totals and every
+   derived input. Verify the tag cloud does not imply findings.
+3. **C. Gaps:** Reconcile canonical outcomes, gap-family assignments and rollup notes with source
+   omissions and rejected facts. Record standing capability/crosswalk costs; stop on unexpected
+   causes, even when the job completed with gaps.
+4. **D. Baseline:** Save an authorized `stepwise.py accept` baseline and corpus namespace with
+   taxonomy/topology hashes, assignment IDs, basis counts and gap-tag sets. Distinguish changed
+   classification rules from changed target evidence.
+
+## Resume and invalidation
+
+Each tag-family shard fingerprint binds assignment content, target snapshot, vocabulary,
+capability rules, crosswalk, component topology and accepted manifest. Changed ownership or
+taxonomy invalidates the affected tagging projection; stale scope/taxonomy is rechecked within
+the attempt. The [runtime key](../architecture/jobs-and-runtime.md#wave-1-resumability) also
+requires exact upstream/configuration/component identities. Artifact-bearing results cannot be
+transplanted as portable failed-attempt checkpoints. This path dispatches no model.
