@@ -97,7 +97,7 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [cpg_analysis](job_cpg_analysis.md) | runtime interchange | current |
 | [cpp_compiled_analysis](job_cpp_compiled_analysis.md) | runtime interchange | current |
 | [cpp_symbol_index](job_cpp_symbol_index.md) | runtime interchange | current |
-| [debug_symbol_indexing](job_debug_symbol_indexing.md) | runtime interchange | current |
+| [Debug-symbol indexing job](job_debug_symbol_indexing.md) | code intelligence | current |
 | [dependency_intelligence](job_dependency_intelligence.md) | runtime interchange | current |
 | [document_issue_analysis](job_document_issue_analysis.md) | review inference and guidance | current |
 | [dossier_publication](job_dossier_publication.md) | reporting and metrics | current |
@@ -124,7 +124,7 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [security_tagging](job_security_tagging.md) | review inference and guidance | current |
 | [source_history_analysis](job_source_history_analysis.md) | scanners and evidence collection | current |
 | [svf_alias_analysis](job_svf_alias_analysis.md) | runtime interchange | current |
-| [target_acquisition](job_target_acquisition.md) | runtime interchange | current |
+| [Target acquisition](job_target_acquisition.md) | target acquisition and build | current |
 | [target_analysis_plan](job_target_analysis_plan.md) | target acquisition and build | current |
 | [target_catalog](job_target_catalog.md) | target acquisition and build | current |
 | [test_coverage](job_test_coverage.md) | runtime interchange | current |
