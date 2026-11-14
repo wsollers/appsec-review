@@ -437,7 +437,7 @@ class Context(_Contract):
         proposal_ids = [item.record_id.value for item in self.origin_proposals]
         if any(value is None for value in proposal_ids):
             raise IntegrityError("origin proposals require original proposal identities")
-        _unique(proposal_ids, "origin proposal identities")
+        _source_identities(self.origin_proposals)
 
 
 def _source_bindings(value: object) -> tuple[SourceRef, ...]:
@@ -943,8 +943,6 @@ def _verify_continuations(record: Product, continued: Mapping[str, Sequence[Sour
         else:
             sources = [item for item in rows if isinstance(item, SourceRef)]
             _source_identities(sources)
-            if name == ReferenceField.ORIGIN_PROPOSALS:
-                _unique([item.record_id.value for item in sources], "continued origin proposal identities")
 
 
 def _link(value: object) -> Link:
