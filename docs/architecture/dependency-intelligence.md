@@ -1,3 +1,11 @@
+---
+title: "Dependency intelligence"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_dependency_intelligence", "job_review_data_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Dependency intelligence
 
 See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place
@@ -21,7 +29,8 @@ retrieval shard named `dependency-intelligence`. The shard contains:
 
 After repository inference, a distinct deterministic unit canonicalizes repository identities and
 groups every referring `dependency_id`. Scorecard retrieval consumes only that repository inventory,
-so each unique repository causes at most one cache lookup and one remote retrieval per run (up to
+so each unique repository causes at most one cache lookup and one remote retrieval per execution
+of `scorecards.fetch` (up to
 `retries + 1` HTTP attempts; shipped `retries = 1`). The result
 is then associated back to every dependency in the group; repository deduplication never discards
 the package, SBOM, native provenance, exposure, CVE, or advisory identities.
@@ -115,10 +124,14 @@ is optimization and reference history, not run evidence by itself, and the clien
 repository-provided endpoint.
 
 Every dependency without usable Scorecard context remains present and receives a scoped gap. The
-closed operational kinds are `unresolved_repository`, `unsupported_host`, `scorecard_not_found`,
+repository/Scorecard operational kinds are `unresolved_repository`, `unsupported_host`, `scorecard_not_found`,
 `scorecard_rate_limit`, `scorecard_request_failure`, `scorecard_malformed_response`,
 `scorecard_cache_invalid`, `scorecard_cache_write_failure`, `repository_bound`, `model_unavailable`,
-`model_failure`, and `bounds`. A gap is missing coverage, not evidence that the dependency is safe.
+`model_failure`, and `bounds`. Native discovery, curation, investigation and SPDX publication add
+their own scoped input, bounds, mapping, conflict, conversion and validation reasons. These legacy
+domain `kind` values are not source-emitted canonical producer-gap codes. The
+[canonical job page](../operations/job_dependency_intelligence.md) describes the combined outcomes.
+A gap is missing coverage, not evidence that the dependency is safe.
 
 ## Public API
 

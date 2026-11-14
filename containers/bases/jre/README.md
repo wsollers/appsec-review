@@ -1,3 +1,11 @@
+---
+title: "jre base image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # jre base image
 
 `appsec-review/base-jre:21-noble` is the shared runtime base image declared by `base-jre` in
@@ -16,7 +24,7 @@ containers/build-all.ps1 build base-jre
 Equivalent direct build:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/bases/jre/Dockerfile \
   --tag appsec-review/base-jre:21-noble containers/bases/jre
 ```

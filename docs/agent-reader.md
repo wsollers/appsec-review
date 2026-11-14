@@ -1,6 +1,38 @@
+---
+title: "Agent navigation"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_code_graph_index", "job_final_publication_gate", "job_final_report_publication", "job_poc_generation", "job_sanitizer_build", "job_svf_alias_analysis", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Agent navigation
 
 Repository-wide authority and trust rules live only in [`../AGENTS.md`](../AGENTS.md).
+
+Current documentation entrypoints:
+
+- [`overview.md`](overview.md) — the executive view and its evidence/coverage limits.
+- [`operations/README.md`](operations/README.md) — canonical `job_*.md` contracts, process,
+  dataflow, gaps and acceptance, alongside specialized operator procedures.
+- [`generated/inventory.json`](generated/inventory.json) — source-derived job, task, dataset,
+  schema and test declarations, not observed run coverage.
+- [`generated/guidance.md`](generated/guidance.md) — registered model guidance and allowed
+  bindings, not evidence of dispatch.
+- [`generated/matrix-tool-bucket.md`](generated/matrix-tool-bucket.md) and
+  [`generated/matrix-bucket-availability.md`](generated/matrix-bucket-availability.md) —
+  provisional purpose/applicability views with explicit unknown cells.
+
+| Subsystem | Current view |
+|---|---|
+| Images and deployment | [Images, source mounts and policy](architecture/images-and-deployment.md) |
+| Acquisition and build | [Targets, topology and build evidence](architecture/target-acquisition-and-build.md) |
+| Code intelligence | [Syntax, symbols, graph and dataflow](architecture/code-intelligence.md) |
+| Scanners and evidence | [Producer observations and coverage](architecture/scanners-and-evidence-collection.md) |
+| Review and guidance | [Bounded inference and evidence use](architecture/review-inference-and-guidance.md) |
+| Runtime interchange | [Admission, reads, publication and manifests](architecture/runtime-interchange.md) |
+| Reporting and metrics | [Certification, rendering and measurement](architecture/reporting-and-metrics.md) |
+| Testing and operations | [Validation boundaries and recovery](architecture/testing-and-operations.md) |
 
 Relevant bounded procedures and design references:
 
@@ -19,13 +51,13 @@ Relevant bounded procedures and design references:
 - [`operations/inference-security-review.md`](operations/inference-security-review.md) — model selection and upgrade, local capacity overlay, and outcomes for the inference security review; design in [`architecture/inference-security-review.md`](architecture/inference-security-review.md).
 - [`operations/lead-severity-triage.md`](operations/lead-severity-triage.md) — deterministic-first severity ordering for scanner leads that reported no severity, its bounded Haiku fallback, audit artifact, and recovery.
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).
-- [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md) — code-graph strategy, `graph` index, `query_code_graph`, R3 admissibility update, job topology, rollout, the chunked implementation and test plan (implemented through C9, offline-verified), and the partially implemented Clang phase (K4 static analysis is complete; K1-K3 and optional K5 remain planned).
+- [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md) — historical code-graph decisions and revision-specific implementation/verification records; the current subsystem view is linked above.
 - [`tasks/seeded-clang-neighborhoods-prompt.md`](tasks/seeded-clang-neighborhoods-prompt.md) — task prompt and acceptance requirements for seeded Clang AST/IR, static-analyzer and CPG producers.
 - [`architecture/seeded-neighborhoods.md`](architecture/seeded-neighborhoods.md) — seeded neighborhoods for the Clang AST/IR, Clang-Tidy/Static Analyzer and CPG producers: shared seeding module, card `producers`, flow, diagnostics and symbol exposure.
 - [`architecture/seeded-codeql-neighborhoods.md`](architecture/seeded-codeql-neighborhoods.md) — seeded, bounded-depth CodeQL neighborhoods around findings, database cards and their MCP tools.
 - [`architecture/dataflow-bounded-slices.md`](architecture/dataflow-bounded-slices.md) — lead packages bounded by correlated dataflow paths; pluggable source-slice strategies and multi-language function spans (`package-slice/2`).
 - [`operations/code-graph-index.md`](operations/code-graph-index.md) — `job_code_graph_index` inputs, units, shards, resume and verification.
-- [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — SVF points-to cross-check producer (opt-in): image, job, cross-check rules, memory-object accessor index, finding-lead memory and caller context, tunables and verification tiers.
+- [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — preserved SVF design and implementation record; current behavior and accounting limits are in the code-intelligence view and canonical job page.
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
 - [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository, the paired case-094 tag and the blind CASTLE-C250 corpus).
@@ -41,9 +73,8 @@ Relevant bounded procedures and design references:
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
   delivered completion source and approved dossier decisions: compile-only PoC before one final gate,
   chains before review seal, confirmed-only remediation and nonexecuting validation.
-- [`architecture/dossier-data-inventory.md`](architecture/dossier-data-inventory.md) — source-verified
-  effective dossier inputs, bounded queries, indexes/shards, all producer dataset visibility,
-  provenance, evidence ceilings and architectural change map.
+- [`architecture/dossier-data-inventory.md`](architecture/dossier-data-inventory.md) — preserved
+  dossier input inventory and implementation change map; current reporting boundaries are linked above.
 - [`operations/dossier-publication.md`](operations/dossier-publication.md) — implemented protected
   dossier job, one dossier per confirmed finding regardless of origin and per PoC outcome,
   retained deterministic artifacts, render gaps and public-reference boundary.
@@ -58,7 +89,7 @@ Relevant bounded procedures and design references:
 - [`reviews/code-graph-precomputation-implementation.md`](reviews/code-graph-precomputation-implementation.md) — code-graph implementation record: decisions, chunks and merges, reconciliations, C9 integration fixes, verification, live-unverified items, and next work.
 - [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
 - [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
-- [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — typed, bounded repair proposals (apt packages, allowlisted environment, pinned package manager, manifest restores) for failed project-build image probes.
+- [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — registered model-side repair proposal contract; registration does not mean the current project-build dispatcher calls a model.
 - [`../pipeline/skills/post-build-security-assessment/SKILL.md`](../pipeline/skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
 - [`../pipeline/skills/binary-evidence/SKILL.md`](../pipeline/skills/binary-evidence/SKILL.md) — review-cell guidance on how decompiled binary evidence differs from source and how to cite it (binary hash, function address, pseudo-C line).
 - [`../.claude/skills/parallel-implementation/SKILL.md`](../.claude/skills/parallel-implementation/SKILL.md) — development skill (repository agents only) for splitting an approved design into parallel agent chunks and merging them.
@@ -77,7 +108,7 @@ Relevant bounded procedures and design references:
 - [`SEI-CERT.md`](SEI-CERT.md) — SEI CERT coverage overview and links to the official standards.
 - [`operations/sei-cert-rule-pack.md`](operations/sei-cert-rule-pack.md) — validating, extending, and evaluating the SEI CERT rule pack under Semgrep and OpenGrep.
 
-Operations, one page per job or service:
+Specialized operator procedures (canonical job contracts are in the entrypoints above):
 
 - [`operations/third-party-data-sync.md`](operations/third-party-data-sync.md) — NVD, OSV, MITRE, and cve-bin-tool feed publication.
 - [`operations/source-history-analysis.md`](operations/source-history-analysis.md) and

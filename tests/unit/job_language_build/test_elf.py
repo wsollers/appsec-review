@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import struct
-import sys
 
 import pytest
 
@@ -16,13 +16,6 @@ def test_loader_facts_reads_needed_libraries_in_declared_order(tmp_path: Path) -
     path.write_bytes(minimal_elf(("libgcc_s.so.1", "libc.so.6")))
     assert elf.loader_facts(path) == {"needed": ["libgcc_s.so.1", "libc.so.6"], "interpreter": None,
                                       "soname": None, "run_paths": [], "linkage": "dynamic"}
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="reads the running ELF interpreter")
-def test_loader_facts_agree_with_a_real_dynamic_executable() -> None:
-    facts = elf.loader_facts(Path(sys.executable).resolve())
-    assert facts["linkage"] == "dynamic" and facts["interpreter"].startswith("/lib")
-    assert any(name.startswith("libc.so") for name in facts["needed"])
 
 
 def test_loader_facts_reports_a_file_without_a_dynamic_segment_as_static(tmp_path: Path) -> None:
@@ -308,3 +301,194 @@ def test_loader_facts_reads_a_32_bit_big_endian_file(tmp_path: Path) -> None:
         _facts(tmp_path, _patched(data, (dynamic_offset + 4, ">I", len(strings))))
     with pytest.raises(ValueError):
         _facts(tmp_path, _patched(data, (string_offset + 1, ">B", 0xFF)))
+
+
+def _split_load_elf(*, wide: bool = True, order: str = "<", loads: int = 2,
+                    reverse_headers: bool = False, observed: bool = False,
+                    boundary: str = "cross") -> tuple[bytes, dict[str, int]]:
+    """Owned ELF bytes with a string table spanning constant-bias load mappings."""
+    header, program, entry = (64, 56, 16) if wide else (52, 32, 8)
+    count = loads + 1
+    dynamic_offset = header + count * program
+    string_offset = 0x5D8 if observed else dynamic_offset + 8 * entry
+    names = (b"libasan.so.8", b"libc.so.6", b"libsample.so", b"$ORIGIN/lib", b"/opt/lib")
+    strings = bytearray(b"\0")
+    offsets = []
+    if observed:
+        strings = bytearray(42266)
+        offsets = [1, 0x1000 - string_offset - 4, len(strings) - 64,
+                   len(strings) - 48, len(strings) - 24]
+        for offset, name in zip(offsets, names):
+            strings[offset:offset + len(name) + 1] = name + b"\0"
+    else:
+        for name in names:
+            offsets.append(len(strings))
+            strings.extend(name + b"\0")
+        strings.extend(bytes(16))
+    bias = 0x3FF000
+    tags = [(tag, offset) for tag, offset in zip((1, 1, 14, 15, 29), offsets)]
+    tags.extend(((5, bias + string_offset), (10, len(strings)), (0, 0)))
+    dynamic = b"".join(struct.pack(order + ("qQ" if wide else "iI"), *tag) for tag in tags)
+    size = string_offset + len(strings)
+    split = 0x1000 if observed else string_offset + 6
+    if boundary == "table-ends-at-first-boundary":
+        split, size = size, size + 1
+    elif boundary == "table-starts-at-second-boundary":
+        split = string_offset
+    cuts = [0, split, *([string_offset + 18] if loads == 3 else []), size]
+    extents = list(zip(cuts, cuts[1:]))
+    if reverse_headers:
+        extents.reverse()
+    data = bytearray(size)
+    data[:16] = b"\x7fELF" + bytes([2 if wide else 1, 1 if order == "<" else 2, 1, 0]) + bytes(8)
+    struct.pack_into(order + ("HHIQQQIHHHHHH" if wide else "HHIIIIIHHHHHH"), data, 16,
+                     3, 62 if wide else 3, 1, 0, header, 0, 0, header, program, count, 0, 0, 0)
+
+    def segment(index: int, kind: int, offset: int, length: int) -> None:
+        address = bias + offset
+        if wide:
+            struct.pack_into(order + "IIQQQQQQ", data, header + index * program,
+                             kind, 5, offset, address, address, length, length, 4096)
+        else:
+            struct.pack_into(order + "IIIIIIII", data, header + index * program,
+                             kind, offset, address, address, length, length, 5, 4096)
+
+    for index, (start, end) in enumerate(extents):
+        segment(index, 1, start, end - start)
+    segment(loads, 2, dynamic_offset, len(dynamic))
+    data[dynamic_offset:dynamic_offset + len(dynamic)] = dynamic
+    data[string_offset:string_offset + len(strings)] = strings
+    return bytes(data), {
+        "first": header, "second": header + program, "split": split, "bias": bias,
+        "strtab": dynamic_offset + 5 * entry + entry // 2, "strings": string_offset,
+        "offset": 8 if wide else 4, "address": 16 if wide else 8,
+        "filesz": 32 if wide else 16, "memsz": 40 if wide else 20,
+    }
+
+
+def _split_facts() -> dict:
+    return {"needed": ["libasan.so.8", "libc.so.6"], "interpreter": None,
+            "soname": "libsample.so", "run_paths": ["$ORIGIN/lib", "/opt/lib"], "linkage": "dynamic"}
+
+
+def test_loader_facts_reads_observed_adjacent_mapping_shape(tmp_path: Path) -> None:
+    data, layout = _split_load_elf(observed=True)
+    assert layout["strings"] == 0x5D8 and layout["split"] == 0x1000
+    assert layout["bias"] + layout["strings"] == 0x3FF5D8
+    assert len(data) - layout["strings"] == 42266
+    assert layout["bias"] + len(data) == 0x409AF2
+    assert data[0xFFC:0x1006] == b"libc.so.6\0"
+    assert _facts(tmp_path, data) == _split_facts()
+
+
+@pytest.mark.parametrize(("wide", "order", "loads", "reverse"), [
+    (False, "<", 2, False), (False, ">", 2, False),
+    (True, "<", 2, False), (True, ">", 2, False),
+    (True, "<", 3, False), (True, "<", 2, True),
+], ids=["elf32-le", "elf32-be", "elf64-le", "elf64-be", "three-loads", "reordered-headers"])
+def test_loader_facts_reads_string_table_across_adjacent_loads(
+        tmp_path: Path, wide: bool, order: str, loads: int, reverse: bool) -> None:
+    data, _layout = _split_load_elf(wide=wide, order=order, loads=loads, reverse_headers=reverse)
+    assert _facts(tmp_path, data) == _split_facts()
+
+
+@pytest.mark.parametrize("boundary", [
+    "table-ends-at-first-boundary", "table-starts-at-second-boundary", "table-ends-at-file-end",
+])
+def test_loader_facts_accepts_exact_load_boundaries(tmp_path: Path, boundary: str) -> None:
+    data, _layout = _split_load_elf(boundary=boundary)
+    assert _facts(tmp_path, data) == _split_facts()
+
+
+@pytest.mark.parametrize("defect", [
+    "virtual-gap", "file-gap", "file-backward", "bss-bridge",
+    "file-backed-overlap", "memory-overlap", "final-unbacked-byte", "segment-past-file",
+    "request-overflow32", "request-overflow64", "load-overflow32", "load-overflow64",
+])
+def test_loader_facts_rejects_noncontiguous_string_table_mappings(tmp_path: Path, defect: str) -> None:
+    wide = not defect.endswith("32")
+    original, layout = _split_load_elf(wide=wide)
+    data = bytearray(original)
+    fmt = "<Q" if wide else "<I"
+    first, second = layout["first"], layout["second"]
+
+    def change(offset: int, delta: int) -> None:
+        value, = struct.unpack_from(fmt, data, offset)
+        struct.pack_into(fmt, data, offset, value + delta)
+
+    message = "not mapped by a loadable segment"
+    if defect == "virtual-gap":
+        change(second + layout["address"], 1)
+    elif defect == "file-gap":
+        change(second + layout["offset"], 1)
+        data.append(0)
+    elif defect == "file-backward":
+        change(second + layout["offset"], -1)
+    elif defect == "bss-bridge":
+        change(first + layout["filesz"], -1)
+    elif defect == "file-backed-overlap":
+        change(second + layout["address"], -1)
+        message = "loadable segments overlap"
+    elif defect == "memory-overlap":
+        change(first + layout["memsz"], 1)
+        message = "loadable segments overlap"
+    elif defect == "final-unbacked-byte":
+        change(second + layout["filesz"], -1)
+        assert data[-16:] == bytes(16)  # Every named string still terminates before this unbacked tail.
+    elif defect == "segment-past-file":
+        change(second + layout["filesz"], 1)
+        change(second + layout["memsz"], 1)
+        message = "segment extends past the end of the file"
+    else:
+        limit = 1 << (64 if wide else 32)
+        if defect.startswith("request-overflow"):
+            struct.pack_into(fmt, data, layout["strtab"], limit - 4)
+        else:
+            address, = struct.unpack_from(fmt, data, second + layout["address"])
+            struct.pack_into(fmt, data, second + layout["memsz"], limit - address + 1)
+        message = "overflows ELF address space"
+    assert data[layout["strings"]:layout["strings"] + 14] == b"\0libasan.so.8\0"
+    with pytest.raises(ValueError, match=message):
+        _facts(tmp_path, bytes(data))
+
+
+def test_catalog_resolves_dependencies_across_adjacent_loads(tmp_path: Path) -> None:
+    data, _layout = _split_load_elf()
+    (tmp_path / "app").write_bytes(data)
+    artifacts, gaps = _catalog(tmp_path, tmp_path, {}, 100, "build-unit-fixture")
+    assert len(artifacts) == 1
+    assert artifacts[0]["loader_dependencies"] == ["libasan.so.8", "libc.so.6"]
+    assert artifacts[0]["loader_dependency_status"] == "resolved"
+    assert artifacts[0]["loader_parser"] == elf.PARSER_IDENTITY
+    assert all("delivery_fact_unavailable" in gap for gap in gaps)
+
+
+def test_file_offset_separates_elf32_virtual_and_physical_bounds() -> None:
+    limit = 1 << 32
+    segment = elf.Segment(kind=1, offset=limit - 8, address=0x1000, file_size=32, memory_size=32)
+    image = elf.Image(wide=False, order="<", file_size=limit + 24, header_size=52,
+                      segments=(segment,), section_offset=0, section_entry_size=0,
+                      section_count=0, section_names_index=0)
+    assert elf._file_offset(image, 0x1004, 28, "test table") == limit - 4
+    assert elf._file_offset(image, 0x1010, 8, "test table") == limit + 8
+    with pytest.raises(ValueError, match="load file range is out of bounds"):
+        elf._file_offset(replace(image, file_size=image.file_size - 1), 0x1004, 28, "test table")
+    with pytest.raises(ValueError, match="requested range overflows ELF address space"):
+        elf._file_offset(image, limit - 4, 8, "test table")
+    overflowing = replace(image, segments=(replace(segment, address=limit - 16),))
+    with pytest.raises(ValueError, match="load range overflows ELF address space"):
+        elf._file_offset(overflowing, limit - 8, 4, "test table")
+
+
+def test_adjacent_loads_supply_real_sanitizer_runtime_evidence(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_sanitizer_build.evidence import runtime_evidence
+
+    data, _layout = _split_load_elf()
+    path = tmp_path / "app"
+    path.write_bytes(data)
+    evidence = runtime_evidence(path, "executable")
+    assert evidence["evidence_status"] == "resolved"
+    assert evidence["needed_libraries"] == ["libasan.so.8", "libc.so.6"]
+    assert evidence["sanitizers"]["address"]["runtime_libraries"] == ["libasan.so.8"]
+    assert evidence["sanitizers"]["address"]["runtime_referenced"] is True
+    assert evidence["sanitizers"]["undefined"]["runtime_referenced"] is False

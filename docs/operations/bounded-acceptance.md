@@ -1,3 +1,11 @@
+---
+title: "Bounded integration acceptance"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Bounded integration acceptance
 
 This is the operator guide for the explicit acceptance profiles exposed by `run-tests`.
@@ -35,7 +43,8 @@ Parameterized selections must collect and pass every matching parameter case.
 
 ## Select and inspect a profile
 
-Use the checkout's own Python 3.11+ virtual environment with its test dependencies installed.
+Use the checkout's own environment with its test dependencies installed. Python 3.12 is the
+documented baseline; [T-160](../TODO.md) records the advertised-minimum renderer limitation.
 Acceptance refuses a virtual environment borrowed from another checkout. Process cases also
 require the pinned Dagster host dependencies, including when those cases are selected by `quick`.
 Follow repository host policy: use Linux or a Linux-filesystem WSL checkout by default; native
@@ -53,7 +62,8 @@ scripts/run-tests.sh --acceptance signals --workers 1
 scripts/run-tests.sh --acceptance review --workers 1
 ```
 
-Remove `-DryRun` / `--dry-run` to execute the inspected selection. Dry run prints JSON containing
+Only after explicit user authorization, remove `-DryRun` / `--dry-run` to execute the inspected
+selection. A dry-run result is not execution permission. Dry run prints JSON containing
 `profile`, `nodes`, `workers`, `deadline_seconds`, `case_deadline_seconds`, `strict` and
 `implemented`; it neither establishes prerequisite availability nor demonstrates coverage.
 
@@ -372,7 +382,7 @@ For new fixtures:
 3. Do not launch child `git`. The supervisor resolves HEAD before the guarded test process and
    exports `APPSEC_ACCEPTANCE_TESTED_COMMIT`; use it rather than widening the executable guard.
 4. Use application producers and certified validators at real joins. Write framework
-   `handoff/2` fixture envelopes through `tests.handoff_fixture.write_fixture_handoff`; do not
+   `job-handoff/2` fixture envelopes through `tests.handoff_fixture.write_fixture_handoff`; do not
    replace the current review `/3` or gate/report `/2` domain contracts to make an integration pass.
    Freeze the actual configuration before synthetic upstream handoffs, and bind their
    explicitly claimed upstream digest. Declare tiny selections such as one lead package and

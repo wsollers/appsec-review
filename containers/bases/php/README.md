@@ -1,3 +1,11 @@
+---
+title: "php base image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # php base image
 
 `appsec-review/base-php:8.4-bookworm` is the shared runtime base image declared by `base-php` in
@@ -16,7 +24,7 @@ containers/build-all.ps1 build base-php
 Equivalent direct build:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/bases/php/Dockerfile \
   --tag appsec-review/base-php:8.4-bookworm containers/bases/php
 ```

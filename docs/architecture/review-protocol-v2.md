@@ -1,3 +1,11 @@
+---
+title: "Review protocol v2: the model-facing layer"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review protocol v2: the model-facing layer
 
 Status: implemented (see section 13 for the decisions taken where this document left a choice open). Observed behavior comes from the first live
@@ -63,7 +71,11 @@ a wrong one fatal.
 
 The package keeps its hash-pinned identity and reuse basis. Its model-facing view is organized into
 labelled sections. Ids are shortened here. Every built view is validated against
-[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/4`).
+[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/5`).
+The illustrative JSON below retains the original protocol sketch, not the current stored
+package envelope. Current assembly is `review-package/6` with `assemble-review-packages/13`;
+bounded operation and generated-model context remain routing data, as described in the
+[package contract](review-package-contract.md).
 
 ```json
 {

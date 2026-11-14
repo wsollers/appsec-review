@@ -1,3 +1,11 @@
+---
+title: "Bounded acceptance architecture"
+kind: "architecture"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Bounded acceptance architecture
 
 The acceptance path exercises real application producer/consumer joins without taking ownership
@@ -198,7 +206,7 @@ not descriptions of current application capability.
 
 The authentic fixture attaches source-resolving call-chain evidence to an accepted index set and
 runs the current inference-review job using scripted inference. Framework handoff envelopes use
-`handoff/2` through `tests.handoff_fixture.write_fixture_handoff`. The current review domain is
+`job-handoff/2` through `tests.handoff_fixture.write_fixture_handoff`. The current review domain is
 `/3`; gate and report domains remain `/2`. These domain versions are separate from the
 framework envelope and must not be changed to make fixture integration pass.
 

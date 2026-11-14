@@ -1,11 +1,20 @@
+---
+title: "Container image and Python module signing"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Container image and Python module signing
 
-Pinned container images and the installed `appsec_review` package are signed by the operator on the
-review host and verified wherever they are launched or imported. Container image verification is
-opt-in: it runs only when `[signing] image_enforcement = "required"`, and the default (also the
-repository's `appsec-review.toml` setting) is `"disabled"`. When it is enabled, verification fails
-closed: a missing, malformed, untrusted or mismatched signature stops the launch or the process. It
-is never reported as clean. Code: `src/appsec_review/signing/`, `src/appsec_review/config/signing.py`,
+The operator can sign pinned container images and the `appsec_review` package. General image
+launch enforcement is opt-in through `[signing] image_enforcement = "required"`; the default is
+`"disabled"`. Explicit verification commands and host-side deployment lifecycle verification still
+check signatures when that general policy is disabled. Python-module bootstrap enforcement is a
+separate configured boundary. Where enforcement applies, a missing, malformed, untrusted or
+mismatched signature refuses the launch/import, never a clean result.
+Code: `src/appsec_review/signing/`, `src/appsec_review/config/signing.py`,
 `deploy/dagster/bin/image_signing.py` and `deploy/dagster/native/root_entrypoint.py`.
 
 ## Threat model
@@ -133,7 +142,7 @@ types fail configuration loading. Runtime profiles and capacity overlays cannot 
 | `openssl` | `/usr/bin/openssl` | Absolute path to the OS-owned OpenSSL 3 binary; a relative path or `..` is rejected. |
 | `trusted_keys_dir` | `/etc/appsec-review/signing/trusted-keys` | Trust anchors; a relative path resolves against the configuration file's directory. |
 | `image_signatures_dir` | `/var/lib/appsec-review/signing/images` | Image envelopes; a relative path resolves the same way. |
-| `image_enforcement` | `"disabled"` | Opt-in. `"required"` verifies every image launch or reuse; `"disabled"` launches and reuses images without checking envelopes. |
+| `image_enforcement` | `"disabled"` | Selects general executor image-envelope enforcement. Explicit verification and host lifecycle checks remain separate; documented legacy gaps below still apply. |
 
 A missing table or key means these defaults, including `"disabled"`; image enforcement is enabled
 only by an explicit `image_enforcement = "required"`. `signing.policy.default_image_verifier`
@@ -142,16 +151,18 @@ application root. If the configuration cannot be loaded or the verifier cannot b
 `SignatureVerificationError` and caches nothing. A failure never falls back to
 `DisabledImageVerifier`. `verify-image` always checks envelopes, whatever `image_enforcement` says.
 To opt in, install the trust anchors, sign the pinned images (`sign-image --all-pinned`), set
-`image_enforcement = "required"`, and rebuild the Dagster image, which bakes in
-`appsec-review.toml`.
+`image_enforcement = "required"` only as an explicit operator policy change. The TOML is mounted,
+not baked into the Dagster tooling image: reload the measured configuration/source and start a
+fresh authorized run rather than rebuilding an unchanged image or rewriting a frozen run.
 Module enforcement does not use `[signing]`. It is driven by the environment or by the release
 layout (see [Modules](#python-modules)).
 
 ## Container images
 
-With `image_enforcement = "required"`, every pinned image is verified when it is launched or reused,
-after its identity check. With the default `"disabled"`, each call site below still runs its identity
-and pin checks but skips the envelope check:
+With `image_enforcement = "required"`, the following call sites verify applicable pinned images.
+With `"disabled"`, executor paths keep their ordinary identity checks but skip envelope
+enforcement. The in-container self-check is a distinct case: it returns `disabled` before daemon
+inspection. Host-side lifecycle verification remains independent of both.
 
 | Call site | Image verified |
 | --- | --- |
@@ -188,8 +199,9 @@ flowchart TD
     resolve -- "policy cannot load, or envelope missing or untrusted" --> refused["ImageSignatureRefused (RuntimeError)<br/>prepare/start in the driver: record UNKNOWN, cleanup still allowed<br/>_start_spec: request rejected, record stays PREPARED"]
 ```
 
-A catalog tool launch through `ContainerExecutor.resolve_image` runs in this order. The other call
-sites use the same `EnvelopeImageVerifier` after their own identity checks:
+A catalog tool launch through `ContainerExecutor.resolve_image` follows this sequence when
+envelope enforcement is selected. Other policy-controlled call sites use the same verifier after
+their own identity checks:
 
 ```mermaid
 sequenceDiagram
@@ -229,9 +241,11 @@ sequenceDiagram
 ```
 
 The pipeline never signs the images that it derives at run time: project images and CodeQL derived
-images. Such an image is trusted only through its verified signed inputs and the identity recorded
+images. Such an image relies on its input/derivation identities and the identity recorded
 in its manifest (`project_images.derived_base_image_id` and `BuildProfile.derived_from_image_id`).
-Every executor accepts an injectable `image_verifier`. Unit tests use a conftest-installed accepting
+Input signatures are verified only where the selected enforcement boundary requires them;
+derivation does not make the output signed. These verifier-enabled paths accept an injectable
+`image_verifier`. Unit tests use a conftest-installed accepting
 verifier, and enforcement tests pass explicit verifiers. Live, integration and acceptance tests run
 under the configured policy.
 
@@ -415,7 +429,8 @@ Run these steps on the review host from the repository checkout, never during a 
    implementation-release manifest onto `/var/dagster/release/` before it execs the code server.
    Otherwise the gate exits 3, so the code location never becomes healthy
    and the webserver and daemon, which depend on it, do not start. With
-   `image_enforcement = "disabled"` (the default) it logs status `disabled` and starts unchecked. The gate is a
+   `image_enforcement = "disabled"` (the default) this second, in-container check is skipped;
+   host-side image verification and configured module verification still apply. The gate is a
    second check, not the authority: a malicious image can omit its own check (Docker socket access
    is root-equivalent), and a webserver or daemon started with `--no-deps` may skip it. Settings are
    described in [Signed image](../../deploy/dagster/README.md#signed-image) and
@@ -564,7 +579,9 @@ evidence that they are verified.
 - **Image signature enforcement is opt-in and off by default.** With the default
   `image_enforcement = "disabled"` (the repository setting), no job, executor, builder or the
   Dagster self-check verifies container image envelopes; only digest pins and identity checks
-  apply. Unsigned or re-signed images launch. Set `image_enforcement = "required"` to enforce.
+  apply on those executor paths. The in-container self-check also skips daemon inspection.
+  An unsigned image is not blocked by this general policy alone; the host lifecycle still refuses
+  an unverified deployment image. Enabling enforcement remains an explicit policy decision.
   Host-side `lifecycle.py` signing and verification of the Dagster image, `verify-image`, and
   Python module signing are not controlled by this setting.
 - **The native engine broker does not verify signatures yet.** It launches the images declared under
@@ -598,13 +615,12 @@ evidence that they are verified.
   dependencies are imported by the standard finders from the read-only release, and empty
   directories are not part of the manifest.
 - **Derived images are unsigned.** They rely on verified inputs and recorded identities.
-- **The cve-bin-tool image is pinned only optionally, and the repository pin is unset.** Its step
+- **The cve-bin-tool image has a legacy optional pin path.** Its step
   settings accept an `image_id` pin. When it is set, the tag must resolve to exactly that ID
   (otherwise the launch is refused), the step never builds the image, and `sign-image --all-pinned`
-  signs it. The pin value is owner-recorded: only the review-host session that builds the image sets
-  it. Pending owner action: build and smoke the image on the review host, read
-  `docker image inspect --format '{{.Id}}' <settings.image>`, set `image_id` in
-  `appsec-review.toml`, then run `sign-image --all-pinned`. Until then, on the first Docker-path run
+  signs it. This `image`/optional `image_id` pair is not the generic host-pins binding path.
+  [T-050](../TODO.md) tracks reconciling it with [host-owned pins](image-pin-verification.md);
+  do not store a host observation in tracked TOML. On the first Docker-path run
   with `settings.image` absent, the image is built from its context and launched unverified; with
   `image_enforcement = "required"`, later runs verify whatever the tag resolves to, so they fail until
   the operator runs `sign-image <settings.image>`, and any signed image retagged as `settings.image`

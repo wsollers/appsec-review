@@ -1,8 +1,17 @@
+---
+title: "Garnet result cache: Windows Nano Server image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Garnet result cache: Windows Nano Server image
 
 The inference security review caches pointers to completed blue-role cell results in
 [Microsoft Garnet](https://github.com/microsoft/garnet), a Redis-compatible server with per-key TTL.
-The cache is optional and fail-open: if it is unreachable, reviews run uncached and only cost more.
+The cache is optional and fail-open: if it is unreachable, the review runs uncached and may repeat
+model work. A cache hit is revalidated by the cell executor; a stored result is not new evidence.
 
 ## Why two images
 
@@ -29,7 +38,10 @@ The script refuses a Linux-containers engine and refuses to build if the `v2.2.5
 names the pinned commit. It fetches that exact commit into
 `%LOCALAPPDATA%\appsec-review\garnet-src\<commit>` (override with `-SourceDirectory`), verifies the
 checkout, builds it as the context, and prints the local image ID. NuGet packages are restored at
-build time at the versions Garnet's sources declare at that commit. Nothing is pushed.
+build time at the versions Garnet's sources declare at that commit, with network access.
+The source directory is disposable: the script force-checks out the pinned commit and removes
+untracked and ignored files there. Nothing is pushed. This is a service-provisioning recipe,
+not evidence that the Windows review execution path has been manually validated.
 
 ## Run
 

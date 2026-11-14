@@ -1,9 +1,19 @@
+---
+title: "Code-graph index"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_review_data_indexing", "job_review_prioritization", "job_security_tagging", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Code-graph index
 
 `job_code_graph_index` turns the accepted CodeQL graph exports into the `graph` retrieval index
-that `query_code_graph` serves. The design authority is
-[`code-graph-precomputation.md`](../architecture/code-graph-precomputation.md) (decision D4 and
-sections 7.1 to 7.4). The job runs no analyzer and reads no target tree beyond the source files the
+that `query_code_graph` serves. Current behavior is summarized in
+[code intelligence](../architecture/code-intelligence.md) and the
+[canonical job page](job_code_graph_index.md); the original D4 decision remains in the historical
+[design record](../architecture/code-graph-precomputation.md).
+The job runs no analyzer and reads no target tree beyond the source files the
 accepted CodeQL plan names, each verified against its accepted SHA-256.
 
 ## Inputs
@@ -16,7 +26,7 @@ accepted CodeQL plan names, each verified against its accepted SHA-256.
 | clangd, LLVM IR and Clang AST shards | `analysis` shards of `job_cpp_symbol_index` (`clangd-*`) and `job_cpp_compiled_analysis` (`branch` `ir` and `ast`), from the accepted manifest or, when the `job_codeql_analysis` manifest rewrite dropped them, from those jobs' own accepted handoffs (`restored_secondary` in the load output) | Accepted manifest verification; a restored shard's handoff manifest is re-verified and the shard must be produced by that handoff's job |
 | CodeQL observations | Accepted `observations` shards `codeql-<language>-<scope>-*` | Accepted manifest verification |
 | Prioritization flow steps | Accepted `priority` shards of `job_review_prioritization`, when present | Accepted manifest verification |
-| Catalog and columns | `rules/codeql-graph-export/catalog.json` and `columns.json` | The catalog is schema-checked and its SHA-256 must equal `jobs.job_codeql_analysis.settings.languages.<language>.export_queries.catalog_sha256` of the run-bound resolved configuration for every exported language (a mismatch, or no bound configuration, is an `IntegrityError`). The export pack's `columns_sha256` must equal the normalizer's `columns.json` |
+| Catalog and columns | Supplied `rules/codeql-graph-export/catalog.json` and `columns.json` | Catalog shape and export contracts are checked; the catalog release must match frozen `review_policy.releases.graph_catalog`. Missing bound configuration or a contradictory release fails. Reuse requires declared graph catalog, columns, normalizer and validation releases, not fresh customer-evidence hashes of supplied files. |
 
 Each clangd, IR and AST shard serves exactly one CodeQL scope: the scope whose planned files hold
 most of the shard's located paths, with ties broken by scope id. A shard is never shared between two
@@ -39,7 +49,7 @@ Intermediate fact sets pass between units as `data/code-graph/scopes/<scope>/wor
 The job publishes one `graph` shard, `graph-<scope_id>-<family>`, for each CodeQL scope and fact
 family. CodeQL-export `symbol` entities ride in the `call_site` shard, and each relation goes in the
 shard of its fact endpoint. The shard producer carries `job`, `unit`, `family`, `language`,
-`scope_id`, `build_unit_id`, `rule` and `catalog_sha256`. C6, C7 and C8 select shards by these keys.
+`scope_id`, `build_unit_id`, `rule` and `catalog_release`. Consumers select shards by these keys.
 
 Every shard has one coverage row, `graph:<scope_id>:<family>`, with the section 7.4 state. A scope
 whose export is `SKIPPED`, `FAILED` or `NOT_APPLICABLE` still publishes all seven shards. Each holds
@@ -74,16 +84,17 @@ A scope's checkpoint (`data/code-graph/scopes/<scope>/checkpoint.json`) binds:
 - the scope's identity, root, build unit, database identity and export status
 - the export-manifest hash and the export pack
 - the planned file hashes
-- the catalog SHA-256 and the `columns.json` SHA-256
+- the declared graph catalog and columns releases
 - the rule versions: `graph-normalize/2`, `graph-cross-check/1`, `graph-sarif-correlation/1` and
   `graph-fact-admissibility/1`
 - the `GraphSettings` bounds and the CodeQL version
 - the identities of every secondary, observation and prioritization shard read
-- the job implementation hash
+- the declared graph normalizer release
 
-A rerun with unchanged inputs reuses every scope without normalizing again. A catalog change (made
-together with its `catalog_sha256` pin, which means a new run configuration) rebuilds only the graph
-shards: the CodeQL databases, exports and export checkpoints stay as they are. If a checkpoint
+A rerun with unchanged eligible identities reuses its scope without normalizing again. Missing
+required releases disables scope reuse. A changed catalog declaration requires a new frozen run;
+do not infer arbitrary cross-run database/export reuse from the local graph key. CodeQL's
+explicit predecessor admission is a separate boundary. If a local output checkpoint
 matches but its shards no longer verify, the job deletes it and rebuilds the scope.
 
 ## Configuration
@@ -105,6 +116,12 @@ not by `settings.graph`. It runs before
 chain. Its units run in the `index` pool. The CLI graph (`appsec-review start`, `resume`,
 `plan-resume`) runs it between `job_review_prioritization` and `job_review_data_indexing`, and
 `--force-from job_code_graph_index` is accepted.
+
+Enabled predecessor edges are projected from typed input/scheduling contracts; the
+[generated job declaration](job_code_graph_index.md) is the inventory reference. When admitted,
+SVF contributes qualified alias cross-checks in addition to the call-edge producers above.
+Its module coverage and root accounting differ as recorded in [T-159](../TODO.md);
+neither an empty aggregate gap list nor an unavailable secondary is a negative graph fact.
 
 ## Verification
 

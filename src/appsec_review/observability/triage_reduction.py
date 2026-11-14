@@ -233,7 +233,7 @@ def _load_manifest(run_root: Path, review: Mapping[str, Any]) -> dict[str, Any]:
              and document.get("lane") == "lead", code)
     manifest_ref = _ref(document.get("package_manifest"), code)
     manifest_path = resolve_bound(run_root, manifest_ref)
-    manifest = verify_package_manifest(manifest_path)       # content hash and every package's bytes
+    manifest = verify_package_manifest(manifest_path, run_root=run_root)  # package and routing-input bytes
     _require(manifest["content_sha256"] == document.get("package_manifest_content_sha256")
              == review["lead_package_manifest_sha256"], code)
     admission = []

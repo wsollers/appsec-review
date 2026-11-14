@@ -1,7 +1,16 @@
+---
+title: "tool-ghidra: pinned Ghidra headless decompilation closure"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_review_intake"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # tool-ghidra: pinned Ghidra headless decompilation closure
 
 This directory builds `appsec-review/tool-ghidra:12.1.4`: an offline, non-root image that holds the
-reviewed Ghidra 12.1.4 closure, a Temurin 21 JDK, and one export script. It imports one binary,
+reviewed Ghidra 12.1.4 closure, a Temurin 21 JDK, an export script and an optional debug-symbol
+pre-analysis script. It imports one binary,
 runs Ghidra's automatic analysis, and writes bounded structured exports. The binary is never
 executed.
 

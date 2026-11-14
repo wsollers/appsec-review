@@ -1,3 +1,11 @@
+---
+title: "Operating proof-of-concept generation"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_language_build", "job_poc_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating proof-of-concept generation
 
 **Delivered contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC reads the shared verified
@@ -19,7 +27,7 @@ compiler or runtime reproduction. That bounded result and the real
 [seeded PDF sample](dossier-publication.md#verified-seeded-sample) remain distinct in the
 [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
 
-`job_poc_generation` writes, for each finding the judge agreed is correct, a **proof-of-concept unit-test
+`job_poc_generation` writes, for admitted judge-qualified candidates within its bounds, a **proof-of-concept unit-test
 function** that a developer can add to a test target and watch in a debugger, and checks that it **compiles**
 against the project's own build. It is the second half of the design in
 [`../architecture/review-judge-and-poc.md`](../architecture/review-judge-and-poc.md) (section 5); the decisions it
@@ -56,7 +64,9 @@ dependency. The job uses, in that run:
 - a `poc_candidates` array in the review handoff (below);
 - for native compile coverage, an accepted `job_language_build` handoff with a successful unit that
   compiled the sink's file, its hash-bound workspace and the pinned image on the local daemon.
-  Missing/unsupported custody produces an accounted candidate status/gap, not execution or a source fallback.
+  The typed contract requires that build handoff at admission. Within an admitted build,
+  missing/unsupported sink-unit custody produces an accounted candidate status/gap, not execution
+  or a source fallback.
 
 For a disabled manual PoC, explicitly certify it before publishing the report:
 

@@ -1,3 +1,11 @@
+---
+title: "Jobs and runtime"
+kind: "architecture"
+subsystem: "runtime interchange"
+status: "current"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Jobs and runtime
 
 ## Wave 1 resumability
@@ -81,8 +89,10 @@ Python static procedures, separate blinded reviewer, provisional result boundary
 unresolved coverage.
 
 A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
-enabled. `false` makes the job transparent: it is absent from direct and Dagster graphs, takes no
-inputs, publishes no handoff or artifacts, and is excluded from the run inventory. Nested feature
+enabled. `false` removes the job from automatic direct/Dagster graph dispatch and makes its
+scheduling vertex transparent. That dispatch does no new work for it; registered ownership and
+historical attempt files remain accounted for by inventory. Explicitly supported manual routes,
+such as disabled PoC admission, have separate rules. Nested feature
 flags such as `settings.model.enabled` or `settings.github.enabled` control only that feature and do
 not suppress the containing job. An enabled job is dispatched normally and must satisfy its full
 input, output, tool, and acceptance contracts.
@@ -149,8 +159,9 @@ accepted job receipts correctly remain linked to their original launch.
 A job may also declare a cheap, deterministic `input_identity` probe for inputs the target
 fingerprint deliberately excludes. The runner records the probe value in the claim and handoff, and
 the resume planner re-probes it against the graph target; a mismatch reruns the job and invalidates
-its downstream closure. `job_source_history_analysis` uses it for the mainline commit, object
-format, and shallow boundary, because `.git` is outside the source fingerprint.
+its downstream closure. `job_source_history_analysis` uses its history probe for selected
+repository roots, resolved Git identity, object format, shallow boundary and configuration,
+because `.git` is outside the ordinary source fingerprint.
 
 ## Global events
 

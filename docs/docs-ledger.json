@@ -394,6 +394,14 @@
     },
     {
       "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "overview"
+    },
+    {
+      "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/SEI-CERT.md",
@@ -499,6 +507,14 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/code-intelligence.md",
+      "reason": "Keep the T-132 source-grounded subsystem view and its links to preserved decisions, canonical jobs and named coverage gaps.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
       "disposition": "merge-into",
       "kind": "architecture",
       "merge_target": "docs/operations/codeql-analysis.md",
@@ -521,6 +537,14 @@
       "path": "docs/architecture/debug-symbol-indexing.md",
       "reason": "Separate the current Build-bound debug-symbol indexing view from its preserved decisions and link the subsystem dive in T-132.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/dependency-intelligence-enhancement.md",
+      "reason": "Keep the proposed dependency intelligence design and its T-149 implementation interfaces distinct from implemented behavior.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
@@ -609,6 +633,14 @@
       "path": "docs/architecture/guidance-procedures.md",
       "reason": "Reconcile Role-selected review procedures with its implementation and link generated facts from the subsystem dive in T-132.",
       "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/images-and-deployment.md",
+      "reason": "Keep the T-132 source-grounded image, source-mount, signing and deployment boundary view.",
+      "subsystem": "images and deployment"
     },
     {
       "decision_record": true,
@@ -716,11 +748,27 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/reporting-and-metrics.md",
+      "reason": "Keep the T-132 source-grounded reporting and metrics view without treating designed audit products as produced evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/architecture/retrieval-surfaces.md",
       "reason": "Reconcile Retrieval surfaces: tools, MCP, review cells, and skills with its implementation and link generated facts from the subsystem dive in T-132.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/review-inference-and-guidance.md",
+      "reason": "Keep the T-132 source-grounded review and bounded-guidance view with explicit production versus design boundaries.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
@@ -753,6 +801,22 @@
       "path": "docs/architecture/review-protocol-v2.md",
       "reason": "Separate the current Review protocol v2: the model-facing layer view from its preserved decisions and link the subsystem dive in T-132.",
       "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/runtime-interchange.md",
+      "reason": "Keep the T-132 source-grounded runtime, input authority, canonical outcome and manifest boundary view.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/scanners-and-evidence-collection.md",
+      "reason": "Keep the T-132 source-grounded scanner and evidence collection view with raw-output, observation and coverage distinctions.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
@@ -804,6 +868,14 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/target-acquisition-and-build.md",
+      "reason": "Keep the T-132 source-grounded acquisition, topology, workspace and capture view reconciled to Wave1a declarations.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/architecture/telemetry.md",
@@ -820,11 +892,27 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/testing-and-operations.md",
+      "reason": "Keep the T-132 testing and operations view linked to the single enforcement table, charter and recovery procedure.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/architecture/testing.md",
       "reason": "State the forward T-113 testing contract in T-131 and distinguish every enforced rule from a named enforcement gap.",
       "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/threat-driven-hunting-enhancement.md",
+      "reason": "Keep the proposed T-151, T-155 and T-156 hunt coverage design and its shared evidence-resolution boundary.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
@@ -833,6 +921,14 @@
       "path": "docs/architecture/tree-sitter-ast.md",
       "reason": "Reconcile Tree-sitter AST production with its implementation and link generated facts from the subsystem dive in T-132.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/triage-verifier-enhancement.md",
+      "reason": "Preserve the proposed protected decision, scoped evidence, request-resolution and audit design with its approval boundaries.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
@@ -889,6 +985,14 @@
       "path": "docs/assets/dossier-samples/poc-cover.png",
       "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
       "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/assets/review-pipeline.svg",
+      "reason": "Preserve the executive overview's explicitly permitted hand-authored SVG.",
+      "subsystem": "overview"
     },
     {
       "decision_record": false,
@@ -955,6 +1059,78 @@
       "subsystem": "review inference and guidance"
     },
     {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/guidance.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/history-index.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/inventory.json",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-bucket-availability.json",
+      "reason": "Regenerate every bucket/language cell and producer/dataset declaration without claiming run coverage.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-bucket-availability.md",
+      "reason": "Regenerate the seven-column declaration summary while retaining named gaps and source-backed non-applicability.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-tool-bucket.json",
+      "reason": "Regenerate the complete canonical-tool classification and declared input/binding matrix.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/matrix-tool-bucket.md",
+      "reason": "Regenerate the bounded Markdown summary of tool classification, bindings and gaps.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/generated/walk-index.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "testing and operations"
+    },
+    {
       "decision_record": true,
       "disposition": "keep",
       "kind": "history",
@@ -963,12 +1139,28 @@
       "subsystem": "target acquisition and build"
     },
     {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/intelligence-buckets.json",
+      "reason": "Keep the authored primary-purpose bucket definitions and exact tool/dataset assignments as the taxonomy source.",
+      "subsystem": "runtime interchange"
+    },
+    {
       "decision_record": true,
       "disposition": "keep",
       "kind": "history",
       "path": "docs/migration-ledger.json",
       "reason": "Preserve the historical rebuild mapping and its verification limits without treating it as the current job registry.",
       "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/operations/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
@@ -1161,6 +1353,382 @@
       "path": "docs/operations/job-test-selection.md",
       "reason": "Reconcile Job-focused test selection with the generated contracts and acceptance boundaries without editing the active T-113 job page.",
       "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_artifact_indexing.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_artifact_security_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_binary_evidence_indexing.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_build_environment_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_build_iteration.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_change_context_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_ci_configuration_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_clang_static_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_code_graph_index.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_codeql_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_cpg_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_cpp_compiled_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_cpp_symbol_index.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_debug_symbol_indexing.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_dependency_intelligence.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_document_issue_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_dossier_publication.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_evidence_collection.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_final_publication_gate.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_final_report_publication.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_image_pin_verification.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_inference_security_review.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_language_build.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_model_connectivity.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_openvex_export.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_owasp_control_assessment.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_poc_generation.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_post_build_security_assessment.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_profile_data.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_project_build.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_remediation_planning.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_remediation_validation.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_review_data_indexing.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_review_intake.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_review_package_assembly.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_review_prioritization.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_sanitizer_build.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_security_tagging.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_source_history_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_svf_alias_analysis.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_target_acquisition.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_target_analysis_plan.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_target_catalog.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_test_coverage.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_third_party_data_sync.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_threat_model_generation.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_tree_sitter_ast.md",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": true,
@@ -1507,6 +2075,14 @@
       "subsystem": "images and deployment"
     },
     {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/overview.md",
+      "reason": "Keep the hand-authored executive front page first in the generated index.",
+      "subsystem": "overview"
+    },
+    {
       "decision_record": true,
       "disposition": "keep",
       "kind": "history",
@@ -1529,6 +2105,14 @@
       "path": "docs/plans/native-compiler-profiles.md",
       "reason": "Preserve Native admission from builder-image compiler profiles as a planning and decision record linked from the current subsystem view.",
       "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/processes/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "testing and operations"
     },
     {
       "decision_record": true,
@@ -1584,6 +2168,38 @@
       "kind": "process",
       "path": "docs/processes/walk-fresh-run-prompt.md",
       "reason": "Keep Prompt: start a fresh walk run from the top as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/2026-11-13-dependency-intelligence-review.md",
+      "reason": "Preserve the dated source-backed dependency review, exact baseline and empirical validation limits.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/2026-11-13-threat-driven-hunting-review.md",
+      "reason": "Preserve the dated attack-surface and hunting review, including the distinction from delivered T-146 work.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/2026-11-13-triage-verifier-review.md",
+      "reason": "Preserve the dated triage and verification review and its source-backed efficacy and evidence-contract limitations.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/reviews/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
       "subsystem": "testing and operations"
     },
     {
@@ -1817,6 +2433,14 @@
       "path": "docs/samples/report-synthetic-fixture.pdf",
       "reason": "Preserve this synthetic rendered example as a derived review artifact, not an authored architecture source or real-run evidence.",
       "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/schemas/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
+      "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
@@ -2390,6 +3014,22 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/review-audit-publication.schema.json",
+      "reason": "Keep the closed audit availability and frozen-policy metadata contract aligned with accepted control-field transport.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/review-decision-audit.schema.json",
+      "reason": "Keep the reviewed decision-audit codec, identity and continuation constraints distinct from T-150 runtime publication and consumer wiring.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/review-package-manifest.schema.json",
       "reason": "Keep review-package-manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "review inference and guidance"
@@ -2702,8 +3342,32 @@
       "decision_record": true,
       "disposition": "keep",
       "kind": "task",
+      "path": "docs/tasks/2026-11-13-behavior-oriented-review.md",
+      "reason": "Preserve the active T-146 design record and its implementation boundaries.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
       "path": "docs/tasks/2026-11-13-docs-program-prompt.md",
       "reason": "Preserve Documentation program: generated inventory, authored job pages, subsystem dives as the task brief or execution record rather than a second current-state reference.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-13-smoke-targets-prompt.md",
+      "reason": "Preserve the smoke-target program brief and its T-134 through T-145 assignments.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "generated",
+      "kind": "generated",
+      "path": "docs/tasks/README.md",
+      "reason": "Regenerate this view from its declared sources with scripts/generate-docs.py.",
       "subsystem": "testing and operations"
     },
     {
@@ -2741,8 +3405,16 @@
   ],
   "schema": "appsec-review/docs-ledger/1",
   "scope": {
+    "archive_citations": {
+      "docs/reviews/archived-container-assets.md": {
+        "count": 60,
+        "gap": "T-148",
+        "targets_sha256": "c09aed6a656471874c7124c49c82764528b4523d2d474ca854293028f9f853b1"
+      }
+    },
     "decision_records": "Preserve dated decisions and conservatively protect design, review and task records; revise means metadata or separated current exposition, never rewriting decisions.",
     "dispositions": "Planned maintenance actions, not claims that prose is reconciled or that a future generated index already exists; keep permits the frontmatter required by T-128.",
+    "historical_identifiers": "User decisions 2026-11-13: current claims use source identifiers; historical records and explicit historical passages preserve retired identifiers but retain link checks; the TODO registry is planning data with separate registry checks.",
     "host_local_walks": "Excluded from the committed inventory; local walk rows remain keep and host-local and are not portable existence requirements.",
     "membership": "git-tracked files, including this ledger",
     "paths": [
@@ -2750,7 +3422,8 @@
       "containers/**/README.md",
       "docs/**",
       "scripts/README.md"
-    ]
+    ],
+    "subsystems": "The eight Stage 6 subsystems plus overview for the executive front page and its SVG."
   },
   "survey": {
     "inventory_commit": "4f32730db5b5dcaba64e1b64cb376f07cab29fbd",

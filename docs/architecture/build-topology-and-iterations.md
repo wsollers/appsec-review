@@ -1,3 +1,11 @@
+---
+title: "Target build topology and bounded iterations"
+kind: "architecture"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_build_iteration", "job_language_build", "job_project_build", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Target build topology and bounded iterations
 
 ## Current graph/2 source contract
@@ -45,8 +53,13 @@ flowchart LR
   C --> M[Recipe-only promotion / product reuse]
 ```
 
-Native enforcement has four closed proof kinds: selected MSBuild mapping, explicit compiler
-target, pinned compiler default and explicit Go target. A selected `.sln` member, its captured
+Planning's native annotations have four proof kinds: selected MSBuild mapping, explicit compiler
+target, pinned compiler default and explicit Go target. Production native enforcement instead
+requires the post-build `captured_invocation` record from verified execution and measured image
+compiler profiles. Missing static metadata alone no longer blocks an otherwise admitted recipe;
+unknown operations, unsafe compiler resolution, missing recipes and incompatible required
+interfaces still block. See [current native execution](../operations/job_project_build.md#process).
+A selected `.sln` member, its captured
 descriptor and requested operation determine managed/native classification; the driver's
 family does not. A Release solution can legitimately map to a Debug x64 project. Uncaptured
 members stay unknown. Managed x86 and applicable AnyCPU executable Prefer32Bit remain managed
@@ -81,9 +94,11 @@ verified at 83 functions/173 passing cases. Historical V2 original `e95602dd3db9
 observed 150 functions/333 cases across three admitted cohorts: 327 passed and six failed, not
 333 passes. Subsequent source corrections and the V3 changes below do not inherit that result.
 Their exact-SHA handoff records separate admission and any later evidence. They are not replayed
-or live accepted here. Real compiler-profile acquisition is absent; optional metadata intake and explicitly
-synthetic unit controls are not a probe or provisioning path. Unsupported compiler/wrapper
-closure remains a named unknown. The 295-unit/120-second offline budget and 16 MiB graph bound
+or live accepted here. The earlier V1/V2 records did not establish real compiler-profile acquisition.
+Current production implements the bounded image probe in
+`container_runtime/compiler_profiles.py`; its presence does not supply new live acceptance for
+those historical records. Unsupported compiler/wrapper closure remains a named unknown.
+The 295-unit/120-second offline budget and 16 MiB graph bound
 are requirements, not measured acceptance results. The source-history receipts below describe
 the earlier implementation only.
 
@@ -139,8 +154,10 @@ Prepared-image replay reads the immutable approval's `compiler_metadata` referen
 raw bytes and requires the actual resolved image digest and exact candidate recipe digest.
 It derives and admits a new immutable refinement from that metadata **before** replay
 reconstruction, executor creation, `resolve()` or command execution. Promotion and selected replay
-recheck the same binding. No compiler profile is acquired or inferred from an image label.
-Native CMake without a supported compiler closure remains unknown and cannot execute.
+recheck the same binding. Prepared-image approval consumes existing metadata, never infers it
+from an image label. This is distinct from the current production native path, which measures
+compiler profiles after safe recipe admission and requires captured proof before accepting
+native outputs.
 
 Node packaging and native operations are likewise distinct. A `binding.gyp` file or the word
 `build` does not activate native compilation. Exact captured npm lifecycle scripts determine
@@ -148,7 +165,7 @@ whether the requested command invokes `node-gyp build/rebuild`; package-only `np
 package-only unless its applicable prepack/prepare/postpack hooks request native work. Unrelated
 scripts do not activate it, and unresolved scripts remain blockers. Scoped manifest facts retain
 their raw hash and declaring lines. The rule-identity change invalidates prior graph/refinement
-and feedback identities without changing graph/2, proposal/3 or the four closed proof kinds.
+and feedback identities without changing graph/2, proposal/3 or the four planning annotation kinds.
 
 ```mermaid
 flowchart LR
@@ -282,7 +299,7 @@ Historical target paths and unit identities are examples, never generic runtime 
 
 ## IMPLEMENTED: conservative ownership and producer readiness
 
-`jobs/build_topology.py` compiles `appsec-review/build-topology/1` from accepted catalog
+`jobs/build_topology.py` compiles `appsec-review/build-topology/2` from accepted catalog
 declarations. Every catalog unit is accounted for once as `independent`, `contained`,
 `unsupported`, or `unresolved`. Literal CMake declarations can resolve ownership through
 `add_subdirectory`, target declarations, and linking; recursive Make `$(MAKE) -C` declarations
@@ -311,8 +328,10 @@ Ordering alone never materializes a library.
 Variants have six fields: `configuration`, `target_arch`, `execution_role`, `linkage`,
 `toolchain`, and `abi`. Explicit central `settings.variants` entries may be keyed by unit ID or
 family; contradictions with descriptor facts are rejected. Unknown facts are not guessed.
-Unknown required compatibility blocks product-dependent readiness, and any unknown variant
-field forbids successful-node checkpoint reuse. A basename match cannot substitute an ABI,
+Unknown required compatibility blocks product-dependent readiness. Graph/2 reuse rechecks the
+recipe-bound refinement, required product roles/axes and retained bytes; it does not apply the
+legacy graph/1 rule that every nullable variant field independently forbids reuse.
+A basename match cannot substitute an ABI,
 architecture, toolchain, host/target role, or configuration.
 
 ## IMPLEMENTED: one shared run-owned production tree
@@ -398,14 +417,18 @@ and leases live under `data/build/iterations/`. The narrow CLI
 controller-claimed immutable request. It is not a general arbitrary-node launch command.
 
 `job_project_build` now prepares images and publishes an immutable execution graph/dispatch.
-Its non-Unity `probe` tasks are compatibility no-ops, not a first whole-graph compilation.
-Unity retains its existing single engine execution. Language-build consumes the authoritative
+Its `probe.native` executes isolated native units once, while product-connected native units
+remain controller-owned; other non-Unity probes do not compile. Unity retains its existing single
+engine execution. Language-build consumes the authoritative
 production receipts rather than rebuilding once per family. JVM still uses its instrumentation
 trace; WebAssembly without native components still uses its plain executor. Shared workspace
 wiring does not claim their migration to standardized syscall/envp capture.
 
 A failed node is recorded, restored and exposed through failure context; dependent nodes block,
-while unrelated ready work may continue. Aggregate outcomes include `COMPLETED_WITH_GAPS`.
+while unrelated ready work may continue when a prepared receipt and confirmed cleanup permit
+rollback. A command-custody refusal before a prepared receipt, or unconfirmed cleanup, can instead
+stop the controller; [T-092](../TODO.md#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build)
+owns the unresolved failure-containment decision. Aggregate outcomes include `COMPLETED_WITH_GAPS`.
 There is no persisted `AWAITING_RECIPE` state or universal whole-review pause in this increment.
 An intermediate success or completed Dagster invocation is not an overall build/SPDX acceptance.
 Legacy probe/rebuild dispatches require replanning; `force_buildability_probe = true` and

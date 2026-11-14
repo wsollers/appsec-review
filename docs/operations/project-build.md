@@ -1,3 +1,11 @@
+---
+title: "Project-build operations"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_image_pin_verification", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Project-build operations
 
 `job_project_build` consumes only the accepted, hash-verified target analysis plan and turns its
@@ -17,9 +25,11 @@ Image preparation is not compiler success, deployment, or a completed target rev
 
 **Graph/2 source admission:** `plan.load_recipes` publishes a new immutable accepted refinement
 after choosing deterministic, inferred or selected promoted recipes. Native image admission
-precedes resolver creation and image/repair cache access. Returned images must match the pinned
-compiler metadata; an image tag or family label is not proof. Missing recipe, selected member,
-effective compiler closure or required interface produces a named blocker. Recipe-null planning
+precedes resolver creation and image/repair cache access. Supplied compiler metadata must match its
+bound image/recipe; an image tag or family label is not proof. Missing static metadata alone is
+not a pre-build refusal: native target proof comes from captured compiler invocations and the
+running image's measured profiles before outputs are accepted. Missing recipe, selected member,
+recognized operation or required interface produces a named blocker. Recipe-null planning
 remains valid, while graph/1 builds require accepted replanning. No metadata collector, builder
 provisioning, new deployment or live acceptance is implied by this source update.
 An image-changing recipe without matching prebound compiler/recipe metadata is blocked before
@@ -43,7 +53,9 @@ The configured topology must be exactly `plan`, `image`, `static_dispatch`, `pro
 | `acceptance` | `publish_handoff` | write `accepted-project-build-dispatch.json` (`appsec-review/project-build-dispatch/3`) |
 
 Families are `native`, `rust`, `go`, `java`, `node`, `dotnet`, `python`, `php`, and `wasm`; each
-needs a `settings.profiles.<family>` entry with a pinned `tag`, `image_id`, and non-root `user`.
+needs a resolved `settings.profiles.<family>` entry with a pinned `tag`, `image_id`, and non-root
+`user`. Committed recipes carry tags; observed IDs are supplied by the
+[host-pins layer](image-pin-verification.md#frozen-configuration), not copied into portable recipes.
 
 Unity is an engine, not another language family. Its accepted units remain `dotnet` with
 `build_system = "unity"` and additional engine identity. They bypass generic .NET recipe
@@ -139,8 +151,9 @@ require replanning rather than selecting the old execution path.
 
 `settings.variants` may contain entries keyed by build-unit ID or family, with
 `configuration`, `target_arch`, `execution_role`, `linkage`, `toolchain`, and `abi`.
-Entries must agree with accepted descriptor evidence; absent facts remain unknown. Unknown
-variant fields forbid successful-node checkpoint reuse and can block product-dependent readiness.
+Entries must agree with accepted descriptor evidence; absent facts remain unknown. Required
+product compatibility must resolve. Graph/2 checkpoint reuse verifies refinement, product roles/
+axes and retained bytes, rather than rejecting every nullable legacy variant field independently.
 
 ## Recipe validation
 
@@ -167,7 +180,7 @@ a Windows build recipe. Generic .NET projects are not excluded by this rule.
 
 ## Typed image repair and detached recipe recovery
 
-The active non-Unity path prepares images and dispatches; it does not call the retained
+The active path prepares images/dispatches and executes isolated native units once; it does not call the retained
 default-image probe/model-repair loop. Production failures are recorded by bounded iterations,
 then the operator can select failure context, try a detached recipe and promote a verified
 revision for a new production execution. See
@@ -310,8 +323,10 @@ The accepted dispatch is published beneath the attempt's `artifacts/project-buil
 Failed preparation yields an explicit omitted-unit/upstream gap, not an absent family or a
 successful build. Static dispatch remains available independently.
 
-Language-build owns the authoritative production receipts, captured command/tool provenance,
-typed artifacts and `[build_outputs]` classifications. Mutable production state lives at
+Project-build owns its isolated native and Unity execution receipts; language-build consumes
+those without rebuilding and publishes them with controller-owned production receipts,
+captured command/tool provenance, typed artifacts and `[build_outputs]` classifications.
+Mutable controller production state lives at
 `runs/<run-id>/workspace/build/{target,install}`; immutable iterations/products/generations and
 durable artifact copies remain run-owned outside disposable state. Failed writes are restored
 before retry, and selected recipe changes invalidate the affected node/consumers without

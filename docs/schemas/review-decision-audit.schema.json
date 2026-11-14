@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/review-decision-audit.schema.json",
+  "title": "Protected review decision-audit contracts",
+  "description": "Projection metadata, never new source evidence or a claim state. Semantic cross-record and content-hash checks are enforced by review.decision_audit.contracts.",
+  "oneOf": [
+    {"$ref": "#/$defs/decision"},
+    {"$ref": "#/$defs/verification"},
+    {"$ref": "#/$defs/basis"},
+    {"$ref": "#/$defs/manifest"}
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\s\\u0000-\\u001f]+$"},
+    "hash": {"type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$"},
+    "path": {
+      "type": "string", "minLength": 1, "maxLength": 1024,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:%\\u0000-\\u001f])[^/]+(?:/[^/]+)*$"
+    },
+    "absence": {"enum": ["not_applicable", "pre_claim", "not_produced", "not_commissioned", "legacy_unrecorded", "unavailable", "redacted", "unknown_model_revision"]},
+    "predicate": {"enum": ["affected_construct", "attacker_input_control", "source_to_sink_reachability", "missing_or_ineffective_guard", "configuration_enables", "security_impact"]},
+    "role": {"enum": ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter", "independent_verifier", "independent_scorer", "poc_designer", "poc_verifier", "attack_chain_analyst", "finding_adjudicator", "completeness_reviewer", "lead_triager", "adjudication_judge"]},
+    "predicates": {"type": "array", "items": {"$ref": "#/$defs/predicate"}, "maxItems": 6, "uniqueItems": true},
+    "ids": {"type": "array", "items": {"$ref": "#/$defs/id"}, "maxItems": 256, "uniqueItems": true},
+    "link": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "absence_reason"],
+      "properties": {
+        "value": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"type": "string"}, "absence_reason": {"type": "null"}}},
+        {"properties": {"value": {"type": "null"}, "absence_reason": {"$ref": "#/$defs/absence"}}}
+      ]
+    },
+    "hash_link": {
+      "allOf": [
+        {"$ref": "#/$defs/link"},
+        {"properties": {"value": {"oneOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]}}}
+      ]
+    },
+    "round": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "absence_reason"],
+      "properties": {
+        "value": {"type": ["integer", "null"], "minimum": 0},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"type": "integer"}, "absence_reason": {"type": "null"}}},
+        {"properties": {"value": {"type": "null"}, "absence_reason": {"$ref": "#/$defs/absence"}}}
+      ]
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "absence_reason"],
+      "properties": {
+        "value": {"type": ["boolean", "null"]},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"type": "boolean"}, "absence_reason": {"type": "null"}}},
+        {"properties": {"value": {"type": "null"}, "absence_reason": {"$ref": "#/$defs/absence"}}}
+      ]
+    },
+    "origin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "review_attempt_id", "target_snapshot", "accepted_manifest_sha256", "review_handoff_sha256", "ledger_head_sha256", "projection_sha256", "package_manifest_sha256", "lead_package_manifest_sha256", "configuration_sha256", "guidance_sha256", "implementation_sha256", "projection_policy_version", "projection_policy_sha256"],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/id"},
+        "review_attempt_id": {"$ref": "#/$defs/id"},
+        "target_snapshot": {"$ref": "#/$defs/id"},
+        "accepted_manifest_sha256": {"$ref": "#/$defs/hash"},
+        "review_handoff_sha256": {"$ref": "#/$defs/hash"},
+        "ledger_head_sha256": {"$ref": "#/$defs/hash"},
+        "projection_sha256": {"$ref": "#/$defs/hash"},
+        "package_manifest_sha256": {"$ref": "#/$defs/hash"},
+        "lead_package_manifest_sha256": {"$ref": "#/$defs/hash_link"},
+        "configuration_sha256": {"$ref": "#/$defs/hash"},
+        "guidance_sha256": {"$ref": "#/$defs/hash_link"},
+        "implementation_sha256": {"$ref": "#/$defs/hash_link"},
+        "projection_policy_version": {"$ref": "#/$defs/id"},
+        "projection_policy_sha256": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "subject": {
+      "type": "object", "additionalProperties": false,
+      "required": ["lead_id", "proposal_ref", "claim_id", "adjudication_id", "finding_package_id", "package_id", "operation_id", "component_id", "build_scope_id", "cell_id", "round"],
+      "properties": {
+        "lead_id": {"$ref": "#/$defs/link"},
+        "proposal_ref": {"$ref": "#/$defs/link"},
+        "claim_id": {"$ref": "#/$defs/link"},
+        "adjudication_id": {"$ref": "#/$defs/link"},
+        "finding_package_id": {"$ref": "#/$defs/link"},
+        "package_id": {"$ref": "#/$defs/link"},
+        "operation_id": {"$ref": "#/$defs/link"},
+        "component_id": {"$ref": "#/$defs/link"},
+        "build_scope_id": {"$ref": "#/$defs/link"},
+        "cell_id": {"$ref": "#/$defs/link"},
+        "round": {"$ref": "#/$defs/round"}
+      }
+    },
+    "source_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "path", "sha256", "record_id", "uses"],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/id"},
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "record_id": {"$ref": "#/$defs/link"},
+        "uses": {"type": "array", "items": {"enum": ["available", "supplied", "read", "cited"]}, "minItems": 1, "maxItems": 4, "uniqueItems": true}
+      }
+    },
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/source_ref"}, "maxItems": 256, "uniqueItems": true},
+    "optional_source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "absence_reason"],
+      "properties": {
+        "value": {"oneOf": [{"$ref": "#/$defs/source_ref"}, {"type": "null"}]},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"type": "object"}, "absence_reason": {"type": "null"}}},
+        {"properties": {"value": {"type": "null"}, "absence_reason": {"$ref": "#/$defs/absence"}}}
+      ]
+    },
+    "explanation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["text", "absence_reason", "redaction_reason", "authority"],
+      "properties": {
+        "text": {"type": ["string", "null"], "minLength": 1, "maxLength": 2000},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]},
+        "redaction_reason": {"$ref": "#/$defs/link"},
+        "authority": {"const": "non_evidentiary"}
+      },
+      "oneOf": [
+        {"properties": {"text": {"type": "string"}, "absence_reason": {"type": "null"}}},
+        {"properties": {"text": {"type": "null"}, "absence_reason": {"$ref": "#/$defs/absence"}}}
+      ]
+    },
+    "relation_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["relation_id", "claim_id", "predicate", "kind", "producing_cell_id", "actor_role", "admissibility", "counted", "noncounted_reason", "source"],
+      "properties": {
+        "relation_id": {"$ref": "#/$defs/id"},
+        "claim_id": {"$ref": "#/$defs/id"},
+        "predicate": {"$ref": "#/$defs/predicate"},
+        "kind": {"enum": ["supports", "contradicts", "qualifies"]},
+        "producing_cell_id": {"$ref": "#/$defs/id"},
+        "actor_role": {"$ref": "#/$defs/role"},
+        "admissibility": {"enum": ["direct", "direct_for_mapped_predicate", "analyst_assessed", "indirect"]},
+        "counted": {
+          "type": "boolean",
+          "description": "Counted in original predicate accounting, not necessarily decisive for the recorded adjudication row."
+        },
+        "noncounted_reason": {"enum": [null, "analyst_assessed", "indirect", "incomplete", "judge_nondeciding", "qualifying", "not_required", "not_evaluated"]},
+        "source": {"$ref": "#/$defs/source_ref"}
+      },
+      "if": {"properties": {"counted": {"const": true}}},
+      "then": {"properties": {"noncounted_reason": {"type": "null"}}},
+      "else": {"properties": {"noncounted_reason": {"type": "string"}}}
+    },
+    "continuation_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["field", "path", "sha256", "record_count", "byte_count"],
+      "properties": {
+        "field": {"enum": ["sources", "relations", "origin_proposals", "warrants", "request_resolutions", "hunt_receipts"]},
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "record_count": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "byte_count": {"type": "integer", "minimum": 1, "maximum": 8388608}
+      }
+    },
+    "optional_sources": {
+      "type": "object", "additionalProperties": false,
+      "required": ["values", "absence_reason"],
+      "properties": {
+        "values": {"$ref": "#/$defs/sources"},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "if": {"properties": {"values": {"maxItems": 0}}},
+      "then": {"properties": {"absence_reason": {"$ref": "#/$defs/absence"}}},
+      "else": {"properties": {"absence_reason": {"type": "null"}}}
+    },
+    "future_references": {
+      "type": "object", "additionalProperties": false,
+      "required": ["warrants", "request_resolutions", "hunt_receipts", "authority"],
+      "properties": {
+        "warrants": {"$ref": "#/$defs/optional_sources"},
+        "request_resolutions": {"$ref": "#/$defs/optional_sources"},
+        "hunt_receipts": {"$ref": "#/$defs/optional_sources"},
+        "authority": {"const": "non_authoritative_reference"}
+      }
+    },
+    "coverage_count": {
+      "type": "object", "additionalProperties": false,
+      "required": ["population", "expected", "emitted", "omitted", "unavailable", "reason"],
+      "properties": {
+        "population": {"enum": ["decision", "verification_coverage", "decision_basis", "collected_leads", "expected_cells", "emitted_proposals"]},
+        "expected": {"type": ["integer", "null"], "minimum": 0},
+        "emitted": {"type": "integer", "minimum": 0},
+        "omitted": {"type": "integer", "minimum": 0},
+        "unavailable": {"type": ["integer", "null"], "minimum": 0},
+        "reason": {"enum": [null, "legacy_unavailable", "input_unavailable", "not_commissioned", "bounded_omission", "failed_input", "partial_input"]}
+      }
+    },
+    "context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "subject", "sources", "relations", "origin_proposals", "continuations", "future", "explanation", "gap_ids"],
+      "properties": {
+        "origin": {"$ref": "#/$defs/origin"},
+        "subject": {"$ref": "#/$defs/subject"},
+        "sources": {"allOf": [{"$ref": "#/$defs/sources"}, {"minItems": 1}]},
+        "relations": {"type": "array", "items": {"$ref": "#/$defs/relation_ref"}, "maxItems": 256, "uniqueItems": true},
+        "origin_proposals": {"$ref": "#/$defs/sources"},
+        "continuations": {"type": "array", "items": {"$ref": "#/$defs/continuation_ref"}, "maxItems": 256, "uniqueItems": true},
+        "future": {"$ref": "#/$defs/future_references"},
+        "explanation": {"$ref": "#/$defs/explanation"},
+        "gap_ids": {"$ref": "#/$defs/ids"}
+      }
+    },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "record_id", "visibility", "authority", "context", "stage", "outcome", "original_outcome", "cell_receipt", "reason_code", "basis_status", "deciding_row", "deciding_row_absence_reason", "deciding_actor_roles", "required_predicates", "missing_predicates", "actor_role", "actor_role_absence_reason"],
+      "properties": {
+        "schema": {"const": "appsec-review/review-decision/1"},
+        "record_id": {"type": "string", "minLength": 73, "maxLength": 73, "pattern": "^decision-[0-9a-f]{64}$"},
+        "visibility": {"const": "protected_audit"},
+        "authority": {"const": "projection_only"},
+        "context": {"$ref": "#/$defs/context"},
+        "stage": {"enum": ["collection", "severity_triage", "admission", "package_assembly", "cell_execution", "red_discovery", "proposal_normalization", "claim_cap", "blue_review", "independent_verification", "judge_review", "adjudication", "scoring", "publication"]},
+        "outcome": {"$ref": "#/$defs/id"},
+        "original_outcome": {"$ref": "#/$defs/link"},
+        "cell_receipt": {"$ref": "#/$defs/optional_source"},
+        "reason_code": {"enum": ["recorded_decision", "unstated", "severity_below_admission", "admission_policy", "invalid_output", "timed_out", "not_launched", "budget_limit", "outside_scope", "exact_duplicate", "direct_support", "direct_contradiction", "unresolved_contradiction", "missing_evidence", "publication_policy", "input_unavailable"]},
+        "basis_status": {"enum": ["unstated", "narrative_only", "cited_nondeciding", "existing_policy"]},
+        "deciding_row": {"enum": [null, "r1_duplicate", "r2_out_of_scope", "r3_unresolved_contradiction", "r4_direct_contradiction", "r5_confirmed", "r6_supported", "r7_insufficient_evidence"]},
+        "deciding_row_absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]},
+        "deciding_actor_roles": {
+          "type": "array", "items": {"$ref": "#/$defs/role"}, "maxItems": 14, "uniqueItems": true,
+          "description": "Exact roles derived from the recorded row, required predicates and complete inline plus continued relation population; never all counted roles by default."
+        },
+        "actor_role": {
+          "description": "Original producing role, not deciding authority or an endorsement of a semantic outcome.",
+          "oneOf": [{"$ref": "#/$defs/role"}, {"type": "null"}]
+        },
+        "actor_role_absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]},
+        "required_predicates": {"$ref": "#/$defs/predicates"},
+        "missing_predicates": {"$ref": "#/$defs/predicates"}
+      },
+      "allOf": [
+        {"if": {"properties": {"actor_role": {"type": "null"}}}, "then": {"properties": {"actor_role_absence_reason": {"$ref": "#/$defs/absence"}}}, "else": {"properties": {"actor_role_absence_reason": {"type": "null"}}}},
+        {"if": {"properties": {"deciding_row": {"type": "null"}}}, "then": {"properties": {"deciding_row_absence_reason": {"$ref": "#/$defs/absence"}}}, "else": {"properties": {"deciding_row_absence_reason": {"type": "null"}}}},
+        {"if": {"properties": {"stage": {"const": "collection"}}}, "then": {"properties": {"outcome": {"enum": ["collected", "unavailable"]}}}},
+        {"if": {"properties": {"stage": {"const": "severity_triage"}}}, "then": {"properties": {"outcome": {"enum": ["assessed", "unknown", "not_required"]}}}},
+        {"if": {"properties": {"stage": {"const": "admission"}}}, "then": {"properties": {"outcome": {"enum": ["admitted", "not_admitted"]}}}},
+        {"if": {"properties": {"stage": {"const": "package_assembly"}}}, "then": {"properties": {"outcome": {"enum": ["assembled", "omitted", "blocked"]}}}},
+        {
+          "if": {"properties": {"stage": {"const": "cell_execution"}}},
+          "then": {
+            "properties": {
+              "outcome": {"enum": ["succeeded", "failed", "blocked", "timed_out", "canceled", "invalid", "not_launched"]},
+              "actor_role": {"$ref": "#/$defs/role"},
+              "deciding_actor_roles": {"maxItems": 0},
+              "deciding_row": {"type": "null"},
+              "context": {"properties": {"subject": {"properties": {"cell_id": {"properties": {"value": {"$ref": "#/$defs/id"}}}}}}}
+            }
+          }
+        },
+        {"if": {"properties": {"stage": {"const": "red_discovery"}}}, "then": {"properties": {"outcome": {"enum": ["proposed", "explicit_no_claim", "blocked", "invalid", "timed_out", "not_launched", "proposal_rejected"]}}}},
+        {"if": {"properties": {"stage": {"const": "proposal_normalization"}}}, "then": {"properties": {"outcome": {"enum": ["normalized", "merged", "rejected"]}}}},
+        {"if": {"properties": {"stage": {"const": "claim_cap"}}}, "then": {"properties": {"outcome": {"enum": ["admitted", "capped"]}}}},
+        {"if": {"properties": {"stage": {"enum": ["blue_review", "independent_verification"]}}}, "then": {"properties": {"outcome": {"enum": ["succeeded", "failed", "blocked", "timed_out", "canceled", "invalid", "not_launched"]}}}},
+        {"if": {"properties": {"stage": {"const": "judge_review"}}}, "then": {"properties": {"outcome": {"enum": ["red_correct", "blue_correct", "partly", "neither", "unresolved", "failed", "blocked", "timed_out", "canceled", "invalid", "not_launched"]}}}},
+        {"if": {"properties": {"stage": {"const": "adjudication"}}}, "then": {"properties": {"outcome": {"enum": ["proposed", "supported", "confirmed", "contradicted", "not_reachable", "not_exploitable_in_observed_configuration", "insufficient_evidence", "duplicate", "out_of_scope", "coverage_gap"]}}}, "else": {"properties": {"deciding_row": {"type": "null"}}}},
+        {"if": {"properties": {"stage": {"const": "scoring"}}}, "then": {"properties": {"outcome": {"enum": ["scored", "unrated", "failed", "not_required"]}}}},
+        {"if": {"properties": {"stage": {"const": "publication"}}}, "then": {"properties": {"outcome": {"enum": ["publishable", "verification_backlog", "withheld", "not_published"]}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r1_duplicate"}}}, "then": {"properties": {"outcome": {"const": "duplicate"}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r2_out_of_scope"}}}, "then": {"properties": {"outcome": {"const": "out_of_scope"}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r3_unresolved_contradiction"}}}, "then": {"properties": {"outcome": {"const": "insufficient_evidence"}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r4_direct_contradiction"}}}, "then": {"properties": {"outcome": {"enum": ["contradicted", "not_reachable", "not_exploitable_in_observed_configuration"]}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r5_confirmed"}}}, "then": {"properties": {"outcome": {"const": "confirmed"}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r6_supported"}}}, "then": {"properties": {"outcome": {"const": "supported"}}}},
+        {"if": {"properties": {"deciding_row": {"const": "r7_insufficient_evidence"}}}, "then": {"properties": {"outcome": {"const": "insufficient_evidence"}}}},
+        {"if": {"properties": {"outcome": {"const": "explicit_no_claim"}}}, "then": {"properties": {"basis_status": {"enum": ["unstated", "narrative_only", "cited_nondeciding"]}}}}
+      ]
+    },
+    "blindness": {
+      "type": "object", "additionalProperties": false,
+      "required": ["actor_distinct", "conversation_fresh", "prior_response_absent", "shared_actor_cache_absent", "request_check", "passed"],
+      "properties": {
+        "actor_distinct": {"$ref": "#/$defs/check"},
+        "conversation_fresh": {"$ref": "#/$defs/check"},
+        "prior_response_absent": {"$ref": "#/$defs/check"},
+        "shared_actor_cache_absent": {"$ref": "#/$defs/check"},
+        "request_check": {"$ref": "#/$defs/optional_source"},
+        "passed": {"$ref": "#/$defs/check"}
+      }
+    },
+    "diversity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider_distinct", "model_profile_distinct", "resolved_model_revision"],
+      "properties": {
+        "provider_distinct": {"$ref": "#/$defs/check"},
+        "model_profile_distinct": {"$ref": "#/$defs/check"},
+        "resolved_model_revision": {
+          "allOf": [
+            {"$ref": "#/$defs/link"},
+            {"properties": {"absence_reason": {"enum": [null, "unknown_model_revision", "legacy_unrecorded", "not_produced", "unavailable"]}}}
+          ]
+        }
+      }
+    },
+    "predicate_coverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["predicate", "required", "own_read_refs", "supporting_relation_ids", "contradicting_relation_ids", "qualifying_relation_ids", "coverage", "unknown_reason"],
+      "properties": {
+        "predicate": {"$ref": "#/$defs/predicate"},
+        "required": {"type": "boolean"},
+        "own_read_refs": {"$ref": "#/$defs/sources"},
+        "supporting_relation_ids": {"$ref": "#/$defs/ids"},
+        "contradicting_relation_ids": {"$ref": "#/$defs/ids"},
+        "qualifying_relation_ids": {"$ref": "#/$defs/ids"},
+        "coverage": {"enum": ["supported", "contradicted", "conflicted", "missing", "unknown"]},
+        "unknown_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "if": {"properties": {"coverage": {"const": "unknown"}}},
+      "then": {"properties": {"unknown_reason": {"$ref": "#/$defs/absence"}}},
+      "else": {"properties": {"unknown_reason": {"type": "null"}}}
+    },
+    "evidence_overlap": {
+      "type": "object", "additionalProperties": false,
+      "required": ["same_upstream_artifact_ids", "distinct_upstream_producer_ids", "comparison_available"],
+      "properties": {
+        "same_upstream_artifact_ids": {"$ref": "#/$defs/ids"},
+        "distinct_upstream_producer_ids": {"$ref": "#/$defs/ids"},
+        "comparison_available": {"$ref": "#/$defs/check"}
+      }
+    },
+    "verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "record_id", "visibility", "authority", "context", "status", "receipt", "blindness", "diversity", "predicates", "evidence_overlap", "confirmation_eligible", "existing_r6_passed"],
+      "properties": {
+        "schema": {"const": "appsec-review/verification-coverage/1"},
+        "record_id": {"type": "string", "minLength": 77, "maxLength": 77, "pattern": "^verification-[0-9a-f]{64}$"},
+        "visibility": {"const": "protected_audit"},
+        "authority": {"const": "projection_only"},
+        "context": {"$ref": "#/$defs/context"},
+        "status": {"enum": ["succeeded", "failed", "blocked", "timed_out", "canceled", "invalid", "not_launched"]},
+        "receipt": {"$ref": "#/$defs/optional_source"},
+        "blindness": {"$ref": "#/$defs/blindness"},
+        "diversity": {"$ref": "#/$defs/diversity"},
+        "predicates": {"type": "array", "items": {"$ref": "#/$defs/predicate_coverage"}, "maxItems": 6, "uniqueItems": true},
+        "evidence_overlap": {"$ref": "#/$defs/evidence_overlap"},
+        "confirmation_eligible": {"$ref": "#/$defs/check"},
+        "existing_r6_passed": {"$ref": "#/$defs/check"}
+      }
+    },
+    "record_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "record_id", "sha256"],
+      "properties": {
+        "kind": {"enum": ["decision", "verification_coverage", "decision_basis"]},
+        "record_id": {"$ref": "#/$defs/id"},
+        "sha256": {"$ref": "#/$defs/hash"}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "decision"}}}, "then": {"properties": {"record_id": {"minLength": 73, "maxLength": 73, "pattern": "^decision-[0-9a-f]{64}$"}}}},
+        {"if": {"properties": {"kind": {"const": "verification_coverage"}}}, "then": {"properties": {"record_id": {"minLength": 77, "maxLength": 77, "pattern": "^verification-[0-9a-f]{64}$"}}}},
+        {"if": {"properties": {"kind": {"const": "decision_basis"}}}, "then": {"properties": {"record_id": {"minLength": 79, "maxLength": 79, "pattern": "^decision-basis-[0-9a-f]{64}$"}}}}
+      ]
+    },
+    "optional_record": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "absence_reason"],
+      "properties": {
+        "value": {"oneOf": [{"$ref": "#/$defs/record_ref"}, {"type": "null"}]},
+        "absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]}
+      },
+      "oneOf": [
+        {"properties": {"value": {"type": "object"}, "absence_reason": {"type": "null"}}},
+        {"properties": {"value": {"type": "null"}, "absence_reason": {"$ref": "#/$defs/absence"}}}
+      ]
+    },
+    "basis": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "record_id", "visibility", "authority", "context", "claim", "finding", "adjudication", "decisions", "verification", "required_predicates", "missing_predicates", "judge_verdicts", "score_refs"],
+      "properties": {
+        "schema": {"const": "appsec-review/decision-basis/1"},
+        "record_id": {"type": "string", "minLength": 79, "maxLength": 79, "pattern": "^decision-basis-[0-9a-f]{64}$"},
+        "visibility": {"const": "protected_audit"},
+        "authority": {"const": "projection_only"},
+        "context": {"$ref": "#/$defs/context"},
+        "claim": {"$ref": "#/$defs/source_ref"},
+        "finding": {"$ref": "#/$defs/source_ref"},
+        "adjudication": {"$ref": "#/$defs/source_ref"},
+        "decisions": {"type": "array", "items": {"allOf": [{"$ref": "#/$defs/record_ref"}, {"properties": {"kind": {"const": "decision"}}}]}, "minItems": 1, "maxItems": 256, "uniqueItems": true},
+        "verification": {"allOf": [{"$ref": "#/$defs/optional_record"}, {"properties": {"value": {"oneOf": [{"type": "null"}, {"type": "object", "properties": {"kind": {"const": "verification_coverage"}}}]}}}]},
+        "required_predicates": {"$ref": "#/$defs/predicates"},
+        "missing_predicates": {"$ref": "#/$defs/predicates"},
+        "judge_verdicts": {"$ref": "#/$defs/sources"},
+        "score_refs": {"$ref": "#/$defs/sources"}
+      }
+    },
+    "shard_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "path", "sha256", "byte_count", "record_count", "records"],
+      "properties": {
+        "kind": {"enum": ["decision", "verification_coverage", "decision_basis"]},
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "byte_count": {"type": "integer", "minimum": 1, "maximum": 8388608},
+        "record_count": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "records": {"type": "array", "items": {"$ref": "#/$defs/record_ref"}, "minItems": 1, "maxItems": 5000, "uniqueItems": true}
+      }
+    },
+    "manifest_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "path", "sha256", "record_id"],
+      "properties": {
+        "origin": {"$ref": "#/$defs/origin"},
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "record_id": {"type": "string", "minLength": 79, "maxLength": 79, "pattern": "^audit-manifest-[0-9a-f]{64}$"}
+      }
+    },
+    "manifest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "record_id", "visibility", "authority", "origin", "shards", "coverage"],
+      "properties": {
+        "schema": {"const": "appsec-review/review-audit-manifest/1"},
+        "record_id": {"type": "string", "minLength": 79, "maxLength": 79, "pattern": "^audit-manifest-[0-9a-f]{64}$"},
+        "visibility": {"const": "protected_audit"},
+        "authority": {"const": "projection_only"},
+        "origin": {"$ref": "#/$defs/origin"},
+        "shards": {"type": "array", "items": {"$ref": "#/$defs/shard_ref"}, "uniqueItems": true},
+        "coverage": {"type": "array", "items": {"$ref": "#/$defs/coverage_count"}, "minItems": 6, "maxItems": 6, "uniqueItems": true}
+      }
+    }
+  }
+}

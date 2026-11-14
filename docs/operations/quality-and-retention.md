@@ -1,3 +1,11 @@
+---
+title: "Operational status, cost provenance, quality trends and retention"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operational status, cost provenance, quality trends and retention
 
 These are derived operator facilities, not a replacement scheduler, recovery controller,
@@ -125,8 +133,11 @@ operator-supplied annotations where the original evaluator did not retain them.
 ```
 
 Artifacts are content-addressed and immutable; an identical publication reports `duplicate`.
-Comparison requires the same corpus, prompt/model/config identities, role, variant and case
-count. Otherwise it reports `incomparable`. Missing results and empty denominators are explicit.
+Comparison requires the same known corpus, role, variant, case count and source scoring schema.
+Those mismatches or mixed per-case configuration make it `incomparable`. Implementation,
+configuration, prompt and model identities are the comparison variables: known changes are
+reported in `changed` rather than refusing the comparison. Missing identities are named in
+`unknown` and cannot support attribution. Missing results and empty denominators are explicit.
 Evaluation precision is **case-resolution precision**, not production finding precision.
 Single-turn evaluation has no retrieval-failure measurement; it stays unavailable rather than
 zero. Acceptance results do not supply abstention, token or retrieval metrics.

@@ -1,3 +1,11 @@
+---
+title: "Job input and dispatch contracts"
+kind: "architecture"
+subsystem: "runtime interchange"
+status: "current"
+jobs: ["job_artifact_indexing", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_ci_configuration_analysis", "job_evidence_collection", "job_language_build", "job_project_build", "job_target_catalog", "job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job input and dispatch contracts
 
 `Job.contract` is the typed dispatch and input authority. It extends the existing job/dataset
@@ -17,9 +25,19 @@ operational receipts are distinct from source evidence, and raw review-cell prop
 provisional even when their producing attempt is accepted.
 
 Required inputs reject absence; optional inputs report gaps or explicit non-applicability.
-Conditional requirements apply when their producer is enabled in the frozen configuration.
+`when_producer_enabled` requirements apply when their producer is enabled in the frozen configuration.
 An accepted producer can still have partial, unavailable or retriable coverage. Acceptance is not
 completeness. A required producer envelope does not make every optional, per-scope dataset mandatory.
+
+`when_output_declared` is a separate, explicit compatibility mode for non-envelope handoff
+datasets. It lets an absent historical output declaration follow the requirement's gap or
+non-applicability policy. A present declaration still requires the exact schema and known
+authority; coverage restrictions and accepted run/target/attempt/hash checks still apply.
+This mode grants no permission to read undeclared payloads, even if their bytes are pinned
+elsewhere in the envelope. Ordinary optional/required behavior and historical serialized
+contract field shapes remain unchanged. The six protected decision-audit inputs on the
+dossier and final gate use this mode so historical audit absence can reach the reader's
+explicit `legacy_unrecorded` result.
 
 Scheduling edges order jobs, including transparent disabled vertices. Only semantic inputs
 participate in input selection and invalidation. Dispatch classes are `review_graph`,

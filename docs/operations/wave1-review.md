@@ -1,41 +1,35 @@
+---
+title: "Wave 1 review operations"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_image_pin_verification", "job_owasp_control_assessment", "job_target_catalog", "job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Wave 1 review operations
 
 The direct CLI and Dagster share the application-owned job lifecycle, enabled review topology,
 receipts, validation, and accepted handoffs. The CLI runs a topological order linearly; Dagster
 can run independent branches concurrently.
 
-The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
-
-```text
-model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
-  -> ci_configuration_analysis -> source_history_analysis
-  -> build_environment_analysis
-  -> target_analysis_plan
-  -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
-  -> artifact_indexing -> test_coverage -> profile_data -> debug_symbol_indexing -> artifact_security_analysis
-  -> evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
-  -> sanitizer_build -> cpp_symbol_index -> [cpg_analysis only when enabled]
-  -> svf_alias_analysis (opt-in; only when enabled) -> binary_evidence_indexing
-  -> post_build_security_assessment -> dependency_intelligence
-  -> codeql_analysis -> review_prioritization
-  -> code_graph_index -> security_tagging
-  -> owasp_control_assessment (enabled by default)
-  -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review -> poc_generation
-  -> remediation_planning -> remediation_validation -> dossier_publication -> final_publication_gate
-  -> final_report_publication
-```
+The direct `start`, `plan-resume`, and `resume` commands derive their order from
+[`orchestration.topology`](../../src/appsec_review/orchestration/topology.py), not a second
+hand-maintained job list. The [generated inventory](../generated/inventory.json) and
+[canonical job pages](README.md) expose current declarations and dependencies. Enabled graph
+jobs, standalone maintenance and internal build transactions retain distinct dispatch classes.
 
 Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every
 enabled catalog image, build profile and CodeQL source image resolves on the local daemon to exactly
 its pin; any missing image or moved tag fails the run (see
-[`image-pin-verification.md`](image-pin-verification.md)). The pipeline never builds images. Setting
+[`image-pin-verification.md`](image-pin-verification.md)). This readiness gate never builds an image;
+separately commissioned build paths can request bounded derived images. Setting
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
 
 The default-enabled [static environment producer](build-environment-analysis.md) also appears
 between catalog and planner in `project_build_review`. Disabling it preserves the catalog barrier.
 Expected current evidence cannot be treated as optional; trusted standalone planning explicitly
-records `NOT_RUN` when that producer was deliberately not scheduled.
+records domain availability `NOT_RUN` when that producer was deliberately not scheduled; this
+does not add a word to the canonical producer-status vocabulary.
 
 Both surfaces then run `target_acquisition`. For `start --system <id>` (Dagster:
 `APPSEC_REVIEW_SYSTEM=<id>`) it acquires or re-verifies every component of the configured system in
@@ -49,7 +43,8 @@ run job_third_party_data_sync`). Both surfaces run change-context analysis after
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
 document issue analysis after package assembly. Dagster's
 `wave1_review` runs the independent branches concurrently; the CLI runs them in one topological order.
-`final_report_publication` is its single terminal job; the gate and the report are described in
+The report and enabled standalone OpenVEX export are post-gate graph peers; the report consumes
+the gate, not the export. The gate and report are described in
 [`final-report.md`](final-report.md). At integration `b702eb7`, enabled completion producers all
 precede one final gate. New configurations enable compile-only PoC, confirmed-only planning,
 bounded nonexecuting validation and protected dossiers; disabled optional jobs are omitted and
@@ -88,8 +83,8 @@ particular, coverage and profile ingestion consume accepted catalog/build/artifa
 Clang consumes accepted C/C++ scopes; dependency intelligence consumes accepted catalog, build,
 artifact, and evidence handoffs (including compiler/linker/loader facts resolved from their
 hash-bound artifacts); and code-graph indexing consumes accepted CodeQL exports plus its declared
-cross-check inputs. Dagster additionally orders dependency intelligence after compiled C/C++
-analysis when that branch is enabled, but that barrier does not add a fifth accepted handoff.
+cross-check inputs. Both surfaces apply the contract-derived dependency barriers when their
+branches are enabled; scheduling alone grants no additional accepted input.
 
 On both surfaces, `target_catalog.retrieval_indexes.build_target_documents` starts after
 `target_catalog.repository_discovery.partition_repository`. It selects Markdown design and threat
@@ -115,14 +110,16 @@ appsec-review resume --run-id 2026-10-08-0001 --target targets/appsec-multi-vuln
 appsec-review resume --run-id 2026-10-08-0001 --target targets/appsec-multi-vuln --force-from job_target_catalog
 ```
 
-`plan-resume` is read-only apart from its audit event. It explains `REUSE`, `RUN`, and downstream
-`INVALIDATE` and `REVALIDATE` decisions. A job is reused only when its configuration, implementation,
-schema, validator, target, upstream handoffs, accepted handoff, and run-owned artifacts resolve and
-match; a `REVALIDATE` job (an ancestor runs, everything of its own matches) is reused at dispatch only
-if every producer it pinned is equivalent to the one then accepted (same handoff, or equal evidence
-`content_sha256`), and runs otherwise.
-Source history analysis also re-probes the target's mainline history identity, so a rewritten
-commit message reruns it and invalidates the plan even when the tree bytes are unchanged.
+`plan-resume` is read-only: the graph's planning path suppresses the execution planner's audit
+event. It explains `REUSE`, `RUN`, and downstream `INVALIDATE` and `REVALIDATE` decisions. A job
+is reused only when its configuration, implementation, schema, validator, target, upstream
+handoffs, accepted handoff, and run-owned artifacts resolve and match; a `REVALIDATE` job (an
+ancestor runs, everything of its own matches) is reused at dispatch only if every producer it
+pinned is equivalent to the one then accepted (same handoff, or equal evidence `content_sha256`),
+and runs otherwise.
+Source history analysis also recomputes its declared history identity over selected repository
+roots and Git metadata/configuration. That identity can change even when worktree bytes do not;
+it is separate from the ordinary source snapshot.
 Failed and interrupted attempts remain immutable; only a validated success updates `latest.json`.
 
 Read the global log without `jq`:
@@ -145,8 +142,10 @@ For Dagster, start the documented stack in `deploy/dagster/README.md`, set
 `wave1_review`. Dagster exposes each application's intake, catalog, analysis, producer,
 normalization, indexing, manifest, and publication units as nodes. Scanner timeout, OOM, nonzero
 exit, unavailable image/prerequisite, missing
-output, or parser incompatibility is persisted as a bounded producer disposition and coverage gap;
-the node succeeds after recording that truth and the review may end `COMPLETED_WITH_GAPS`.
+output, or parser incompatibility can be published as bounded producer dispositions and coverage
+gaps when that producer's contract permits continuation. This is not a blanket conversion of
+every failure into a successful node; required-input admission and hard execution failures still
+stop the affected job. The review may end `COMPLETED_WITH_GAPS`.
 Configuration corruption, unsafe paths, changed handoffs, receipt persistence/locking failures,
 artifact hash mismatch, invalid manifests, and index corruption fail the Dagster run.
 
@@ -162,9 +161,9 @@ accepted manifest while preserving old attempt receipts and reusing unaffected p
 and shards. Dagster step selection can rerun a producer branch and its manifest/publication closure
 without rerunning independent branches.
 
-Checkov 3.3.19 is bounded to typed Terraform/HCL, Dockerfile names (`Dockerfile`, `Dockerfile.*`,
+The configured Checkov adapter is bounded to typed Terraform/HCL, Dockerfile names (`Dockerfile`, `Dockerfile.*`,
 `*.dockerfile`, `Containerfile*`), structurally recognized GitHub Actions workflows, and
-structurally recognized CloudFormation templates (see the open question on the last two in
+structurally recognized CloudFormation templates (see bounded selection in
 [`static-analysis.md`](static-analysis.md)). Arbitrary YAML is
 not IaC merely by extension. Unsupported Checkov families are named gaps. Hadolint, Trivy, Checkov,
 and Zizmor retain separate producer scopes and shard identities so overlapping coverage is visible.

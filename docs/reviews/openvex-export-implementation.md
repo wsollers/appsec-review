@@ -1,3 +1,11 @@
+---
+title: "OpenVEX findings export implementation"
+kind: "review"
+subsystem: "reporting and metrics"
+status: "historical"
+jobs: ["job_openvex_export"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OpenVEX findings export implementation
 
 Status: standalone gate/2 export landed on local main `83e67b23`; the user-directed automatic

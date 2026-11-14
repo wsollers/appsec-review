@@ -1,10 +1,17 @@
+---
+title: "Operating review-data indexing"
+kind: "operations"
+subsystem: "runtime interchange"
+status: "current"
+jobs: ["job_build_iteration", "job_code_graph_index", "job_codeql_analysis", "job_inference_security_review", "job_review_data_indexing", "job_review_package_assembly", "job_security_tagging", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating review-data indexing
 
 `job_review_data_indexing` precedes `job_review_package_assembly` in both the direct review graph
 (`appsec-review start`) and the Dagster `wave1_review` graph. It follows `job_code_graph_index`,
 `job_security_tagging` and the default-enabled OWASP assessment when those jobs are enabled on either
-surface. It accounts for every
-dataset the run produced, restores shards a manifest rewrite dropped, publishes cross-domain links
+surface. It accounts for declared publications of eligible producers, restores verified shards a manifest rewrite dropped, publishes cross-domain links
 and the stage-1 precomputed query sets, and publishes the dataset inventory as an indexed dataset.
 The design is in [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
 
@@ -29,15 +36,11 @@ are review context, and unmatched declarations or requests are named gaps, not f
 
 ## Steps
 
-| Step.task | Output | Notes |
-|---|---|---|
-| `load.accepted_inputs` | `accepted-inputs.json` | Verifies the accepted manifest and target snapshot, reads every registered job's accepted handoff, restores shards a producer published but a later manifest rewrite dropped, reports shard conflicts, reads resolved job topology, pins global reference feeds and records the OWASP workbench status. |
-| `links.cross_domain` | `links/links-*` shards | Five link families: `representation`, `finding_source`, `package_advisory`, `symbol_syntax`, `history_code`. Exact links need equal identity, hash or byte span; name/line/hash-only joins are separate ambiguous relations carrying their method and confidence. |
-| `precompute.<query_set>` | `precomputed/qs-<query_set>` shards | One immutable shard per stage-1 set: `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context`. |
-| `fts.image_validation` | `data/indexing/fts/<attempt>/` | Offline cross-check of this job's shard text with the pinned `tool-sqlite-fts` image (see below). |
-| `audit.inventory` | `inventory.json` | Publication completeness audit. A violation fails the job and blocks index acceptance; the report stays on disk. |
-| `matrix.coverage` | `coverage-matrices.json` | Language, build-unit, producer/consumer and input-source matrices plus the follow-up query-set list. The `code_graph` lane is computed from accepted `graph` shards (see below). |
-| `publish.inventory_index` | `inventory/dataset-inventory` shard and manifest | Accepted manifest = upstream shards + restored shards + link, product and inventory shards. |
+The [canonical job page](job_review_data_indexing.md) owns the generated step/task/output
+declarations and authored process. `load.accepted_inputs` selects enabled review-graph producers
+before this stage, excluding downstream consumers and non-graph dispatch classes. Its accepted
+reads remain subject to the typed contract and admitted pins; it does not read every registered
+job merely because that job exists. File-ownership accounting has a broader scope, described below.
 
 All bounds are in `[jobs.job_review_data_indexing.settings]` in `appsec-review.toml`.
 

@@ -1,3 +1,11 @@
+---
+title: "Operating the final publication gate and the final report"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating the final publication gate and the final report
 
 **Delivered snapshot contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC, remediation
@@ -53,8 +61,8 @@ accepted-handoff pointer and re-verifies, from bytes, everything it binds. Any d
 - every ledger shard re-hashes, keeps its row count and merges deterministically to the handoff's
   ledger head; the published `claim-ledger.jsonl` and `projection.json` are byte-identical to what the
   shards produce; the projection hash and the gap identifiers match the handoff;
-- the lead and hunt package manifests verify (including every package's bytes) and the hunt
-  manifest's content hash matches the handoff;
+- the lead and hunt package manifests verify (including every package's bytes), and each
+  content hash matches its separate handoff field;
 - every finding package and score package re-hashes, validates against `finding-package/2` and
   `score-package/3`, belongs to a claim in the ledger in the same state, and carries the handoff's
   manifest, ledger head and ship-block policy hashes;
@@ -73,7 +81,9 @@ dossier membership/caps/files/render receipts; and chain candidate/frontier/comp
 Before sealing, `reverify_snapshot` rehashes all bindings and rechecks the accepted review and
 admitted producer pointers, rejecting a concurrent replacement. Frozen `resolved.json` is also
 bound. Integrity failure produces no accepted snapshot; ordinary absent/failed/capped enhancement
-work remains a named capability gap without re-adjudicating the base finding.
+work within an accepted producer can remain a named capability gap without re-adjudicating the
+base finding. Missing enabled producer envelopes are rejected by the current typed input contract
+before this capability classification; they are not accepted as success-shaped absent sections.
 
 **`gate.classify`** places every finding package in exactly one bucket and names the limitations.
 

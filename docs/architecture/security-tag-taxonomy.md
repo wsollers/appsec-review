@@ -1,3 +1,11 @@
+---
+title: "Security tag taxonomy"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_security_tagging"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Security tag taxonomy
 
 Status: first vertical slice implemented by `job_security_tagging` (see
@@ -81,7 +89,7 @@ packages, build artifacts, and tool observations.
 | `declared` | A manifest, SBOM entry, or import makes the capability available. No call site was resolved. | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang` |
 | `invoked` | A resolved call site, route registration, decorator, or configuration key exercises the capability. For declarative configuration (IaC, manifests, Dockerfiles, workflows), the parsed key or resource is the resolved site. | `func`, `infra`, `data`, `surface` |
 | `reported` | A scanner rule matched, through SARIF or another normalized observation. The match is unverified. For `gap`, a producer or this job reported missing coverage. | `cwe`, `cert-*`, `misra-*`, `vuln`, `scorecard`, `func`, `infra` (rule-defined capability matches), `gap` |
-| `confirmed` | An adjudicated claim with resolving evidence, produced by the inference review or the workbench. | `cwe`, `cert-*`, `misra-*`, `vuln`, `capec`, `attack` |
+| `confirmed` | An adjudicated claim with resolving evidence. The current pre-review tagging producer does not mint this basis; an OWASP assessment is not final claim confirmation. | `cwe`, `cert-*`, `misra-*`, `vuln`, `capec`, `attack` |
 | `derived` | A crosswalk produced this tag from other assignments. It means "applicable" or "relevant to review". | `surface` (boundary tags only), `asvs5`, `masvs2`, `nist53r5`, `ssdf`, `k8s-pss`, `slsa1`, `top10-2025`, `api-top10-2023`, `cicd-top10`, `k8s-top10-2022`, `scorecard`, `cwe`, `capec`, `attack` |
 
 Validation rejects every namespace/basis pair outside this table. For example, a `cwe:*` tag with
@@ -667,8 +675,9 @@ the direct CLI graph and `wave1_review` when enabled. The default-enabled OWASP 
 using accepted assignments and
 distinct-subject tag-cloud counts as bounded routing context, not proof; absent tags are unknown.
 There is no OWASP-to-tagging dependency. Review data indexing closes the producer wave before
-package assembly and inference review. Tagging reads only the accepted, hash-verified retrieval
-manifest and publishes immutable `tags` retrieval shards, one per display family.
+package assembly and inference review. Tagging reads the admitted, hash-verified retrieval
+manifest/shards and resolves exact source bytes for eligible graph sites; it does not discover
+source by walking the target tree. It publishes immutable `tags` retrieval shards, one per display family.
 A shard's fingerprint covers:
 
 - its upstream manifest;
@@ -676,6 +685,7 @@ A shard's fingerprint covers:
 - the crosswalk hash;
 - the capability-rule hash;
 - the assignment content.
+- the component topology and ownership-rule identity.
 
 Assignments are queried through the existing bounded `search`, `find`, and `coverage` filters with
 `indexes=["tags"]` and `kinds=["tag_assignment"]`, so no new MCP tool is needed. The vocabulary,
@@ -693,7 +703,7 @@ carry:
 | Area | Implemented | Not yet implemented (reported as named gaps) |
 | --- | --- | --- |
 | Vocabulary | Namespace registry, grammar, ID normalizers, namespace/basis table, `proposed` rejection | Pinned NIST, SSDF, MISRA, PSS, SLSA, CI/CD and Kubernetes Top 10, Scorecard, and KEV catalogs |
-| Code facts | `lang` from the source inventory; `infra`/`platform` from configuration-file paths (`declared`); `func` from inventory package names (`declared`); `infra:ci:*` from CI static rules (`reported`) | `invoked` capability detection from AST or taint models; `data`, `surface` entry and privilege facts; `component` roles |
+| Code facts | `lang` from source inventory; file/package capabilities (`declared`); CI capabilities (`reported`); bounded exact graph entry/sink capabilities (`invoked`), including native memory and neutral remote/file/CLI/environment/IPC inputs | Standalone AST-only capability detection; unsupported graph classes; sensitivity and privilege facts; published `component` role tags |
 | Weaknesses | `cwe` from CodeQL SARIF rule tags, Gitleaks (`cwe:798`), and CI rules; `cert-*` from CERT rule IDs; `vuln:severity:*` and `cwe:1395` from advisory matches; `gap:crosswalk-unmapped` for unmapped findings | Semgrep, Checkov, and Trivy declared CWEs (the evidence normalizer does not retain them yet) |
 | Crosswalk | Curated one-hop rules with `same_subject`, `component`, `ci_job`, and `project` scopes; conflict and proposed-namespace rejection at assembly | `upstream` CWE→CAPEC→ATT&CK rules from a run-pinned MITRE feed; `taint_path`, `iac_resource`, `k8s_object`, and `container_stage` scopes |
 | Gaps | Per-shard coverage gaps, absent required indexes, `gap:catalog-fixture` for fixture-only control catalogs | Infrastructure gaps (`unrendered`, `deployed-state`, `offline`) |
@@ -701,3 +711,12 @@ carry:
 
 Gap tags carry basis `reported`: a producer or the tagging job reported the missing coverage.
 Curated crosswalk rules carry `reviewer: pending-human-review` until a reviewer signs them off.
+
+T-146 adds fourteen pinned graph mapping rules. Each invoked assignment retains the original
+graph reference and producer, re-resolved source bytes/span, and a stable source-site identity.
+`surface:entry:remote-input` does not imply HTTP, public deployment or authorization status.
+Ambiguous, missing, conflicting, unsupported or bounded-out evidence remains a gap. Canonical
+`func:authn:*`, session, crypto, storage and network tags route component questions with their
+original declared/invoked basis; neither tags nor derived crosswalk labels satisfy a control.
+The [implementation and unit record](../tasks/2026-11-13-behavior-oriented-review.md) distinguishes
+delivered behavior from unrun integration, acceptance and real-model efficacy.

@@ -12,6 +12,7 @@ from appsec_review.runtime.datasets import artifact_only, protected
 
 _J = "data/jobs/job_inference_security_review"
 _A = _J + "/attempts/*"
+_AUDIT = _A + "/artifacts/decision-audit"
 # The contract below binds the accepted index, packages and their original dataset producers.
 # Historical handoff declarations retain their schema-defined "planned" label; it does not
 # describe current registration. Live dependencies are projected from Job.contract.
@@ -63,6 +64,39 @@ DATASETS = (
               artifacts=(_A + "/steps/attack_chains/**",),
               reason="continuity evidence and model proposals are protected review material; only the final "
                      "gate may project confirmed or qualified chain summaries", authority=EvidenceAuthority.PROVISIONAL),
+    protected("review_audit_metadata", "publication", "inference_review",
+              "appsec-review/review-audit-publication/1",
+              "Accepted audit availability, frozen projection policy and manifest binding.",
+              artifacts=(_AUDIT + "/publication.json",),
+              reason="protected operator/application metadata; no worker evidence or query grant",
+              authority=EvidenceAuthority.OPERATIONAL),
+    protected("review_decision_audit", "publication", "inference_review",
+              "appsec-review/review-audit-manifest/1",
+              "Exact protected audit shard membership, source identities and population coverage.",
+              artifacts=(_AUDIT + "/manifest.json",),
+              reason="derived audit manifest; historical or disabled absence remains explicit",
+              authority=EvidenceAuthority.OPERATIONAL),
+    protected("review_decisions", "publication", "inference_review", "appsec-review/review-decision/1",
+              "Bounded lead, proposal, cell and claim stage decisions with original provenance.",
+              artifacts=(_AUDIT + "/decision/*.jsonl",),
+              reason="protected decision metadata, not additional target evidence",
+              authority=EvidenceAuthority.OPERATIONAL),
+    protected("review_verification_coverage", "publication", "inference_review",
+              "appsec-review/verification-coverage/1",
+              "Separate observed verifier blindness, diversity and evidence-support coverage.",
+              artifacts=(_AUDIT + "/verification_coverage/*.jsonl",),
+              reason="protected verification observations; no retrospective or inferred success",
+              authority=EvidenceAuthority.OPERATIONAL),
+    protected("review_decision_bases", "publication", "inference_review", "appsec-review/decision-basis/1",
+              "Exact finding/claim/adjudication decision bases including noncounted counterevidence.",
+              artifacts=(_AUDIT + "/decision_basis/*.jsonl",),
+              reason="protected dossier/operator context; does not change accepted claim authority",
+              authority=EvidenceAuthority.OPERATIONAL),
+    protected("review_audit_continuations", "publication", "inference_review", "application/x-ndjson",
+              "Manifest-bound closed source/relation reference continuation rows.",
+              artifacts=(_AUDIT + "/continuations/**.jsonl",),
+              reason="protected bounded references decoded by their declared continuation field",
+              authority=EvidenceAuthority.OPERATIONAL),
     artifact_only("scores_and_findings", "publication", "inference_review", "appsec-review/finding-package/2",
                   "Independent score packages, confirmed/supported finding packages and the accepted handoff.",
                   artifacts=(_A + "/steps/scoring/**", _A + "/steps/publication/tasks/publish_handoff/**"),
@@ -77,6 +111,16 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        *(InputRequirement("job_threat_model_generation", kind, schema,
+                           authority=EvidenceAuthority.ROUTING_CONTEXT,
+                           availability=Availability.OPTIONAL, missing=MissingPolicy.GAP)
+          for kind, schema in (
+              ("handoff", "appsec-review/job-handoff/2"),
+              ("generated_dfd", "appsec-review/generated-dfd/1"),
+              ("generated_threat_model", "appsec-review/generated-threat-model/1"),
+              ("generated_model_evidence", "appsec-review/generated-model-evidence/1"),
+              ("threat_model_documents", "appsec-review/threat-model-generation/1"),
+          )),
         InputRequirement("job_artifact_indexing", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_artifact_indexing", "artifact_catalog",
@@ -200,7 +244,7 @@ CONTRACT = JobContract(
         InputRequirement("job_debug_symbol_indexing", "symbol_coverage",
                          "appsec-review/debug-symbol-coverage/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_debug_symbol_indexing", "target_decision",
-                         "appsec-review/debug-symbol-decision/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         "appsec-review/debug-symbol-decision/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_debug_symbol_indexing", "raw_artifact_refs",
                          "appsec-review/debug-symbol-inputs/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_debug_symbol_indexing", "reader_executions",

@@ -1,3 +1,11 @@
+---
+title: "Generic language-build operations"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_build_environment_analysis", "job_build_iteration", "job_language_build", "job_project_build", "job_sanitizer_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Generic language-build operations
 
 **Graph/2 source admission:** actual dispatch, local build caches, task checkpoints, direct
@@ -11,10 +19,12 @@ and PE metadata remains unparsed rather than assumed compatible. Graph/1 artifac
 remain inspection-only. These controls are authored source, not a claim of unit/live acceptance
 or acquired native compiler metadata.
 
-Native/Rust recipes without closed target proof now publish a precise preparation block,
-not a ready dispatch; language publication preserves that upstream reason and its empty
-commands/artifacts. The same applies to Visual C++ without an admitted MSBuild/VCBuild
-capability. Captured Gradle settings beside the selected driver bind declared modules;
+Recipes with unresolved operation/selection or required-interface blockers do not become ready
+dispatches; language publication preserves the upstream reason and empty commands/artifacts.
+Missing static compiler metadata alone is not native execution proof or a blanket refusal:
+the native adapter measures the running image and verifies captured target evidence before
+accepting its outputs. Visual C++ without an admitted MSBuild/VCBuild
+capability remains blocked. Captured Gradle settings beside the selected driver bind declared modules;
 a captured Android managed/bytecode module is not blanket-classified as native.
 
 Product-dependent generic/JVM/Wasm execution requires the admitted shared workspace and exact
@@ -139,10 +149,12 @@ include/library/tool/pkg-config/CMake interfaces to execution; it does not merel
 upstream Boolean. There is no fresh source-only copy for each production node.
 Commands use accepted phase directories, checked by the common production/replay source/driver
 guard immediately before every launch, then execute without an introduced shell.
-The pinned container uses Docker's
-bridge network so declared package-manager dependencies can be downloaded,
-runs non-root with dropped capabilities and `no-new-privileges`, has a read-only root, and receives
-central CPU, memory, PID, timeout, tmpfs, and output limits. Target binaries and tests are never run.
+Generic native execution selects network `none`; other production families select Docker's
+`bridge` network so declared package-manager dependencies can be downloaded. Containers run
+non-root with dropped capabilities and `no-new-privileges`, a read-only root, and PID, timeout,
+tmpfs and output bounds. Ordinary Docker build argv does not set fixed CPU/memory limits;
+the opt-in native adapter does. Runtime resource admission is a separate boundary.
+Target applications and test suites are not run; admitted build generators/hooks can execute.
 The capture driver creates a fresh owner-only scratch directory inside the run-owned workspace for
 each command and binds `TMPDIR`, `TMP`, and `TEMP` to it. Compiler and build-system temporaries,
 including MSBuild response files, therefore remain inside the workspace boundary until capture can
@@ -805,7 +817,9 @@ The accepted graph accounts for independent/contained/unsupported/unresolved uni
 Readiness requires successful producers, exact declared interfaces and retained product
 verification. Six variant fields (`configuration`, `target_arch`, `execution_role`, `linkage`,
 `toolchain`, `abi`) come only from explicit descriptor/configuration evidence. Unknown required
-compatibility blocks consumers; any unknown variant field forbids checkpoint reuse.
+compatibility blocks consumers. Graph/2 checkpoint reuse validates recipe-bound refinement,
+required product roles/axes and retained bytes, not blanket completeness of every legacy
+nullable variant field.
 
 Reuse additionally binds source, structural graph, frozen configuration, recipe revision,
 image/toolchain, exact upstream products, execution/capture and `[build_outputs]` identities,
@@ -834,7 +848,10 @@ recomposition. Recovery verifies expected generations and before/after ledger st
 cleanup or tainted state is unfinished, never reusable success.
 
 Failure blocks dependent nodes while unrelated ready nodes may continue; family/aggregate results
-can be `COMPLETED_WITH_GAPS`. There is no durable `AWAITING_RECIPE` state or mandatory whole-review
+can be `COMPLETED_WITH_GAPS` when a prepared receipt and confirmed cleanup permit rollback.
+Pre-receipt command-custody refusals and unconfirmed cleanup can still stop the controller;
+see [T-092](../TODO.md#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build).
+There is no durable `AWAITING_RECIPE` state or mandatory whole-review
 pause. Image preparation, a completed invocation, or an intermediate successful node does not
 establish overall target/SPDX completion.
 
@@ -910,7 +927,7 @@ trees once per unit, after the build, before it catalogues files
 (`src/appsec_review/jobs/build_output_scope.py`,
 `src/appsec_review/jobs/job_language_build/native_outputs.py`). The design is
 [`native-build-output-discovery.md`](../architecture/native-build-output-discovery.md). The walk
-covers the generic families (native, Go, .NET, Python, Rust); the JVM and WebAssembly adapters do
+covers the generic families, including the Node and PHP installer-record catalogs; the JVM and WebAssembly adapters do
 not use it.
 
 **Configured exclusions.** Every `[[build_outputs.exclusions]]` rule whose `families` include the
@@ -975,11 +992,11 @@ Classification gaps:
 | `build-output-msbuild-directory-unresolved` | an MSBuild output directory could not be resolved |
 | `build-output-capture-incomplete: ...` | capture was incomplete, so capture-based classification is off; layout facts and the heuristic still apply |
 
-`node.catalog` and `php.catalog` accept the dispositions but do not walk them yet. Node and PHP
-units therefore apply no `[build_outputs]` rule in this job, and their dispositions and counts
-are empty. Non-Unity project probes no longer run, so the shipped `node-bundler-cache` rule is
-not applied there as a substitute production classification. Their
-installer-record classifiers are separate work.
+`node.catalog` and `php.catalog` use the dispositions walk and their installed-package classifiers.
+Verified npm/Composer trees are summarized with resolving installer evidence; unverified nested
+content remains per-file rather than inheriting a trusted parent classification. Configured
+`[build_outputs]` exclusions apply, and the receipts retain classified roots and counts.
+See the installed-dependency sections above; these are implemented catalogs, not unused hooks.
 
 ### Immutable retry publication
 

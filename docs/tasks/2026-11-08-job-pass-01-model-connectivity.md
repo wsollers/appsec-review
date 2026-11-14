@@ -1,3 +1,11 @@
+---
+title: "Job pass 01 — `job_model_connectivity`"
+kind: "task"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_image_pin_verification", "job_model_connectivity", "job_owasp_control_assessment", "job_post_build_security_assessment", "job_review_intake"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 01 — `job_model_connectivity`
 
 First job of the job-by-job pass (fix, then audit the unit tests, then add tests). Advances

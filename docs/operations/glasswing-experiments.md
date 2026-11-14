@@ -1,3 +1,11 @@
+---
+title: "Glasswing quality experiments"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Glasswing quality experiments
 
 `appsec_review.observability.experiments` is an offline measurement domain beside

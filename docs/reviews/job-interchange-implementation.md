@@ -1,3 +1,11 @@
+---
+title: "Job interchange implementation record"
+kind: "review"
+subsystem: "runtime interchange"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job interchange implementation record
 
 Status: shared contracts, runtime publication/admission, concrete native provenance, operational

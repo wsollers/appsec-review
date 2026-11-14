@@ -1,3 +1,11 @@
+---
+title: "Finding metrics"
+kind: "architecture"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Finding metrics
 
 Status: **implemented 2026-11-11 as an offline operator domain**
@@ -276,8 +284,8 @@ parse what was exported, never fetch, never execute.
 
 ### 7.1 Boundary
 
-- `job_crash_evidence_ingestion` reads a directory the operator exported and registered for the
-  run. It makes no network call and contacts no crash service.
+- The proposed ingestion job ([T-075](../TODO.md)) would read a directory the operator exported
+  and registered for the run, without contacting a crash service.
 - Crash bytes, module names, symbols, annotations and messages are untrusted data. They never
   reach a worker prompt as instructions and never become metric labels.
 - A minidump contains process memory. The job keeps **only** the normalized record below. Raw
@@ -406,8 +414,8 @@ confirmed high or critical finding.
 | Part of this design | Module (`observability/findings/`) | State | Item |
 | --- | --- | --- | --- |
 | Fingerprint, lifecycle, finding history | `identity`, `lifecycle`, `history` | implemented | T-060 |
-| Reviewed units derived from a run | `coverage_adapter` | implemented; not run against a real accepted run; files of units below the hunt cutoff are not recorded by a run | T-073 |
-| Entry points derived from a run | `coverage_adapter` | implemented from `surface:entry:*` tags; no producer assigns those tags yet, and no tag marks a parser | T-073 |
+| Reviewed units derived from a run | `coverage_adapter` | implemented; T-146 manifests retain sources below the cutoff and distinguish operation-only review from whole-file review; real-run efficacy remains unverified | T-073, T-146 |
+| Entry points derived from a run | `coverage_adapter` | graph-backed input tags now exist, including neutral remote input; no tag establishes deployed exposure or a parser entry point | T-073, T-146 |
 | Targeted fix re-check: requests, admission, scoring | `recheck` | implemented, model-free | T-061 |
 | Live verifier transport for the re-check | none | open | T-074 |
 | Labelled triage effectiveness, split ratios, audit miss rate | `triage`, `labels` | implemented | T-062 |
@@ -420,7 +428,7 @@ confirmed high or critical finding.
 | Hunt-lane value and coverage | `coverage` | implemented | T-068 |
 | Developer outcomes, audit sample, actionability | `labels`, `actionability` | implemented | T-069 |
 | Game slices from path rules | `slices` | implemented | T-070 |
-| Attacker position, owner, function and remediation recorded by the review; game cases and guidance | none | open | T-076 |
+| Attacker position, owner, function and remediation recorded by the review; game cases and guidance | `run_adapter` (remediation projection only) | T-146 reads certified exact-finding remediation attachments; other missing dimensions remain unknown | T-076, T-146 |
 | Reviewer integrity: citations, verification, canary drift | `integrity` | implemented; injection case not keyed | T-071 |
 | Crash adapters, binding, corroboration, missed buckets, lead candidates | `crash/` | implemented | T-072 |
 | Crash evidence as a review-graph job and lane A lead family; raw minidumps | none | open | T-075 |
@@ -428,35 +436,42 @@ confirmed high or critical finding.
 
 Corpus series, canary runs and live reviews remain user-owned manual validation.
 
+T-146 actionability requires a counted, complete supporting reachability relation before crediting
+an entry-to-sink path. Absence from a missing-predicate list is not path evidence. A proposed
+remediation is credited only from its exact certified finding binding; static/build checks never
+count as a runtime-validated fix. The [implementation record](../tasks/2026-11-13-behavior-oriented-review.md)
+reports focused unit coverage, not observed precision, recall or developer acceptance.
+
 ## 12. Implementation decisions
 
 Where the code differs from the text above, the code is authoritative and this section says why.
 
 1. **A separate document, not a run-summary section.** `finding-metrics/1` is built on request by
-   the operator command. The run-owned telemetry summary and its schema are unchanged: the summary
-   is recomputed at every job completion, and verifying the whole review there would add cost to
-   every run and couple a derived view to the run lifecycle.
+   the operator command. The run-owned telemetry summary and its schema are separate. Current
+   run-level drivers and standalone launch finalization refresh that summary, not every job
+   publication; finding-scorecard construction does not become a completion hook.
 2. **Triage reduction is not edited.** The split ratios are computed from the existing
    `triage_reduction` section by `triage.split_ratios`; the section keeps its `/1` schema.
 3. **Coverage is derived from what a run records, and supplied for the rest.** A run records review
-   units by component, not by source file, but every review package body names the accepted
+   units by component/build and operation or fallback scope; every review package body names the accepted
    `source_file` identities in its scope, the claim projection records each cell's role and
    terminal status, and the accepted source catalog maps an identity to its path and content hash.
-   `coverage_adapter` joins them: a catalogued file is reviewed when a package that contained it had
-   every red cell succeed; any other catalogued file is `cells_incomplete`, `not_launched` or
-   `not_packaged`. Three things are not derivable and are named instead of guessed:
-   - The files of a review unit below the hunt cutoff. The package manifest lists such a unit by
-     key only, so its files are `not_packaged` like files of no unit, and
-     `units_below_hunt_cutoff:<n>` counts the units. The manifest's `units` rows would have to carry
-     their `source_ids` to split them.
+   `coverage_adapter` joins them: successful red cells on an operation-only package leave the
+   containing file `operation_only`, not reviewed. A successful whole-file package may establish
+   reviewed status; other reasons include `cells_incomplete`, `not_launched`, `below_hunt_cutoff`
+   and `not_packaged`. T-146 updated the implementation while preserving the original
+   evidence-derived-coverage decision:
+   - Current manifests retain below-cutoff units' `source_ids`, so those files can be identified as
+     `below_hunt_cutoff`; the `units_below_hunt_cutoff:<n>` gap also retains the unit count.
+     Older manifests without those identities cannot support that attribution.
    - A parser entry point. Entry points are derived from accepted `surface:entry:*` tags
-     (`http-public`, `http-internal` and `message-consumer` as network handlers, `rpc` as RPC
+     (`remote-input`, `http-public`, `http-internal` and `message-consumer` as network handlers, `rpc` as RPC
      handlers, `file-input` as file loaders). No term of that group is a parser, and
      `func:data:parse-*` marks code that calls a parser, not an entry point.
-   - Entry points at all, for now. The vocabulary defines `surface:entry:*`, but no tagging
-     producer assigns it, so the derived catalogue is null with a named gap until one does. The
-     code graph's `entry_point` facts (taint sources with a `source_class`) are a candidate second
-     source and are not used: a source site is not an entry point of one of the four kinds.
+   - Graph-backed tagging now emits bounded source-resolved `surface:entry:*` assignments.
+     The neutral `remote-input` tag does not establish a public HTTP route or deployment exposure.
+     A run without accepted entry tags still produces a null catalogue with a named gap.
+     The adapter consumes tags, not raw graph rows as an unqualified second catalogue.
 
    An operator `--units` or `--entry-points` file still takes precedence. When neither a file nor a
    derivation gives the units, an absent finding is `not_covered` and the snapshot names the gap.
@@ -478,7 +493,7 @@ Where the code differs from the text above, the code is authoritative and this s
    inferred; it stays null until the review records it (T-076).
 10. **Crash evidence is an operator facility, not yet a job.** Adapters, binding, corroboration,
     the missed-bucket list and lead candidates are implemented and unit tested.
-    `job_crash_evidence_ingestion`, the `crash_report` lane A lead family, raw minidump walking and
+    The proposed ingestion job, the `crash_report` lane A lead family, raw minidump walking and
     symbolication are not (T-075): registering a job changes the review graph and the lead family
     changes what a model reviews, and neither can be validated without live runs.
 11. **The experiments domain has no `published` stage.** The adapter registers published snapshots

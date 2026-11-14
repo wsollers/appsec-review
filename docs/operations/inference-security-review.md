@@ -1,3 +1,11 @@
+---
+title: "Inference security review operations"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_code_graph_index", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_model_connectivity", "job_remediation_planning", "job_remediation_validation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Inference security review operations
 
 Design authority: [`../architecture/inference-security-review.md`](../architecture/inference-security-review.md).
@@ -154,9 +162,10 @@ overlay may set only `review_teams`, `[...settings.result_cache]` (see [Blue res
 `orchestration.dagster.pools.*`, `review_policy.resources.*` (the host resource budget) and
 `review_policy.releases.*` (the host's [component release IDs](performance-assurance.md#operator-declared-releases),
 which are not capacity and do change release-bound identities); any other key is rejected.
-It is recorded as its own hashed layer in the run's configuration manifest. Capacity is excluded
-from cell fingerprints, so runs with different team counts reuse each other's cells and produce
-identical canonical outputs.
+It is recorded as its own hashed layer in the run's configuration manifest. Team capacity is
+excluded from semantic cell fingerprints; unchanged cells may be reused when the remaining
+admission bindings permit it. This is not a guarantee of identical fresh model answers or
+completion under different contention and exhausted budgets.
 
 [`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
 raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts; the checked-in
@@ -232,7 +241,8 @@ connect_timeout_seconds = 0.5                   # 0.05..10; connect and socket t
 - **Fail-open.** A store that is unreachable, times out, or has no `redis` client turns every lookup
   into a miss and every write into a no-op. The first failure disables the memo for the rest of
   that job attempt and logs one `REVIEW_RESULT_CACHE_UNAVAILABLE` warning. The cell runs the model
-  normally, and the outcome is identical to running without the memo. Unavailability is not a gap.
+  normally under the same evidence/validation contract; a fresh stochastic answer need not equal
+  the cached answer. Cache unavailability itself is not a coverage gap.
 - **Auditing.** A hit writes the cell's own receipt with `turns: []`, zero counts, and
   `reused_from = {cell_id, attempt, receipt_sha256, memo_key}`, which names the receipt of the model
   call that produced the result. A pointer that fails any check is a miss. The checks are: another
@@ -633,6 +643,14 @@ ratings.
 
 ## Tuning lane B ranking
 
+T-146 adds exact-site operation units alongside retained whole-file fallback units. Each located
+lead is assigned at most once to an operation or fallback. New manifests retain source identities
+even below the hunt cutoff; reviewing one operation does not count as whole-file coverage.
+`packages.max_operation_records = 2000` bounds discovery. Optional generated DFD/threat-model
+context is read through the admitted input contract, bounded by
+`packages.max_behavior_artifact_bytes = 8388608`, and joined by original graph identity.
+Its boundary/flow questions remain routing context, not predicate evidence or new tool authority.
+
 Lane B ranks review units by the sum of their known signal points (see the design section "Lane B:
 open discovery"). The top `lanes.hunt_max_units` units are hunted. Every weight is set in one
 table, and the checked-in values are the shipped defaults:
@@ -642,8 +660,8 @@ table, and the checked-in values are the shipped defaults:
 lps = 1000                           # full review-prioritization (LPS) score
 sii = 1000                           # full source-history instability (SII) score
 hotspot = 1000                       # full hotspot score
-tag_density = 1000                   # tag density at tag_density_full_tags_per_file tags per file
-tag_density_full_tags_per_file = 4
+tag_density = 1000                   # retained key: distinct evidenced security-operation sites
+tag_density_full_tags_per_file = 4    # retained key: sites for full points, no file-count multiplier
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -660,12 +678,18 @@ signal (a missing producer or feed) still contributes nothing, whatever its weig
 
 The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
 and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
-which reassembles hunt packages. The rank rule stays `review-unit-rank/2` because the formula does
-not change.
+which reassembles hunt packages. `review-unit-rank/3` replaces raw tag counting: language, gap,
+reported and derived tags do not add operation points; multiple labels/producers at one physical
+site count once. Missing or partial evidence remains unknown rather than proving absence.
+Fresh packages use `assemble-review-packages/13` and the model-facing `package-view/5`.
+Preceding publications remain readable without being reused as the new semantic output.
+Generated-map bytes remain bound through final certification. Role counts, verifier independence,
+judge policy and execution authority are unchanged; see the
+[design and focused unit record](../tasks/2026-11-13-behavior-oriented-review.md).
 
 ## Code-graph evidence
 
-When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ only):
+When the run has accepted `graph` shards (`job_code_graph_index`):
 
 - **Packages.** Lead packages embed the `dataflow_path` facts correlated `bridged` or `partial`
   with a CodeQL lead, with their sink, entry point, guards and ranges; hunt packages embed the
@@ -710,8 +734,9 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
   answer did not account for), `compact_result` (what the model wrote), `result` (the expanded document the
   validators saw), `repair_errors` (why the last attempt was rejected) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
   and validator versions changed.
-- **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` (now empty: the compact answer carries no
-  chain seeds) and names it in the lane document under `poc_basis`.
+- **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` and names it under
+  `poc_basis`. Compact discovery can carry bounded `chain_seeds`; the pre-seal composer consumes
+  eligible adjudicated claim-ID hints, never seed prose as continuity proof.
 - **View bounds.** `max_view_bytes`, `max_view_source_lines` and `max_view_type_declarations` under
   `[jobs.job_inference_security_review.settings.packages]` bound what a cell sees. A view that omitted rows names
   them in a material gap and in `omitted`; the whole stored package, including every gap, stays hash-pinned.
@@ -833,16 +858,19 @@ Decision 4 separates the findings the handoff publishes:
   No remediation job reads it. A backlog item enters remediation only after a later review
   confirms it.
 
-The handoff's `planned_consumers` names the four downstream jobs fixed by decision 8 and the
-handoff fields each one reads: `job_remediation_planning`, `job_remediation_validation`,
-`job_final_publication_gate` and `job_final_report_publication`. The gate and the report are built and
-read this handoff ([`final-report.md`](final-report.md)); the two remediation jobs are not.
+The historical `planned_consumers` projection does not grant reads. Planning, validation, the
+gate and report are implemented with typed input contracts. Planning/validation read the
+accepted review and exact prerequisite bindings; the final report reads only the gate-certified
+snapshot, not the review handoff independently. See [remediation](remediation.md),
+[final publication](final-report.md) and [input admission](../architecture/job-input-contracts.md#admission-and-read-receipts).
 
 ## Outcomes
 
 - Ordinary failures, such as provider errors, timeouts, invalid output, a failed team or an entire
   failed lane, become typed gaps. The handoff is then published with status `DEGRADED`.
   `review_incomplete = true` is set when the gap ratio exceeds `lanes.incomplete_gap_ratio`.
+  This continuation applies only while the runtime permits it: an active first-error controller
+  can raise `ReviewStopped` instead. Cancellation/admission refusal is not successful coverage.
 - Integrity failures block publication and leave the accepted pointer unchanged. These include a
   tampered manifest or shard, a broken ledger chain, a non-deterministic merge, or the application
   granting a forbidden capability.

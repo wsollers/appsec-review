@@ -1,3 +1,11 @@
+---
+title: "Operating profile-data ingestion"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_language_build", "job_profile_data"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating profile-data ingestion
 
 `job_profile_data` imports execution-profile artifacts retained by accepted builds. It never creates
@@ -7,8 +15,13 @@ profile data itself. Arrange for a build or test workflow to emit a supported te
 The configured topology is `load.accepted_inputs`, `normalize.profile_data`,
 `index.profile_data`, then `acceptance.publish_handoff`. Central bounds limit accepted artifacts,
 bytes per artifact, rows per artifact, bytes per line, and frames per sample. Changing a parser,
-normalizer, mapping identity, bound, accepted handoff, report hash, or target snapshot invalidates
-reuse; do not put these values in a target file or prompt. The identity values in the settings
+normalizer, mapping identity, report hash or target snapshot changes the corresponding shard
+identity. Bounds and admitted inputs also participate in run/attempt identity, but the local shard
+key does not explicitly include bounds or normalized row content. A bounds-only same-run edit is
+refused by frozen configuration; no admitted stale-reuse path has been established. See the
+[conditional identity analysis](../architecture/scanners-and-evidence-collection.md#as-built-today)
+and [canonical job page](job_profile_data.md), rather than assuming every local key includes every
+bound. Do not put these values in a target file or prompt. The identity values in the settings
 must equal the code constants (`job_profile_data/job.py`); any other value fails configuration
 loading rather than invalidating shards.
 

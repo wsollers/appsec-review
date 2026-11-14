@@ -1,10 +1,19 @@
+---
+title: "Operating dependency intelligence"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_dependency_intelligence"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating dependency intelligence
 
 Run `job_dependency_intelligence` after target cataloging, accepted language builds, artifact
 indexing, and evidence collection. Its central configuration must declare this topology in order:
 
 1. `inputs.load_accepted`
-2. `resolution.detect_dependencies`, `resolution.infer_repositories`
+2. `resolution.detect_dependencies`, `resolution.curate_components`,
+   `resolution.investigate_components`, `resolution.infer_repositories`
 3. `repositories.deduplicate`
 4. `scorecards.fetch`
 5. `publication.publish_sbom`, `publication.publish_context`
@@ -13,6 +22,9 @@ indexing, and evidence collection. Its central configuration must declare this t
 The SPDX 2.3 native enrichment and its telemetry have a separate
 [operator guide](native-sbom.md). Its status describes inventory coverage, independently of
 repository inference and Scorecard availability.
+The [canonical job page](job_dependency_intelligence.md) supplies the generated input/dataset
+declarations and exact stage acceptance checks; curation and metadata investigation precede
+repository resolution and do not turn inferred upstreams into confirmed package releases.
 
 Configure positive deterministic bounds for dependency and unique-repository counts, native candidate count, command
 tokens, metadata file count/bytes, and inference candidate bytes. Configure a repository-host

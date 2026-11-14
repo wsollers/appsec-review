@@ -1,4 +1,17 @@
+---
+title: "Dossier data, queries and provenance"
+kind: "architecture"
+subsystem: "reporting and metrics"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Dossier data, queries and provenance
+
+> Current subsystem view: [Reporting and metrics](reporting-and-metrics.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
+
+This inventory records its original source checkpoint. Current job and dataset declarations
+are in the [generated inventory](../generated/inventory.json).
 
 **V2 source delta, not produced dossier evidence:** `job_build_environment_analysis` adds a
 sensitive artifact-only static declaration/availability publication before planning. Proposal/3

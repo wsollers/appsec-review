@@ -103,7 +103,7 @@ def test_outputs_are_one_indexed_shard_family_three_documents_and_two_protected_
     assert [(k, v.step, v.family, v.disposition, v.schema, v.sensitivity) for k, v in declared.items()] == [
         ("normalized_symbols", "extract", "symbols", "indexed", INDEX_SCHEMA, "internal"),
         ("symbol_coverage", "extract", "symbols", "artifact_only", "appsec-review/debug-symbol-coverage/1", "internal"),
-        ("target_decision", "decide", "configuration", "artifact_only", "appsec-review/debug-symbol-decision/1",
+        ("target_decision", "decide", "configuration", "artifact_only", "appsec-review/debug-symbol-decision/2",
          "internal"),
         ("raw_artifact_refs", "extract", "symbols", "protected", "appsec-review/debug-symbol-inputs/1", "sensitive"),
         ("reader_executions", "extract", "symbols", "protected", "appsec-review/container-execution/1", "sensitive"),
@@ -168,11 +168,9 @@ def test_every_published_document_lands_inside_its_glob_with_its_declared_schema
     for kind, reference in written.items():
         assert _claimed(reference["path"]) == [kind], reference["path"]
         document = json.loads((run_root / reference["path"]).read_text(encoding="utf-8"))
+        assert document["schema"] == declared[kind].schema, kind
         if kind == "target_decision":
-            # TODO(T-114): the declaration says debug-symbol-decision/1; the job writes and verifies /2.
             assert document["schema"] == DECISION_SCHEMA == "appsec-review/debug-symbol-decision/2"
-        else:
-            assert document["schema"] == declared[kind].schema, kind
     (index,) = selected["indexes"]
     assert index["name"] == INDEX_NAME and index["schema"] == INDEX_SCHEMA == declared["normalized_symbols"].schema
     assert _shard_claims(index["shard_id"]) == ["normalized_symbols"]

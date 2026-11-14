@@ -7,14 +7,28 @@ from appsec_review.runtime.datasets import artifact_only
 _A = "data/jobs/job_target_acquisition/attempts/*"
 DATASETS = (
     artifact_only(
-        "target_acquisition", "publication", "configuration", "appsec-review/target-acquisition-job/1",
+        "target_acquisition", "publication", "configuration", "appsec-review/target-acquisition-job/2",
         "Pinned acquisition or read-only re-verification of every component of the requested review system.",
-        artifacts=(
-            _A + "/steps/selection/tasks/resolve_system/target-acquisition-plan.json",
-            _A + "/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",
-            _A + "/steps/acquisition/tasks/acquire_components/system-manifest.json",
-            _A + "/steps/publication/tasks/publish_handoff/target-acquisition-handoff.json",
-        ),
+        artifacts=(_A + "/steps/publication/tasks/publish_handoff/target-acquisition-handoff.json",),
+        reason="source provenance of the review target; intake binds the composed tree fingerprint", authority=EvidenceAuthority.OPERATIONAL,
+    ),
+    artifact_only(
+        "target_acquisition_plan", "selection", "configuration", "appsec-review/target-acquisition-job/2",
+        "Frozen configuration and selected component specifications for the requested review system.",
+        artifacts=(_A + "/steps/selection/tasks/resolve_system/target-acquisition-plan.json",),
+        reason="source provenance of the review target; intake binds the composed tree fingerprint", authority=EvidenceAuthority.OPERATIONAL,
+    ),
+    artifact_only(
+        "target_acquisition_result", "acquisition", "configuration", "appsec-review/target-acquisition-job/2",
+        "Component acquisition or re-verification result, including scoped failures and non-applicability.",
+        artifacts=(_A + "/steps/acquisition/tasks/acquire_components/target-acquisition-result.json",),
+        reason="source provenance of the review target; intake binds the composed tree fingerprint", authority=EvidenceAuthority.OPERATIONAL,
+    ),
+    artifact_only(
+        "target_acquisition_system_manifest", "acquisition", "configuration",
+        "appsec-review/target-system-acquisition/1",
+        "Exact-byte copy of the verified composed-system acquisition manifest, when available.",
+        artifacts=(_A + "/steps/acquisition/tasks/acquire_components/system-manifest.json",),
         reason="source provenance of the review target; intake binds the composed tree fingerprint", authority=EvidenceAuthority.OPERATIONAL,
     ),
 )

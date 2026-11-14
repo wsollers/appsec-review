@@ -1,3 +1,11 @@
+---
+title: "Native SPDX enrichment implementation"
+kind: "review"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native SPDX enrichment implementation
 
 ## Outcome and boundaries

@@ -1,3 +1,11 @@
+---
+title: "Tree-sitter AST production"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_review_prioritization", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Tree-sitter AST production
 
 `job_tree_sitter_ast` is an independent syntax producer. It consumes the accepted review-intake

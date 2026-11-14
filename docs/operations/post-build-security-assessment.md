@@ -1,3 +1,11 @@
+---
+title: "Post-build security assessment"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_cpp_compiled_analysis", "job_language_build", "job_post_build_security_assessment"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Post-build security assessment
 
 The `post_build_security_assessment` Dagster job consumes the accepted
@@ -39,6 +47,13 @@ when deterministic evidence is failing, refutes it when deterministic evidence p
 unknown evidence unvalidated. Provider failures and budget overflow complete with explicit gaps.
 The model must answer with an `appsec-review/build-security-inference-proposal/1` object; the
 validated outcome is written to `inference-results.json` (`appsec-review/build-security-inference/1`).
+
+Blocked upstream cases still publish hash-bound empty stage documents. A case without build
+actions or binary artifacts makes no model call and records the missing-evidence reason. Actual
+model requests use the registered `post_build` worker and shared bounded execution/retry transport;
+see [the canonical model and acceptance boundary](job_post_build_security_assessment.md).
+Its confirmation label compares a known deterministic check; it is not independent proof of
+every statement in a model claim.
 
 ## Binaries of every build family
 
@@ -107,9 +122,9 @@ resumption, truncation, and gaps. The file is process-safe and crash-recovers a 
 
 Unit and synthetic fixture coverage validates dynamic enumeration, redaction, formats, rules,
 inference validation, index scopes, fingerprints, telemetry contracts, and DAG topology. Current
-live generic-build acceptance is recorded by the verification evidence named in the deployment
-guide; historical fixed-case acceptance is no longer the active topology.
+live generic-build acceptance requires the exact verification evidence named in the deployment
+guide; historical fixed-case acceptance does not establish health at the current source boundary.
 
 Exact per-command timings and linker actions remain named gaps when the build system emits only a
-compile database and no link command file. Model inference was disabled in the live run as centrally
+compile database and no link command file. Model inference was disabled in the previously recorded live run as centrally
 configured; deterministic inspection and checks were exercised.

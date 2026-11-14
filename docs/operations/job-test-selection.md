@@ -1,3 +1,11 @@
+---
+title: "Job-focused test selection"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_code_graph_index", "job_codeql_analysis", "job_review_intake"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job-focused test selection
 
 From the Linux checkout with its own installed environment:

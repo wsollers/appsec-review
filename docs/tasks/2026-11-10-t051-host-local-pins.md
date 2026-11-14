@@ -1,3 +1,11 @@
+---
+title: "T-051 - Host-local image pins on WSOLLERS1"
+kind: "task"
+subsystem: "images and deployment"
+status: "historical"
+jobs: ["job_image_pin_verification", "job_model_connectivity", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # T-051 - Host-local image pins on WSOLLERS1
 
 T-051 moves host image observations out of tracked recipes before continuing T-057's c094

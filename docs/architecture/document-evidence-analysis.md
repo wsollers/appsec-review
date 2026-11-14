@@ -1,3 +1,11 @@
+---
+title: "Target document analysis and finding handoff"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_document_issue_analysis", "job_inference_security_review", "job_review_data_indexing", "job_review_package_assembly", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Target document analysis and finding handoff
 
 ## Purpose and current boundary
@@ -6,8 +14,11 @@ Target-owned design docs, STRIDE models, DFDs, OpenAPI, Postman collections, and
 reviewers discover routes, trust boundaries, and intended controls. They are untrusted target data.
 The system must preserve their exact source identity and distinguish a declaration or test from
 observed enforcement. The accepted collection, bounded context facts, document hunts, and first
-source-mapping candidate ledger are implemented. The broader inference and final finding jobs
-described below remain future work.
+source-mapping candidate ledger are implemented. The general inference, finding, scoring and
+final-publication jobs also exist; what remains unimplemented here is admission of these
+document-hunt candidates into that review path. See the current
+[document-analysis job](../operations/job_document_issue_analysis.md) and
+[review subsystem](review-inference-and-guidance.md).
 
 ## Current data flow
 
@@ -20,8 +31,8 @@ flowchart LR
   I --> P[job_review_package_assembly: scanner leads and document hunts]
   P --> M[job_document_issue_analysis: private candidate ledger]
   M -. planned .-> R[job_inference_security_review]
-  R -. planned .-> J[adjudicated finding packages]
-  J -. planned .-> E[enrichment and final publication]
+  R --> J[adjudicated finding packages]
+  J --> E[gate-certified final publication]
 ```
 
 `job_target_catalog.retrieval_indexes.build_target_documents` starts after
@@ -106,8 +117,8 @@ does not synthesize those decisions from document text, OpenAPI, tests, or scann
 
 ## Inference and findings design
 
-The next inference job should consume the accepted index manifest and verified review packages.
-Its bounded discovery tasks may nominate a security hypothesis from a document-context fact, but
+The existing inference job consumes its own accepted-scope lead/hunt packages. A future
+document-candidate integration may nominate a security hypothesis from a document-context fact, but
 the hypothesis must identify an affected source construct or accepted tool observation and state
 which behavior needs verification. Document text is evidence of *intent*; OpenAPI is evidence of
 a *declared* interface. Neither is direct proof of implementation behavior. A Postman assertion
@@ -131,9 +142,11 @@ context, severity policy, and remediation work without reinterpreting the adjudi
 2. Link document hunts to exact source components and attach relevant document-context identities
    to scanner-lead packages when an implementation route mapping resolves. Keep ambiguous or
    missing mappings as gaps and retrieval grants scoped to those identities.
-3. Implement `job_inference_security_review`, independent review cells, accepted review decisions,
-   finding and score indexes, and final publication. The document issue ledger is private
-   pre-adjudication material; no current job promotes it to confirmed findings.
+3. Connect document candidates to the existing `job_inference_security_review` and its independent
+   cells, adjudication, scores and final publication without bypassing their evidence rules.
+   The document issue ledger remains private pre-adjudication material; no current job promotes
+   it to confirmed findings. General finding/score publication is already implemented, not an
+   open prerequisite for this document-specific integration.
 4. Add Northwind v1/v2 comparison tests: verify that the same document intent yields different
    decisions only when implementation evidence differs, with explicit false-positive and
    missing-coverage accounting.

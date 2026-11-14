@@ -1,3 +1,11 @@
+---
+title: "Model profiles: dev, prod, copilot-dev and copilot-prod"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_dependency_intelligence", "job_inference_security_review", "job_model_connectivity", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_project_build", "job_review_intake", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Model profiles: dev, prod, copilot-dev and copilot-prod
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
@@ -81,8 +89,9 @@ scripts/stack-rebuild.sh --profile copilot-prod
 scripts/review-start.sh --profile copilot-prod --target appsec-multi-vuln
 ```
 
-PowerShell uses `-Profile copilot-prod` on the corresponding scripts. Rebuilding is necessary
-when the running image predates this profile. Both Copilot profiles use the same Copilot image
+PowerShell uses `-Profile copilot-prod` on the corresponding scripts. Rebuild only when the image's
+dependencies, SDK/runtime or verifier need changing; profile TOML is mounted source, not an
+image payload. Both Copilot profiles use the same Copilot image
 tag and overlay; changing profiles does not change the login or borrow Git credentials.
 
 ## Copilot with a separate GitHub identity
@@ -156,6 +165,7 @@ rejected with a message that names the key.
 | `jobs.job_owasp_control_assessment.settings.models.reviewer` (only this named profile) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
 | `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
+| `jobs.job_remediation_planning.settings.writer`, `jobs.job_remediation_validation.settings.reviewer` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
 | `jobs.job_inference_security_review.settings.budgets` | `budget_team_packages` (positive integer or `"all"`), `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.lanes` | `exploration_enabled` (Boolean), `exploration_reserve` (positive integer) |
@@ -180,6 +190,14 @@ for providers, models, personas, skills, pools, and residual gaps. Existing runs
 settings; offline verification does not imply a live production run.
 
 ## The prod values
+
+These are configured model contracts, not proof that each worker is dispatched. In particular,
+the current project-build units do not call the dormant image-repair inference helper; see
+[worker dispatch boundaries](../architecture/worker-prompt-contracts.md#dispatch-inventory).
+The central profile files and generated job declarations are authoritative for exact selections.
+Remediation writer/reviewer profiles also have production overrides; their exact limits remain
+in [`profiles/prod.toml`](../../profiles/prod.toml) and the corresponding Copilot profile, rather
+than being inferred from this core-family summary.
 
 | Setting | Model | Reasoning | Max input | Max output | Timeout (s) |
 | --- | --- | --- | --- | --- | --- |
@@ -248,8 +266,9 @@ separate contract for `prod`; do not compare a `prod` run with the `dev` contrac
 
 ## A work account whose model names differ
 
-Edit `profiles/prod.toml` (the `model` values, and nothing else needs to change), then rerun:
-`scripts/stack-rebuild --profile prod` copies the new file into the image (the Dockerfile copies
-`profiles/` next to `appsec-review.toml`) and recreates the stack. The file hash is part of the
-run's frozen configuration, so the edit is recorded. Do not use a model name that the account does not
-list: the preflight reports it unavailable and blocks the run.
+Edit the intended profile's exact model selections, preserving the documented Claude/Copilot
+profile parity and account-supported IDs. Profile files are part of the read-only mounted source,
+not copied into the application image. After the active-run source freeze is released, use the
+documented [source reload](image-pin-verification.md#deploying-changed-application-code) to re-sign
+and recreate services, then create a new run with that profile. Rebuild only for dependency/tool/
+verifier changes. The profile hash is frozen in the run; an unavailable model blocks preflight.

@@ -1,3 +1,11 @@
+---
+title: "Profile-data ingestion"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_language_build", "job_profile_data", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Profile-data ingestion
 
 `job_profile_data` turns profile reports already retained by accepted language builds into bounded,

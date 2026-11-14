@@ -1,3 +1,11 @@
+---
+title: "Node/TypeScript build image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Node/TypeScript build image
 
 `Dockerfile` defines `audit-buildenv-typescript:local`, the image behind the `node` build profile
@@ -31,9 +39,8 @@ locked size and SHA-256. This layer's Docker build runs without network; the pin
 packages come from the shared toolchain image.
 
 The resulting image ID is not reproducible across hosts, because apt and layer metadata carry build
-timestamps. After every build, copy the inspected ID into
-`[jobs.job_project_build.settings.profiles.node].image_id`. The executor refuses to run any other
-image under the `node` profile, and `deploy/dagster/bin/review_run.py` refuses to submit a review
-when the local tag resolves to a different ID. After a host rebuild,
-`appsec-review update-image-pins --write` can apply the same edit (see
-`docs/operations/image-pin-verification.md`).
+timestamps. After a host rebuild, `appsec-review update-image-pins --write` updates the ignored
+`deploy/dagster/host-pins.toml` binding for this tag, not `appsec-review.toml`.
+The loader freezes it as the resolved `node` profile's `image_id`. The executor refuses a different
+local image, and `deploy/dagster/bin/review_run.py` checks the effective host-bound profiles before
+submission. See [profile image pins](../README.md#profile-image-pins).

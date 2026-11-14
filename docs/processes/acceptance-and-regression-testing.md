@@ -1,3 +1,11 @@
+---
+title: "Per-job output correctness, acceptance, and anti-regression"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_artifact_indexing", "job_codeql_analysis", "job_evidence_collection", "job_language_build", "job_project_build", "job_target_catalog", "job_third_party_data_sync", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Per-job output correctness, acceptance, and anti-regression
 
 Test tiers, the unit harness and the standards shared by every tier are in

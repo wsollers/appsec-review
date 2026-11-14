@@ -1,3 +1,11 @@
+---
+title: "Evidence completion and remediation"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation", "job_remediation_planning", "job_remediation_validation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Evidence completion and remediation
 
 Status: implementation contract, partially delivered; no change to execution authorization.
@@ -37,6 +45,13 @@ generate a function and negative control, compile them, check symbol resolution,
 execute them**. A compiled function is developer documentation, not an observed reproduction.
 Runtime proof, automatic patch application to a target, and automatic release clearance are not
 part of this proposal.
+
+Current admission is governed by [typed input contracts](job-input-contracts.md#admission-and-read-receipts):
+the gate requires enabled completion producers' handoff envelopes. Missing required envelopes
+are rejected before capability classification. The gap outcomes below describe accepted
+producers' incomplete/capped/failed item coverage, not permission to bypass that admission check.
+The [current reporting dive](reporting-and-metrics.md) and authored job pages distinguish this
+implemented path from the original baseline and delivery sequence retained below.
 
 ## 1. What was missing at the original baseline
 

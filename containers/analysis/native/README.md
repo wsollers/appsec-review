@@ -1,10 +1,18 @@
+---
+title: "Native-analysis capabilities"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_cpp_compiled_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native-analysis capabilities
 
-The archived native and CodeQL images are decomposed here conceptually, not copied. Planned bounded
-capabilities are: compiler tracing, CodeQL database creation/query, and language-server extraction.
-Each capability needs its own output schema, failure contract, immutable tool closure, and fixture.
-The catalog keeps `audit-native`, `audit-codeql`, `audit-codeql-native`, and `audit-lsp-vendor`
-visible until those criteria are met.
+The archived native and CodeQL images are not copied. Compiler tracing, CodeQL database
+creation/query and clangd indexing now have separate implementations and contracts.
+The catalog retains `audit-native`, `audit-codeql` and `audit-lsp-vendor` as deferred legacy entries;
+`audit-codeql-native` is marked replaced. These legacy dispositions do not disable the current
+implementations listed in the [generated tool matrix](../../../docs/generated/matrix-tool-bucket.md).
 
 `containers/tools/native-cpp/` now supplies the narrow build, Clang AST, LLVM IR, and ELF/symbol
 capability used by `job_cpp_compiled_analysis`. `containers/tools/infer/` separately supplies the

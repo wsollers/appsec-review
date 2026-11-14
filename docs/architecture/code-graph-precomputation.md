@@ -1,4 +1,14 @@
+---
+title: "Code-graph precomputation for direct review evidence"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "historical"
+jobs: ["job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_evidence_collection", "job_inference_security_review", "job_review_data_indexing", "job_review_prioritization", "job_security_tagging", "job_svf_alias_analysis", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Code-graph precomputation for direct review evidence
+
+> Current subsystem view: [Code intelligence](code-intelligence.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
 
 Status: implemented through C9 (integration and acceptance) for C/C++, offline-verified, with the
 export pack since compiled and run live on the pinned image against a calibration database

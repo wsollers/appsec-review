@@ -1,3 +1,11 @@
+---
+title: "Clang static-analysis tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Clang static-analysis tool image
 
 This offline image adds hash-locked `clang-tidy-18` packages and the repository-owned bounded

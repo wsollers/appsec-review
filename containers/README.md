@@ -1,3 +1,11 @@
+---
+title: "Container packaging"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_image_pin_verification"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Container packaging
 
 `catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it
@@ -18,12 +26,10 @@ in its `assets.lock.json` and the new image ID in its pins. A lock or pin record
 build used. It is not a target to recreate. Do not chase an old hash or compare image IDs between
 machines.
 
-The catalog also enables tools that were not derived from the legacy archive: `tool-actionlint`,
-`tool-cppcheck`, `tool-native-cpp`, `tool-tree-sitter`, `tool-sqlite-fts`, `tool-git`, `tool-pmd`,
-`tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, `tool-clang-static-analysis`, `tool-svf`,
-`tool-joern`, `tool-ghidra`, and `tool-report-latex` (report PDF rendering, see
-[`report/latex/README.md`](report/latex/README.md); it replaces the deferred `audit-report`). The authoritative catalog currently enables 32 tool images; the other enabled
-entries are the four bases and the ten build environments under `containers/buildenv/`.
+The [generated tool matrix](../docs/generated/matrix-tool-bucket.md) lists the catalog tools and
+their consumers. Catalog enablement means the image is available for provisioning, not that every
+consumer is enabled or provides complete coverage. For example, `tool-report-latex` replaces
+`audit-report` for [PDF rendering](report/latex/README.md), while Joern's consumer remains disabled.
 
 CodeQL is the exception: its licensed source image is operator-provided and its derived
 `appsec-review-codeql:*` analysis images are built by the CodeQL job
@@ -60,18 +66,22 @@ containers/build-all.ps1 security --all
 Running either launcher with no arguments means `build --all`. `list <ids>` restricts the listing
 and `list --json` prints machine-readable id, state, tag, and dependencies. `smoke` runs the startup
 version check; `smoke --functional` adds the fixture-based functional checks. Set
-`APPSEC_DOCKER_BIN` to use a Docker-compatible client other than `docker` for build, smoke, and
-security commands; the application runtime always invokes `docker`.
+`APPSEC_DOCKER_BIN` to use a Docker-compatible client other than `docker` for the engine's build,
+smoke, and security commands. Acquisition helpers may still call `docker` directly; the
+application runtime also invokes `docker`.
 
 Before each build, external artifacts are downloaded over HTTPS into an ignored `downloads/`
-directory and verified against the declared byte size and SHA-256 in `assets.lock.json`. Docker build
-steps run with networking disabled, and every build passes `--provenance=false --sbom=false`: under
+directory and verified against the declared byte size and SHA-256 in `assets.lock.json`. Tool and
+base image build steps run with networking disabled. Build environments use their catalog
+`build_network`: most permit networked APT installation; the Node/TypeScript layer uses `none`.
+Base-image resolution and host-side acquisition can also reach the network. Every catalog build
+passes `--provenance=false --sbom=false`: under
 Docker 29's containerd image store BuildKit otherwise wraps each export in a timestamped attestation,
 so an image whose layers were all cache hits still gets a new ID, everything `FROM` it rebuilds, and
 its pin moves on every run (seen on HAL5000, 2026-11-09: four full 25-minute builds of unchanged recipes). Logs and the machine-readable summary
 (`appsec-review/container-build-summary/2`) are written under `runs/container-builds/<run-id>/`.
-Each result records status, image id, tag, digest, log paths and the build's telemetry: `duration_seconds`
-split into `fetch_seconds` and `build_seconds`, `assets` (`current`/`fetched` counts and bytes),
+Each result records status, image ID in `digest`, tag, log paths and the build's telemetry: `duration_seconds`
+split into `fetch_seconds` and `build_seconds`, `assets` (`current`/`fetched`/`acquired` counts and bytes),
 `size_bytes`, and `steps` parsed from the `--progress=plain` BuildKit log (`steps`, `cached_steps`,
 `executed_steps`, `errored_steps`, `unfinished_steps`, `executed_seconds`, `slowest_step`). The summary's
 `metrics` object totals these and names the `slowest` images and the dependency **critical path** — the
@@ -101,7 +111,7 @@ with the host's CA bundle lent read-only; the lock URL is the archive root, whic
 as not fetchable) and `tool-tree-sitter` (`acquire_assets.sh` downloads the two
 hash-locked wheels and runs `acquire_assets.py` in the pinned base for the grammar libraries; its lock
 has no `artifacts` list, the wheels and grammars themselves are the local files). The helpers may use
-the network; builds still never do. `tool-sqlite-fts` has no asset lock.
+the network; these four tool-image build steps do not. `tool-sqlite-fts` has no asset lock.
 
 ## Rule and query packs
 
@@ -131,11 +141,22 @@ read-only root, all capabilities dropped, `no-new-privileges`, bounded CPU/memor
 a read-only target mount, and one writable scratch mount. Image definitions package tools only.
 Application jobs own arguments and translate tool output into findings.
 
-A catalog entry may pin `image_id`; the application executor then refuses to run a local image
-whose id differs (`src/appsec_review/container_runtime/executor.py`). With the opt-in
+At application execution, `ContainerExecutor` uses the application's non-root numeric UID/GID
+when available, falling back to the manifest's `10001:10001`, and grants owner-only scratch access.
+Its admission queue timeout is separate from the tool's execution timeout. This scanner boundary
+does not describe network-enabled image provisioning or every build/provider executor.
+Production Dagster images also contain tooling rather than the application checkout; Compose mounts
+the source read-only. The deployment Dockerfile's `test` stage does copy source. See
+[deployment image and source mount](../docs/architecture/deployment-image-and-source-mount.md).
+
+Host-local `deploy/dagster/host-pins.toml` bindings are frozen into resolved configuration and
+applied when loading the runtime catalog with that configuration. The application executor refuses
+a local image whose ID differs from its effective expected ID
+(`src/appsec_review/container_runtime/executor.py`). With the opt-in
 `[signing] image_enforcement = "required"`, pinned or not, it also refuses
-an image whose id has no signature envelope from a trusted operator key; sign images after building
-and re-pinning them (see [`../docs/operations/signing.md`](../docs/operations/signing.md)).
+an image whose id has no signature envelope from a trusted operator key. The default is
+`"disabled"`; explicit signature verification, including the deployment lifecycle's image check,
+still verifies signatures. See [`../docs/operations/signing.md`](../docs/operations/signing.md).
 Image-ID pins are host-local:
 a rebuilt image's id is not reproducible across hosts, results are never compared across hosts,
 and a changed pin means rerunning, not a defect (asset locks stay exact). `job_image_pin_verification`
@@ -161,5 +182,6 @@ isolation setting at this boundary (see
 5. Run validation, build the selected image, run startup and functional smoke tests, lint every
    Dockerfile, and record the result in the review artifact.
 
-The build system never accepts secrets as build arguments and never executes downloaded installer
-scripts. Cached downloads are disposable; the committed lock files are authoritative.
+Do not pass secrets as build arguments. Acquisition verifies locked inputs before use; individual
+recipes may execute their verified installers (for example Rust's component `install.sh`).
+Cached downloads are disposable; the committed lock files are authoritative.

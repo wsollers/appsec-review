@@ -25,7 +25,7 @@ from .standards import digest
 
 TURN_SCHEMA = "appsec-review/owasp-assessment-turn/1"
 OUTCOMES = {"satisfied", "not_satisfied", "cannot_verify"}
-RESULT_RULE = "owasp-assessment-acceptance/2"
+RESULT_RULE = "owasp-assessment-acceptance/3"
 
 
 def _clean(value: Any) -> Any:
@@ -366,8 +366,14 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
                             or obligation["subject_id"] not in subjects(rule, resolved)):
                         raise ValueError("authentic evidence does not concern the obligation's named subject")
                     check["subject_binding"] = True
-                    if resolved["truncated"] or any("ambiguous" in gap for gap in resolved["limitations"]):
-                        raise ValueError("truncated or ambiguous evidence cannot establish an obligation")
+                    if (resolved["truncated"] or resolved.get("redaction", {}).get("applied")
+                            or any("ambiguous" in gap for gap in resolved["limitations"])
+                            or not resolved.get("source_subject", {}).get("complete")):
+                        raise ValueError("incomplete, redacted or ambiguous evidence cannot establish an obligation")
+                    if (rule.recognizer == "python_http_operation/1"
+                            and resolved["source_subject"]["kind"] != "module"):
+                        raise ValueError("complete function does not resolve external authorization policy, "
+                                         "middleware, consumer identity or service-guard prerequisites")
                     check["predicate_support"] = "analyst_assessed; not a direct extractor fact"
                     value[relation].append(resolved["reference"])
                 except (ValueError, OSError, UnicodeError) as exc:

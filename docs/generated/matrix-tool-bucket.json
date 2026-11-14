@@ -1,0 +1,2097 @@
+{ "generated_from": "generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py, docs/intelligence-buckets.json, src/appsec_review/tool_inputs.py, src/appsec_review/jobs/cataloging.py, src/appsec_review/review/capability.py by scripts/generate-docs.py; do not edit",
+  "classification_semantics": [
+    "Each catalog image whose kind is tool and each declared dataset output_kind has exactly one primary-purpose bucket.",
+    "Composite datasets keep their complete family, schema, stage, sensitivity and authority; a bucket is not an evidence claim or a permission grant.",
+    "Tool input compatibility and configured producer languages do not prove rule coverage, per-dataset language applicability or accepted run coverage.",
+    "Non-tool catalog entries, including legacy CodeQL redesign/replacement records, are not invented as canonical tool IDs; CodeQL producer datasets remain represented."
+  ],
+  "non_tool_catalog_entries": {
+    "audit-binary-analysis": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "audit-buildenv-android": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-cpp": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-cpp-resolute": {
+      "kind": "redesign",
+      "state": "deferred"
+    },
+    "audit-buildenv-dotnet": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-go": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-java": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-php": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-python": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-rust": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "audit-buildenv-rust-wasm": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-buildenv-typescript": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "audit-codeql": {
+      "kind": "redesign",
+      "state": "deferred"
+    },
+    "audit-codeql-native": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "audit-container": {
+      "kind": "retired",
+      "state": "retired"
+    },
+    "audit-doc-convert": {
+      "kind": "build-asset",
+      "state": "deferred"
+    },
+    "audit-iac": {
+      "kind": "retired",
+      "state": "retired"
+    },
+    "audit-lsp-vendor": {
+      "kind": "redesign",
+      "state": "deferred"
+    },
+    "audit-native": {
+      "kind": "redesign",
+      "state": "deferred"
+    },
+    "audit-report": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "audit-static": {
+      "kind": "retired",
+      "state": "retired"
+    },
+    "audit-static-opengrep": {
+      "kind": "retired",
+      "state": "retired"
+    },
+    "base-jre": {
+      "kind": "base",
+      "state": "enabled"
+    },
+    "base-php": {
+      "kind": "base",
+      "state": "enabled"
+    },
+    "base-python": {
+      "kind": "base",
+      "state": "enabled"
+    },
+    "base-ubuntu": {
+      "kind": "base",
+      "state": "enabled"
+    },
+    "buildenv-native-toolchain": {
+      "kind": "buildenv",
+      "state": "enabled"
+    },
+    "mythos-orchestrator-dagster": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "scancode-toolkit": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "tool-cve-bin-tool": {
+      "kind": "redesign",
+      "state": "deferred"
+    },
+    "tool-microsoft-sbom-tool": {
+      "kind": "replacement",
+      "state": "replaced"
+    },
+    "tool-sbomasm": {
+      "kind": "replacement",
+      "state": "replaced"
+    }
+  },
+  "rows": [
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "GitHub Actions workflow files (not action metadata)",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-actionlint",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs._is_github_workflow",
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_ci_configuration_analysis"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.github_actionlint_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_ci_configuration_analysis.ci_analysis.github_actionlint_scan"
+        ]
+      },
+      "tool": "tool-actionlint"
+    },
+    {
+      "bucket": "artifacts_and_binary",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "ELF, PE/.NET, COFF, Mach-O binaries and Android packages",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [
+            "android-package",
+            "coff",
+            "dotnet-assembly",
+            "elf",
+            "macho",
+            "pe"
+          ],
+          "interpreters": [],
+          "key": "artifact:tool-blint",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "accepted native binary artifacts",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-blint",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".a",
+            ".dll",
+            ".dylib",
+            ".exe",
+            ".o",
+            ".so"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "binary_hardening.blint_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.binary_hardening.blint_scan"
+        ]
+      },
+      "tool": "tool-blint"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "Azure Pipelines definitions",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-checkov:azure_pipelines",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs.<lambda>",
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "Bitbucket Pipelines definitions",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-checkov:bitbucket_pipelines",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs.<lambda>",
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "CircleCI configuration",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-checkov:circleci_pipelines",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs.<lambda>",
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "GitHub Actions workflow files",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-checkov:github_actions",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs._is_github_workflow",
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "GitLab CI definitions",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-checkov:gitlab_ci",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs.<lambda>",
+          "suffixes": []
+        },
+        {
+          "any_input": true,
+          "description": "any cataloged file",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-checkov",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_ci_configuration_analysis",
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.azure_checkov_scan"
+        },
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.bitbucket_checkov_scan"
+        },
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.circleci_checkov_scan"
+        },
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.github_checkov_scan"
+        },
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.gitlab_checkov_scan"
+        },
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "configuration.checkov_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_ci_configuration_analysis.ci_analysis.azure_checkov_scan",
+          "job_ci_configuration_analysis.ci_analysis.bitbucket_checkov_scan",
+          "job_ci_configuration_analysis.ci_analysis.circleci_checkov_scan",
+          "job_ci_configuration_analysis.ci_analysis.github_checkov_scan",
+          "job_ci_configuration_analysis.ci_analysis.gitlab_checkov_scan",
+          "job_evidence_collection.configuration.checkov_scan"
+        ]
+      },
+      "tool": "tool-checkov"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-clang-static-analysis"
+    },
+    {
+      "bucket": "symbols_and_calls",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-clangd-indexer"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "C",
+          "C++",
+          "C/C++"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "C and C++ source and headers",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-cppcheck",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".c",
+            ".cc",
+            ".cpp",
+            ".cxx",
+            ".h",
+            ".hh",
+            ".hpp",
+            ".hxx"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.cppcheck_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.cppcheck_scan"
+        ]
+      },
+      "tool": "tool-cppcheck"
+    },
+    {
+      "bucket": "artifacts_and_binary",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-ghidra"
+    },
+    {
+      "bucket": "history",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-git"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": true,
+          "description": "any cataloged file",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-gitleaks",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "secrets.gitleaks_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.secrets.gitleaks_scan"
+        ]
+      },
+      "tool": "tool-gitleaks"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "Go"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "Go source",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-gosec",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".go"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.gosec_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.gosec_scan"
+        ]
+      },
+      "tool": "tool-gosec"
+    },
+    {
+      "bucket": "dependencies_and_advisories",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": true,
+          "description": "any produced artifact file except media and asset files",
+          "excluded_description": "media and asset files (images, audio, video, fonts, 3D models, textures, game data) carry no package metadata a cataloger can read",
+          "excluded_formats": [
+            "audio-aac",
+            "audio-aiff",
+            "audio-flac",
+            "audio-midi",
+            "audio-mp3",
+            "audio-ogg",
+            "audio-soundfont",
+            "audio-tracker-module",
+            "audio-wav",
+            "font-bdf",
+            "font-embedded-opentype",
+            "font-font-collection",
+            "font-opentype",
+            "font-pcf",
+            "font-truetype",
+            "font-type1",
+            "font-woff",
+            "game-data-doom-wad",
+            "image-bmp",
+            "image-gif",
+            "image-gimp",
+            "image-heif",
+            "image-icon",
+            "image-jpeg",
+            "image-jpeg-2000",
+            "image-jpeg-xl",
+            "image-netpbm",
+            "image-openexr",
+            "image-pcx",
+            "image-photoshop",
+            "image-png",
+            "image-qoi",
+            "image-radiance-hdr",
+            "image-svg",
+            "image-tiff",
+            "image-webp",
+            "image-xpm",
+            "model-3ds",
+            "model-blender",
+            "model-blitz3d",
+            "model-collada",
+            "model-directx-x",
+            "model-fbx",
+            "model-gltf",
+            "model-gltf-binary",
+            "model-iqm",
+            "model-lightwave",
+            "model-milkshape",
+            "model-ply",
+            "model-quake-model",
+            "model-stl",
+            "model-usd",
+            "model-wavefront-mtl",
+            "model-wavefront-obj",
+            "texture-astc",
+            "texture-basis",
+            "texture-dds",
+            "texture-ktx",
+            "texture-pvr",
+            "texture-targa",
+            "texture-valve-texture",
+            "video-asf",
+            "video-avi",
+            "video-bink",
+            "video-flv",
+            "video-isobmff",
+            "video-matroska",
+            "video-mpeg",
+            "video-mpeg-ts"
+          ],
+          "formats": [],
+          "interpreters": [],
+          "key": "artifact:tool-grype",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        },
+        {
+          "any_input": true,
+          "description": "the Syft SBOM of the cataloged directory",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-grype",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "vulnerability_matching.grype_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.vulnerability_matching.grype_scan"
+        ]
+      },
+      "tool": "tool-grype"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "Dockerfiles and Containerfiles",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-hadolint",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs._is_dockerfile",
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "configuration.hadolint_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.configuration.hadolint_scan"
+        ]
+      },
+      "tool": "tool-hadolint"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-infer"
+    },
+    {
+      "bucket": "dataflow",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-joern"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "Java",
+          "Kotlin",
+          "Swift"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "Java, Kotlin, and Swift source",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-mobsfscan",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".java",
+            ".kt",
+            ".swift"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.mobsfscan_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.mobsfscan_scan"
+        ]
+      },
+      "tool": "tool-mobsfscan"
+    },
+    {
+      "bucket": "build_and_deployment",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-native-cpp"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "C",
+          "C++",
+          "C/C++",
+          "Java"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "C, C++, and Java source (SEI CERT rule pack)",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-opengrep",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".c",
+            ".cc",
+            ".cpp",
+            ".cxx",
+            ".h",
+            ".hh",
+            ".hpp",
+            ".hxx",
+            ".java"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.opengrep_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.opengrep_scan"
+        ]
+      },
+      "tool": "tool-opengrep"
+    },
+    {
+      "bucket": "dependencies_and_advisories",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "lockfiles and manifests osv-scanner extracts offline",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "artifact:tool-osv-scanner",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs._is_osv_lockfile",
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "lockfiles and manifests osv-scanner extracts offline",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-osv-scanner",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs._is_osv_lockfile",
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "vulnerability_matching.osv_scanner_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.vulnerability_matching.osv_scanner_scan"
+        ]
+      },
+      "tool": "tool-osv-scanner"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "PHP"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "PHP source",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-phpcs",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".php"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.phpcs_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.phpcs_scan"
+        ]
+      },
+      "tool": "tool-phpcs"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "PHP"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "PHP source",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-phpstan",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".php"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.phpstan_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.phpstan_scan"
+        ]
+      },
+      "tool": "tool-phpstan"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "Java"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "Java source",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-pmd",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".java"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.pmd_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.pmd_scan"
+        ]
+      },
+      "tool": "tool-pmd"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "PHP"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "PHP source",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-psalm",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".php"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.psalm_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.psalm_scan"
+        ]
+      },
+      "tool": "tool-psalm"
+    },
+    {
+      "bucket": "review_products",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-report-latex"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "partial",
+        "values": [
+          "C",
+          "C#",
+          "C++",
+          "C/C++",
+          "Go",
+          "Java",
+          "JavaScript",
+          "Kotlin",
+          "PHP",
+          "Python",
+          "Ruby",
+          "Rust",
+          "Shell",
+          "Swift",
+          "TypeScript"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "source files of the Semgrep-parsed languages",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-semgrep",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".c",
+            ".cc",
+            ".cpp",
+            ".cs",
+            ".cxx",
+            ".go",
+            ".h",
+            ".hh",
+            ".hpp",
+            ".hxx",
+            ".java",
+            ".js",
+            ".jsx",
+            ".kt",
+            ".php",
+            ".py",
+            ".rb",
+            ".rs",
+            ".sh",
+            ".swift",
+            ".ts",
+            ".tsx"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.semgrep_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.semgrep_scan"
+        ]
+      },
+      "tool": "tool-semgrep"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "Shell"
+        ]
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "sh, bash, dash, and ksh scripts",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [
+            "bash",
+            "busybox",
+            "dash",
+            "ksh",
+            "sh"
+          ],
+          "key": "tool-shellcheck",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".sh"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.shellcheck_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.shellcheck_scan"
+        ]
+      },
+      "tool": "tool-shellcheck"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "JVM classes and archives",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [
+            "jvm-archive",
+            "jvm-class"
+          ],
+          "interpreters": [],
+          "key": "artifact:tool-spotbugs",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "accepted JVM bytecode artifacts",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-spotbugs",
+          "names": [],
+          "predicate": null,
+          "suffixes": [
+            ".class",
+            ".ear",
+            ".jar",
+            ".war"
+          ]
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "source_sast.spotbugs_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.source_sast.spotbugs_scan"
+        ]
+      },
+      "tool": "tool-spotbugs"
+    },
+    {
+      "bucket": "documents_and_retrieval",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-sqlite-fts"
+    },
+    {
+      "bucket": "dataflow",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-svf"
+    },
+    {
+      "bucket": "dependencies_and_advisories",
+      "catalog_state": "enabled",
+      "gap": [],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": true,
+          "description": "any produced artifact file except media and asset files",
+          "excluded_description": "media and asset files (images, audio, video, fonts, 3D models, textures, game data) carry no package metadata a cataloger can read",
+          "excluded_formats": [
+            "audio-aac",
+            "audio-aiff",
+            "audio-flac",
+            "audio-midi",
+            "audio-mp3",
+            "audio-ogg",
+            "audio-soundfont",
+            "audio-tracker-module",
+            "audio-wav",
+            "font-bdf",
+            "font-embedded-opentype",
+            "font-font-collection",
+            "font-opentype",
+            "font-pcf",
+            "font-truetype",
+            "font-type1",
+            "font-woff",
+            "game-data-doom-wad",
+            "image-bmp",
+            "image-gif",
+            "image-gimp",
+            "image-heif",
+            "image-icon",
+            "image-jpeg",
+            "image-jpeg-2000",
+            "image-jpeg-xl",
+            "image-netpbm",
+            "image-openexr",
+            "image-pcx",
+            "image-photoshop",
+            "image-png",
+            "image-qoi",
+            "image-radiance-hdr",
+            "image-svg",
+            "image-tiff",
+            "image-webp",
+            "image-xpm",
+            "model-3ds",
+            "model-blender",
+            "model-blitz3d",
+            "model-collada",
+            "model-directx-x",
+            "model-fbx",
+            "model-gltf",
+            "model-gltf-binary",
+            "model-iqm",
+            "model-lightwave",
+            "model-milkshape",
+            "model-ply",
+            "model-quake-model",
+            "model-stl",
+            "model-usd",
+            "model-wavefront-mtl",
+            "model-wavefront-obj",
+            "texture-astc",
+            "texture-basis",
+            "texture-dds",
+            "texture-ktx",
+            "texture-pvr",
+            "texture-targa",
+            "texture-valve-texture",
+            "video-asf",
+            "video-avi",
+            "video-bink",
+            "video-flv",
+            "video-isobmff",
+            "video-matroska",
+            "video-mpeg",
+            "video-mpeg-ts"
+          ],
+          "formats": [],
+          "interpreters": [],
+          "key": "artifact:tool-syft",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        },
+        {
+          "any_input": true,
+          "description": "the cataloged directory",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-syft",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "software_inventory.syft_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.software_inventory.syft_scan"
+        ]
+      },
+      "tool": "tool-syft"
+    },
+    {
+      "bucket": "syntax",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-tree-sitter"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "Terraform/HCL files and Dockerfiles",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-trivy",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs.<lambda>",
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "configuration.trivy_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_evidence_collection.configuration.trivy_scan"
+        ]
+      },
+      "tool": "tool-trivy"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "GitHub Actions workflows and action definitions",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "ci:tool-zizmor",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs.<lambda>",
+          "suffixes": []
+        },
+        {
+          "any_input": false,
+          "description": "GitHub Actions workflow files",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [],
+          "interpreters": [],
+          "key": "tool-zizmor",
+          "names": [],
+          "predicate": "appsec_review.tool_inputs._is_github_workflow",
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_ci_configuration_analysis",
+          "job_evidence_collection"
+        ]
+      },
+      "launch_bindings": [
+        {
+          "job": "job_ci_configuration_analysis",
+          "job_enabled": true,
+          "line": 724,
+          "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
+          "task": "ci_analysis.github_zizmor_scan"
+        },
+        {
+          "job": "job_evidence_collection",
+          "job_enabled": true,
+          "line": 1310,
+          "source": "src/appsec_review/jobs/job_evidence_collection/job.py",
+          "task": "configuration.zizmor_scan"
+        }
+      ],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "job_ci_configuration_analysis.ci_analysis.github_zizmor_scan",
+          "job_evidence_collection.configuration.zizmor_scan"
+        ]
+      },
+      "tool": "tool-zizmor"
+    }
+  ],
+  "schema": "appsec-review/docs-tool-bucket-matrix/1",
+  "scope": {
+    "kind": "declarations_only",
+    "not_applicable": "A populated source-backed state, never an unknown cell disguised as success.",
+    "not_claimed": [
+      "host image availability",
+      "executed tool calls",
+      "accepted run coverage",
+      "per-dataset language coverage",
+      "issued run/package capabilities"
+    ]
+  },
+  "tool_policy": {
+    "disable_grype": true,
+    "enable_swift": false
+  }
+}

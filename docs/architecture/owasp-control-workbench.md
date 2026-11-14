@@ -1,3 +1,11 @@
+---
+title: "OWASP control-assessment workbench"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OWASP control-assessment workbench
 
 The workbench is a bounded, evidence-backed stage **before hunt/package assembly and red/blue
@@ -33,8 +41,8 @@ flowchart TD
 
 Direct `start`/`resume`/`plan-resume` and Dagster select this chain when the jobs are enabled.
 Direct `--force-from` accepts tagging or OWASP only when enabled; OWASP is enabled by
-default but can be explicitly disabled. This is shared OWASP ordering, not full graph parity: the direct graph still omits
-CI/post-build branches, and third-party sync remains standalone. See
+default but can be explicitly disabled. Both drivers derive review-job membership and ordering from
+the typed contracts, including enabled CI/post-build producers; third-party sync remains standalone. See
 [wave 1 operations](../operations/wave1-review.md).
 
 ## Catalog authority, completeness and licensing
@@ -79,6 +87,20 @@ site. A complete narrowed site can retain its identity while omitted material re
 unresolved coverage. Unsupported languages, unrecognized constructs and other controls stay named
 `not_assessed`/unresolved work; a lexical match or documentation declaration cannot satisfy them.
 
+T-146 selects complete original Python subjects rather than the first 120 lines of each file.
+Supported sources precede unsupported files; accepted syntax/graph locations prioritize bounded
+discovery. `max_discovery_files = 512` and `max_discovery_bytes = 8388608` bound discovery per
+component. The existing source-line, evidence and subject limits still bound dispatched work.
+Omitted files, subjects and outside lines remain explicit coverage limits, separate from a
+clipped or redacted subject that cannot establish an obligation.
+
+Complete short HTTP modules retain their policy context; a route function extracted from an
+oversized module cannot establish external middleware/authorization prerequisites. Evidence
+projection and obligation construction use the same configured evidence set, including settings
+above the former hard-coded 100-reference cut. The binding and acceptance identities are
+`owasp-evidence-binding/2` and `owasp-assessment-acceptance/3`; no additional control procedure or
+runtime adapter is implied. See the [design and unit record](../tasks/2026-11-13-behavior-oriented-review.md).
+
 The `MASVS-NETWORK-1` obligation records what runtime evidence would require, but **has no accepted
 runtime adapter**. It remains unsupported even with `dynamic_authorized = true`. Static TLS/HTTPS
 strings and MASTG mappings are not runtime transport proof.
@@ -117,7 +139,7 @@ Its results are visibly qualification-only and never production-eligible. Merely
 
 ## Publication, downstream use and resumability
 
-Four deterministic validator cells partition batches across the `owasp_validator` pool, followed
+Four configured worker cells receive deterministic batch partitions across the `owasp_validator` pool, followed
 by independent review, exactly-once join and immutable publication. Every selected control ×
 component row must occur exactly once; a missing, duplicate or unexpected row blocks the join.
 A failed cell retains named gaps without erasing successful siblings.

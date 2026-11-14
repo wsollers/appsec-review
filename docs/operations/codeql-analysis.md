@@ -1,3 +1,11 @@
+---
+title: "Cross-language CodeQL analysis"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_code_graph_index", "job_codeql_analysis", "job_evidence_collection", "job_language_build", "job_project_build", "job_review_data_indexing", "job_review_prioritization"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Cross-language CodeQL analysis
 
 `job_codeql_analysis` is the sole CodeQL producer. It runs after the accepted target catalog,
@@ -5,6 +13,9 @@ language build, artifact index, artifact-security analysis, C++ compiled analysi
 assessment, static-evidence, and tree-sitter handoffs in Dagster's `wave1_review`. The job never
 discovers a second target snapshot: it plans from accepted artifacts and verifies every source hash
 before use.
+The [canonical job page](job_codeql_analysis.md) links generated step, input and dataset
+declarations. Database, query, normalization and export are actions inside `execution.scopes`,
+not independent configured steps.
 
 ## Supported coverage
 
@@ -68,8 +79,12 @@ image writes modules to `/tmp/appsec-go-mod` and reads the image's read-only mod
 
 ### Explicit preinstalled runtimes
 
-An operator may configure `jobs.job_codeql_analysis.settings.preinstalled_runtimes` as an array
-of at most 128 exact declarations. With the array absent or empty, the bounded-layer preparation
+An operator records at most 128 exact preinstalled-runtime declarations in the host-owned
+`deploy/dagster/host-pins.toml` `preinstalled_runtimes` array. The loader injects that array into
+resolved `jobs.job_codeql_analysis.settings.preinstalled_runtimes`; putting the array in base,
+profile or overlay configuration is rejected. Follow
+[the host-pin procedure](image-pin-verification.md#host-procedure).
+With the host array empty, the bounded-layer preparation
 path is unchanged and `preinstalled_undeclared` has no effect. Once any declaration exists,
 resolution of a requested (build environment image, effective user) pair follows these rules:
 
@@ -89,8 +104,9 @@ resolution of a requested (build environment image, effective user) pair follows
     only when `review_policy.releases` declares `codeql` and `codeql_runner`.
 
 Any other value is a configuration error. The shipped `appsec-review.toml` sets
-`preinstalled_undeclared = "derive"`: the source (inventory) image and the native C/C++ image
-use their declared preinstalled runtimes, and every other build profile, including per-run
+`preinstalled_undeclared = "derive"`. Which environments use preinstalled runtimes is determined
+by the selected host's frozen declarations, not a universal mapping committed in the recipe.
+Any wholly undeclared build environment, including per-run
 customized project images produced by `job_project_build` image repair (whose IDs cannot be
 declared statically), derives. `CODEQL_RUNTIME_RESOLVED` records which path each scope took as
 `preparation_kind = "preinstalled"` or `"derived"`, with `image_build_performed` and
@@ -114,8 +130,7 @@ no source/build profile override is needed. The selected effective user is bound
 database and predecessor identities; execution rejects subsequent user drift. This does not
 change legacy derived-image identity semantics.
 
-The following is a shape example, not an enabled or usable image declaration. Replace the
-placeholders with operator-approved installed IDs/releases and the actual application UID/GID:
+The central policy remains separate from the host observations:
 
 ```toml
 [review_policy.releases]
@@ -125,27 +140,9 @@ codeql_runner = "operator-runner-release"
 [jobs.job_codeql_analysis.settings]
 # "fail" (default) or "derive"; applies only to environments no declaration names.
 preinstalled_undeclared = "fail"
-
-[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
-source_image_id = "sha256:<64-hex-source-id>"
-build_image_id = "sha256:<same-source-id-for-inventory>"
-runtime_image_id = "sha256:<64-hex-installed-source-runtime-id>"
-runtime_user = "1000:1000"
-codeql_release_id = "operator-codeql-release"
-runner_release_id = "operator-runner-release"
-runner_source = "application"
-
-[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
-source_image_id = "sha256:<64-hex-source-id>"
-build_image_id = "sha256:<64-hex-accepted-build-environment-id>"
-runtime_image_id = "sha256:<64-hex-installed-compatible-build-runtime-id>"
-runtime_user = "1000:1000"
-codeql_release_id = "operator-codeql-release"
-runner_release_id = "operator-runner-release"
-runner_source = "application"
 ```
 
-The second mapping must match the image in the actual accepted build receipt and the effective
+Each host mapping must match the image in the actual accepted build receipt and the effective
 application user selected from its nominal user, including its dependency
 environment; a generic C++ image is not authorization for a different dependency-bearing image.
 Under `preinstalled_undeclared = "fail"`, inventory needs the source-environment mapping and every
@@ -153,8 +150,11 @@ additional accepted environment needs its own entry. Under `"derive"`, an enviro
 entry derives its runtime instead; an entry for the image but not the effective user still fails.
 A source-only runtime does not establish compiled CodeQL coverage.
 
-Resolution inspects source/build tag bindings and the selected runtime by immutable ID each
-time, and execution independently inspects that ID again. It does not scan installed payloads,
+Preinstalled resolution inspects source/build tag bindings and the selected runtime by immutable ID
+each time, and execution independently inspects that ID again. It applies the configured signature
+policy to source, environment and preinstalled runtime images; for an authenticated runtime-derived
+project environment, its recorded pinned base supplies the signature boundary. No missing identity
+or required signature is waived. Preinstalled selection does not scan installed payloads,
 read an old image manifest to establish trust, pull/tag/build images, or bypass execution
 reservations, target verification, protected build replay or cleanup. The operator declaration
 asserts runtime compatibility and installed release provenance; tool inventory and real
@@ -242,7 +242,8 @@ Byte comparison includes SQLite's serialized format, so replay retained shards w
 deployment runtime; a host Python using a different SQLite version can produce different bytes
 for the same logical records and is not a valid byte-identical recovery check.
 
-Ordinary producer failures are accepted as scope-local coverage gaps. A sibling scope continues.
+Ordinary producer failures have scope-local coverage fallbacks. An active execution-safety policy
+can stop execution before that fallback publishes; it does not promise every sibling continues.
 Changed accepted handoffs, source bytes, protected argv, image identities, database manifests,
 checkpoints, or SARIF identities are framework-integrity failures and stop publication.
 
@@ -296,7 +297,7 @@ runner checks declared execution compatibility, not supplied payload integrity, 
 manifest's language, pack identity and bounds must equal the configuration.
 
 The export checkpoint is `export-checkpoint.json`
-(`appsec-review/codeql-export-checkpoint/1`). Its identity binds the database identity and tree,
+(`appsec-review/codeql-export-checkpoint/2`). Its identity binds the database identity and tree,
 the effective export contract, the manifest schema, the bounds and declared export/runner releases.
 A database, declared pack release, bound or declared runner release change reruns the export only. A query-suite or catalog change
 does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a
@@ -324,9 +325,10 @@ A succeeded record carries `export_status`, `export_identity`, `export_reused`, 
 `export_manifest` and `export_files`, each `{path, sha256, size_bytes}`, plus row counts and
 `truncated_queries`. Other records carry `export_status` (`FAILED`, `SKIPPED` or
 `NOT_APPLICABLE`) and the gaps or reason. The plan is `outputs["plan.inventory"].plan` in the
-handoff's `result.json`; `job_code_graph_index` reads the plan and `export.scopes` only through
-those handoff-bound identities, and checks the catalog it normalizes with against this job's
-configured `catalog_sha256` pin.
+handoff's `result.json`; `job_code_graph_index` reads that plan and current `execution.scopes`
+export publication through handoff-bound identities. It checks the graph catalog's declared
+release against frozen `review_policy.releases.graph_catalog`, not a freshly hashed supplied
+catalog payload. The older `export.scopes` reference is an explicit legacy read path only.
 
 Verification status: the export step runs offline in `tests/test_codeql_export_step.py` and, inside
 the real job with an injected executor, in `tests/integration/test_code_graph_end_to_end.py`. Both
@@ -472,8 +474,10 @@ By default the export is seeded from finding locations instead of running over t
 Seeds are the locations of `tool_observation` entities from `job_evidence_collection`. The job
 writes `scope.csv` and `seeds.csv` next to the staged database and the runner binds them with
 `--external`. Mode, depth, limit and the seed set are part of the export identity, so changing any
-reruns the export. A scope with no resolvable seed does not run the export; it is `partial` with the
-gap "seeded export skipped". Each export record carries a `seeded` section with the seed ledger
+reruns the export under the appropriate frozen-run/admission boundary. A scope with no selected
+seeds does not run the export: it records `SKIPPED` and downstream unavailable coverage with the
+no-seed reason. Selected seeds that resolve to no function are instead reported by the executed
+export's seed ledger; they are not the pre-execution no-seed branch. Each export record carries a `seeded` section with the seed ledger
 (`resolved`, `unresolved`, `file_not_in_database`, `over_limit`), the neighborhood function count
 and the per-depth histogram. `job_code_graph_index` publishes one database card per scope; models
 list the cards with `list_codeql_databases` and expand one with `query_codeql_neighborhood`.
@@ -504,11 +508,12 @@ hash from the event's `query_metrics` field, or a `query_metrics_gap` reason:
 | compile | Runner compile summary on stdout (`appsec-review/codeql-compile/1`) | compile ms per query file | cache hits report no time and are named as a gap |
 | database | — | not applicable | — |
 
-The analyze timing source needs a runner that writes `query-timings.json`. The declared runner
-release `review_policy.releases.codeql_runner = "appsec-codeql-runner-89568569"` does: derived
-images copy the repository's `codeql_runner.py`, and the shipped `preinstalled_runtimes` declare
-`runner_source = "application"` with that release; environments they do not name derive under the
-shipped `preinstalled_undeclared = "derive"`. A runtime that still carries an older runner yields
+The analyze timing source needs a runner that writes `query-timings.json`. The current supplied
+runner supports it; derived images copy the repository runner, while each host's preinstalled
+declaration selects its own `runner_source`. Record the actual frozen runner release and source
+rather than assuming every host uses an application-mounted wrapper. Wholly undeclared
+environments derive under the shipped `preinstalled_undeclared = "derive"` policy.
+A runtime that still carries an older runner yields
 analyze rows with the gap "runner wrote no query-timings.json". If an exception escapes after an action's
 `COMPLETED` event, the isolated wrapper also emits `CODEQL_ACTION_FAILED`, so that action is counted
 twice.
@@ -558,9 +563,10 @@ For a fresh `appsec-multi-vuln` run, verify:
 7. `query_codeql` returns the same accepted observations; and
 8. deployment verification reports per-language and per-profile execution, SARIF, observation,
    and gap counts; and
-9. every successful database of a language with a pinned graph-export pack has a `SUCCEEDED`
-   graph export whose manifest is bound to the handoff, every other language reports
-   `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py` passes (not yet run).
+9. every exportable successful database has a bound successful export or an explicit failed,
+   disabled or no-seed disposition with its coverage cost; no-pack languages report
+   `NOT_APPLICABLE`. A separately authorized live graph check is still required; this checklist
+   does not assert it ran.
 
 ## Live acceptance
 
@@ -571,7 +577,7 @@ and normalized observation files with verified hashes. The benign fixture curren
 observations; this is a verified zero-result execution, not evidence that an arbitrary Rust target
 is clean. Rust compiler-native AST and IR coverage are outside CodeQL and remain unsupported.
 
-The current bounded acceptance report is
+The previously recorded bounded acceptance report is
 `deploy/dagster/verification/codeql-cross-language-live-acceptance.json`. Dagster run
 `0958c6ff-907d-43fc-b82a-004243f3a573` executed all seven selected steps successfully for
 application run `2026-10-09-0007` and reused accepted CodeQL attempt `attempt_0006`. The producer

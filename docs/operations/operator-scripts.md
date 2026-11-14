@@ -1,7 +1,15 @@
+---
+title: "Operator scripts"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_model_connectivity"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operator scripts
 
 Small, guarded scripts in `scripts/` start and stop the local Dagster stack, start and end reviews,
-clean disposable test state and run the tests. Every script exists twice with the same options: a
+clean disposable test state and run the tests. The paired operator entrypoints have corresponding options: a
 bash script (`scripts/<name>.sh`, Linux and WSL) and a PowerShell twin (`scripts/<name>.ps1`). The
 logic lives in `deploy/dagster/bin/ops.py`, `ops_clean.py` and `ops_tests.py` (typed, unit-tested in
 `tests/test_operator_scripts.py`); the scripts only locate the repository and a Python 3.11+
@@ -28,16 +36,20 @@ entrypoints do not change the existing review status/watch or recovery commands.
 - `--help` (`-Help`) lists the options. `--dry-run` (`-DryRun`) is offered wherever a script changes
   something: it prints what would happen, including the exact command lines, and changes nothing.
   A dry run still reports a refusal and exits 3 when the real run would be refused.
-- Each script prints what it is about to do before it does it, and never prints secrets. Tool output
-  that is shown (for example a failed model probe) has token-like strings replaced by `[redacted]`.
-  Only four deployment settings are ever read from a container's environment
+- Scripts print the selected operations before executing them. Displayed tool output
+  (for example a failed model probe) has recognized token-like strings replaced by `[redacted]`;
+  this is a bounded redaction filter, not a proof about every possible external diagnostic.
+  Four deployment settings are selected for carry-forward/reporting from the container environment
   (`APPSEC_REVIEW_TARGET`, `APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING`,
   `APPSEC_REVIEW_PROFILE`).
 - Exit codes: `0` success, `1` the operation failed (or the final run status is not successful, or
   the stack is not healthy), `2` usage error, `3` refused by a safety rule, `4` nothing matched the
   id, target or file you named.
 - Environment: `APPSEC_PYTHON` picks the interpreter (default: the checkout's `.venv`, then the main
-  checkout's `.venv` when this is a git worktree, then `python3`); `APPSEC_DAGSTER_URL` or `--url`
+  checkout's `.venv` when this is a git worktree, then `python3`/`python`). Automatic candidates
+  are checked for Python >=3.11; the explicit override is used directly. Repository tests still
+  require their own checkout's environment, and [T-160](../TODO.md) records the separate
+  advertised-minimum renderer gap. `APPSEC_DAGSTER_URL` or `--url`
   sets the GraphQL endpoint (default `http://127.0.0.1:<port>/graphql`, where the port is
   `APPSEC_DAGSTER_WEB_PORT` from the environment or `deploy/dagster/.env`, default `3000`).
 - PowerShell: options are `-PascalCase` (`--no-probe` is `-NoProbe`). Every twin also takes `-Wsl`
@@ -80,7 +92,8 @@ several sessions share one Docker daemon and one Dagster stack.
    `NOT_STARTED`, `MANAGED`, `STARTING`, `STARTED`, `CANCELING`) makes the script refuse with exit 3
    and name the runs. `--force` overrides it and prints a warning. If the stack is up but Dagster
    cannot be queried, the script refuses too (it cannot prove nothing is running); with the stack
-   down there is nothing to protect. `stack-start` on a running stack is not guarded unless it
+   down this check cannot query its runs; that does not independently prove descendant cleanup.
+   `stack-start` on a running stack is not guarded unless it
    would recreate containers (`--build`, or a changed `--target`/`--overlay`/`--recording`).
 2. **Own stack only.** The stack scripts and `review-start` refuse (exit 3) when the running
    containers were created from another checkout's compose files, because `lifecycle.py` would
@@ -94,8 +107,9 @@ several sessions share one Docker daemon and one Dagster stack.
 4. **Signed image only.** `lifecycle.py build` builds the tooling image, signs and verifies its ID,
    then records that selection in `.env`. `lifecycle.py start`/`reload` verify the explicit shell ID
    or recorded ID and sign the mounted Python package before launching exactly that image. Only an
-   unpinned first launch uses the build tag; a missing pin never falls back to a tag or an implicit
-   build. Verification failure exits 3 and the scripts report `refused` without touching Compose. See
+   unpinned first launch uses the build tag; the operator wrapper can build that first image when
+   no pin exists and its build tag is absent. Once an ID is selected, a missing pinned image does
+   not fall back to another tag or implicit build. Verification failure exits 3 before Compose. See
    [Signed image](../../deploy/dagster/README.md#signed-image).
 5. **No silent reverts.** Compose lets the shell override `.env`. `stack-restart`/`rebuild`/`start`
    carry the running code-location's non-empty target, overlay and recording values forward and say so,
@@ -149,10 +163,8 @@ or `off`; `--profile` is `dev` (default), `prod`, `copilot-dev`, or `copilot-pro
 needs `APPSEC_REVIEW_MODEL_REPLAY_DIR`, which the compose file does not pass; the parity walk replays
 locally instead.
 
-The profile selects the models and limits (`dev`: Haiku and today's limits; `prod`: Sonnet 5.5, an Opus 5.5
-verifier and larger limits; `copilot-dev`: Haiku through Copilot with unchanged dev limits;
-`copilot-prod`: Sonnet 5.5 with an Opus 5.5 verifier and judge through Copilot, retaining all prod limits;
-see [`model-profiles.md`](model-profiles.md)). The stack scripts set the container's default profile:
+The selected base/profile TOML owns model, reasoning and budget values; see
+[`model-profiles.md`](model-profiles.md). The stack scripts set the container's default profile:
 they print `profile: dev|prod|copilot-dev|copilot-prod` (and, for either production profile, a notice
 that it uses the more capable models and larger token limits), carry the running value over on a plain
 restart, and `stack-status` shows it. `review-start --profile X` and `--overlay F` choose the profile

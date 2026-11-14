@@ -1,3 +1,11 @@
+---
+title: "Build environments"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_image_pin_verification", "job_language_build", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Build environments
 
 Each enabled build environment is a language-only, non-root (`10001:10001`) image used by
@@ -11,7 +19,7 @@ change adds no image/profile asset pins, acquisition, provisioning or host probe
 
 | Catalog id | Directory | Toolchain | Build profiles |
 | --- | --- | --- | --- |
-| `buildenv-native-toolchain` | `native-toolchain/` | gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace; build drivers CMake 3.28, Ninja 1.11, Meson 1.3, Autotools 2.71, libtool 2.4.7 (T-058) | base of every family image |
+| `buildenv-native-toolchain` | `native-toolchain/` | gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace; build drivers CMake 3.28, Ninja 1.11, Meson 1.3, Autotools 2.71, libtool 2.4.7 (T-058) | base of the six native-toolchain families below |
 | `audit-buildenv-cpp` | `cpp/` | nothing more; clang is the default `CC`/`CXX` | `native` |
 | `audit-buildenv-go` | `go/` | + Go 1.23.1, `GOTOOLCHAIN=local` | `go` |
 | `audit-buildenv-python` | `python/` | + Python 3.12.3 headers, pip 24.0, venv | `python` |
@@ -52,9 +60,11 @@ python3 containers/build.py smoke buildenv-native-toolchain audit-buildenv-cpp a
 
 ## Profile image pins
 
-`appsec-review.toml` pins every build profile to a tag and a local Docker image id
-(`[jobs.job_project_build.settings.profiles.<family>]`). A run resolves the tag and refuses to build
-when the local id differs from the pin, so a pin names exactly the bytes the run accepts.
+`appsec-review.toml` declares each build profile's tag
+(`[jobs.job_project_build.settings.profiles.<family>]`). The ignored, host-owned
+`deploy/dagster/host-pins.toml` supplies its local Docker image ID before typed configuration
+validation. The resolved configuration freezes that binding. A run resolves the tag and refuses
+to build when the local ID differs from the pin.
 
 The id is produced by building the image on the host that runs reviews and reading
 `docker image inspect <tag> --format '{{.Id}}'` (`build.py build` also records it as `digest` in its
@@ -64,18 +74,21 @@ host-local (owner decision, 2026-10-15): images move forward, results are never 
 hosts, slight container drift between hosts is acceptable, and a changed pin means rerunning, not a
 defect (see [Moving forward, not reproducing](../README.md#moving-forward-not-reproducing)). Asset
 locks record the SHA-256 of the downloaded inputs a working build used; when upstream moves,
-re-acquire and record the new hash. After rebuilding and smoking an image, update its pin by hand or
-with `appsec-review update-image-pins --write`, which re-pins each moved tag to its local image (see
+re-acquire and record the new hash. After rebuilding and smoking an image,
+`appsec-review update-image-pins --write` validates and atomically updates the host-pins file,
+not the tracked configuration, catalog or asset locks (see
 [`../../docs/operations/image-pin-verification.md`](../../docs/operations/image-pin-verification.md))
-and then sign it with `appsec-review signing sign-image --all-pinned` (see
-[`../../docs/operations/signing.md`](../../docs/operations/signing.md)); `BuildContainerExecutor`
-refuses an unsigned build image when `[signing] image_enforcement = "required"` (opt-in);
-the pipeline never builds images or rewrites pins on its own, and `job_image_pin_verification` fails
-a review whose local images no longer match their pins. When a Dockerfile here changes, rebuild the image and update
-the pin in the same change. The committed pins name whichever host last re-pinned (see T-051 in
-[`../../docs/TODO.md`](../../docs/TODO.md)).
+on the review host. `BuildContainerExecutor` refuses an unsigned build image when
+`[signing] image_enforcement = "required"` (opt-in, disabled by default); signing procedures are
+in [`../../docs/operations/signing.md`](../../docs/operations/signing.md).
+The pipeline does not rebuild these catalog images or rewrite host pins. It can derive
+per-recipe project images through the commissioned image builder, including network-enabled
+dependency provisioning. `job_image_pin_verification` fails a review whose local images no
+longer match their frozen pins. A recipe change needs a host rebuild and a refreshed host
+binding before execution, not a committed machine-specific image ID.
 
-The Rust/WebAssembly image backs both the `rust` and `wasm` profiles; update both pins together.
+The Rust/WebAssembly image backs both the `rust` and `wasm` profiles; one host tag binding supplies
+both resolved profile IDs.
 
 ## Still deferred
 

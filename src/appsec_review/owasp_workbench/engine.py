@@ -26,6 +26,24 @@ APPLICABILITY_OUTCOMES = {
     "unsupported_missing_evidence",
 }
 RESULT_STATUSES = {"satisfied", "not_satisfied", "cannot_verify", "not_assessed"}
+_CAPABILITY_TAG_ROLES = {
+    f"func:{capability}": role
+    for role, capabilities in {
+        "storage": ("data:sql-query", "data:nosql-query", "data:orm", "data:ldap-query"),
+        "authentication_identity": (
+            "authn:password", "authn:mfa", "authn:webauthn", "authn:oauth2-client",
+            "authn:oauth2-server", "authn:oidc", "authn:saml", "authn:jwt", "authn:api-key",
+            "authn:mtls-client", "authn:credential-recovery", "session:cookie",
+            "session:server-store", "session:token-refresh", "session:csrf-token"),
+        "cryptography_data_protection": (
+            "crypto:symmetric", "crypto:asymmetric-sign", "crypto:asymmetric-encrypt",
+            "crypto:hash", "crypto:password-hash", "crypto:mac", "crypto:rng",
+            "crypto:key-mgmt", "crypto:cert-validation"),
+        "network": ("net:http-client", "net:grpc", "net:websocket", "net:tls-server",
+                    "net:tls-client", "net:raw-socket", "net:dns", "net:redirect"),
+    }.items()
+    for capability in capabilities
+}
 
 
 def _hash(value: Any) -> str:
@@ -117,15 +135,15 @@ def characterize_components(
             raise ValueError(f"component {component_id} lacks resolving evidence citations")
         roles, reasons = _deterministic_roles(raw)
         routing = list(raw.get("routing_context", ()))
-        tag_roles = {
-            "func:data:sql-query": "storage", "func:auth:authentication": "authentication_identity",
-            "func:crypto:encryption": "cryptography_data_protection",
-        }
         for tag in routing:
-            mapped = tag_roles.get(tag.get("tag"))
+            if not isinstance(tag, Mapping) or tag.get("basis") not in ("declared", "invoked"):
+                continue
+            name = tag.get("tag")
+            mapped = _CAPABILITY_TAG_ROLES.get(name) if isinstance(name, str) else None
             if mapped:
                 roles.add(mapped)
-                reasons.append(f"accepted tag {tag['tag']} routes context; it is not control proof")
+                reasons.append(f"accepted {tag['basis']} tag {name} routes context; "
+                               "it is not control proof or deployment evidence")
         inference_record = {"status": "not_needed", "proposal_sha256": None}
         ambiguity = []
         if not roles:
@@ -355,7 +373,9 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
                            evidence: Sequence[Mapping[str, Any]], *,
                            retrieval_manifest: Mapping[str, Any],
                            assessment_mode: str = "qualification",
-                           max_subjects: int = 8) -> tuple[dict[str, Any], ...]:
+                           max_subjects: int = 8, max_evidence: int = 200) -> tuple[dict[str, Any], ...]:
+    if type(max_evidence) is not int or not 1 <= max_evidence <= 200:
+        raise ValueError("package evidence bound must be between 1 and 200")
     row_by_id = {row["row_id"]: row for row in rows}
     control_by_id = {control["control_identity"]: control for control in controls}
     component_by_id = {item["component_id"]: item for item in classifications}
@@ -367,6 +387,8 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
         observations = [dict(item) for item in evidence
                         if item.get("component_id") == row["component_id"] and
                         item.get("control_id") in {None, row["control_id"]}]
+        omitted = max(0, len(observations) - max_evidence)
+        observations = observations[:max_evidence]
         package = {
             "schema": "appsec-review/finding-package/1",
             "row_id": row_id, "batch_id": batch["batch_id"],
@@ -377,7 +399,7 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
             "component": {"target_id": row["target_id"], "project_id": row["project_id"],
                           "component_id": row["component_id"], "roles": component["roles"],
                           "evidence": component["evidence"]},
-            "evidence_references": observations[:100],
+            "evidence_references": observations,
             "allowed_retrieval_tools": sorted(set(batch["required_tools"]) |
                                               {"find", "read_excerpt", "resolve_evidence"}),
             "retrieval_manifest": dict(retrieval_manifest),
@@ -396,6 +418,9 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
                 *component.get("limitations", []),
                 "Assessment covers named source subjects, not the entire component or deployed system.",
             ]
+        if omitted:
+            package.setdefault("limitations", []).append(
+                f"package evidence bound omitted {omitted} accepted records; no obligations use omitted evidence")
         package["package_id"] = f"package-{_hash(package)[:24]}"
         packages.append(package)
     return tuple(packages)

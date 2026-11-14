@@ -1,3 +1,11 @@
+---
+title: "Alias, slice, and type-layout graph modes (design)"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "historical"
+jobs: ["job_code_graph_index", "job_codeql_analysis", "job_cpp_compiled_analysis", "job_svf_alias_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Alias, slice, and type-layout graph modes (design)
 
 Status: **proposed, not implemented.** Nothing in this document exists in the code, the central

@@ -1,3 +1,11 @@
+---
+title: "Binary decompilation: running Ghidra before a review"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_binary_evidence_indexing", "job_review_intake"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Binary decompilation: running Ghidra before a review
 
 `appsec-review binary-decompile` disassembles and decompiles configured third-party binaries with
@@ -5,8 +13,9 @@ the pinned `tool-ghidra` image and publishes the result under `data/binary-decom
 **before** you submit a review. Design and output formats are in
 [`../architecture/binary-decompilation.md`](../architecture/binary-decompilation.md).
 
-A publication is binary-derived evidence. It is not source coverage, and no review job reads it
-yet (see "Submit the review").
+A publication is binary-derived evidence, not source coverage. Intake freezes its identity and
+the [binary indexing job](job_binary_evidence_indexing.md) consumes it as described under
+"Submit the review"; decompilation itself remains a separately requested pre-run operation.
 
 ## Prerequisites
 
@@ -19,9 +28,10 @@ yet (see "Submit the review").
   ```
 
   The first build downloads a 570 MB archive and produces an image of about 1.8 GB.
-- The built image signed with the operator key. The catalog does not pin this image, so
-  `--all-pinned` skips it; sign the tag explicitly, and re-sign after every rebuild (see
-  [`signing.md`](signing.md)):
+- A verified host image binding from [image-pin verification](image-pin-verification.md).
+  When `[signing].image_enforcement = "required"`, the installed image must also have a trusted
+  signature; the default disabled policy does not require provisioning a key. An explicit tag
+  signing example, when authorized, is (see [`signing.md`](signing.md)):
 
   ```sh
   appsec-review signing sign-image appsec-review/tool-ghidra:12.1.4 --private-key ~/.config/appsec-review/signing/private/operator.pem
@@ -183,7 +193,8 @@ The review then consumes the publication:
    as a gap.
 
 Index bounds are in `[jobs.job_binary_evidence_indexing.settings]`. With no configured binaries the
-job is `NOT_APPLICABLE` and the review is unchanged.
+job is `NOT_APPLICABLE` with no binary-function facts; a coverage-only shard can still be
+published. This is not a scanner clean-result claim.
 
 **Current limit.** A review still needs a source target directory. The binary-only target kind is
 designed in the architecture page and not implemented.
@@ -273,7 +284,7 @@ not built.
 
 - **Windows and Docker Desktop.** Bind-mount sources deeper than 16 path components fail. The
   store adds four components below the data directory, so keep the checkout shallow.
-- **Linux.** Files the container writes belong to uid 10001. Publications are rewritten by the
+- **Linux.** Files the container writes use the effective runtime UID/GID. Publications are rewritten by the
   host user, but removal of `data/binary-decompilation/.staging/` is best effort.
 - **Disk.** A publication holds one small file per decompiled function. A binary with 50,000
   functions produces about 100,000 files.

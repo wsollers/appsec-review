@@ -1,3 +1,11 @@
+---
+title: "Review metrics"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review metrics
 
 Run `appsec-review metrics --run-id <id>` after or during a review. The command deterministically
@@ -11,7 +19,7 @@ findings are correct, useful, repeatable and acted on is the subject of the
 
 The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
 adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`), introduced
-in `appsec-review/run-metrics/5` and retained in the current `/7`. It separates handoff admission, execution, coverage, native retention,
+in <!-- historical:begin -->`appsec-review/run-metrics/5`<!-- historical:end --> and retained in the current `/7`. It separates handoff admission, execution, coverage, native retention,
 and observation provenance. Historical `/4` summaries lack this section; absence is not zero
 provenance work. Do not copy claimed event counts into reports:
 retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
@@ -106,9 +114,10 @@ production performance claims.
 
 Treat every entry in `review.gaps`, every nonzero `source_gap_count`, and every build or CodeQL gap
 as missing coverage. A missing, changed, escaped, or malformed receipt is an integrity gap and is
-never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
-finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
-or vulnerabilities.
+never evidence that the corresponding scope is clean. `finding_states` counts emitted lifecycle
+transitions, not unique accepted final findings. Use the
+[finding snapshot and scorecard](../architecture/finding-metrics.md) for that partition;
+scanner observations and CodeQL SARIF result counts are not confirmed defects or vulnerabilities.
 
 ## Triage reduction
 
@@ -270,9 +279,9 @@ establish a security-negative result.
 The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
 requires PoC, chain, remediation, dossier and final-publication tracking from their first
 implementation. The existing `metrics` command and summary path remain the operating surface;
-no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
-combined source `6975aef2` retained `completion-process-metrics/1` in `run-metrics/4`;
-`run-metrics/5` retained it alongside interchange and the other domain sections, as do `/6` and the current `/7`.
+no separate backend is needed. Integration `b702eb7` first added `completion` to <!-- historical:begin -->`run-metrics/3`<!-- historical:end -->;
+combined source `6975aef2` retained `completion-process-metrics/1` in <!-- historical:begin -->`run-metrics/4`<!-- historical:end -->;
+<!-- historical:begin -->`run-metrics/5`<!-- historical:end --> retained it alongside interchange and the other domain sections, as do `/6` and the current `/7`.
 This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
 parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.
@@ -406,9 +415,10 @@ acceptance produce explicit gaps/conflicts. `attempts` holds correlation details
 `duplicate_lifecycle_records` records deduplication.
 Timing stays in logs/receipts/summary, outside deterministic document/manifest/result bytes.
 
-The ordinary runtime metrics snapshot is written **before** `HANDOFF_ACCEPTED`. A later
-job snapshot or `appsec-review metrics --run-id <id>` refreshes accepted semantics after
-acceptance. An initial missing-acceptance gap/null total is not an accepted empty export.
+Whole-run snapshots are refreshed by run-level completion/error drivers and standalone launch
+finalization, not on every `JobRunner` publication. A summary read during a run can therefore lag
+`HANDOFF_ACCEPTED`; `appsec-review metrics --run-id <id>` explicitly refreshes accepted semantics.
+A missing-acceptance gap/null total in an earlier snapshot is not an accepted empty export.
 No runtime sequencing change or background metrics service is added. Corrupt accepted output
 is an export-reader integrity failure; the metrics wrapper records `latest_state = stale`
 with `latest_accepted_output_unavailable`, not a clean result. The final report does not

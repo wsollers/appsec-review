@@ -1,3 +1,11 @@
+---
+title: "Near-terminal inference security review"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_code_graph_index", "job_cpg_analysis", "job_document_issue_analysis", "job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Near-terminal inference security review
 
 Status: design approved; vertical slice 1 is implemented as the registered
@@ -34,6 +42,13 @@ Role-selected, pinned procedures and evidence-preserving compact investigation f
 in [guidance procedures](guidance-procedures.md) and [red discovery output](red-discovery-output.md).
 The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
 its document hunts are not yet consumed by the inference review job.
+
+Current source reconciliation through `dd6e025ce82a69d4b755a013e78723b2eb3ee772` is summarized
+in [review inference and guidance](review-inference-and-guidance.md) and the
+[authored job page](../operations/job_inference_security_review.md). T-150 adds pure
+decision-audit contracts/validators at this boundary, not a production audit writer, sidecar or
+new worker/MCP grant. Historical readiness decisions and the wider unimplemented designs below
+remain records of their original scope, not claims that those stages execute today.
 
 ## Purpose and governing decisions
 
@@ -563,10 +578,11 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   - Dockerfile and IaC misconfiguration (`config_scanner`).
 
   Each family has a versioned normalization rule (`lead-family/dependency_advisory/2` and
-  `lead-family/artifact_scanner/2` add the NVD band; `lead-family/source_sast/2` adds the shellcheck, psalm and Infer
+  <!-- historical:begin -->`lead-family/artifact_scanner/2`<!-- historical:end --> add the NVD band; <!-- historical:begin -->`lead-family/source_sast/2`<!-- historical:end --> adds the shellcheck, psalm and Infer
   producers). Every observation producer has an explicit lead-or-not decision
   ([`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md)); a credential literal is never shown to a
-  model (`secret-redaction/1`). Unknown severity is never treated as low.
+  model by the secret-lead view projection (`secret-redaction/1`); that rule alone is not a
+  guarantee over every retrieval route. Unknown severity is never treated as low.
   Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
@@ -581,14 +597,15 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 
 ### Lane B: open discovery
 
-- **Unit of work.** The unit of work is a ranked review unit: a component, trust boundary, or
-  function cluster. Units are ranked deterministically from accepted signals:
+- **Unit of work.** Exact-site operation units coexist with retained component/build-unit
+  whole-file fallback batches. Optional admitted generated models supply bounded routing context,
+  not direct evidence or proven deployment boundaries. Units are ranked deterministically from accepted signals:
   - review-prioritization LPS;
   - source-history instability (SII);
   - hotspots;
-  - security tag density;
+  - distinct evidenced security-operation sites, not raw tag counts;
   - medium, low, and info leads, which also appear on the hunt menu as hints;
-  - advisory reference signals (`review-unit-rank/2`): `advisory_kev` is 250 points when any
+  - advisory reference signals (`review-unit-rank/3`): `advisory_kev` is 250 points when any
     dependency/artifact advisory in the unit is KEV-listed, and `advisory_epss` is the unit's highest
     EPSS percentile times 250. A unit with no advisory lead scores a true zero; an advisory whose KEV
     or EPSS feed was unavailable makes the signal `unknown` (`feed_unavailable`), never zero. Both
@@ -599,13 +616,14 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   signals and then by unit key. Every weight is configurable (decision B2) in the typed, validated
   table `[jobs.job_inference_security_review.settings.ranking]` (`review/ranking.py::RankWeights`).
   Unknown keys are rejected, and every weight is an integer in `[0, 1000]`. The defaults are the
-  shipped `review-unit-rank/2` values and reproduce its order byte for byte:
+  retained numerical weights; version 3 changes the opportunity signal and therefore invalidates
+  prior ranking/package identities:
 
   | Key | Default | Signal points |
   |---|---|---|
   | `lps`, `sii`, `hotspot` | 1000 each | producer score in [0, 1] (or a percentage) times the weight, capped at the weight |
-  | `tag_density` | 1000 | `tags x weight / (tag_density_full_tags_per_file x member files)`, capped at the weight |
-  | `tag_density_full_tags_per_file` | 4 | tags per member file that earn the full `tag_density` weight |
+  | `tag_density` | 1000 | retained key: distinct invoked operation sites times weight / saturation count, capped at weight; no file-count multiplier |
+  | `tag_density_full_tags_per_file` | 4 | retained key: distinct sites that earn the full weight; multiple labels/producers at one physical site count once |
   | `lead_hint_medium`, `lead_hint_low`, `lead_hint_info` | 100, 30, 10 | per medium/low/info lead hint |
   | `lead_hints_max` | 1000 | cap on the summed lead hints |
   | `advisory_kev` | 250 | any advisory in the unit is KEV-listed |
@@ -614,7 +632,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   The weights reach `review/units.py` through `PackageSettings.rank_weights`. They are recorded in
   the package manifest's `settings` and are semantic settings, so they enter every fingerprint
   derived from the settings. Changing a weight changes the order, not the rule, so `RANK_RULE`
-  stays `review-unit-rank/2`.
+  stays `review-unit-rank/3`.
 
   The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
   is a `coverage_gap` with reason `below_hunt_cutoff`.
@@ -961,7 +979,7 @@ Model prose, reported scanner severity and FIRST EPSS have no field in the facto
 never promotes a claim: only `confirmed` and `supported` claims are scored, and contradicting
 relations never set a factor.
 
-Factors read only *counted* relations. Under `predicate-admission/1` source text cited for attacker control, reachability or guards is analyst-assessed and never counted, so the weakest `code_evidence` basis of `taint_path`, `attacker_control` and `guard_absent` is reachable only through a counted relation of a kind the table leaves direct for that predicate (none today); in practice those factors come from a mapped tool observation or a direct-eligible graph fact, or are missing with a reason.
+Factors read only *counted* relations. Under `predicate-admission/2` source text cited for attacker control, reachability or guards is analyst-assessed and never counted, so the weakest `code_evidence` basis of `taint_path`, `attacker_control` and `guard_absent` is reachable only through a counted relation of a kind the table leaves direct for that predicate (none today); in practice those factors come from a mapped tool observation or a direct-eligible graph fact, or are missing with a reason.
 
 | Factor | Closed scale (weakest first) | Derived from | Cites |
 |---|---|---|---|
@@ -1032,7 +1050,7 @@ shipped model is calibrated for full evidence, a claim missing attacker control 
 is usually `unrated`; the operator fix is to supply the evidence (graph facts, accepted tags),
 not to lower thresholds (see "Tuning scoring" in the operations guide).
 
-`application_risk_matrix/3` replaces `application_risk_matrix/2`, which scored a missing factor
+`application_risk_matrix/3` replaces <!-- historical:begin -->`application_risk_matrix/2`<!-- historical:end -->, which scored a missing factor
 as zero points and so let missing evidence silently lower a rating. `/2` is no longer selectable;
 `/1` stays for comparison.
 
@@ -1084,7 +1102,7 @@ cites `cwe_impact_overrides.<CWE>` and records its reason and, when the catalog 
 derived class, so drift between an exception and the catalog stays visible.
 
 Catalog states follow decision 5's MITRE fallback. An unpinned, mismatched or unreadable catalog,
-or a pinned `mitre-index/1` index without consequences, derives nothing: every non-overridden
+or a pinned <!-- historical:begin -->`mitre-index/1`<!-- historical:end --> index without consequences, derives nothing: every non-overridden
 `impact_class` is missing with the catalog gap as its reason, and technical severity is `null`.
 A stale catalog still derives, just as it still supplies CWE names and abstractions, because the
 consequences are reference data about the weakness class. Each such factor records
@@ -1870,6 +1888,10 @@ A later live-model acceptance repeats the same fixture with pinned guidance/mode
 verifies budgets and schema repair. Live PoC execution remains disabled until the isolation runner
 and policy-denial suite pass on the deployment host.
 
+> The following readiness and owner-decision record is historical; current job
+> declarations are in the [generated contract](../operations/job_inference_security_review.md).
+
+<!-- historical:begin -->
 ## Implementation readiness decisions
 
 Readiness review, 2026-10-12. The authority model, invariants, lifecycle, scoring boundary, PoC
@@ -2566,3 +2588,4 @@ will be enforced in code.
     the deployment host: the CodeQL graph export, the NVD/KEV/EPSS/MITRE feed syncs, and a live
     inference run that includes `job_code_graph_index`. A failure there is treated as a bug, not a
     design change.
+<!-- historical:end -->

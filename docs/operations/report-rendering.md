@@ -1,3 +1,11 @@
+---
+title: "Report rendering (PDF and single-page HTML)"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_final_report_publication", "job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Report rendering (PDF and single-page HTML)
 
 `python -m appsec_review.reporting` turns a finished review run into a readable report: a LaTeX
@@ -44,6 +52,12 @@ renderer-neutral document. Missing or unreadable artifacts become **named gaps**
   with relations and state transitions, cell outcomes, ledger gaps).
 - Sources: `final-report.json`, the assembled and review packages, `data/inference-recordings`, the
   review ledger shards and the cell receipts of `job_inference_security_review`.
+
+The diagnostic reader can select matching files across attempts; it is not the final gate's
+accepted-snapshot verifier. Full interchanges are available only when bounded model recordings
+were commissioned and retained. Ordinary cell receipts contain hashes and structured outcomes,
+not every prompt, retrieved body or internal model reasoning. Treat diagnostic output containing
+recordings as private, not as the sanitized public final report.
 
 Everything shown is bounded. A cut field says `n more <unit>, sha256 <64 hex>` (the hash is of the
 whole). Defaults live in `Limits` (`tokens.py`). Model output, target content and tool output are
@@ -135,8 +149,8 @@ containers/build-all.sh smoke --functional tool-report-latex
 ## Limits and what is not done
 
 - Only `job_inference_security_review` recordings are drawn; a recording's longest call chain is the
-  interchange, other chains are counted. Blue and verifier answers use the generic digest (their
-  field names are not fixed yet; fields named stance, verdict, state, disposition and so on become badges).
+  interchange, other chains are counted. Blue and verifier answers use the generic renderer digest;
+  their actual response contracts are closed and validated, not unspecified fields.
 - Glyphs the bundled fonts lack (for example CJK) appear as `<U+XXXX>` in the PDF; HTML shows them.
 - No PDF accessibility tagging; links and bookmarks are internal only.
 - A full run (hundreds of packages) is hundreds of pages; use `--limit`/`--package`.

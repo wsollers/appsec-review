@@ -1,3 +1,11 @@
+---
+title: "Engineering security signals"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_clang_static_analysis", "job_cpp_compiled_analysis", "job_dependency_intelligence", "job_evidence_collection", "job_language_build", "job_profile_data", "job_review_data_indexing", "job_target_catalog", "job_test_coverage"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Engineering security signals
 
 This page is the canonical cross-workflow design for the engineering-signal producers added
@@ -52,16 +60,17 @@ attempts, checkpoints, receipts, validation, immutable handoffs, manifests, and 
 | `job_profile_data` | `job_target_catalog`, `job_language_build`, and `job_artifact_indexing` handoffs; hash-listed execution-profile artifacts | `appsec-review/profile-data-handoff/1` | `analysis` shard `profile-data-<build-unit-id>` for every accepted receipt |
 | `job_dependency_intelligence` | `job_target_catalog`, `job_language_build`, `job_artifact_indexing`, and `job_evidence_collection` handoffs | `appsec-review/dependency-intelligence-handoff/1` | one `inventory` shard `dependency-intelligence` |
 
-Every input is resolved through `data/jobs/<job-id>/latest.json` to an accepted
-`appsec-review/job-handoff/1` and then rechecked by path, hash, schema, and source snapshot where
-applicable. A latest pointer is not evidence by itself.
+Producer inputs are read through `runtime.consume.accepted_upstream` against the job's typed
+contract and the claim's admitted handoff pins. The accepted envelope is
+`appsec-review/job-handoff/2`; payload paths, hashes, schemas and source snapshots are checked
+where applicable. Scheduling ancestry and a latest pointer are not evidence of consumption.
 
 The principal payload schemas and locations are:
 
 | Payload | Schema | Run-owned source |
 | --- | --- | --- |
 | Target inventory and declarations | `appsec-review/target-catalog/1`; dependency subcatalog `appsec-review/dependency-catalog/1` | accepted `job_target_catalog` publication |
-| Build receipts and coverage identities | `appsec-review/language-build-handoff/1` | accepted `job_language_build` publication and its receipt-referenced workspace artifacts |
+| Build receipts and coverage identities | `appsec-review/language-build-handoff/2` | accepted `job_language_build` publication and its receipt-referenced workspace artifacts |
 | Indexed produced artifacts | `appsec-review/artifact-indexing/1` | accepted `job_artifact_indexing` summary and verified `artifacts` manifest shard |
 | C/C++ analysis scopes | `appsec-review/cpp-compiled-analysis/2`; protected commands `appsec-review/protected-compile-commands/1` | accepted `job_cpp_compiled_analysis` publication and receipt-referenced protected files |
 | SBOM/package observations | `appsec-review/retrieval-index/2` entities from producer `tool-syft` | accepted `job_evidence_collection` observations shards |
@@ -151,7 +160,8 @@ Dependency intelligence merges three classes of accepted observation:
 1. declared dependencies from the target catalog's `appsec-review/dependency-catalog/1`;
 2. package/SBOM observations from accepted Syft `tool_observation` entities; and
 3. native evidence from protected compiler/linker rows, accepted artifact loader metadata, and
-   hash-bound `.pc`, `*Config.cmake`, or `*-config.cmake` files in accepted workspaces.
+   authenticated target/workspace metadata, including headers, vendored package documents,
+   pkg-config and supported CMake metadata.
 
 Native parsing recognizes `-lfoo`, `-l:libfoo.so`, forwarded `-Wl` arguments, archive/shared
 library paths, Windows import names, frameworks, ELF loader dependencies and SONAMEs. Every native
@@ -165,7 +175,13 @@ and runtime/production observations are retained even when they conflict, and th
 When no accepted observation establishes scope, the job conservatively emits `PROD` with basis
 `conservative-default`; this prioritizes investigation and is not proof of production deployment.
 Canonical HTTPS repository metadata on the configured public-forge allowlist wins. Only unresolved
-native candidates may use model inference. The model receives one bounded candidate and an
+native candidates reach repository-resolution inference. Separately, bounded native component
+curation and root-scoped metadata investigation run before repository normalization; their proposals
+are checked against authenticated catalog paths and exact evidence. Raw discovery, effective
+discovery and a separately validated enriched SPDX inventory are all retained. See
+[native SPDX operations](../operations/native-sbom.md) and the
+[canonical job contract](../operations/job_dependency_intelligence.md).
+For repository resolution, the model receives one bounded candidate and an
 evidence-reference allowlist plus the registered runtime skill, persona, role, and task. Its
 `appsec-review/native-dependency-resolution-proposal/1` response is schema-validated, restricted to
 configured hosts, limited to confidence `0.95`, and remains
@@ -173,7 +189,8 @@ configured hosts, limited to confidence `0.95`, and remains
 
 After dependency resolution, `repositories.deduplicate` groups dependencies by canonical public
 forge identity. Scorecard retrieval consumes that repository inventory, so dependencies that map
-to the same repository share one cache lookup and at most one bounded HTTP retrieval per run. The
+to the same repository share one cache lookup and at most one bounded HTTP retrieval per
+`scorecards.fetch` execution. The
 result is associated back to every referring dependency without collapsing package, version,
 provenance, exposure, SBOM, or advisory identities.
 
@@ -281,8 +298,11 @@ Downstream behavior is deliberately narrower than the available context:
 
 All model, network, worker, parser identity, checker, and bound settings live in
 [`../../appsec-review.toml`](../../appsec-review.toml) under the producer job tables. Changing an
-identity-bearing setting invalidates reuse through the resolved configuration and producer
-fingerprints. Do not move operational values into prompts.
+identity-bearing setting requires reconciliation with frozen run configuration and producer
+fingerprints; it is not permission to change an existing run. Coverage/profile local shard keys
+do not explicitly bind all ingestion bounds, but no admitted stale-reuse path has been established;
+see [the conditional identity analysis](scanners-and-evidence-collection.md#as-built-today).
+Do not move operational values into prompts.
 
 Operator pages:
 
@@ -299,4 +319,3 @@ Implementation entry points are under `src/appsec_review/jobs/job_clang_static_a
 `tests/test_engineering_signal_integration.py`; focused behavior lives in
 `tests/test_clang_static_analysis.py`, `tests/test_test_coverage.py`, `tests/test_profile_data.py`,
 `tests/test_dependency_intelligence.py`, and `tests/test_multivuln_coverage_fixtures.py`.
-

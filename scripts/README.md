@@ -1,7 +1,51 @@
+---
+title: "Scripts"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Scripts
 
-Operator scripts for the review host. Every script exists as a bash script (`<name>.sh`, Linux and
-WSL) and a PowerShell twin (`<name>.ps1`) with the same options (`--kebab-case` in bash,
+## Documentation generation
+
+`scripts/generate-docs.sh` (or `.venv/bin/python scripts/generate-docs.py`) regenerates the
+job inventory, guidance reference, job-page blocks and documentation indexes. `--check` reports
+drift without writing; `--output-root test/tmp/<name>` writes an isolated reproduction.
+The executive overview and its SVG are authored and are never generator outputs.
+
+The generator loads the checked-in `dev` recipe through the typed loader, with no profile
+overlay or host observations. Its in-memory unbound image sentinels only satisfy loader shape
+validation; they are neither emitted nor usable as execution evidence. It never launches jobs,
+tools or models, reads a target or run, or loads runtime skill text. Missing task bindings remain
+explicit [T-147](../docs/TODO.md) gaps, not claims that a task has no tool or model.
+
+Authored metadata uses one-line YAML scalars (JSON-quoted when needed) and JSON-style string
+arrays. Required fields are `title`, `kind`, `subsystem`, `status` and `last reconciled`; `jobs`
+is a sorted, unique array when relevant. Status is `current` or `historical`; task progress lives
+in the TODO registry. The reconciliation value comes from `docs/docs-sync.json` and does not
+advance merely because generated views changed. Generated Markdown carries its notice as the
+first body line after frontmatter; generated JSON carries it on its first line.
+
+Current prose identifiers are checked against the source inventory. Historical records and
+explicitly marked historical passages retain retired names; the TODO registry is planning data.
+A historical passage uses balanced `<!-- historical:begin -->` and `<!-- historical:end -->`
+markers around the preserved text. Those markers do not exempt its links. Missing historical
+archive citations are separately reported under [T-148](../docs/TODO.md); new broken links are
+not accepted as archive exceptions.
+
+`docs/intelligence-buckets.json` assigns one primary-purpose bucket to each canonical catalog
+tool and dataset output kind. The generator validates complete, unique assignments before
+writing the tool and availability matrices, in Markdown and JSON. Composite outputs retain
+their original schema, stage, sensitivity and authority; bucket membership never grants access.
+The full JSON includes every bucket/language pair and separate producer/dataset declarations.
+Source-backed not-applicable states are distinct from missing information, which names
+[T-147](../docs/TODO.md) or [T-157](../docs/TODO.md). Configured candidates, input compatibility
+and registry eligibility are not observed execution, language coverage or issued capabilities.
+
+The paired operator entrypoints below have a bash script (`<name>.sh`, Linux and WSL) and a
+PowerShell twin (`<name>.ps1`) with corresponding options (`--kebab-case` in bash,
 `-PascalCase` in PowerShell). Run any of them with `--help` / `-Help` for the full option list.
 Run them from any directory; they find the checkout themselves.
 
@@ -16,10 +60,10 @@ Logic: `deploy/dagster/bin/ops.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start.sh` / `.ps1` | Start (and if needed build) the Dagster stack, then check health, the Claude overlay and model connectivity. |
+| `stack-start.sh` / `.ps1` | Start the Dagster stack, building only when requested or on the supported unpinned first-launch path; check health, the selected provider overlay and connectivity. |
 | `stack-stop.sh` / `.ps1` | Stop the containers, keeping volumes; refuses while a run is active unless `--force`; `--purge-volumes --yes` removes data. |
 | `stack-restart.sh` / `.ps1` | Stop and start the stack, or reload every Dagster image service (`--code-location-only`), keeping PostgreSQL. |
-| `stack-rebuild.sh` / `.ps1` | Build the image and recreate the stack with the Claude overlay. |
+| `stack-rebuild.sh` / `.ps1` | Build the tooling image and recreate the stack with its selected provider overlay; source-only changes use reload instead. |
 | `stack-status.sh` / `.ps1` | One-screen status: containers, health, compose files, image, active runs, disk. |
 | `stack-logs.sh` / `.ps1` | Show one service's container logs. |
 
@@ -42,7 +86,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `run-readiness.sh` / `.ps1` | One-time preparation of a review host (T-057 Phase 0, `run-readiness.md` steps 1–5): preconditions (`default` Docker context, ext4 checkout, clean tree, OpenSSL 3, `.venv`), operator key + committed trust anchor + host trust directory, validate/build/smoke/report every image, host re-pin as its own commit, sign every pinned image, compile the CodeQL packs. Stops at the first failing step; `--from STEP` / `--only STEP` resume; `--dry-run` prints every command. Never pushes. On Windows always runs in WSL. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-readiness). |
+| `run-readiness.sh` / `.ps1` | Operator host preparation (T-057 Phase 0): check daemon/checkout/environment, prepare operator key and committed public anchor, validate/build/smoke/report images, write ignored host bindings without a pin commit, sign pinned images and compile CodeQL packs. Stops at the first failure; `--from STEP` / `--only STEP` select work; `--dry-run` prints commands. Never pushes. On Windows it delegates to WSL. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-readiness). |
 | `compile-codeql-queries.sh` / `.ps1` | Compile, one pack at a time, the CodeQL packs that are not precompiled (the graph-export packs registered with `warm = true` in `rules/registry.toml`) into the shared compile-cache volume review runs mount. Skips the image's standard query packs and the CERT pack, which ship precompiled `.qlx`. Options: `--language`, `--ram` (default 7000 MB), `--threads` (default 8), `--dry-run`, `--allow-concurrent`. Run it after a CodeQL image/release change or any graph-export QL change, before review runs. Wraps `containers/build.py query-packs --warm`. Details: [`docs/operations/codeql-analysis.md`](../docs/operations/codeql-analysis.md#compiling-codeql-queries). |
 
 ## Development
@@ -56,6 +100,6 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | File | Purpose |
 | --- | --- |
-| `lib/common.sh` | Sourced by the bash scripts: locates the checkout and a Python 3.11+ interpreter (`APPSEC_PYTHON`, the checkout's `.venv`, the main checkout's `.venv`, then `python3`) and runs `ops.py`. |
+| `lib/common.sh` | Locates the checkout and interpreter (`APPSEC_PYTHON`, its `.venv`, the main checkout's `.venv`, then `python3`/`python`). Automatic candidates require >=3.11; an explicit `APPSEC_PYTHON` is used directly. The compatibility fallback is not permission to test with another checkout's environment. |
 | `lib/common.ps1` | Dot-sourced by the PowerShell twins: finds the checkout (`APPSEC_REPO_ROOT`, the current directory, then the script location), translates paths for WSL and runs `ops.py` or the bash twin. |
 | `known-failures.txt` | Pytest node ids that fail without this repository's changes; `run-tests` reports them as known. One `<node id> \| <reason>` per line. |

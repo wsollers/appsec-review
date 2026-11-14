@@ -1,3 +1,11 @@
+---
+title: "Remediation artifact contracts"
+kind: "schema"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_remediation_planning", "job_remediation_validation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Remediation artifact contracts
 
 These are protected, attempt-owned attachments to immutable confirmed findings, not findings,

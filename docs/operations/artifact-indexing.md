@@ -1,3 +1,11 @@
+---
+title: "Produced-artifact indexing"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_language_build", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Produced-artifact indexing
 
 `job_artifact_indexing` is the repository-independent boundary between accepted language builds and
@@ -85,8 +93,10 @@ than 1 MB of target source.
 
 Known limitation: an artifact that no invocation or producer-supplied relationship uniquely
 attributes still receives a 0.25-confidence `GENERATED_FROM` edge to every command of its unit.
-That is O(outputs × commands) rows for weakly attributed units; batching bounds the rows per
-shard, not the total. Reducing these edges is a pending follow-up.
+That is O(outputs × commands) rows for weakly attributed units; batching limits ordinary batches,
+not the total, and a single oversized artifact still occupies its own shard. Reducing these edges
+is a pending follow-up. The [canonical job page](job_artifact_indexing.md) distinguishes shard
+counts, artifact counts and exact versus ambiguous attribution.
 
 ### Deferred: parallel build units
 

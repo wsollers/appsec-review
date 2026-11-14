@@ -1,4 +1,14 @@
+---
+title: "Build execution capture restart handoff — 2026-10-09"
+kind: "history"
+subsystem: "target acquisition and build"
+status: "historical"
+jobs: ["job_language_build", "job_project_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Build execution capture restart handoff — 2026-10-09
+
+> Current subsystem view: [Target acquisition and build](../architecture/target-acquisition-and-build.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
 
 > **Historical snapshot (noted 2026-10-12).** This handoff records the state on 2026-10-09 and is
 > superseded by [`build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md)

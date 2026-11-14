@@ -1,3 +1,11 @@
+---
+title: "opengrep tool image"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # opengrep tool image
 
 `appsec-review/tool-opengrep:1.30.2` is the tool image declared by `tool-opengrep` in
@@ -18,12 +26,12 @@ rule pack (`rules/sei-cert/`). The pack is mounted read-only at `/rules-sei-cert
 match `rules/sei-cert/pack.lock.json`; otherwise the adapter does not run and reports the pack as
 unavailable. The target is mounted read-only at `/target`, output goes to the writable `/scratch`,
 and the run uses `tool.toml` and
-[`runtime-policy.toml`](../../runtime-policy.toml): no network, UID/GID 10001, read-only root,
+[`runtime-policy.toml`](../../runtime-policy.toml): no network, non-root execution, read-only root,
 dropped capabilities, `no-new-privileges`, and bounded CPU, memory, PIDs, time, and output.
 
 ## Build
 
-Run from the repository root. The launcher builds missing dependency images in order, fetches and
+Run from the repository root. The launcher builds dependency images in order, fetches and
 verifies the locked assets, runs the build with networking disabled, and writes logs under
 `runs/container-builds/<run-id>/`:
 
@@ -35,7 +43,7 @@ containers/build-all.ps1 build tool-opengrep
 Equivalent direct build once the dependency images exist and `downloads/` holds the verified assets:
 
 ```text
-docker build --network=none --pull=false \
+docker build --network=none --pull=false --provenance=false --sbom=false \
   --file containers/tools/opengrep/Dockerfile \
   --build-arg TOOL_VERSION=1.30.2 \
   --tag appsec-review/tool-opengrep:1.30.2 containers/tools/opengrep

@@ -1,3 +1,11 @@
+---
+title: "Seeded neighborhoods (all producers)"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Seeded neighborhoods (all producers)
 
 Status: contract (2026-10-16). Generalizes [`seeded-codeql-neighborhoods.md`](seeded-codeql-neighborhoods.md)
@@ -93,7 +101,7 @@ database`. Every named bound produces a gap; none widens the selection.
 
 ## 7. Failure, not-applicable and zero-seed semantics
 
-* **Zero seeds**: clean skip; no tool runs; the gap above is named; coverage is not `complete`; the job
+* **Zero seeds**: nonexecuted scope; no tool runs; the gap above is named; coverage is not `complete`; the job
   is `COMPLETED_WITH_GAPS`.
 * **Compile or analyze failure**: a gap on exactly the seeds that unit carried; those seeds stay
   `unresolved` (reason `producer_failed`). A total failure is `unavailable` coverage. A failure is not
@@ -107,8 +115,10 @@ database`. Every named bound produces a gap; none widens the selection.
 Each producer's checkpoint identity binds its own `seeded` identity (`SeededSettings.identity()`: mode,
 depth, seed limit and its bounds) and the seed set. Changing mode, depth, limit or the seed set reruns only
 the affected producer; an unchanged producer reuses its checkpoint, and CodeQL's identity is untouched
-(`test_seeded_compiled.py`, `test_seeded_clang_static.py`, `test_seeded_cpg.py`). Shards and card payloads
-are byte-identical across runs.
+(`test_seeded_compiled.py`, `test_seeded_clang_static.py`, `test_seeded_cpg.py`). Selection and row
+ordering are deterministic; run/attempt-bound artifact and receipt references mean this is not a
+blanket guarantee of byte-identical shards or cards across distinct runs. Configuration changes
+require a new frozen run, not an in-place setting edit.
 
 ## 9. Publication and exposure
 
@@ -167,8 +177,11 @@ treat them as inexact leads.
 observation shard (now the seeded subset, with its gaps); package assembly already reads `graph`
 families per scope. The remaining consumers are listed in `docs/TODO.md`.
 
-**Cross-check.** IR can only agree or be `NOT_COVERED`; only clangd can disagree. A seeded disagreement
-emits a `CONTRADICTS` relation and makes the fact ineligible (`graph/crosscheck.py`).
+**Cross-check.** Among the call-edge inputs handled by `graph/crosscheck.py`, IR can only agree or
+be not-covered; clangd can disagree. The separate `graph/svf_crosscheck.py` path can also contradict
+using qualified closed-world, complete points-to evidence. A seeded disagreement emits a
+`CONTRADICTS` relation and makes the fact ineligible. Missing or open-world evidence does not
+become a negative. See [the current graph job](../operations/job_code_graph_index.md).
 
 ## 10. Coverage and soundness
 

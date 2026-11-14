@@ -1,9 +1,19 @@
+---
+title: "Image-pin verification and host bindings"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: ["job_image_pin_verification", "job_model_connectivity"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Image-pin verification and host bindings
 
 The operator builds and smokes images on each review host's declared Docker daemon. Committed
 configuration describes recipes: tags, versions and asset payload hashes. Observed Docker IDs and
 CodeQL preinstalled runtime declarations live only in ignored `deploy/dagster/host-pins.toml`.
 They are not portable between daemons or hosts, and pinning never edits tracked recipes.
+
+<a id="host-procedure-rebuild-re-pin-reload"></a>
 
 ## Host procedure
 

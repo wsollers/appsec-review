@@ -1,3 +1,11 @@
+---
+title: "Clang static analysis"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_cpp_compiled_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Clang static analysis
 
 See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place
@@ -8,7 +16,7 @@ accepted project scopes from `job_cpp_compiled_analysis`; each scope binds a mat
 snapshot and its run-owned normalized `compile_commands.json`. It does not scan an arbitrary live
 tree and never executes a target-produced binary.
 
-For every applicable scope the job runs two actions from the same pinned offline image:
+For each selected runnable scope the job runs two actions from the same pinned offline image:
 
 - Clang-Tidy with centrally configured check families; and
 - Clang Static Analyzer (`clang --analyze`) with centrally configured checker families.
@@ -19,6 +27,13 @@ is labelled `warning` (normalized to medium reported severity); clang-tidy `erro
 normalize to high. Runtime networking is disabled, the accepted scope is mounted read-only,
 and only run-owned scratch is writable. The actions are independent: failure of one action is a
 named gap and does not discard valid observations from the other.
+
+Selection follows the shared seeded policy when enabled: no seeds or no supported selected units
+runs no engine and retains explicit incomplete coverage. Full-mode and seeded checkpoint behavior
+differ; see the [canonical job page](../operations/job_clang_static_analysis.md). An active
+execution-safety stop may prevent a failure fallback from reaching publication. The recipe catalog
+and host-observed image binding are separate under
+[image-pin verification](../operations/image-pin-verification.md).
 
 ## Evidence and coverage
 

@@ -1,3 +1,11 @@
+---
+title: "Appsec-review: system review and downstream verification plan"
+kind: "review"
+subsystem: "testing and operations"
+status: "historical"
+jobs: ["job_build_environment_analysis", "job_build_iteration", "job_document_issue_analysis", "job_inference_security_review", "job_language_build", "job_poc_generation", "job_review_data_indexing", "job_sanitizer_build", "job_security_tagging", "job_target_analysis_plan", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Appsec-review: system review and downstream verification plan
 
 **Reviewed 6 November 2026.** Local source: `wsollers/appsec-review` at

@@ -1,3 +1,11 @@
+---
+title: "TODO registry"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_image_pin_verification", "job_language_build", "job_model_connectivity", "job_post_build_security_assessment", "job_project_build", "job_remediation_validation", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_third_party_data_sync", "job_threat_model_generation"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # TODO registry
 
 This is the only TODO file in the repository (`AGENTS.md`, "Deferred work and TODOs"). Every
@@ -99,14 +107,14 @@ until each is rewritten into the entry format when it is next touched.
 | T-104 | [Look up CPE candidates in the pinned NVD snapshot](#t-104-look-up-cpe-candidates-in-the-pinned-nvd-snapshot) | data | open |
 | T-105 | [Match vulnerabilities in one stage over the merged dependency inventory](#t-105-match-vulnerabilities-in-one-stage-over-the-merged-dependency-inventory) | scanners | blocked |
 | T-106 | [Restart the nightly data sync and refuse stale feeds at run readiness](#t-106-restart-the-nightly-data-sync-and-refuse-stale-feeds-at-run-readiness) | data | open |
-| T-107 | [Generate a data-flow diagram and threat model from accepted run evidence](#t-107-generate-a-data-flow-diagram-and-threat-model-from-accepted-run-evidence) | review | open |
+| T-107 | [Generate a data-flow diagram and threat model from accepted run evidence](#t-107-generate-a-data-flow-diagram-and-threat-model-from-accepted-run-evidence) | review | in-progress |
 | T-108 | [Publish the static deployment inventory as a job](#t-108-publish-the-static-deployment-inventory-as-a-job) | evidence | open |
 | T-109 | [Put a hard ceiling on test runs and enforce the ten-second unit limit](#t-109-put-a-hard-ceiling-on-test-runs-and-enforce-the-ten-second-unit-limit) | testing | open |
 | T-110 | [Decide what the walk does with shell environment scripts the bounded reader cannot read](#t-110-decide-what-the-walk-does-with-shell-environment-scripts-the-bounded-reader-cannot-read) | build | open |
 | T-111 | [Surface build-descriptor bounds as gap records and size them against real targets](#t-111-surface-build-descriptor-bounds-as-gap-records-and-size-them-against-real-targets) | build | open |
 | T-112 | [Record what the analysis-summary trim removed, and do not report truncation under the bounds](#t-112-record-what-the-analysis-summary-trim-removed-and-do-not-report-truncation-under-the-bounds) | build | open |
 | T-113 | [Walk every job into tests/unit with code-level tests under the enforced tier](#t-113-walk-every-job-into-testsunit-with-code-level-tests-under-the-enforced-tier) | testing | in-progress |
-| T-114 | [Declare the debug-symbol decision dataset with the schema the job writes](#t-114-declare-the-debug-symbol-decision-dataset-with-the-schema-the-job-writes) | binary | open |
+| T-114 | [Declare the debug-symbol decision dataset with the schema the job writes](#t-114-declare-the-debug-symbol-decision-dataset-with-the-schema-the-job-writes) | binary | done (2026-11-13, 9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16) |
 | T-115 | [Record code-graph live verification in fixture provenance and test it against the lock](#t-115-record-code-graph-live-verification-in-fixture-provenance-and-test-it-against-the-lock) | graph | open |
 | T-116 | [Make the code-graph docs name all eight pinned export packs](#t-116-make-the-code-graph-docs-name-all-eight-pinned-export-packs) | graph | open |
 | T-117 | [Fix the stale image_id comments in appsec-review.toml (not during an active walk)](#t-117-fix-the-stale-image_id-comments-in-appsec-reviewtoml-not-during-an-active-walk) | images | open |
@@ -120,9 +128,9 @@ until each is rewritten into the entry format when it is next touched.
 | T-125 | [Close or confirm the Rust canonicalize sanitizer gap](#t-125-close-or-confirm-the-rust-canonicalize-sanitizer-gap) | graph | open |
 | T-126 | [Design the multi-producer plan for code-graph and dataflow facts](#t-126-design-the-multi-producer-plan-for-code-graph-and-dataflow-facts) | graph | blocked |
 | T-127 | [Inventory the documentation in a disposition ledger](#t-127-inventory-the-documentation-in-a-disposition-ledger) | pipeline | done (2026-11-13, docs/docs-ledger.json) |
-| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | open |
-| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | blocked |
-| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | blocked |
+| T-128 | [Generate the documentation inventory and enforce frontmatter and links](#t-128-generate-the-documentation-inventory-and-enforce-frontmatter-and-links) | pipeline | done (2026-11-13, docs/generated/inventory.json) |
+| T-129 | [Map tools and datasets to intelligence buckets and availability matrices](#t-129-map-tools-and-datasets-to-intelligence-buckets-and-availability-matrices) | pipeline | done (2026-11-13, docs/intelligence-buckets.json) |
+| T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | open |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | blocked |
 | T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | blocked |
 | T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
@@ -138,6 +146,21 @@ until each is rewritten into the entry format when it is next touched.
 | T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | done (2026-11-13, appsec-review-smoke-php v1.0.0 = ef0c942de7d2; guzzle substituted for monolog) |
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | done (2026-11-13, https://github.com/wsollers/appsec-review-smoke-guide, commit dc69349) |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout) |
+| T-146 | [Make review behavior-oriented and developer-actionable](#t-146-make-review-behavior-oriented-and-developer-actionable) | review | done (2026-11-13, docs/tasks/2026-11-13-behavior-oriented-review.md) |
+| T-147 | [Declare exact task and dataset publication bindings for documentation](#t-147-declare-exact-task-and-dataset-publication-bindings-for-documentation) | pipeline | open |
+| T-148 | [Resolve historical archive citations without restoring the archive](#t-148-resolve-historical-archive-citations-without-restoring-the-archive) | testing | open |
+| T-149 | [Route scoped dependency decision packets into review and account for their use](#t-149-route-scoped-dependency-decision-packets-into-review-and-account-for-their-use) | review | blocked |
+| T-150 | [Publish complete protected review decision products](#t-150-publish-complete-protected-review-decision-products) | review | done (2026-11-13, 08d50a742) |
+| T-151 | [Bind hunt coverage obligations to accepted operation identities](#t-151-bind-hunt-coverage-obligations-to-accepted-operation-identities) | review | blocked |
+| T-152 | [Bind decisive evidence to scoped propositions and polarity](#t-152-bind-decisive-evidence-to-scoped-propositions-and-polarity) | evidence | blocked |
+| T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | blocked |
+| T-154 | [Audit labelled stage loss and dismissals by stratum](#t-154-audit-labelled-stage-loss-and-dismissals-by-stratum) | testing | blocked |
+| T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
+| T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
+| T-157 | [Declare language and applicability metadata for intelligence matrices](#t-157-declare-language-and-applicability-metadata-for-intelligence-matrices) | pipeline | open |
+| T-158 | [Close the documented test-tier enforcement gaps](#t-158-close-the-documented-test-tier-enforcement-gaps) | testing | open |
+| T-159 | [Preserve SVF module partial reasons in canonical outcomes](#t-159-preserve-svf-module-partial-reasons-in-canonical-outcomes) | graph | open |
+| T-160 | [Reconcile the advertised Python minimum with renderer syntax](#t-160-reconcile-the-advertised-python-minimum-with-renderer-syntax) | testing | open |
 | T-161 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-161-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | done (2026-11-13, repair-reuse: REVALIDATE in `runtime/resume.py`, `equivalent_upstreams` in `runtime/equivalence.py`) |
 | T-162 | [Scope the dataset-contract repair refusal to the changed job](#t-162-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`) |
 | T-163 | [Measure a job's implementation identity from the modules it imports](#t-163-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`) |
@@ -671,8 +694,11 @@ until each is rewritten into the entry format when it is next touched.
   - GCC counterpart to `audit-buildenv-cpp` (`CC=gcc CXX=g++`, sanitizer runtimes, `-fanalyzer`)
     and a recorded retry on GCC when the clang build fails; needs a second native profile per
     family in `job_project_build`.
-  - Decide whether archived `audit-native` capabilities (SVF, CodeChecker) earn a bounded image;
-    retire or replace the deferred `audit-native`, `audit-codeql`, `audit-lsp-vendor` entries.
+  - SVF now has a dedicated image and producer. Its live fixture still loads an unbound catalog
+    and compares the absent `image_id`, so an installed image can be skipped. Bind that fixture
+    to the host-owned effective configuration and cover image selection offline before any
+    separately authorized live run. Decide the remaining CodeChecker/deferred
+    `audit-native`, `audit-codeql`, `audit-lsp-vendor` entries independently.
   - Share only explicit LSP payload layers; add language-server fixtures.
   - Binary analysis: a specialized capability only when BLint/Syft/Grype/Trivy fail a job contract;
     no curl-to-shell installers, no duplicated scanners.
@@ -681,11 +707,24 @@ until each is rewritten into the entry format when it is next touched.
   - ScanCode: evaluate a fixed release; compare incremental value with Syft before enabling.
   - Microsoft SBOM Tool / SBOM Assembly: stay replaced by Syft unless a contract proves a gap.
   - Document conversion: complete hashed `.deb` closure for pandoc/poppler; PDF/DOCX fixtures.
-  - `tool-report-latex`: call it from a publication job, drop `manual = true`, pin `image_id`,
-    add a pdftoppm visual check.
+  - `tool-report-latex` is already called by dossier publication; correct its stale catalog
+    purpose text rather than claiming the integration is missing. Any change to its manual
+    catalog policy and the pdftoppm visual check remains a separate decision/validation.
+    Observed image IDs belong in host bindings, not the tracked catalog.
+  - Correct `buildenv-native-toolchain`'s purpose description: Java, Android and .NET images
+    do not all inherit that image. README corrections do not change the authoritative catalog.
+  - Reconcile the cve-bin-tool maintenance builder's legacy `image`/optional `image_id` pair
+    with host-owned bindings. Its unpinned Docker path can build a missing image and skips
+    signature verification for that newly built output; document this existing commissioning
+    boundary without instructing operators to store observed IDs in tracked TOML.
   - Dagster: orchestration is a deployment concern; do not restore its archived image.
 - **Done when:** each bullet is either closed or promoted to its own T-item.
-- **Refs:** `containers/README.md`, `containers/buildenv/README.md`.
+- **Refs:** `containers/README.md`, `containers/buildenv/README.md`, T-051,
+  `containers/catalog.toml`, `tests/live/test_svf_live.py`,
+  `src/appsec_review/jobs/job_dossier_publication/job.py`,
+  `src/appsec_review/reporting/dossier_render.py`,
+  `src/appsec_review/jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`,
+  `docs/operations/signing.md`.
 
 ### T-051 — Host-local image pins: bind the observed image ID into the run
 
@@ -1013,7 +1052,10 @@ until each is rewritten into the entry format when it is next touched.
   entry points listed by residual-coverage reason.
 - **Refs:** `src/appsec_review/observability/triage_reduction.py` (`hunt_lane_claims_excluded`),
   `src/appsec_review/review/packages.py`, `docs/architecture/review-prioritization.md`.
-  Remaining work: T-073.
+  Remaining work: T-073, T-156. Completed offline formulas do not establish independently
+  labelled hunt novelty or receipt-backed surface coverage; see
+  [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md) and
+  [evaluation design](architecture/threat-driven-hunting-enhancement.md#verification-and-empirical-evaluation).
 
 ### T-069 — Ingest developer outcomes and audit dismissed leads
 
@@ -1031,7 +1073,9 @@ until each is rewritten into the entry format when it is next touched.
   the final report states actionability completeness per finding.
 - **Refs:** T-060, `src/appsec_review/observability/experiments/contracts.py` (labels),
   `docs/operations/final-report.md`.
-  Remaining work: T-076.
+  Remaining work: T-076. T-154 extends the completed random-audit mechanism with stratified,
+  population-bound sampling; it does not reopen the implemented formulas. See
+  [triage design](architecture/triage-verifier-enhancement.md#5-independent-evaluation-design).
 
 ### T-070 — Slice findings by a game threat model
 
@@ -1064,9 +1108,17 @@ until each is rewritten into the entry format when it is next touched.
   whose comments instruct the reviewer, with the outcome recorded; a documented scheduled canary
   series on a fixed corpus and configuration whose detection-rate change flags drift. The canary
   runs are user-owned.
+  The 2026-11-13 review also identifies judge dissent being projected as verifier overturn.
+  Separate those actors and use the full expected verifier/citation population, not only
+  published survivors; retain requested, dropped, resolved, admitted and counted citation stages.
 - **Done when:** the citation-resolution rate is in the run-metrics summary under unit test, the
-  injection case is keyed, and the operations doc gives the canary command.
-- **Refs:** T-065, `src/appsec_review/review/evidence.py`, `pipeline/prompt-fragments/governing-rules.md`.
+  injection case is keyed, and the operations doc gives the canary command. A judge-only dissent
+  never increments verifier overturn, and absent/failed verifier cells remain in coverage.
+- **Refs:** T-065, T-154, `src/appsec_review/review/evidence.py`,
+  `src/appsec_review/observability/findings/run_adapter.py`,
+  `pipeline/prompt-fragments/governing-rules.md`,
+  [triage review](reviews/2026-11-13-triage-verifier-review.md),
+  [triage design](architecture/triage-verifier-enhancement.md).
 
 ### T-072 — Ingest crash reports as finding evidence
 
@@ -1101,14 +1153,20 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** an adapter from accepted run artifacts (catalog path index, review package manifests,
   lane coverage) to the reviewed and unreviewed source files with their content hashes, and to the
   catalogued entry points with `reviewed`, `not_admitted` and `not_built` status. No target scan.
+  Beyond T-146's operation-only versus whole-file distinction, consume T-156 receipts to report
+  actual operation/question investigation separately from legacy package execution. Derive
+  catalogued, built and extracted states from their own accepted records, not catalog membership.
 - **Progress:** `observability/findings/coverage_adapter.py` derives reviewed source files and
   entry points from a run (2026-11-11, `a71681a1`). Covered by unit tests only; not yet checked
   against a real run. Entry points are empty on real runs until T-086 gives them a producer.
 - **Done when:** `snapshot` needs no `--units` for a run with an accepted catalog, the integration
   test asserts non-null `reviewed_units`, and `scorecard` prints entry-point coverage without an
-  operator file.
+  operator file. A successful package or same-file sibling cannot grant investigation credit to
+  an unanswered operation; unavailable historical receipt detail remains unknown.
 - **Refs:** T-060, T-068, `src/appsec_review/observability/findings/run_adapter.py`,
-  `docs/architecture/finding-metrics.md` (section 12, decision 3).
+  `docs/architecture/finding-metrics.md` (section 12, decision 3), T-146, T-151, T-156,
+  [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-074 — Wire the fix re-check to the verifier role
 
@@ -1154,11 +1212,16 @@ until each is rewritten into the entry format when it is next touched.
   the final report; corpus cases and runtime guidance for server trust in client state,
   unvalidated replication RPCs, bitstream length handling and entitlement bypass, through the
   runtime-guidance checklist.
+  Reuse T-146's delivered counted-path/remediation projection. T-150 supplies decision-basis
+  and qualified-counterevidence references to the same protected dossier; T-151 supplies
+  candidate operation context, not established attacker/ownership/deployment finding labels.
 - **Done when:** a fixture review publishes the fields, the snapshot fingerprint basis is
   `function_and_code`, the report lists what each finding is missing, and one keyed corpus case
   exists per named weakness class.
 - **Refs:** T-069, T-070, T-002, `src/appsec_review/jobs/accepted_review.py`,
-  `.claude/skills/add-runtime-guidance/SKILL.md`.
+  `.claude/skills/add-runtime-guidance/SKILL.md`, T-146, T-150, T-151,
+  [triage design](architecture/triage-verifier-enhancement.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-077 — Derive lead records with stage attribution from a run
 
@@ -1170,6 +1233,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** an adapter from the lane A lead manifest, lead accounting and claim projection (the
   inputs `triage_reduction` already verifies) and the funnel's stage vocabulary to lead records;
   lead labels from the answer key by scope; the paired figures printed beside the funnel.
+  Consume T-150's complete decision products to retain unadmitted family/scanner provenance,
+  proposal-only cap/invalid outcomes and jointly deciding actor-role sets. Judge verdicts are
+  not removal authority. Keep independent labels outside worker-readable inputs.
 - **Progress:** `observability/findings/lead_adapter.py` derives lane A lead records with
   removal-stage attribution from a run, and `scorecard --run` uses it (2026-11-11, `a71681a1`).
   Covered by unit tests only; not yet checked against a real run, and `stepwise.py system` does not
@@ -1177,7 +1243,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** unit tests build lead records from a recorded lane A document, and
   `stepwise.py system` prints true-lead retention beside false-lead removal for a keyed corpus.
 - **Refs:** T-062, `src/appsec_review/observability/triage_reduction.py`,
-  `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/triage.py`.
+  `src/appsec_review/acceptance/funnel.py`, `src/appsec_review/observability/findings/triage.py`,
+  T-150, T-154, [triage review](reviews/2026-11-13-triage-verifier-review.md),
+  [triage design](architecture/triage-verifier-enhancement.md).
 
 ### T-078 — Check the model login before a review is submitted
 
@@ -1316,15 +1384,18 @@ until each is rewritten into the entry format when it is next touched.
 
 - **State:** open
 - **Area:** review
-- **Why:** the coverage adapter (T-073) cannot name the source files of manifest `units` rows
-  that were not hunted, because those rows carry no `source_ids`, and it finds no entry points on
-  real runs, because no job assigns `surface:entry:*` tags.
-- **Scope:** record `source_ids` on every manifest unit row; either add a producer for
-  `surface:entry:*` tags or decide to read entry points from the code-graph entry-point facts, and
-  record the decision.
+- **Why:** the original adapter lacked source IDs below the hunt cutoff and a produced
+  entry-point denominator. T-146 now retains all unit source IDs and emits neutral graph-backed
+  remote-input tags, but broader source/entry classification and real-run coverage remain.
+- **Scope:** reconcile the delivered T-146 operation/fallback/source interface with accepted
+  graph entry facts; keep syntax/parser candidates a separate evidence tier. Decide the
+  authoritative entry denominator once for T-073/T-151. Remote input never establishes public
+  exposure, and source-only subjects must remain eligible without compiled evidence.
 - **Done when:** on a completed run the adapter reports reviewed and unreviewed files for every
   unit and a non-empty entry-point list for a target that has entry points.
-- **Refs:** `src/appsec_review/observability/findings/coverage_adapter.py`, T-073, T-068.
+- **Refs:** `src/appsec_review/observability/findings/coverage_adapter.py`, T-073, T-068,
+  T-146, T-151, [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-087 — Normalize crash symbols for corroboration
 
@@ -1582,11 +1653,18 @@ until each is rewritten into the entry format when it is next touched.
 
 - **State:** open
 - **Area:** topology
-- **Blocks:** T-098, T-100, T-101, T-102, T-105
+- **Blocks:** T-098, T-100, T-101, T-102, T-105, T-149
 - **Why:** dependencies are found in eight places with different record shapes, three of which never reach the merged inventory; the Freeciv catalog's dependency list was empty (walk 05). There is no one place that says what a dependency observation is or who may produce one.
 - **Scope:** define `dependency-observation/1` (name, version, how the version is known, ecosystem, purl, CPE candidates, component root, vendored flag, scope, finder id, resolving evidence); a registry of finders, each a pure function over accepted inputs returning observations and named gaps; move the existing producers behind it without changing behaviour (catalog `package.json`, Syft observations, native discovery); `normalize_dependencies` consumes only the registry's output and `job_dependency_intelligence` stays the single merge and SPDX publisher. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first. The user also asked (same date) that as many tools as possible feed the SBOM and review data.
-- **Done when:** catalog, Syft and native observations reach `normalize_dependencies` only through the registry, with unchanged output on the accepted cpp-multivuln baseline.
-- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `src/appsec_review/jobs/job_target_catalog/job.py`, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091, T-011.
+  Review refinement: separate immutable observations, physical instances and package coordinates;
+  preserve version-kind/conflict sets, source selectors, scoped relationships and inherited gaps.
+  Merge accepted artifact inventories, installed summaries and Unity metadata before deriving
+  SPDX and indexed projections, with every representation omission accounted. Preserve separate
+  copies and forge-specific repository namespaces rather than flattening matching PURLs.
+- **Done when:** catalog, Syft and native observations reach `normalize_dependencies` only through the registry, with unchanged output on the accepted cpp-multivuln baseline. Adversarial fixtures preserve distinct copies, conflicting identities and unsupported inputs; normalized/SPDX/retrieval differences have explicit projection dispositions.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `src/appsec_review/jobs/job_target_catalog/job.py`, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, T-035, T-091, T-011,
+  [dependency review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [dependency design](architecture/dependency-intelligence-enhancement.md).
 
 ### T-100 — Find dependencies declared in native build systems
 
@@ -1605,8 +1683,10 @@ until each is rewritten into the entry format when it is next touched.
 - **Blocked by:** T-099
 - **Why:** the catalog recognises Maven, Gradle, NuGet, Cargo, Go, Python, Composer and RubyGems manifests but reports a deferred parser for most of them.
 - **Scope:** take manifest and lockfile contents from Syft and osv-scanner extraction rather than writing parsers, as registry finders. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): package-manager tools that need network egress to resolve (Maven, npm and the like) are pre-authorized by the user; each use is still declared in typed configuration and recorded in the run. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
-- **Done when:** no catalog gap reads that the dependency parser is deferred for a manifest type the catalog recognises.
-- **Refs:** `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/jobs/job_evidence_collection/`, T-099, T-011.
+- **Done when:** every recognized manifest/lockfile format has bounded extraction or a truthful unsupported-input outcome; independently labelled fixtures measure instance/identity recall, preserve transitive relationships and distinguish declared constraints from installed/resolved versions. Merely removing a deferred-parser message does not establish coverage.
+- **Refs:** `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/jobs/job_evidence_collection/`, T-099, T-011,
+  [dependency review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [dependency design](architecture/dependency-intelligence-enhancement.md).
 
 ### T-102 — Find components in built binaries with a cve-bin-tool scan adapter
 
@@ -1643,10 +1723,20 @@ until each is rewritten into the entry format when it is next touched.
 - **State:** blocked
 - **Area:** scanners
 - **Blocked by:** T-009, T-099, T-103, T-104
+- **Blocks:** T-149
 - **Why:** each matcher scans its own private view (Grype over a Syft SBOM, osv-scanner per project, nothing for native or vendored code), so coverage depends on which tool happened to see a dependency. Grype is off by `tools.disable_grype` and has no database snapshot on this host.
 - **Scope:** Grype and Trivy in SBOM mode over the published SPDX, OSV by purl through the index matcher, the CPE lookup, and cve-bin-tool per built binary, all over the merged inventory; every match records the matcher, the database snapshot id and how the version was known. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): (3) native-SBOM design decision 2 is lifted: discovered native versions may be matched against vulnerability data, labelled as leads; vendored copies stay leads because they are often patched. Then `disable_grype = false`, and T-010's dedupe becomes a property of the stage. (4) Order agreed: fix the stale nightly (T-106), then the registry with the vendored and native-declaration finders (T-099, T-098, T-100), then the databases into the nightly (T-009, T-103), then this stage. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+  Review refinement: preserve source/artifact OSV and Grype package coordinates through the
+  advisory join; bind each result to an accepted instance and exact feed/comparator identity.
+  Keep scanner report, affected range, local patch applicability and reachability separate,
+  retaining negative/unknown/unsupported outcomes. The design recommends a separate
+  target-independent matching producer to avoid inventory cycles; that boundary is proposed,
+  not approved or implemented here. T-009 code and indexed OSV matching already exist; do not
+  reimplement them or infer current feed deployment from historical host observations.
 - **Done when:** one run publishes matches from every enabled matcher over the same inventory with snapshot ids, a declared-version match is labelled a lead, and Grype coverage is no longer a configured-disabled gap.
-- **Refs:** `src/appsec_review/jobs/job_evidence_collection/`, `src/appsec_review/jobs/job_artifact_security_analysis/`, `appsec-review.toml` (`[tools]`), T-010, T-013.
+- **Refs:** `src/appsec_review/jobs/job_evidence_collection/`, `src/appsec_review/jobs/job_artifact_security_analysis/`, `appsec-review.toml` (`[tools]`), T-010, T-013, T-149,
+  [dependency review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [dependency design](architecture/dependency-intelligence-enhancement.md).
 
 ### T-106 — Restart the nightly data sync and refuse stale feeds at run readiness
 
@@ -1659,21 +1749,36 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-107 — Generate a data-flow diagram and threat model from accepted run evidence
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
-- **Why:** no job in the graph produces a data-flow diagram or a threat model; the catalog only classifies documents the target supplies, and Freeciv supplies none (walk 05). The user asked on 2026-11-11 whether the jobs that should create them exist; they do not. This is the F07 row of T-059 re-cut as one job.
-- **Scope:** a design for one job, `job_threat_model_generation`, is being written by a separate session on branch `dfd-threat-model` (not merged). This entry holds the id; its scope and done-when are replaced by the design's proposed text when the user approves the design. Nothing is implemented before that.
-- **Done when:** the user has approved a design, this entry carries its scope and acceptance, and the job publishes a data-flow diagram and threat model with resolving evidence on a real run.
-- **Refs:** T-059 (F07), T-070, `docs/tasks/2026-11-11-freeciv-walk-05-target-catalog.md`, branch `dfd-threat-model`.
+- **Why:** the original Freeciv walk had no generated threat model. The registered,
+  default-disabled deterministic first slice now publishes source-cited DFD/model/evidence/view
+  artifacts, but declaration/mitigation/asset enrichment and real-run usefulness remain unaccepted.
+- **Scope:** retain the implemented accepted-input ledger, citation validation and routing-only
+  outputs. Reconcile remaining design lanes against the merged source, not the former unmerged
+  branch description. T-146 owns the delivered optional package consumer; do not create another
+  operation map or consumer. T-108 owns static deployment publication.
+- **Done when:** the remaining approved scope is explicit and a separately requested real run
+  publishes useful, resolving DFD/threat-model products with honest actor/asset/mitigation and
+  deployment gaps. Existing code/unit coverage alone does not close real-run acceptance.
+- **Refs:** T-059 (F07), T-070, T-108, T-146,
+  `src/appsec_review/jobs/job_threat_model_generation/`,
+  `docs/architecture/dfd-and-threat-model-generation.md`,
+  [hunting review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [hunting design](architecture/threat-driven-hunting-enhancement.md).
 
 ### T-108 — Publish the static deployment inventory as a job
 
 - **State:** open
 - **Area:** evidence
 - **Why:** the `appsec_review.deployment` library extracts listeners, services and relationships from deployment documents, but no job publishes them as an accepted dataset, so a threat model has no deployment facts to build on. This is the static half of the F06 row of T-059.
-- **Scope:** proposed by the same design session as T-107 on branch `dfd-threat-model` (not merged): wire the existing library into a job whose output is an accepted dataset. This entry holds the id; its scope and done-when are replaced by the design's proposed text when the user approves it.
+- **Scope:** wire the existing library into an approved typed producer and accepted dataset,
+  preserving descriptor hashes, selected deployment/variant, conflicts and unsupported-input
+  coverage. Static declarations never imply observed effective deployment. Enrichment remains
+  optional for source-only hunting; reconcile the input-matrix placeholder with the actual route.
 - **Done when:** the user has approved the design, and a run publishes the static deployment inventory as an accepted, consumable dataset.
-- **Refs:** `src/appsec_review/deployment/`, T-059 (F06), T-107, branch `dfd-threat-model`.
+- **Refs:** `src/appsec_review/deployment/`, T-059 (F06), T-107,
+  [hunting design](architecture/threat-driven-hunting-enhancement.md#existing-products-enriched-elsewhere-not-duplicated).
 
 ### T-109 — Put a hard ceiling on test runs and enforce the ten-second unit limit
 
@@ -1681,6 +1786,10 @@ until each is rewritten into the entry format when it is next touched.
 - **Area:** testing
 - **Why:** on 2026-11-11 and 12 two comparison runs of unit files took 26 to 28 minutes and one did not finish in 1,700 s. They were plain `pytest` runs, which have no limit; `scripts/run-tests.sh` has a 300 s total limit but it can be raised by option and is not the only route. The underlying cost is tests filed as unit tests that drive whole job graphs: 17 tests in one affected set took 19 to 98 s each against the 10 s rule of `AGENTS.md`, which nothing enforces. The user asked on 2026-11-12 for the harness to fault when a run exceeds about fifteen minutes.
 - **Scope:** (1) a ceiling on a wrapper run that no option can raise past fifteen minutes, ending the run as a failure with the tests still running named; (2) plain multi-file `pytest` refused or warned in favour of the wrapper; (3) the 10 s unit limit enforced: a test over it fails unless it carries an explicit, reasoned time budget, with the current offenders listed and either narrowed or moved to the integration tier. No assertion is weakened to meet a limit.
+  Stage 5 source audit (2026-11-13): `tests/unit/` now has the 10 s post-phase check, but legacy
+  paths remain outside that default and a declared reason does not prove user approval.
+  T-113's separate under-ten-minute whole-unit-suite contract also needs an enforceable route;
+  neither the configurable wrapper deadline nor the ten-minute selected-quality CI job proves it.
 - **Done when:** a wrapper run over the ceiling exits non-zero naming the unfinished tests; a unit test over 10 s without a declared budget fails; the list of tests over 10 s at the time of the change is empty or each has a recorded disposition.
 - **Refs:** `scripts/run-tests.sh`, `deploy/dagster/bin/ops_tests.py`, `tests/conftest.py`, `docs/architecture/testing.md`, `docs/processes/walk-charter.md` (section 10), T-047.
 
@@ -1855,7 +1964,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-128 — Generate the documentation inventory and enforce frontmatter and links
 
-- **State:** open
+- **State:** done (2026-11-13, docs/generated/inventory.json)
 - **Area:** pipeline
 - **Blocked by:** T-127
 - **Blocks:** T-129
@@ -1874,6 +1983,16 @@ until each is rewritten into the entry format when it is next touched.
   The link validator must distinguish links from literal Markdown examples in inline or fenced
   code: Stage 1 found the existing `tests/test_documentation.py` regex treating the program
   prompt's inline `relative/path.md#anchor` example as a missing file, unchanged from `145bcceda`.
+  User decisions on 2026-11-13: undeclared task bindings are explicit T-147 gaps rather than
+  inferred launches; historical pages and explicitly marked historical passages retain retired
+  identifiers; current claims remain checked against source; the TODO registry is planning data
+  checked by its own registry tests. The executive overview and its SVG remain authored.
+  Delivered: deterministic inventory for 47 jobs, 448 tasks and 158 dataset declarations;
+  guidance, per-job generated blocks and kind indexes; metadata on the portable document set;
+  drift, metadata, link and identifier regressions. The existing link guard now shares the
+  literal-aware parser. The focused gate passed 97 checks, with one named T-148 archive-source
+  skip and no case over ten seconds; undeclared bindings remain explicit T-147 gaps.
+  The docs-sync watermark is unchanged because this is not a full cumulative code reconciliation.
 - **Done when:** `tests/docs/test_generated_docs.py` detects regeneration differences;
   `tests/docs/test_docs_frontmatter.py` rejects missing or invalid frontmatter;
   `tests/docs/test_docs_links.py` rejects unresolved relative links and anchors; and
@@ -1886,7 +2005,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-129 — Map tools and datasets to intelligence buckets and availability matrices
 
-- **State:** blocked
+- **State:** done (2026-11-13, docs/intelligence-buckets.json)
 - **Area:** pipeline
 - **Blocked by:** T-128
 - **Blocks:** T-130
@@ -1900,16 +2019,27 @@ until each is rewritten into the entry format when it is next touched.
   datasets, stages, retrieval indices, MCP tools and role capabilities. Markdown summaries
   have at most seven columns; each empty availability cell names a gap id. Add newly found
   gaps to `docs/TODO.md` in the same commit, linking existing T-115 through T-126 where relevant.
+  Delivered: twelve primary-purpose buckets, all 32 canonical catalog tools and 156 unique
+  output kinds across 158 producer/dataset declarations, plus 204 bucket/language cells over
+  seventeen source-declared language labels. Composite outputs retain their original authority,
+  schema and protection. User decision on 2026-11-13: source-backed not-applicable states are
+  distinct from missing cells; missing or partially declared cells name T-147 or T-157.
+  These are declaration matrices, not proof of run coverage or issued worker capabilities.
 - **Done when:** `tests/docs/test_intelligence_buckets.py` rejects an unmapped tool or dataset,
   a bucket without a definition and an empty matrix cell without a gap id; every tool and
   dataset has exactly one bucket, and generated outputs pass the Stage 2 drift checks.
 - **Refs:** `docs/tasks/2026-11-13-docs-program-prompt.md` (Stage 3),
   `containers/catalog.toml`, `src/appsec_review/mcp/schema.py`,
-  `pipeline/guidance/registry.json`, T-128, T-115, T-126.
+  `pipeline/guidance/registry.json`, T-128, T-115, T-126,
+  [dependency product map](architecture/dependency-intelligence-enhancement.md#intelligence-products-and-routes),
+  [decision product map](architecture/triage-verifier-enhancement.md#1-product-and-authority-model),
+  [hunt product map](architecture/threat-driven-hunting-enhancement.md#intelligence-product-contracts-and-retrieval).
+  These mappings are provisional until this task assigns canonical buckets; they name actual
+  output kinds and artifact/index routes without blocking independent runtime implementation.
 
 ### T-130 — Author job operations pages around the generated contracts
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Blocked by:** T-129
 - **Blocks:** T-131
@@ -2113,6 +2243,362 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** `targets/` holds the nine clones at their tags; `git status` in this repository shows only `docs/TODO.md` and `docs/operations/test-targets.md` changed (plus `targets/.gitignore` if a pattern was needed); every link in the edited page resolves; the change is committed on `main` and handed to the WSL checkout, not pushed.
 - **Refs:** `docs/tasks/2026-11-13-smoke-targets-prompt.md` Stage 5; `docs/operations/test-targets.md`; `targets/.gitignore`; `tests/test_blind_target_isolation.py`.
 
+### T-146 — Make review behavior-oriented and developer-actionable
+
+- **State:** done (2026-11-13, docs/tasks/2026-11-13-behavior-oriented-review.md)
+- **Area:** review
+- **Why:** Tags and completed jobs do not establish useful findings. Prefix-biased OWASP
+  evidence, raw tag-count ranking and disconnected behavioral context can consume the review
+  budget without investigating complete, relevant security operations.
+- **Scope:** Subject-complete bounded OWASP evidence; observed graph-backed capabilities;
+  operation/boundary-oriented packages with explicit fallback; optional admitted generated-model
+  context; deduplicated opportunity ranking; truthful actionability metrics; a documented bounded
+  investigation/verification process. Preserve evidence authority and independent adjudication.
+- **Done when:** The documented implementation slices and their valuable code-level unit
+  regressions pass independently, shuffled and within ten seconds per test. Integration and
+  acceptance scenarios are authored but not executed without separate permission. Completion
+  of implementation is distinguished from the later user-owned real-run efficacy comparison.
+- **Refs:** `docs/tasks/2026-11-13-behavior-oriented-review.md`,
+  `src/appsec_review/owasp_workbench/`, `src/appsec_review/review/`,
+  `src/appsec_review/jobs/job_security_tagging/`, T-001, T-073, T-076, T-086, T-107.
+
+### T-147 — Declare exact task and dataset publication bindings for documentation
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** the Stage 2 inventory can project the typed job and dataset contracts, but most units
+  do not declare whether they launch an external tool or which model worker they select;
+  inspecting a task name or a job-level model setting is not proof of a launch or selection.
+  An existing artifact-security declaration also claims an aggregate publication with the
+  scanner-result step and schema rather than the step and schema its publisher emits.
+- **Scope:** add authoritative, independently testable task bindings at the execution definition
+  that owns them, including deterministic/internal tasks, conditional tool selection, model
+  profiles, roles, persona/stack routing, task prompts and allowed versus selected runtime skills.
+  Then project those declarations into `scripts/documentation.py` instead of maintaining a
+  parallel documentation mapping. Until then, the user-approved inventory names each missing
+  binding as this gap and links the handler; a missing binding never means no tool or model runs.
+  Do not modify frozen configuration, guidance registry or `DATASETS` as part of the docs program.
+  Observed source mismatch: `job_artifact_security_analysis/datasets.py` declares
+  `artifact_security_results` at `analyze` with `appsec-review/artifact-security-observation/1`;
+  its artifact glob also claims `accepted-analysis.json`, which `acceptance.publish_handoff`
+  writes with `appsec-review/artifact-security-analysis/1`. Separate or narrow the declarations
+  and reconcile affected typed consumers in the implementation repair, preserving actual
+  payload formats; the documentation generator retains the current declarations unchanged.
+- **Done when:** every registered unit's binding is covered by a focused test of the real
+  dispatch definition, and generated task rows distinguish exact, conditional and no-launch
+  bindings with no unknown binding silently converted to an empty success; a focused publisher
+  regression also verifies the artifact-security aggregate's actual schema, step and owning
+  declaration without running the full job or a scanner.
+- **Refs:** T-128, `scripts/documentation.py`, `src/appsec_review/runtime/units.py`,
+  `src/appsec_review/guidance/workers.py`, `docs/generated/inventory.json`,
+  `src/appsec_review/jobs/job_artifact_security_analysis/datasets.py`,
+  `src/appsec_review/jobs/job_artifact_security_analysis/job.py` (`publish`).
+
+### T-148 — Resolve historical archive citations without restoring the archive
+
+- **State:** open
+- **Area:** testing
+- **Why:** the dated container-assets review links to ignored `old/` files that are absent in
+  this checkout; its cited pre-simplification tag is also unavailable locally and on `origin`.
+  Those historical citations cannot be verified as portable relative links.
+- **Scope:** recover immutable citation destinations and provenance from an owner-supplied
+  historical source, without restoring, executing or importing archive instructions. Preserve
+  the dated review's decisions; do not invent URLs or silently exempt new broken links.
+  The docs link checks report this narrowly scoped archive coverage gap separately from
+  current and otherwise resolvable historical links.
+- **Done when:** each historical archive citation has a verified durable destination and the
+  archive-citation documentation check runs without a missing-source skip.
+- **Refs:** T-128, `docs/reviews/archived-container-assets.md`,
+  `docs/reviews/archived-container-assets.json`, `docs/reviews/container-migration.md`,
+  `tests/docs/test_docs_links.py`, `AGENTS.md` (Rebuild boundary).
+
+### T-149 — Route scoped dependency decision packets into review and account for their use
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-099, T-105
+- **Why:** inventory-only advisory facts are retrievable but not independently admitted as
+  review leads; global dependency context competes under a shared cap and loses instance,
+  matching uncertainty and build relevance before review.
+- **Scope:** implement design slice DEP-A: instance/build/component-scoped decision packets,
+  accountable matcher nominations and bounded package views using existing review/index routes.
+  Preserve identity, version, match, delivery, patch and reachability as separate dimensions.
+  Record availability, supply, read, citation and disposition without inventing model attention;
+  project coverage through the existing final gate/report. Reuse T-146 operation anchors where
+  available and T-129 mapping coordination without a taxonomy implementation blocker. Refine
+  existing T-010 through T-013 and T-098 through T-106 work from the source-backed review rather
+  than duplicating finders, matchers or feed activation. This design does not enable scanning.
+- **Done when:** each nomination yields a relevant bounded packet or a named held/duplicate/
+  unavailable outcome; distinct copies and uncertainty survive projection; package/version facts
+  cannot prove local applicability. Deterministic fixtures show no silent loss and exact
+  gate-bound coverage. Independently labelled paired evaluations of inventory recall, identity/
+  advisory precision, reviewer use, known misses and cost remain separately authorized.
+- **Refs:** [review](reviews/2026-11-13-dependency-intelligence-review.md),
+  [design](architecture/dependency-intelligence-enhancement.md),
+  `src/appsec_review/review/lead_families.py`, `src/appsec_review/review/advisories.py`,
+  `src/appsec_review/indexing/products.py`, T-129, T-146.
+
+### T-150 — Publish complete protected review decision products
+
+- **State:** done (2026-11-13, 08d50a742)
+- **Area:** review
+- **Blocks:** T-152, T-153, T-154
+- **Why:** no-claim reasons, pre-claim caps/rejections and qualified counterevidence exist in
+  separate artifacts but do not form a complete queryable decision trail or developer brief.
+- **Scope:** implement TRI-A: immutable source-bound stage records, original proposal membership,
+  separate blindness/model/evidence verification coverage and decision-basis attachments.
+  Declare closed datasets/validators/readers, then a fixed-template protected audit adapter and
+  existing dossier/gate projection. Preserve current claim states, scoring, role counts and
+  judge/PoC policy; deny blind verifiers access to prior decision narratives or labels. T-077
+  owns lead-adapter/display completion and T-076 owns broader actionability. Reference T-156
+  coverage receipts when available, never reproduce their producer. T-129 is nonblocking mapping.
+  The 2026-11-13 sync checkpoint contains only reviewed codec/schema/unit foundations:
+  no runtime enablement, output/consumer registrations, audit reads or publication wiring.
+  The full reviewed source boundary is `08d50a742aa52f0a2c574243c2d10fbb50d646fa`:
+  immutable publication, fixed-template queries, dossier/gate wiring, explicit historical
+  declaration compatibility and original-source read permissions. The final focused gate
+  passed 1,245 units; integration, acceptance and live validation were not run.
+- **Done when:** every collected lead, emitted proposal and expected cell has an exact terminal
+  trace or named gap; unadmitted provenance and counterevidence remain inspectable. Projection-only
+  fixtures preserve adjudication/score/ship/PoC decisions; scope, hash, redaction and capability
+  negative cases pass. New records do not become target evidence or independent quality labels.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md),
+  [design](architecture/triage-verifier-enhancement.md#tri-a-publish-complete-protected-decision-products),
+  [implementation and verification](architecture/triage-verifier-enhancement.md#t-150-implementation-record),
+  `src/appsec_review/jobs/job_inference_security_review/teams.py`,
+  `src/appsec_review/jobs/job_inference_security_review/stages.py`,
+  `src/appsec_review/reporting/dossiers.py`, T-076, T-077, T-129, T-146.
+
+### T-151 — Bind hunt coverage obligations to accepted operation identities
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-146, T-086
+- **Blocks:** T-155, T-156
+- **Why:** T-146 supplies operations and routing questions but not a durable per-operation
+  investigation denominator with source-bound uncertainty and complete question/omission accounting.
+- **Scope:** implement HUNT-A as a bounded projection of the landed T-146 operation/fallback
+  universe, not another operation map or generated-model consumer. Bind questions to accepted
+  source/build/graph identities; separate catalogued/built/extracted/configuration facets and
+  candidate versus established actor/resource/ownership/deployment facts. Extend package views,
+  closed schemas and declared artifact readers. T-108 remains optional; T-129 mapping is nonblocking.
+- **Done when:** every enumerated operation/fallback has an obligation or explicit applicability/
+  omission reason; unknown/clipped scope remains visible and selected questions reach existing
+  packages. Identity, bounds, stale/foreign-input, duplicate-site and fallback regressions preserve
+  source authority. Independent exposed-surface efficacy acceptance is separately requested.
+- **Refs:** [review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [design](architecture/threat-driven-hunting-enhancement.md#p1-operation-bound-surface-obligations),
+  `src/appsec_review/review/units.py`, `src/appsec_review/review/packages.py`,
+  `src/appsec_review/jobs/job_inference_security_review/datasets.py`, T-070, T-073, T-076.
+
+### T-152 — Bind decisive evidence to scoped propositions and polarity
+
+- **State:** blocked
+- **Area:** evidence
+- **Blocked by:** T-150
+- **Blocks:** T-153
+- **Why:** evidence-kind admissibility does not generally bind the exact claim proposition and
+  polarity; guard checks in relation resolution and scoring can apply different semantic tests.
+- **Scope:** implement TRI-B application-validated warrants for already commissioned structured
+  presence/build and guard/range facts. Bind subject/sink/operand/build scope and both support/
+  contradiction directions; retain requested versus effective stance and reuse one warrant in
+  adjudication and scoring. Version policy/schema/cache identities. No new proof engine, widened
+  model authority or historical-state reinterpretation; policy activation requires approval.
+- **Done when:** actual validators reject wrong-subject/build/polarity claims, treat effective
+  guards consistently, retain legitimate direct evidence and leave uncommissioned semantics
+  qualified or unresolved. Numeric conclusions require exact tool facts, not citation membership.
+  Independently labelled paired policy evaluation is designed and separately authorized.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md#g2-admissibility-is-stronger-than-citation-validity-but-not-a-full-semantic-warrant),
+  [design](architecture/triage-verifier-enhancement.md#tri-b-bind-decisive-evidence-to-scoped-propositions-and-polarity),
+  `src/appsec_review/review/evidence.py`, `src/appsec_review/review/adjudication.py`,
+  `src/appsec_review/review/scoring/factors.py`.
+
+### T-153 — Reconcile bounded evidence obligations with verified resolutions
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-150, T-152
+- **Blocks:** T-156
+- **Why:** package follow-up retains evidence requests but seals them uniformly unsatisfied,
+  preventing a verified later answer from being distinguished from unavailable evidence.
+- **Scope:** implement TRI-C as the single canonical evidence-request identity, deduplication,
+  warranted-resolution and terminal-ledger lifecycle. Preserve original submissions and exact
+  scope/receipt references; reconcile only admitted evidence within current package rounds and
+  budgets. T-156 supplies transport/delivery receipts and references these canonical outcomes:
+  served/delivered never means resolved. No second request state machine, automatic producer/
+  specialist commissioning or cross-package grants. T-156 is not a reverse prerequisite.
+- **Done when:** a resolving answer closes only its matching scoped obligation with warrant/
+  receipt references; unrelated same-predicate evidence does not. Conflicts, caps, timeouts,
+  unavailable producers and scope denials retain exact reasons. Reuse/dedup preserve origins
+  and bounds; legacy delivery-only receipts retain unknown semantic resolution.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md#g3-evidence-requests-are-retained-but-never-recognized-as-resolved),
+  [design](architecture/triage-verifier-enhancement.md#tri-c-reconcile-bounded-evidence-obligations),
+  `src/appsec_review/jobs/job_inference_security_review/teams.py`,
+  `src/appsec_review/review/ledger.py`, `src/appsec_review/review/accounting.py`.
+
+### T-154 — Audit labelled stage loss and dismissals by stratum
+
+- **State:** blocked
+- **Area:** testing
+- **Blocked by:** T-150, T-071, T-077
+- **Why:** existing resolved-lead rates and uniform dismissal samples do not establish
+  all-collected/admitted retention, rare-stratum misses or trustworthy actor attribution.
+- **Scope:** implement TRI-D on the existing metrics/audit exporter: complete population pins,
+  explicitly named denominator views, seeded strata/inclusion probabilities and weighted labelled
+  estimates. Reuse T-071 actor/citation attribution, T-077 lead records and T-067 corpus ownership.
+  Exercise current family obligations through actual compact expansion, evidence resolution,
+  independence and adjudication, while keeping proxy evaluation labelled. Preserve completed
+  T-062/T-069 formulas. No automatic canary, panel change, fix recheck or live model comparison.
+- **Done when:** independently keyed recorded cases distinguish admission loss, silence, reasoned
+  dismissal, cap/invalid/timeout and unresolved outcomes; judge dissent never counts as verifier
+  overturn. Sampling/weighting is reproducible with honest unlabelled coverage; reports pair
+  retention/removal, false confirmation/unresolved, severity, stability, coverage and known cost.
+  Canned responses prove contracts, not real-model improvement; holdout use is separately approved.
+- **Refs:** [review](reviews/2026-11-13-triage-verifier-review.md),
+  [design](architecture/triage-verifier-enhancement.md#tri-d-measure-labelled-stage-loss-and-audit-dismissals-by-stratum),
+  `src/appsec_review/observability/findings/triage.py`,
+  `src/appsec_review/observability/findings/labels.py`, `src/appsec_review/review/evaluation.py`.
+
+### T-155 — Allocate bounded hunt work fairly across surface and evidence strata
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-151
+- **Blocks:** T-156
+- **Why:** global top-N ranking and package-partition costs can favor well-instrumented
+  components; existing fair-share scheduling balances lanes, not opportunities within hunting.
+- **Scope:** implement HUNT-B: immutable versioned selection plans over T-151 questions with typed
+  component/surface/evidence strata, explicit fallback reserve and unmet-floor reasons.
+  Preserve T-146 opportunity scoring, current panels, lane-A admission and outer lane fairness.
+  Plan bounded package/question costs without silently enlarging actual job budgets. Allocation
+  policy and quality/cost margins require approval, not defaults invented from this source review.
+- **Done when:** identical inputs/settings produce identical plans; duplicate tags/templates do
+  not multiply weight. Declared floors hold when capacity suffices, otherwise omissions are
+  explicit; one unit's partitions cannot silently consume another's reserved first pass.
+  Exact lead accounting and budget limits survive. Efficacy comparison uses landed T-146 as
+  baseline and requires separate independent-label authorization.
+- **Refs:** [review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [design](architecture/threat-driven-hunting-enhancement.md#deterministic-fair-selection-under-fixed-budgets),
+  `src/appsec_review/review/units.py`, `src/appsec_review/review/teams.py`,
+  `src/appsec_review/jobs/job_inference_security_review/job.py`.
+
+### T-156 — Bind hunt investigation and omission coverage to execution receipts
+
+- **State:** blocked
+- **Area:** review
+- **Blocked by:** T-151, T-155, T-153
+- **Why:** successful execution, supplied source and per-operation investigation are different
+  observations; available receipts do not provide the complete scoped question/delivery join.
+- **Scope:** implement HUNT-C protected investigation receipts and sanitized coverage projections:
+  exact expected-question partitions, original-source delivery spans and transport/served outcomes.
+  Reference T-153 canonical request IDs, warranted resolution and ledger closure; do not reproduce
+  their lifecycle. T-150 audit reads these receipts. Complete T-073 adapter/report integration
+  with separate discovery/selection/build/extraction/investigation axes. Delivery-only records may
+  land before T-153 with resolution explicitly unknown; final integrated acceptance requires it.
+- **Done when:** unanswered questions, unrelated same-file citations, clipped/redacted subjects
+  and unserved material requests cannot earn complete investigation credit. Every expected
+  question/request has an accountable outcome; spans resolve to pinned bytes; below-cutoff,
+  partial/reused/failed and historical work retains truthful coverage. No source-only receipt
+  implies compilation, no delivered receipt implies semantic resolution, and no new finding state
+  or worker authority appears. Real hunt-yield/coverage/cost evaluation stays separately authorized.
+- **Refs:** [review](reviews/2026-11-13-threat-driven-hunting-review.md),
+  [design](architecture/threat-driven-hunting-enhancement.md#from-selection-to-actual-coverage),
+  [shared resolution design](architecture/triage-verifier-enhancement.md#25-evidence-obligation-and-resolution),
+  `src/appsec_review/review/cells.py`, `src/appsec_review/observability/findings/coverage_adapter.py`.
+
+### T-157 — Declare language and applicability metadata for intelligence matrices
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** dataset declarations do not bind outputs to languages, most producer language
+  selectors are not exposed by the typed inventory, and several tool input selectors use formats
+  or predicates rather than source-language lists. A configured producer language or an accepted file suffix cannot
+  establish per-dataset coverage or a run/package-scoped review capability.
+- **Scope:** make those boundaries explicit in authoritative producer and tool-input contracts,
+  then project them into the documentation matrices without inferring support from names or
+  prose. Retain the distinction between declared input compatibility, configured producer
+  candidates, actual publication, and issued review capabilities. User decision on 2026-11-13:
+  intentional source-backed not-applicable cells are populated states, while missing or
+  unsupported cells require a named TODO gap. Preserve protected payloads and the separate
+  OWASP store; do not grant new access merely to fill a matrix cell. Existing source declarations
+  are not changed by the documentation program.
+- **Done when:** focused tests cover each declared applicability boundary against its owning
+  selector or producer contract, every bucket/language pair is represented without guessed
+  coverage, and remaining unknown cells name an explicit accepted limit or unresolved item.
+- **Refs:** T-129, T-147, `docs/intelligence-buckets.json`,
+  `scripts/docs_matrices.py`, `src/appsec_review/runtime/datasets.py`,
+  `src/appsec_review/tool_inputs.py`, `src/appsec_review/review/capability.py`,
+  `tests/docs/test_intelligence_buckets.py`.
+
+### T-158 — Close the documented test-tier enforcement gaps
+
+- **State:** open
+- **Area:** testing
+- **Why:** the Stage 5 source audit found that the forward test contract is broader than its
+  executable guards: the unit tier checks selected process/socket/Dagster entrypoints, serial
+  explicit selection can omit the environment guard, and command flags do not prove manual
+  authorization or all four job-acceptance checks. Timing-test expectations also predate the
+  configured unit budget.
+- **Scope:** reconcile `tests/test_time_budgets.py` with the current unit/integration/live
+  defaults; cover the serial environment-guard path; establish and test the intended boundary
+  for real engines, tools and model clients without banning legitimate canned-fixture plumbing.
+  Keep the limitations of loopback/Unix sockets, child processes and imported execution aliases
+  explicit. Decide which procedural checks are host/user-owned and which gain machine-readable
+  enforcement: manual-heavy authorization, repeated shuffled/parallel verification, the
+  prohibition on hiding failures with `xfail`, and independent acceptance evidence. Do not treat
+  a nonempty exception reason, `--allow-heavy`, a passing framework check or an accepted baseline
+  as proof of the user's authorization or the independent source comparison. T-109 continues
+  to own time ceilings; T-113 owns the remaining path migration. No guards change in the docs pass.
+- **Done when:** focused positive/negative regressions establish each selected enforcement
+  boundary; policy-only checks are explicitly assigned to an accountable owner rather than
+  described as automatically enforced; the testing page's enforcement map matches the code.
+- **Refs:** T-109, T-113, T-131, `docs/architecture/testing.md`,
+  `tests/unit/conftest.py`, `tests/conftest.py`, `tests/time_budgets.py`,
+  `tests/test_time_budgets.py`, `tests/test_000_unit_environment_guard.py`,
+  `deploy/dagster/bin/ops_test_guard.py`, `deploy/dagster/bin/stepwise.py`.
+
+### T-159 — Preserve SVF module partial reasons in canonical outcomes
+
+- **State:** open
+- **Area:** graph
+- **Why:** the Stage 6 source audit found SVF module coverage retaining partial reasons while
+  the aggregate status/gaps are derived from a narrower string list. Root outcome projection
+  reads declared unit control fields, not nested scope objects or SQLite coverage, so it cannot
+  recover an omitted module reason. The detailed coverage is present; this is a mismatch with
+  aggregate accounting, not loss of all SVF evidence or a demonstrated live failure.
+- **Scope:** reproduce the module-partial/root-summary disagreement with a focused canned
+  fixture, then carry each applicable module reason and scope into canonical producer outcomes
+  without duplicating unrelated reasons or changing the closed status vocabulary. Preserve
+  useful alias records, native provenance and detailed coverage. Do not broaden this into the
+  separate conditional coverage/profile cache-identity concerns: frozen configuration and
+  admitted repair currently block the suggested bounds-only stale-return scenario.
+- **Done when:** independent fast unit cases cover a module-only partial reason, complete and
+  unavailable modules, and aggregation/publication; root coverage and scoped canonical gaps
+  agree with retained module rows without treating non-applicability as failure.
+- **Refs:** T-132, `src/appsec_review/jobs/job_svf_alias_analysis/job.py`
+  (module coverage, scope summary and aggregate return),
+  `src/appsec_review/runtime/handoff.py` (`_producer_outcome`),
+  `docs/architecture/code-intelligence.md`, `docs/architecture/runtime-interchange.md`,
+  `docs/operations/job_svf_alias_analysis.md`.
+
+### T-160 — Reconcile the advertised Python minimum with renderer syntax
+
+- **State:** open
+- **Area:** testing
+- **Why:** `pyproject.toml` advertises Python >=3.11, while `reporting/html.py` reuses the outer
+  quote inside an f-string, syntax introduced in Python 3.12. The quality baseline retains the
+  corresponding `ruff:invalid-syntax` diagnostic. The documented deployment/quality environment
+  uses 3.12, so its success does not establish compatibility with the advertised minimum.
+- **Scope:** resolve the supported-minimum decision and the affected syntax without silently
+  raising the package requirement through a documentation edit. Verify the HTML renderer and
+  affected import path with the actual lowest supported interpreter; a newer interpreter's
+  `ast.parse(feature_version=...)` is not sufficient proof for this lexical feature. Prune the
+  exact obsolete quality-baseline diagnostic only after its cause is fixed.
+- **Done when:** declared Python support, renderer syntax and setup documentation agree;
+  focused unit/syntax checks pass on the actual minimum interpreter, and the baseline does
+  not retain or broaden the resolved exception.
+- **Refs:** T-130, `pyproject.toml`, `src/appsec_review/reporting/html.py`,
+  `quality/baseline.json`, `docs/development/quality-gates.md`, `README.md`.
 ### T-161 — Revalidate unchanged descendants at dispatch instead of invalidating them at plan time
 
 - **State:** done (2026-11-13, repair-reuse: REVALIDATE in `runtime/resume.py`, `equivalent_upstreams` in `runtime/equivalence.py`)
@@ -2249,7 +2735,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   schema mismatch, and job_target_catalog is blocked on the typed-gap migration in T-055.
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
-  Next: job_debug_symbol_indexing.
+  The remaining 29-job inventory is paused for approved bounded repair waves. Wave 1a
+  (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
+  The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
+  shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
+  These are production-repair gates, not completed T-113 recertifications: original stashes
+  remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:
   job_third_party_data_sync has eight files / 24 cases (19 passed, five named prerequisite
   skips): real loopback TLS, NVD range resume and incremental pagination, reference parsers,
@@ -2335,7 +2826,7 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
 
 ### T-114 — Declare the debug-symbol decision dataset with the schema the job writes
 
-- **State:** open
+- **State:** done (2026-11-13, 9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16)
 - **Area:** binary
 - **Why:** `job_debug_symbol_indexing/datasets.py` declares the `target_decision` dataset with schema
   `appsec-review/debug-symbol-decision/1`, while `debug_symbols/contract.py` sets
@@ -2664,6 +3155,8 @@ User decision 2026-11-12: the nightly sync may reach the network for database by
 a separately authorized Dagster image rebuild, not just source reload. No images, host pins,
 deployment, nightly run, acceptance or live review are changed by the implementation task.
 
+<a id="optimize-produced-artifact-grype-without-reducing-coverage"></a>
+
 ### T-010 — Optimize produced-artifact Grype without reducing coverage
 
 Future artifact Grype work must deduplicate accepted artifacts by content hash and cache only by
@@ -2672,6 +3165,8 @@ reuse hash-verified accepted SBOMs, filter unsupported formats before launch, an
 concurrency with partitioned resumability. Telemetry must report artifact/byte throughput, avoided
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
+
+<a id="summarize-installed-dependencies-for-the-remaining-ecosystems"></a>
 
 ### T-011 — Summarize installed dependencies for the remaining ecosystems
 
@@ -2704,6 +3199,8 @@ no per-file review and no supply-chain rows.
 Update 2026-11-12 (dependency plan): the installed and resolved dependency summaries become finders behind the
 registry of T-099, in the order above. Package-manager tools that need network egress to resolve are
 pre-authorized by the user (2026-11-12).
+
+<a id="follow-ups-from-the-scanner-launch-reduction"></a>
 
 ### T-012 — Follow-ups from the scanner launch reduction
 

@@ -1,3 +1,11 @@
+---
+title: "Deterministic static-analysis evidence collection"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_security_analysis", "job_evidence_collection", "job_review_prioritization", "job_target_analysis_plan"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Deterministic static-analysis evidence collection
 
 `job_evidence_collection` is the single semantic job for the accepted narrow static tools. It
@@ -13,7 +21,7 @@ scanners to run. In Dagster's `wave1_review`, it runs after `job_target_analysis
 | secrets | Gitleaks | Any bounded cataloged worktree; history is explicitly excluded |
 | source SAST | Semgrep, Gosec, MobSFScan, ShellCheck, PHPCS, PHPStan, Psalm, Cppcheck, PMD | Cataloged source languages; Cppcheck uses a sanitized compile database or reports source-mode gaps, while PMD reports missing classpath/bytecode coverage |
 | source SAST | SpotBugs | Accepted JVM bytecode only; the scanner never compiles target source |
-| source SAST | OpenGrep | Cataloged C, C++, and Java files; runs only the SEI CERT rule pack, which Semgrep also runs |
+| source SAST | OpenGrep | Cataloged C, C++, and Java files; SEI CERT, review-signal and banned-function rules, but not the Semgrep-specific security baseline |
 | software inventory | Syft | Cataloged directory/manifests; directory, artifact, and OCI/archive coverage are distinct |
 | vulnerability matching | OSV Scanner, Grype | Cataloged manifests/SBOM plus a verified immutable local database; Grype also requires the Syft SBOM |
 | configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit Dockerfiles, typed Terraform/HCL, structurally identified CloudFormation, and GitHub workflows; arbitrary YAML is excluded. `TOOL_INPUT_SUPPORT` admits the Terraform/HCL, Dockerfile and YAML/JSON formats the Checkov adapter selects structurally, so selected workflows and CloudFormation templates are launched rather than dropped as `SKIPPED_NA`; Trivy is declared and selected for Terraform/HCL and Dockerfiles only. |
@@ -33,8 +41,10 @@ Syft/database prerequisite and launch contract; disabled coverage is never inter
 
 ## Runtime boundary
 
-The application resolves tags only through `containers/catalog.toml`, inspects the local image to
-obtain its immutable `sha256:` image ID, verifies any catalog-pinned ID, and executes that ID. It
+The recipe catalog supplies approved tools; frozen host bindings supply observed image IDs.
+The application inspects the local image, verifies its expected immutable ID and configured
+signature policy, and executes that ID. See [image-pin verification](image-pin-verification.md).
+It
 uses argv arrays and the central `containers/runtime-policy.toml`: no network, numeric non-root
 user, read-only root and target, run-owned writable scratch, all capabilities dropped,
 `no-new-privileges`, and bounded CPU, memory, PIDs, tmpfs, time, stdout, and stderr. Scanner
@@ -66,6 +76,10 @@ whose shebang names `zsh` or `fish` is never handed to ShellCheck, and `Dockerfi
 no source analyzer supports are published as `unsupported_coverage` and one named
 `unsupported-language coverage` gap. Artifact, receipt, handoff, manifest, index, and path integrity
 violations remain framework failures.
+
+An active execution-safety policy can stop at an invocation failure before its fallback gap
+publishes. The [canonical job page](job_evidence_collection.md) distinguishes those exceptions,
+originating scan dispositions, native-result retention and coverage-only output.
 
 ## Evidence and retrieval
 

@@ -1,3 +1,11 @@
+---
+title: "Debug-symbol indexing implementation"
+kind: "review"
+subsystem: "code intelligence"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Debug-symbol indexing implementation
 
 ## Result and boundaries

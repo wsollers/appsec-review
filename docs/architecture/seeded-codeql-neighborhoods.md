@@ -1,3 +1,11 @@
+---
+title: "Seeded CodeQL neighborhoods"
+kind: "architecture"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_code_graph_index", "job_codeql_analysis", "job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Seeded CodeQL neighborhoods
 
 Status: contract (2026-10-16). Extends [`code-graph-precomputation.md`](code-graph-precomputation.md)
@@ -10,7 +18,7 @@ symbols exposure are in [`seeded-neighborhoods.md`](seeded-neighborhoods.md).
 
 ## 1. Problem
 
-The whole-program graph export (`export.scopes` in `job_codeql_analysis`) evaluates every call
+The whole-program graph export (an action inside `execution.scopes` in `job_codeql_analysis`) evaluates every call
 site, sink, source, flow summary, path, guard and range of a database. That is acceptable for a
 small project and does not scale: a million-line C++ application makes the export the dominant cost
 of the review, and almost none of it is ever read, because a review only asks about the code around
@@ -33,10 +41,11 @@ CodeQL is run **from the findings outward**, not over the whole program.
    shard per scope and family) plus one **database card** per scope. The card tells a model which
    database holds what: a project may have several (language, build unit), and the model must know
    which one to ask about.
-5. Models reach the data through MCP with bounded context: `list_codeql_databases` (discovery) and
+5. Consumers reach the data through bounded retrieval tools: `list_codeql_databases` (discovery) and
    `query_codeql_neighborhood` (bounded expansion over the precomputed graph). **No MCP call runs
    CodeQL.** Anything outside the precomputed neighborhood is a named gap, never a negative
-   conclusion.
+   conclusion. Review cells request these tools through the application-authorized in-process
+   loop; external clients use MCP. See [retrieval surfaces](retrieval-surfaces.md).
 
 `mode = "whole_program"` keeps the previous behavior and is still the reference for tests and for
 small projects.
@@ -53,7 +62,7 @@ small projects.
 `seed_depth`, `seed_limit` and `mode` are part of the export identity, so changing any of them
 re-runs the export. The seed set (sorted `path,start_line,end_line`) is part of it too.
 
-## 4. Seed extraction (`job_codeql_analysis`, before `export.scopes`)
+## 4. Seed extraction (`job_codeql_analysis`, before the export action)
 
 * Source: `tool_observation` entities in the observation shards named by the plan's
   `upstream_manifests` (read with `ShardSet(...).entities(shards, kinds=("tool_observation",))`),
@@ -62,7 +71,9 @@ re-runs the export. The seed set (sorted `path,start_line,end_line`) is part of 
   `rule_of` and `normalize_reported_severity` give the ledger fields.
 * Mapping: the path is mapped to the database source root of each scope (scope root plus the
   accepted file list); a seed is assigned to every scope whose accepted files contain the path.
-  The export CSV carries the database-relative path (`File.getRelativePath()`).
+  The export CSV carries the database-relative path. C/C++ uses `GraphExport.sourcePath`, which
+  excludes paths matching `CMakeFiles/` so configure-time compiler probes do not become accepted
+  project-source graph facts; the same path rule governs seed resolution.
 * Normalization: a seed is the pair of lines `[start_line, end_line]` of the location (a point has
   `start_line == end_line`). Duplicates collapse. Order is deterministic (path, start, end). When
   more than `seed_limit` distinct seeds exist the highest severity wins, ties broken by path and
@@ -166,7 +177,7 @@ Arguments: `database` (required card identity); exactly one of `seed` (a ledger 
 (`callers` | `callees` | `both`, default `both`); `depth` (default and maximum
 `min(card.seed_depth, MAX_TOOL_DEPTH)`); `limit` (max `MAX_TOOL_LIMIT`); `include` (subset of
 `calls`, `sinks`, `entry_points`, `guards`, `ranges`, `paths`, and the producer extras `flow`,
-`diagnostics`, `symbols`; default `["calls", "sinks"]`). The producer extras read the scope's
+`diagnostics`, `symbols`, `cpg`; default `["calls", "sinks"]`). The producer extras read the scope's
 `producer_neighborhood` shard and are specified in
 [`seeded-neighborhoods.md`](seeded-neighborhoods.md) section 9.
 Returns the call closure from the subject over the stored `call_site` relation, with the requested

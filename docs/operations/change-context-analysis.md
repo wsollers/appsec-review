@@ -1,3 +1,11 @@
+---
+title: "Change-context analysis operations"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_change_context_analysis", "job_source_history_analysis", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Change-context analysis operations
 
 `job_change_context_analysis` turns accepted source history plus optional review, deployment, and
@@ -121,6 +129,9 @@ The job reruns when its configuration (including export pins) or any accepted up
 changes. Failed Git executions are retriable on resume. Deterministic gaps (disabled sources,
 unpinned or mismatched exports, no time zone, truncated or shallow lifetime history) persist until
 configuration or inputs change. Use `--force-from job_change_context_analysis` in the direct graph
-to rebuild only this job; do not edit accepted pointers or delete shards.
+to force this producer and invalidate its semantic downstream closure; it does not promise that
+only this job runs. Do not edit accepted pointers or delete shards. The
+[canonical job page](job_change_context_analysis.md#resume-and-invalidation) distinguishes
+configuration/upstream invalidation from the absence of a live export/history freshness probe.
 Settings and export-pin changes require a new run: `--force-from` does not replace an existing
 run's frozen resolved configuration.

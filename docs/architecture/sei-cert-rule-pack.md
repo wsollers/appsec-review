@@ -1,3 +1,11 @@
+---
+title: "SEI CERT rule pack"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # SEI CERT rule pack
 
 `rules/sei-cert/` is a portable Semgrep CE / OpenGrep rule pack mapped to the SEI CERT C, C++,
@@ -141,16 +149,22 @@ resolves. Raw stdout/stderr and the result are written with SHA-256 identities t
 
 `job_evidence_collection` runs the pack through its existing adapter boundary:
 
-- `tool-semgrep` loads the Semgrep baseline and the SEI CERT rules; `tool-opengrep` (its own pinned
-  image) loads only the SEI CERT rules and is scoped to C, C++, and Java files.
+- `tool-semgrep` loads its security baseline, review-signal and banned-function rules plus the
+  SEI CERT pack. `tool-opengrep` (its own pinned image) loads SEI CERT, review-signal and
+  banned-function rules for its selected C, C++, and Java inputs, not the Semgrep-specific baseline.
 - Before either runs, the job verifies the rule files against `pack.lock.json` and mounts them
   read-only at `/rules-sei-cert`; a mismatch makes the tool `BLOCKED` with an explicit gap.
-- Engine errors and skipped targets become coverage gaps (the terminal status is `PARTIAL`), and
-  each record keeps the canonical rule ID, its `rule_mapping` (CERT identifier, URL, coverage
+- Engine errors and unsupported parsing remain coverage gaps; declared no-applicable-rule/language
+  skip reasons are separately recorded as `SKIPPED_NA`, not failed coverage. Each
+  record keeps the canonical rule ID, its `rule_mapping` (CERT identifier, URL, coverage
   status, CWE), and the cataloged source file hash. The tool identity records the pack's
   `rule_files_sha256` and `tree_sha256`.
 - Every applicable run carries the limitation that only the implemented subset is evidenced and
   that an absence of findings is not CERT conformance.
+
+See the [canonical evidence-collection page](../operations/job_evidence_collection.md) for the
+current scanner boundary and [generated rule-pack coverage](../../rules/sei-cert/COVERAGE.md)
+instead of treating the pack's implementation status as target conformance.
 
 `rules/cpp-cert/` remains the CodeQL and CodeChecker crosswalk; it references pack rule IDs and no
 longer contains Semgrep rules.

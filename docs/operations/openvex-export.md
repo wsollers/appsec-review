@@ -1,3 +1,11 @@
+---
+title: "OpenVEX findings export"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_openvex_export"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OpenVEX findings export
 
 **Automatic local export at
@@ -142,9 +150,10 @@ detected credentials and unresolved template markers are errors even when disabl
 Nonblank author/action are checked when enabled even if no findings will be exported;
 empty repository remains valid automatic mode. Text is preserved exactly, not silently redacted or rewritten.
 Ordinary LF/tab formatting in action text is allowed; executable markup is not.
-Secret detection cannot replace operator review. Exporter implementation identity is declared
-centrally as `review_policy.releases.job_openvex_export` (checked-in value
-`openvex-export-2`), not inferred from installed files or model output.
+Secret detection cannot replace operator review. The exporter tooling label is declared centrally
+as `review_policy.releases.job_openvex_export` (checked-in value `openvex-export-2`).
+Runtime implementation/checkpoint identity separately combines measured source provenance with
+configured labels; the label is not a substitute for the measured release.
 
 The default action requests review and validation; it claims neither that a fix exists nor
 that remediation succeeded. Explicit advice/author overrides remain the operator's responsibility.
@@ -329,9 +338,9 @@ limitations into unsupported OpenVEX properties.
 statements/bytes, empty results, failures, reuse and unavailable observations. Runtime timing
 belongs in telemetry, not deterministic export artifacts. A completion event or a file on disk
 does not prove acceptance; the runner's accepted handoff is authoritative. The ordinary runtime
-metrics snapshot precedes `HANDOFF_ACCEPTED`; a later job snapshot or
-`appsec-review metrics --run-id <id>` refreshes accepted semantic counts. A successful export
-can therefore be awaiting reconciliation in its initial summary, not an accepted zero.
+metrics snapshot is refreshed by run-level drivers and standalone launch finalization, not every
+job publication. A mid-run summary can lag acceptance; `appsec-review metrics --run-id <id>`
+refreshes accepted semantic counts. An older missing-acceptance summary is not an accepted zero.
 
 Latest state/`latest_accepted` requires current authority through `load_export`; cumulative
 semantic counters independently reverify historical accepted bundles through

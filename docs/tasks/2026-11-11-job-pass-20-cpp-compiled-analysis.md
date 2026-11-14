@@ -1,3 +1,11 @@
+---
+title: "Job pass 20: preserve project-relative Infer observations"
+kind: "task"
+subsystem: "code intelligence"
+status: "historical"
+jobs: ["job_cpp_compiled_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Job pass 20: preserve project-relative Infer observations
 
 This T-057 repair follows nineteen individually checked and accepted jobs in the

@@ -1,3 +1,11 @@
+---
+title: "Target acquisition"
+kind: "operations"
+subsystem: "target acquisition and build"
+status: "current"
+jobs: ["job_image_pin_verification", "job_model_connectivity", "job_review_intake", "job_target_acquisition", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Target acquisition
 
 A review **system** is composed of one or more **components**, because one reviewed system can live
@@ -27,9 +35,10 @@ Two entry points share one engine (`acquire_system`):
 
 Implementation: `src/appsec_review/target_acquisition/` and
 `src/appsec_review/jobs/job_target_acquisition/`. Configuration:
-`src/appsec_review/config/target_acquisition.py`. Tests: `tests/test_target_acquisition.py`. These
-use local Git repositories with nested submodules, a fake `p4`, and loopback review-API servers. No
-test uses the network.
+`src/appsec_review/config/target_acquisition.py`. Current test selectors are maintained on the
+[canonical job page](job_target_acquisition.md#test-selection). Fixture coverage uses local Git
+repositories, fake Perforce and loopback review-API servers rather than live provider services;
+loopback HTTP is still network use.
 
 ```mermaid
 flowchart LR
@@ -120,11 +129,19 @@ revision binding, and coverage.
 
 The gate records `target-acquisition-plan.json`, `target-acquisition-result.json` (per-component
 status, action, acquisition id and manifest hash) and a hash-checked copy of the system manifest
-(`system-manifest.json`) in its attempt directory. A failed component is a named gap and the run
-completes with gaps; when no component is available, the gate fails the run. Without a requested
+(`system-manifest.json`) in its attempt directory. A failed component is a named gap and the gate
+can publish partial acquisition when another component is available; this does not establish
+that downstream review jobs will complete. When no component is available, the gate fails the run. Without a requested
 system (a `--target` run) the gate records `NOT_REQUESTED` and changes nothing.
 `jobs.job_target_acquisition.settings.enabled = false` removes the gate from every graph, and
 `--system` is then refused.
+
+The [generated dataset contract](job_target_acquisition.md#published-dataset-declarations)
+distinguishes the plan, result, optional exact-byte system-manifest copy and final handoff.
+The plan/result/final payload schema is `appsec-review/target-acquisition-job/2`; the copied
+system manifest keeps `appsec-review/target-system-acquisition/1`. This declaration split
+changes accounting, not payload writers or intake's external schemas, and grants no new
+consumer read authority for those internal artifacts.
 
 ## Run
 

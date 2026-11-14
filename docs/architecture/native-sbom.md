@@ -1,4 +1,14 @@
+---
+title: "Native vendored dependency discovery and SPDX enrichment"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "historical"
+jobs: ["job_artifact_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_language_build", "job_target_catalog"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Native vendored dependency discovery and SPDX enrichment
+
+> Current subsystem view: [Scanners and evidence collection](scanners-and-evidence-collection.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
 
 ## Status, scope, and decisions
 

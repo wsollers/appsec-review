@@ -1,7 +1,19 @@
+---
+title: "Shared native toolchain"
+kind: "operations"
+subsystem: "images and deployment"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Shared native toolchain
 
-Every language build environment compiles C and C++ with one toolchain: node-gyp addons, phpize
-extensions, setuptools C extensions, cgo, clang `--target=wasm32` and direct native builds.
+The C/C++, Go, Python, PHP, Rust/WebAssembly and Node/TypeScript build environments share one
+C/C++ toolchain: node-gyp addons, phpize extensions, setuptools C extensions, cgo,
+clang `--target=wasm32` and direct native builds. Java, Android and .NET use separate bases.
+The catalog's purpose text still says every language environment inherits this base; correcting
+that metadata is tracked by
+[T-050](../../../docs/TODO.md#t-050-container-catalog-deferred-acceptance-work).
 
 It also carries the build drivers every family may meet (T-058): Autotools 2.71, libtool 2.4.7,
 CMake 3.28, Ninja 1.11, Meson 1.3 and pkg-config. A Go module with cgo + CMake, a Python package
@@ -49,11 +61,11 @@ without supported compiler closure remains blocked; target labels and this READM
 
 ## Why a base image
 
-All family build environments (C/C++, Go, Python, PHP, Rust/WebAssembly, and Node) are Ubuntu 24.04
+These six family build environments (C/C++, Go, Python, PHP, Rust/WebAssembly, and Node) are Ubuntu 24.04
 images on the digest-pinned `base-ubuntu` boundary. A shared distribution makes a base image the
 simplest single definition: the toolchain layer is built once, stored once on disk, and every family
-image inherits exactly the same compiler files. The manifest exists for an image that must keep a
-different `FROM` (for example an upstream language image on Ubuntu 24.04); it still installs the
+image in that set inherits exactly the same compiler files. The manifest exists for an image that
+must keep a different `FROM` (for example an upstream language image on Ubuntu 24.04); it still installs the
 same pins and runs the same check.
 
 The base contains no language-specific runtime or analysis framework. LLVM symbol readers are

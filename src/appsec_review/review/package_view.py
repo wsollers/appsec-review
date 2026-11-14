@@ -1,4 +1,4 @@
-"""The model-facing view of a review package (``package-view/4``, review-protocol-v2.md section 4).
+"""The model-facing view of a review package (``package-view/5``, review-protocol-v2.md section 4).
 
 The stored package is hash-pinned and keeps every identity and every gap. A review cell is shown a *view* of
 it, built at cell time and never stored as an identity: labelled sections (``L`` lead, ``S`` source, ``K`` sink,
@@ -37,7 +37,7 @@ from appsec_review.review.schemas import VIEW_SCHEMA_FILE, validate as validate_
 from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
-VIEW_RULE = "appsec-review/package-view/4"
+VIEW_RULE = "appsec-review/package-view/5"
 GAP_VIEW_RULE = "appsec-review/package-gap-view/1"
 PROTOCOL = "review-protocol/2"
 MAX_INLINE_GAPS = 12
@@ -49,7 +49,7 @@ SANITIZED_KEYS = frozenset({"package_id", "manifest_sha256", "input_fingerprint"
 DECLARATION_KINDS = frozenset({"CXXRecordDecl", "RecordDecl", "EnumDecl", "TypedefDecl", "TypeAliasDecl",
                                "ClassTemplateDecl", "ClassDecl", "StructDecl"})
 # Sections trimmed first when the view exceeds its byte budget; the lead, source and sinks are never trimmed.
-TRIM_ORDER = ("other", "tags", "memory", "corroboration", "callees", "callers", "flows", "entries", "guards",
+TRIM_ORDER = ("other", "tags", "model", "memory", "corroboration", "callees", "callers", "flows", "entries", "guards",
               "ranges")
 _FILE_ROWS = ("gaps.jsonl", "corroborating_findings.jsonl")
 
@@ -200,6 +200,9 @@ class _Builder:
 
     def source_rows(self, leads: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
         """The lead's function span and the declarations of the types it mentions, plus the gaps found."""
+        operation = (self.package.get("scope") or {}).get("operation")
+        if self.package.get("kind") == "hunt" and operation:
+            return self.operation_source_rows(operation)
         if self.package.get("kind") != "finding_lead" or len(leads) != 1:
             return [], []
         lead = leads[0]
@@ -229,6 +232,7 @@ class _Builder:
                         if gap:
                             gaps.append(gap)
                 return rows, gaps
+
         if function and function.get("path") == path and function.get("file_sha256") not in (None, location["file_sha256"]):
             gaps.append("the function's file changed after package assembly; its extent is not shown")
             function = None
@@ -254,6 +258,22 @@ class _Builder:
             if gap:
                 gaps.append(gap)
         return rows, gaps
+
+    def operation_source_rows(self, operation: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+        located, reason = self.source(operation["source_id"])
+        if located is None:
+            return [], [f"operation source unavailable: {reason}"]
+        location, lines = located["location"], located["lines"]
+        first, last = operation["start_line"], operation["end_line"]
+        if (location["path"] != operation["path"] or location["file_sha256"] != operation["file_sha256"]
+                or not 1 <= first <= last <= len(lines)):
+            return [], ["operation anchor differs from accepted source; no excerpt is shown"]
+        end = min(len(lines), last + WINDOW_LINES, first + self.limits.max_source_lines - 1)
+        start = max(1, first - min(WINDOW_LINES, max(0, self.limits.max_source_lines - (end - first + 1))))
+        row = self._span(operation["source_id"], operation["path"], operation["file_sha256"], lines,
+                         start, end, "cited_source", end < last)
+        self.locator_paths.add(operation["path"])
+        return [row], ["Operation source is a bounded display window, not complete control or whole-file proof."]
 
     def control_source_rows(self, assessment: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
         """Cited source is context for an OWASP interpretation, never a location of the conclusion."""
@@ -449,7 +469,8 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         "callees": [dict(item) for item in nb.get("callees", ())], "flows": [dict(item) for item in nb.get("flows", ())],
         "entries": [dict(item) for item in nb.get("entries", ())], "memory": memory,
         "corroboration": [dict(item) for item in nb.get("corroboration", ())],
-        "tags": builder.tags(tag_refs), "other": other}
+        "tags": builder.tags(tag_refs), "other": other,
+        "model": list((scope.get("operation") or {}).get("model_context", ()))}
 
     # Gaps: material ones inline (bounded), everything else in the hash-referenced file.
     terms = {str(item) for item in builder.locator_paths} | {lead["ref"] for lead in leads} | neighborhood_refs
@@ -527,7 +548,7 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         dropped = {key: value for key, value in omitted.items() if value}
         if dropped:
             gap_texts.append("view byte budget: omitted " + ", ".join(f"{key}={value}" for key, value in sorted(dropped.items()))
-                         + "; the rows remain reachable with expand")
+                         + "; evidence rows remain reachable with expand; routing context remains in the stored package")
         material_rows = []
         for item in gap_texts:
             marker = label("X", None)
@@ -557,6 +578,14 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
             "graph_families": list((package.get("retrieval") or {}).get("graph_families", ())),
             "truncation": package.get("truncation"),
         }
+        operation = scope.get("operation")
+        if operation is not None:
+            document["scope"]["operation"] = {
+                "authority": "routing_context", "path": operation["path"],
+                "lines": [operation["start_line"], operation["end_line"]],
+                "questions": list(operation["questions"]), "limitations": list(operation["limitations"]),
+                "model_context_count": len(operation["model_context"]), "model_context": rows["model"],
+            }
         return document, labels, files
 
     while True:

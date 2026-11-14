@@ -1,3 +1,11 @@
+---
+title: "Third-party data synchronization"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_review_data_indexing", "job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Third-party data synchronization
 
 `job_third_party_data_sync` is the Dagster-independent runtime job that refreshes external reference
@@ -194,7 +202,7 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   impacts per consequence and 128 characters per term. Terms are whitespace-normalized and
   deduplicated, and `consequence_truncated_weaknesses` counts weaknesses that were cut. The
   inference review derives each claim's `impact_class` from these rows
-  (`cwe-impact-derivation/1`). A `mitre-index/1` snapshot has no consequences, so no impact class
+  (`cwe-impact-derivation/1`). A <!-- historical:begin -->`mitre-index/1`<!-- historical:end --> snapshot has no consequences, so no impact class
   can be derived until `mitre_sync` runs again.
 - Each MITRE source may carry an optional `sha256` pin; a downloaded file that does not match fails
   the fetch. Without a pin the hash is recorded but not verified. The ATT&CK and CAPEC sources are
@@ -205,8 +213,12 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   identical content yields the same content-addressed snapshot.
 
 Feed publications are immutable snapshot directories. A manifest hashes every published file, and
-`current.json` advances atomically only after full validation. A failed refresh leaves the prior
-last-known-good pointer unchanged.
+`current.json` advances atomically after that snapshot's publication checks. Failures before this
+commit leave the prior pointer unchanged; later verification or global-metadata failure can occur
+after a valid snapshot was committed. Publication is per feed, not one rollback transaction across
+the job's independent branches. Inspect exact snapshot/receipt identities after a failed job rather
+than assuming every pointer stayed unchanged. The
+[canonical producer page](job_third_party_data_sync.md#process) separates these boundaries.
 
 ## Per-run pinning and freshness
 

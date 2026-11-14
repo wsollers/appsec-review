@@ -1,187 +1,82 @@
-# Architecture navigation
+---
+title: "Architecture index"
+kind: "generated"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 
-Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is navigation only.
+<!-- generated from: document frontmatter by scripts/generate-docs.py; do not edit -->
+# Architecture index
 
-- [`testing.md`](testing.md) — test tiers and their collection boundary, the unit harness
-  (production-sizing guard, timing table, shuffle, xdist), unit and higher-tier standards, and the
-  working loop.
-- [`bounded-acceptance.md`](bounded-acceptance.md) - dependency-ready authentic producer stages,
-  strict post-cleanup publication detachment, invocation-specific custody, private readers,
-  telemetry origin, qualified bounded exhaustive series, revision-bound warm evidence and explicit gaps;
-  [operator guide](../operations/bounded-acceptance.md).
-- [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
-- [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
-- [`deployment-image-and-source-mount.md`](deployment-image-and-source-mount.md) — tooling-only Dagster image, read-only source mount, launch-time source identity, per-launch module signing and the no-rebuild repair cycle.
-- [`bounded-worker-execution.md`](bounded-worker-execution.md) - shared model execution, typed
-  failures/replay, atomic budget reservations, active timing and compatibility boundaries.
-- [`job-interchange.md`](job-interchange.md) — versioned job envelopes, outcomes, native-result
-  references, observation metadata, offline schema, identity boundaries, and migration.
-- [`build-environments-and-execution-capture.md`](build-environments-and-execution-capture.md) —
-  shared and project-derived build images, conditional capture control design, the pinned
-  `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
-- [`build-topology-and-iterations.md`](build-topology-and-iterations.md) - evidence-qualified
-  historical topology discovery, the initial Windows/canonical WSL source publication and
-  shared-workspace producer graph, registered bounded iterations, detached recipe recovery,
-  restoration, and retention; deployment and live acceptance remain unestablished.
-- [`../operations/build-environment-analysis.md`](../operations/build-environment-analysis.md) -
-  bounded static environment declarations, authoritative availability and proposal/3 feedback;
-  declarations are advisory, not native execution proof.
-- [`../operations/language-build.md`](../operations/language-build.md) — global registered build
-  iterations, family adapters, protected provenance, recovery CLI, checkpoints and workspace retention.
-- [`native-build-output-discovery.md`](native-build-output-discovery.md) — native build-layout
-  discovery (CMake, Meson, Ninja, MSBuild, vcpkg, Conan, execution capture), dependency-tree
-  classification, and named `[build_outputs]` exclusions; implemented, with implementation notes.
-- [`../operations/artifact-security-analysis.md`](../operations/artifact-security-analysis.md) — generic bounded security analysis of accepted produced artifacts.
-- [`engineering-security-signals.md`](engineering-security-signals.md) — end-to-end Clang,
-  coverage, profile hotness, dependency identity and exposure, OpenSSF Scorecard, provenance,
-  handoff, and downstream-consumer architecture.
-- [`clang-static-analysis.md`](clang-static-analysis.md) — Clang-Tidy and Clang Static Analyzer over accepted C/C++ compile scopes.
-- [`test-coverage-ingestion.md`](test-coverage-ingestion.md) — bounded LCOV, Cobertura, JaCoCo, and LLVM coverage normalization and source binding.
-- [`profile-data.md`](profile-data.md) — bounded folded-stack, perf-script, Callgrind, and LLVM sample-profile ingestion with context-only hotness ranks.
-- [`debug-symbol-indexing.md`](debug-symbol-indexing.md) — run-selected Clang/DWARF and MSVC/PDB evidence, explicit workflow routing, bounded symbol queries, and test-first acceptance.
-- [`dependency-intelligence.md`](dependency-intelligence.md) — declared, SBOM, linker, loader, and metadata dependency resolution with OpenSSF Scorecard context.
-- [`native-sbom.md`](native-sbom.md) — bounded vendored/header-only discovery, evidence-backed identity claims, SPDX 2.3 enrichment, and metric correctness.
-- [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
-- [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
-- [`finding-metrics.md`](finding-metrics.md) — finding quality: triage effectiveness, usefulness, corpus correctness, stability, fix tracking, coverage, developer outcomes and crash-report ingestion; what is implemented and what is open.
-- [`../operations/finding-metrics.md`](../operations/finding-metrics.md) — the finding snapshot, scorecard, crash ingestion and audit-sample commands.
-- [`../operations/telemetry-report.md`](../operations/telemetry-report.md) — the end-of-review telemetry LaTeX/PDF rollup, one per run.
-- [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.
-- [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
-  runtime skills: which consumer reaches the data how.
-- [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
-- [`owasp-control-workbench.md`](owasp-control-workbench.md) — pre-hunt OWASP flow/diagram, full pinned
-  catalogs versus four Python procedures, evidence custody, blinded review and provisional downstream context.
-- [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — faceted, basis-qualified security
-  tag vocabulary, crosswalk, and tag-cloud rollup produced by `job_security_tagging`.
-- [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
-- [`source-history-analysis.md`](source-history-analysis.md) — Git and GitHub history instability
-  signals for churn-led review prioritization; Perforce remains planned.
-- [`../operations/source-history-analysis.md`](../operations/source-history-analysis.md) — history
-  job configuration, GitHub enrichment, image build, and recovery.
-- [`change-context-analysis.md`](change-context-analysis.md) — review-speed, deployment-proximity,
-  scope-sprawl, repeated-repair, test-churn, and ownership signals with a review-priority index.
-- [`../operations/change-context-analysis.md`](../operations/change-context-analysis.md) —
-  change-context sources, export pinning, configuration, and retrieval.
-- [`../operations/target-acquisition.md`](../operations/target-acquisition.md) — hash-pinned,
-  parallel acquisition of a review system's components (Git by default with recursive submodules,
-  Perforce, GitLab/Gerrit/Azure DevOps review exports) into `targets/<system>/` by the
-  `job_target_acquisition` gate before intake, and the manifests intake records.
-- [`review-prioritization.md`](review-prioritization.md) — function-level cyclomatic and cognitive
-  complexity, import coupling, boundary/privilege/suppression heuristics, CodeQL source-to-sink
-  paths, and the LLM Prioritization Score.
-- [`../operations/review-prioritization.md`](../operations/review-prioritization.md) — prioritization
-  configuration, outputs, retrieval examples, and coverage limits.
-- [`seeded-codeql-neighborhoods.md`](seeded-codeql-neighborhoods.md) — CodeQL graph export seeded
-  from finding locations to a configured depth, the per-database card, and the
-  `list_codeql_databases` / `query_codeql_neighborhood` MCP tools (phase 3 of the code graph).
-- [`seeded-neighborhoods.md`](seeded-neighborhoods.md) — the seeded rule for the Clang AST/IR,
-  Clang-Tidy/Static Analyzer and CPG producers, the shared seeding module, the card's `producers` list
-  and the flow, diagnostics and symbols exposure.
-- [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
-- [`../SEI-CERT.md`](../SEI-CERT.md) — SEI CERT coverage overview, official-standard links, and status totals.
-- [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md) — SEI CERT Semgrep/OpenGrep rule pack, CERT
-  mapping statuses, portability constraints, and evidence integration.
-- [`evidence-sources-and-dataflow-retrieval.md`](evidence-sources-and-dataflow-retrieval.md) — input
-  inventory, authority classes, precomputed dataflow, model-facing formats, MCP tools, and job flow.
-- [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
-  route and boundary analysis, inference access, and the finding handoff design.
-- [`binary-decompilation.md`](binary-decompilation.md) — pre-run Ghidra decompilation of third-party
-  binaries: inputs, the hash-addressed publication store, gaps, review intake and the
-  `job_binary_evidence_indexing` shards a review cites, and the known-binary efficacy comparison.
-- [`../operations/binary-decompilation.md`](../operations/binary-decompilation.md) — registering a
-  binary, starting and verifying a decompilation, failures, and the efficacy command.
-- [`telemetry.md`](telemetry.md) — structured event and redaction design.
-- [`windows-native-analysis-vm.md`](windows-native-analysis-vm.md) — proposed Windows-native analysis isolation.
-- [`windows-host-runner.md`](windows-host-runner.md) — native Windows host build runner (scripts under `deploy/windows/`).
-- [`inference-security-review.md`](inference-security-review.md) — near-terminal red/blue/verification,
-  evidence-qualified adjudication, independent scoring, benign proof-of-trigger, attack-chain, and
-  quorum design.
-- [`review-package-contract.md`](review-package-contract.md) — versioned finding-lead, scanner hunt, and document hunt
-  package inputs, membership gates, retrieval scopes, and implementation dependencies.
-- [`red-discovery-output.md`](red-discovery-output.md) — red-pool proposal, taint-path, chain-seed,
-  evidence, and lead-accounting contract.
-- [`review-protocol-v2.md`](review-protocol-v2.md) — the model-facing layer of the review: labelled
-  package v2 with embedded neighborhood facts, retrieval and `expand`, compact red, blue and verifier
-  answers, and how stances become ledger states.
-- [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
-  `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
-- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — delivered source for
-  PoC publication, evidence-qualified attack chains, remediation planning and assurance-labelled
-  validation, with one final gate after all producers; preserves compile-only PoC policy.
-- [`dossier-data-inventory.md`](dossier-data-inventory.md) — source-verified dossier input, query,
-  index/shard, producer, dataset visibility and provenance inventory; available evidence versus
-  admissibility, missing capabilities and the completion architecture change map.
-- [`../operations/dossier-publication.md`](../operations/dossier-publication.md) — implemented protected
-  per-confirmed-finding and per-PoC-outcome dossier publication before the final gate,
-  retained JSON/LaTeX/PDF/receipts, nonexecution assurance and render-gap behavior.
-- [`../reviews/evidence-completion-documentation-inventory.md`](../reviews/evidence-completion-documentation-inventory.md) —
-  documentation inventory/reconciliation record, source baselines, outstanding implementation
-  details and known target-link check baseline.
-- [`../operations/remediation.md`](../operations/remediation.md) — confirmed-only exact patch
-  planning, safe regression specifications, bounded nonexecuting native syntax validation,
-  protected receipts, automatic new-run defaults and remaining acceptance gaps.
-- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
-  compile-only test/control functions, immutable protected attempt files, enabled new-run pre-gate
-  ordering and explicit authenticated manual admission for frozen disabled runs.
-- [`openvex-export.md`](openvex-export.md) — default-on standalone affected-only deterministic
-  local OpenVEX generation/validation, truthful tool author and accepted-snapshot namespace,
-  immutable overrides, protected evidence companion,
-  certified gate `/2` reader/verifier/projector and telemetry; gate-only report preserved,
-  exact verification and policy-change landing tracked separately.
-- [`../operations/openvex-export.md`](../operations/openvex-export.md) — no-setup defaults and explicit opt-out/overrides,
-  certified-gate dataflow and independent post-gate outputs, export-status diagrams,
-  accounting, privacy, metrics refresh and remaining validation limits.
-- [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
-  query design.
-- [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
-  strategy: CodeQL-first producers with C/C++ cross-checks, the `graph` index and
-  `query_code_graph` tool, fact families and R3 admissibility, job topology, language rollout,
-  and the parallel implementation and test plan (implemented through C9 for C/C++, offline-verified;
-  record in [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md);
-  operations in [`../operations/code-graph-index.md`](../operations/code-graph-index.md)).
-- [`svf-alias-producer.md`](svf-alias-producer.md) — SVF points-to cross-check producer (opt-in):
-  pinned `tool-svf` image, `job_svf_alias_analysis`, and `svf-cross-check/1` rules for indirect
-  calls and guard operand aliasing, a memory-object accessor index, and memory and caller context in
-  C/C++ finding-lead packages, with depth and fan-out as TOML tunables (operations in
-  [`../operations/svf-alias-analysis.md`](../operations/svf-alias-analysis.md)).
-- [`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) — proposed
-  `query_code_graph` modes `aliases`, `slice_backward`/`slice_forward`, `type_layout` and
-  `buffer_bounds` over precomputed CodeQL and SVF facts, the internal `control_flow` family and
-  sink CFG context, and why no raw CFG mode is added (design only, not implemented); the detector
-  coverage checklist is in [`../reviews/detector-coverage-checklist.md`](../reviews/detector-coverage-checklist.md).
-
-Operations pages not listed above:
-
-- [`../operations/model-profiles.md`](../operations/model-profiles.md) — the `dev` and `prod` runtime profiles: selection, the closed-allowlist `profiles/prod.toml` layer, and the effect on fingerprints and the model contract.
-- [`../operations/inference-security-review.md`](../operations/inference-security-review.md) — inference review model selection and upgrade, capacity overlay, and outcomes.
-- [`../operations/wave1-review.md`](../operations/wave1-review.md) — direct CLI and `wave1_review` scope.
-- [`../operations/third-party-data-sync.md`](../operations/third-party-data-sync.md) — feed synchronization.
-- [`../operations/target-analysis-planning.md`](../operations/target-analysis-planning.md) — analysis planning.
-- [`../operations/project-build.md`](../operations/project-build.md) — project-image preparation,
-  iterative dispatch, Unity's single execution, recipe validation, and image-capability gaps.
-- [`../operations/ci-configuration-analysis.md`](../operations/ci-configuration-analysis.md) — CI/CD configuration analysis.
-- [`../operations/tree-sitter-ast.md`](../operations/tree-sitter-ast.md) — Tree-sitter image and AST shards.
-- [`../operations/artifact-indexing.md`](../operations/artifact-indexing.md) — produced-artifact indexing.
-- [`../operations/cpp-compiled-analysis.md`](../operations/cpp-compiled-analysis.md) and
-  [`../operations/cpp-index-jobs.md`](../operations/cpp-index-jobs.md) — C/C++ analysis, clangd, and Joern.
-- [`../operations/post-build-security-assessment.md`](../operations/post-build-security-assessment.md) — build-hardening assessment.
-- [`../operations/sanitizer-build.md`](../operations/sanitizer-build.md) — ASan/UBSan rebuild of accepted native units; instrumented outputs are catalogued, never executed.
-- [`../operations/final-report.md`](../operations/final-report.md) — final publication gate and final report: bucket accounting, limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
-- [`../operations/static-analysis.md`](../operations/static-analysis.md) — deterministic static evidence collection.
-- [`../operations/codeql-analysis.md`](../operations/codeql-analysis.md) — cross-language CodeQL.
-- [`../operations/swift-execution-policy.md`](../operations/swift-execution-policy.md) — disabled-by-default Swift execution and durable coverage gap.
-- [`../operations/owasp-control-assessment.md`](../operations/owasp-control-assessment.md) — OWASP control assessment.
-- [`../operations/security-tagging.md`](../operations/security-tagging.md) — security tagging.
-- [`../operations/review-data-indexing.md`](../operations/review-data-indexing.md) — dataset inventory and publication audit.
-- [`../operations/retrieval-mcp.md`](../operations/retrieval-mcp.md) — local retrieval MCP gateway.
-- [`../operations/sei-cert-rule-pack.md`](../operations/sei-cert-rule-pack.md) — SEI CERT rule-pack operation.
-- [`dfd-and-threat-model-generation.md`](dfd-and-threat-model-generation.md) — design (not
-  implemented) of `job_threat_model_generation`: a generated, evidence-cited data-flow diagram and
-  STRIDE-per-interaction threat model from accepted run evidence, its gap and unknown model, and
-  the limits on downstream use; plan in
-  [`../tasks/2026-11-12-dfd-threat-model-plan.md`](../tasks/2026-11-12-dfd-threat-model-plan.md).
-
-Other records: decision and migration reviews in [`../reviews/`](../reviews/), implementation task
-prompts in [`../tasks/`](../tasks/), JSON schemas in [`../schemas/`](../schemas/), and the full
-documentation index in [`../agent-reader.md`](../agent-reader.md).
+| Document | Subsystem | Status |
+| --- | --- | --- |
+| [SEI CERT coverage](../SEI-CERT.md) | scanners and evidence collection | current |
+| [Third-party binary decompilation with Ghidra](binary-decompilation.md) | scanners and evidence collection | current |
+| [Bounded acceptance architecture](bounded-acceptance.md) | testing and operations | current |
+| [Shared bounded model execution](bounded-worker-execution.md) | review inference and guidance | current |
+| [Build environments, execution capture, and secret scanning](build-environments-and-execution-capture.md) | target acquisition and build | current |
+| [Target build topology and bounded iterations](build-topology-and-iterations.md) | target acquisition and build | current |
+| [Change-context analysis](change-context-analysis.md) | scanners and evidence collection | current |
+| [Static CI configuration analysis](ci-configuration-analysis.md) | scanners and evidence collection | current |
+| [Clang static analysis](clang-static-analysis.md) | scanners and evidence collection | current |
+| [Code-graph precomputation for direct review evidence](code-graph-precomputation.md) | code intelligence | historical |
+| [Code intelligence](code-intelligence.md) | code intelligence | current |
+| [Cross-language CodeQL architecture](cross-language-codeql.md) | code intelligence | current |
+| [Dataflow-bounded package slices](dataflow-bounded-slices.md) | code intelligence | current |
+| [Build-bound debug-symbol indexing](debug-symbol-indexing.md) | code intelligence | current |
+| [Dependency intelligence enhancement design](dependency-intelligence-enhancement.md) | scanners and evidence collection | current |
+| [Dependency intelligence](dependency-intelligence.md) | scanners and evidence collection | current |
+| [Deployment image and source mount](deployment-image-and-source-mount.md) | images and deployment | current |
+| [Generated data-flow diagram and threat model](dfd-and-threat-model-generation.md) | review inference and guidance | historical |
+| [Target document analysis and finding handoff](document-evidence-analysis.md) | scanners and evidence collection | current |
+| [Dossier data, queries and provenance](dossier-data-inventory.md) | reporting and metrics | historical |
+| [Engineering security signals](engineering-security-signals.md) | scanners and evidence collection | current |
+| [Evidence completion and remediation](evidence-completion-and-remediation.md) | review inference and guidance | current |
+| [Evidence sources, dataflow precomputation, and model-facing retrieval](evidence-sources-and-dataflow-retrieval.md) | runtime interchange | historical |
+| [Finding metrics](finding-metrics.md) | reporting and metrics | current |
+| [Alias, slice, and type-layout graph modes (design)](graph-alias-slice-layout-modes.md) | code intelligence | historical |
+| [Role-selected review procedures](guidance-procedures.md) | review inference and guidance | current |
+| [Images and deployment](images-and-deployment.md) | images and deployment | current |
+| [Review data indexing and reusable retrieval products](indexing-and-query-reuse.md) | runtime interchange | current |
+| [Near-terminal inference security review](inference-security-review.md) | review inference and guidance | current |
+| [Job consumer read-path inventory](job-consumer-read-paths.md) | runtime interchange | current |
+| [Job input and dispatch contracts](job-input-contracts.md) | runtime interchange | current |
+| [Job interchange and native-result provenance](job-interchange.md) | runtime interchange | current |
+| [Jobs and runtime](jobs-and-runtime.md) | runtime interchange | current |
+| [Native build-output discovery and named build-output exclusions](native-build-output-discovery.md) | target acquisition and build | current |
+| [Native vendored dependency discovery and SPDX enrichment](native-sbom.md) | scanners and evidence collection | historical |
+| [OpenVEX findings export](openvex-export.md) | reporting and metrics | current |
+| [OWASP control-assessment workbench](owasp-control-workbench.md) | scanners and evidence collection | current |
+| [Profile-data ingestion](profile-data.md) | scanners and evidence collection | current |
+| [Python and retrieval architecture](python-and-retrieval.md) | runtime interchange | current |
+| [Red discovery output contract](red-discovery-output.md) | review inference and guidance | current |
+| [Reporting and metrics](reporting-and-metrics.md) | reporting and metrics | current |
+| [Retrieval surfaces: tools, MCP, review cells, and skills](retrieval-surfaces.md) | code intelligence | current |
+| [Review inference and guidance](review-inference-and-guidance.md) | review inference and guidance | current |
+| [Judge role and proof-of-concept generation](review-judge-and-poc.md) | review inference and guidance | historical |
+| [Review package and finding-lead contract](review-package-contract.md) | review inference and guidance | current |
+| [Review prioritization](review-prioritization.md) | review inference and guidance | current |
+| [Review protocol v2: the model-facing layer](review-protocol-v2.md) | review inference and guidance | current |
+| [Runtime interchange](runtime-interchange.md) | runtime interchange | current |
+| [Scanners and evidence collection](scanners-and-evidence-collection.md) | scanners and evidence collection | current |
+| [Security tag taxonomy](security-tag-taxonomy.md) | review inference and guidance | current |
+| [Seeded CodeQL neighborhoods](seeded-codeql-neighborhoods.md) | code intelligence | current |
+| [Seeded neighborhoods (all producers)](seeded-neighborhoods.md) | code intelligence | current |
+| [SEI CERT rule pack](sei-cert-rule-pack.md) | scanners and evidence collection | current |
+| [Source history analysis](source-history-analysis.md) | scanners and evidence collection | current |
+| [SVF points-to producer](svf-alias-producer.md) | code intelligence | historical |
+| [Target acquisition and build](target-acquisition-and-build.md) | target acquisition and build | current |
+| [Telemetry and derived metrics](telemetry.md) | reporting and metrics | current |
+| [Test-coverage ingestion](test-coverage-ingestion.md) | scanners and evidence collection | current |
+| [Testing and operations](testing-and-operations.md) | testing and operations | current |
+| [Testing architecture](testing.md) | testing and operations | current |
+| [Threat-driven hunting: evidence-bound coverage and budget allocation](threat-driven-hunting-enhancement.md) | review inference and guidance | current |
+| [Tree-sitter AST production](tree-sitter-ast.md) | code intelligence | current |
+| [Proposed triage and verifier decision-product enhancements](triage-verifier-enhancement.md) | review inference and guidance | current |
+| [Windows host build runner](windows-host-runner.md) | target acquisition and build | current |
+| [Future Windows native-analysis project](windows-native-analysis-vm.md) | target acquisition and build | historical |
+| [Effective worker prompt contracts](worker-prompt-contracts.md) | review inference and guidance | current |
+| [Bounded static deployment inventory](../deployment-inventory.md) | scanners and evidence collection | current |
+| [How an appsec-review run works](../overview.md) | overview | current |

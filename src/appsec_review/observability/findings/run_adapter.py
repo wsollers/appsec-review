@@ -17,8 +17,8 @@ What a run records and what it does not:
 * ``reviewed_units`` is the caller's: an operator file, or the files ``coverage_adapter`` derives
   from the run's review packages, cell records and accepted source catalog. Without either it stays
   ``None`` with the named gap ``reviewed_units_not_supplied``, or with the derivation's own gap.
-* Enclosing functions, owners, attacker position and remediation are not recorded by the review
-  today; they stay ``None`` (not established) unless the caller's slice rules establish them.
+* Remediation presence comes from certified, exact-finding attachments. Static/compile checks
+  do not establish a validated runtime fix. Unestablished owners and attacker positions stay unknown.
 """
 from __future__ import annotations
 
@@ -74,6 +74,46 @@ def _overlaps(location: Mapping[str, Any], observations: Iterable[tuple[str, int
     return any(path == location["path"] and start <= high and end >= low for path, start, end in observations)
 
 
+def _path_present(row: Mapping[str, Any], projection: Mapping[str, Any]) -> bool | None:
+    counted = set(row.get("direct_evidence", ()))
+    relations = projection.get("relations", {}).get(row["claim_id"], ())
+    if any(item.get("relation_id") in counted and item.get("claim_id") == row["claim_id"]
+           and item.get("predicate") == _REACHABILITY and item.get("kind") == "supports"
+           and item.get("complete") is True
+           and item.get("admissibility") in {"direct", "direct_for_mapped_predicate"}
+           and item.get("provenance") is None for item in relations):
+        return True
+    return False if _REACHABILITY in row.get("missing_predicates", ()) else None
+
+
+def _attachment(report: Mapping[str, Any], row: Mapping[str, Any], section: str) -> Mapping[str, Any] | None:
+    matched = [item for item in (report.get(section) or {}).get("items", ())
+               if item.get("finding", {}).get("finding_package_id") == row["finding_package_id"]]
+    if len(matched) > 1:
+        raise ValueError(f"{section} repeats a finding attachment")
+    if not matched:
+        return None
+    item = matched[0]
+    binding = item["finding"]
+    if (binding.get("claim_id") != row["claim_id"] or not row.get("sha256")
+            or binding.get("sha256") != row["sha256"]):
+        raise ValueError(f"{section} attachment has a different finding identity")
+    return item
+
+
+def _remediation_actionability(report: Mapping[str, Any], row: Mapping[str, Any]) -> tuple[bool | None, bool | None]:
+    plan = _attachment(report, row, "remediation_planning")
+    validation = _attachment(report, row, "remediation_validation")
+    present = None if plan is None else plan.get("status") == "proposal_generated" and plan.get("plan") is not None
+    if validation is None:
+        return present, None
+    from appsec_review.jobs.completion_contracts import verify_nonexecution_assurance
+    verify_nonexecution_assurance(validation)
+    if validation.get("validation") is not None and (plan is None or plan.get("plan") is None):
+        raise ValueError("remediation validation has no accepted plan for this finding")
+    return present, False
+
+
 def findings_from_documents(documents: RunDocuments) -> tuple[list[dict[str, Any]], list[str]]:
     """Finding records of every package in the report's three buckets, and the named gaps.
 
@@ -119,6 +159,7 @@ def findings_from_documents(documents: RunDocuments) -> tuple[list[dict[str, Any
             else:
                 scanner_backed = any(_overlaps(location, documents.observations) for location in locations)
             preconditions = claim.get("preconditions") if claim else None
+            remediation, remediation_validated = _remediation_actionability(documents.report, row)
             records.append({
                 "finding_id": finding_id, "claim_id": row["claim_id"], "lane": lane, "state": row["state"],
                 "bucket": bucket, "weakness_cwe": claim.get("weakness_cwe") if claim else None,
@@ -129,9 +170,9 @@ def findings_from_documents(documents: RunDocuments) -> tuple[list[dict[str, Any
                 "scanner_backed": scanner_backed,
                 "duplicates_collapsed": duplicates.get(row["claim_id"], 0),
                 "actionability": {
-                    "entry_to_sink_path": _REACHABILITY not in row.get("missing_predicates", ()),
+                    "entry_to_sink_path": _path_present(row, documents.projection),
                     "preconditions": True if preconditions else None,
-                    "remediation": None, "remediation_validated": None},
+                    "remediation": remediation, "remediation_validated": remediation_validated},
                 "citations": {"total": citations.get("total"), "unresolved": citations.get("unresolved")},
                 "verification": {
                     "verifier_overturned": None if judged is None else bool(judged.get("disagrees_with_state")),

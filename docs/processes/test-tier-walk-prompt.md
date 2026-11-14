@@ -1,3 +1,11 @@
+---
+title: "Test-tier walk: the per-job session brief (T-113)"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_project_build", "job_third_party_data_sync"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Test-tier walk: the per-job session brief (T-113)
 
 This is the brief handed to each fresh agent session that walks one job into the enforced test

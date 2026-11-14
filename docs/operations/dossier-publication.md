@@ -1,3 +1,11 @@
+---
+title: "Dossier publication operations"
+kind: "operations"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_dossier_publication"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Dossier publication operations
 
 Status: producer delivered in `065f736c`, centrally wired in `b702eb7`, assurance compatibility
@@ -208,11 +216,13 @@ must fail integrity validation, not become success-shaped empty sections.
 
 Retries must write a new immutable attempt and leave earlier accepted artifact bytes intact.
 Resume invalidates dependent consumers on changed accepted inputs/configuration/schema and
-declared implementation/validation/tool releases. Rendering receipts retain template hashes, but
-template/code edits alone are not automatic reuse invalidation: supplied platform identity uses
-[operator-declared releases](performance-assurance.md#operator-declared-releases), not payload
-fingerprints. Corrected supplied software needs the intended declared release and a new versioned
-run; never rewrite an old run's frozen release/configuration. Final gate `/2` verifies referenced bytes, exact
+implementation/validation/tool identities. Runtime provenance now combines the measured mounted
+source release with any configured invalidation labels; labels cannot replace measured provenance
+(`runtime/release.py::identities_from_release`). Rendering receipts also retain template hashes
+and reject a template changed during rendering. Respect the active-run source freeze and use
+[source reload](image-pin-verification.md#deploying-changed-application-code) for changed supplied
+code; never rewrite an old run's frozen release/configuration or accepted artifacts.
+Final gate `/2` verifies referenced bytes, exact
 membership/cap partitions and optional upstream identities, then certifies one snapshot; report
 `/2` reads only its sanitized status/ref projection and rehashes that binding set.
 

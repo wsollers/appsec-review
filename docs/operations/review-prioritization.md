@@ -1,3 +1,11 @@
+---
+title: "Review prioritization operations"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_review_prioritization", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Review prioritization operations
 
 `job_review_prioritization` ranks files and functions for LLM review from structural complexity,
@@ -21,6 +29,11 @@ Semgrep (evidence collection), and CodeQL handoffs are optional. When one is abs
 job still publishes and names the gap (`history_hotspots_unavailable`,
 `semgrep_review_signals_unavailable`, `semantic_paths_unavailable`), and the affected feature is
 missing rather than zero. The review then ends `COMPLETED_WITH_GAPS`.
+
+History may contain several accepted repository-specific signal documents. Their file/symbol
+maps are merged with exact identities; overlapping paths fail rather than overwrite one source
+with another. Per-source missing rankings remain gaps even when another source contributes.
+See [composed history inputs](../architecture/review-prioritization.md#history-from-composed-sources).
 
 The Semgrep pattern pack `rules/semgrep/review-signals.yml` runs in the existing evidence-collection
 Semgrep execution next to `security.yml`; no extra tool run is needed.

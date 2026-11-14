@@ -1,3 +1,11 @@
+---
+title: "Design Review: Formal Verification Docs (2026-11-07)"
+kind: "history"
+subsystem: "review inference and guidance"
+status: "historical"
+jobs: ["job_cpp_compiled_analysis", "job_review_data_indexing", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Design Review: Formal Verification Docs (2026-11-07)
 
 **Status:** Review of [`sast-to-lean-and-proof-directed-fuzzing.md`](sast-to-lean-and-proof-directed-fuzzing.md)

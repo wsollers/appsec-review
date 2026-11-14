@@ -1,3 +1,11 @@
+---
+title: "Produced-artifact security analysis"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_language_build"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Produced-artifact security analysis
 
 `job_artifact_security_analysis` consumes the accepted `job_language_build` publication and the
@@ -74,7 +82,8 @@ whole, and the container runs under `jobs.job_artifact_security_analysis.setting
 lockfile whose ecosystem the snapshot lacks is not launched and records the gap "offline OSV
 snapshot lacks ecosystem <X>"; the same text replaces osv-scanner's exit-127 "could not find local
 databases" report. Its exit-128 "No package sources found" report (an empty lockfile) is accepted as
-`SKIPPED_NA`; any other non-zero exit is a gap carrying the last bounded stderr line, as are
+`SKIPPED_NA`; ordinary exits 0 and 1 are accepted by the adapter (1 can report matches).
+Other exits are gaps carrying the last bounded stderr line, as are
 timeouts and truncation.
 
 ## Installed npm packages: one scan per installer record
@@ -240,11 +249,14 @@ hash-verified scanner contract; this does not affect successful sibling evidence
 An interrupted attempt can reuse only shards whose fingerprints and raw artifact hashes still
 match. Changing one artifact or scanner identity invalidates its dependent shards without forcing
 unrelated siblings to rerun. Scanner failure is isolated to that artifact/capability pair; successful
-siblings remain publishable with the failure represented as a gap. Upstream identity changes are not
+siblings can remain publishable with the failure represented as a gap, unless the active
+execution-safety policy stops execution before that fallback publishes. Upstream identity changes are not
 recoverable scanner failures and stop the job.
 
 Use `appsec-review plan-resume --run-id <id> --target <path>` before a consequential resume. Do not
 delete locks, edit pointers, or modify accepted files to force reuse.
+The [canonical job page](job_artifact_security_analysis.md) links current generated declarations
+and distinguishes scan-summary counts from individual scanner finding records.
 
 ## Evidence and retrieval
 

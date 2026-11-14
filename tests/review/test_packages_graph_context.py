@@ -191,7 +191,8 @@ def _lead(assembly, fixture: FixtureRun, key: str) -> dict:
 
 def _native_hunt(assembly) -> dict:
     hunts = [item.document() for item in assembly.packages
-             if item.kind == "hunt" and item.document()["scope"]["build_unit_id"] == "native-main"]
+             if item.kind == "hunt" and item.document()["scope"]["build_unit_id"] == "native-main"
+             and not item.document()["scope"].get("operation")]
     assert len(hunts) == 1
     return hunts[0]
 

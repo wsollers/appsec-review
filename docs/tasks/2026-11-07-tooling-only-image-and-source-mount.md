@@ -1,3 +1,11 @@
+---
+title: "TASK - TOOLING-ONLY DAGSTER IMAGE WITH A MOUNTED SOURCE CHECKOUT"
+kind: "task"
+subsystem: "images and deployment"
+status: "historical"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # TASK - TOOLING-ONLY DAGSTER IMAGE WITH A MOUNTED SOURCE CHECKOUT
 
 User direction, quoted: "The inner loop is too slow ... Docker images should have tooling only

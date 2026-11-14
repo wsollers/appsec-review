@@ -1,6 +1,6 @@
 """Operator entry point of the finding-metrics domain: ``python -m appsec_review.observability.findings``.
 
-Four subcommands, all offline and derived. None launches a review, calls a model, contacts a crash
+Offline, derived commands. None launches a review, calls a model, contacts a crash
 service or reads a target:
 
 * ``snapshot``     read one accepted run and publish its ``finding-snapshot/1`` into a history store;
@@ -11,6 +11,7 @@ service or reads a target:
                    are derived from the run
 * ``crash-ingest`` parse operator-exported crash files into a content-addressed ``crash-evidence/1``
 * ``audit-sample`` draw the reproducible sample of removed leads for human labelling
+* ``decision-audit`` query one accepted protected audit using closed, bounded operator templates
 
 Exit status: 0 on success, 2 for an unusable input (named on stderr). A figure that cannot be
 computed is printed as ``n/a`` with its reason; it never changes the exit status.
@@ -175,6 +176,16 @@ def _audit_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+def _decision_audit(args: argparse.Namespace) -> int:
+    from appsec_review.review.decision_audit.query import Query, execute
+    from appsec_review.review.decision_audit.reader import load_decision_audit
+    query = Query(args.template, lead_id=args.lead_id, claim_id=args.claim_id,
+                  predicate=args.predicate, stage=args.stage, role=args.role)
+    audit = load_decision_audit(args.run)
+    print(json.dumps(execute(audit, query, limit=args.limit, cursor=args.cursor), sort_keys=True, indent=1))
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="python -m appsec_review.observability.findings",
                                    description="Finding metrics: offline, derived, reported and never asserted.")
@@ -228,6 +239,22 @@ def parser() -> argparse.ArgumentParser:
     audit.add_argument("--size", type=int, required=True)
     audit.add_argument("--output", type=Path, required=True)
     audit.set_defaults(handler=_audit_sample)
+
+    from appsec_review.review.decision_audit.contracts import Stage
+    from appsec_review.review.decision_audit.query import Template
+    from appsec_review.review.models import Predicate, Role
+    decisions = commands.add_parser("decision-audit", help="bounded protected operator query; not a worker grant")
+    decisions.add_argument("--run", type=Path, required=True, help="accepted run directory, never a manifest path")
+    decisions.add_argument("--template", choices=[item.value for item in Template], required=True)
+    decisions.add_argument("--lead-id")
+    decisions.add_argument("--claim-id")
+    decisions.add_argument("--predicate", choices=[item.value for item in Predicate])
+    decisions.add_argument("--stage", choices=[item.value for item in Stage])
+    decisions.add_argument("--role", choices=[item.value for item in Role],
+                           help="record attribution filter only; does not authorize access")
+    decisions.add_argument("--limit", type=int, help="bounded by accepted policy max_page_size")
+    decisions.add_argument("--cursor", help="continuation from this exact accepted manifest and query")
+    decisions.set_defaults(handler=_decision_audit)
     return root
 
 

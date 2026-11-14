@@ -1,3 +1,11 @@
+---
+title: "SEI CERT coverage"
+kind: "architecture"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_evidence_collection"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # SEI CERT coverage
 
 appsec-review maps its Semgrep CE and OpenGrep rules to the
@@ -46,7 +54,7 @@ are recorded as coverage gaps. See
 ## Local use
 
 ```text
-python -m pip install -e ".[rulepacks]"          # adds PyYAML 6.0.3 to the project venv
+python -m pip install -e ".[rulepacks]"          # existing rule-pack extra; PyYAML is also a base dependency
 python -m appsec_review.rulepacks.sei_cert validate
 python -m appsec_review.rulepacks.sei_cert evaluate --output test/tmp/sei-cert-evaluation
 ```
@@ -54,6 +62,10 @@ python -m appsec_review.rulepacks.sei_cert evaluate --output test/tmp/sei-cert-e
 Semgrep and OpenGrep are not project dependencies. Provide the pinned versions through
 `APPSEC_REVIEW_SEMGREP` and `APPSEC_REVIEW_OPENGREP` or on `PATH`, as the operations guide
 describes.
+
+The [canonical evidence-collection page](operations/job_evidence_collection.md) describes the
+current scanner boundary; [generated coverage](../rules/sei-cert/COVERAGE.md) remains the per-rule
+inventory, not an assertion that delegated analyzers ran for a target.
 
 ## What the results mean
 

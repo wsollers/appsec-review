@@ -51,12 +51,13 @@ from .coverage import ENTRY_POINT_KINDS, MAX_ENTRY_POINTS
 
 MAX_SOURCE_FILES = 500_000          # catalogued source files per run
 RED_ROLES = (Role.RED_TEAM_ANALYST.value, Role.HYPOTHESIS_HUNTER.value)
-UNREVIEWED_REASONS = ("cells_incomplete", "not_launched", "not_packaged")
+UNREVIEWED_REASONS = ("operation_only", "cells_incomplete", "not_launched", "below_hunt_cutoff", "not_packaged")
 ENTRY_TAG_PREFIX = "surface:entry:"
 # The taxonomy's "Entry points" group (docs/architecture/security-tag-taxonomy.md, namespace
 # ``surface``) mapped to the four kinds of section 5.7. Terms that are not one of those kinds (cli,
 # env-config, local-ipc, mobile-deeplink, cloud-public, ci-untrusted) are left out and counted.
 ENTRY_KIND_BY_TAG: Mapping[str, str] = {
+    "surface:entry:remote-input": "network_handler",
     "surface:entry:http-public": "network_handler",
     "surface:entry:http-internal": "network_handler",
     "surface:entry:message-consumer": "network_handler",
@@ -142,16 +143,23 @@ def reviewed_units(documents: CoverageDocuments
     if len(catalog) > MAX_SOURCE_FILES:
         raise ValueError("more catalogued source files than the bounded number per run")
     states = _package_states(documents)
-    rank = {"reviewed": 0, "cells_incomplete": 1, "not_launched": 2}
+    rank = {"reviewed": 0, **{reason: number for number, reason in enumerate(UNREVIEWED_REASONS, 1)}}
     best: dict[str, str] = {}
     outside: set[str] = set()
     for package in documents.packages or ():
         state = states[str(package["package_id"])]
+        if state == "reviewed" and package.get("coverage_scope") == "operation":
+            state = "operation_only"
         for source_id in package.get("source_ids", ()):
             if source_id not in catalog:
                 outside.add(str(source_id))
             elif rank[state] < rank.get(best.get(source_id, ""), len(rank)):
                 best[source_id] = state
+    for unit in documents.units or ():
+        if unit.get("hunted") is False:
+            for source_id in unit.get("source_ids", ()):
+                if source_id in catalog:
+                    best.setdefault(source_id, "below_hunt_cutoff")
     reviewed: dict[str, str | None] = {}
     unreviewed: dict[str, str] = {}
     for source_id in sorted(catalog):
@@ -246,7 +254,9 @@ def _packages(run_root: Path, triage: Mapping[str, Any]) -> list[dict[str, Any]]
         sources = scope.get("source_ids") if isinstance(scope, Mapping) else None
         if not isinstance(sources, list) or not all(isinstance(item, str) for item in sources):
             raise ValueError(f"package {entry['package_id']} names no scope sources")
-        packages.append({"package_id": str(entry["package_id"]), "source_ids": sorted(sources)})
+        packages.append({"package_id": str(entry["package_id"]), "source_ids": sorted(sources),
+                         "coverage_scope": "operation" if scope.get("operation") or body.get("kind") == "finding_lead"
+                         else "files"})
     return packages
 
 

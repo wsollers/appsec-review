@@ -91,7 +91,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/12"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/13"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -147,6 +147,8 @@ class PackageSettings:
     max_slice_lines: int = 120
     max_slice_lines_per_function: int = 40
     rank_weights: RankWeights = DEFAULT_RANK_WEIGHTS   # lane B rank weights (``settings.ranking``)
+    max_operation_records: int = 2000
+    max_behavior_artifact_bytes: int = 8 * 1024 * 1024
 
     def __post_init__(self) -> None:
         if not isinstance(self.rank_weights, RankWeights):
@@ -163,7 +165,8 @@ class PackageSettings:
         if type(self.exploration_reserve) is not int or self.exploration_reserve < 1:
             raise ValueError("exploration_reserve must be a positive integer")
         for name in ("hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
-                     "max_memory_context_entries", "max_callers"):
+                     "max_memory_context_entries", "max_callers", "max_operation_records",
+                     "max_behavior_artifact_bytes"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
@@ -1515,7 +1518,7 @@ class _Assembler:
                                  f"sources={outside_sources[:5]}")
         bound = self.settings.max_context_entries
         budget = bound - len({(item.role, item.id) for item in unit.context})
-        graph_context, graph_omitted = self.graph.unit_context(unit.paths, budget)
+        graph_context, graph_omitted = ([], 0) if unit.operation else self.graph.unit_context(unit.paths, budget)
         context, omitted, gaps = self._cap(
             (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
              *self.control_context.get(unit.component_id, ())),
@@ -1533,6 +1536,8 @@ class _Assembler:
                         "build_unit_id": unit.build_unit_id, "source_ids": list(unit.source_ids),
                         "artifact_ids": sorted({identity for lead in unit.leads for identity, role in lead.related
                                                 if role == "artifact"})}
+        if unit.operation is not None:
+            scope_record["operation"] = dict(unit.operation)
         rank = ranked.rank_record()
         byte_omitted_controls = 0
 
@@ -1655,7 +1660,8 @@ def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> di
 def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = None, *,
                       collection: LeadCollection | None = None,
                       cwe_reference: CweReference | None = None,
-                      graph_settings: GraphSettings | None = None, slice_sources: Any = None) -> Assembly:
+                      graph_settings: GraphSettings | None = None, slice_sources: Any = None,
+                      behavior_core: Any = None) -> Assembly:
     """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
 
     ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
@@ -1678,7 +1684,15 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev,
                              settings.exploration_enabled, settings.exploration_reserve)
 
-    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights)
+    from appsec_review.review.behavior import graph_operations, load_model
+    operations, operation_gaps = graph_operations(scope, limit=settings.max_operation_records)
+    model_context, model_gaps, model_identity = {}, (), None
+    if behavior_core is not None:
+        model_context, model_gaps, model_identity = load_model(
+            scope, operations, core=behavior_core, max_bytes=settings.max_behavior_artifact_bytes,
+            limit=settings.max_context_entries)
+    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights,
+                        operations=operations, model_context=model_context)
     ranked = rank_units(units)
     hunted, cutoff_gaps = select_hunts(ranked, settings.hunt_max_units)
     for item in hunted:
@@ -1690,7 +1704,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     scope.verify()
 
     # A missing graph index is already the scope's ``code_graph`` producer gap (review/scope.py).
-    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps))
+    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps,
+                        *operation_gaps, *model_gaps))
     hunted_keys = {item.unit.key for item in hunted}
     unit_packages: dict[str, list[str]] = defaultdict(list)
     for package in packages:
@@ -1725,8 +1740,11 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "inputs": ShardSet.identities(scope.shards), "evidence_map_sha256": sha256_hex(scope.evidence_map()),
         "packages": [package.entry() for package in packages],
         "units": [{"unit_key": item.unit.key, **item.rank_record(), "hunted": item.unit.key in hunted_keys,
+                   "source_ids": list(item.unit.source_ids), "coverage_scope": "operation" if item.unit.operation else "files",
+                   "operation": item.unit.operation,
                    "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ()))}
                   for item in ranked],
+        "behavior_model": model_identity,
         "gaps": [gap.record() for gap in gaps],
         "cwe_reference": cwe_reference.record() if cwe_reference is not None else None,
         "counts": {"leads": collection.counts(), "admitted": admitted_counts, "kev_admitted": kev_admitted,
@@ -1760,7 +1778,7 @@ def _reference_weaknesses(scope: AcceptedScope) -> dict[str, tuple[str | None, s
     return dict(sorted(found.items()))
 
 
-def publish_packages(assembly: Assembly, out_dir: Path) -> Path:
+def publish_packages(assembly: Assembly, out_dir: Path, *, run_root: Path | None = None) -> Path:
     """Write package bytes and the manifest under a run-owned directory, then verify them."""
     out_dir = Path(out_dir)
     for package in assembly.packages:
@@ -1774,11 +1792,11 @@ def publish_packages(assembly: Assembly, out_dir: Path) -> Path:
     if manifest_path.is_file() and manifest_path.read_bytes() != assembly.manifest_bytes:
         raise IntegrityError("published package manifest differs from its reassembly")
     atomic_bytes(manifest_path, assembly.manifest_bytes)
-    verify_package_manifest(manifest_path)
+    verify_package_manifest(manifest_path, run_root=run_root)
     return manifest_path
 
 
-def verify_package_manifest(manifest_path: Path) -> dict[str, Any]:
+def verify_package_manifest(manifest_path: Path, *, run_root: Path | None = None) -> dict[str, Any]:
     """Verify the manifest hash and every package's bytes before a consumer reads them."""
     manifest_path = Path(manifest_path)
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1789,6 +1807,7 @@ def verify_package_manifest(manifest_path: Path) -> dict[str, Any]:
         raise IntegrityError("package manifest content hash mismatch")
     document["content_sha256"] = claimed
     validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
+    verify_behavior_model(document, run_root)
     for entry in document["packages"]:
         path = manifest_path.parent / "packages" / f"{entry['package_id']}.json"
         if not path.is_file() or file_sha256(path) != entry["sha256"]:
@@ -1798,3 +1817,15 @@ def verify_package_manifest(manifest_path: Path) -> dict[str, Any]:
         if package_id != entry["package_id"] or package_id != f"{body['kind']}-{sha256_hex(body)}":
             raise IntegrityError(f"package identity does not match its body: {entry['package_id']}")
     return document
+
+
+def verify_behavior_model(document: Mapping[str, Any], run_root: Path | None) -> None:
+    """Recheck generated routing inputs on every package-manifest read, including final publication."""
+    model = document.get("behavior_model")
+    if model is None:
+        return
+    if run_root is None or Path(run_root).name != document["run_id"]:
+        raise IntegrityError("generated model verification requires the exact run_root")
+    from appsec_review.jobs.bound_artifacts import resolve_bound
+    for reference in (model["handoff"], *model["artifacts"].values()):
+        resolve_bound(run_root, reference)

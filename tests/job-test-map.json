@@ -148,7 +148,8 @@
         "tests/unit/job_debug_symbol_indexing/test_normalize.py",
         "tests/unit/job_debug_symbol_indexing/test_publish.py",
         "tests/unit/job_debug_symbol_indexing/test_accepted_loader.py",
-        "tests/unit/job_debug_symbol_indexing/test_metrics.py"
+        "tests/unit/job_debug_symbol_indexing/test_metrics.py",
+        "tests/unit/runtime/test_wave1a_contracts.py"
       ],
       "integration": [
         "tests/integration/job_debug_symbol_indexing/test_debug_symbol_indexing_graph.py",
@@ -181,7 +182,8 @@
     "job_dossier_publication": {
       "unit": [
         "tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer",
-        "tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier"
+        "tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier",
+        "tests/unit/review_decision_audit_consumers/test_dossier.py"
       ],
       "integration": [],
       "acceptance": [],
@@ -197,7 +199,9 @@
       "unit": [
         "tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that",
         "tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket",
-        "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps"
+        "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps",
+        "tests/unit/review_decision_audit_wiring/test_classification.py",
+        "tests/unit/review_decision_audit_wiring/test_gate_handler.py"
       ],
       "integration": [],
       "acceptance": ["tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket"],
@@ -231,15 +235,37 @@
     },
     "job_inference_security_review": {
       "unit": [
+        "tests/unit/review_behavior/test_contract_and_view.py",
+        "tests/unit/review_behavior/test_handler_wiring.py",
+        "tests/unit/review_behavior/test_coverage.py",
+        "tests/unit/review_behavior/test_model_context.py",
+        "tests/unit/review_behavior/test_operations.py",
+        "tests/unit/review_behavior/test_publication_bindings.py",
+        "tests/unit/observability_findings/test_actionability_evidence.py",
         "tests/review/test_discovery_competence.py",
         "tests/review/test_prompt_competence.py",
         "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
         "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
         "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema",
-        "tests/test_inference_fixture_contracts.py"
+        "tests/test_inference_fixture_contracts.py",
+        "tests/unit/review_decision_audit_producer/test_adapter.py",
+        "tests/unit/review_decision_audit_producer/test_bounds.py",
+        "tests/unit/review_decision_audit_producer/test_capture.py",
+        "tests/unit/review_decision_audit_producer/test_integrity.py",
+        "tests/unit/review_decision_audit_producer/test_projection.py",
+        "tests/unit/review_decision_audit_producer/test_publication.py",
+        "tests/unit/review_decision_audit_producer/test_review_fixes.py",
+        "tests/unit/review_decision_audit_wiring/test_inference_handler.py",
+        "tests/unit/review_decision_audit_wiring/test_origin.py"
       ],
-      "integration": ["tests/integration/test_review_consumer_acceptance.py"],
-      "acceptance": ["tests/acceptance/test_prompt_competence.py::test_live_prompt_competence"],
+      "integration": [
+        "tests/integration/test_review_consumer_acceptance.py",
+        "tests/integration/review_behavior/test_package_join.py"
+      ],
+      "acceptance": [
+        "tests/acceptance/test_prompt_competence.py::test_live_prompt_competence",
+        "tests/acceptance/review_behavior/test_behavioral_review.py"
+      ],
       "live": []
     },
     "job_language_build": {
@@ -270,7 +296,8 @@
         "tests/unit/job_language_build/test_php_installed.py",
         "tests/unit/job_language_build/test_python.py",
         "tests/unit/job_language_build/test_rust.py",
-        "tests/unit/job_language_build/test_wasm.py"
+        "tests/unit/job_language_build/test_wasm.py",
+        "tests/unit/job_language_build/test_upstream_gap_contract.py"
       ],
       "integration": [
         "tests/integration/job_language_build/test_language_build_graph.py",
@@ -281,7 +308,8 @@
         "tests/integration/job_language_build/test_php_graph.py",
         "tests/integration/job_language_build/test_python_graph.py",
         "tests/integration/job_language_build/test_rust_graph.py",
-        "tests/integration/job_language_build/test_wasm_graph.py"
+        "tests/integration/job_language_build/test_wasm_graph.py",
+        "tests/integration/job_language_build/test_elf_host.py"
       ],
       "acceptance": [
         "tests/acceptance/job_project_build/test_family_project_builds.py"
@@ -311,9 +339,16 @@
       "live": []
     },
     "job_owasp_control_assessment": {
-      "unit": ["tests/test_owasp_assessment_job.py"],
-      "integration": [],
-      "acceptance": [],
+      "unit": [
+        "tests/test_owasp_assessment_job.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+        "tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_settings.py",
+        "tests/unit/job_owasp_control_assessment/test_package_projection.py"
+      ],
+      "integration": ["tests/integration/job_owasp_control_assessment/test_subject_selection.py"],
+      "acceptance": ["tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"],
       "live": []
     },
     "job_poc_generation": {
@@ -425,12 +460,17 @@
     },
     "job_security_tagging": {
       "unit": [
+        "tests/unit/job_security_tagging/test_behavioral_tags.py",
+        "tests/unit/job_security_tagging/test_handler.py",
+        "tests/unit/job_security_tagging/test_reader.py",
+        "tests/unit/job_security_tagging/test_rules_and_roles.py",
+        "tests/unit/job_security_tagging/test_native_language_aliases.py",
         "tests/test_security_tagging.py::test_grammar_and_identifier_normalization",
         "tests/test_security_tagging.py::test_namespace_basis_table_is_enforced",
         "tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity"
       ],
-      "integration": [],
-      "acceptance": [],
+      "integration": ["tests/integration/job_security_tagging/test_behavioral_tags.py"],
+      "acceptance": ["tests/acceptance/job_security_tagging/test_behavioral_tags.py"],
       "live": []
     },
     "job_source_history_analysis": {
@@ -473,7 +513,8 @@
       "unit": [
         "tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets",
         "tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories",
-        "tests/test_target_acquisition.py::test_url_and_path_safety_primitives"
+        "tests/test_target_acquisition.py::test_url_and_path_safety_primitives",
+        "tests/unit/runtime/test_wave1a_contracts.py"
       ],
       "integration": [],
       "acceptance": [],
@@ -618,7 +659,8 @@
         "tests/test_input_contract_admission.py",
         "tests/test_downstream_input_contracts.py",
         "tests/test_standalone_input_contracts.py",
-        "tests/test_shard_ownership.py"
+        "tests/test_shard_ownership.py",
+        "tests/unit/review_decision_audit_wiring/test_optional_declarations.py"
       ],
       "integration": ["tests/integration/test_job_input_contracts.py"],
       "acceptance": ["tests/acceptance/test_job_input_contracts.py"],
@@ -691,6 +733,33 @@
         "tests/test_repair_admission.py::test_successful_portable_unit_is_admitted_into_fresh_attempt"
       ],
       "integration": ["tests/integration/test_repair_workflow.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "review-decision-audit": {
+      "jobs": [
+        "job_dossier_publication",
+        "job_final_publication_gate",
+        "job_inference_security_review"
+      ],
+      "unit": [
+        "tests/unit/review_decision_audit/test_contract.py",
+        "tests/unit/review_decision_audit/test_datasets.py",
+        "tests/unit/review_decision_audit/test_imports.py",
+        "tests/unit/review_decision_audit/test_metadata.py",
+        "tests/unit/review_decision_audit/test_settings.py",
+        "tests/unit/review_decision_audit_consumers/test_accepted_review.py",
+        "tests/unit/review_decision_audit_consumers/test_cli.py",
+        "tests/unit/review_decision_audit_consumers/test_control_budget.py",
+        "tests/unit/review_decision_audit_consumers/test_known_cell_scope.py",
+        "tests/unit/review_decision_audit_consumers/test_lead_trace.py",
+        "tests/unit/review_decision_audit_consumers/test_proposals.py",
+        "tests/unit/review_decision_audit_consumers/test_query.py",
+        "tests/unit/review_decision_audit_consumers/test_reader.py",
+        "tests/unit/review_decision_audit_consumers/test_reader_edges.py",
+        "tests/unit/review_decision_audit_consumers/test_source_permissions.py"
+      ],
+      "integration": [],
       "acceptance": [],
       "live": []
     },

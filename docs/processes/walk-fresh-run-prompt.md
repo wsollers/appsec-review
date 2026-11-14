@@ -1,3 +1,11 @@
+---
+title: "Prompt: start a fresh walk run from the top"
+kind: "process"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_final_report_publication"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Prompt: start a fresh walk run from the top
 
 A paste-ready prompt for any host. It starts a fresh run of an existing walk at job 1 and

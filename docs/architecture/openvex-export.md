@@ -1,3 +1,11 @@
+---
+title: "OpenVEX findings export"
+kind: "architecture"
+subsystem: "reporting and metrics"
+status: "current"
+jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_openvex_export", "job_poc_generation", "job_review_intake", "job_target_acquisition"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # OpenVEX findings export
 
 Status: **automatic local export**, reconciled against
@@ -682,7 +690,8 @@ may stale latest without discarding historical semantic work. Tampered/unreadabl
 bytes retain known execution counts, but make their semantic contribution unknown with a
 named gap; without a verifiable accepted output semantic totals are null.
 
-Runtime's ordinary snapshot occurs before `HANDOFF_ACCEPTED`; a later job snapshot or
+Whole-run snapshots are refreshed by run-level drivers and standalone launch finalization,
+not at every job publication. A mid-run summary can lag `HANDOFF_ACCEPTED`;
 `appsec-review metrics --run-id <id>` refreshes acceptance-backed semantics. No runtime
 sequencing rewrite is needed. A pre-acceptance snapshot is not an accepted-empty verdict.
 

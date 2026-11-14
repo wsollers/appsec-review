@@ -1,3 +1,11 @@
+---
+title: "Implementation prompt: seeded neighborhoods for the Clang, LLVM IR, AST and CPG producers"
+kind: "task"
+subsystem: "code intelligence"
+status: "historical"
+jobs: ["job_clang_static_analysis", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_evidence_collection", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Implementation prompt: seeded neighborhoods for the Clang, LLVM IR, AST and CPG producers
 
 Status: **ready to start** (written 2026-10-16). Read root `AGENTS.md` first and work outside

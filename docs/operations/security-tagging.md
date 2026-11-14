@@ -1,8 +1,19 @@
+---
+title: "Operating the security-tagging stage"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_owasp_control_assessment", "job_security_tagging"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating the security-tagging stage
 
 `security_tagging` assigns basis-qualified tags from the
 [security tag taxonomy](../architecture/security-tag-taxonomy.md) to code subjects. It reads only
-the accepted retrieval manifest (`data/indices/accepted.json`), never the target tree. In the
+the attempt's admitted retrieval manifest and shards, plus hash-checked source spans for invoked
+graph facts; it does not discover files by scanning the target tree. Input authority follows
+[accepted-upstream admission](../architecture/job-input-contracts.md#admission-and-read-receipts),
+not a mutable pointer alone. In the
 `wave1_review` Dagster graph it runs after CodeQL, review prioritization and code-graph indexing
 when registered (`orchestration/topology.py`). The default-enabled `job_owasp_control_assessment` then
 consumes accepted tag assignments and a bounded component tag cloud as routing context, never
@@ -10,8 +21,9 @@ control proof. Tagging does not depend on OWASP. Review data indexing follows al
 producers, then package assembly, document issue analysis and inference review; final report
 publication is terminal. Direct `start`/`resume`/`plan-resume` select the same enabled
 prioritization → code graph → tagging → OWASP → indexing chain; `--force-from` cannot bypass a
-disabled-job gate. OWASP is enabled by default in all shipped profiles. CI/post-build branches remain Dagster additions,
-and third-party metadata sync remains standalone.
+disabled-job gate. OWASP is enabled by default in all shipped profiles. The direct CLI and
+Dagster derive review-job membership from the same typed contracts, including enabled CI and
+post-build producers; third-party metadata sync remains standalone.
 Run it standalone only after an accepted manifest exists; without one the input validator fails the
 job.
 
@@ -48,12 +60,16 @@ Reading the results:
   the job publishes no security findings itself.
 - Every `gap:*` tag and every entry in the handoff `gaps` list is missing coverage. An empty region
   of the tag cloud is never evidence that the target is clean.
-- The job completes with gaps by design. Its standing gaps are: invoked capability detection (`func`
-  tags come from package inventory only), the upstream CWE->CAPEC->ATT&CK crosswalk (deferred until
+- The job completes with gaps by design. Invoked capabilities now come from bounded, direct-eligible,
+  source-resolved graph entry/sink facts; package inventory still supplies only `declared` capability.
+  Its standing gaps are limited mapped graph-class coverage, the upstream CWE->CAPEC->ATT&CK crosswalk (deferred until
   the MITRE feed is pinned into the run), and the unimplemented `taint_path`, `iac_resource`,
   `k8s_object`, and `container_stage` crosswalk scopes. The feed-backed rollups add the `rollup_gap`
   notes declared on their namespaces in `data/reference/taxonomy/vocabulary.json`. Each is named in
   the handoff.
+
+The [current job page](job_security_tagging.md) names the exact collector decisions, rejected
+graph-fact causes, immutable publication and acceptance checks.
 
 A re-run in the same application run produces the same assignment set for the same accepted
 manifest and pinned taxonomy, and replaces earlier tag shards in the accepted manifest instead of

@@ -1,3 +1,11 @@
+---
+title: "Generated DFD and threat model"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_artifact_indexing", "job_code_graph_index", "job_cpp_compiled_analysis", "job_dependency_intelligence", "job_language_build", "job_owasp_control_assessment", "job_review_data_indexing", "job_review_prioritization", "job_security_tagging", "job_target_catalog", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Generated DFD and threat model
 
 `job_threat_model_generation` (T-107) builds a data-flow diagram and a candidate threat list from
@@ -6,7 +14,7 @@ evidence other jobs already accepted. The design is
 describes the first slice that is implemented.
 
 The output is **generated**. It is not the target owner's document, it is never counted as a
-supplied `dfd` or `threat_model`, and no review claim may cite it: its authority is
+supplied `dfd` or `threat_model`, and it is not direct claim evidence: its authority is
 `routing_context`, which may guide where a reviewer looks and never satisfies an obligation.
 
 ## Disabled by default
@@ -19,7 +27,12 @@ later does not add it to an existing run.
 
 When enabled, the job runs after `job_owasp_control_assessment`, `job_dependency_intelligence` and
 `job_security_tagging` (scheduling edges only) and before `job_review_data_indexing`, which schedules
-after it so the dataset inventory sees its files. No job consumes its handoff.
+after it so the dataset inventory sees its files. The inference job now optionally reads an
+admitted handoff through `review/behavior.py::load_model`, revalidates the origin, source
+references and hashes, and attaches bounded routing context to operation packages. It retrieves
+original evidence to establish predicates; the generated model does not satisfy them. See the
+[current job page](job_threat_model_generation.md) and
+[review subsystem](../architecture/review-inference-and-guidance.md).
 
 ## What it reads
 
@@ -153,7 +166,9 @@ accepted handoffs the graph would pass; it is not a path to input files.
   statement is an unknown until it exists.
 - Mitigation evidence: every candidate threat is `not_examined`.
 - Assets: `assets` is empty, and each data store has an `asset_sensitivity_unknown`.
-- Consumers: no job reads the output, nothing is indexed, and the final report does not show it.
+- General indexing and public model rendering: the model remains artifact-only and is not
+  independently rendered by the final report. The implemented inference routing-context consumer
+  described above is not a new evidence grant or a deployment-proof consumer.
 
 ## Verification boundary
 

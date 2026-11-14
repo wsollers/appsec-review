@@ -1,3 +1,11 @@
+---
+title: "Debug-symbol indexing"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_debug_symbol_indexing"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Debug-symbol indexing
 
 `job_debug_symbol_indexing` is enabled by default in the normal review graph.

@@ -1,3 +1,11 @@
+---
+title: "Source history analysis operations"
+kind: "operations"
+subsystem: "scanners and evidence collection"
+status: "current"
+jobs: ["job_source_history_analysis", "job_target_analysis_plan", "job_tree_sitter_ast"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Source history analysis operations
 
 `job_source_history_analysis` runs after the accepted target catalog and before
@@ -69,8 +77,10 @@ Discovery is bounded to 4,096 catalog roots/first-level entries and 256 actual s
 bound leaves explicit coverage gaps rather than silently declaring the remainder covered.
 
 For an acquired component, history follows the first-parent chain ending at its **pinned acquired
-revision**, not a different local `main` tip. For a direct checkout, it uses `main`, else `master`,
-else `HEAD`. Binding compares the reviewed bytes with that source's selected revision:
+revision**, not a different local `main` tip. For a direct checkout, it anchors at resolved
+`HEAD`; only an unresolved `HEAD` falls back to a known mainline tip, recording
+`head_unresolved_using_mainline`. See the [canonical job process](job_source_history_analysis.md#process).
+Binding compares the reviewed bytes with that source's selected revision:
 
 - files that differ from it are reported as `working_tree_divergent`, and get no line history,
   symbols, or complexity; and
@@ -156,10 +166,11 @@ bound; a change log among them appears as `changelog_excluded_from_inventory` wi
 reason, and is not read. Raise the catalog bound, or accept the gap. Likewise raise
 `changelog.max_file_bytes` when `changelog_bytes_truncated` reports a large remainder.
 
-`changelog_paths_unbound` is common and usually benign: change logs name files that have since
-been deleted or moved. The record gives the ambiguous, unmatched and invalid counts.
-`changelog_format_unrecognized` on a prose `NEWS` or `HISTORY` file is also expected; the file is
-not parsed and nothing is inferred from it.
+`changelog_paths_unbound` can reflect files that were deleted or moved; the record gives
+ambiguous, unmatched and invalid counts. `changelog_format_unrecognized` can occur on prose
+`NEWS` or `HISTORY` files; nothing is inferred from their unparsed content. Neither cause is
+automatically an expected gap in a walk: compare it with source and obtain the recorded
+expected-gaps decision and coverage cost.
 
 ### GitHub identity, credentials, and network access
 
@@ -265,8 +276,8 @@ source root, rather than being attributed to both the parent and nested reposito
   - Files and symbols are separate populations, each with its own tiers.
 - **Scores** are relative to one population, window, and run. Do not compare scores across runs or
   targets, or across independently ranked sources in a composed target.
-  - A score of 0 means the unit is lowest on every metric in this population, not that it is
-    stable.
+  - A score of 0 means no positive weighted normalized contribution was available; constant,
+    missing and zero-weight inputs must also be considered. It does not establish stability.
   - A constant metric, listed in `constant_metrics`, contributes nothing to any unit.
 - **Missing inputs.** `weight_coverage < 1` means the score used fewer metrics, usually because
   complexity was unavailable. Read the matching `complexity_unavailable:<reason>` gap before
@@ -278,7 +289,8 @@ source root, rather than being attributed to both the parent and nested reposito
   with `rank_eligibility = excluded:<category>` and keep their metrics. To rank one of them, narrow
   the matching pattern in TOML.
 - **Unavailable signals.** `pull_request_timing` and `deployment_timing` are always `unavailable`
-  coverage rows. This lane does not acquire that data and never infers it from commit timestamps.
+  coverage rows in this lane. GitHub enrichment retains review timestamps for change-context
+  analysis, but history does not compute those timing metrics or infer them from commit timestamps.
 - **History gaps.** These include `shallow_history`, `history_window_truncated`, and
   `message_stream_misaligned`. Scores still reflect what was observed, but treat every entry as
   incomplete. A shallow clone needs a deeper clone (at least M months) to remove the gap.
@@ -402,10 +414,15 @@ hotspots, normalized changes, GitHub enrichment artifact, and exact retained Git
 It also binds the actual Git image, configured resource bounds, and bounded stream-parser version,
 while retaining the line-history, symbol, complexity, and SII identities. Identical rankings do not
 permit reuse when their retained provenance changes.
-As with other producers, deployment operators must bump the declared source-history component
-release when deploying changed software; the runtime does not hash installed implementation files.
+The history-input probe is separate from software identity. Whole-job reuse also follows the
+shared implementation, schema, validator and deployment checks in
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
+deploying changed sources follows the documented release/reload procedure.
 
-A rerun invalidates the plan and everything below it. These gaps are marked
+A changed handoff invalidates semantic consumers and their downstream closure, not unrelated
+scheduling-only branches. Legacy reason strings are canonicalized as `producer_reported_gap`
+with `retryable=False`; the following execution failures also carry explicit retry dispositions.
+These dispositions are
 retriable, so a later resume retries them:
 
 - GitHub rate limiting;

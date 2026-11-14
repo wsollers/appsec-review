@@ -1,3 +1,11 @@
+---
+title: "Operating SVF points-to analysis"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_code_graph_index", "job_cpp_compiled_analysis", "job_inference_security_review", "job_svf_alias_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Operating SVF points-to analysis
 
 `job_svf_alias_analysis` runs after an accepted `job_cpp_compiled_analysis` handoff and before
@@ -63,8 +71,9 @@ module, a name-based caller match and every reached bound appear as named gaps i
 
 ## Image
 
-The catalog entry `tool-svf` is pinned by `image_id`, and the executor refuses any other local
-image. Build instructions, the offline asset lock and the license review are in
+The recipe catalog declares `tool-svf`; the run's frozen host binding supplies its expected
+image ID, which the executor verifies before applying configured signing policy.
+See [image-pin verification](image-pin-verification.md). Build instructions, the offline asset lock and the license review are in
 [`containers/tools/svf/`](../../containers/tools/svf/README.md). A missing or mismatched image is a
 scope gap (`tool-svf image unavailable`), never zero points-to records.
 
@@ -82,6 +91,11 @@ scope gap (`tool-svf image unavailable`), never zero points-to records.
   flag and `open_world_reasons`.
 - Raw plans, compile databases, driver documents and execution receipts stay under `data/svf/` as
   protected run artifacts. Bitcode is deleted after each module is analyzed.
+
+Do not equate the aggregate gap list with those module rows. [T-159](../TODO.md) records that
+normalization/open-world reasons can remain in module coverage and nested scope status without
+reaching root canonical outcomes; the runtime does not inspect SQLite coverage to reconstruct them.
+Acceptance must compare both surfaces, as specified by the [canonical job page](job_svf_alias_analysis.md).
 
 In `job_code_graph_index`, SVF verdicts appear as a `svf` producer entry (`rule: svf-cross-check/1`)
 in each covered fact's `cross_check` block. A `disagree` entry comes only from closed-world, complete

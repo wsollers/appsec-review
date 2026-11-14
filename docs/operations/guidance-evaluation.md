@@ -1,3 +1,11 @@
+---
+title: "Evaluating review guidance"
+kind: "operations"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Evaluating review guidance
 
 Structural prompt tests establish schema, authority and provenance compatibility, not model
@@ -179,7 +187,10 @@ candidate yield separately from independently verified findings using held-out a
 Repeated roles on one model are not independent evidence; scripted outcomes measure neither
 precision nor marginal role yield. F08 does not change these settings or run this experiment.
 
-Future F07 threat-model/deployment context and F11 experiment-planning adapters must use their
+The generated threat-model producer and its bounded inference routing consumer now exist;
+deployment-inventory publication remains T-108. The original F07/F11 labels identify
+proposed experiment adapters, not absent production guidance or permission to create a producer.
+Any future threat-model/deployment-context or experiment-planning adapter must use its
 actual admitted producer artifacts, production request constructor/renderer, application reader
 and final validator. Add missing/foreign/stale inputs and closed-schema regressions before an
 adapter is considered covered. Never synthesize a future producer receipt merely to fill a card;

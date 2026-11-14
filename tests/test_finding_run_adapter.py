@@ -118,7 +118,7 @@ def test_duplicate_claims_are_counted_on_the_claim_their_chain_ends_at():
 
 def test_actionability_and_verification_are_read_not_inferred():
     plain = findings_from_documents(documents())[0][0]
-    assert plain["actionability"] == {"entry_to_sink_path": True, "preconditions": True, "remediation": None,
+    assert plain["actionability"] == {"entry_to_sink_path": None, "preconditions": True, "remediation": None,
                                       "remediation_validated": None}
     assert plain["verification"] == {"verifier_overturned": None, "distinct_model": True}
     report = {"findings": [package("F1", "c1", missing=["source_to_sink_reachability"], review_id=None,

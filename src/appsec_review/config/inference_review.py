@@ -3,7 +3,8 @@
 Every table rejects unknown keys. ``teams.review_teams`` and the ``result_cache`` table are capacity,
 not semantics: they are the only job settings a local overlay may change, and
 :func:`semantic_settings_view` strips them so that runs at different concurrency or cache placement
-share cell, lane, and round fingerprints. Everything else here is semantic.
+share cell, lane, and round fingerprints. ``decision_audit`` is publication-only and has its
+own projection identity; it cannot change model-cell semantics or be changed by capacity overlays.
 """
 from __future__ import annotations
 
@@ -179,6 +180,8 @@ class PackageAssemblySettings:
     max_view_bytes: int
     max_view_source_lines: int
     max_view_type_declarations: int
+    max_operation_records: int = 2000
+    max_behavior_artifact_bytes: int = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,6 +389,43 @@ class ResultCacheSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class DecisionAuditSettings:
+    """Publication-only bounds; an absent table preserves historical audit unavailability."""
+
+    enabled: bool = False
+    max_input_bytes: int = 64 * 1024 * 1024
+    max_records: int = 100_000
+    shard_records: int = 5000
+    shard_bytes: int = 8 * 1024 * 1024
+    page_size: int = 50
+    max_page_size: int = 200
+
+    @classmethod
+    def from_mapping(cls, value: object, field: str) -> DecisionAuditSettings:
+        if value is None:
+            return cls()
+        table = _table(value, field, {
+            "enabled", "max_input_bytes", "max_records", "shard_records", "shard_bytes",
+            "page_size", "max_page_size",
+        })
+        result = cls(
+            enabled=_bool(table["enabled"], f"{field}.enabled"),
+            max_input_bytes=_int(table["max_input_bytes"], f"{field}.max_input_bytes",
+                                 4096, 64 * 1024 * 1024),
+            max_records=_int(table["max_records"], f"{field}.max_records", 1, 1_000_000),
+            shard_records=_int(table["shard_records"], f"{field}.shard_records", 1, 5000),
+            shard_bytes=_int(table["shard_bytes"], f"{field}.shard_bytes", 4096, 8 * 1024 * 1024),
+            page_size=_int(table["page_size"], f"{field}.page_size", 1, 200),
+            max_page_size=_int(table["max_page_size"], f"{field}.max_page_size", 1, 200),
+        )
+        if result.page_size > result.max_page_size:
+            raise ValueError(f"{field}.page_size must not exceed max_page_size")
+        if result.shard_bytes > result.max_input_bytes:
+            raise ValueError(f"{field}.shard_bytes must not exceed max_input_bytes")
+        return result
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceSecurityReviewSettings:
     rounds: RoundSettings
     teams: TeamSettings
@@ -418,6 +458,7 @@ class InferenceSecurityReviewSettings:
     lead_filters: LeadFilters = LeadFilters()
     # Blue-cell result memo (``settings.result_cache``); capacity, never in the semantic view.
     result_cache: ResultCacheSettings = ResultCacheSettings()
+    decision_audit: DecisionAuditSettings = DecisionAuditSettings()
 
     @property
     def judge(self) -> JudgeSettings | None:
@@ -471,13 +512,14 @@ def _jsonable(value: Any) -> Any:
 
 
 def semantic_settings_view(settings: InferenceSecurityReviewSettings) -> dict[str, Any]:
-    """Settings with every capacity key removed; the only view cell/lane/round fingerprints may use.
+    """Model semantics only; capacity and audit-publication settings have separate identities.
 
     Pool limits live outside job settings and are therefore never part of this view.
     """
     document = settings.as_document()
     del document["teams"]["review_teams"]
     del document["result_cache"]
+    del document["decision_audit"]
     return {"schema": SEMANTIC_VIEW_SCHEMA, "settings": document}
 
 
@@ -687,7 +729,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
                                        "roles", "routing", "scoring", "poc"},
                       {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates",
-                       "attack_chains", "result_cache", "source_dispositions", "lead_filters"})
+                       "attack_chains", "result_cache", "decision_audit", "source_dispositions",
+                       "lead_filters"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -735,7 +778,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         "hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
         "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth",
         "max_view_bytes", "max_view_source_lines", "max_view_type_declarations",
-        "slice_strategies", "max_slice_lines", "max_slice_lines_per_function"})
+        "slice_strategies", "max_slice_lines", "max_slice_lines_per_function"},
+        {"max_operation_records", "max_behavior_artifact_bytes"})
     slice_strategies = packages_value["slice_strategies"]
     if not isinstance(slice_strategies, list):
         raise ValueError(f"{field}.slice_strategies must be an array of strategy names")
@@ -761,6 +805,10 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         max_view_source_lines=_int(packages_value["max_view_source_lines"], f"{field}.max_view_source_lines", 10, 2000),
         max_view_type_declarations=_int(packages_value["max_view_type_declarations"],
                                         f"{field}.max_view_type_declarations", 0, 32),
+        max_operation_records=_int(packages_value.get("max_operation_records", 2000),
+                                   f"{field}.max_operation_records", 1, 100_000),
+        max_behavior_artifact_bytes=_int(packages_value.get("max_behavior_artifact_bytes", 8 * 1024 * 1024),
+                                         f"{field}.max_behavior_artifact_bytes", 1, 64 * 1024 * 1024),
     )
     if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
         raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "
@@ -835,4 +883,6 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                                             f"{_PREFIX}.source_dispositions"),
         lead_filters=LeadFilters.from_mapping(settings.get("lead_filters"), f"{_PREFIX}.lead_filters"),
         result_cache=ResultCacheSettings.from_mapping(settings.get("result_cache"), f"{_PREFIX}.result_cache"),
+        decision_audit=DecisionAuditSettings.from_mapping(settings.get("decision_audit"),
+                                                          f"{_PREFIX}.decision_audit"),
     )

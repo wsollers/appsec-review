@@ -1,3 +1,11 @@
+---
+title: "C/C++ index jobs: clangd symbol index and Joern CPG"
+kind: "operations"
+subsystem: "code intelligence"
+status: "current"
+jobs: ["job_clang_static_analysis", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # C/C++ index jobs: clangd symbol index and Joern CPG
 
 Two independent jobs index accepted C/C++ projects after `job_cpp_compiled_analysis` completes.
@@ -20,10 +28,12 @@ job_cpp_compiled_analysis (accepted handoff)
 ```
 
 Neither job depends on the other. In the Dagster wave, each depends only on
-`job_cpp_compiled_analysis`, and `job_codeql_analysis` waits for both. Each job's publication
-composes the latest accepted manifest and replaces only its own earlier shards, so the two can
-finish in either order without dropping each other's evidence. CodeQL composes both as sibling
-producers.
+`job_cpp_compiled_analysis`, and `job_codeql_analysis` waits for enabled declared predecessors.
+Each publication composes its admitted input manifest and replaces its own earlier shards;
+it does not read an unpinned latest pointer to capture concurrently finishing siblings.
+CodeQL retains admitted sibling manifests as upstream references, and later graph/review-data
+indexing restores accepted producer shards when necessary. See the generated declarations in
+the [symbol](job_cpp_symbol_index.md) and [CPG](job_cpg_analysis.md) job pages.
 
 ## Index scopes: the generic input
 
@@ -92,9 +102,10 @@ For each scope:
 2. **Retain the CPG.** A successful CPG within `max_cpg_bytes` is retained at
    `data/code-index/joern/<scope>/run/cpg.bin`, with its SHA-256 and size, as run-owned evidence.
    It is never served over MCP.
-3. **Publish a blocked shard.** Bounded CPG/PDG export, source mapping, functional fixtures, and
-   security acceptance are not implemented yet. So every scope publishes a `BLOCKED` evidence
-   entity with zero observations and `unavailable` coverage. It names the generated CPG, or the
+3. **Publish the available evidence.** Every scope retains a `BLOCKED` evidence entity with zero
+   security observations. Whole-program CPG retention has unavailable coverage; the enabled
+   seeded path described below can add bounded per-function facts with partial coverage, not
+   general source-mapped CPG/PDG completeness. The marker names the generated CPG, or the
    reason none was produced: timeout, OOM, non-zero exit, empty output, or over the bound.
    Generating a CPG is not CPG coverage.
 
@@ -103,7 +114,7 @@ Settings in `[jobs.job_cpg_analysis.settings]`:
   Joern is deprecated" in
   [`../architecture/code-graph-precomputation.md`](../architecture/code-graph-precomputation.md).
   When `false`, the job is not planned at all, so no Joern container runs and no rows are
-  published (the in-job `DISABLED` path that writes `unavailable` rows is unreachable from the
+  published (the in-job disabled path that writes `unavailable` rows is unreachable from the
   planners). The `cpg_graph` coverage lane is always `unavailable` in the coverage matrix.
 - `workers` (1 until a per-tool resource profile is reviewed).
 - `max_cpg_bytes`.

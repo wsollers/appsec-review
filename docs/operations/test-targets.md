@@ -1,7 +1,20 @@
+---
+title: "Test targets: where to get the repositories"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Test targets: where to get the repositories
 
 Reviews and the acceptance tests run against target repositories that are **not** part of this
 repository. `targets/` is ignored by Git, so a target never enters this repository.
+
+The table records fixture specifications and prior provenance, not a fresh inspection of this
+host's checkouts, remote tags or tool performance. A walk still verifies its exact source,
+prerequisites and confirmed expected-gap list under the [charter](../processes/walk-charter.md);
+documentation reconciliation does not read an answer key or establish target acceptance.
 
 | Target | Where it comes from | Where it goes | Used by |
 | --- | --- | --- | --- |
@@ -97,8 +110,10 @@ git clone https://github.com/wsollers/appsec-review-smoke-guide.git ..\appsec-re
   blanked with line numbers kept, one reproducible commit) and then cloned into `targets/`. Its key,
   `test/acceptance/castle-c250-v1/expectations.toml`, is derived from upstream metadata and never placed in
   the target. Steps: [`acceptance-funnel.md`](acceptance-funnel.md#manual-validation-user-owned).
-- On a new host, clone the target before the first stack start; the Dagster compose file mounts
-  `targets/` writable at `/opt/app/targets`, because acquisition and builds write into it.
+- On a new host, prepare the selected target before its review. Compose mounts `targets/`
+  writable for acquisition; this is not a claim that managed builds rewrite the accepted
+  checkout. Build-workspace custody is described in
+  [acquisition and build](../architecture/target-acquisition-and-build.md).
 
 The full download steps are in the README section "Download the acceptance target".
 

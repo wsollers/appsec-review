@@ -1,7 +1,15 @@
+---
+title: "Recovery and repair admission"
+kind: "operations"
+subsystem: "testing and operations"
+status: "current"
+jobs: ["job_ci_configuration_analysis", "job_model_connectivity", "job_review_intake", "job_source_history_analysis"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Recovery and repair admission
 
 Recovery is **fail -> inspect bounded evidence -> reproduce in a focused unit test -> repair ->
-build a release -> inspect admission -> restart**. Inspection does not run tests, captured
+measure the release -> inspect admission -> explicitly restart**. Inspection does not run tests, captured
 commands, workers, Docker builds, or models.
 
 ## Release and deployment identity
@@ -10,7 +18,7 @@ commands, workers, Docker builds, or models.
 container catalogs/query packs/adapters, validators/schema assets, bundled reference fixtures,
 runtime guidance/rules, dependency locks, the image recipe, and scripts. The release
 builder follows static cross-job helper imports as well. It rejects a release lacking shared
-code or validator coverage, or an absent explicitly named dependency. At build time:
+code or validator coverage, or an absent explicitly named dependency. At release measurement:
 
 ```sh
 python -m appsec_review.runtime.release            # direct (non-Dagster) runs: beside the sources
@@ -23,7 +31,7 @@ Dagster deployment the code-location's start command runs this builder against t
 and then execs the code server; the `test` image stage runs it at build time because it is the one
 stage that carries sources. Job handlers never scan or hash installed platform payloads as customer
 evidence. They read the bounded generated manifest at the configured location.
-Changing a source/helper/schema/script and rebuilding changes the appropriate identity even
+Changing a source/helper/schema/script and remeasuring changes the appropriate identity even
 when operator release labels are unchanged. Labels can invalidate an identity, but cannot
 replace source provenance. Missing manifests disable reuse, including successful-unit reuse.
 Dynamic imports outside the declared source closure must be added to the manifest before release.
@@ -321,7 +329,8 @@ Host image bindings are a hashed configuration layer, not a source repair: chang
 immutable. The T-051 cutover preserves `2026-11-10-0002` and starts a fresh c094 run by explicit
 operator decision; it does not promise uninterrupted reuse across that cutover.
 An unchanged job may reuse an accepted predecessor only after full artifact verification.
-Actual DAG ancestors determine input handoffs in both drivers; independent branches survive,
+Typed declarations and admitted pins determine input handoffs in both drivers; DAG ancestry
+describes availability, not permission. Independent branches survive,
 live gates always run, and `COMPLETED_WITH_GAPS` survives warm reuse. Dagster also accepts the
 `appsec/force_from` tag for every job in its enabled graph.
 

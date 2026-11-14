@@ -1,3 +1,11 @@
+---
+title: "Role-selected review procedures"
+kind: "architecture"
+subsystem: "review inference and guidance"
+status: "current"
+jobs: ["job_inference_security_review", "job_owasp_control_assessment"]
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Role-selected review procedures
 
 The guidance composer combines knowledge, responsibility and reusable procedure without changing

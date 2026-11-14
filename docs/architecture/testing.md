@@ -1,3 +1,11 @@
+---
+title: "Testing architecture"
+kind: "architecture"
+subsystem: "testing and operations"
+status: "current"
+jobs: []
+last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
+---
 # Testing architecture
 
 Rules for repository agents live in [`../../AGENTS.md`](../../AGENTS.md) ("Verification"). This
@@ -14,14 +22,46 @@ procedure. Where this page and `AGENTS.md` differ, `AGENTS.md` wins and this pag
 | Recover after a failed or repaired job | [working loop](#working-loop) step 5 and the [recovery runbook](../operations/recovery-repair.md) |
 | Run a named suite or a long run | [operator wrapper](#operator-wrapper) |
 
+## Forward contract and enforcement
+
+The 2026-11-12 contract recorded under [T-113](../TODO.md) is the rule going forward, not a
+description of every test inherited from before the walk. Unit tests exercise code with canned
+fixtures, finish in under ten seconds each and under ten minutes for the whole unit suite, and do
+not run Docker, analysis tools or models. Integration may use those boundaries under its 300 s
+default; live validation has an 1800 s default. Acceptance remains a user-owned, per-job decision
+using the charter's four checks, not a synonym for a green pytest run.
+
+The table distinguishes a rule from the mechanism that actually checks it. An explicit command
+line or exception reason is not evidence that the user authorized a heavier validation.
+
+| Contract | Enforcement source | Actual boundary and remaining gap |
+| --- | --- | --- |
+| Code-level unit tests use canned fixtures, not real engines, tools or models. | [unit guard](../../tests/unit/conftest.py), `blocked_executable`, `_install_guards`, `guard_dagster_if_imported` | Partially enforced for files under `tests/unit/`: selected process names, direct socket connections and selected Dagster entry points are guarded; fake executables under scratch are allowed. This is not a sandbox or proof that arbitrary subprocesses, in-process clients and local services are fake. Blanket enforcement is **stated, not enforced** ([T-158](../TODO.md)). |
+| Each unit test finishes in under 10 s. | [configured budgets](../../pyproject.toml), [phase clock](../../tests/time_budgets.py), [report hook](../../tests/conftest.py) | The default unit budget is 10 s across setup/call/teardown for `tests/unit/`; an overrun fails after a phase returns, not while a test is hung. Legacy paths remain unbudgeted unless explicitly marked ([T-113](../TODO.md)); approved-exception provenance and hard ceilings remain [T-109](../TODO.md). |
+| The whole unit suite finishes in under 10 minutes. | [wrapper supervisor](../../deploy/dagster/bin/ops_test_guard.py), [wrapper entry](../../deploy/dagster/bin/ops_tests.py) | **Stated, not enforced** as a universal suite ceiling ([T-109](../TODO.md)). A wrapper invocation has its selected total deadline, but `Limits` accepts any finite positive override and direct pytest bypasses it. The [CI quality job](../../.github/workflows/quality.yml) has a ten-minute job timeout, not proof that the full unit suite meets this contract. |
+| Integration cases use the 300 s default; live cases use 1800 s. | [configured budgets](../../pyproject.toml), [tier classification and phase clock](../../tests/time_budgets.py) | Enforced after phases for `tests/integration/` and `tests/live/` or root `test_live_*` paths. A declared `time_budget` marker replaces the default and requires a reason; the parser does not verify user approval ([T-109](../TODO.md)). The acceptance folder is not automatically the live path tier. |
+| Select each job and tier from the explicit map. | [job map](../../tests/job-test-map.json), [nonexecuting selector](../../src/appsec_review/development/test_selection.py), [selector regressions](../../tests/test_job_test_selection.py) | The selector validates exact registered jobs and source selectors and reports empty handler coverage as a gap; common-contract cases do not fill that gap. Its proposed command is inspection output, not execution permission. |
+| Implicit discovery must not collect integration, acceptance or live paths. | [collection hook](../../tests/conftest.py), `pytest_ignore_collect`; [focused selector guard](../../deploy/dagster/bin/ops_test_guard.py) | Enforced for implicit collection and wrapper admission. Explicit pytest paths bypass implicit exclusion; wrapper `--allow-heavy` signals selection intent, not user authorization. Manual permission remains **stated, not enforced by these flags** ([T-158](../TODO.md)). |
+| Unit sessions must not inherit production configuration or persistent run bindings. | [environment guard](../../tests/test_000_unit_environment_guard.py), [session preflight and ordering](../../tests/conftest.py) | Xdist controllers run the guard before workers. Serial sessions reorder it only when its module is collected; an explicit serial selector can omit it. The universal first-guard rule is therefore **stated, not fully enforced** ([T-158](../TODO.md)). |
+| Test files, fixtures and ordering must be independent. | [shuffle support](../../tests/conftest.py), [collection proof](../../deploy/dagster/bin/ops_test_guard.py), [bounded worker selection](../../deploy/dagster/bin/ops_tests.py) | The tools exercise shuffled/parallel orders and pin collection; they cannot prove independence in every order. The before-integration procedure and fixture review remain required. Automatically enforcing that procedure on every path is **stated, not enforced** ([T-158](../TODO.md)). |
+| Long and multi-file runs go through the bounded wrapper with exact selectors/counts. | [shell entry](../../scripts/run-tests.sh), [wrapper](../../deploy/dagster/bin/ops_tests.py), [supervisor and collection guard](../../deploy/dagster/bin/ops_test_guard.py), [guard regressions](../../tests/test_ops_test_guard.py) | The wrapper enforces its collection proof, selected deadline and owned-process cleanup. Universal use of the wrapper, rather than a direct multi-file pytest command, is **stated, not enforced** ([T-109](../TODO.md)). |
+| Scratch and caches stay in `test/tmp/`; skips and slow cases are visible. | [scratch validation, timings and summary](../../tests/conftest.py), [fixed report](../../deploy/dagster/bin/ops_tests.py) | Path bounds and reporting are implemented. A named skip is a coverage gap, not a pass; reporting an over-10-second legacy case alone does not make it fail. The prohibition on hiding failures with `xfail` is procedural, **stated, not enforced as a blanket collection rejection** ([T-158](../TODO.md)). |
+| Accept each job only with inputs, independent comparison, canonical gaps and a saved baseline. | [walk charter, section 5](../processes/walk-charter.md#5-accepting-a-job-the-four-checks), [stepwise operator](../../deploy/dagster/bin/stepwise.py) | The operator supports framework checks and baseline custody, but does not independently establish the human/source comparison or the user's expected-gap decision. Automatic proof of all four checks is **stated, not enforced** ([T-158](../TODO.md)); the user-owned procedure remains mandatory. |
+
+`tests/test_time_budgets.py` still contains expectations that omit the unit budget key at this
+source boundary. The implementation and configured values above establish the current behavior;
+that test file is not cited here as a passing verification record. Its reconciliation is included
+in [T-158](../TODO.md). No integration, acceptance or live validation is implied by this document.
+
 ## Tiers
 
 | Tier | Location | Collected by bare `pytest` | Who runs it | May use |
 | --- | --- | --- | --- | --- |
-| Unit | `tests/unit/<job_id>/`, `tests/unit/<package>/`; helpers in `tests/shared/` | yes | anyone, on every change, smallest relevant selection | the job's own code and canned fixtures only: no Docker, tools, models, network or Dagster (enforced by `tests/unit/conftest.py`); 10 s per test |
-| Pre-walk unit | `tests/test_*.py` and `tests/<area>/` outside the tier directories | yes, until T-113 moves each job | the same, but treat every test as suspect | whatever it used before the walk; no budget until moved |
+| Unit | `tests/unit/<job_id>/`, `tests/unit/<package>/`; helpers in `tests/shared/` | yes | anyone, on every change, smallest relevant selection | the job's own code and canned fixtures only: no real Docker, tools, models, network or Dagster; selected boundary guards in `tests/unit/conftest.py`, with the enforcement limits above; 10 s per test |
+| Pre-walk legacy paths | `tests/test_*.py` and `tests/<area>/` outside the tier directories | yes, until T-113 moves each job | inspect and select narrowly; the path is not a unit-safety guarantee | inherited behavior may violate the forward contract; unit guards and the unit path budget do not apply automatically |
 | Integration | `tests/integration/<job_id>/` (older files directly under `tests/integration/`) | no; only when named explicitly with `--allow-heavy` | the user, on explicit request | Docker, tool images, target checkouts and models against fixtures; 300 s per test |
 | Acceptance | `tests/acceptance/<job_id>/`, driven by `scripts/run-tests.* --acceptance <profile>`; the former live tier (`tests/live/`, `tests/test_live_*.py`) folds in here as the walk reaches each job | no | the user, on explicit request | the Dagster stack, Docker, real models and targets: one job at a time, validated per job (the stepwise process); 1800 s per test for the former live files |
+| Live path tier | `tests/live/`, root `tests/test_live_*.py` while those paths remain | no | the user, on explicit request | real tooling/hosts/providers within the declared case; configured 1800 s default, separately from acceptance-profile budgets |
 
 Per-job correctness, parity and system acceptance (SAT/SIT) are described in
 [`../processes/acceptance-and-regression-testing.md`](../processes/acceptance-and-regression-testing.md).
@@ -36,20 +76,22 @@ running them.
 
 ## The unit harness
 
-Everything below is implemented in `tests/conftest.py` and applies to every test it collects.
+The root harness is implemented in `tests/conftest.py`; the scope qualifications below are part
+of its behavior, not exemptions from the forward contract.
 
 - **Temporary state.** `--basetemp` and the pytest cache must stay under `test/tmp/`
   (`pyproject.toml` sets `--basetemp=test/tmp`); the harness rejects overrides outside it. Give each
   concurrent or focused session its own `--basetemp=test/tmp/<session-name>`.
-- **Production-sizing guard first.** `tests/test_000_unit_environment_guard.py` is reordered to be
-  the first item of every session (`pytest_collection_modifyitems`). It fails, listing each
+- **Production-sizing guard.** `tests/test_000_unit_environment_guard.py` is reordered first
+  when it is collected (`pytest_collection_modifyitems`). It fails, listing each
   offending variable, when the session would resolve production sizing: a non-`dev`
   `APPSEC_REVIEW_PROFILE`, any `APPSEC_REVIEW_CONFIG_OVERLAY`, an `APPSEC_REVIEW_CONFIG` other than
   the checkout's `appsec-review.toml`, any `APPSEC_NATIVE_*` variable, any `DAGSTER_HOME`, an
   `APPSEC_ACCEPTANCE_ROOT` / `APPSEC_ACCEPTANCE_RUNS_DIR` binding, or resolved sizing values that
   differ from the checked-in dev values. Expected values are derived from the files, not hard-coded.
   It never skips and never scrubs the environment. Under xdist the controller runs the same check as
-  a preflight before workers start.
+  a preflight before workers start. An explicit serial selection can omit the guard module;
+  that enforcement gap is [T-158](../TODO.md), not permission to inherit production settings.
 - **Timing table.** Every test's start, finish, setup/call/teardown durations, worker and outcome
   are written to the SQLite table `test_timings` in `<basetemp>.timings.sqlite`, next to the base
   directory. Query it while a run is in progress, for example
@@ -59,8 +101,10 @@ Everything below is implemented in `tests/conftest.py` and applies to every test
 - **Order and parallelism.** `pytest-xdist` is in the `test` extra. `--shuffle-seed=<int>` shuffles
   the collected order deterministically (the guard stays first) and prints the seed in the header,
   so an order-dependent failure is reproducible.
-- **Unit-only fakes.** An autouse fixture stops run-completion hooks from starting the LaTeX
-  telemetry container in unit tests; integration and live tests keep the real renderer.
+- **Telemetry completion substitute.** An autouse fixture replaces the completion-hook LaTeX
+  renderer outside the integration/live path tiers. This also affects acceptance-path tests
+  collected through this root fixture; it is not proof of renderer coverage. Integration and live
+  paths keep the real hook, and renderer tests can exercise their explicit boundary.
 - **Missing targets.** `@pytest.mark.requires_target("<name>")` skips, naming the absent
   `targets/<name>` checkout.
 
@@ -70,20 +114,22 @@ Everything below is implemented in `tests/conftest.py` and applies to every test
 
 `tests/unit/<job_id>/` holds the code-level tests of one job (`tests/unit/<package>/` for shared
 code, `tests/shared/` for helpers every tier may use). Everything under `tests/unit/` runs under
-`tests/unit/conftest.py`, which enforces the tier instead of relying on review:
+`tests/unit/conftest.py`, which enforces these selected boundaries:
 
 - the `unit` time budget (`unit_time_budget_seconds`, 10 s for setup, call and teardown together)
   fails the test that crosses it, through the same `PhaseClock` as the integration and live tiers;
 - starting `docker`, `podman`, `claude`, `codex`, `gh` or a Dagster process is refused before it
   runs, unless the executable is a fake the test wrote under the pytest base temp;
-- a socket may connect to loopback only;
+- IP socket connections are restricted to loopback; Unix sockets remain allowed;
 - `execute_job`, `materialize` and `execute_in_process` are refused once `dagster` is imported;
 - `os.fsync` is a no-op, because durability is not what a unit test checks.
 
-A refusal raises `UnitTierViolation`; the fix is a fake at the boundary, a canned fixture, or a
+A refusal raises `UnitTierViolation`; these selected entrypoint guards are not a complete
+process/network sandbox ([T-158](../TODO.md)). The fix is a fake at the boundary, a canned fixture, or a
 move to `tests/integration/` or `tests/acceptance/`. Tests still at the root of `tests/` are the
 pre-walk suite: T-113 moves each job's tests into its folder, replacing those that ran whole job
-graphs or engines with code-level tests, and carries no budget until then.
+graphs or engines with code-level tests. Those paths have no default unit budget; an explicit
+budget marker can still apply.
 
 ### The test-tier walk (T-113)
 
