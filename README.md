@@ -626,10 +626,12 @@ appsec-review resume --run-id <run-id> --target targets/appsec-multi-vuln --forc
 ```
 
 An implementation change requires [explicit repair admission](docs/operations/recovery-repair.md),
-not just `--force-from`. Build-time dependency manifests identify job/shared/validator/script
-bytes; release labels alone cannot admit reuse. `plan-repair`, `failure-replay`, and
-`select-job-tests` explain recovery without executing work. Every enabled graph job, including
-post-index consumers, can be forced; only its actual dependents are invalidated.
+not just `--force-from`. Launch-time dependency manifests (`implementation-release.json`) identify
+each job's imported module, validator and script closure; release labels alone cannot admit reuse.
+`plan-repair`, `failure-replay`, and `select-job-tests` explain recovery without executing work.
+Unchanged descendants of a repaired job revalidate against upstream content equivalence at dispatch
+(`REVALIDATE`); every enabled graph job, including post-index consumers, can be forced with
+`--force-from`, which invalidates its actual dependents.
 
 Other options: the global `--config <path-or-file-URI>` (before the subcommand) selects a
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and

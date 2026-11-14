@@ -26,9 +26,8 @@ an image-only application asset is insufficient. Keep the checkout and declared 
 fixed during a review. These declarations do not rebuild or relabel the old image wrapper, and
 an unmapped accepted dependency environment remains an explicit gap.
 Use the integrated `main` checkout for both deployment and review launches, not another
-worktree's configuration or virtual environment. Rebuild the application image after integrating
-code, then verify the loaded code location before launching; the fixed wrapper mount alone does
-not update the application package.
+worktree's configuration or virtual environment. Reload the stack with `lifecycle.py reload` after
+integrating application code, then verify the loaded code location before launching.
 
 ## Result cache
 
@@ -97,9 +96,9 @@ The start command alone does not establish authentication or launch safety. Comp
 non-inference authentication checks before submission. The overlay is mounted read-only under
 `/opt/app/test/acceptance` and inherited by the application workers. It needs no image rebuild.
 A deployment-only commit must record its own source SHA separately from the retained image's
-implementation SHA and immutable image ID, with byte-equivalence evidence for installed
-application/configuration/guidance assets. Changes to packaged implementation still require a
-rebuild. No resource configuration commissions a derived-image builder or authorizes a retry.
+immutable image ID, with measured source-identity evidence for mounted
+application/configuration/guidance assets. Changes to mounted application code require
+`lifecycle.py reload`; only dependency, tool or signing-verifier changes require a rebuild. No resource configuration commissions a derived-image builder or authorizes a retry.
 
 ## Build, start, verify, and stop
 
@@ -158,8 +157,8 @@ set both `APPSEC_REVIEW_SYSTEM=<id>` and `APPSEC_REVIEW_TARGET=/opt/app/targets/
 [`../../docs/operations/target-acquisition.md`](../../docs/operations/target-acquisition.md).
 
 The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
-models and larger token limits from `profiles/prod.toml`, which the image copies next to
-`appsec-review.toml`). It is the containers' default, set when they are created
+models and larger token limits from `profiles/prod.toml`, mounted read-only alongside
+`appsec-review.toml` at `/opt/app`). It is the containers' default, set when they are created
 (`scripts/stack-restart --profile prod`); `scripts/review-start --profile` selects another profile of
 the same provider family for one run. See [model profiles](../../docs/operations/model-profiles.md).
 
@@ -249,8 +248,8 @@ On success it prints a `container-image-self-check` JSON line with status `verif
 code server. On any failure it prints status `refused` and exits 3, so the code location never
 becomes healthy and the webserver and daemon, which wait for it, are not started. With
 `image_enforcement = "disabled"` (the default; enforcement is opt-in with `"required"`) it prints
-status `disabled` and starts the server unchecked. The image bakes in `appsec-review.toml`, so a
-change to `[signing]` takes effect only after `lifecycle.py build` and `reload`. The
+status `disabled` and starts the server unchecked. `appsec-review.toml` is mounted read-only at
+`/opt/app/appsec-review.toml`, so a change to `[signing]` takes effect after `lifecycle.py reload`. The
 gate itself runs from verified modules, because the image's `sitecustomize.py` verifies the package
 first. `lifecycle.py reload` recreates the code location, so the gate runs again with the newly
 verified ID. The gate does not replace host verification: access to the Docker socket is
@@ -261,7 +260,7 @@ for a healthy code location and then skips the gate.
 Inside the final stages every Python process runs the image's `sitecustomize.py` (a copy of
 `signing/sitecustomize_shim.py` in the interpreter's standard library directory). It loads the
 root-owned verifier from `/opt/appsec-review/signing-bootstrap/` and verifies
-`/usr/local/lib/python3.12/site-packages/appsec_review` against
+`/opt/app/src/appsec_review` (`APPSEC_REVIEW_MODULE_ROOT`) against
 `/opt/appsec-review/signing/python-modules.json` with `/usr/bin/openssl` and the mounted trust anchors.
 If verification fails, the process exits with code 78. The image contains no keys. Compose mounts
 `APPSEC_SIGNING_TRUSTED_KEYS_DIR` (default `/etc/appsec-review/signing/trusted-keys`) and
@@ -293,11 +292,11 @@ Run the offline packaging regression tests with
 These tests stage catalog assets through the build-context exclusion rules and exercise the same
 catalog-loading command used by the image build; they do not build or restart the deployment.
 
-Rebuild and reload the image services (code location, webserver and daemon) after an application
-change, then prove that the workspace reconnected:
+Reload the image services (code location, webserver and daemon) after an application code
+change (run `lifecycle.py build` first only when dependencies, tools or the signing verifier
+changed), then prove that the workspace reconnected:
 
 ```bash
-python deploy/dagster/bin/lifecycle.py build
 python deploy/dagster/bin/lifecycle.py reload
 python deploy/dagster/bin/verify.py
 ```
@@ -541,11 +540,10 @@ python deploy/dagster/bin/lifecycle.py config
 ## Stepwise acceptance of wave1_review
 
 `stepwise.py` runs every `wave1_review` job as its own single-job Dagster job, one at a time,
-against one application run. Each launch goes through the webserver into the packaged code location,
+against one application run. Each launch goes through the webserver into the mounted code location,
 so a job runs with the same uid/gid, mounts and Docker socket as in `wave1_review`. The job order
-and each job's upstream handoffs come from the packaged code location
-(`python -m appsec_review.orchestration.topology`), so the code-location image must contain that
-module. The launcher names the accepted upstream handoffs in the `appsec/upstream_handoffs` run tag.
+and each job's upstream handoffs come from the mounted code location
+(`python -m appsec_review.orchestration.topology`). The launcher names the accepted upstream handoffs in the `appsec/upstream_handoffs` run tag.
 The job's begin op checks each one against the run's `latest.json` pointer, so a standalone job binds
 the same handoffs it would receive inside the graph.
 
@@ -636,8 +634,8 @@ The verdict is one of these:
   fields.
 - `DIFFERENT` (exit 3): the outputs differ.
 - `INVALID COMPARISON` (exit 3): the two handoffs disagree on implementation, configuration,
-  validation, source fingerprint, input or upstream identity, such as when the code-location
-  image was built from another commit.
+  validation, source fingerprint, input or upstream identity, such as when the mounted
+  code location was reloaded from another commit.
 - `RUN FAILED` (exit 1): either side failed, or the local write audit found something.
 
 The report, both normalized outputs, the local log and the recordings are kept under
