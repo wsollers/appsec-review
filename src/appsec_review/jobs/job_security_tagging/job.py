@@ -20,6 +20,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from .cloud import build_cloud
 from .collation import collect_facets
+from .model_pass import run_model_pass
 from .crosswalk import Crosswalk, evaluate, load_crosswalk
 from .producers import (
     TAG_INDEX, AcceptedIndexes, Scope, collect_coverage_gaps, collect_graph_facts, collect_observation_facts,
@@ -39,13 +40,15 @@ TOPOLOGY = {
     "scope": ("resolve_inputs",),
     "collection": ("source_facts", "observation_facts", "coverage_gaps"),
     # Collation pass (T-5008, docs/architecture/collation-pass.md): facets per first-party file and component.
-    "collation": ("collate_facets",),
+    "collation": ("collate_facets", "model_pass"),
     "crosswalk": ("apply_crosswalk",),
     "integrity": ("validate_assignments",),
     "publication": ("publish_index", "publish_tag_cloud", "publish_handoff"),
 }
 COLLECTORS = tuple(f"collection.{task}" for task in TOPOLOGY["collection"])
 COLLATION = "collation.collate_facets"
+MODEL_PASS = "collation.model_pass"
+COLLATION_UNITS = (COLLATION, MODEL_PASS)
 FACET_SHARD = "facets"
 STANDING_GAPS = (
     "invoked capability coverage is limited to resolved, eligible graph entry/sink classes with pinned mappings",
@@ -243,7 +246,8 @@ def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: A
     return shards
 
 
-def build_job() -> Job:
+def build_job(*, infer=None) -> Job:
+    """``infer`` is the application's recorded model transport; the model pass uses it only when enabled."""
     def load_taxonomy(unit: UnitContext) -> Mapping[str, Any]:
         vocabulary, rules, crosswalk = _taxonomy(unit.job.repository_root, unit.job.config.settings)
         proposed = sorted(name for name, value in vocabulary.namespaces.items() if value.status != "active")
@@ -314,10 +318,35 @@ def build_job() -> Job:
                                     for item in document["components"]}
         return result
 
+    def model_pass(unit: UnitContext) -> Mapping[str, Any]:
+        """T-5008 stage 4: optional recorded model pass; off by default, never a dependency of the facets."""
+        vocabulary, rules, _ = _unit_taxonomy(unit)
+        _, limit, _ = _settings(unit.job.config.settings)
+        settings = _collation_settings(unit.job.config.settings)
+        collated = unit.output(COLLATION)
+        facet_records = _read(unit, collated["artifact"])["assignments"]
+        collation = _read(unit, collated["collation"])
+        indexes, scope = (_indexes(unit), _scope(unit)) if settings.model_pass.enabled else (None, None)
+        if not settings.model_pass.enabled:
+            from .model_pass import PURPOSES_SCHEMA, WORKER_ID
+            document = {"schema": PURPOSES_SCHEMA, "target_snapshot": collation["target_snapshot"],
+                        "mode": "disabled", "worker": WORKER_ID, "components": []}
+            records, gaps = [], []
+        else:
+            records, gaps, document = run_model_pass(
+                repository_root=unit.job.repository_root, run_root=unit.job.run_root, indexes=indexes, scope=scope,
+                vocabulary=vocabulary, rules_sha256=rules.sha256, settings=settings, collation=collation,
+                facet_records=facet_records, infer=infer, limit=limit, unit_id=unit.unit_id)
+        result = _assignment_set(unit, "model-pass", records, gaps)
+        result["purposes"] = _write(unit, "unit-purposes.json", document)
+        result["mode"] = document["mode"]
+        result["component_status"] = {item["component_id"]: item["status"] for item in document["components"]}
+        return result
+
     def apply_crosswalk(unit: UnitContext) -> Mapping[str, Any]:
         vocabulary, _, crosswalk = _unit_taxonomy(unit)
         scope = _scope(unit)
-        observed = [record for unit_id in (*COLLECTORS, COLLATION)
+        observed = [record for unit_id in (*COLLECTORS, *COLLATION_UNITS)
                     for record in _read(unit, unit.output(unit_id)["artifact"])["assignments"]]
 
         def scope_subject(kind: str, key: str, group: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
@@ -350,7 +379,7 @@ def build_job() -> Job:
 
     def validate_assignments(unit: UnitContext) -> Mapping[str, Any]:
         vocabulary, _, _ = _unit_taxonomy(unit)
-        records = [record for unit_id in (*COLLECTORS, COLLATION, "crosswalk.apply_crosswalk")
+        records = [record for unit_id in (*COLLECTORS, *COLLATION_UNITS, "crosswalk.apply_crosswalk")
                    for record in _read(unit, unit.output(unit_id)["artifact"])["assignments"]]
         merged = merge_assignments(records)
         known = {record["assignment_id"] for record in merged}
@@ -395,7 +424,7 @@ def build_job() -> Job:
         validated = unit.output("integrity.validate_assignments")
         records = _read(unit, validated["artifact"])["assignments"]
         gap_tags = sorted({record["tag"] for record in records if record["family"] == "gap"})
-        collector_gaps = [gap for unit_id in ("scope.resolve_inputs", *COLLECTORS, COLLATION)
+        collector_gaps = [gap for unit_id in ("scope.resolve_inputs", *COLLECTORS, *COLLATION_UNITS)
                           for gap in unit.output(unit_id)["gaps"]]
         gaps = list(dict.fromkeys([*STANDING_GAPS, *collector_gaps,
                                    *unit.output("publication.publish_tag_cloud")["rollup_gaps"]]))
@@ -422,16 +451,18 @@ def build_job() -> Job:
         *(u(unit_id, handler, ("taxonomy.load_taxonomy", "scope.resolve_inputs"))
           for unit_id, handler in zip(COLLECTORS, (source_facts, observation_facts, coverage_gaps), strict=True)),
         u(COLLATION, collate_facets, ("taxonomy.load_taxonomy", "scope.resolve_inputs", *COLLECTORS)),
+        u(MODEL_PASS, model_pass, ("taxonomy.load_taxonomy", "scope.resolve_inputs", COLLATION)),
         u("crosswalk.apply_crosswalk", apply_crosswalk, ("taxonomy.load_taxonomy", "scope.resolve_inputs",
-                                                         *COLLECTORS, COLLATION)),
+                                                         *COLLECTORS, *COLLATION_UNITS)),
         u("integrity.validate_assignments", validate_assignments,
-          ("taxonomy.load_taxonomy", *COLLECTORS, COLLATION, "crosswalk.apply_crosswalk")),
+          ("taxonomy.load_taxonomy", *COLLECTORS, *COLLATION_UNITS, "crosswalk.apply_crosswalk")),
         u("publication.publish_index", publish_index,
           ("taxonomy.load_taxonomy", "scope.resolve_inputs", "integrity.validate_assignments")),
         u("publication.publish_tag_cloud", publish_tag_cloud,
           ("taxonomy.load_taxonomy", "integrity.validate_assignments")),
         u("publication.publish_handoff", publish_handoff,
-          ("taxonomy.load_taxonomy", "scope.resolve_inputs", *COLLECTORS, COLLATION, "integrity.validate_assignments",
+          ("taxonomy.load_taxonomy", "scope.resolve_inputs", *COLLECTORS, *COLLATION_UNITS,
+           "integrity.validate_assignments",
            "publication.publish_index", "publication.publish_tag_cloud")),
     )
     return Job("job_security_tagging", "security_tagging", UnitExecutor(units).execute,

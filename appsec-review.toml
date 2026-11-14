@@ -2851,6 +2851,7 @@ workers = 3
 [jobs.job_security_tagging.steps.collation]
 workers = 1
 [jobs.job_security_tagging.steps.collation.tasks.collate_facets]
+[jobs.job_security_tagging.steps.collation.tasks.model_pass]
 
 [jobs.job_security_tagging.steps.crosswalk]
 workers = 1

@@ -38,8 +38,10 @@ after capability collection that assigns closed facet tags (`role`, `exposure`, 
 per component, from the collected tags, pinned lexical and path rules over hash-verified
 first-party bytes, build receipts and target documents. Its rules live in the pinned
 capability-rules file, its settings under `jobs.job_security_tagging.settings.collation`, and its
-records in the `tags` index shard `facets`. The deterministic step (`collation.collate_facets`) is
-implemented; the optional model pass (`collation.model_pass`, off by default) is stage 4 of the design.
+records in the `tags` index shard `facets`. The deterministic step (`collation.collate_facets`) and the
+optional recorded model pass (`collation.model_pass`, off by default; one bounded call per first-party
+component through the application's recorded transport, writing `model-pass.json` and
+`unit-purposes.json`) are implemented.
 The step publishes `facet-facts.json` (the assignment set) and `collation.json`
 (`appsec-review/collation-pass/1`: per first-party file its facets and assignment ids, per component
 its facets and `target:*` classes, the files skipped per disposition, the sources that were available

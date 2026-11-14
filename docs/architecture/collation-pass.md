@@ -252,7 +252,8 @@ taxonomy -> scope -> collection{source_facts, observation_facts, coverage_gaps}
         -> collation{collate_facets[, model_pass]} -> crosswalk -> integrity -> publication
 ```
 
-Stage 2 registers the `collate_facets` task; the `model_pass` task joins the step with stage 4.
+`collate_facets` is the deterministic pass; `model_pass` (stage 4) publishes a disabled record unless
+`settings.collation.model_pass.enabled` is true.
 
 Why a step rather than a job between tagging and package assembly:
 
@@ -365,6 +366,17 @@ purpose.
   `collation:model_pass_failed:<component>`.
 - **Setting.** `model_pass.enabled = false` by default in every shipped profile; when disabled the
   unit publishes an empty proposal set with `mode: disabled` and no gap.
+- **Implementation.** `jobs/job_security_tagging/model_pass.py` (`run_model_pass`), the specialized
+  worker `unit_purpose` (`guidance/workers.py`: role `unit_purpose_collator`, task
+  `unit_purpose_collation`, skill `unit-purpose-collation`), the role fragment
+  `pipeline/prompt-fragments/roles/unit_purpose_collator.md`. The request carries the component's
+  deterministic facets with assignment ids, its first-party paths, the allowed `role` and `asset`
+  values and the excerpts (the lines the facets cite, then each file's first 20 lines, within
+  `max_excerpt_lines`), each line clipped to 200 characters. Accepted claims are `reported`
+  assignments with producer `collation-model-pass`; the purpose paragraph is stored in
+  `unit-purposes.json` beside the proposal hash and acceptance decision. Carrying the purpose into
+  the unit context (section 5.2) needs an accepted-upstream read of that artifact by package assembly
+  and is not wired by T-5008.
 
 ## 7. Invariants
 
@@ -451,7 +463,7 @@ not applicable with the `target:cli` citation, no batch and no model call, and t
 | 1 | This document and the pointers in the three operations pages | this change |
 | 2 | Vocabulary, pinned rules, `collation.collate_facets`, unit context `facets` | implemented (`tests/unit/job_security_tagging/test_collation.py`, `tests/review/test_unit_facets.py`) |
 | 3 | Hunt obligations, routing, rank signal, OWASP target class, classifier deletion | implemented (`tests/unit/job_owasp_control_assessment/test_target_class.py`, `test_target_class_job.py`, `tests/review/test_unit_facets.py`, `tests/review/test_units.py`, `tests/test_guidance_routing.py`) |
-| 4 | Model pass, runtime skill, typed setting | follows; off by default |
+| 4 | Model pass, runtime skill, typed setting | implemented, off by default (`tests/unit/job_security_tagging/test_model_pass.py`); the purpose paragraph is recorded in `unit-purposes.json` and is not yet carried into the unit context (see section 6) |
 
 Not covered by T-5008: threat-model seeding and the report sentence (section 5.2), catalog-fact
 dispositions (T-165 remainder), catalog symbols as a facet source (lexical facts cover the names), and

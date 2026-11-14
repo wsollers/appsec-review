@@ -29,17 +29,18 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `collation` | `collation.collate_facets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L300) |
-| `collection` | `collection.coverage_gaps` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L295) |
-| `collection` | `collection.observation_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L289) |
-| `collection` | `collection.source_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L278) |
-| `crosswalk` | `crosswalk.apply_crosswalk` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L317) |
-| `integrity` | `integrity.validate_assignments` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L351) |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L394) |
-| `publication` | `publication.publish_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L370) |
-| `publication` | `publication.publish_tag_cloud` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L387) |
-| `scope` | `scope.resolve_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L258) |
-| `taxonomy` | `taxonomy.load_taxonomy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L247) |
+| `collation` | `collation.collate_facets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L304) |
+| `collation` | `collation.model_pass` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L321) |
+| `collection` | `collection.coverage_gaps` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L299) |
+| `collection` | `collection.observation_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L293) |
+| `collection` | `collection.source_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L282) |
+| `crosswalk` | `crosswalk.apply_crosswalk` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L346) |
+| `integrity` | `integrity.validate_assignments` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L380) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L423) |
+| `publication` | `publication.publish_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L399) |
+| `publication` | `publication.publish_tag_cloud` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L416) |
+| `scope` | `scope.resolve_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L262) |
+| `taxonomy` | `taxonomy.load_taxonomy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L251) |
 
 ### Accepted input declarations
 
@@ -183,7 +184,15 @@ Protected and artifact-only routes expose sanitized metadata, not payload access
 
 ### Model and guidance declarations
 
-No job-level model declaration; absence of a task binding remains [T-147](../TODO.md), not a nonexecution claim.
+These are job-level declarations; exact per-task selection is not declared ([T-147](../TODO.md)).
+
+```json
+{}
+```
+
+- Role: [unit_purpose_collator](../generated/guidance.md#roles-unit_purpose_collator).
+- Task prompt: `unit_purpose_collation`.
+- Runtime skill: [unit-purpose-collation](../generated/guidance.md#runtime_skills-unit-purpose-collation).
 
 ### Test selection
 

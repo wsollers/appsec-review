@@ -168,7 +168,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_post_build_security_assessment",
                       lambda: build_post_build_security(infer=infer))
     registry.register("job_owasp_control_assessment", build_owasp_control_assessment)
-    registry.register("job_security_tagging", build_security_tagging)
+    registry.register("job_security_tagging", lambda: build_security_tagging(infer=infer))
     registry.register("job_review_prioritization", build_review_prioritization)
     registry.register("job_threat_model_generation", build_threat_model_generation)
     registry.register("job_review_data_indexing", build_review_data_indexing)

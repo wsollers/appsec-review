@@ -654,6 +654,16 @@ Jobs: No dispatched job declaration.
 }
 ```
 
+## roles unit_purpose_collator
+
+Jobs: `job_security_tagging`.
+
+```json
+{
+  "responsibility": "State one first-party component's role and asset facets and purpose from supplied excerpts, citing a supplied line or a deterministic tag for every claim (T-5008 collation model pass)."
+}
+```
+
 ## personas api_web
 
 Jobs: `job_owasp_control_assessment`.
@@ -1167,5 +1177,18 @@ Jobs: `job_target_analysis_plan`.
     "job_target_analysis_plan"
   ],
   "path": "pipeline/skills/target-analysis-planning/SKILL.md"
+}
+```
+
+## runtime_skills unit-purpose-collation
+
+Jobs: `job_security_tagging`.
+
+```json
+{
+  "jobs": [
+    "job_security_tagging"
+  ],
+  "path": "pipeline/skills/unit-purpose-collation/SKILL.md"
 }
 ```

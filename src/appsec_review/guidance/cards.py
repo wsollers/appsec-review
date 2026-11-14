@@ -43,6 +43,8 @@ CITATIONS = {
                              "locator, from evidence or expansion. A source identity alone is not a citation.",
     "lead_fact": "Name a supplied lead_id exactly once; tool_fact is null or that lead's supplied "
                  "tool_fact id. Triage is prioritization, not a verified finding.",
+    "cited_line": "Each claim cites a supplied excerpt as exactly {path, line} or a supplied deterministic "
+                  "facet as exactly {assignment_id}. Values come from allowed_values; nothing else is evidence.",
 }
 
 
@@ -329,6 +331,14 @@ def request_card(request: Any) -> dict[str, Any]:
             scope_ids("evidence_refs", refs)
             rows = [dataset(name, available=bool(task.get(name))) for name in
                     ("actions", "artifacts", "deterministic_results")]
+        elif citation == "cited_line":
+            # T-5008 collation model pass: the supplied excerpts and deterministic facets are the only scope.
+            excerpts = [row for row in task.get("excerpts", ()) if isinstance(row, Mapping)]
+            scope_ids("paths", [*request.allowed_paths, *(row.get("path") for row in excerpts)])
+            scope_ids("assignment_ids", [row.get("assignment_id") for row in task.get("deterministic_facets", ())
+                                         if isinstance(row, Mapping)])
+            rows = [dataset("first_party_excerpts", available=bool(excerpts), authority="direct"),
+                    dataset("deterministic_facets", available=bool(task.get("deterministic_facets")))]
         elif citation == "inventory_path_sha256":
             scope_files([*task.get("evidence_inventory", ()), *(
                 row for unit in task.get("build_units", ())
