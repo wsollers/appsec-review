@@ -2668,6 +2668,8 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
+  Wave 1c aligns image-repair proposal validation and its JSON schema on current-only `/3`,
+  preserving bounded repairs, explicit refusal and normalized identities.
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:

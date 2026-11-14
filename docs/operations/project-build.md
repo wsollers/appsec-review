@@ -187,8 +187,9 @@ revision for a new production execution. See
 [bounded iterations and recovery](language-build.md#bounded-iterations-and-recovery).
 
 The retained image-only helper contract is `appsec-review/build-image-repair/3`
-([schema](../schemas/build-image-repair.schema.json)); `/2` remains accepted at its compatibility
-boundary. Its explicit `NOT_IMAGE_REPAIRABLE` outcome stops image repair. Typed failure diagnosis
+([schema](../schemas/build-image-repair.schema.json)); only `/3` proposals are accepted.
+Unsupported versions are validation errors, not valid `NOT_IMAGE_REPAIRABLE` refusals.
+Its explicit `NOT_IMAGE_REPAIRABLE` outcome stops image repair. Typed failure diagnosis
 prioritizes capability/prerequisite/source/capture evidence; only resolved image/environment
 evidence establishes image repairability. A missing relative project header or library is not an
 apt-package diagnosis. `RepairStopped.reason_code` and normalized proposal identities stop

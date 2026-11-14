@@ -19,7 +19,7 @@
     }
   ],
   "properties": {
-    "schema": {"enum": ["appsec-review/build-image-repair/3", "appsec-review/build-image-repair/2"]},
+    "schema": {"const": "appsec-review/build-image-repair/3"},
     "outcome": {"enum": ["IMAGE_REPAIR", "NOT_IMAGE_REPAIRABLE"]},
     "system_packages": {
       "type": "array",

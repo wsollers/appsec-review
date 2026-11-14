@@ -32,7 +32,6 @@ from appsec_review.storage.atomic import canonical_json_sha256
 
 
 REPAIR_SCHEMA = "appsec-review/build-image-repair/3"
-LEGACY_REPAIR_SCHEMA = "appsec-review/build-image-repair/2"
 REPAIR_FIELDS = frozenset({"schema", "system_packages", "environment", "package_manager",
                            "dependency_restores", "reason"})
 MAX_SYSTEM_PACKAGES = 64
@@ -224,7 +223,7 @@ def validate_repair_proposal(proposal: Mapping[str, Any], *, recipe: Mapping[str
         expected = expected | {"outcome"}
     if set(proposal) != expected:
         return ("repair proposal fields are invalid",)
-    if proposal.get("schema") not in {REPAIR_SCHEMA, LEGACY_REPAIR_SCHEMA}:
+    if proposal.get("schema") != REPAIR_SCHEMA:
         errors.append("repair proposal schema is unsupported")
     reason = proposal.get("reason")
     if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 4096:

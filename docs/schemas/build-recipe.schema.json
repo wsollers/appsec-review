@@ -30,7 +30,7 @@
     "network_required": {"type": "boolean"},
     "reason": {"type": "string", "minLength": 1, "maxLength": 4096},
     "image_repairs": {
-      "description": "Present only on a recipe produced by an accepted image repair (appsec-review/build-image-repair/2). Its environment is also merged into environment.",
+      "description": "Present only on a recipe produced by an accepted image repair (appsec-review/build-image-repair/3). Its environment is also merged into environment.",
       "type": "object",
       "additionalProperties": false,
       "required": ["environment", "package_manager", "dependency_restores"],

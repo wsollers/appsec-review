@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from pathlib import Path
 
@@ -53,21 +54,48 @@ def _recipe():
             "dependency_files": [], "reason": "accepted build"}
 
 
+def _schema_validator():
+    path = Path(__file__).resolve().parents[3] / "docs/schemas/build-image-repair.schema.json"
+    schema = json.loads(path.read_bytes())
+    jsonschema.Draft202012Validator.check_schema(schema)
+    return jsonschema.Draft202012Validator(schema)
+
+
 def test_non_image_outcome_is_typed_terminal_not_an_exception_retry():
     refusal = {"schema": REPAIR_SCHEMA, "outcome": "NOT_IMAGE_REPAIRABLE",
                "reason": "restore the complete committed sibling layout; image cause unproven"}
-    assert validate_repair_proposal(refusal, recipe=_recipe(), build_system="cmake") == ()
+    recipe = _recipe()
+    original = deepcopy((recipe, refusal))
+    validator = _schema_validator()
+    validator.validate(refusal)
+    assert validate_repair_proposal(refusal, recipe=recipe, build_system="cmake") == ()
     with pytest.raises(RepairStopped) as stopped:
-        apply_repair(_recipe(), refusal, build_system="cmake")
+        apply_repair(recipe, refusal, build_system="cmake")
     assert stopped.value.reason_code == "not_image_repairable"
-    assert validate_repair_proposal({**refusal, "system_packages": []},
-                                    recipe=_recipe(), build_system="cmake")
+    assert str(stopped.value) == refusal["reason"]
+    for field in ("system_packages", "environment", "package_manager", "dependency_restores"):
+        invalid = {**refusal, field: _proposal()[field]}
+        invalid_original = deepcopy(invalid)
+        with pytest.raises(jsonschema.ValidationError):
+            validator.validate(invalid)
+        assert validate_repair_proposal(invalid, recipe=recipe, build_system="cmake") == (
+            "repair proposal fields are invalid",)
+        with pytest.raises(ValueError, match="repair proposal fields are invalid") as rejected:
+            apply_repair(recipe, invalid, build_system="cmake")
+        assert type(rejected.value) is ValueError
+        assert invalid == invalid_original
+    assert (recipe, refusal) == original
 
 
 def test_normalized_no_op_has_terminal_reason_and_duplicate_identity_ignores_explanation():
+    recipe, proposal = _recipe(), _proposal()
+    original = deepcopy((recipe, proposal))
+    _schema_validator().validate(proposal)
+    assert validate_repair_proposal(proposal, recipe=recipe, build_system="cmake") == ()
     with pytest.raises(RepairStopped) as stopped:
-        apply_repair(_recipe(), _proposal(), build_system="cmake")
+        apply_repair(recipe, proposal, build_system="cmake")
     assert stopped.value.reason_code == "normalized_no_op"
+    assert (recipe, proposal) == original
     first = _proposal(system_packages=["zlib1g-dev", "libssl-dev"])
     second = _proposal(system_packages=["libssl-dev", "zlib1g-dev"], reason="different wording",
                        outcome="IMAGE_REPAIR")
@@ -76,15 +104,62 @@ def test_normalized_no_op_has_terminal_reason_and_duplicate_identity_ignores_exp
 
 
 @pytest.mark.parametrize("proposal", [
+    _proposal(system_packages=["libssl-dev"]),
     _proposal(system_packages=["libssl-dev"], outcome="IMAGE_REPAIR"),
-    _proposal(schema="appsec-review/build-image-repair/2"),
     {"schema": REPAIR_SCHEMA, "outcome": "NOT_IMAGE_REPAIRABLE", "reason": "missing prerequisite"},
+], ids=["implicit-image", "explicit-image", "refusal"])
+def test_current_repair_schema_preserves_accepted_forms(proposal):
+    recipe = _recipe()
+    original = deepcopy((recipe, proposal))
+    _schema_validator().validate(proposal)
+    assert validate_repair_proposal(proposal, recipe=recipe, build_system="cmake") == ()
+    if proposal.get("outcome") == "NOT_IMAGE_REPAIRABLE":
+        with pytest.raises(RepairStopped) as stopped:
+            apply_repair(recipe, proposal, build_system="cmake")
+        assert stopped.value.reason_code == "not_image_repairable"
+        assert str(stopped.value) == proposal["reason"]
+    else:
+        repaired = apply_repair(recipe, proposal, build_system="cmake")
+        assert repaired == {**recipe, "system_packages": ["libssl-dev"],
+                            "reason": f"{recipe['reason']} Image repair: {proposal['reason']}"}
+        assert repaired is not recipe
+    assert (recipe, proposal) == original
+
+
+@pytest.mark.parametrize("boundary", ["runtime", "json-schema"])
+@pytest.mark.parametrize("shape", ["image", "refusal"])
+@pytest.mark.parametrize("schema_field", [
+    pytest.param({"schema": "appsec-review/build-image-repair/2"}, id="legacy"),
+    pytest.param({"schema": "appsec-review/build-image-repair/999"}, id="unknown"),
+    pytest.param({}, id="missing"),
+    pytest.param({"schema": None}, id="null"),
+    pytest.param({"schema": 3}, id="integer"),
+    pytest.param({"schema": True}, id="boolean"),
+    pytest.param({"schema": []}, id="array"),
+    pytest.param({"schema": {}}, id="object"),
+    pytest.param({"schema": ""}, id="empty"),
+    pytest.param({"schema": REPAIR_SCHEMA + " "}, id="whitespace"),
 ])
-def test_repair_schema_preserves_bounded_compatibility_and_explicit_refusal(proposal):
-    schema = json.loads((Path(__file__).resolve().parents[3] / "docs/schemas/build-image-repair.schema.json").read_bytes())
-    jsonschema.Draft202012Validator.check_schema(schema)
-    jsonschema.validate(proposal, schema)
-    assert not validate_repair_proposal(proposal, recipe=_recipe(), build_system="cmake")
+def test_unsupported_repair_versions_are_rejected_before_application(boundary, shape, schema_field):
+    recipe = _recipe()
+    proposal = (_proposal(system_packages=["libssl-dev"]) if shape == "image" else
+                {"schema": REPAIR_SCHEMA, "outcome": "NOT_IMAGE_REPAIRABLE",
+                 "reason": "missing prerequisite"})
+    del proposal["schema"]
+    proposal.update(deepcopy(schema_field))
+    original = deepcopy((recipe, proposal))
+    if boundary == "json-schema":
+        with pytest.raises(jsonschema.ValidationError):
+            _schema_validator().validate(proposal)
+    else:
+        message = ("repair proposal fields are invalid" if "schema" not in proposal else
+                   "repair proposal schema is unsupported")
+        errors = validate_repair_proposal(proposal, recipe=recipe, build_system="cmake")
+        with pytest.raises(ValueError, match=message) as rejected:
+            apply_repair(recipe, proposal, build_system="cmake")
+        assert type(rejected.value) is ValueError
+        assert errors == (message,)
+    assert (recipe, proposal) == original
 
 
 @pytest.mark.parametrize("proposal", [
@@ -96,4 +171,10 @@ def test_repair_schema_preserves_bounded_compatibility_and_explicit_refusal(prop
     {**_proposal(), "Dockerfile": "FROM remote"},
 ])
 def test_image_recovery_does_not_expand_closed_allowlists(proposal):
-    assert validate_repair_proposal(proposal, recipe=_recipe(), build_system="cmake")
+    recipe = _recipe()
+    original = deepcopy((recipe, proposal))
+    assert validate_repair_proposal(proposal, recipe=recipe, build_system="cmake")
+    with pytest.raises(ValueError) as rejected:
+        apply_repair(recipe, proposal, build_system="cmake")
+    assert type(rejected.value) is ValueError
+    assert (recipe, proposal) == original
