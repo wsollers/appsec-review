@@ -7,8 +7,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "docs/TODO.md"
-ENTRY = re.compile(r"^### (T-\d{3}) — (.+)$", re.M)
-INDEX_ROW = re.compile(r"^\| (T-\d{3}) \| \[(.+?)\]\(#([a-z0-9_-]+)\) \| ([a-z]+) \| (.+?) \|$", re.M)
+ENTRY = re.compile(r"^### (T-\d{3,4}) — (.+)$", re.M)
+INDEX_ROW = re.compile(r"^\| (T-\d{3,4}) \| \[(.+?)\]\(#([a-z0-9_-]+)\) \| ([a-z]+) \| (.+?) \|$", re.M)
 AREAS = {"build", "topology", "images", "windows", "mobile", "scanners", "codeql", "graph", "native",
          "data", "history", "evidence", "review", "binary", "testing", "pipeline"}
 STATE = re.compile(r"^(open|in-progress|blocked|done \(\d{4}-\d{2}-\d{2}, .+\))$")
@@ -89,7 +89,7 @@ def test_active_entries_carry_the_required_fields_in_order() -> None:
         for relation in ("Blocked by", "Blocks"):
             match = re.search(rf"^- \*\*{relation}:\*\* (.+)$", block, re.M)
             if match:
-                named = re.findall(r"T-\d{3}", match.group(1))
+                named = re.findall(r"T-\d{3,4}", match.group(1))
                 assert named, f"{entry_id}: empty {relation} line"
                 assert entry_id not in named, f"{entry_id}: {relation} names itself"
 
@@ -99,7 +99,7 @@ def test_relations_name_existing_ids() -> None:
     ids = {entry_id for entry_id, _ in ENTRY.findall(text)}
     referenced = set(re.findall(r"\*\*(?:Blocked by|Blocks):\*\* ([^\n]+)", text))
     for line in referenced:
-        for named in re.findall(r"T-\d{3}", line):
+        for named in re.findall(r"T-\d{3,4}", line):
             assert named in ids, f"relation names unknown id {named}"
 
 
