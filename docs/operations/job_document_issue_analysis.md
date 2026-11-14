@@ -1,7 +1,7 @@
 ---
 title: "document_issue_analysis"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_document_issue_analysis"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -9,7 +9,12 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 # document_issue_analysis
 
-This page contains the generated contract; the authored process and acceptance description are tracked by [T-130](../TODO.md).
+## Purpose
+
+Map accepted document-hunt subjects to bounded implementation locations and retain a private
+candidate ledger. A unique route match is not proof of insecure behavior. The current handler
+supplies no red, blue or independent-verifier decisions to the adjudication helper, so every
+candidate remains `insufficient_evidence`; findings and scoring inputs are empty.
 
 <!-- generated:begin job=job_document_issue_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -910,3 +915,91 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+## Process
+
+The [handler](../../src/appsec_review/jobs/job_document_issue_analysis/job.py) delegates mapping and
+verification to [document_issues.py](../../src/appsec_review/document_issues.py).
+
+### `analysis`
+
+1. In `analysis.map_and_adjudicate`, resolve the accepted retrieval manifest and require its target
+   snapshot to equal the job fingerprint. Verify the accepted package handoff, result, package
+   directory and manifest hash; a missing or escaping reference fails, rather than producing an
+   empty ledger.
+2. Derive the computation fingerprint from accepted index/package manifests, source snapshot,
+   source bounds, schema and implementation/validation releases. Consult the shared object cache
+   only when those releases permit reuse.
+3. Verify the package manifest and bounded source inventory even on a cache hit. On a miss, inspect
+   only accepted source-file rows, verify checkout bytes, omit nonimplementation paths, and record
+   oversized, undecodable or capped sources. Match route method and normalized route shape.
+4. For each `document_hunt` package, classify implementation mapping as `unique`, `ambiguous` or
+   `unmapped`; retain document evidence, source locations and proof obligations separately.
+   Remove the premapping gap only for a unique match. Do not manufacture behavioral proof or
+   independent reviews.
+5. Validate the ledger schema and content identity, publish a content-addressed object and receipt,
+   and reverify counts through the output validator. Always return `COMPLETED_WITH_GAPS` with
+   the unadjudicated-coverage statement and candidate gap identities.
+
+## Dataflow
+
+```mermaid
+flowchart LR
+  job["job_document_issue_analysis"] --> a["analysis.map_and_adjudicate"]
+  packages["job_review_package_assembly / review_packages"] --> a
+  source["job_target_catalog / source_files"] --> a
+  a --> map["unique / ambiguous / unmapped"]
+  map --> ledger["document_issue_ledger"]
+  a -. "input or byte mismatch" .-> reject["reject publication"]
+  map -. "mapping and source bounds; no adjudication" .-> gaps["coverage_gaps"]
+  gaps --> ledger
+```
+
+The checkout access here is real: `_source_lines` verifies accepted catalog locations against
+source bytes. It is not unrestricted model retrieval. Package and manifest admission follow
+[input contracts](../architecture/job-input-contracts.md#admission-and-read-receipts) and
+[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
+
+## Gaps
+
+The job emits legacy strings and candidate gap IDs, not custom `producer-gap/1` codes.
+No retryability classification is supplied by these constructors; see the canonical
+[gap conversion](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope).
+
+| Source-emitted reason | Scope and walk meaning |
+| --- | --- |
+| `UNADJUDICATED_GAP` statement in the handler | Entire ledger, including an empty one: finding publication is not implemented in this path. This is a coverage cost, not a clean result. |
+| `accepted source index is unavailable` | No implementation mapping source. |
+| `source mapping truncated`, `source mapping skipped oversized file`, `source mapping skipped undecodable file` | Accepted source inventory or named path omitted by a bound/encoding limit. |
+| `implementation mapping ambiguous; no behavior conclusion`, `implementation mapping unmapped; no behavior conclusion` | Document subject has multiple or no matching source routes. |
+| Inherited package `coverage_gaps` | Preserve their producer, scope, state and reason; only the unique-match premapping gap is superseded. |
+
+Changed source bytes, package identities or ledger hashes raise errors. They are not advisory
+mapping gaps. Compare every canonical outcome with the walk's expected causes before proceeding.
+
+## Acceptance
+
+1. **A. Inputs:** Compare the claim's package handoff pin, package-manifest hash, accepted retrieval
+   manifest and target snapshot with the verified ledger bindings. Record the source-file and byte
+   bounds used, including the accepted rows outside them.
+2. **B. Independent comparison:** Independently count `document_hunt` entries in the accepted
+   package manifest and compare with ledger candidates. Inspect accepted source lines for each
+   sampled route/method match, including ambiguous/unmapped cases. Compare the three mapping
+   partitions; verify `supported = 0`, `findings = []` and `scoring_inputs = []`.
+3. **C. Gaps:** Group the handoff's verified outcomes by canonical cause, then resolve candidate
+   gap IDs back to ledger reasons. Record source omissions and the unavoidable unadjudicated
+   coverage cost. An unexpected cause stops the walk.
+4. **D. Baseline:** On an authorized walk, save the accepted baseline with `stepwise.py accept`
+   and record corpus namespace, ledger content hash, package hash, counts and mapping partitions.
+   Compare those identities and omissions on the next run; no run is asserted here.
+
+## Resume and invalidation
+
+The shared `document-issues` cache binds both manifest hashes, source snapshot, bounded settings,
+schema and component releases. Missing release identities prevent lookup. A hit still rechecks
+source inputs and the immutable ledger, so unchanged settings cannot excuse changed bytes.
+An upstream package/index or bound change rebuilds this ledger, not the upstream producers.
+The [runtime resume rules](../architecture/jobs-and-runtime.md#wave-1-resumability) still apply;
+an artifact-bearing unit result is not a portable failed-attempt checkpoint.
+
+This job dispatches no model. The helper's optional review arguments do not commission reviewers.
