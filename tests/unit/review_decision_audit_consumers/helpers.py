@@ -36,7 +36,7 @@ class Fixture:
     def __init__(self, base: Path, *, settings: DecisionAuditSettings | None = None, receipt_changes=None,
                  scores=False, chain_cell=False, cell_package="package-1", proposal=False, proposal_count=1,
                  discovery_results=None, capture_items=None, other_claim=False, discovery_status="succeeded",
-                 qualification_cell="blue-1", second_proposal_package="original-red-2"):
+                 qualification_cell="blue-1", second_proposal_package="original-red-2", config_padding_bytes=0):
         self.root = base.resolve() / "run-1"
         self.attempt = f"data/jobs/{REVIEW_JOB}/attempts/attempt_0001"
         self.audit_root = self.attempt + "/artifacts/decision-audit"
@@ -47,6 +47,8 @@ class Fixture:
                                           "steps": {}, "workers": 1, "name": REVIEW_JOB}}}
         self.config["build_capture"] = tomllib.loads(
             (Path(__file__).resolve().parents[3] / "appsec-review.toml").read_text())["build_capture"]
+        if config_padding_bytes:
+            self.config["fixture_padding"] = "x" * config_padding_bytes
         config_ref = self.write("data/configuration/resolved.json", self.config, pin=False)
         self.write("data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]}, pin=False)
         self.policy = {"version": POLICY_VERSION, "settings": asdict(self.settings),

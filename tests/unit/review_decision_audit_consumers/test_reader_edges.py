@@ -39,12 +39,9 @@ def test_undeclared_protected_publication_is_not_an_operator_grant(tmp_path):
 
 
 def test_metadata_and_configuration_together_obey_original_reader_cap(tmp_path):
-    fixture = Fixture(tmp_path, settings=DecisionAuditSettings(enabled=True, max_input_bytes=4096, shard_bytes=4096))
-    fixture.config["fixture_padding"] = "x" * 5000
-    ref = fixture.write("data/configuration/resolved.json", fixture.config, pin=False)
-    fixture.write("data/configuration/manifest.json", {"resolved_sha256": ref["sha256"]}, pin=False)
-    fixture.accept()
-    with pytest.raises(AuditBoundExceeded, match="metadata and configuration"):
+    fixture = Fixture(tmp_path, settings=DecisionAuditSettings(enabled=True, max_input_bytes=4096, shard_bytes=4096),
+                      config_padding_bytes=5000)
+    with pytest.raises(AuditBoundExceeded, match="control bootstrap"):
         fixture.load()
 
 
