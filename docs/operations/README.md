@@ -105,31 +105,31 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [final_publication_gate](job_final_publication_gate.md) | reporting and metrics | current |
 | [final_report_publication](job_final_report_publication.md) | reporting and metrics | current |
 | [image_pin_verification](job_image_pin_verification.md) | images and deployment | current |
-| [inference_security_review](job_inference_security_review.md) | runtime interchange | current |
+| [inference_security_review](job_inference_security_review.md) | review inference and guidance | current |
 | [language_build](job_language_build.md) | target acquisition and build | current |
 | [model_connectivity](job_model_connectivity.md) | review inference and guidance | current |
 | [openvex_export](job_openvex_export.md) | reporting and metrics | current |
-| [owasp_control_assessment](job_owasp_control_assessment.md) | runtime interchange | current |
-| [poc_generation](job_poc_generation.md) | runtime interchange | current |
+| [owasp_control_assessment](job_owasp_control_assessment.md) | review inference and guidance | current |
+| [poc_generation](job_poc_generation.md) | review inference and guidance | current |
 | [post_build_security_assessment](job_post_build_security_assessment.md) | runtime interchange | current |
 | [profile_data](job_profile_data.md) | runtime interchange | current |
 | [project_build](job_project_build.md) | target acquisition and build | current |
-| [remediation_planning](job_remediation_planning.md) | runtime interchange | current |
-| [remediation_validation](job_remediation_validation.md) | runtime interchange | current |
+| [remediation_planning](job_remediation_planning.md) | review inference and guidance | current |
+| [remediation_validation](job_remediation_validation.md) | review inference and guidance | current |
 | [review_data_indexing](job_review_data_indexing.md) | runtime interchange | current |
 | [review_intake](job_review_intake.md) | target acquisition and build | current |
 | [review_package_assembly](job_review_package_assembly.md) | runtime interchange | current |
-| [review_prioritization](job_review_prioritization.md) | runtime interchange | current |
-| [sanitizer_build](job_sanitizer_build.md) | runtime interchange | current |
-| [security_tagging](job_security_tagging.md) | runtime interchange | current |
+| [review_prioritization](job_review_prioritization.md) | review inference and guidance | current |
+| [sanitizer_build](job_sanitizer_build.md) | target acquisition and build | current |
+| [security_tagging](job_security_tagging.md) | review inference and guidance | current |
 | [source_history_analysis](job_source_history_analysis.md) | scanners and evidence collection | current |
 | [svf_alias_analysis](job_svf_alias_analysis.md) | runtime interchange | current |
 | [target_acquisition](job_target_acquisition.md) | runtime interchange | current |
 | [target_analysis_plan](job_target_analysis_plan.md) | target acquisition and build | current |
 | [target_catalog](job_target_catalog.md) | target acquisition and build | current |
 | [test_coverage](job_test_coverage.md) | runtime interchange | current |
-| [third_party_data_sync](job_third_party_data_sync.md) | runtime interchange | current |
-| [threat_model_generation](job_threat_model_generation.md) | runtime interchange | current |
+| [third_party_data_sync](job_third_party_data_sync.md) | scanners and evidence collection | current |
+| [threat_model_generation](job_threat_model_generation.md) | review inference and guidance | current |
 | [tree_sitter_ast](job_tree_sitter_ast.md) | runtime interchange | current |
 | [Generic language-build operations](language-build.md) | target acquisition and build | current |
 | [Lead severity triage](lead-severity-triage.md) | review inference and guidance | current |
