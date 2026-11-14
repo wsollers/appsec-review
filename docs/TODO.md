@@ -138,6 +138,9 @@ until each is rewritten into the entry format when it is next touched.
 | T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | done (2026-11-13, appsec-review-smoke-php v1.0.0 = ef0c942de7d2; guzzle substituted for monolog) |
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | done (2026-11-13, https://github.com/wsollers/appsec-review-smoke-guide, commit dc69349) |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout) |
+| T-146 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-146-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | open |
+| T-147 | [Scope the dataset-contract repair refusal to the changed job](#t-147-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | open |
+| T-148 | [Measure a job's implementation identity from the modules it imports](#t-148-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2105,6 +2108,34 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** clone each smoke repository to `targets/appsec-review-smoke-<language>` at `v1.0.0` (ignored by `targets/.gitignore`; add a pattern only if one is needed) and the guide to a sibling of the checkout. Add to `docs/operations/test-targets.md` one table row per smoke target (purpose, build profile, planted advisory, the one build unit), the clone lines for Linux and Windows in the existing style, the guide's clone line with the same never-under-`targets/` warning the multi-vuln guide carries, and a paragraph stating what the smoke tier proves (attribution of a failure to a pipeline stage; whether code intelligence squelches the planted false positives) and does not (recall, scale). Run the docs link check if `docs/tasks/2026-11-13-docs-program-prompt.md` Stage 2 has produced one, otherwise check links by hand.
 - **Done when:** `targets/` holds the nine clones at their tags; `git status` in this repository shows only `docs/TODO.md` and `docs/operations/test-targets.md` changed (plus `targets/.gitignore` if a pattern was needed); every link in the edited page resolves; the change is committed on `main` and handed to the WSL checkout, not pushed.
 - **Refs:** `docs/tasks/2026-11-13-smoke-targets-prompt.md` Stage 5; `docs/operations/test-targets.md`; `targets/.gitignore`; `tests/test_blind_target_isolation.py`.
+
+### T-146 — Revalidate unchanged descendants at dispatch instead of invalidating them at plan time
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `plan_repair` marks every descendant of an invalidated job `INVALIDATE` ("transitive downstream invalidation") at plan time, before anyone knows whether the upstream output changed. In the 2026-11-13 smoke review (`2026-11-13-0001`) five recoveries reused 15, 0, 3, 0 and 8 of 42 jobs and each fix-restart cycle cost about 45 minutes, mostly re-running jobs whose own code, configuration and inputs were byte-identical.
+- **Scope:** a new plan decision `REVALIDATE` for a descendant whose own component identities, configuration, dataset contract and accepted handoff still verify when only the upstream handoffs are unknown; `forced_by_repair` does not force a fresh attempt for it, so the runtime decides at dispatch: `begin_or_reuse_attempt` reuses the accepted attempt exactly as `REUSE` does when every claimed identity and every pinned `upstream_handoffs` SHA equal the ones it would claim now, and runs the job otherwise. `INVALIDATE` stays for historical, successor and deferred-fingerprint forced plans. Every existing refusal (stop verification, shared-store `ComputationAdmission`, immutability) is unchanged; the action is added wherever the decision set is enumerated (`mcp/operator.py`, `deploy/dagster/bin/stepwise_rewind.py`) and documented in `docs/operations/recovery-repair.md`.
+- **Done when:** unit tests show an upstream re-run with an identical handoff reuses the downstream attempt, a differing upstream handoff runs it, and a changed downstream identity runs it; the existing repair, resume, rewind and operator tests pass with the new action.
+- **Refs:** `src/appsec_review/runtime/resume.py`, `src/appsec_review/runtime/repair.py`, `src/appsec_review/runtime/graph.py`, `src/appsec_review/runtime/runner.py`, `docs/operations/recovery-repair.md`, `tests/unit/runtime/test_repair_revalidate.py`.
+
+### T-147 — Scope the dataset-contract repair refusal to the changed job
+
+- **State:** open
+- **Area:** pipeline
+- **Blocked by:** T-146
+- **Why:** `plan_repair` appends "unsupported dataset compatibility change for <job>" when any job's `dataset_contract` SHA differs from its last claim, and the whole plan is inadmissible. On 2026-11-13 declaring additional producers for `job_owasp_control_assessment` refused the in-place repair of all 42 jobs although only that job changed and it was going to run anyway.
+- **Scope:** a compatible change (the old contract's datasets and `job_contract.inputs` are each a subset of the new ones and every other field is identical) forces the changed job to run and leaves the plan admissible; the refusal stays when the plan would reuse an accepted attempt of the changed job or when the change removes a dataset or input, changes the contract schema or any other contract field. Its descendants follow T-146.
+- **Done when:** unit tests cover an added dataset and an added input requirement (admissible, the job runs) and a removed dataset and a changed non-input field (refused).
+- **Refs:** `src/appsec_review/runtime/repair.py` (`plan_repair`), `src/appsec_review/runtime/datasets.py` (`dataset_contract`), `src/appsec_review/runtime/contracts.py`, `docs/operations/recovery-repair.md`.
+
+### T-148 — Measure a job's implementation identity from the modules it imports
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `build_release` digests every job's `implementation` and `validation` identity over the job package closure plus all of `common` (every file under `src/appsec_review/**` outside job packages), so any change to shared code re-identifies all 42 jobs and a repair reuses nothing. The import graph is dense (`appsec_review.storage` is imported by over two hundred modules, the runtime by every job), so the gain is bounded, but modules no job imports (operator tooling, CLI, acceptance helpers) stop re-identifying jobs.
+- **Scope:** extend the existing static import walk in `build_release` so a job's closure holds the job package files, the other job packages it imports, and only the `appsec_review.*` modules under `common` it transitively imports (module imports imply their parent packages); non-Python `common` files, validators and scripts stay in every closure as today. Any walked module whose `appsec_review` import cannot be resolved to a file in the release, or that imports dynamically (`importlib.import_module`, `__import__`), keeps the whole `common` set for that job. The manifest shape, `validate_release`, `implementation-release.json` measurement at launch (`deploy/dagster/bin/host.py`) and module signing are unchanged; `docs/architecture/deployment-image-and-source-mount.md` describes the closure.
+- **Done when:** release tests show a change to a `common` module no job imports leaves the job identity unchanged while a change to an imported one changes it, and an unresolvable import falls back to the whole `common` set; `tests/test_release_manifest_location.py` and `tests/test_dagster_signing.py` still pass.
+- **Refs:** `src/appsec_review/runtime/release.py` (`build_release`), `release-dependencies.json`, `tests/release_support.py`, `tests/test_repair_admission.py` (`test_each_declared_dependency_changes_build_identity`), `docs/architecture/deployment-image-and-source-mount.md`.
 
 ## Legacy backlog
 
