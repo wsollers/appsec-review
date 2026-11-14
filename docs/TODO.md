@@ -141,6 +141,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-146 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-146-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | open |
 | T-147 | [Scope the dataset-contract repair refusal to the changed job](#t-147-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`) |
 | T-148 | [Measure a job's implementation identity from the modules it imports](#t-148-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`) |
+| T-149 | [Require a producing job on every index shard identity](#t-149-require-a-producing-job-on-every-index-shard-identity) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2135,6 +2136,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** extend the existing static import walk in `build_release` so a job's closure holds the job package files, the other job packages it imports, and only the `appsec_review.*` modules under `common` it transitively imports (module imports imply their parent packages); non-Python `common` files, validators and scripts stay in every closure as today. Any walked module whose `appsec_review` import cannot be resolved to a file in the release, or that imports dynamically (`importlib.import_module`, `__import__`), keeps the whole `common` set for that job. The manifest shape, `validate_release`, `implementation-release.json` measurement at launch (`deploy/dagster/bin/host.py`) and module signing are unchanged; `docs/architecture/deployment-image-and-source-mount.md` describes the closure.
 - **Done when:** release tests show a change to a `common` module no job imports leaves the job identity unchanged while a change to an imported one changes it, and an unresolvable import falls back to the whole `common` set; `tests/test_release_manifest_location.py` and `tests/test_dagster_signing.py` still pass.
 - **Refs:** `src/appsec_review/runtime/release.py` (`build_release`), `release-dependencies.json`, `tests/release_support.py`, `tests/test_repair_admission.py` (`test_each_declared_dependency_changes_build_identity`), `docs/architecture/deployment-image-and-source-mount.md`.
+
+### T-149 — Require a producing job on every index shard identity
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `runtime.inputs.observe_shard` attributes every embedded shard to `producer["job"]`; a shard whose producer lacks that key cannot be read by any downstream job. `job_debug_symbol_indexing` published its shard with `producer["job_id"]` and the smoke-cpp run `2026-11-14-0001` failed `owasp_control_assessment` `load_inputs` with "undeclared or unsupplied shard producer: None". The key was fixed at the producer (main commit after `1f40f7aa`, 2026-11-13); nothing refuses the next producer that makes the same mistake. An `IndexIdentity.__post_init__` check was tried and failed 48 tests whose fixtures build identities with an empty or ad hoc producer (`tests/test_retrieval_core.py`, `tests/unit/job_debug_symbol_indexing/support.py`, others).
+- **Scope:** decide where the rule lives (`IndexIdentity.__post_init__` or `write_manifest` for `data/indices/` shards), migrate every fixture to a named producing job, then enforce, keeping an error that names the shard.
+- **Done when:** an identity or manifest entry whose producer does not name a registered job is refused by a unit test, the migrated fixtures pass, and `tests/test_retrieval_core.py` is at or below its current failure baseline.
+- **Refs:** `src/appsec_review/retrieval/index.py`, `src/appsec_review/runtime/inputs.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`, `tests/unit/job_debug_symbol_indexing/test_contract.py`.
 
 ## Legacy backlog
 
