@@ -138,13 +138,13 @@ until each is rewritten into the entry format when it is next touched.
 | T-143 | [Create the PHP smoke target appsec-review-smoke-php](#t-143-create-the-php-smoke-target-appsec-review-smoke-php) | testing | done (2026-11-13, appsec-review-smoke-php v1.0.0 = ef0c942de7d2; guzzle substituted for monolog) |
 | T-144 | [Create the smoke answer-key repository appsec-review-smoke-guide](#t-144-create-the-smoke-answer-key-repository-appsec-review-smoke-guide) | testing | done (2026-11-13, https://github.com/wsollers/appsec-review-smoke-guide, commit dc69349) |
 | T-145 | [Clone the smoke targets and document them in test-targets.md](#t-145-clone-the-smoke-targets-and-document-them-in-test-targetsmd) | testing | done (2026-11-13, docs/operations/test-targets.md; clones under targets/ in the WSL checkout) |
-| T-146 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-146-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | done (2026-11-13, repair-reuse: REVALIDATE in `runtime/resume.py`, `equivalent_upstreams` in `runtime/equivalence.py`) |
-| T-147 | [Scope the dataset-contract repair refusal to the changed job](#t-147-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`) |
-| T-148 | [Measure a job's implementation identity from the modules it imports](#t-148-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`) |
-| T-149 | [Require a producing job on every index shard identity](#t-149-require-a-producing-job-on-every-index-shard-identity) | pipeline | open |
-| T-150 | [Review only first-party code: vendored, SDK and generated paths leave the review lanes](#t-150-review-only-first-party-code-vendored-sdk-and-generated-paths-leave-the-review-lanes) | review | in-progress |
-| T-151 | [Verify whether first-party code uses vendored code named by a CVE or finding](#t-151-verify-whether-first-party-code-uses-vendored-code-named-by-a-cve-or-finding) | evidence | open |
-| T-152 | [Stylistic observations are not security leads](#t-152-stylistic-observations-are-not-security-leads) | review | in-progress |
+| T-161 | [Revalidate unchanged descendants at dispatch instead of invalidating them at plan time](#t-161-revalidate-unchanged-descendants-at-dispatch-instead-of-invalidating-them-at-plan-time) | pipeline | done (2026-11-13, repair-reuse: REVALIDATE in `runtime/resume.py`, `equivalent_upstreams` in `runtime/equivalence.py`) |
+| T-162 | [Scope the dataset-contract repair refusal to the changed job](#t-162-scope-the-dataset-contract-repair-refusal-to-the-changed-job) | pipeline | done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`) |
+| T-163 | [Measure a job's implementation identity from the modules it imports](#t-163-measure-a-jobs-implementation-identity-from-the-modules-it-imports) | pipeline | done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`) |
+| T-164 | [Require a producing job on every index shard identity](#t-164-require-a-producing-job-on-every-index-shard-identity) | pipeline | open |
+| T-165 | [Review only first-party code: vendored, SDK and generated paths leave the review lanes](#t-165-review-only-first-party-code-vendored-sdk-and-generated-paths-leave-the-review-lanes) | review | in-progress |
+| T-166 | [Verify whether first-party code uses vendored code named by a CVE or finding](#t-166-verify-whether-first-party-code-uses-vendored-code-named-by-a-cve-or-finding) | evidence | open |
+| T-167 | [Stylistic observations are not security leads](#t-167-stylistic-observations-are-not-security-leads) | review | in-progress |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2113,7 +2113,7 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** `targets/` holds the nine clones at their tags; `git status` in this repository shows only `docs/TODO.md` and `docs/operations/test-targets.md` changed (plus `targets/.gitignore` if a pattern was needed); every link in the edited page resolves; the change is committed on `main` and handed to the WSL checkout, not pushed.
 - **Refs:** `docs/tasks/2026-11-13-smoke-targets-prompt.md` Stage 5; `docs/operations/test-targets.md`; `targets/.gitignore`; `tests/test_blind_target_isolation.py`.
 
-### T-146 — Revalidate unchanged descendants at dispatch instead of invalidating them at plan time
+### T-161 — Revalidate unchanged descendants at dispatch instead of invalidating them at plan time
 
 - **State:** done (2026-11-13, repair-reuse: REVALIDATE in `runtime/resume.py`, `equivalent_upstreams` in `runtime/equivalence.py`)
 - **Area:** pipeline
@@ -2122,16 +2122,16 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** unit tests show an upstream re-run with an identical handoff reuses the downstream attempt, a differing upstream handoff runs it, and a changed downstream identity runs it; the existing repair, resume, rewind and operator tests pass with the new action.
 - **Refs:** `src/appsec_review/runtime/resume.py`, `src/appsec_review/runtime/repair.py`, `src/appsec_review/runtime/graph.py`, `src/appsec_review/runtime/runner.py`, `docs/operations/recovery-repair.md`, `tests/unit/runtime/test_repair_revalidate.py`.
 
-### T-147 — Scope the dataset-contract repair refusal to the changed job
+### T-162 — Scope the dataset-contract repair refusal to the changed job
 
 - **State:** done (2026-11-13, repair-reuse: `compatible_dataset_change` in `src/appsec_review/runtime/repair.py`)
 - **Area:** pipeline
 - **Why:** `plan_repair` appends "unsupported dataset compatibility change for <job>" when any job's `dataset_contract` SHA differs from its last claim, and the whole plan is inadmissible. On 2026-11-13 declaring additional producers for `job_owasp_control_assessment` refused the in-place repair of all 42 jobs although only that job changed and it was going to run anyway.
-- **Scope:** a compatible change (the old contract's datasets and `job_contract.inputs` are each a subset of the new ones and every other field is identical) forces the changed job to run and leaves the plan admissible; the refusal stays when the plan would reuse an accepted attempt of the changed job or when the change removes a dataset or input, changes the contract schema or any other contract field. Its descendants follow T-146.
+- **Scope:** a compatible change (the old contract's datasets and `job_contract.inputs` are each a subset of the new ones and every other field is identical) forces the changed job to run and leaves the plan admissible; the refusal stays when the plan would reuse an accepted attempt of the changed job or when the change removes a dataset or input, changes the contract schema or any other contract field. Its descendants follow T-161.
 - **Done when:** unit tests cover an added dataset and an added input requirement (admissible, the job runs) and a removed dataset and a changed non-input field (refused).
 - **Refs:** `src/appsec_review/runtime/repair.py` (`plan_repair`), `src/appsec_review/runtime/datasets.py` (`dataset_contract`), `src/appsec_review/runtime/contracts.py`, `docs/operations/recovery-repair.md`.
 
-### T-148 — Measure a job's implementation identity from the modules it imports
+### T-163 — Measure a job's implementation identity from the modules it imports
 
 - **State:** done (2026-11-13, repair-reuse: import-walk closure in `src/appsec_review/runtime/release.py`)
 - **Area:** pipeline
@@ -2140,7 +2140,7 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** release tests show a change to a `common` module no job imports leaves the job identity unchanged while a change to an imported one changes it, and an unresolvable import falls back to the whole `common` set; `tests/test_release_manifest_location.py` and `tests/test_dagster_signing.py` still pass.
 - **Refs:** `src/appsec_review/runtime/release.py` (`build_release`), `release-dependencies.json`, `tests/release_support.py`, `tests/test_repair_admission.py` (`test_each_declared_dependency_changes_build_identity`), `docs/architecture/deployment-image-and-source-mount.md`.
 
-### T-149 — Require a producing job on every index shard identity
+### T-164 — Require a producing job on every index shard identity
 
 - **State:** open
 - **Area:** pipeline
@@ -2149,34 +2149,34 @@ until each is rewritten into the entry format when it is next touched.
 - **Done when:** an identity or manifest entry whose producer does not name a registered job is refused by a unit test, the migrated fixtures pass, and `tests/test_retrieval_core.py` is at or below its current failure baseline.
 - **Refs:** `src/appsec_review/retrieval/index.py`, `src/appsec_review/runtime/inputs.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`, `tests/unit/job_debug_symbol_indexing/test_contract.py`.
 
-### T-150 — Review only first-party code: vendored, SDK and generated paths leave the review lanes
+### T-165 — Review only first-party code: vendored, SDK and generated paths leave the review lanes
 
 - **State:** in-progress
 - **Area:** review
-- **Blocks:** T-151
+- **Blocks:** T-166
 - **Why:** The review lanes reason over every accepted source file. On smoke-cpp run `2026-11-14-0003` the target's own code is under 400 lines, but `third_party/` (zlib, bzip2, lz4, cJSON; 31,187 lines in 185 files) produced 1,077 scanner leads, one 185-file hunt unit and 505 hunt packages, each carrying the unit-wide context (184 source identities, 59 context entries) in its 64 KiB body, so the hunt menu split to 1 to 3 leads per package and the dev job budget (6,000,000 output tokens) was exhausted after about 1,700 model turns with half the cells unreviewed. Developers cannot change vendored or SDK code; review effort spent there buys nothing they can act on. A `vendored` path class already exists for ranking only (`[jobs.job_source_history_analysis.settings.filters]`), and `[exclusions]` removes paths from analysis entirely, which is too blunt: the vendored code must still be inventoried as a dependency (`job_dependency_intelligence`) and remain queryable evidence.
 - **Scope:** one typed path disposition per accepted source file (`first_party`, `vendored`, `sdk`, `generated`, `test`), derived from configured globs in the central TOML and from catalog facts (vendor directories, SDK roots, lockfile-declared packages), recorded in the target catalog and carried on the `source_file` identity. `collect_leads`, `build_units` and `_Assembler.hunts` keep only first-party files and the leads located in them; leads in other dispositions are recorded as `not_admitted` with the disposition as the reason, never as a gap. The scanners, indexes and dependency inventory still cover the whole target. The smoke targets' `third_party/` directories are the first case; do not change the smoke repositories.
 - **Done when:** a unit test assembles packages over a fixture with a `third_party/` tree and shows no lead, unit or package located there, every such lead listed as `not_admitted` with disposition `vendored`, and the dependency inventory for the same fixture unchanged; a cpp smoke review under `dev` finishes `inference_security_review` without exhausting the job budget, with the lead and hunt package counts recorded in the walk record.
 - **Refs:** `src/appsec_review/review/dispositions.py` (`SourceDispositions`, branch `first-party-scope`, 2026-11-14: the typed `[jobs.job_inference_security_review.settings.source_dispositions]` globs classify every accepted source file at `accept_manifest`; `lead_families.scope_leads` records non-first-party leads as `not_admitted`, `build_units` and `_Assembler.hunts` keep only first-party files, the package manifest records `counts.dispositions`; the catalog-fact derivation (vendor directories, SDK roots, lockfile-declared packages) and the smoke-run measurement remain), `src/appsec_review/review/lead_families.py` (`collect_leads`), `src/appsec_review/review/units.py` (`build_units`), `src/appsec_review/review/packages.py` (`_Assembler.hunts`, `admitted_leads`), `src/appsec_review/config/exclusions.py`, `appsec-review.toml` (`[jobs.job_source_history_analysis.settings.filters].vendored`), `docs/operations/inference-security-review.md` ("Review scope"), `docs/operations/test-targets.md` ("Smoke runs"), `tests/review/test_first_party_scope.py`, run `2026-11-14-0003` package manifest `data/jobs/job_inference_security_review/attempts/attempt_0001/steps/packages/`.
 
-### T-151 — Verify whether first-party code uses vendored code named by a CVE or finding
+### T-166 — Verify whether first-party code uses vendored code named by a CVE or finding
 
 - **State:** open
 - **Area:** evidence
-- **Blocked by:** T-150
-- **Why:** Once vendored and SDK code leaves the review lanes (T-150), a CVE against a vendored package, or a scanner finding located in vendored code, is only actionable if first-party code actually reaches the affected code. Today `job_dependency_intelligence` matches discovered versions to advisories and the report lists them, but nothing checks whether the target calls the vulnerable function, includes the affected header or links the affected object, so a vendored CVE is reported with the same weight whether or not it is used.
+- **Blocked by:** T-165
+- **Why:** Once vendored and SDK code leaves the review lanes (T-165), a CVE against a vendored package, or a scanner finding located in vendored code, is only actionable if first-party code actually reaches the affected code. Today `job_dependency_intelligence` matches discovered versions to advisories and the report lists them, but nothing checks whether the target calls the vulnerable function, includes the affected header or links the affected object, so a vendored CVE is reported with the same weight whether or not it is used.
 - **Scope:** for each advisory or finding located in a non-first-party disposition, a bounded reachability check from first-party code: symbol references and call edges from the accepted code graph, CodeQL and symbol indexes (`code_graph`, `cpp_symbol_index`, `debug_symbol_indexing`), and build evidence that the affected translation unit or library is compiled or linked. The outcome is one of `used` (with the citing first-party source lines), `not_used` (with the indexes consulted) or `unknown` (a named gap when an index is missing), recorded on the dependency finding and carried into scoring and the report. No model worker decides this; it is index evidence.
 - **Done when:** a unit test over a fixture with a vendored library whose advisory names a function shows `used` when first-party code calls it and `not_used` when it does not, each with its evidence; a missing code-graph shard yields `unknown` as a gap; the cpp smoke report shows the disposition for every planted vulnerable dependency, checked against the smoke answer key by the user.
 - **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `src/appsec_review/retrieval/debug_symbols.py`, `src/appsec_review/jobs/job_cpp_symbol_index/`, `src/appsec_review/jobs/job_code_graph_index/`, `docs/operations/dependency-intelligence.md`, `docs/operations/test-targets.md`.
 
-### T-152 — Stylistic observations are not security leads
+### T-167 — Stylistic observations are not security leads
 
 - **State:** in-progress
 - **Area:** review
 - **Why:** On smoke-cpp run `2026-11-14-0003`, 933 of the 1,077 scanner observations were `info` severity, and 509 of them were cppcheck `style` checks (330 `unusedStructMember`, 74 `variableScope`, 46 `constVariablePointer`, 19 `constParameterPointer`, 10 `unreadVariable`), with one `portability` row; cppcheck `performance` and `portability` labels are not in the severity table and became `unknown`-severity leads, which lane A admits. Every such observation became a lead and a hunt-menu entry, so the menus and the model turns were spent on readability and maintainability findings that carry no security signal.
 - **Scope:** a typed list of stylistic rule classes under `[jobs.job_inference_security_review.settings.lead_filters]` (`review/lead_filters.py`): each names a scanner (id or glob) and the native severities and/or rule-id globs of its non-security checks. At lead collection (`lead_families.scope_leads`) a first-party observation matching a class is recorded as `not_admitted` with reason `stylistic`, never as a gap; it stays in the observations index and counts toward scanner coverage, and the package manifest records the count under `counts.dispositions.leads.stylistic`. Shipped default: cppcheck `style`, `performance`, `portability`, `information`. Semgrep and OpenGrep rule `metadata.category` is not carried into the indexed observation by `job_evidence_collection`, so a Semgrep class can only name rule ids; the `appsec-review.review-signal.sink.*` rules are sink nominations the hunt lane uses as hints and are deliberately not classified as stylistic.
 - **Done when:** a unit test over a fixture with cppcheck `style`, `warning` and `error` observations shows the `style` row recorded as `not_admitted`/`stylistic` with no lead, unit entry or hunt-menu entry, the `warning` and `error` rows still leads, and the configuration validated and frozen into the resolved settings (done on branch `first-party-scope`, `tests/review/test_first_party_scope.py`, `tests/test_inference_review_config.py`); a cpp smoke review under `dev` records the stylistic count in the package manifest and the hunt menus hold no cppcheck `style` rows.
-- **Refs:** `src/appsec_review/review/lead_filters.py`, `src/appsec_review/review/lead_families.py` (`scope_leads`), `appsec-review.toml` (`[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]`), `src/appsec_review/jobs/job_evidence_collection/adapters.py` (`_cppcheck_parser`, `_semgrep_parser`), `docs/operations/inference-security-review.md` ("Review scope"), T-150.
+- **Refs:** `src/appsec_review/review/lead_filters.py`, `src/appsec_review/review/lead_families.py` (`scope_leads`), `appsec-review.toml` (`[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]`), `src/appsec_review/jobs/job_evidence_collection/adapters.py` (`_cppcheck_parser`, `_semgrep_parser`), `docs/operations/inference-security-review.md` ("Review scope"), T-165.
 
 ## Legacy backlog
 

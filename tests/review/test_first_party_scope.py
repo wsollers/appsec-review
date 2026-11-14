@@ -1,4 +1,4 @@
-"""First-party review scope (T-150) and the stylistic lead filter (T-152).
+"""First-party review scope (T-165) and the stylistic lead filter (T-167).
 
 The fixture's opt-in ``third_party`` trees carry a high Semgrep lead and a high cppcheck lead; first-party
 ``native/src/parse.c`` carries a cppcheck ``style`` row and a cppcheck ``warning``. With the repository's

@@ -43,7 +43,7 @@
           "residual_coverage": {"enum": ["review_pending", "exploration_reserve_cutoff", "outside_admission_policy",
                                          "outside_review_scope"]},
           "exclusion": {
-            "description": "Only for a lead outside the review scope: its non-first-party disposition (T-150) or stylistic (T-152).",
+            "description": "Only for a lead outside the review scope: its non-first-party disposition (T-165) or stylistic (T-167).",
             "enum": ["vendored", "sdk", "generated", "test", "stylistic"]
           },
           "exclusion_detail": {"type": "string", "maxLength": 500}
@@ -51,7 +51,7 @@
       }
     },
     "source_dispositions": {
-      "description": "The source-disposition globs the scope was accepted under (SourceDispositions.record, T-150).",
+      "description": "The source-disposition globs the scope was accepted under (SourceDispositions.record, T-165).",
       "type": "object",
       "additionalProperties": false,
       "required": ["rule", "vendored", "sdk", "generated", "test"],

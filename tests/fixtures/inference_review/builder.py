@@ -27,7 +27,7 @@ bound; ``kev_cves``, ``nvd_records`` and ``mitre_weaknesses`` replace the fixtur
 ``third_party`` adds two vendored C files (``third_party/zlib/inflate.c`` at the target root and
 ``native/third_party/lz4/lz4.c`` inside the native component) with a high-severity Semgrep and a high-severity
 cppcheck observation located in them, a cppcheck ``style`` observation in each tree, and a cppcheck ``warning``
-in first-party ``native/src/parse.c`` (T-150 dispositions, T-152 stylistic classes).
+in first-party ``native/src/parse.c`` (T-165 dispositions, T-167 stylistic classes).
 
 ``config`` binds the run to that configuration file (loaded under the ambient environment, so set any
 capacity overlay first) before the synthetic upstream handoff is frozen. A test that later drives the

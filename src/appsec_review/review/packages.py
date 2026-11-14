@@ -1506,7 +1506,7 @@ class _Assembler:
         unit = ranked.unit
         menu = [(lead, *self._locate(lead)[:2]) for lead in unit.leads]
         menu.sort(key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
-        # First-party scope gate (T-150): the menu and the package scope hold only first-party leads and files.
+        # First-party scope gate (T-165): the menu and the package scope hold only first-party leads and files.
         outside = sorted(lead.observation_id for lead, *_ in menu
                          if self.scope.disposition_for(lead.path) != FIRST_PARTY)
         outside_sources = sorted(set(unit.source_ids) & self.outside_scope_ids)
@@ -1713,7 +1713,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                "residual_coverage": "review_pending" if lead.observation_id in admitted_ids
                else "exploration_reserve_cutoff" if admission_reasons(lead, settings)
                else "outside_admission_policy"} for lead in collection.leads),
-            # Leads outside the review scope (T-150 dispositions, T-152 stylistic classes): not admitted
+            # Leads outside the review scope (T-165 dispositions, T-167 stylistic classes): not admitted
             # by scope, with the reason; the observation remains scanner coverage, never a gap.
             *({"lead_id": item.lead.observation_id, "effective_severity": item.lead.effective_severity,
                "status": "not_admitted", "reasons": [], "residual_coverage": "outside_review_scope",

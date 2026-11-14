@@ -1180,13 +1180,13 @@ max_view_bytes = 49152           # byte budget of the model-facing package view 
 max_view_source_lines = 160      # longest function excerpt in a view
 max_view_type_declarations = 6   # type declarations embedded in a view
 
-[jobs.job_inference_security_review.settings.source_dispositions]   # T-150: review lanes see first_party only
+[jobs.job_inference_security_review.settings.source_dispositions]   # T-165: review lanes see first_party only
 vendored = ["**/third_party/**", "**/vendor/**", "**/node_modules/**", "**/external/**"]  # (abridged)
 sdk = ["**/sdk/**", "**/sdks/**"]
 generated = ["**/generated/**", "**/gen/**", "*.pb.go", "*_pb2.py", "*.pb.cc", "*.pb.h"]
 test = ["**/test/**", "**/tests/**", "**/spec/**", "**/__tests__/**", "test_*", "*_test.*"]
 
-[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]  # T-152: never leads
+[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]  # T-167: never leads
 scanner = "tool-cppcheck"
 native_severities = ["style", "performance", "portability", "information"]
 

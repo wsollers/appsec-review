@@ -120,8 +120,8 @@ about 500 packages and the budget is exhausted after roughly 1,700 model turns; 
 record budget gaps and the handoff is `DEGRADED`, which is expected under `dev`. Capacity is excluded
 from cell fingerprints, so a run under the overlay reuses the cells of a run under `--overlay none`.
 
-Those numbers were measured on run `2026-11-14-0003` before source dispositions (T-150) and the
-stylistic lead filter (T-152). Each smoke target vendors its third-party libraries under `third_party/`
+Those numbers were measured on run `2026-11-14-0003` before source dispositions (T-165) and the
+stylistic lead filter (T-167). Each smoke target vendors its third-party libraries under `third_party/`
 (the cpp target: zlib, bzip2, lz4 and cJSON, 185 files), which the default
 `[jobs.job_inference_security_review.settings.source_dispositions]` globs classify as `vendored`: the
 scanners, indexes and the dependency inventory still cover those files, but their leads are recorded as
@@ -129,7 +129,7 @@ scanners, indexes and the dependency inventory still cover those files, but thei
 rows in the target's own code are recorded as `stylistic`. The package manifest's `counts.dispositions`
 shows the file and lead counts per disposition; compare them with the answer key's planted findings,
 which all live in first-party code. The first smoke run under these settings decides whether the `dev`
-budget now carries `inference_security_review` to completion (T-150 "Done when").
+budget now carries `inference_security_review` to completion (T-165 "Done when").
 
 CodeQL coverage of a smoke needs the host's preinstalled CodeQL runtimes declared for the source image
 and for the build profile the smoke compiles with (`native` for cpp; `java`, `go` and `dotnet` for

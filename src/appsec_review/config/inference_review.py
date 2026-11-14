@@ -411,10 +411,10 @@ class InferenceSecurityReviewSettings:
     # PoC candidates the handoff lists (review-judge-and-poc.md section 4); semantic.
     poc_candidates: PocCandidateSettings = PocCandidateSettings()
     attack_chains: AttackChainSettings = AttackChainSettings()
-    # Source dispositions (``settings.source_dispositions``, T-150): which accepted source files the review
+    # Source dispositions (``settings.source_dispositions``, T-165): which accepted source files the review
     # lanes reason over; semantic. Absent means every file is first-party.
     source_dispositions: SourceDispositions = SourceDispositions()
-    # Lead filters (``settings.lead_filters``, T-152): stylistic rule classes that are never leads; semantic.
+    # Lead filters (``settings.lead_filters``, T-167): stylistic rule classes that are never leads; semantic.
     lead_filters: LeadFilters = LeadFilters()
     # Blue-cell result memo (``settings.result_cache``); capacity, never in the semantic view.
     result_cache: ResultCacheSettings = ResultCacheSettings()

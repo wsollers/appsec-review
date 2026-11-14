@@ -13,7 +13,7 @@ read as zero. Every weight comes from :class:`~appsec_review.review.ranking.Rank
 Only the top ``hunt_max_units`` units receive hunt packages; every other unit is a coverage gap
 with reason ``below_hunt_cutoff``.
 
-Units are built from first-party source files only (``SourceFile.disposition``, T-150): vendored, SDK,
+Units are built from first-party source files only (``SourceFile.disposition``, T-165): vendored, SDK,
 generated and test files never become unit members or ``source_ids``, and the collection's leads are
 already scoped by ``lead_families.scope_leads``.
 """

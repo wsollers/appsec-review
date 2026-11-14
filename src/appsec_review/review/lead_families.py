@@ -15,7 +15,7 @@ CWE-798, no scanner value or match ever kept) and Dockerfile/IaC misconfiguratio
 scanner is neither mapped nor listed as a deliberate non-lead is a named ``unmapped_observations`` gap. Dependency and artifact-scanner leads carry the bounded
 ``advisory_context`` of ``review.advisories`` (reference context only).
 
-Review scope (T-150, T-152): after normalization, a lead located in a source file whose disposition is not
+Review scope (T-165, T-167): after normalization, a lead located in a source file whose disposition is not
 ``first_party`` (``review.dispositions``), or whose observation matches a configured stylistic rule class
 (``review.lead_filters``), leaves ``LeadCollection.leads`` and is kept in ``LeadCollection.excluded`` with its
 reason. Exclusion is a scope decision recorded as ``not_admitted``; it is never a coverage gap, and the
@@ -724,7 +724,7 @@ def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None 
 
 def scope_leads(scope: AcceptedScope, leads: Iterable[Lead], filters: LeadFilters
                 ) -> tuple[tuple[Lead, ...], tuple[ExcludedLead, ...]]:
-    """Split normalized leads into the review scope and the excluded rest (T-150, T-152).
+    """Split normalized leads into the review scope and the excluded rest (T-165, T-167).
 
     The disposition decides first: a lead located in a non-first-party file is excluded with that disposition,
     whatever its rule. A first-party lead whose observation matches a stylistic rule class is excluded as

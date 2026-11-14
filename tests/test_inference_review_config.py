@@ -360,7 +360,7 @@ def test_capacity_keys_are_excluded_from_the_semantic_view(tmp_path: Path) -> No
     assert base.as_document()["teams"]["review_teams"] == 3   # the full view still carries capacity
 
 
-# ---------------------------------------------------------------- review scope (T-150, T-152)
+# ---------------------------------------------------------------- review scope (T-165, T-167)
 
 
 def test_source_dispositions_and_stylistic_classes_load_from_the_repository_defaults() -> None:

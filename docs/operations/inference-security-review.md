@@ -244,7 +244,7 @@ connect_timeout_seconds = 0.5                   # 0.05..10; connect and socket t
 The review lanes reason only over **first-party** code, the code the target's developers own and can
 change. Every accepted source file gets one disposition at `scope.accept_manifest`: `first_party`,
 `vendored`, `sdk`, `generated` or `test`, derived from the target-relative POSIX globs under
-`[jobs.job_inference_security_review.settings.source_dispositions]` (T-150). The classes are tested in
+`[jobs.job_inference_security_review.settings.source_dispositions]` (T-165). The classes are tested in
 that order and the first match wins; an unmatched path, and a lead with no location, is first-party.
 Glob semantics are those of the source-history filters (`src/appsec_review/path_globs.py`): `**/`
 spans directories and a pattern without `/` matches the file name at any depth.
@@ -266,11 +266,11 @@ The effect is a scope decision, never a coverage gap:
   unit member or a hunt package `scope.source_ids` entry, and `_Assembler.hunts` fails the membership
   gate if one ever does.
 - Scanners, indexes and `job_dependency_intelligence` still cover the whole target. The vendored code
-  remains queryable evidence and inventoried as a dependency; T-151 checks whether first-party code
+  remains queryable evidence and inventoried as a dependency; T-166 checks whether first-party code
   reaches vendored code named by an advisory. `[exclusions]` is the separate, blunter tool that removes
   paths from analysis altogether.
 
-Stylistic observations are filtered the same way (T-152). A rule class under
+Stylistic observations are filtered the same way (T-167). A rule class under
 `[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]` names a scanner (id or glob) and
 the native severities and/or rule-id globs of its style, readability, performance or portability checks;
 a first-party observation matching a class is recorded as `not_admitted` with reason `stylistic`. The

@@ -2934,13 +2934,13 @@ max_view_bytes = 49152
 max_view_source_lines = 160
 max_view_type_declarations = 6
 
-# Source dispositions (T-150; review/dispositions.py). Every accepted source file is first_party unless a glob
+# Source dispositions (T-165; review/dispositions.py). Every accepted source file is first_party unless a glob
 # below names it vendored, sdk, generated or test, tested in that order (path_globs.py semantics: "**/"
 # spans directories, a pattern without "/" matches the file name at any depth). The lead lane, the hunt lane
 # and the hypothesis hunters reason only over first_party files: a lead located in another disposition is
 # recorded as not_admitted with the disposition as its reason, never as a coverage gap, and no review unit or
 # hunt package names such a file. Scanners, indexes and job_dependency_intelligence still cover the whole
-# target; T-151 checks whether first-party code reaches vendored code named by an advisory. Semantic: a
+# target; T-166 checks whether first-party code reaches vendored code named by an advisory. Semantic: a
 # change here changes the lead set, the units and every fingerprint derived from the settings.
 [jobs.job_inference_security_review.settings.source_dispositions]
 vendored = ["**/third_party/**", "**/third-party/**", "**/thirdparty/**", "**/vendor/**", "**/vendors/**",
@@ -2952,7 +2952,7 @@ generated = ["**/generated/**", "**/gen/**", "*.pb.go", "*_pb2.py", "*_pb2_grpc.
 test = ["**/test/**", "**/tests/**", "**/spec/**", "**/__tests__/**", "**/testdata/**", "test_*", "*_test.*",
         "*.test.*", "*.spec.*", "*Test.java", "*Tests.cs"]
 
-# Stylistic lead filter (T-152; review/lead_filters.py). An observation whose scanner matches `scanner` and whose
+# Stylistic lead filter (T-167; review/lead_filters.py). An observation whose scanner matches `scanner` and whose
 # native severity is in `native_severities` (case-insensitive) or whose rule id matches a `rule_ids` glob is a
 # style, readability or maintainability check, not a security lead: it stays in the observations index and in
 # scanner coverage, and lead collection records it as not_admitted with reason "stylistic". Each entry names

@@ -1,4 +1,4 @@
-"""Lead filters: observation rule classes that are never security leads (T-152).
+"""Lead filters: observation rule classes that are never security leads (T-167).
 
 Scanners report style, readability, performance and portability checks beside their security
 checks. cppcheck's ``unusedStructMember``, ``variableScope``, ``constVariablePointer``,
