@@ -113,7 +113,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_debug_symbol_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `normalized_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `symbol_coverage` | `appsec-review/debug-symbol-coverage/1` | handoff | optional | gap |
-| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/1` | handoff | optional | gap |
+| `job_debug_symbol_indexing` | `target_decision` | `appsec-review/debug-symbol-decision/2` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `raw_artifact_refs` | `appsec-review/debug-symbol-inputs/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `reader_executions` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_debug_symbol_indexing` | `debug_symbol_summary` | `appsec-review/debug-symbol-indexing/1` | handoff | optional | gap |
@@ -571,7 +571,7 @@ flowchart LR
   input62 -. schema .-> input_schema62
   producer63["job_debug_symbol_indexing"]
   input63["target_decision"]
-  input_schema63["appsec-review/debug-symbol-decision/1"]
+  input_schema63["appsec-review/debug-symbol-decision/2"]
   producer63 --> input63 --> job
   input63 -. schema .-> input_schema63
   producer64["job_debug_symbol_indexing"]

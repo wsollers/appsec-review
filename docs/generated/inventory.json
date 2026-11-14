@@ -1491,7 +1491,6 @@
       "appsec-review/dataset-inventory-row/1",
       "appsec-review/dataset-inventory/1",
       "appsec-review/debug-symbol-coverage/1",
-      "appsec-review/debug-symbol-decision/1",
       "appsec-review/debug-symbol-decision/2",
       "appsec-review/debug-symbol-execution-plan/2",
       "appsec-review/debug-symbol-indexing/1",
@@ -2019,6 +2018,7 @@
       "appsec-review/unit-facets/2",
       "appsec-review/unit-output/1",
       "appsec-review/unit-purpose-proposal/1",
+      "appsec-review/unit-purposes/1",
       "appsec-review/unity-build-executor/1",
       "appsec-review/unity-build-fingerprint/1",
       "appsec-review/unity-build-settings/1",
@@ -2270,7 +2270,6 @@
       "dataset-inventory-row/1",
       "dataset-inventory/1",
       "debug-symbol-coverage/1",
-      "debug-symbol-decision/1",
       "debug-symbol-decision/2",
       "debug-symbol-execution-plan/2",
       "debug-symbol-indexing/1",
@@ -2901,6 +2900,7 @@
       "unit-facets/2",
       "unit-output/1",
       "unit-purpose-proposal/1",
+      "unit-purposes/1",
       "unity-build-executor/1",
       "unity-build-fingerprint/1",
       "unity-build-settings/1",
@@ -24967,7 +24967,7 @@
             "missing": "gap",
             "output_kind": "target_decision",
             "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/1"
+            "schema": "appsec-review/debug-symbol-decision/2"
           },
           {
             "authority": "producer_evidence",
@@ -25752,7 +25752,7 @@
           "job_security_tagging"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "a1508c2c4a6a49b14eff9d7a0301edfd094127e9df2015ab135f2ee1bbea895c",
+        "sha256": "2f8c8b1f88f72174093727864d56cefdf55015245f59bd98d2e14cffcd2884a7",
         "target_access": "checkout"
       },
       "dagster": {
@@ -43957,7 +43957,7 @@
     "src/appsec_review/jobs/job_codeql_analysis/__init__.py": "98bb3ee7784db54c122b3456fe82af9a66bd58e2b1c6bb7bef2db063ce6c1578",
     "src/appsec_review/jobs/job_codeql_analysis/datasets.py": "13e11ebd8b0cfd428e0797f5809c272a82311a2fecb188c61b253726a7034b78",
     "src/appsec_review/jobs/job_codeql_analysis/job.py": "64d9eefcc44580d77748478838c8a5b8c7c2d472da3169f7e2798f383980cbbf",
-    "src/appsec_review/jobs/job_codeql_analysis/planning.py": "540dc5bd4ea418e7055a998984e20be6c772e288cc0d507c652c093e241690c6",
+    "src/appsec_review/jobs/job_codeql_analysis/planning.py": "ad9048077d53de5569ec751639762b086ddff1613b398612981d93960459fe3e",
     "src/appsec_review/jobs/job_codeql_analysis/sarif.py": "c4d1ca86083a022b5de0c21158c1b2c4ed8175505533727fad53cbb3f2d08ea6",
     "src/appsec_review/jobs/job_cpg_analysis/__init__.py": "4f9e9b035c185cfe82a21f25d1089824cd68edc355b5e27a2604358487806cfd",
     "src/appsec_review/jobs/job_cpg_analysis/datasets.py": "1cab97818edb0f0beb6d0c440b6ca1bb9663b384f64b1dbe9d4dc61e821ad344",
@@ -44069,7 +44069,7 @@
     "src/appsec_review/jobs/job_openvex_export/settings.py": "3d3b71e9959234365d383de6080844bd5f66e5db1173cedf85364f2d74b384fd",
     "src/appsec_review/jobs/job_openvex_export/validation.py": "86d1c002ac74d367ea6480c8c3e6ae00aed4f5eb422f35f9e69f26cec8e9a67e",
     "src/appsec_review/jobs/job_owasp_control_assessment/__init__.py": "549de9b64a182affa30410346da5d37bee43be3a1b5ac291a8e57f6105c88049",
-    "src/appsec_review/jobs/job_owasp_control_assessment/datasets.py": "f2cfa2a5f10f1d69c1e87ed32357a5e07865bf1ae418654c41a6ece2476b22f4",
+    "src/appsec_review/jobs/job_owasp_control_assessment/datasets.py": "b0f77ad78a3cf616b7368dfb8dc0f746e5c03e689b06e21a9839b6076780348e",
     "src/appsec_review/jobs/job_owasp_control_assessment/job.py": "0f4edcf959e7e1ed36431aee87ae2c689e7d74f6a6eef778f79d11d96713dcb9",
     "src/appsec_review/jobs/job_poc_generation/__init__.py": "77742331ec426136abd8e4728acafa7e8d77ddb5a184b1f0fa8e70d2895ff224",
     "src/appsec_review/jobs/job_poc_generation/ast_reduce.py": "736ca527a96f443874ff43ff49085bf3baddc4570d256c7498f1fd56ba99c5b9",
