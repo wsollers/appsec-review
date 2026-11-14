@@ -114,7 +114,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-111 | [Surface build-descriptor bounds as gap records and size them against real targets](#t-111-surface-build-descriptor-bounds-as-gap-records-and-size-them-against-real-targets) | build | open |
 | T-112 | [Record what the analysis-summary trim removed, and do not report truncation under the bounds](#t-112-record-what-the-analysis-summary-trim-removed-and-do-not-report-truncation-under-the-bounds) | build | open |
 | T-113 | [Walk every job into tests/unit with code-level tests under the enforced tier](#t-113-walk-every-job-into-testsunit-with-code-level-tests-under-the-enforced-tier) | testing | in-progress |
-| T-114 | [Declare the debug-symbol decision dataset with the schema the job writes](#t-114-declare-the-debug-symbol-decision-dataset-with-the-schema-the-job-writes) | binary | open |
+| T-114 | [Declare the debug-symbol decision dataset with the schema the job writes](#t-114-declare-the-debug-symbol-decision-dataset-with-the-schema-the-job-writes) | binary | done (2026-11-13, 9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16) |
 | T-115 | [Record code-graph live verification in fixture provenance and test it against the lock](#t-115-record-code-graph-live-verification-in-fixture-provenance-and-test-it-against-the-lock) | graph | open |
 | T-116 | [Make the code-graph docs name all eight pinned export packs](#t-116-make-the-code-graph-docs-name-all-eight-pinned-export-packs) | graph | open |
 | T-117 | [Fix the stale image_id comments in appsec-review.toml (not during an active walk)](#t-117-fix-the-stale-image_id-comments-in-appsec-reviewtoml-not-during-an-active-walk) | images | open |
@@ -2650,7 +2650,7 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
 
 ### T-114 — Declare the debug-symbol decision dataset with the schema the job writes
 
-- **State:** open
+- **State:** done (2026-11-13, 9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16)
 - **Area:** binary
 - **Why:** `job_debug_symbol_indexing/datasets.py` declares the `target_decision` dataset with schema
   `appsec-review/debug-symbol-decision/1`, while `debug_symbols/contract.py` sets
