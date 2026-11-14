@@ -280,7 +280,7 @@ def _publish_shard(unit: UnitContext, scope: IndexScope, *, artifacts: list[Any]
                                          "project_id": scope.project_id, "shard_id": shard, **function}))
     text = "; ".join([seeding.coverage_gap(compact), *gaps] if compact else gaps)
     builder.add_coverage(f"joern:{scope.project_id}"[:256], "partial" if exported else "unavailable", text[:16384])
-    sha = file_sha256(path) if path.exists() else builder.build()
+    sha, _ = builder.build_or_reuse()
     producer: dict[str, Any] = {"job": JOB_ID, "unit": unit.unit_id, "scope_id": scope.scope_id,
                                 "project_root": scope.root}
     if compact is not None:

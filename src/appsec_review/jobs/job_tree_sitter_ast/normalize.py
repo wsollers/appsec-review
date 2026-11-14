@@ -44,16 +44,9 @@ def attest_reused_shard(run_root: Path, index_path: Path, metadata: Mapping[str,
     an implementation change that receipt is incompatible, and consuming the shard through a manifest
     refuses ("repair cannot relabel an unresolved or incompatible named computation as legacy").
     """
-    from appsec_review.retrieval.index import INDEX_SCHEMA
-    from appsec_review.storage.shared import current
-    owner = current()
-    if owner is None or not index_path.is_relative_to(owner.run_root / "data" / "indices"):
-        return
     identity = metadata["index_identity"]
-    owner.named("index-shard", index_path, computed=True, expected_sha256=str(identity["sha256"]),
-                computation={"fingerprint": metadata["fingerprint"], "name": identity["name"],
-                             "shard_id": identity["shard_id"], "target_snapshot": target_snapshot,
-                             "schema": INDEX_SCHEMA})
+    IndexBuilder(index_path, name=str(identity["name"]), fingerprint=str(metadata["fingerprint"]),
+                 target_snapshot=target_snapshot, shard_id=str(identity["shard_id"])).attest_existing(str(identity["sha256"]))
 
 
 def node_identity(target_snapshot: str, scope: Scope, grammar: GrammarLock,

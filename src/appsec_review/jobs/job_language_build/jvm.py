@@ -662,7 +662,8 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
                              None if complete else "; ".join(receipt["gaps"][:10]))
         sha = builder.build()
     else:
-        sha = file_sha256(path)
+        sha = IndexBuilder(path, name="build", fingerprint=fingerprint,
+                           target_snapshot=unit.job.source_fingerprint, shard_id=shard).attest_existing()
     identity = IndexIdentity("build", "appsec-review/retrieval-index/2", sha, fingerprint,
         path.relative_to(unit.job.run_root).as_posix(),
         {"job": "job_language_build", "unit": unit.unit_id, "family": "java"},

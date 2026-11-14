@@ -1128,6 +1128,9 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
                                     "gaps": tuple(value["index_identity"].get("gaps", ()))})
         candidate = unit.job.run_root / identity.relative_path
         if candidate.is_file() and file_sha256(candidate) == identity.sha256:
+            IndexBuilder(candidate, name=identity.name, fingerprint=identity.fingerprint,
+                         target_snapshot=unit.job.source_fingerprint,
+                         shard_id=identity.shard_id).attest_existing(identity.sha256)
             reused = {**value, "checkpoint_reused": output.get("checkpoint_reused", False),
                       "index_reused": True,
                       "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}

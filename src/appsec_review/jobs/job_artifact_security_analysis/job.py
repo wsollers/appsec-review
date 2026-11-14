@@ -769,7 +769,9 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                                  gaps[0] if gaps else None)
             sha = builder.build()
         else:
-            sha = file_sha256(path)
+            sha = IndexBuilder(path, name="observations", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint,
+                               shard_id="artifact-security").attest_existing()
         identity = IndexIdentity("observations", INDEX_SCHEMA, sha, fingerprint,
             path.relative_to(unit.job.run_root).as_posix(), {"job": "job_artifact_security_analysis"},
             tuple(gaps[:1000]), "artifact-security")

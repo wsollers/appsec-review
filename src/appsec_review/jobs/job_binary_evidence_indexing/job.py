@@ -345,7 +345,7 @@ def index_binary(unit: UnitContext, document: Mapping[str, Any], entry: Mapping[
     binary.build(managed_routing(manifest))
     status = "partial" if binary.gaps else "complete"
     builder.add_coverage(f"binary:{entry['binary_id']}"[:256], status, "; ".join(binary.gaps[:10]) or None)
-    sha = file_sha256(path) if path.exists() else builder.build()
+    sha, _ = builder.build_or_reuse()
     gaps = [f"{entry['binary_id']}: {gap}" for gap in binary.gaps]
     index = IndexIdentity("binary", "appsec-review/retrieval-index/2", sha, fingerprint,
                           path.relative_to(unit.job.run_root).as_posix(),

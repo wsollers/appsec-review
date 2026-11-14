@@ -593,7 +593,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                                  None if not plan["coverage_gaps"] else "; ".join(plan["coverage_gaps"][:10]))
             sha256 = builder.build()
         else:
-            sha256 = file_sha256(path)
+            sha256 = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
+                                  target_snapshot=unit.job.source_fingerprint,
+                                  shard_id="target-analysis-plan").attest_existing()
         identity = IndexIdentity("analysis", "appsec-review/retrieval-index/2", sha256, fingerprint,
             path.relative_to(unit.job.run_root).as_posix(),
             {"job": "job_target_analysis_plan", "unit": unit.unit_id}, tuple(plan["coverage_gaps"]),

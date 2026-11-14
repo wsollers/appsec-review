@@ -556,6 +556,7 @@ def _finish_shard(builder: IndexBuilder, path: Path) -> tuple[str, bool]:
                         digest = _verify_shard(path, name=builder.name, fingerprint=builder.fingerprint,
                                                shard_id=builder.shard_id,
                                                target_snapshot=builder.target_snapshot)
+                    builder.attest_existing(digest)
                     count_work("shards_reused")
                     return digest, True
                 return builder.build(), False

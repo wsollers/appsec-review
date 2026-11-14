@@ -867,7 +867,9 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 builder.add_coverage("post-build-security", "partial" if gaps else "complete", "; ".join(gaps[:20]) or None)
                 sha = builder.build()
             else:
-                sha = file_sha256(path)
+                sha = IndexBuilder(path, name="build_security", fingerprint=fingerprint,
+                                   target_snapshot=unit.job.source_fingerprint,
+                                   shard_id=shard_id).attest_existing()
                 gaps = list(dict.fromkeys([*provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
                                           *deterministic_value.get("gaps", ()), *inference_value.get("gaps", ())]))
             identity = IndexIdentity("build_security", "appsec-review/retrieval-index/2", sha, fingerprint,
