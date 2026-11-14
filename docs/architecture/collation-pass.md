@@ -170,13 +170,17 @@ descriptor) is first-party and still collated: it gets `role:build-glue` from th
 | --- | --- | --- | --- |
 | Capability tags already collected by the job (`lang:*`, `func:*`, `surface:*`, `data:*`, `infra:*`, `component:*`; `declared` from paths and packages, `invoked` from graph entry/sink sites, `reported` from tools) | facets through the tag-to-facet rules (section 3.3) | `derived`, citing the input assignment | the facets that need them are not assigned; the job's existing `graph-capability:missing_graph` gap already names an absent graph index, and the collation artifact adds `collation:no_graph_facts` |
 | Lexical facts: include, import, identifier and path patterns matched line by line against the hash-verified bytes of each first-party file, from pinned `collation.lexical_rules` and `collation.path_rules` in `data/reference/taxonomy/capability-rules.json` | facets and the `func`/`surface` tags a rule names, with the matched line as the evidence span | `declared` (confidence `high` for includes, imports and paths; `medium` for identifier patterns) | a file over `max_source_bytes_per_file` or unreadable is skipped with gap `collation:source_unread:<path>`; a language with no lexical rules is skipped with `collation:no_lexical_rules:<lang>` |
-| Build receipts (`build` index, `build_action` rows with build points) | `target:library` when a component's build points produce only libraries; `role:build-glue` for descriptor paths | `derived` | no `build` shard: `collation:no_build_facts`; the library class then needs the no-mechanism rule |
-| Catalog symbols (`analysis/default`, kind `symbol`) | names that the identifier rules may match without reading the file (`main`, `login`, `session_*`), with the symbol's line as the span | `declared` | no symbol shard: `collation:no_symbol_index`; lexical facts still cover the file |
-| Target documents (`documents` index: README, design, OpenAPI, protobuf) | `mechanism:http` from an OpenAPI document, `mechanism:rpc` from protobuf or AsyncAPI documents, at component level | `declared` | empty or absent: `collation:no_documents` (the smoke-cpp run indexed none) |
+| Build receipts (`build` index, `build_action` rows with build points) | `target:library` when a component's build points produce only libraries and no file has an entry mechanism | `derived` | no `build` shard: `collation:no_build_facts`; the library class then rests on the recorded absence of mechanisms (confidence `medium`) |
+| Target documents (`documents` index, kinds `openapi`, `postman`, `graphql`, `protobuf`, `asyncapi`) | `mechanism:http` from an OpenAPI, Postman or GraphQL document, `mechanism:rpc` from a protobuf or AsyncAPI document, on the owning component | `declared` | empty or absent: `collation:no_documents` (the smoke-cpp run indexed none). README text is not read: the catalog does not index it and free text would not give a closed value |
 | Model pass (section 6) | `role`, `asset`, purpose | `reported` | disabled: a payload fact (`model_pass: disabled`), not a gap; rejected output: `collation:model_pass_rejected:<component>` |
 
-The rules are data, pinned by hash with the capability-rules file, so a vocabulary or rule change
-changes the pinned identity and every shard fingerprint; nothing is hard-coded in the collector.
+The rules are data, pinned by hash with the capability-rules file (`collation.lexical_rules`,
+`collation.path_rules`, `collation.tag_rules`, `collation.facet_rules`, `collation.target_rules`), so a
+vocabulary or rule change changes the pinned identity and every shard fingerprint. Three target
+classes are structural and live in the collector (`jobs/job_security_tagging/collation.py`):
+`target:build-tooling` (every first-party file is `role:build-glue`), `target:test-only` (every
+non-glue first-party file is `role:test`) and `target:library` (section 2); the data rules decide
+`web-api`, `mobile` and `cli`.
 
 ### 3.3 Tag-to-facet rules (`derived`)
 
@@ -245,8 +249,10 @@ The pass is a new step `collation` of `job_security_tagging`, after `collection`
 
 ```
 taxonomy -> scope -> collection{source_facts, observation_facts, coverage_gaps}
-        -> collation{collate_facets, model_pass} -> crosswalk -> integrity -> publication
+        -> collation{collate_facets[, model_pass]} -> crosswalk -> integrity -> publication
 ```
+
+Stage 2 registers the `collate_facets` task; the `model_pass` task joins the step with stage 4.
 
 Why a step rather than a job between tagging and package assembly:
 
@@ -263,7 +269,7 @@ Why a step rather than a job between tagging and package assembly:
   it.
 
 Contract parity (`.claude/skills/add-a-job-contract/SKILL.md`): `TOPOLOGY` in
-`jobs/job_security_tagging/job.py` gains the step and its two tasks, and `appsec-review.toml` gains
+`jobs/job_security_tagging/job.py` gains the step and its task(s), and `appsec-review.toml` gains
 the matching `[jobs.job_security_tagging.steps.collation]` tables, so `_validate_config` keeps
 refusing a topology that differs from central configuration. No new dataset: the facet records are
 `tag_assignments` rows in the declared `tags` index, and the collation artifacts
@@ -279,7 +285,7 @@ Typed settings, all under `[jobs.job_security_tagging.settings.collation]`:
 | --- | --- | --- |
 | `max_source_bytes_per_file` | 262144 | Largest first-party file the lexical rules read; a larger file is skipped with a named gap |
 | `max_files_per_component` | 4096 | Files collated per component; the rest are skipped with a named gap |
-| `source_dispositions` | resolved by the loader from `jobs.job_inference_security_review.settings.source_dispositions` | The T-165 globs; a literal table here must equal that one or configuration loading fails |
+| `source_dispositions` | resolved by the loader from `jobs.job_inference_security_review.settings.source_dispositions` | The T-165 globs; a literal table here must equal that one or configuration loading fails. The resolved table is written into the tagging job's frozen settings (`config/collation.py`, `config/loader.py`) |
 | `model_pass.enabled` | `false` | Section 6; the deterministic pass never depends on it |
 | `model_pass.max_components` | 64 | Components the model pass may describe per run |
 | `model_pass.max_excerpt_lines` | 400 | Source lines sent per component, chosen from facet evidence spans |
@@ -310,7 +316,7 @@ gaps, and the rule identities.
 
 | Consumer | Reads | Uses it for |
 | --- | --- | --- |
-| Unit context (`review/packages.py`, `_Assembler.unit_context_document`, T-5000) | the `facets` shard rows whose subject is one of the unit's source files or its component | `package-unit-context/2` gains `facets`: the unit's facet tags (union over its files and component, each with basis, subject count and assignment ids), its component's `target` classes, the derived hunt obligations (next row) and the model-pass purpose when accepted. Every hunt partition of the unit references it once |
+| Unit context (`review/packages.py`, `_Assembler.unit_context_document`, T-5000) | the `facets` shard rows whose subject is one of the unit's source files or its component | `package-unit-context/2` gains `facets` (`unit-facets/1`): the unit's facet tags (union over its files and component, each with its strongest basis, distinct-subject count, assignment ids and entity identities), its component's `target_classes`, and from stage 3 the derived hunt obligations and the model-pass purpose when accepted. The facet entity identities join `entity_ids`, so a worker may `trace` them. Every hunt partition of the unit references it once |
 | Hunt obligations (`review/packages.py`, `FACET_OBLIGATIONS`) | the unit's facet tags | A closed table maps facets to named hunt obligations carried in the unit context beside the predicate `obligations`: `role:auth` → `authentication_enforced`; `role:session` or `state:session` → `session_lifecycle`; `trust:user-tainted` → `input_validation`; `role:authorization` → `authorization_checked`; `asset:credentials` or `asset:keys` → `secret_handling`; `role:serialization` → `deserialization_safety`; `role:storage` → `storage_query_safety`; `role:crypto` → `crypto_misuse`; `mechanism:file` → `path_and_file_handling`; `role:logging` → `logging_hygiene`. Each obligation names the tags it rests on. The package view renders them as bounded questions; the obligation vocabulary is closed (`hunt-facet-obligations/1`) |
 | Stack routing (`guidance/routing.py`, `route_stack`) | `mechanism:*` and `exposure:*` tags of the package scope | `mechanism:rpc` joins the C-family RPC basis; a managed-language scope with `mechanism:http`, `mechanism:networked-listener` or `mechanism:rpc` selects its service stack even when no `component:*` tag exists (today a language alone never selects a service stack; the real run had no component tags) |
 | Persona routing (`route_persona`, `rank_personas`) | facet namespaces join `LOCATION_NAMESPACES`, so a persona whose `covers` names `role:auth` or `asset:credentials` is ranked on them | personas may cover facets; the partition check stays over `cwe`/`func`/`infra`/`data` so no persona is forced to claim every facet |
@@ -441,9 +447,10 @@ not applicable with the `target:cli` citation, no batch and no model call, and t
 | Stage | Content | State |
 | --- | --- | --- |
 | 1 | This document and the pointers in the three operations pages | this change |
-| 2 | Vocabulary, pinned rules, `collation.collate_facets`, unit context `facets` | follows |
+| 2 | Vocabulary, pinned rules, `collation.collate_facets`, unit context `facets` | implemented (`tests/unit/job_security_tagging/test_collation.py`, `tests/review/test_unit_facets.py`) |
 | 3 | Hunt obligations, routing, rank signal, OWASP target class, classifier deletion | follows |
 | 4 | Model pass, runtime skill, typed setting | follows; off by default |
 
 Not covered by T-5008: threat-model seeding and the report sentence (section 5.2), catalog-fact
-dispositions (T-165 remainder), and any live-run measurement.
+dispositions (T-165 remainder), catalog symbols as a facet source (lexical facts cover the names), and
+any live-run measurement.

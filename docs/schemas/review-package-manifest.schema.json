@@ -106,7 +106,7 @@
       }
     },
     "unit_contexts": {
-      "description": "One entry per hunted unit: the unit context document (package-unit-context/1) its hunt packages reference, content-addressed under unit-context/<sha256>.json beside the packages.",
+      "description": "One entry per hunted unit: the unit context document (package-unit-context/2) its hunt packages reference, content-addressed under unit-context/<sha256>.json beside the packages.",
       "type": "array",
       "items": {
         "type": "object",
@@ -114,7 +114,7 @@
         "required": ["unit_key", "schema", "path", "sha256", "bytes", "counts"],
         "properties": {
           "unit_key": {"type": "string", "minLength": 1},
-          "schema": {"const": "appsec-review/package-unit-context/1"},
+          "schema": {"const": "appsec-review/package-unit-context/2"},
           "path": {"type": "string", "pattern": "^unit-context/[0-9a-f]{64}\\.json$"},
           "sha256": {"$ref": "#/$defs/sha"},
           "bytes": {"type": "integer", "minimum": 1},

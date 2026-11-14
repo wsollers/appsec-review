@@ -36,6 +36,8 @@ to another resolved configuration, and an accepted handoff must match the run's 
 """
 from __future__ import annotations
 
+import hashlib
+
 from dataclasses import asdict, dataclass, field
 import json
 import random
@@ -61,7 +63,8 @@ from tests.fixtures import reference_feeds as feeds
 RUN_ID = "2026-10-12-0001"
 SNAPSHOT = "target-sha256:" + "7" * 64
 SHARDS = ("source", "components", "build", "semgrep", "opengrep", "codeql", "osv", "ci", "priority", "history",
-          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence", "gitleaks", "cppcheck")
+          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence", "gitleaks", "cppcheck",
+          "facets")
 # The seeded credential of the opt-in ``secrets`` fixture: no artifact the intake produces may contain it.
 FIXTURE_SECRET = "sk_live_9f8e7d6c5b4a39281706f5e4d3c2b1a0"
 SECRET_FILE = "native/src/config.cpp"
@@ -207,7 +210,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              mitre_weaknesses: dict[str, tuple] | None = None,
                              advisory_extra: dict[str, dict[str, Any]] | None = None,
                              secrets: bool = False, secret_extra: dict[str, Any] | None = None,
-                             third_party: bool = False, config: Path | None = None) -> FixtureRun:
+                             third_party: bool = False, config: Path | None = None,
+                             facets: bool = False) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -403,6 +407,40 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                                  {"tag": tag, "subject": {"kind": "file", "path": path, "logical_id": ids[path]}},
                                  location(path, 1)))
     shard("tags", "tags", "security-domain", {"job": "job_security_tagging", "family": "security_domain"}, tags)
+    if facets:
+        # Collation facets (T-5008) as the tagging job publishes them: the svc handler is an HTTP login route,
+        # the native parser a CLI; each component carries its target class.
+        facet_rows = []
+        facet_specs = [
+            ("svc/api/handler.py", "component:0001", "declared", "role:auth"),
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:http"),
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:networked-listener"),
+            ("svc/api/handler.py", "component:0001", "declared", "role:session"),
+            ("svc/api/handler.py", "component:0001", "derived", "trust:user-tainted"),
+            ("svc/api/handler.py", "component:0001", "derived", "exposure:client-facing"),
+            ("svc/api/handler.py", "component:0001", "derived", "asset:credentials"),
+            ("svc/api/handler.py", "component:0001", "derived", "state:session"),
+            ("native/src/parse.c", "component:0002", "declared", "mechanism:cli"),
+            ("native/src/parse.c", "component:0002", "derived", "trust:user-tainted"),
+            ("native/src/parse.c", "component:0002", "derived", "exposure:operator-only"),
+            (None, "component:0001", "derived", "target:web-api"),
+            (None, "component:0002", "derived", "target:cli"),
+        ]
+        for number, (path, component_id, basis, tag) in enumerate(facet_specs):
+            assignment_id = "tag:" + hashlib.sha256(f"facet-{number}-{tag}".encode()).hexdigest()
+            ids[f"facet:{tag}:{path or component_id}"] = LogicalIdentity.derive(
+                EntityKind.TAG_ASSIGNMENT, SNAPSHOT, {"assignment_id": assignment_id}).value
+            component_key = "component:svc" if component_id == "component:0001" else "component:native"
+            subject = ({"kind": "source_file", "logical_id": ids[path], "path": path, "component_id": component_id}
+                       if path else {"kind": "component", "logical_id": ids[component_key], "component_id": component_id})
+            payload = {"schema": "appsec-review/tag-assignment/1", "tag": tag, "namespace": tag.split(":", 1)[0],
+                       "family": "code_facts", "basis": basis, "assignment_id": assignment_id, "subject": subject,
+                       "producer": {"name": "collation", "rule_id": "fixture"}, "evidence": [], "derived_from": [],
+                       "confidence": "high"}
+            facet_rows.append(EntityRecord(LogicalIdentity.parse(ids[f"facet:{tag}:{path or component_id}"]),
+                                           assignment_id, tag, f"{tag} {path or component_id}", payload,
+                                           location(path, 1) if path else None))
+        shard("facets", "tags", "facets", {"job": "job_security_tagging", "family": "code_facts"}, facet_rows)
 
     pins = publish_feeds(base, omit_feeds=omit_feeds, stale_feeds=stale_feeds, kev_cves=kev_cves,
                          nvd_records=nvd_records, mitre_weaknesses=mitre_weaknesses)

@@ -120,7 +120,7 @@
           "additionalProperties": false,
           "required": ["schema", "sha256", "size_bytes", "counts", "file"],
           "properties": {
-            "schema": {"const": "appsec-review/package-unit-context/1"},
+            "schema": {"const": "appsec-review/package-unit-context/2"},
             "sha256": {"$ref": "#/$defs/sha"},
             "size_bytes": {"type": "integer", "minimum": 1},
             "counts": {

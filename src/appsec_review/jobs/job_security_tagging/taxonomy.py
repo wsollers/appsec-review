@@ -30,6 +30,13 @@ _SEGMENT = re.compile(r"^[a-z0-9][a-z0-9.\-]*$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ROLLUPS = {"self", "domain", "chapter", "cert-category", "family"}
 _FAMILIES = {"code_facts", "controls", "routing", "weakness", "threat", "gap"}
+# Collation facets (docs/architecture/collation-pass.md, T-5008) and the per-component target class.
+FACET_NAMESPACES = ("role", "exposure", "trust", "mechanism", "asset", "state")
+TARGET_NAMESPACE = "target"
+COLLATION_NAMESPACES = (*FACET_NAMESPACES, TARGET_NAMESPACE)
+_LEXICAL_KINDS = {"include", "import", "identifier"}
+_LEXICAL_EMIT_NAMESPACES = {*FACET_NAMESPACES, "func", "surface", "data"}
+_CONFIDENCES = {"high", "medium", "low"}
 
 
 class TaxonomyError(ValueError):
@@ -205,6 +212,18 @@ def load_vocabulary(path: Path, expected_sha256: str) -> Vocabulary:
 
 
 @dataclass(frozen=True, slots=True)
+class CollationRules:
+    """The pinned collation rules: lexical and path facts, tag-to-facet, facet-to-facet and target rules."""
+
+    lexical_rules: tuple[Mapping[str, Any], ...]
+    path_rules: tuple[Mapping[str, Any], ...]
+    tag_rules: tuple[Mapping[str, Any], ...]
+    facet_rules: tuple[Mapping[str, Any], ...]
+    target_rules: tuple[Mapping[str, Any], ...]
+    patterns: Mapping[str, tuple[re.Pattern[str], ...]]  # lexical rule id -> compiled patterns
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityRules:
     sha256: str
     languages: Mapping[str, str]
@@ -213,6 +232,7 @@ class CapabilityRules:
     observation_rules: tuple[Mapping[str, Any], ...]
     coverage_gaps: Mapping[str, str]
     graph_rules: tuple[Mapping[str, Any], ...] = ()
+    collation: CollationRules | None = None
 
 
 _EXTRACTORS = {"sarif-rule-cwe-tags", "cert-rule-id", "advisory-severity", "package-capability"}
@@ -286,7 +306,104 @@ def parse_capability_rules(document: Mapping[str, Any], sha256: str, vocabulary:
             vocabulary.validate_tag(f"{tag}:probe", "reported")
         else:
             vocabulary.validate_tag(tag, "reported")
-    return CapabilityRules(sha256, languages, path_rules, package_rules, observation_rules, gaps, graph_rules)
+    collation = (_parse_collation_rules(document["collation"], vocabulary, seen)
+                 if "collation" in document else None)
+    return CapabilityRules(sha256, languages, path_rules, package_rules, observation_rules, gaps, graph_rules,
+                           collation)
+
+
+def _known_tag(vocabulary: Vocabulary, tag: str, where: str) -> None:
+    """A tag or ``namespace:prefix*`` pattern must name a registered namespace and, when exact, a term."""
+    if tag.endswith("*"):
+        _require(bool(_NAMESPACE.fullmatch(tag.split(":", 1)[0])) and tag.split(":", 1)[0] in vocabulary.namespaces,
+                 f"{where} names an unregistered namespace: {tag}")
+        return
+    name, segments = split_tag(tag)
+    namespace = vocabulary.namespace(tag)
+    if namespace.pattern is None and segments[0] not in namespace.parameterized:
+        _require(tag in namespace.terms, f"{where} names an unknown term: {tag}")
+
+
+def _parse_collation_rules(document: Any, vocabulary: Vocabulary, seen: set[str]) -> CollationRules:
+    """Validate the collation rules; every emitted facet is valid at the basis its rule produces."""
+    _require(isinstance(document, Mapping), "collation rules must be an object")
+    _require(set(document) <= {"note", "lexical_rules", "path_rules", "tag_rules", "facet_rules", "target_rules"},
+             "unknown collation rule keys")
+    patterns: dict[str, tuple[re.Pattern[str], ...]] = {}
+
+    def rule_list(key: str, allowed: set[str], required: set[str]) -> tuple[Mapping[str, Any], ...]:
+        values = tuple(document.get(key, ()))
+        for rule in values:
+            _require(isinstance(rule, Mapping), f"collation {key} rule must be an object")
+            rule_id = rule.get("id")
+            _require(isinstance(rule_id, str) and bool(rule_id) and rule_id not in seen,
+                     f"duplicate or missing collation rule id: {rule_id}")
+            seen.add(rule_id)
+            _require(set(rule) <= allowed and required <= set(rule), f"collation rule keys are invalid: {rule_id}")
+            _require(isinstance(rule["emit"], list) and bool(rule["emit"])
+                     and all(isinstance(tag, str) for tag in rule["emit"]), f"collation rule emits nothing: {rule_id}")
+        return values
+
+    lexical = rule_list("lexical_rules", {"id", "kind", "languages", "patterns", "emit", "confidence", "rationale"},
+                        {"id", "kind", "patterns", "emit", "rationale"})
+    for rule in lexical:
+        _require(rule["kind"] in _LEXICAL_KINDS, f"collation lexical kind is invalid: {rule['id']}")
+        _require(isinstance(rule["rationale"], str) and bool(rule["rationale"].strip()),
+                 f"collation lexical rule requires rationale: {rule['id']}")
+        _require("confidence" not in rule or rule["confidence"] in _CONFIDENCES,
+                 f"collation lexical confidence is invalid: {rule['id']}")
+        if "languages" in rule:
+            _require(isinstance(rule["languages"], list) and bool(rule["languages"]),
+                     f"collation lexical languages are invalid: {rule['id']}")
+            for tag in rule["languages"]:
+                vocabulary.validate_tag(tag, "declared")
+                _require(split_tag(tag)[0] == "lang", f"collation lexical languages must be lang tags: {rule['id']}")
+        _require(isinstance(rule["patterns"], list) and bool(rule["patterns"])
+                 and all(isinstance(item, str) and item for item in rule["patterns"]),
+                 f"collation lexical patterns are invalid: {rule['id']}")
+        try:
+            patterns[rule["id"]] = tuple(re.compile(item) for item in rule["patterns"])
+        except re.error as exc:
+            raise TaxonomyError(f"collation lexical pattern does not compile: {rule['id']}: {exc}") from exc
+        for tag in rule["emit"]:
+            namespace = vocabulary.validate_tag(tag, "declared")
+            _require(namespace.name in _LEXICAL_EMIT_NAMESPACES,
+                     f"collation lexical rule may emit facets and capabilities only: {rule['id']}")
+    paths = rule_list("path_rules", {"id", "names", "suffixes", "prefixes", "emit"}, {"id", "emit"})
+    for rule in paths:
+        _require(any(rule.get(key) for key in ("names", "suffixes", "prefixes")),
+                 f"collation path rule has no matcher: {rule['id']}")
+        for tag in rule["emit"]:
+            _require(vocabulary.validate_tag(tag, "declared").name in FACET_NAMESPACES,
+                     f"collation path rule must emit a facet: {rule['id']}")
+    tags = rule_list("tag_rules", {"id", "inputs", "emit"}, {"id", "inputs", "emit"})
+    for rule in tags:
+        _require(isinstance(rule["inputs"], list) and bool(rule["inputs"]), f"collation tag rule has no inputs: {rule['id']}")
+        for tag in rule["inputs"]:
+            _known_tag(vocabulary, tag, f"collation tag rule {rule['id']}")
+            _require(tag.split(":", 1)[0] not in COLLATION_NAMESPACES,
+                     f"collation tag rule inputs are capability tags, not facets: {rule['id']}")
+        for tag in rule["emit"]:
+            _require(vocabulary.validate_tag(tag, "derived").name in FACET_NAMESPACES,
+                     f"collation tag rule must emit a facet: {rule['id']}")
+    facets = rule_list("facet_rules", {"id", "any_of", "none_of", "emit"}, {"id", "any_of", "none_of", "emit"})
+    targets = rule_list("target_rules", {"id", "any_of", "none_of", "emit"}, {"id", "any_of", "none_of", "emit"})
+    for rule in (*facets, *targets):
+        for key in ("any_of", "none_of"):
+            _require(isinstance(rule[key], list) and all(isinstance(tag, str) for tag in rule[key]),
+                     f"collation rule {key} is invalid: {rule['id']}")
+            for tag in rule[key]:
+                _known_tag(vocabulary, tag, f"collation rule {rule['id']}")
+        _require(bool(rule["any_of"]), f"collation rule needs a positive condition: {rule['id']}")
+    for rule in facets:
+        for tag in rule["emit"]:
+            _require(vocabulary.validate_tag(tag, "derived").name in FACET_NAMESPACES,
+                     f"collation facet rule must emit a facet: {rule['id']}")
+    for rule in targets:
+        for tag in rule["emit"]:
+            _require(vocabulary.validate_tag(tag, "derived").name == TARGET_NAMESPACE,
+                     f"collation target rule must emit a target class: {rule['id']}")
+    return CollationRules(lexical, paths, tags, facets, targets, patterns)
 
 
 def load_capability_rules(path: Path, expected_sha256: str, vocabulary: Vocabulary) -> CapabilityRules:

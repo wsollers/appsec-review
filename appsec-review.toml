@@ -2813,11 +2813,23 @@ max_assignments = 500000
 
 [jobs.job_security_tagging.settings.taxonomy]
 vocabulary_path = "data/reference/taxonomy/vocabulary.json"
-vocabulary_sha256 = "fed95821aa333942a0c11b35d0fbc68c2ff22d2ef1cad6dfdce30185af532bf2"
+vocabulary_sha256 = "546b54f5f09d6c7d554d026b55e91314165daddf82899909b133ea18d64ea6c5"
 capability_rules_path = "data/reference/taxonomy/capability-rules.json"
-capability_rules_sha256 = "0fd8236398e3026c04675c091f9b8af60ccc861a2a825d6b93c9a436be72feb5"
+capability_rules_sha256 = "2f0eb7d2976bcf102ecdb613c209fffaf481e7950a1b8c0f214148f78a973df5"
 crosswalk_path = "data/reference/taxonomy/crosswalk.json"
 crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
+
+# Collation pass settings (T-5008; semantic: they change which tags exist). `source_dispositions` is
+# resolved by the loader from jobs.job_inference_security_review.settings.source_dispositions (T-165);
+# a literal table here must equal that one. `model_pass` is the optional recorded model pass; it is
+# off in every shipped profile and needs an enabled model profile to turn on.
+[jobs.job_security_tagging.settings.collation]
+max_source_bytes_per_file = 262144    # 1..16777216; a larger first-party file is skipped with a named gap
+max_files_per_component = 4096        # 1..1000000; further first-party files of a component are skipped with a named gap
+[jobs.job_security_tagging.settings.collation.model_pass]
+enabled = false
+max_components = 64
+max_excerpt_lines = 400
 
 [jobs.job_security_tagging.steps.taxonomy]
 workers = 1
@@ -2832,6 +2844,13 @@ workers = 3
 [jobs.job_security_tagging.steps.collection.tasks.source_facts]
 [jobs.job_security_tagging.steps.collection.tasks.observation_facts]
 [jobs.job_security_tagging.steps.collection.tasks.coverage_gaps]
+
+# Collation pass (T-5008, docs/architecture/collation-pass.md): facet tags per first-party file and
+# component, derived from the collected capability tags, pinned lexical/path rules over hash-verified
+# first-party bytes, build points and target documents. Runs after collection, before the crosswalk.
+[jobs.job_security_tagging.steps.collation]
+workers = 1
+[jobs.job_security_tagging.steps.collation.tasks.collate_facets]
 
 [jobs.job_security_tagging.steps.crosswalk]
 workers = 1

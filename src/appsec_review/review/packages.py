@@ -99,13 +99,17 @@ from appsec_review.review.slicing.spans import Header as SpanHeader
 from appsec_review.review.units import (
     RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
 )
+from appsec_review.jobs.job_security_tagging.taxonomy import (
+    BASIS_RANK, COLLATION_NAMESPACES, TARGET_NAMESPACE,
+)
 from appsec_review.storage import atomic_bytes, file_sha256
 from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/7"
 ASSEMBLY_RULE = "appsec-review/assemble-review-packages/14"
-UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/1"
+UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/2"
+UNIT_FACETS_RULE = "appsec-review/unit-facets/1"
 UNIT_CONTEXT_DIRECTORY = "unit-context"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
@@ -1269,6 +1273,8 @@ class _Assembler:
         self.graph = GraphContext(scope)
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
         self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
+        # Collation facets (T-5008) by subject logical id, path and component id: tag, basis, ids.
+        self.facet_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self.control_context: dict[str, list[ContextEntry]] = defaultdict(list)
         from appsec_review.indexing.products import load_control_assessment
         control_cache: dict[str, Any] = {}
@@ -1287,9 +1293,51 @@ class _Assembler:
                 keys = [subject.get("logical_id"), subject.get("path")]
                 if subject.get("kind") == "component":
                     keys.append(subject.get("component_id"))
+                payload = row["payload"]
+                # The entity name carries the tag: the index sanitizer redacts payload strings that look like
+                # secrets (``asset:credentials``, ``asset:session-tokens``), the name column does not.
+                tag = row.get("name") if isinstance(row.get("name"), str) and ":" in str(row.get("name")) \
+                    else payload.get("tag")
+                namespace = tag.split(":", 1)[0] if isinstance(tag, str) else None
                 for key in {key for key in keys if isinstance(key, str) and key}:
                     self.routing_tags[key].append(context_entry(row["identity"], "tag",
                                                                shard_sha256=scope.shard_sha256(shard)))
+                    if namespace in COLLATION_NAMESPACES and isinstance(tag, str):
+                        self.facet_rows[key].append({
+                            "identity": row["identity"], "tag": tag, "namespace": namespace,
+                            "basis": str(payload.get("basis") or "declared"),
+                            "assignment_id": str(payload.get("assignment_id") or row["identity"]),
+                            "subject": str(subject.get("logical_id") or ""),
+                            "subject_kind": str(subject.get("kind") or "")})
+
+    def unit_facets(self, component_id: str, source_ids: Iterable[str], paths: Iterable[str]) -> dict[str, Any]:
+        """``unit-facets/1``: the unit's facet tags (union over its files and component) and target classes.
+
+        Each tag row carries the strongest basis, the number of distinct subjects and the assignment ids,
+        so a worker can ``trace`` any facet to the line or the assignment it rests on. Routing data only.
+        """
+        rows: dict[str, dict[str, Any]] = {}
+        targets: set[str] = set()
+        for key in sorted({component_id, *source_ids, *paths}):
+            for item in self.facet_rows.get(key, ()):
+                if item["namespace"] == TARGET_NAMESPACE:
+                    if item["subject_kind"] == "component":
+                        targets.add(item["tag"])
+                    continue
+                row = rows.setdefault(item["tag"], {"tag": item["tag"], "namespace": item["namespace"],
+                                                   "basis": item["basis"], "subjects": set(),
+                                                   "assignment_ids": set(), "entity_ids": set()})
+                if BASIS_RANK.get(item["basis"], 0) > BASIS_RANK.get(row["basis"], 0):
+                    row["basis"] = item["basis"]
+                row["subjects"].add(item["subject"])
+                row["assignment_ids"].add(item["assignment_id"])
+                row["entity_ids"].add(item["identity"])
+        return {"rule": UNIT_FACETS_RULE,
+                "tags": [{"tag": row["tag"], "namespace": row["namespace"], "basis": row["basis"],
+                          "subjects": len(row["subjects"]), "assignment_ids": sorted(row["assignment_ids"]),
+                          "entity_ids": sorted(row["entity_ids"])}
+                         for _tag, row in sorted(rows.items())],
+                "target_classes": sorted(targets)}
 
     def scoped_tags(self, component_id: str, source_ids: Iterable[str], paths: Iterable[str]) -> list[ContextEntry]:
         return [entry for key in {component_id, *source_ids, *paths} for entry in self.routing_tags.get(key, ())]
@@ -1638,6 +1686,7 @@ class _Assembler:
         """
         assessments = [item.control_assessment for item in context if item.control_assessment is not None]
         underlying = [item for assessment in assessments for item in assessment["evidence"] if item["resolved"]]
+        facets = self.unit_facets(unit.component_id, unit.source_ids, unit.paths)
         # Pure content, with no run or manifest identity: the same accepted facts give the same document
         # and reference in any run. The hunt body that references it pins run_id and manifest_sha256.
         document = {
@@ -1645,8 +1694,10 @@ class _Assembler:
             "scope": {"component_id": unit.component_id, "trust_boundary_id": unit.trust_boundary_id,
                       "build_unit_id": unit.build_unit_id, "source_ids": list(unit.source_ids)},
             "context": [item.record() for item in context],
+            "facets": facets,
             "entity_ids": sorted({*unit.source_ids, *(item.id for item in context),
-                                  *(item["source_identity"] for item in underlying)}),
+                                  *(item["source_identity"] for item in underlying),
+                                  *(identity for row in facets["tags"] for identity in row["entity_ids"])}),
         }
         validate_schema(UNIT_CONTEXT_SCHEMA_FILE, document, "package unit context")
         return UnitContext(unit.key, document, canonical_json(document))

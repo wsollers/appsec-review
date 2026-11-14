@@ -103,6 +103,8 @@ class CannedIndexes:
         self.source_reads.append(dict(location))
         if isinstance(self.data, Exception):
             raise self.data
+        if isinstance(self.data, dict):
+            return self.data[location["path"]]
         return self.data
 
 

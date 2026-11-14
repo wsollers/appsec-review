@@ -38,9 +38,23 @@ after capability collection that assigns closed facet tags (`role`, `exposure`, 
 per component, from the collected tags, pinned lexical and path rules over hash-verified
 first-party bytes, build receipts and target documents. Its rules live in the pinned
 capability-rules file, its settings under `jobs.job_security_tagging.settings.collation`, and its
-records in the `tags` index shard `facets`. The design page states which stage of the pass is
-implemented; until the `collation` step exists in `job.py`, the behaviour described there is a
-specification, not a run result.
+records in the `tags` index shard `facets`. The deterministic step (`collation.collate_facets`) is
+implemented; the optional model pass (`collation.model_pass`, off by default) is stage 4 of the design.
+The step publishes `facet-facts.json` (the assignment set) and `collation.json`
+(`appsec-review/collation-pass/1`: per first-party file its facets and assignment ids, per component
+its facets and `target:*` classes, the files skipped per disposition, the sources that were available
+and the named gaps) beside the other collector artifacts. Settings:
+
+| Key (`settings.collation`) | Default | Effect |
+|---|---|---|
+| `max_source_bytes_per_file` | 262144 | a larger first-party file is not read; gap `collation:source_unread:<path>` |
+| `max_files_per_component` | 4096 | further first-party files of a component are skipped; gap `collation:file_bound` |
+| `source_dispositions` | resolved from `jobs.job_inference_security_review.settings.source_dispositions` | which files are first-party; a literal table must equal the review's |
+| `model_pass.enabled` | `false` | the recorded model pass (stage 4); needs an enabled `model_pass.model` profile |
+
+A facet is routing data: a `target:cli` component sends OWASP to a not-applicable ledger and a
+`trust:user-tainted` unit to input-handling hunts, but no facet is evidence of a weakness or its
+absence. A gap named `collation:*` says which source the pass could not use; it never implies a tag.
 
 Two bounds sit beside the taxonomy pins in `jobs.job_security_tagging.settings`:
 

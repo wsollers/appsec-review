@@ -262,6 +262,9 @@ def test_job_topology_matches_central_configuration() -> None:
                                      "job_security_tagging.scope.resolve_inputs") for node in collectors)
     crosswalk = plan.node("job_security_tagging.crosswalk.apply_crosswalk")
     assert all(node.node_id in crosswalk.dependencies for node in collectors)
+    collation = plan.node("job_security_tagging.collation.collate_facets")
+    assert all(node.node_id in collation.dependencies for node in collectors)
+    assert collation.node_id in crosswalk.dependencies
     config = load_config(ROOT / "appsec-review.toml").job("job_security_tagging")
     assert tuple(config.steps) == tuple(TOPOLOGY)
 
@@ -311,7 +314,14 @@ def test_job_tags_accepted_indexes_and_publishes_queryable_shards(tmp_path: Path
     hits = core.search(query="cwe", indexes=("tags",), kinds=("tag_assignment",), limit=100)
     assert any(hit["name"] == "cwe:89" for hit in hits["results"])
     assert {item["shard_id"] for item in core.manifest["indexes"] if item["name"] == "tags"} == {
-        "code-facts", "controls", "gap", "threat", "weakness"}
+        "code-facts", "controls", "facets", "gap", "threat", "weakness"}
+    # Collation (T-5008): the Python file importing jwt is an auth role; the component class rests on
+    # the absence of any entry mechanism and says so.
+    auth = by_tag["role:auth"]
+    assert {record["basis"] for record in auth} == {"declared", "derived"}
+    assert any(record["evidence"][0]["rule"] == "lex-py-auth-import" for record in auth)
+    library = by_tag["target:library"][0]
+    assert library["basis"] == "derived" and library["evidence"][0]["rests_on_absence"] is True
 
     handoff = outcome["result"]["outputs"]["publication.publish_handoff"]
     assert handoff["security_findings"] == [] and handoff["gaps"]
@@ -332,7 +342,7 @@ def test_rerun_is_deterministic_and_replaces_earlier_tag_shards(tmp_path: Path) 
     assert _assignments(run_root, first) == _assignments(run_root, second)
     core = RetrievalCore(config.runtime.runs_dir, RUN_ID)
     tags = [item for item in core.manifest["indexes"] if item["name"] == "tags"]
-    assert len(tags) == len({item["shard_id"] for item in tags}) == 5
+    assert len(tags) == len({item["shard_id"] for item in tags}) == 6
 
 
 def test_missing_required_index_is_a_named_gap(tmp_path: Path) -> None:

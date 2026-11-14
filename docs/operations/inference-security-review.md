@@ -706,7 +706,7 @@ When the run has accepted `graph` shards (`job_code_graph_index`):
 - **Hunt unit context (T-5000).** A hunted unit's material that every partition shares (its bounded
   `context` entries, including the graph facts above, its source identities and the unit-wide
   retrieval grant) is written once per unit to `assembly/unit-context/<sha256>.json`
-  (`package-unit-context/1`) and listed in the package manifest under `unit_contexts`. Each hunt
+  (`package-unit-context/2`) and listed in the package manifest under `unit_contexts`. Each hunt
   package body holds only its own partition and a `unit_context` reference (`path`, `sha256`,
   `size_bytes`, `counts` of entries, files and entities), so `packages.hunt_menu_partition_size`
   decides the package count: a unit of N leads yields ceil(N / size) packages, and

@@ -2154,7 +2154,7 @@
           "$ref": "#/$defs/inference_scope"
         },
         "unit_context": {
-          "description": "Schema v7 (T-5000), hunt lane: the hash-pinned reference to the unit's context document (package-unit-context/1), published once per hunted unit under unit-context/<sha256>.json beside the packages and holding the unit's context entries, source identities and unit-wide retrieval entity ids. null on a finding-lead package. Consumers merge the document back with review/packages.py merge_unit_context.",
+          "description": "Schema v7 (T-5000), hunt lane: the hash-pinned reference to the unit's context document (package-unit-context/2), published once per hunted unit under unit-context/<sha256>.json beside the packages and holding the unit's context entries, source identities and unit-wide retrieval entity ids. null on a finding-lead package. Consumers merge the document back with review/packages.py merge_unit_context.",
           "oneOf": [
             {
               "type": "null"
@@ -2171,7 +2171,7 @@
               ],
               "properties": {
                 "schema": {
-                  "const": "appsec-review/package-unit-context/1"
+                  "const": "appsec-review/package-unit-context/2"
                 },
                 "path": {
                   "type": "string",

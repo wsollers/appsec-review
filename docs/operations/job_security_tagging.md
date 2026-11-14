@@ -29,16 +29,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `collection` | `collection.coverage_gaps` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L276) |
-| `collection` | `collection.observation_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L270) |
-| `collection` | `collection.source_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L259) |
-| `crosswalk` | `crosswalk.apply_crosswalk` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L281) |
-| `integrity` | `integrity.validate_assignments` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L315) |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L358) |
-| `publication` | `publication.publish_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L334) |
-| `publication` | `publication.publish_tag_cloud` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L351) |
-| `scope` | `scope.resolve_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L239) |
-| `taxonomy` | `taxonomy.load_taxonomy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L228) |
+| `collation` | `collation.collate_facets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L300) |
+| `collection` | `collection.coverage_gaps` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L295) |
+| `collection` | `collection.observation_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L289) |
+| `collection` | `collection.source_facts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L278) |
+| `crosswalk` | `crosswalk.apply_crosswalk` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L317) |
+| `integrity` | `integrity.validate_assignments` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L351) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L394) |
+| `publication` | `publication.publish_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L370) |
+| `publication` | `publication.publish_tag_cloud` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L387) |
+| `scope` | `scope.resolve_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L258) |
+| `taxonomy` | `taxonomy.load_taxonomy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_security_tagging/job.py#L247) |
 
 ### Accepted input declarations
 

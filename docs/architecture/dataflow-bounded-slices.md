@@ -212,7 +212,7 @@ bound, the number of paths, lines and omitted lines, and each strategy's state.
 **Unit context reference (hunt lane, `review-package/7`, T-5000).** A hunted unit's material that is
 the same for every partition (its bounded `context` entries, its `scope.source_ids` and the
 unit-wide part of `retrieval.entity_ids`) is published once per unit as a unit context document
-(`package-unit-context/1`, `docs/schemas/review-package-unit-context.schema.json`), canonical JSON
+(`package-unit-context/2`, `docs/schemas/review-package-unit-context.schema.json`; `/2` adds the unit's collation `facets`), canonical JSON
 at `unit-context/<sha256>.json` beside `packages/`. Each hunt body carries only its partition: the
 `lead_menu`, the `partition` record, the per-lead `evidence` rows and a `unit_context` reference
 `{schema, path, sha256, size_bytes, counts}`; its `context` is `[]`, its `scope` has no
