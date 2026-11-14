@@ -158,6 +158,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
 | T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
 | T-157 | [Declare language and applicability metadata for intelligence matrices](#t-157-declare-language-and-applicability-metadata-for-intelligence-matrices) | pipeline | open |
+| T-158 | [Close the documented test-tier enforcement gaps](#t-158-close-the-documented-test-tier-enforcement-gaps) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -1760,6 +1761,10 @@ until each is rewritten into the entry format when it is next touched.
 - **Area:** testing
 - **Why:** on 2026-11-11 and 12 two comparison runs of unit files took 26 to 28 minutes and one did not finish in 1,700 s. They were plain `pytest` runs, which have no limit; `scripts/run-tests.sh` has a 300 s total limit but it can be raised by option and is not the only route. The underlying cost is tests filed as unit tests that drive whole job graphs: 17 tests in one affected set took 19 to 98 s each against the 10 s rule of `AGENTS.md`, which nothing enforces. The user asked on 2026-11-12 for the harness to fault when a run exceeds about fifteen minutes.
 - **Scope:** (1) a ceiling on a wrapper run that no option can raise past fifteen minutes, ending the run as a failure with the tests still running named; (2) plain multi-file `pytest` refused or warned in favour of the wrapper; (3) the 10 s unit limit enforced: a test over it fails unless it carries an explicit, reasoned time budget, with the current offenders listed and either narrowed or moved to the integration tier. No assertion is weakened to meet a limit.
+  Stage 5 source audit (2026-11-13): `tests/unit/` now has the 10 s post-phase check, but legacy
+  paths remain outside that default and a declared reason does not prove user approval.
+  T-113's separate under-ten-minute whole-unit-suite contract also needs an enforceable route;
+  neither the configurable wrapper deadline nor the ten-minute selected-quality CI job proves it.
 - **Done when:** a wrapper run over the ceiling exits non-zero naming the unfinished tests; a unit test over 10 s without a declared budget fails; the list of tests over 10 s at the time of the change is empty or each has a recorded disposition.
 - **Refs:** `scripts/run-tests.sh`, `deploy/dagster/bin/ops_tests.py`, `tests/conftest.py`, `docs/architecture/testing.md`, `docs/processes/walk-charter.md` (section 10), T-047.
 
@@ -2495,6 +2500,33 @@ until each is rewritten into the entry format when it is next touched.
   `scripts/docs_matrices.py`, `src/appsec_review/runtime/datasets.py`,
   `src/appsec_review/tool_inputs.py`, `src/appsec_review/review/capability.py`,
   `tests/docs/test_intelligence_buckets.py`.
+
+### T-158 — Close the documented test-tier enforcement gaps
+
+- **State:** open
+- **Area:** testing
+- **Why:** the Stage 5 source audit found that the forward test contract is broader than its
+  executable guards: the unit tier checks selected process/socket/Dagster entrypoints, serial
+  explicit selection can omit the environment guard, and command flags do not prove manual
+  authorization or all four job-acceptance checks. Timing-test expectations also predate the
+  configured unit budget.
+- **Scope:** reconcile `tests/test_time_budgets.py` with the current unit/integration/live
+  defaults; cover the serial environment-guard path; establish and test the intended boundary
+  for real engines, tools and model clients without banning legitimate canned-fixture plumbing.
+  Keep the limitations of loopback/Unix sockets, child processes and imported execution aliases
+  explicit. Decide which procedural checks are host/user-owned and which gain machine-readable
+  enforcement: manual-heavy authorization, repeated shuffled/parallel verification, the
+  prohibition on hiding failures with `xfail`, and independent acceptance evidence. Do not treat
+  a nonempty exception reason, `--allow-heavy`, a passing framework check or an accepted baseline
+  as proof of the user's authorization or the independent source comparison. T-109 continues
+  to own time ceilings; T-113 owns the remaining path migration. No guards change in the docs pass.
+- **Done when:** focused positive/negative regressions establish each selected enforcement
+  boundary; policy-only checks are explicitly assigned to an accountable owner rather than
+  described as automatically enforced; the testing page's enforcement map matches the code.
+- **Refs:** T-109, T-113, T-131, `docs/architecture/testing.md`,
+  `tests/unit/conftest.py`, `tests/conftest.py`, `tests/time_budgets.py`,
+  `tests/test_time_budgets.py`, `tests/test_000_unit_environment_guard.py`,
+  `deploy/dagster/bin/ops_test_guard.py`, `deploy/dagster/bin/stepwise.py`.
 
 ## Legacy backlog
 
