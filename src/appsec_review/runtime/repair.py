@@ -426,6 +426,10 @@ def compatible_dataset_change(previous: Mapping[str, Any], current: Mapping[str,
     """
     if not isinstance(previous, Mapping) or not isinstance(current, Mapping):
         return False
+    # The recorded contract comes back from JSON (lists); the live one is built from dataclasses
+    # (tuples). Compare canonical JSON values, or every unchanged record reads as changed.
+    previous = json.loads(canonical_json(previous))
+    current = json.loads(canonical_json(current))
     variable = {"sha256", "datasets", "job_contract"}
     if ({key: value for key, value in previous.items() if key not in variable}
             != {key: value for key, value in current.items() if key not in variable}):

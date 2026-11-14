@@ -13,6 +13,7 @@ from appsec_review.config.assurance import ComponentReleases
 from appsec_review.runtime import GraphRunner, Job, JobRunner, Unit
 from appsec_review.runtime.failure_replay import failure_manifest
 from appsec_review.runtime.repair import (
+    compatible_dataset_change,
     admit_repair, current_binding, plan_repair, stopped_reasons, worker_scope,
 )
 from appsec_review.runtime.release import MANIFEST_NAME, load_release
@@ -403,6 +404,23 @@ def test_begin_never_loads_the_whole_pipeline_log(tmp_path, monkeypatch):
     root = config.runtime.runs_dir / outcome["status"]["run_id"]
     assert PipelineLog(root).contains(lambda record: record["event_type"] == "RUN_STARTED")
     assert outcome["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+
+
+def test_compatible_dataset_change_compares_the_recorded_json_with_the_live_contract(tmp_path):
+    """The recorded contract is JSON (lists); the live one holds tuples. Adding one declaration must read
+    as a compatible widening. Regression for smoke-cpp run 2026-11-14-0005, whose in-place repair was
+    refused with "unsupported dataset compatibility change for job_codeql_analysis" after one dataset
+    was added to the CodeQL job."""
+    from appsec_review.runtime.datasets import artifact_only, dataset_contract
+    before = (artifact_only("plan", "plan", "codeql", "appsec-review/x/1", "Plan.", artifacts=("data/a/*.json",),
+                            reason="r"),)
+    after = before + (artifact_only("cache", "execution", "codeql", "appsec-review/y/1", "Cache.",
+                                    artifacts=("data/b/*.json", "data/b/*.lock"), reason="r"),)
+    recorded = json.loads(canonical_json(dataset_contract("job_fixture", ["plan", "execution"], before)))
+    live = dataset_contract("job_fixture", ["plan", "execution"], after)
+    assert recorded["sha256"] != live["sha256"]
+    assert compatible_dataset_change(recorded, live) is True
+    assert compatible_dataset_change(json.loads(canonical_json(live)), recorded) is False
 
 
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
