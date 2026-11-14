@@ -17,7 +17,7 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 from appsec_review.storage.shared import immutable_bytes, reference, safe_path, verify_reference
 
 REPAIR_SCHEMA = "appsec-review/repair-admission/1"
-PLAN_SCHEMA = "appsec-review/repair-plan/1"
+PLAN_SCHEMA = "appsec-review/repair-plan/2"  # 2: decisions may be REVALIDATE (reuse decided at dispatch)
 COMPATIBILITY = "appsec-review/same-input-contracts/1"
 PUBLICATION_PROTOCOL = "appsec-review/committed-publication/1"
 WORKER_PROTOCOL = "appsec-review/recovery-worker/1"
@@ -343,10 +343,22 @@ def forced_by_repair(run_root: Path, job_id: str, handoff: Mapping[str, Any]) ->
     decision = next((item for item in repair["decisions"] if item["job_id"] == job_id), None)
     if decision is None:
         raise ValueError("job was not included in the admitted repair graph")
-    if decision["action"] == "REUSE":
+    if decision["action"] in {"REUSE", "REVALIDATE"}:
+        # REVALIDATE defers to the dispatch-time check: the accepted attempt is reused only when every
+        # identity still matches and every pinned upstream is equivalent to the one accepted now.
         return False
     claim = read_document(safe_path(run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
     return claim.get("repair_admission_sha256") != binding["repair"]["sha256"]
+
+
+def revalidation_admitted(run_root: Path, job_id: str) -> bool:
+    """Whether the admitted repair plan decided REVALIDATE for ``job_id`` (no binding: no)."""
+    binding = current_binding(run_root)
+    if not binding or binding["repair"] is None:
+        return False
+    repair = read_document(verify_reference(run_root, binding["repair"]))
+    decision = next((item for item in repair["decisions"] if item["job_id"] == job_id), None)
+    return decision is not None and decision["action"] == "REVALIDATE"
 
 
 def check_successor(config: AppConfig, run_root: Path, envelope: Mapping[str, Any] | None) -> None:
@@ -403,6 +415,43 @@ def _planning_repair_context(config: AppConfig, run_root: Path, jobs: Sequence[J
     return context
 
 
+def compatible_dataset_change(previous: Mapping[str, Any], current: Mapping[str, Any]) -> bool:
+    """Whether a job's dataset contract only gained datasets or input requirements since ``previous``.
+
+    Narrow by design: the contract schema, job id, steps and shared namespaces must be identical,
+    every previously declared dataset must still be declared unchanged, and when the job carries a
+    typed contract every other contract field must be identical and every previous input
+    requirement must still be present. Anything else (a removed or edited dataset, a removed input,
+    a contract schema change, a changed dispatch flag) is an incompatible wire-contract change.
+    """
+    if not isinstance(previous, Mapping) or not isinstance(current, Mapping):
+        return False
+    variable = {"sha256", "datasets", "job_contract"}
+    if ({key: value for key, value in previous.items() if key not in variable}
+            != {key: value for key, value in current.items() if key not in variable}):
+        return False
+    old_datasets, new_datasets = previous.get("datasets"), current.get("datasets")
+    if not isinstance(old_datasets, list) or not isinstance(new_datasets, list):
+        return False
+    if any(item not in new_datasets for item in old_datasets):
+        return False
+    if ("job_contract" in previous) != ("job_contract" in current):
+        return False
+    if "job_contract" in current:
+        old_contract, new_contract = previous["job_contract"], current["job_contract"]
+        if not isinstance(old_contract, Mapping) or not isinstance(new_contract, Mapping):
+            return False
+        if ({key: value for key, value in old_contract.items() if key not in {"inputs", "sha256"}}
+                != {key: value for key, value in new_contract.items() if key not in {"inputs", "sha256"}}):
+            return False
+        old_inputs, new_inputs = old_contract.get("inputs"), new_contract.get("inputs")
+        if not isinstance(old_inputs, list) or not isinstance(new_inputs, list):
+            return False
+        if any(item not in new_inputs for item in old_inputs):
+            return False
+    return True
+
+
 def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str, *,
                 target_root: Path | None = None, force_from: str | None = None,
                 historical_rerun: bool = False, dependencies: Mapping[str, Sequence[str]] | None = None,
@@ -455,8 +504,14 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
                 job.job_id, sorted(set(config.job(job.job_id).steps)
                                    | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets,
                 job_contract=job.contract.document() if job.contract is not None else None)
-            if claim.get("dataset_contract", {}).get("sha256") != expected_contract["sha256"]:
-                reasons.append(f"unsupported dataset compatibility change for {job.job_id}")
+            recorded_contract = claim.get("dataset_contract", {})
+            if recorded_contract.get("sha256") != expected_contract["sha256"]:
+                decision = next(item for item in decisions if item.job_id == job.job_id)
+                if not compatible_dataset_change(recorded_contract, expected_contract):
+                    reasons.append(f"unsupported dataset compatibility change for {job.job_id}")
+                elif decision.action != "RUN":
+                    # The widened contract belongs to a fresh attempt; nothing may reuse the old one.
+                    reasons.append(f"dataset contract of {job.job_id} changed but its accepted attempt would be reused")
         from appsec_review.runtime.checkpoints import select_units
         from appsec_review.runtime.resume import job_config_sha256
         from appsec_review.runtime.dependencies import input_projection

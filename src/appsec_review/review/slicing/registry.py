@@ -8,11 +8,10 @@ configuration validation.
 """
 from __future__ import annotations
 
-from importlib import import_module
-
 from appsec_review.review.slicing.contract import SliceStrategy
 
-# name -> "module:factory". Imported lazily so the contract does not depend on strategy implementations.
+# name -> "module:factory". Imported lazily (in ``_strategy_module``) so the contract does not depend on
+# strategy implementations; the imports are spelled out so the release import walk can follow them.
 STRATEGIES: dict[str, str] = {
     "llvm_ir_def_use": "appsec_review.review.slicing.strategies.llvm_ir:LlvmIrDefUse",
     "svf_points_to": "appsec_review.review.slicing.strategies.svf:SvfPointsTo",
@@ -39,11 +38,19 @@ def validate_names(names: tuple[str, ...] | list[str], field: str = "slice_strat
     return names
 
 
+def _strategy_module(dotted: str):
+    from appsec_review.review.slicing.strategies import lexical, llvm_ir, svf, tree_sitter
+    modules = {module.__name__: module for module in (lexical, llvm_ir, svf, tree_sitter)}
+    if dotted not in modules:
+        raise KeyError(f"slice strategy module is not registered for static import: {dotted}")
+    return modules[dotted]
+
+
 def load(name: str) -> SliceStrategy:
     if name not in STRATEGIES:
         raise KeyError(f"unknown slice strategy {name!r}")
     module, attribute = STRATEGIES[name].split(":", 1)
-    strategy = getattr(import_module(module), attribute)()
+    strategy = getattr(_strategy_module(module), attribute)()
     if strategy.name != name or not isinstance(strategy, SliceStrategy):
         raise TypeError(f"slice strategy {name!r} does not implement the SliceStrategy contract")
     return strategy

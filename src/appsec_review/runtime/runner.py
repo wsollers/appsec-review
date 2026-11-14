@@ -386,6 +386,7 @@ class JobRunner:
 
     def begin_or_reuse_attempt(self, job: Job, **kwargs: Any) -> Mapping[str, Any]:
         run_id = kwargs.get("run_id")
+        revalidate = bool(kwargs.pop("revalidate", False))
         upstream = dict(kwargs.get("upstream_handoffs") or {})
         source_fingerprint = str(kwargs.get("source_fingerprint", "none"))
         self._check_target_inputs(job, kwargs.get("target_root"), source_fingerprint)
@@ -409,12 +410,44 @@ class JobRunner:
                 self.config, run_root, (job,), source_fingerprint,
                 target_root=kwargs.get("target_root"),
                 orchestration=kwargs.get("orchestration")).accepted(job, upstream)
+            revalidation = None
+            if (reasons == ("upstream handoffs identity changed",) and handoff_hash is not None
+                    and job.job_id != "job_target_analysis_plan"):
+                # Only the pins differ and every existing refusal passed. Under a REVALIDATE decision the
+                # accepted attempt is reused when each pinned upstream is equivalent to the one accepted now.
+                from appsec_review.runtime.repair import revalidation_admitted
+                if revalidate or revalidation_admitted(run_root, job.job_id):
+                    from appsec_review.runtime.equivalence import equivalent_upstreams
+                    pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
+                    pinned = json.loads(safe_path(run_root, pointer["handoff_path"]).read_text(encoding="utf-8"))
+                    if file_sha256(safe_path(run_root, pointer["handoff_path"])) != handoff_hash:
+                        raise ValueError("accepted handoff changed during reuse admission")
+                    revalidation = equivalent_upstreams(run_root, pinned["upstream_handoff_sha256"], upstream)
+                    if revalidation is not None:
+                        reasons = ()
             if not reasons and handoff_hash is not None:
                 pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
                 handoff_path = safe_path(run_root, pointer["handoff_path"])
                 if file_sha256(handoff_path) != handoff_hash:
                     raise ValueError("accepted handoff changed during reuse admission")
                 handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+                if revalidation is not None:
+                    # The reused attempt is not rewritten: its claim keeps the older pins, which still resolve
+                    # to immutable artifacts in this run; the record beside it says why latest.json of a
+                    # producer names a newer attempt than the one this consumer cites.
+                    required_upstream = dict(handoff["upstream_handoff_sha256"])
+                    from appsec_review.runtime.equivalence import REVALIDATION_SCHEMA
+                    record = {"schema": REVALIDATION_SCHEMA, "run_id": str(run_id), "job_id": job.job_id,
+                              "attempt_id": handoff["attempt_id"],
+                              "dispatch": dict(kwargs.get("orchestration") or {}),
+                              "producers": revalidation,
+                              "decided_at": datetime.now(timezone.utc).isoformat()}
+                    atomic_json(handoff_path.parent / "revalidation.json", record)
+                    PipelineLog(run_root).write(
+                        "REVALIDATED", run_id=str(run_id), job_id=job.job_id, attempt_id=handoff["attempt_id"],
+                        trigger=str(kwargs.get("trigger", "manual")),
+                        orchestrator=dict(kwargs.get("orchestration") or {}).get("system", "application"),
+                        details={"handoff_sha256": handoff_hash, "producers": revalidation})
                 original_claim_path = f"{handoff['resolving_paths']['attempt']}/claim.json"
                 original_claim_reference = next(
                     (item for item in handoff["artifacts"] if item["path"] == original_claim_path), None)
@@ -805,6 +838,14 @@ class JobRunner:
         if accepted:
             handoff["resolving_paths"]["result"] = attempt + "/result.json"
         handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
+        if accepted:
+            # Evidence-body identity (docs/architecture/job-interchange.md): absent, never guessed, when a
+            # pinned upstream predates it, so equivalence stays transitive.
+            from appsec_review.runtime.equivalence import handoff_content_sha256
+            identity = handoff_content_sha256(context.run_root, handoff, gaps=list(outcomes.get("gaps", [])),
+                                              unit_outputs=dict(result.get("outputs", {})))
+            if identity is not None:
+                handoff["content_sha256"] = identity
         if (context.config.job_id in {"job_target_analysis_plan", "job_build_environment_analysis"}
                 and len(canonical_json(handoff)) > 32 * 1024 * 1024):
             raise ValueError("planning/environment handoff exceeds its bounded accepted reader")
@@ -1080,4 +1121,15 @@ class JobRunner:
         claim = self.begin_attempt(job, run_id=run_id, trigger=trigger, orchestration=orchestration, now=now,
                                    target_root=target_root, source_fingerprint=source_fingerprint,
                                    upstream_handoffs=upstream_handoffs)
+        return complete(self, job, claim)
+
+    def run_or_reuse(self, job: Job, **kwargs: Any) -> Mapping[str, Any]:
+        """The dispatch-time half of a ``REVALIDATE`` decision, in process.
+
+        Reuse the accepted attempt when every identity matches and every pinned upstream is
+        equivalent to the one accepted now (``begin_or_reuse_attempt`` with ``revalidate``), else run.
+        """
+        from appsec_review.runtime.launch import complete
+
+        claim = self.begin_or_reuse_attempt(job, revalidate=True, **kwargs)
         return complete(self, job, claim)

@@ -100,7 +100,7 @@ def walk(tmp_path, monkeypatch):
     context.plan = plan_repair(config, context.run_root, jobs, "none", dependencies=DEPENDENCIES)
     assert context.plan["admissible"], context.plan["refusals"]
     assert [entry["action"] for entry in context.plan["decisions"]] == [
-        "REUSE", "RUN", "REUSE", "INVALIDATE", "INVALIDATE"]
+        "REUSE", "RUN", "REUSE", "REVALIDATE", "INVALIDATE"]  # job_e never ran: no accepted handoff
     context.binding = admit_repair(config, context.run_root, jobs, context.plan, dependencies=DEPENDENCIES)
     context.plan_path = tmp_path / "repair-plan.json"
     atomic_json(context.plan_path, context.plan)
