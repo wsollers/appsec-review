@@ -304,6 +304,7 @@ class TeamResult:
     capabilities: list[dict[str, Any]] = field(default_factory=list)
     security_events: list[Mapping[str, Any]] = field(default_factory=list)
     triage: list[dict[str, Any]] = field(default_factory=list)
+    audit_proposals: list[dict[str, Any]] = field(default_factory=list)
     leads: tuple[str, ...] = ()                                   # the package's lead menu
     lead_entries: list[tuple[str, str, str]] = field(default_factory=list)   # (cell, lead, outcome)
     chain_seeds: list[dict[str, Any]] = field(default_factory=list)
@@ -1281,6 +1282,7 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
                                             f"gate:closed_vocabulary: {exc}"))
                 result.triage.append({"cell_id": cell.cell_id, "claim_ref": reference, "claim_id": None,
                                       "decision": "rejected", "reason": "closed_vocabulary"})
+                _audit_proposals(result, work, [(cell, proposal)], None, "rejected", "closed_vocabulary")
                 continue
             claim = normalized.claim
             local_claims[reference] = claim.claim_id
@@ -1323,6 +1325,16 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
     return ordered
 
 
+def _audit_proposals(result: TeamResult, work: PackageWork, items, claim_id: str | None,
+                     decision: str, reason: str | None) -> None:
+    """Keep the original proposal membership that the aggregate triage rows cannot recover."""
+    for cell, proposal in items:
+        result.audit_proposals.append({
+            "package_id": work.package_id, "cell_id": cell.cell_id, "round": work.round_index,
+            "proposal_ref": proposal["local_id"], "claim_id": claim_id,
+            "decision": decision, "reason": reason, "receipt_sha256": cell.record.receipt_sha256})
+
+
 def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
             result: TeamResult) -> list[dict[str, Any]]:
     """Lane B gate then the deterministic cap; lane A only the cap. Every claim is proposed."""
@@ -1340,6 +1352,8 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
                                             round=work.round_index))
                 result.triage.append({"claim_id": claim.claim_id, "decision": "over_cap",
                                       "reason": "max_active_claims", "support": group["support"]})
+                _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
+                                 None, "over_cap", "max_active_claims")
                 continue
             result.claims.append(claim)
         result.gaps.extend(group["relation_gaps"])
@@ -1352,6 +1366,8 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
                                             f"gate:unresolvable_citation ({len(unresolved)} identities)"))
                 result.triage.append({"claim_id": claim.claim_id, "decision": "rejected",
                                       "reason": "unresolvable_citation", "support": group["support"]})
+                _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
+                                 claim.claim_id, "rejected", "unresolvable_citation")
                 continue
         candidates.append(group)
     candidates.sort(key=lambda group: (-group["support"], group["claim"].claim_id))
@@ -1366,12 +1382,16 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
                                     f"triage: over the {work.lane.value} cap of {cap} claims per package"))
         result.triage.append({"claim_id": claim_id, "decision": "over_cap", "reason": "claims_per_package_cap",
                               "support": group["support"]})
+        _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
+                         claim_id, "over_cap", "claims_per_package_cap")
     for group in admitted:
         if group["claim"].claim_id not in previous_admitted:
             result.triage.append({"claim_id": group["claim"].claim_id, "decision": "admitted", "reason": None,
                                   "support": group["support"]})
         result.relations.extend(group["relations"])
         result.requests.extend(group["requests"])
+        _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
+                         group["claim"].claim_id, "admitted", None)
     return admitted
 
 
@@ -1422,6 +1442,22 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
         "verifier_model_distinct": verifier_model_distinct,
         "review_id": make_id("review", 1, {"cell_id": verifier.cell_id, "claim_id": claim.claim_id}),
         "gap_ids": sorted(gap.gap_id for gap in gaps), "status": verifier.record.status.value})
+    actor = _actor(verifier)
+    check_path = ctx.receipts_root / verifier.cell_id / f"independence-attempt-{verifier.record.attempts}.json"
+    result.independence[claim.claim_id][-1]["audit"] = {
+        "schema": "appsec-review/verifier-structure-capture/1",
+        "actor_distinct": all(actor.actor_id != other.actor_id for other in others),
+        "conversation_fresh": bool(actor.conversation_id) and all(
+            actor.conversation_id != other.conversation_id for other in others),
+        "prior_response_absent": actor.prior_response_sha256 is None,
+        "shared_actor_cache_absent": actor.cache_key is None or all(
+            actor.cache_key != other.cache_key for other in others),
+        "request_check": ({"path": check_path.relative_to(ctx.run_root).as_posix(),
+                           "sha256": file_sha256(check_path)} if check_path.is_file() else None),
+        "request_markers_absent": (not any(
+            marker.encode("utf-8") in request_bytes for marker in [*markers, *(other.actor_id for other in others)])
+            if verifier.requests else None),
+    }
 
 
 def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequence[str], digest: str) -> bytes:
@@ -1609,6 +1645,9 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
                                          if team.launched else "budget_or_worker_gap"}
                         for team in teams if team.routing.get("exploration")},
         "triage": {team.package_id: team.triage for team in teams},
+        "proposal_audit": {"schema": "appsec-review/proposal-membership-capture/1",
+                           "items": sorted((item for team in teams for item in team.audit_proposals),
+                                           key=lambda item: (item["cell_id"], item["proposal_ref"]))},
         "lead_accounting": {team.package_id: _lead_summary(team) for team in teams},
         "chain_seeds": seeds,
         "poc_basis": _poc_basis_artifact(lane, teams, Path(ledger_path).with_name("poc-basis.json")),
