@@ -8,12 +8,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import hashlib
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 from appsec_review.jobs.completion_contracts import (
     DOSSIER_SCHEMA, DossierKind, FindingBinding, nonexecution_assurance, verify_nonexecution_assurance,
 )
 from appsec_review.review.models import IntegrityError
+from appsec_review.review.decision_audit.contracts import DecisionRecord, VerificationRecord
+from appsec_review.review.decision_audit.reader import AcceptedAudit
 from appsec_review.review.secret_redaction import redact_source_line
 from appsec_review.storage import canonical_json
 from .digest import bullets, code, field, table
@@ -78,12 +80,79 @@ class _Projection:
         return text
 
 
+def audit_relation_ids(audit: AcceptedAudit, finding: Mapping[str, Any]) -> frozenset[str]:
+    """Only a verified basis for these exact accepted finding bytes can extend excerpt selection."""
+    basis = audit.basis(finding["claim_id"])
+    if basis is None:
+        return frozenset()
+    if (basis.context.subject.finding_package_id.value != finding["finding_package_id"]
+            or basis.context.subject.adjudication_id.value != finding["adjudication_id"]
+            or basis.finding.sha256 != finding["sha256"]
+            or basis.finding.path != finding["path"]):
+        raise IntegrityError("dossier decision basis belongs to another accepted finding")
+    return frozenset(row.relation_id for row in audit.relations(basis))
+
+
+def _decision_basis(audit: AcceptedAudit, finding: Mapping[str, Any], relations: Mapping[str, Mapping[str, Any]],
+                    provenance: Mapping[str, Any], project: _Projection) -> dict[str, Any]:
+    identities = audit_relation_ids(audit, finding)
+    if not identities <= set(relations):
+        raise IntegrityError("dossier audit relations are absent from the accepted projection")
+    basis = audit.basis(finding["claim_id"])
+    if basis is None:
+        return {"available": False, "reason": audit.unavailable_reason or "decision_basis_not_emitted",
+                "coverage": [] if audit.manifest is None else [row.to_dict() for row in audit.manifest.coverage]}
+    origin = basis.context.origin
+    if (origin.ledger_head_sha256 != provenance.get("ledger_head_sha256")
+            or origin.review_handoff_sha256 != (provenance.get("review_handoff") or {}).get("sha256")
+            or {"path": basis.claim.path, "sha256": basis.claim.sha256} != provenance.get("projection")):
+        raise IntegrityError("dossier audit basis does not bind this accepted ledger and review")
+    evidence = []
+    for relation in project.rows([row.to_dict() for row in audit.relations(basis)], "decision_basis.relations"):
+        original = relations[relation["relation_id"]]
+        evidence.append({key: project.text(relation[key], "decision_basis." + key, identity=key == "relation_id")
+                         for key in ("relation_id", "predicate", "kind", "actor_role", "admissibility",
+                                     "noncounted_reason")} | {
+            "counted_by_existing_policy": relation["counted"],
+            "entity_id": project.text(original["entity_id"], "decision_basis.entity_id", identity=True),
+            "locator": project.text(original.get("locator"), "decision_basis.locator"),
+            "source": relation["source"],
+            "notice": "Original policy attribution, not added supporting evidence."})
+    linked = {ref.record_id for ref in basis.decisions}
+    decisions = [{"record_id": row.record_id, "stage": row.stage.value, "outcome": row.outcome,
+                  "reason_code": row.reason_code.value, "basis_status": row.basis_status.value,
+                  "explanation": project.text(row.context.explanation.text, "decision_basis.explanation"),
+                  "explanation_absence_reason": row.context.explanation.absence_reason}
+                 for row in audit.records if isinstance(row, DecisionRecord) and row.record_id in linked]
+    verification = None
+    if basis.verification.value is not None:
+        # The closed basis schema fixes this link's kind; validate_bundle proves exact typed membership.
+        record = cast(VerificationRecord, next(
+            row for row in audit.records if row.record_id == basis.verification.value.record_id))
+        verification = {
+            "record_id": record.record_id, "status": record.status.value,
+            "blindness": record.blindness.passed.to_dict(), "diversity": record.diversity.to_dict(),
+            "confirmation_eligible": record.confirmation_eligible.to_dict(),
+            "existing_r6_passed": record.existing_r6_passed.to_dict(),
+            "predicates": project.rows([row.to_dict() for row in record.predicates], "decision_basis.predicates")}
+    return {
+        "available": True, "record_id": basis.record_id, "sha256": basis.sha256,
+        "manifest": {"path": audit.reference.path, "sha256": audit.reference.sha256},
+        "relations": evidence, "decisions": project.rows(decisions, "decision_basis.decisions"),
+        "verification": verification, "verification_absence_reason": basis.verification.absence_reason,
+        "judge_verdicts": project.rows([row.to_dict() for row in basis.judge_verdicts], "decision_basis.judges"),
+        "required_predicates": [row.value for row in basis.required_predicates],
+        "missing_predicates": [row.value for row in basis.missing_predicates],
+        "coverage": [row.to_dict() for row in audit.manifest.coverage],
+        "notice": "Judge dissent is nondeciding. Opposing, qualifying and noncounted citations are not new support."}
+
 def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str, Any],
                   claim: Mapping[str, Any], relations: Sequence[Mapping[str, Any]],
                   excerpts: Sequence[Mapping[str, Any]] = (), poc: Mapping[str, Any] | None = None,
                   poc_source: str | None = None, remediation: Sequence[Mapping[str, Any]] = (),
                   chains: Sequence[Mapping[str, Any]] = (), provenance: Mapping[str, Any],
-                  gaps: Sequence[str] = (), limits: DossierLimits = DossierLimits()) -> dict[str, Any]:
+                  gaps: Sequence[str] = (), limits: DossierLimits = DossierLimits(),
+                  decision_audit: AcceptedAudit | None = None) -> dict[str, Any]:
     """Build a closed, deterministic model from already verified accepted records."""
     kind = DossierKind(kind)
     binding = FindingBinding.from_mapping({key: finding[key] for key in (
@@ -184,6 +253,8 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
     if any(row["upstream_truncated"] for row in sources):
         gap_list.add("source_excerpt_truncated: accepted retrieval returned bounded source")
     identity = {"run_id": run_id, "kind": kind.value, "finding": binding.as_dict()}
+    audit_view = None if decision_audit is None else _decision_basis(
+        decision_audit, finding, by_id, provenance, project)
     return {
         "schema": DOSSIER_SCHEMA,
         "dossier_id": "dossier-" + hashlib.sha256(canonical_json(identity)).hexdigest(),
@@ -200,6 +271,7 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
         "missing_predicates": sorted(finding.get("missing_predicates", ())),
         "evidence": evidence, "sources": sources, "scores": scores, "chains": chain_views,
         "poc": poc_view, "remediation": remedies,
+        **({} if audit_view is None else {"decision_basis": audit_view}),
         "notices": list(NOTICES), "gaps": [project.text(item, "gap") for item in sorted(gap_list)],
         "truncations": project.cuts,
         "provenance": {key: value for key, value in sorted(provenance.items()) if key in {
@@ -263,6 +335,36 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
     blocks.append(Box(BoxKind.GAP if dossier["missing_predicates"] else BoxKind.VERIFICATION,
                       "Missing proof predicates", items=(
         bullets(dossier["missing_predicates"] or ["None recorded in the accepted finding."], limits),)))
+    basis = dossier.get("decision_basis")
+    if basis is not None:
+        blocks.append(Heading(1, "Protected decision basis", "decision-basis"))
+        if not basis["available"]:
+            blocks.append(Box(BoxKind.GAP, "Decision basis unavailable", items=(Para(basis["reason"]),)))
+        else:
+            blocks.append(Box(BoxKind.PROVENANCE, "Accepted decision projection", items=(
+                Para(basis["notice"]), Fields((field("Record", basis["record_id"], limits, mono=True),)))))
+            for row in basis["decisions"]:
+                blocks.append(Box(BoxKind.PROVENANCE, row["stage"].replace("_", " "), items=(
+                    Fields((field("Outcome", row["outcome"], limits),
+                            field("Reason", row["reason_code"], limits))),
+                    Para(row["explanation"] or str(row["explanation_absence_reason"])))))
+            for row in basis["relations"]:
+                blocks.append(Box(BoxKind.EVIDENCE, row["kind"].replace("_", " "), items=(
+                    Fields(tuple(field(label, row[key], limits) for label, key in (
+                        ("Citation", "relation_id"), ("Actor", "actor_role"), ("Predicate", "predicate"),
+                        ("Admissibility", "admissibility"), ("Noncounted reason", "noncounted_reason"),
+                        ("Counted by original policy", "counted_by_existing_policy"), ("Location", "locator")))),
+                    Para(row["notice"]))))
+            verifier = basis["verification"]
+            blocks.append(Box(BoxKind.VERIFICATION if verifier else BoxKind.GAP, "Independent verification", items=(
+                Para("Unavailable: " + str(basis["verification_absence_reason"])) if verifier is None else
+                Fields((field("Status", verifier["status"], limits),
+                        field("Structural blindness", verifier["blindness"], limits),
+                        field("Model diversity", verifier["diversity"], limits),
+                        field("Existing R6", verifier["existing_r6_passed"], limits))),)))
+        blocks.append(Box(BoxKind.GAP, "Audit coverage (not a clean-target assertion)", items=(
+            bullets([f"{row['population']}: emitted {row['emitted']}, omitted {row['omitted']}, "
+                     f"unavailable {row['unavailable']}; reason {row['reason']}" for row in basis["coverage"]], limits),)))
     blocks.append(Heading(1, "Proof of concept", "poc"))
     poc = dossier["poc"]
     if poc is None:
