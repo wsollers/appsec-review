@@ -13,7 +13,7 @@ from typing import Any, Mapping
 from appsec_review.storage import canonical_json
 import hashlib
 
-CONTENT_SCHEMA = "appsec-review/handoff-content/1"
+CONTENT_SCHEMA = "appsec-review/handoff-content/2"  # 2: body gained unit_outputs (see the interchange doc)
 NORMALISED_ATTEMPT = "attempts/@/"
 HEADER_FIELDS = frozenset({
     "schema", "run_id", "job_id", "attempt_id", "status", "started_at", "completed_at",
@@ -22,8 +22,8 @@ HEADER_FIELDS = frozenset({
     "upstream_handoff_sha256", "resolved_config_sha256", "job_config_sha256", "source_fingerprint",
     "target_snapshot", "content_sha256",
 })
-BODY_FIELDS = ("outputs", "artifact_content", "coverage", "completion_status", "execution_status", "gaps",
-               "dataset_contract_sha256", "evidence_target_snapshot", "upstream_content_sha256")
+BODY_FIELDS = ("outputs", "unit_outputs", "artifact_content", "coverage", "completion_status", "execution_status",
+               "gaps", "dataset_contract_sha256", "evidence_target_snapshot", "upstream_content_sha256")
 EXCLUDED_FILES = frozenset({"claim.json", "status.json", "published.json", "outcomes.json", "result.json",
                             "revalidation.json"})
 EXCLUDED_DIRECTORIES = frozenset({"logs", "events", "steps", "shared"})
@@ -57,12 +57,13 @@ def artifact_content(artifacts: list[Mapping[str, Any]], attempt_path: str) -> l
     return [list(pair) for pair in sorted(pairs)]
 
 
-def handoff_body(handoff: Mapping[str, Any], *, gaps: list[Any],
+def handoff_body(handoff: Mapping[str, Any], *, gaps: list[Any], unit_outputs: Mapping[str, Any],
                  upstream_content_sha256: Mapping[str, str]) -> dict[str, Any]:
     attempt_id = str(handoff["attempt_id"])
     attempt_path = str(handoff["resolving_paths"]["attempt"])
     return {
         "outputs": normalise_attempt_paths(handoff["outputs"], attempt_id),
+        "unit_outputs": normalise_attempt_paths(dict(unit_outputs), attempt_id),
         "artifact_content": artifact_content(handoff["artifacts"], attempt_path),
         "coverage": dict(handoff["coverage"]),
         "completion_status": str(handoff["completion_status"]),
@@ -131,9 +132,11 @@ def equivalent_upstreams(run_root: Path, pinned: Mapping[str, str],
     return record
 
 
-def handoff_content_sha256(run_root: Path, handoff: Mapping[str, Any], *, gaps: list[Any]) -> str | None:
+def handoff_content_sha256(run_root: Path, handoff: Mapping[str, Any], *, gaps: list[Any],
+                           unit_outputs: Mapping[str, Any]) -> str | None:
     """The identity the runner records on an accepted handoff, or ``None`` when it cannot be transitive."""
     upstream = pinned_upstream_content(run_root, handoff.get("upstream_handoff_sha256", {}))
     if upstream is None:
         return None
-    return content_sha256(handoff_body(handoff, gaps=gaps, upstream_content_sha256=upstream))
+    return content_sha256(handoff_body(handoff, gaps=gaps, unit_outputs=unit_outputs,
+                                       upstream_content_sha256=upstream))

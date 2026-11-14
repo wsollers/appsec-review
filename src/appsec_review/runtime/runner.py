@@ -842,7 +842,8 @@ class JobRunner:
             # Evidence-body identity (docs/architecture/job-interchange.md): absent, never guessed, when a
             # pinned upstream predates it, so equivalence stays transitive.
             from appsec_review.runtime.equivalence import handoff_content_sha256
-            identity = handoff_content_sha256(context.run_root, handoff, gaps=list(outcomes.get("gaps", [])))
+            identity = handoff_content_sha256(context.run_root, handoff, gaps=list(outcomes.get("gaps", [])),
+                                              unit_outputs=dict(result.get("outputs", {})))
             if identity is not None:
                 handoff["content_sha256"] = identity
         if (context.config.job_id in {"job_target_analysis_plan", "job_build_environment_analysis"}

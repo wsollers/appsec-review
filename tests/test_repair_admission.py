@@ -829,14 +829,16 @@ def test_unchanged_descendants_are_revalidated_and_reused_when_the_upstream_repu
     assert [event["job_id"] for event in events if event["event_type"] == "REVALIDATED"] == ["job_b", "job_c"]
 
 
-def test_revalidated_descendant_runs_when_the_upstream_evidence_differs(tmp_path):
+@pytest.mark.parametrize("output", [{"value": 7, "terminal_status": "NOT_APPLICABLE"}, {"value": 8}],
+                         ids=["interchange-key", "unit-result-only"])
+def test_revalidated_descendant_runs_when_the_upstream_evidence_differs(tmp_path, output):
     config, jobs, calls = fixture(tmp_path, ("job_a", "job_b"))
     dependencies = {"job_a": (), "job_b": ("job_a",)}
     first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
     root = config.runtime.runs_dir / first["run_id"]
     def produce_not_applicable(context):
         calls.append(("job_a", context.unit_id, context.job.attempt_id))
-        return {"value": 7, "terminal_status": "NOT_APPLICABLE"}
+        return dict(output)
     changed = replace(jobs[0], handler=produce_not_applicable, units=(Unit("work.only", produce_not_applicable),))
     (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
     write_release(tmp_path, (job.job_id for job in jobs))

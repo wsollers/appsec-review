@@ -166,18 +166,18 @@ their attempt ids, timestamps or paths. A handoff without the hash is never equi
 | Part | Fields |
 | --- | --- |
 | Header | `schema`, `run_id`, `job_id`, `attempt_id`, `status`, `started_at`, `completed_at`, `implementation_identity`, `schema_identity`, `validation_identity`, `tool_identity`, `resolving_paths`, `artifacts` (the path map), `outcomes` (reference), `input_manifest` (reference), `input_identity`, `input_set_sha256`, `upstream_handoff_sha256`, `resolved_config_sha256`, `job_config_sha256`, `source_fingerprint`, `target_snapshot`, `content_sha256` |
-| Body | `outputs` (every string with this attempt's `attempts/<attempt_id>/` normalised to `attempts/@/`), `artifact_content` (sorted `[sha256, size_bytes]` pairs of the attempt-root files, see below), `coverage`, `completion_status`, `execution_status`, `gaps` (the `producer-gap/1` records of `outcomes.json`), `dataset_contract_sha256`, `evidence_target_snapshot`, `upstream_content_sha256` (`{producer: content_sha256}` of every pinned upstream handoff) |
+| Body | `outputs` (every string with this attempt's `attempts/<attempt_id>/` normalised to `attempts/@/`), `unit_outputs` (the complete unit results, `result.json` `outputs`, normalised the same way), `artifact_content` (sorted `[sha256, size_bytes]` pairs of the attempt-root files, see below), `coverage`, `completion_status`, `execution_status`, `gaps` (the `producer-gap/1` records of `outcomes.json`), `dataset_contract_sha256`, `evidence_target_snapshot`, `upstream_content_sha256` (`{producer: content_sha256}` of every pinned upstream handoff) |
 
 `content_sha256` is the SHA-256 of the canonical JSON (sorted keys, compact separators, UTF-8) of
-`{"schema": "appsec-review/handoff-content/1", "body": <body>}`. It is an optional header field;
+`{"schema": "appsec-review/handoff-content/2", "body": <body>}`. It is an optional header field;
 its presence is the version signal, and the schema pattern-checks it. The runner emits it only on an
 accepted handoff whose every pinned upstream carries one, so equivalence is transitive: a changed
 grandparent changes every descendant's hash. `artifact_content` covers the files under the attempt
 root except the runtime's own bookkeeping, which embeds attempt ids, timestamps or dispatch
 identity: `claim.json`, `status.json`, `published.json`, `outcomes.json`, `result.json`,
-`revalidation.json`, and everything under `logs/`, `events/`, `steps/` (unit receipts, whose
-interchange content is projected into `outputs`) and `shared/` (computation receipts, whose objects
-are referenced from `outputs`). Artifacts outside the attempt root (the frozen configuration, the
+`revalidation.json`, and everything under `logs/`, `events/`, `steps/` (unit receipts carry
+timestamps; the unit results themselves are the body's `unit_outputs`) and `shared/` (computation
+receipts, whose objects are referenced from `outputs`). Artifacts outside the attempt root (the frozen configuration, the
 input manifest) are run-level and belong to the header.
 
 Rules: nothing hashes a file including its own header; a file-level hash (`handoff_sha256` in
@@ -186,6 +186,11 @@ used for binding and admission, never for equivalence. **A field moving between 
 a content-identity change** and must come with a note in this section (and a new
 `handoff-content` schema id). Interim rule: artifact identity by content pairs and attempt-path
 normalisation stand in for artifacts referenced by content hash throughout the body.
+
+Content-identity changes: `handoff-content/1` hashed only the `outputs` projection, so a unit whose
+evidence lives in its result document alone (no interchange output keys) hashed equal across
+different results; `/2` adds `unit_outputs`. Handoffs carrying a `/1` identity are never equivalent
+to `/2` ones because the hashes differ.
 
 New typed attempts embed `appsec-review/job-contract/1` in `appsec-review/attempt-datasets/3`.
 The existing dataset-contract identity therefore invalidates reuse after an input/dispatch contract

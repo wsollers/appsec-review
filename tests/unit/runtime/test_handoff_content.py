@@ -49,21 +49,29 @@ def test_the_partition_covers_every_handoff_field_exactly_once() -> None:
     document = handoff()
     body_from_document = {"outputs", "coverage", "completion_status", "execution_status",
                           "dataset_contract_sha256", "evidence_target_snapshot"}
+    assert set(BODY_FIELDS) - body_from_document == {"unit_outputs", "artifact_content", "gaps", "upstream_content_sha256"}
     assert set(document) - HEADER_FIELDS == body_from_document
 
 
 def test_two_attempts_with_the_same_evidence_hash_equal_whatever_their_attempt_id() -> None:
-    first = handoff_body(handoff("attempt_0001"), gaps=[], upstream_content_sha256={"job_up": "9" * 64})
+    units = lambda attempt_id: {"work.only": {"value": 7, "where": f"data/jobs/job_x/attempts/{attempt_id}/out.json"}}
+    first = handoff_body(handoff("attempt_0001"), gaps=[], unit_outputs=units("attempt_0001"),
+                         upstream_content_sha256={"job_up": "9" * 64})
     second = handoff_body(handoff("attempt_0007", started_at="2026-11-14T00:00:00+00:00"),
-                          gaps=[], upstream_content_sha256={"job_up": "9" * 64})
+                          gaps=[], unit_outputs=units("attempt_0007"), upstream_content_sha256={"job_up": "9" * 64})
     assert first == second and content_sha256(first) == content_sha256(second)
     assert first["outputs"]["work.only"]["artifact"]["path"] == "data/jobs/job_x/attempts/@/out.json"
+    assert first["unit_outputs"]["work.only"]["where"] == "data/jobs/job_x/attempts/@/out.json"
 
 
-@pytest.mark.parametrize("change", ["output", "coverage", "status", "gap", "upstream", "contract", "target"])
+@pytest.mark.parametrize("change", ["output", "unit_output", "coverage", "status", "gap", "upstream", "contract",
+                                    "target"])
 def test_every_body_field_changes_the_identity(change: str) -> None:
-    base = handoff_body(handoff(), gaps=[], upstream_content_sha256={"job_up": "9" * 64})
+    units = {"work.only": {"value": 7}}
+    base = handoff_body(handoff(), gaps=[], unit_outputs=units, upstream_content_sha256={"job_up": "9" * 64})
     overrides, gaps, upstream = {}, [], {"job_up": "9" * 64}
+    if change == "unit_output":
+        units = {"work.only": {"value": 8}}
     if change == "output":
         overrides["outputs"] = {"work.only": {"terminal_status": "SUCCEEDED"}}
     elif change == "coverage":
@@ -78,7 +86,7 @@ def test_every_body_field_changes_the_identity(change: str) -> None:
         overrides["dataset_contract_sha256"] = "7" * 64
     else:
         overrides["evidence_target_snapshot"] = overrides["target_snapshot"] = "abc"
-    changed = handoff_body(handoff(**overrides), gaps=gaps, upstream_content_sha256=upstream)
+    changed = handoff_body(handoff(**overrides), gaps=gaps, unit_outputs=units, upstream_content_sha256=upstream)
     assert content_sha256(changed) != content_sha256(base)
 
 
@@ -102,9 +110,9 @@ def test_normalisation_touches_only_this_attempt_and_every_string_depth() -> Non
 
 def test_body_hash_names_its_schema_and_refuses_a_foreign_shape() -> None:
     from appsec_review.storage import canonical_json
-    body = handoff_body(handoff(), gaps=[], upstream_content_sha256={})
+    body = handoff_body(handoff(), gaps=[], unit_outputs={}, upstream_content_sha256={})
     assert content_sha256(body) == __import__("hashlib").sha256(
-        canonical_json({"schema": "appsec-review/handoff-content/1", "body": body})).hexdigest()
+        canonical_json({"schema": "appsec-review/handoff-content/2", "body": body})).hexdigest()
     with pytest.raises(ValueError, match="documented partition"):
         content_sha256({**body, "attempt_id": "attempt_0001"})
 
@@ -116,6 +124,6 @@ def test_a_pinned_upstream_without_an_identity_yields_no_identity(monkeypatch, t
     assert equivalence.pinned_upstream_content(tmp_path, {"job_up": "1" * 64}) == {"job_up": "9" * 64}
     assert equivalence.pinned_upstream_content(tmp_path, {"job_up": "1" * 64, "job_old": "2" * 64}) is None
     assert equivalence.handoff_content_sha256(
-        tmp_path, handoff(upstream_handoff_sha256={"job_old": "2" * 64}), gaps=[]) is None
-    assert equivalence.handoff_content_sha256(tmp_path, handoff(), gaps=[]) == content_sha256(
-        handoff_body(handoff(), gaps=[], upstream_content_sha256={"job_up": "9" * 64}))
+        tmp_path, handoff(upstream_handoff_sha256={"job_old": "2" * 64}), gaps=[], unit_outputs={}) is None
+    assert equivalence.handoff_content_sha256(tmp_path, handoff(), gaps=[], unit_outputs={}) == content_sha256(
+        handoff_body(handoff(), gaps=[], unit_outputs={}, upstream_content_sha256={"job_up": "9" * 64}))
