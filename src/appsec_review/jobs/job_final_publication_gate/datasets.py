@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from appsec_review.runtime.datasets import artifact_only
+from appsec_review.jobs.decision_audit_inputs import original_audit_source_inputs
 
 
 _A = "data/jobs/job_final_publication_gate/attempts/*"
-# The gate reads only the accepted inference review handoff and the artifacts it binds.
+# Audit provenance also re-verifies explicitly declared original producer shards.
 DATASETS = (
     artifact_only(
         "publication_gate_decisions", "acceptance", "inference_review",
@@ -24,7 +25,7 @@ from appsec_review.runtime.contracts import (
 )
 
 CONTRACT = JobContract(
-    inputs=(
+    inputs=original_audit_source_inputs((
         InputRequirement("job_language_build", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_dossier_publication", "handoff", "appsec-review/job-handoff/2",
@@ -85,7 +86,7 @@ CONTRACT = JobContract(
                          "appsec-review/remediation-validations/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_remediation_validation", "remediation_validation_receipts",
                          "appsec-review/remediation-validation/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
-    ),
+    )),
     schedule_after=('job_inference_security_review', 'job_poc_generation', 'job_remediation_planning', 'job_remediation_validation', 'job_dossier_publication'),
     dispatch=DispatchClass.REVIEW_GRAPH,
     target_access=TargetAccess.ACCEPTED_EVIDENCE,
