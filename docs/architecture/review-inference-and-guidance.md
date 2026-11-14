@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_document_issue_analysis", "job_inference_security_review", "job_owasp_control_assessment", "job_poc_generation", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_package_assembly", "job_review_prioritization", "job_security_tagging", "job_threat_model_generation"]
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Review inference and guidance
 
@@ -64,7 +64,10 @@ recheck. Truncated/incomplete resolution cannot satisfy an obligation. Advisory/
 reference context and tags remain indirect. The
 [obligation policy](../../src/appsec_review/review/obligations.py) chooses required predicates by
 claim family; it does not demand a source-to-sink path for every secret, configuration or
-dependency claim.
+dependency claim. [Predicate warrants](../../src/appsec_review/review/warrants.py)
+(`predicate-warrant/1`, [T-152](../TODO.md)) check that re-resolved evidence binds to the claim's
+scoped subject, sink, operand and build configuration across both guard polarities before wiring
+into adjudication.
 
 ### Guidance is selected data, not authority
 

@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_binary_evidence_indexing", "job_cpg_analysis", "job_review_data_indexing", "job_review_intake", "job_target_catalog"]
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Third-party binary decompilation with Ghidra
 

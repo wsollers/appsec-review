@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "testing and operations"
 status: "current"
 jobs: []
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Testing architecture
 
@@ -82,6 +82,9 @@ of its behavior, not exemptions from the forward contract.
 - **Temporary state.** `--basetemp` and the pytest cache must stay under `test/tmp/`
   (`pyproject.toml` sets `--basetemp=test/tmp`); the harness rejects overrides outside it. Give each
   concurrent or focused session its own `--basetemp=test/tmp/<session-name>`.
+- **Application-private umask.** `pytest_configure` sets `os.umask(0o022)` so `tmp_path` run roots
+  are never created group- or world-writable on hosts whose shell umask is `0002` (`storage.admission`
+  refuses shared directory custody); `tests/test_000_unit_environment_guard.py` verifies the umask.
 - **Production-sizing guard.** `tests/test_000_unit_environment_guard.py` is reordered first
   when it is collected (`pytest_collection_modifyitems`). It fails, listing each
   offending variable, when the session would resolve production sizing: a non-`dev`

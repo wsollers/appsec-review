@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_code_graph_index", "job_codeql_analysis", "job_evidence_collection", "job_language_build", "job_project_build", "job_review_data_indexing", "job_review_prioritization"]
-last reconciled: "d622f50750ae0c1583d6dac5a0acb0643ea18bcc"
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Cross-language CodeQL analysis
 
@@ -148,6 +148,12 @@ environment; a generic C++ image is not authorization for a different dependency
 Under `preinstalled_undeclared = "fail"`, inventory needs the source-environment mapping and every
 additional accepted environment needs its own entry. Under `"derive"`, an environment without any
 entry derives its runtime instead; an entry for the image but not the effective user still fails.
+When `job_codeql_analysis` is enabled and no `[review_policy.image_builder]` is configured,
+`review-start`, `review_run.py submit`, and `stepwise.py launch` run `verify_codeql_runtimes` at
+preflight: they refuse the launch if the pinned `source_image_id` has no matching
+`preinstalled_runtimes` declaration for the effective runtime user (or if its `runtime_image_id` is
+missing locally), and print a warning for each undeclared compiled build profile (`native`, `java`,
+`go`, `dotnet`).
 A source-only runtime does not establish compiled CodeQL coverage.
 
 Preinstalled resolution inspects source/build tag bindings and the selected runtime by immutable ID
