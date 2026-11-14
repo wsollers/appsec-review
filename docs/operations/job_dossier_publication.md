@@ -29,9 +29,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dossier_publication/job.py#L243) |
-| `dossiers` | `dossiers.create` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dossier_publication/job.py#L146) |
-| `load` | `load.verify_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dossier_publication/job.py#L133) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dossier_publication/job.py#L259) |
+| `dossiers` | `dossiers.create` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dossier_publication/job.py#L152) |
+| `load` | `load.verify_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dossier_publication/job.py#L138) |
 
 ### Accepted input declarations
 
@@ -128,7 +128,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | `tests/integration/test_dossier_live.py` |
-| unit | `tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer`<br>`tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier` |
+| unit | `tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer`<br>`tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier`<br>`tests/unit/review_decision_audit_consumers/test_dossier.py` |
 
 ### Dagster placement
 

@@ -298,3 +298,61 @@ request:
 .venv/bin/python -m pytest -q tests/acceptance/test_finding_metrics.py \
   --basetemp=test/tmp/finding-metrics-acceptance
 ```
+
+## 9. Inspect a protected decision audit
+
+The `decision-audit` command is a bounded host-operator/application reader for an accepted
+inference review's T-150 sidecar. It launches no review or model and reads accepted run artifacts,
+not the target checkout. This is separate from `audit-sample`, which draws leads for independent
+human labelling.
+
+```sh
+RUN="runs/<run-id>"
+.venv/bin/python -m appsec_review.observability.findings decision-audit \
+  --run "$RUN" --template population --stage cell_execution \
+  --role independent_verifier --limit 20
+
+.venv/bin/python -m appsec_review.observability.findings decision-audit \
+  --run "$RUN" --template lead_trace --lead-id "<original-lead-id>" --limit 20
+
+.venv/bin/python -m appsec_review.observability.findings decision-audit \
+  --run "$RUN" --template claim_basis --claim-id "<canonical-claim-id>"
+
+.venv/bin/python -m appsec_review.observability.findings decision-audit \
+  --run "$RUN" --template verification_coverage --claim-id "<canonical-claim-id>"
+```
+
+Replace the placeholders with an accepted run and its original identities. `--run` selects the run,
+never a caller-supplied manifest or arbitrary artifact. The reader verifies the accepted review,
+frozen policy, metadata pins, complete audit bundle and original source membership before serving
+a page. Declared-but-missing enabled publications, changed bytes, foreign scope or malformed
+membership are errors, not an empty successful result.
+
+| Template | Supported selection | Meaning |
+| --- | --- | --- |
+| `population` | optional `--stage`, `--role` | Recorded stage or producing-role population; role is a filter, not an authorization grant |
+| `lead_trace` | required `--lead-id` | Exact receipt-scoped proposal links and canonical claim outcomes, not other leads sharing a cell |
+| `claim_basis` | required `--claim-id` | Accepted decision basis and its original references |
+| `verification_coverage` | optional `--claim-id`, `--predicate` | Separate recorded blindness, diversity and evidence-support coverage |
+
+Available JSON pages distinguish `available`, `total`, `returned`, `coverage`, `omissions` and
+`next_cursor`. An unavailable historical or disabled capability has `available: false`,
+`total: null` and an explicit `unavailable_reason`; it is never reported as zero reviewed decisions.
+This valid unavailable response exits 0; unusable inputs and integrity failures exit 2 with a
+named error. Fresh capacity/input omissions retain their specific reason.
+
+For another page, pass the returned `next_cursor` with the same run, template, filters and
+`--limit`. The cursor binds the exact accepted handoff, manifest, query and page size; changed
+acceptance or query settings invalidate it. Defaults and ceilings come from the run's frozen
+`decision_audit` settings, not today's configuration. Verified continuation references that are
+not expanded in the bounded view remain named omissions.
+
+Rows are `redacted_operator_projection` views, not canonical audit artifacts. Their
+`source_record` and `source_schema` identify the original accepted bytes. Keep output protected:
+redaction is not permission to publish customer metadata. The CLI adds no worker/MCP capability,
+does not feed prior decisions to a blind verifier, and does not change claim state, severity,
+shipment policy or PoC eligibility. Successful execution, recorded evidence use and a correct
+finding remain different facts; judge dissent and counterevidence never become supporting proof.
+
+See the [design and implementation boundary](../architecture/triage-verifier-enhancement.md)
+and T-150 in the [registry](../TODO.md#t-150-publish-complete-protected-review-decision-products).
