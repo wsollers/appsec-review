@@ -514,6 +514,14 @@
       "subsystem": "code intelligence"
     },
     {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/collation-pass.md",
+      "reason": "T-5008 design: facet vocabulary, deterministic derivation, placement, consumers and proving cases of the collation pass; a decision record for the user decision of 2026-11-14.",
+      "subsystem": "review inference and guidance"
+    },
+    {
       "decision_record": false,
       "disposition": "merge-into",
       "kind": "architecture",

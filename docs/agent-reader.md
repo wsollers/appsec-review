@@ -141,6 +141,7 @@ Specialized operator procedures (canonical job contracts are in the entrypoints 
   [architecture and flow diagram](architecture/owasp-control-workbench.md).
 - [`operations/review-prioritization.md`](operations/review-prioritization.md) — review prioritization.
 - [`operations/security-tagging.md`](operations/security-tagging.md) — security tagging.
+- [`architecture/collation-pass.md`](architecture/collation-pass.md) — collation pass (T-5008): facet vocabulary, deterministic derivation, placement, consumers, optional model pass, proving cases.
 - [`operations/document-issue-analysis.md`](operations/document-issue-analysis.md) — source-mapped document candidate ledger.
 - [`operations/retrieval-mcp.md`](operations/retrieval-mcp.md) — local retrieval MCP gateway.
 - [`architecture/retrieval-surfaces.md`](architecture/retrieval-surfaces.md) — retrieval tools vs the MCP adapter vs review-cell retrieval vs runtime skills.

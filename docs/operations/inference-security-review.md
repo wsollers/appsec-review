@@ -187,6 +187,14 @@ facts, and normalized build-command facts. Lead packages include source/componen
 under the same context bounds as hunt packages. Missing facts select a generic profile with a
 routing gap; a language alone is not evidence that a managed-language scope is a service.
 
+The collation pass (T-5008, [design](../architecture/collation-pass.md)) changes what a hunt unit
+carries and how it is routed: the unit context gains the unit's facet tags, its component's
+target class and facet-derived hunt obligations; `route_stack` reads `mechanism:*` facets so a
+managed-language scope with an HTTP or RPC listener selects its service stack without a
+`component:*` tag; personas may cover facets; `hunt_panel` tries `entry_down` first on a
+`trust:user-tainted` unit; and `ranking.facet_exposure`/`ranking.facet_trust` weight exposed,
+tainted units. The design page records which of these are implemented.
+
 Teams run package-local follow-up rounds up to `rounds.max_rounds`. Each round applies the existing
 deterministic R5 evidence policy and R6 verifier-independence checks to accumulated evidence.
 `known_claims` contains only supported/confirmed claims; `variant` hunting is enabled from round 1

@@ -32,6 +32,16 @@ The vocabulary, capability rules, and crosswalk are pinned by path and SHA-256 u
 files without updating its pinned hash fails the job before any unit runs. A namespace marked
 `proposed` in the vocabulary cannot be emitted until its catalog is pinned.
 
+The collation pass (T-5008, [design](../architecture/collation-pass.md)) adds a `collation` step
+after capability collection that assigns closed facet tags (`role`, `exposure`, `trust`,
+`mechanism`, `asset`, `state`) to every first-party file and component, and a `target:*` class
+per component, from the collected tags, pinned lexical and path rules over hash-verified
+first-party bytes, build receipts and target documents. Its rules live in the pinned
+capability-rules file, its settings under `jobs.job_security_tagging.settings.collation`, and its
+records in the `tags` index shard `facets`. The design page states which stage of the pass is
+implemented; until the `collation` step exists in `job.py`, the behaviour described there is a
+specification, not a run result.
+
 Two bounds sit beside the taxonomy pins in `jobs.job_security_tagging.settings`:
 
 | Key | Default | Allowed | Effect when exceeded |

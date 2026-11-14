@@ -25,6 +25,15 @@ classification and graph context route work; they do not prove control outcomes.
 precedes review data indexing, package assembly, hunting, red/blue review and independent
 verification. Prioritization and tagging do not depend on OWASP.
 
+With the collation pass (T-5008, [design](../architecture/collation-pass.md)) the workbench no
+longer classifies components itself: it reads the component's `target:*` class and facet tags
+from the accepted `tags` index, derives the control roles from them, and gates applicability on
+the class. A component that is not `target:web-api` gets every selected ASVS control as
+`not_applicable` with the target-class citation, one that is not `target:mobile` likewise for
+MASVS; such a component produces no batch, no `OWASP_WORKER_STARTED` event and no
+`control_evidence` fact, and the job ends `SUCCEEDED` with a not-applicable ledger. The design
+page records which stage is implemented.
+
 Direct CLI `start`, `resume` and `plan-resume` also select security tagging and OWASP after
 prioritization/code-graph indexing and before review data indexing. Normal enabled-job filtering
 applies: OWASP is selected by default, and `resume`/`plan-resume --force-from` can name tagging
