@@ -84,24 +84,24 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [Image-pin verification and host bindings](image-pin-verification.md) | images and deployment | current |
 | [Inference security review operations](inference-security-review.md) | review inference and guidance | current |
 | [Job-focused test selection](job-test-selection.md) | testing and operations | current |
-| [artifact_indexing](job_artifact_indexing.md) | runtime interchange | current |
-| [artifact_security_analysis](job_artifact_security_analysis.md) | runtime interchange | current |
-| [binary_evidence_indexing](job_binary_evidence_indexing.md) | runtime interchange | current |
+| [artifact_indexing](job_artifact_indexing.md) | scanners and evidence collection | current |
+| [artifact_security_analysis](job_artifact_security_analysis.md) | scanners and evidence collection | current |
+| [binary_evidence_indexing](job_binary_evidence_indexing.md) | code intelligence | current |
 | [build_environment_analysis](job_build_environment_analysis.md) | target acquisition and build | current |
 | [build_iteration](job_build_iteration.md) | target acquisition and build | current |
 | [change_context_analysis](job_change_context_analysis.md) | scanners and evidence collection | current |
-| [ci_configuration_analysis](job_ci_configuration_analysis.md) | runtime interchange | current |
-| [clang_static_analysis](job_clang_static_analysis.md) | runtime interchange | current |
-| [code_graph_index](job_code_graph_index.md) | runtime interchange | current |
-| [codeql_analysis](job_codeql_analysis.md) | runtime interchange | current |
-| [cpg_analysis](job_cpg_analysis.md) | runtime interchange | current |
-| [cpp_compiled_analysis](job_cpp_compiled_analysis.md) | runtime interchange | current |
-| [cpp_symbol_index](job_cpp_symbol_index.md) | runtime interchange | current |
+| [ci_configuration_analysis](job_ci_configuration_analysis.md) | scanners and evidence collection | current |
+| [clang_static_analysis](job_clang_static_analysis.md) | scanners and evidence collection | current |
+| [code_graph_index](job_code_graph_index.md) | code intelligence | current |
+| [codeql_analysis](job_codeql_analysis.md) | code intelligence | current |
+| [cpg_analysis](job_cpg_analysis.md) | code intelligence | current |
+| [cpp_compiled_analysis](job_cpp_compiled_analysis.md) | code intelligence | current |
+| [cpp_symbol_index](job_cpp_symbol_index.md) | code intelligence | current |
 | [Debug-symbol indexing job](job_debug_symbol_indexing.md) | code intelligence | current |
-| [dependency_intelligence](job_dependency_intelligence.md) | runtime interchange | current |
+| [dependency_intelligence](job_dependency_intelligence.md) | scanners and evidence collection | current |
 | [document_issue_analysis](job_document_issue_analysis.md) | review inference and guidance | current |
 | [dossier_publication](job_dossier_publication.md) | reporting and metrics | current |
-| [evidence_collection](job_evidence_collection.md) | runtime interchange | current |
+| [evidence_collection](job_evidence_collection.md) | scanners and evidence collection | current |
 | [final_publication_gate](job_final_publication_gate.md) | reporting and metrics | current |
 | [final_report_publication](job_final_report_publication.md) | reporting and metrics | current |
 | [image_pin_verification](job_image_pin_verification.md) | images and deployment | current |
@@ -111,26 +111,26 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 | [openvex_export](job_openvex_export.md) | reporting and metrics | current |
 | [owasp_control_assessment](job_owasp_control_assessment.md) | review inference and guidance | current |
 | [poc_generation](job_poc_generation.md) | review inference and guidance | current |
-| [post_build_security_assessment](job_post_build_security_assessment.md) | runtime interchange | current |
-| [profile_data](job_profile_data.md) | runtime interchange | current |
+| [post_build_security_assessment](job_post_build_security_assessment.md) | scanners and evidence collection | current |
+| [profile_data](job_profile_data.md) | scanners and evidence collection | current |
 | [project_build](job_project_build.md) | target acquisition and build | current |
 | [remediation_planning](job_remediation_planning.md) | review inference and guidance | current |
 | [remediation_validation](job_remediation_validation.md) | review inference and guidance | current |
 | [review_data_indexing](job_review_data_indexing.md) | runtime interchange | current |
 | [review_intake](job_review_intake.md) | target acquisition and build | current |
-| [review_package_assembly](job_review_package_assembly.md) | runtime interchange | current |
+| [review_package_assembly](job_review_package_assembly.md) | review inference and guidance | current |
 | [review_prioritization](job_review_prioritization.md) | review inference and guidance | current |
 | [sanitizer_build](job_sanitizer_build.md) | target acquisition and build | current |
 | [security_tagging](job_security_tagging.md) | review inference and guidance | current |
 | [source_history_analysis](job_source_history_analysis.md) | scanners and evidence collection | current |
-| [svf_alias_analysis](job_svf_alias_analysis.md) | runtime interchange | current |
+| [svf_alias_analysis](job_svf_alias_analysis.md) | code intelligence | current |
 | [Target acquisition](job_target_acquisition.md) | target acquisition and build | current |
 | [target_analysis_plan](job_target_analysis_plan.md) | target acquisition and build | current |
 | [target_catalog](job_target_catalog.md) | target acquisition and build | current |
-| [test_coverage](job_test_coverage.md) | runtime interchange | current |
+| [test_coverage](job_test_coverage.md) | scanners and evidence collection | current |
 | [third_party_data_sync](job_third_party_data_sync.md) | scanners and evidence collection | current |
 | [threat_model_generation](job_threat_model_generation.md) | review inference and guidance | current |
-| [tree_sitter_ast](job_tree_sitter_ast.md) | runtime interchange | current |
+| [tree_sitter_ast](job_tree_sitter_ast.md) | code intelligence | current |
 | [Generic language-build operations](language-build.md) | target acquisition and build | current |
 | [Lead severity triage](lead-severity-triage.md) | review inference and guidance | current |
 | [Review metrics](metrics.md) | reporting and metrics | current |
