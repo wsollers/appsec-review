@@ -38,7 +38,7 @@ fingerprint, snapshot and shard id and re-attests custody (`index-shard`, `compu
 the reusing attempt so repair-admitted implementations carry a compatible producer receipt at
 manifest publication. Every runtime-consumed shard attributes ownership through
 `IndexIdentity.producer["job"]` (`job_debug_symbol_indexing` now emits `producer["job"]`;
-construction-time enforcement across test fixtures remains [T-160](../TODO.md)).
+construction-time enforcement across test fixtures remains [T-164](../TODO.md)).
 An accepted manifest does not prove that every declared producer ran, every language is covered or every artifact
 is queryable. Raw/protected payloads and sanitized inventory metadata have distinct access
 boundaries. Producer-local coverage and canonical outcomes must be inspected together; an empty

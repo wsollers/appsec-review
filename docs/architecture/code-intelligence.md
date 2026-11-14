@@ -172,7 +172,7 @@ No item or known limitation automatically joins a walk's user-approved expected-
   **T-032:** remaining binary-decompilation review integration/validation boundaries.
 - **T-147, T-157:** missing exact task/dataset and language/applicability metadata; generated
   inventory cells are declarations, not execution evidence.
-- **T-160:** construction-time validation of `IndexIdentity.producer["job"]` (`job_debug_symbol_indexing`
+- **T-164:** construction-time validation of `IndexIdentity.producer["job"]` (`job_debug_symbol_indexing`
   now emits `producer["job"]`; synthetic test fixtures remain to migrate).
 
 The SVF aggregate propagation detail is tracked by T-159, not silently assigned to T-126 or
