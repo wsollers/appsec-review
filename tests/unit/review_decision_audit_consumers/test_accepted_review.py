@@ -30,12 +30,6 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def accepted_case(tmp_path):
     case = review_fixture(tmp_path)
-    historical = accepted_handoff(case.root, REVIEW_JOB)
-    historical_declarations = tuple(row for row in producer_contract(case.root, historical.handoff)
-                                    if row.output_kind not in {item.output_kind for item in audit_declarations(
-                                        historical.handoff["resolving_paths"]["attempt"])})
-    case.publish(REVIEW_JOB, historical.handoff["outputs"], datasets=historical_declarations,
-                 upstream=historical.handoff["upstream_handoff_sha256"])
     schemas = SchemaSet(ROOT / SCHEMA_DIRECTORY)
     original = load_accepted_review(case.root, schemas, max_packages=10)
     legacy = load_accepted_review(case.root, schemas, max_packages=10, include_decision_audit=True)

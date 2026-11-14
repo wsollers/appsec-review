@@ -16,6 +16,7 @@ from appsec_review.indexing.store import accepted_handoff
 from appsec_review.jobs.accepted_review import REVIEW_SCHEMA
 from appsec_review.jobs.bound_artifacts import artifact_ref
 from appsec_review.jobs.job_inference_security_review import stages
+from appsec_review.jobs.job_inference_security_review.datasets import DATASETS as REVIEW_DATASETS
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationRecord,
@@ -43,6 +44,10 @@ REVIEW = "job_inference_security_review"
 LANGUAGE = "job_language_build"
 SOURCE = "src/parse.c"
 TEXT = "void parse(char *input) {\n  char out[8];\n  strcpy(out, input);\n}\n"
+LEGACY_REVIEW_OUTPUTS = (
+    "accepted_scope", "lead_triage", "review_packages", "review_cells",
+    "claim_ledger", "attack_chains", "scores_and_findings",
+)
 COVERAGE_SHARDS = (
     ("job_tree_sitter_ast", "tree_sitter_coverage", "analysis", "tree-sitter-coverage-attempt_0001"),
     ("job_cpp_symbol_index", "clangd_coverage", "analysis", "clangd-coverage-attempt_0001"),
@@ -173,6 +178,7 @@ def fixture(tmp_path, *, engineering=(), coverage_producers=()):
 
 
 def publish_review(case):
+    """Bind this pre-audit producer's capabilities, not new outputs added to the real publisher."""
     root = case.root
     directory = root / "data/inputs/contract-review"
     schemas = SchemaSet(ROOT / SCHEMA_DIRECTORY)
@@ -274,7 +280,9 @@ def publish_review(case):
         verification=settings.verifier_distinctness(), attack_chain_manifest=chains, poc_candidate_list=candidates)
     outputs["publication.publish_handoff"] = {"schema": REVIEW_SCHEMA,
                                               "artifact": write("review.json", handoff)}
-    accepted = case.publish(REVIEW, outputs, upstream={name: value.sha256 for name, value in case.originals.items()})
+    accepted = case.publish(
+        REVIEW, outputs, datasets=tuple(row for row in REVIEW_DATASETS if row.output_kind in LEGACY_REVIEW_OUTPUTS),
+        upstream={name: value.sha256 for name, value in case.originals.items()})
     from appsec_review.jobs.job_remediation_planning.inputs import load_review
     review = load_review(root, ROOT, case.config.job("job_remediation_planning").typed_settings.bounds)
     case.package = package.document()

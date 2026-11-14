@@ -9,9 +9,11 @@ from appsec_review.jobs.job_dossier_publication import build_job as dossier_job
 from appsec_review.jobs.job_final_publication_gate import build_job as gate_job
 from appsec_review.jobs.job_poc_generation import build_job as poc_job
 from appsec_review.jobs.job_remediation_planning import build_job as remediation_job
-from appsec_review.runtime.inputs import read_input_observations
+from appsec_review.review.decision_audit.reader import load_decision_audit
+from appsec_review.review.models import IntegrityError
+from appsec_review.runtime.inputs import producer_contract, read_input_observations
 from tests.downstream_contract_fixture import (
-    COVERAGE_SHARDS, ROOT, SOURCE, TEXT, REVIEW, LANGUAGE, fixture, publish_build, publish_poc,
+    COVERAGE_SHARDS, LEGACY_REVIEW_OUTPUTS, ROOT, SOURCE, TEXT, REVIEW, LANGUAGE, fixture, publish_build, publish_poc,
 )
 from tests.remediation_support import answer
 
@@ -22,6 +24,26 @@ def test_fixture_uses_real_accepted_review_and_original_source_owners(tmp_path):
     assert set(case.originals) == {
         "job_target_catalog", "job_evidence_collection", "job_code_graph_index",
         "job_review_data_indexing", "job_source_history_analysis"}
+    assert {row.output_kind for row in producer_contract(case.root, case.accepted_review.handoff)} == \
+        set(LEGACY_REVIEW_OUTPUTS)
+    audit = load_decision_audit(case.root)
+    assert not audit.available and audit.unavailable_reason == "legacy_unrecorded"
+
+
+@pytest.mark.parametrize("factory,job_id,unit_id", [
+    (gate_job, "job_final_publication_gate", "load.verify_review"),
+    (dossier_job, "job_dossier_publication", "load.verify_inputs"),
+], ids=["gate", "dossier"])
+def test_declared_audit_without_publication_is_rejected_by_typed_consumers(tmp_path, factory, job_id, unit_id):
+    case = fixture(tmp_path, engineering=(job_id,))
+    broken = case.publish(REVIEW, case.accepted_review.handoff["outputs"],
+                          upstream=case.accepted_review.handoff["upstream_handoff_sha256"])
+    assert "review_audit_metadata" in {row.output_kind for row in producer_contract(case.root, broken.handoff)}
+    job = factory(repository_root=ROOT)
+    claim = case.runner.begin_attempt(job, run_id=case.root.name, upstream_handoffs={REVIEW: broken.sha256})
+    with pytest.raises(IntegrityError, match="declares decision audit metadata but omitted its publication"):
+        case.runner.execute_or_reuse_unit(job, claim, unit_id)
+    assert not (case.runner._context_from_claim(job, claim).attempt_root / "handoff.json").exists()
 
 
 @pytest.mark.parametrize("kind,coverage_producers", [
