@@ -11,7 +11,9 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from appsec_review.jobs.job_security_tagging.crosswalk import Crosswalk
-from appsec_review.jobs.job_security_tagging.taxonomy import Vocabulary, normalize_cwe, split_tag
+from appsec_review.jobs.job_security_tagging.taxonomy import (
+    FACET_NAMESPACES, Vocabulary, normalize_cwe, split_tag,
+)
 from appsec_review.review.models import GapClass, HuntStrategy
 
 from .coverage import cover_matches, cover_specificity, crosswalk_tags
@@ -23,7 +25,10 @@ STACK_RULE = "stack-routing/1"
 PANEL_RULE = "hunt-panel/1"
 GENERALIST = "generalist"
 GENERIC_STACK = "generic"
-LOCATION_NAMESPACES = ("func", "infra", "data")
+# Collation facets (T-5008) are location tags a persona may cover; they stay outside the partition.
+LOCATION_NAMESPACES = ("func", "infra", "data", *FACET_NAMESPACES)
+LISTENER_FACETS = frozenset({"mechanism:http", "mechanism:networked-listener", "mechanism:rpc"})
+TAINTED_FACETS = frozenset({"trust:user-tainted", "exposure:client-facing"})
 PARTITION_NAMESPACES = ("cwe", "func", "infra", "data")
 DEFAULT_PANEL_FALLBACK = ("business_logic_abuse", GENERALIST)
 
@@ -126,14 +131,18 @@ def _stack(stack: str, basis: Iterable[str]) -> dict[str, Any]:
 
 
 def route_stack(*, languages: TagCloud = (), components: Iterable[str] = (), build_facts: Iterable[str] = (),
-                interfaces: Iterable[str] = (), subject_tags: Iterable[str] = ()) -> dict[str, Any]:
+                interfaces: Iterable[str] = (), subject_tags: Iterable[str] = (),
+                facet_tags: Iterable[str] = ()) -> dict[str, Any]:
     """``stack-routing/1`` from accepted ``lang``, ``component``, build, and interface facts.
 
     Order: mobile, wasm, C/C++ (embedded, RPC, native), managed-language services (heaviest
     language first, then table order), CI workflow subjects, deployment subjects, ``generic``.
-    ``subject_tags`` carries accepted ``func:net:grpc`` and ``infra:*`` subject facts.
+    ``subject_tags`` carries accepted ``func:net:grpc`` and ``infra:*`` subject facts. ``facet_tags``
+    carries the scope's collation facets (T-5008): ``mechanism:rpc`` joins the C-family RPC basis, and a
+    managed-language scope with a listener facet selects its service stack without a ``component:*`` tag.
     """
     language_weights = _weights(languages)
+    facets = set(facet_tags)
     langs = {tag for tag, weight in language_weights.items() if weight > 0}
     comps, build, iface, subject = set(components), set(build_facts), set(interfaces), set(subject_tags)
     facts = comps | {f"build:{fact}" for fact in build}
@@ -149,12 +158,14 @@ def route_stack(*, languages: TagCloud = (), components: Iterable[str] = (), bui
         if "lang:c" in langs and embedded:
             return _stack("c_systems_embedded", ["lang:c", *(f"build:{fact}" for fact in embedded)])
         rpc = sorted(iface & RPC_INTERFACES)
-        if "func:net:grpc" in subject or rpc:
+        if "func:net:grpc" in subject or rpc or "mechanism:rpc" in facets:
             grpc = ["func:net:grpc"] if "func:net:grpc" in subject else []
-            return _stack("cpp_rpc_service", [*c_family, *grpc, *(f"interface:{item}" for item in rpc)])
+            facet = ["mechanism:rpc"] if "mechanism:rpc" in facets else []
+            return _stack("cpp_rpc_service", [*c_family, *grpc, *facet, *(f"interface:{item}" for item in rpc)])
         return _stack("cpp_native_service", c_family)
     service = sorted(comps & SERVICE_COMPONENTS)
-    if service:
+    listener = sorted(facets & LISTENER_FACETS)
+    if service or listener:
         candidates = []
         for position, (stack, stack_langs) in enumerate(MANAGED_STACKS):
             present = [tag for tag in stack_langs if tag in langs]
@@ -162,7 +173,7 @@ def route_stack(*, languages: TagCloud = (), components: Iterable[str] = (), bui
                 candidates.append((-sum(language_weights[tag] for tag in present), position, stack, present))
         if candidates:
             _, _, stack, present = min(candidates)
-            return _stack(stack, [*present, *service])
+            return _stack(stack, [*present, *service, *listener])
     ci = sorted(tag for tag in subject if tag.startswith(CI_PREFIXES))
     if ci:
         return _stack("ci_pipeline", ci)
@@ -223,7 +234,8 @@ def hunt_panel(personas: PersonaCovers, *, unit_tags: TagCloud, available_source
     """``hunt-panel/1``: choose ``size`` distinct (strategy, persona) pairs for one hunt package.
 
     Strategy candidates in order: ``variant`` (round >= 1 only), ``sink_up``, ``entry_down``,
-    ``control_gap``; the first ``size`` candidates become slots. A slot whose required data source
+    ``control_gap``; a unit tagged ``trust:user-tainted`` or ``exposure:client-facing`` (T-5008) tries
+    ``entry_down`` before ``sink_up``. The first ``size`` candidates become slots. A slot whose required data source
     is unavailable records a ``coverage_gap`` and falls back to ``persona_sweep``. Remaining slots
     are ``persona_sweep``. Slot ``i`` takes the ``i``-th ranked persona, so pairs are distinct.
     """
@@ -235,7 +247,11 @@ def hunt_panel(personas: PersonaCovers, *, unit_tags: TagCloud, available_source
     unknown = sorted(sources - DATA_SOURCES)
     if unknown:
         raise GuidanceError(f"hunt panel data source is unknown: {', '.join(unknown)}")
-    candidates = [HuntStrategy.SINK_UP.value, HuntStrategy.ENTRY_DOWN.value, HuntStrategy.CONTROL_GAP.value]
+    weights = _weights(unit_tags)
+    tainted = sorted(tag for tag in TAINTED_FACETS if weights.get(tag, 0.0) > 0)
+    candidates = ([HuntStrategy.ENTRY_DOWN.value, HuntStrategy.SINK_UP.value, HuntStrategy.CONTROL_GAP.value]
+                  if tainted else
+                  [HuntStrategy.SINK_UP.value, HuntStrategy.ENTRY_DOWN.value, HuntStrategy.CONTROL_GAP.value])
     if round_index >= 1:
         candidates.insert(0, HuntStrategy.VARIANT.value)
     slots: list[str] = []
@@ -268,7 +284,8 @@ def hunt_panel(personas: PersonaCovers, *, unit_tags: TagCloud, available_source
                       "persona_basis": choice["basis"], "matched_tags": list(choice["matched_tags"])})
     routing_gap = any(cell["persona"] == GENERALIST for cell in cells)
     return {"rule": PANEL_RULE, "round": round_index, "cells": cells, "gaps": gaps,
-            "routing_gap": routing_gap, "persona_ranking": [item["persona"] for item in ranking]}
+            "routing_gap": routing_gap, "persona_ranking": [item["persona"] for item in ranking],
+            "strategy_basis": tainted}
 
 
 # ---------------------------------------------------------------------------------------------

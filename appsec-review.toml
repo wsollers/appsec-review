@@ -2946,6 +2946,8 @@ lead_hint_info = 10                  # per info lead hint
 lead_hints_max = 1000                # cap on the summed lead hints
 advisory_kev = 250                   # any advisory in the unit is CISA KEV-listed
 advisory_epss = 250                  # times the unit's highest EPSS percentile
+facet_exposure = 50                  # T-5008: a file of the unit is exposure:client-facing (collation facet)
+facet_trust = 50                     # T-5008: a file of the unit is trust:user-tainted (collation facet)
 
 # Package assembly bounds; admission and the hunt cutoff are lanes.lead_admission and lanes.hunt_max_units.
 [jobs.job_inference_security_review.settings.packages]

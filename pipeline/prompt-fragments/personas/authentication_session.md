@@ -1,7 +1,7 @@
 ---
 id: authentication_session
-version: 1
-covers: ["cwe:287", "cwe:288", "cwe:290", "cwe:294", "cwe:306", "cwe:307", "cwe:347", "cwe:352", "cwe:384", "cwe:521", "cwe:613", "cwe:614", "cwe:620", "cwe:640", "cwe:1004", "cwe:1275", "func:authn:*", "func:session:*"]
+version: 2
+covers: ["cwe:287", "cwe:288", "cwe:290", "cwe:294", "cwe:306", "cwe:307", "cwe:347", "cwe:352", "cwe:384", "cwe:521", "cwe:613", "cwe:614", "cwe:620", "cwe:640", "cwe:1004", "cwe:1275", "func:authn:*", "func:session:*", "role:auth", "role:session", "asset:credentials", "asset:session-tokens", "state:session"]
 standards: ["cwe", "capec", "attack", "asvs5", "api-top10-2023"]
 max_tokens: 1500
 ---

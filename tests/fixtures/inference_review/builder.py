@@ -211,7 +211,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              advisory_extra: dict[str, dict[str, Any]] | None = None,
                              secrets: bool = False, secret_extra: dict[str, Any] | None = None,
                              third_party: bool = False, config: Path | None = None,
-                             facets: bool = False) -> FixtureRun:
+                             facets: bool | str = False) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -411,7 +411,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
         # Collation facets (T-5008) as the tagging job publishes them: the svc handler is an HTTP login route,
         # the native parser a CLI; each component carries its target class.
         facet_rows = []
-        facet_specs = [
+        svc_web = [
             ("svc/api/handler.py", "component:0001", "declared", "role:auth"),
             ("svc/api/handler.py", "component:0001", "declared", "mechanism:http"),
             ("svc/api/handler.py", "component:0001", "declared", "mechanism:networked-listener"),
@@ -420,11 +420,30 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             ("svc/api/handler.py", "component:0001", "derived", "exposure:client-facing"),
             ("svc/api/handler.py", "component:0001", "derived", "asset:credentials"),
             ("svc/api/handler.py", "component:0001", "derived", "state:session"),
+            (None, "component:0001", "derived", "target:web-api"),
+        ]
+        # facets="cli": the svc handler is a command-line tool (T-5008 Done-when (c), a target that admits
+        # neither ASVS nor MASVS).
+        svc_cli = [
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:cli"),
+            ("svc/api/handler.py", "component:0001", "derived", "trust:user-tainted"),
+            ("svc/api/handler.py", "component:0001", "derived", "exposure:operator-only"),
+            (None, "component:0001", "derived", "target:cli"),
+        ]
+        native_cli = [
             ("native/src/parse.c", "component:0002", "declared", "mechanism:cli"),
             ("native/src/parse.c", "component:0002", "derived", "trust:user-tainted"),
             ("native/src/parse.c", "component:0002", "derived", "exposure:operator-only"),
-            (None, "component:0001", "derived", "target:web-api"),
             (None, "component:0002", "derived", "target:cli"),
+        ]
+        # facets="android": the native component is an Android application (MASVS applies).
+        native_android = [
+            ("native/src/parse.c", "component:0002", "declared", "component:android-mobile"),
+            (None, "component:0002", "derived", "target:mobile"),
+        ]
+        facet_specs = [
+            *(svc_cli if facets == "cli" else svc_web),
+            *(native_android if facets == "android" else native_cli),
         ]
         for number, (path, component_id, basis, tag) in enumerate(facet_specs):
             assignment_id = "tag:" + hashlib.sha256(f"facet-{number}-{tag}".encode()).hexdigest()

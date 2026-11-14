@@ -54,7 +54,9 @@ def test_without_facet_records_the_unit_context_says_so_and_still_validates(tmp_
     assembly = assemble_packages(accept_manifest(fixture.run_root))
     for context in assembly.unit_contexts:
         jsonschema.validate(context.document, UNIT_CONTEXT_SCHEMA_DOCUMENT)
-        assert context.document["facets"] == {"rule": UNIT_FACETS_RULE, "tags": [], "target_classes": []}
+        assert context.document["facets"] == {
+            "rule": UNIT_FACETS_RULE, "obligation_rule": "appsec-review/hunt-facet-obligations/1",
+            "tags": [], "target_classes": [], "obligations": []}
 
 
 def test_resolved_hunt_package_exposes_the_facets_through_its_reference(faceted, tmp_path: Path) -> None:
@@ -72,3 +74,34 @@ def test_resolved_hunt_package_exposes_the_facets_through_its_reference(faceted,
     resolved = resolve_package_document(package_path)
     assert resolved["unit_context"]["sha256"] == stored["unit_context"]["sha256"]
     assert set(document["entity_ids"]) <= set(resolved["retrieval"]["entity_ids"])
+
+
+def test_facets_derive_closed_hunt_obligations_and_the_view_renders_them(faceted) -> None:
+    """Done-when (b): the hunt package for the login unit carries the derived obligations."""
+    from appsec_review.review.package_view import ViewLimits, build_view
+    from appsec_review.review.packages import FACET_OBLIGATIONS, HUNT_FACET_OBLIGATION_RULE
+    from appsec_review.retrieval.core import RetrievalCore
+    fixture, assembly = faceted
+    svc = _context(assembly, "component:0001").document["facets"]
+    obligations = {item["obligation"]: item["basis_tags"] for item in svc["obligations"]}
+    assert set(obligations) == {"authentication_enforced", "session_lifecycle", "input_validation", "secret_handling"}
+    assert obligations["session_lifecycle"] == ["role:session", "state:session"]
+    assert obligations["input_validation"] == ["trust:user-tainted"]
+    assert svc["obligation_rule"] == HUNT_FACET_OBLIGATION_RULE
+    assert set(obligations) <= set(FACET_OBLIGATIONS)
+    native = _context(assembly, "component:0002").document["facets"]
+    assert [item["obligation"] for item in native["obligations"]] == ["input_validation"]
+    hunt = next(item for item in assembly.packages if item.kind == "hunt"
+                and item.document()["scope"]["component_id"] == "component:0001")
+    resolved = hunt.resolved()
+    assert resolved["unit_facets"]["obligations"] == svc["obligations"]
+    assert sorted(resolved["proof_obligations"]) == resolved["proof_obligations"], "predicate obligations are unchanged"
+    core = RetrievalCore(fixture.runs_dir, fixture.run_id)
+    view = build_view(resolved, core, ViewLimits(48 * 1024, 160, 6)).document
+    assert view["facets"]["target_classes"] == ["target:web-api"]
+    assert set(view["facets"]["tags"]) >= {"role:auth", "mechanism:http", "trust:user-tainted"}
+    assert view["facets"]["obligations"] == svc["obligations"]
+    # Closed ids only: no assignment id, evidence span or free text reaches the worker through the facets.
+    assert set(view["facets"]) == {"rule", "tags", "target_classes", "obligations"}
+    lead = next(item for item in assembly.packages if item.kind == "finding_lead")
+    assert build_view(lead.resolved(), core, ViewLimits(48 * 1024, 160, 6)).document["facets"] is None

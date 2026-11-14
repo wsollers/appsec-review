@@ -9,7 +9,7 @@ from appsec_review.guidance import (
     route_stack,
 )
 from appsec_review.guidance.fragments import load_tool_names
-from appsec_review.guidance.routing import STACK_IDS
+from appsec_review.guidance.routing import STACK_IDS, rank_personas
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.storage import file_sha256
@@ -100,6 +100,40 @@ def test_persona_routing_specificity_and_tie_break_are_deterministic() -> None:
 def test_stack_routing_table(facts, stack: str, basis: list[str]) -> None:
     route = route_stack(**facts)
     assert route == {"rule": "stack-routing/1", "stack": stack, "basis": basis, "routing_gap": False}
+
+
+def test_facets_select_a_service_stack_and_the_rpc_basis_without_component_tags() -> None:
+    """T-5008: a listener facet is the evidence a language alone never was."""
+    route = route_stack(languages=["lang:python"], facet_tags=["mechanism:http", "mechanism:networked-listener",
+                                                              "trust:user-tainted"])
+    assert route == {"rule": "stack-routing/1", "stack": "python_service",
+                     "basis": ["lang:python", "mechanism:http", "mechanism:networked-listener"], "routing_gap": False}
+    assert route_stack(languages=["lang:python"], facet_tags=["trust:user-tainted"])["stack"] == "generic"
+    rpc = route_stack(languages=["lang:cpp"], facet_tags=["mechanism:rpc"])
+    assert (rpc["stack"], rpc["basis"]) == ("cpp_rpc_service", ["lang:cpp", "mechanism:rpc"])
+    assert route_stack(languages=["lang:cpp"], facet_tags=["mechanism:cli"])["stack"] == "cpp_native_service"
+
+
+def test_personas_rank_on_facet_covers_and_facets_stay_out_of_the_partition(taxonomy) -> None:
+    personas = {**PERSONAS, "authentication_session": (*PERSONAS["authentication_session"], "role:auth", "asset:*")}
+    route = route_persona(personas, location_tags=["role:auth", "lang:python"])
+    assert (route["persona"], route["basis"], route["matched_tags"]) == ("authentication_session", "location_tags",
+                                                                       ["role:auth"])
+    ranked = rank_personas(personas, {"role:auth": 1, "asset:credentials": 1, "func:exec:shell": 1})
+    assert ranked[0]["persona"] == "authentication_session" and ranked[0]["score"] == 2
+    vocabulary, crosswalk = taxonomy
+    assert partition_check(personas, vocabulary, crosswalk)["orphans"] == partition_check(
+        PERSONAS, vocabulary, crosswalk)["orphans"], "facet covers add no partition obligation"
+
+
+def test_tainted_unit_tries_entry_down_before_sink_up() -> None:
+    tainted = {**UNIT, "trust:user-tainted": 1, "exposure:client-facing": 1}
+    panel = hunt_panel(PERSONAS, unit_tags=tainted, available_sources=["source_sink_facts", "entry_point_catalog"])
+    assert [cell["strategy"] for cell in panel["cells"]] == ["entry_down", "sink_up", "persona_sweep"]
+    assert panel["strategy_basis"] == ["exposure:client-facing", "trust:user-tainted"]
+    plain = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["source_sink_facts", "entry_point_catalog"])
+    assert [cell["strategy"] for cell in plain["cells"]] == ["sink_up", "entry_down", "persona_sweep"]
+    assert plain["strategy_basis"] == []
 
 
 def test_stack_routing_generic_fallback_records_gap() -> None:

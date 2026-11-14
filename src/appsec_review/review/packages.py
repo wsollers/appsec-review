@@ -109,7 +109,22 @@ from appsec_review.storage.atomic import canonical_json
 PACKAGE_SCHEMA = "appsec-review/review-package/7"
 ASSEMBLY_RULE = "appsec-review/assemble-review-packages/14"
 UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/2"
-UNIT_FACETS_RULE = "appsec-review/unit-facets/1"
+UNIT_FACETS_RULE = "appsec-review/unit-facets/2"
+HUNT_FACET_OBLIGATION_RULE = "appsec-review/hunt-facet-obligations/1"
+# Closed hunt obligations a unit's collation facets derive (T-5008). Each names the facets it rests on;
+# the view renders them beside the predicate obligations as bounded questions, never as findings.
+FACET_OBLIGATIONS: Mapping[str, tuple[str, ...]] = {
+    "authentication_enforced": ("role:auth",),
+    "session_lifecycle": ("role:session", "state:session"),
+    "input_validation": ("trust:user-tainted",),
+    "authorization_checked": ("role:authorization",),
+    "secret_handling": ("asset:credentials", "asset:keys"),
+    "deserialization_safety": ("role:serialization",),
+    "storage_query_safety": ("role:storage",),
+    "crypto_misuse": ("role:crypto",),
+    "path_and_file_handling": ("mechanism:file",),
+    "logging_hygiene": ("role:logging",),
+}
 UNIT_CONTEXT_DIRECTORY = "unit-context"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
@@ -344,7 +359,9 @@ def merge_unit_context(document: Mapping[str, Any], unit_document: Mapping[str, 
     retrieval = {**document["retrieval"],
                  "entity_ids": sorted({*document["retrieval"]["entity_ids"], *unit_document["entity_ids"]})}
     return {**document, "scope": {**scope, "source_ids": list(unit_scope["source_ids"])},
-            "context": [dict(item) for item in unit_document["context"]], "retrieval": retrieval}
+            "context": [dict(item) for item in unit_document["context"]], "retrieval": retrieval,
+            # The unit's collation facets and derived hunt obligations (T-5008), for the view and routing.
+            "unit_facets": dict(unit_document.get("facets") or {})}
 
 
 def load_unit_context(assembly_dir: Path, reference: Mapping[str, Any]) -> dict[str, Any]:
@@ -1332,12 +1349,15 @@ class _Assembler:
                 row["subjects"].add(item["subject"])
                 row["assignment_ids"].add(item["assignment_id"])
                 row["entity_ids"].add(item["identity"])
-        return {"rule": UNIT_FACETS_RULE,
+        present = set(rows)
+        obligations = [{"obligation": name, "basis_tags": sorted(present & set(tags))}
+                       for name, tags in sorted(FACET_OBLIGATIONS.items()) if present & set(tags)]
+        return {"rule": UNIT_FACETS_RULE, "obligation_rule": HUNT_FACET_OBLIGATION_RULE,
                 "tags": [{"tag": row["tag"], "namespace": row["namespace"], "basis": row["basis"],
                           "subjects": len(row["subjects"]), "assignment_ids": sorted(row["assignment_ids"]),
                           "entity_ids": sorted(row["entity_ids"])}
                          for _tag, row in sorted(rows.items())],
-                "target_classes": sorted(targets)}
+                "target_classes": sorted(targets), "obligations": obligations}
 
     def scoped_tags(self, component_id: str, source_ids: Iterable[str], paths: Iterable[str]) -> list[ContextEntry]:
         return [entry for key in {component_id, *source_ids, *paths} for entry in self.routing_tags.get(key, ())]

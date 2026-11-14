@@ -29,6 +29,7 @@ _ASSIGNMENT = re.compile(
 _CREDENTIAL = re.compile(r"\b(?:sk_live_|gh[pousr]_|github_pat_|AKIA)[A-Za-z0-9_/-]+")
 _BASIC_AUTH = re.compile(r"(?P<head>https?://[^/\s:@]+:)(?P<value>[^@\s/]+)(?=@)")
 _ROUTING_INDEXES = frozenset({"tags", "priority", "graph"})
+_TAG_NAME = re.compile(r"^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9.-]*){1,3}$")
 _CONCLUSION_KINDS = frozenset({
     "precomputed_fact", "finding_package", "review_unit", "review_signal", "review_flow_step",
     "review_context_file", "coverage_cell",
@@ -513,8 +514,11 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         if len(routes[owner]) > settings.max_evidence_per_component:
             continue
         payload = row["payload"]
+        name = row.get("name")
         routes[owner].append({
             "identity": row["identity"], "kind": row["kind"], "index": row["index"],
+            # The entity name is the tag itself (closed vocabulary); the payload copy may be redacted.
+            "name": name if isinstance(name, str) and _TAG_NAME.match(name) else None,
             "content_sha256": digest({"payload": payload, "location": row.get("location")}),
             "usage": "routing_only", "tag": _redact_data(payload.get("tag")),
             "basis": _redact_data(payload.get("basis")), "subject": _redact_data(payload.get("subject")),

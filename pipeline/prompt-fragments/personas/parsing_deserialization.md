@@ -1,7 +1,7 @@
 ---
 id: parsing_deserialization
-version: 2
-covers: ["cwe:20", "cwe:409", "cwe:502", "cwe:611", "cwe:674", "cwe:776", "cwe:827", "cwe:1287", "cwe:1333", "func:data:parse-json", "func:data:parse-xml", "func:data:parse-yaml", "func:data:deserialize-native", "func:data:regex", "func:data:archive-extract"]
+version: 3
+covers: ["cwe:20", "cwe:409", "cwe:502", "cwe:611", "cwe:674", "cwe:776", "cwe:827", "cwe:1287", "cwe:1333", "func:data:parse-json", "func:data:parse-xml", "func:data:parse-yaml", "func:data:deserialize-native", "func:data:regex", "func:data:archive-extract", "role:serialization", "role:input-parsing"]
 standards: ["cwe", "capec", "attack", "asvs5"]
 max_tokens: 1500
 ---

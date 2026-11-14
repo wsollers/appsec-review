@@ -1,7 +1,7 @@
 ---
 id: injection_interpreters
-version: 1
-covers: ["cwe:74", "cwe:77", "cwe:78", "cwe:79", "cwe:88", "cwe:89", "cwe:90", "cwe:94", "cwe:95", "cwe:113", "cwe:114", "cwe:116", "cwe:117", "cwe:426", "cwe:427", "cwe:470", "cwe:643", "cwe:917", "cwe:943", "cwe:1236", "cwe:1336", "func:data:sql-query", "func:data:orm", "func:data:nosql-query", "func:data:ldap-query", "func:data:template-render", "func:exec:shell", "func:exec:process-spawn", "func:exec:dynamic-eval", "func:exec:dynamic-load"]
+version: 2
+covers: ["cwe:74", "cwe:77", "cwe:78", "cwe:79", "cwe:88", "cwe:89", "cwe:90", "cwe:94", "cwe:95", "cwe:113", "cwe:114", "cwe:116", "cwe:117", "cwe:426", "cwe:427", "cwe:470", "cwe:643", "cwe:917", "cwe:943", "cwe:1236", "cwe:1336", "func:data:sql-query", "func:data:orm", "func:data:nosql-query", "func:data:ldap-query", "func:data:template-render", "func:exec:shell", "func:exec:process-spawn", "func:exec:dynamic-eval", "func:exec:dynamic-load", "role:storage"]
 standards: ["cwe", "capec", "attack", "asvs5", "top10-2025"]
 max_tokens: 1500
 ---

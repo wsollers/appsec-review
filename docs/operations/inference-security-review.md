@@ -193,7 +193,8 @@ target class and facet-derived hunt obligations; `route_stack` reads `mechanism:
 managed-language scope with an HTTP or RPC listener selects its service stack without a
 `component:*` tag; personas may cover facets; `hunt_panel` tries `entry_down` first on a
 `trust:user-tainted` unit; and `ranking.facet_exposure`/`ranking.facet_trust` weight exposed,
-tainted units. The design page records which of these are implemented.
+tainted units (`review-unit-rank/4`). All of these are implemented; the hunt view shows the facets,
+target classes and derived obligations under `facets` as closed ids.
 
 Teams run package-local follow-up rounds up to `rounds.max_rounds`. Each round applies the existing
 deterministic R5 evidence policy and R6 verifier-independence checks to accumulated evidence.
@@ -686,7 +687,7 @@ signal (a missing producer or feed) still contributes nothing, whatever its weig
 
 The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
 and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
-which reassembles hunt packages. `review-unit-rank/3` replaces raw tag counting: language, gap,
+which reassembles hunt packages. `review-unit-rank/4` replaces raw tag counting: language, gap,
 reported and derived tags do not add operation points; multiple labels/producers at one physical
 site count once. Missing or partial evidence remains unknown rather than proving absence.
 Fresh packages use `assemble-review-packages/14` and the model-facing `package-view/6`.

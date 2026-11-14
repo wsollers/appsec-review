@@ -1,7 +1,7 @@
 ---
 id: business_logic_abuse
-version: 1
-covers: ["cwe:472", "cwe:602", "cwe:642", "cwe:799", "cwe:837", "cwe:840", "cwe:841", "cwe:1284"]
+version: 2
+covers: ["cwe:472", "cwe:602", "cwe:642", "cwe:799", "cwe:837", "cwe:840", "cwe:841", "cwe:1284", "asset:money"]
 standards: ["cwe", "capec", "asvs5", "api-top10-2023"]
 max_tokens: 1500
 ---

@@ -8,7 +8,7 @@
   "required": ["schema", "rule", "protocol", "kind", "lane", "lead_family", "persona", "stack_profile", "scope",
                "partition", "rank", "leads", "source", "neighborhood", "build", "corroboration", "tags",
                "other_context", "material_gaps", "gap_counts", "files", "omitted", "proof_obligations",
-               "graph_families", "truncation", "unit_context"],
+               "graph_families", "truncation", "unit_context", "facets"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-view/1"},
     "rule": {"enum": ["appsec-review/package-view/4", "appsec-review/package-view/5",
@@ -109,6 +109,26 @@
       "additionalProperties": {"type": "integer", "minimum": 1}
     },
     "proof_obligations": {"type": "array", "items": {"type": "string"}},
+    "facets": {
+      "description": "Hunt packages (T-5008): the hunted unit's collation facets as closed tag ids, the component's target classes and the hunt obligations they derive (hunt-facet-obligations/1). Routing data for the worker, never evidence. null on a finding-lead view or when the unit has no facet record.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule", "tags", "target_classes", "obligations"],
+          "properties": {
+            "rule": {"type": "string", "pattern": "^appsec-review/unit-facets/[0-9]+$"},
+            "tags": {"type": "array", "items": {"type": "string", "pattern": "^(role|exposure|trust|mechanism|asset|state):[a-z0-9][a-z0-9.-]*$"}},
+            "target_classes": {"type": "array", "items": {"type": "string", "pattern": "^target:[a-z0-9-]+$"}},
+            "obligations": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                            "required": ["obligation", "basis_tags"],
+                            "properties": {"obligation": {"type": "string", "pattern": "^[a-z_]+$"},
+                                           "basis_tags": {"type": "array", "items": {"type": "string"}}}}}
+          }
+        }
+      ]
+    },
     "graph_families": {"type": "array", "items": {"type": "string"}},
     "truncation": {"type": ["object", "null"]},
     "unit_context": {

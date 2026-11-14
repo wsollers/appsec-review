@@ -1277,6 +1277,12 @@ def load_control_assessment(run_root: Path, snapshot: str, result: Mapping[str, 
     return cache[key]
 
 
+def control_evidence_candidate(record: Mapping[str, Any]) -> bool:
+    """A control-result row the target-class gate marked ``not_applicable`` (T-5008) is a ledger entry,
+    never a ``control_evidence`` fact; every other row stays a candidate for projection."""
+    return record.get("applicability") != "not_applicable"
+
+
 def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
     derived, shards, name = Derived(), context.shards, "control_evidence"
     if context.owasp.get("status") != "accepted":
@@ -1298,6 +1304,7 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
         consume_named(context.run_root, path, namespace="owasp-shard", expected_sha256=shard["sha256"])
         for record in json.loads(path.read_text(encoding="utf-8")).get("records", ()):
             results.append((shard, record))
+    results = [pair for pair in results if control_evidence_candidate(pair[1])]
     results.sort(key=lambda pair: (str(pair[1].get("component_id")), str(pair[1].get("control_identity"))))
     unresolved_total = 0
     for shard, record in results[:context.max_facts]:

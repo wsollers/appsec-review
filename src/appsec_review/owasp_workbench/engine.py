@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 import hashlib
-from itertools import islice
 from pathlib import PurePosixPath
+import re
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.storage import canonical_json
@@ -26,26 +26,6 @@ APPLICABILITY_OUTCOMES = {
     "unsupported_missing_evidence",
 }
 RESULT_STATUSES = {"satisfied", "not_satisfied", "cannot_verify", "not_assessed"}
-_CAPABILITY_TAG_ROLES = {
-    f"func:{capability}": role
-    for role, capabilities in {
-        "storage": ("data:sql-query", "data:nosql-query", "data:orm", "data:ldap-query"),
-        "authentication_identity": (
-            "authn:password", "authn:mfa", "authn:webauthn", "authn:oauth2-client",
-            "authn:oauth2-server", "authn:oidc", "authn:saml", "authn:jwt", "authn:api-key",
-            "authn:mtls-client", "authn:credential-recovery", "session:cookie",
-            "session:server-store", "session:token-refresh", "session:csrf-token"),
-        "cryptography_data_protection": (
-            "crypto:symmetric", "crypto:asymmetric-sign", "crypto:asymmetric-encrypt",
-            "crypto:hash", "crypto:password-hash", "crypto:mac", "crypto:rng",
-            "crypto:key-mgmt", "crypto:cert-validation"),
-        "network": ("net:http-client", "net:grpc", "net:websocket", "net:tls-server",
-                    "net:tls-client", "net:raw-socket", "net:dns", "net:redirect"),
-    }.items()
-    for capability in capabilities
-}
-
-
 def _hash(value: Any) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
@@ -59,64 +39,56 @@ def _citation_valid(citation: Mapping[str, Any]) -> bool:
             and lines[1] >= lines[0])
 
 
-def _bounded_strings(values: Iterable[Any], *, limit: int, length: int = 512) -> list[str]:
-    return [str(value)[:length] for value in islice(values, limit)]
+CLASSIFICATION_SCHEMA = "appsec-review/component-classification/2"
+# T-5008: the control family a target class admits. A component without the class gets every selected
+# control of the family as not_applicable, citing the class assignment; no batch is dispatched for it.
+FAMILY_TARGET_CLASSES = {"ASVS": "target:web-api", "MASVS": "target:mobile"}
+# Collation facets and classes (docs/architecture/collation-pass.md) to the control roles the catalogs
+# name. The workbench keeps no classifier of its own: a role exists only when a tag establishes it.
+FACET_COMPONENT_ROLES: Mapping[str, tuple[str, ...]] = {
+    "role:auth": ("authentication_identity",), "role:session": ("authentication_identity",),
+    "role:authorization": ("authentication_identity",),
+    "role:storage": ("storage",), "state:persistent-store": ("storage",),
+    "role:crypto": ("cryptography_data_protection",), "asset:keys": ("cryptography_data_protection",),
+    "asset:credentials": ("cryptography_data_protection",),
+    "mechanism:http": ("application_api_server", "network"), "mechanism:rpc": ("application_api_server", "network"),
+    "mechanism:networked-listener": ("network",), "target:web-api": ("application_api_server",),
+    "component:android-mobile": ("android_mobile",), "component:ios-mobile": ("ios_mobile",),
+    "role:build-glue": ("build_supply_chain",), "exposure:build-time": ("build_supply_chain",),
+    "target:build-tooling": ("build_supply_chain",),
+    "role:test": ("test_development_only",), "target:test-only": ("test_development_only",),
+}
+_TAG = re.compile(r"^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9.-]*){1,3}$")
+_ROUTING_BASES = frozenset({"declared", "invoked", "derived", "reported"})
+_FACET_NAMESPACES = frozenset({"role", "exposure", "trust", "mechanism", "asset", "state"})
 
 
-def _deterministic_roles(component: Mapping[str, Any]) -> tuple[set[str], list[str]]:
-    paths = [str(value).lower().replace("\\", "/") for value in component.get("paths", ())]
-    languages = {str(value).lower() for value in component.get("languages", ())}
-    frameworks = {str(value).lower() for value in component.get("frameworks", ())}
-    tags = {str(value).lower() for value in component.get("tags", ())}
-    roles: set[str] = set()
-    reasons: list[str] = []
+def _routing_tag(record: Any) -> tuple[str, str] | None:
+    """``(tag, basis)`` of one accepted routing record, or None when it establishes nothing.
 
-    def mark(role: str, reason: str) -> None:
-        roles.add(role)
-        reasons.append(reason)
-
-    if tags & {"api", "server", "backend", "application"} or frameworks & {
-        "django", "flask", "fastapi", "spring", "express", "aspnet", "rails",
-    }:
-        mark("application_api_server", "accepted component metadata identifies an application/API/server")
-    if tags & {"frontend", "web-ui"} or languages & {"typescript", "javascript"} and any(
-            value.endswith(("package.json", "vite.config.ts", "next.config.js")) for value in paths):
-        mark("web_frontend", "accepted web build/language signals identify a frontend")
-    if tags & {"android", "mobile-android"} or languages & {"kotlin"} and any(
-            "androidmanifest.xml" in value for value in paths):
-        mark("android_mobile", "accepted Android manifest/language signals identify a mobile component")
-    if tags & {"ios", "mobile-ios"} or languages & {"swift", "objective-c"} and any(
-            value.endswith(("info.plist", ".xcodeproj/project.pbxproj")) for value in paths):
-        mark("ios_mobile", "accepted iOS project/language signals identify a mobile component")
-    keyword_roles = {
-        "authentication_identity": ("auth", "identity", "session", "oauth", "oidc"),
-        "cryptography_data_protection": ("crypto", "encrypt", "key-management", "secrets"),
-        "storage": ("storage", "database", "persistence", "repository"),
-        "network": ("network", "transport", "tls", "http-client"),
-        "platform_integration": ("platform", "integration", "plugin"),
-        "build_supply_chain": ("build", "dependency", "supply-chain", "ci"),
-        "deployment_operations": ("deployment", "operations", "iac", "container"),
-        "administrative_tooling": ("admin", "operator", "management"),
-        "test_development_only": ("test-only", "development-only", "fixture"),
-    }
-    for role, signals in keyword_roles.items():
-        if tags.intersection(signals):
-            mark(role, f"accepted component tags identify the {role} role")
-    if any(value.startswith(("tests/", "test/", "fixtures/")) for value in paths) and paths and all(
-            value.startswith(("tests/", "test/", "fixtures/")) for value in paths):
-        mark("test_development_only", "all accepted component paths are test/development fixtures")
-    return roles, reasons
+    The entity ``name`` carries the tag: the index sanitizer redacts payload strings that look like
+    secrets (``asset:credentials``). Only a grammatical tag with a recorded basis counts.
+    """
+    if not isinstance(record, Mapping) or not isinstance(record.get("basis"), str) \
+            or record["basis"] not in _ROUTING_BASES:
+        return None
+    for key in ("name", "tag"):
+        value = record.get(key)
+        if isinstance(value, str) and _TAG.match(value):
+            return value, str(record["basis"])
+    return None
 
 
-def characterize_components(
+def classify_components(
     components: Sequence[Mapping[str, Any]], *,
-    inference: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
     max_components: int = 128,
     assessment_mode: str = "qualification",
 ) -> tuple[dict[str, Any], ...]:
-    """Classify coherent accepted components without reading a target tree.
+    """Read each component's target class and control roles from its accepted collation tags.
 
-    The optional resolver receives only bounded component metadata and cited index signals.
+    No target tree is read and nothing is inferred: ``target:*`` and facet assignments of the tags
+    index (``routing_context``) are the only source, each cited by identity and assignment id. A
+    component without a target class is ``low`` confidence and records the gap; it never guesses.
     """
     if not 1 <= len(components) <= max_components:
         raise ValueError("component characterization input exceeds its configured bound")
@@ -133,64 +105,60 @@ def characterize_components(
                 value.get("schema") == "appsec-review/owasp-evidence-reference/1"
                 if assessment_mode == "assessment" else _citation_valid(value)) for value in citations):
             raise ValueError(f"component {component_id} lacks resolving evidence citations")
-        roles, reasons = _deterministic_roles(raw)
         routing = list(raw.get("routing_context", ()))
-        for tag in routing:
-            if not isinstance(tag, Mapping) or tag.get("basis") not in ("declared", "invoked"):
+        tag_citations: list[dict[str, Any]] = []
+        tags: dict[str, str] = {}
+        for record in routing:
+            parsed = _routing_tag(record)
+            if parsed is None:
                 continue
-            name = tag.get("tag")
-            mapped = _CAPABILITY_TAG_ROLES.get(name) if isinstance(name, str) else None
+            tag, basis = parsed
+            namespace = tag.split(":", 1)[0]
+            if namespace == "target" and basis != "derived":
+                continue  # a class is only ever derived by collation
+            if namespace not in _FACET_NAMESPACES and namespace != "target" and tag not in FACET_COMPONENT_ROLES:
+                continue
+            tags.setdefault(tag, basis)
+            tag_citations.append({"tag": tag, "basis": basis, "identity": record.get("identity"),
+                                  "assignment_id": (record.get("subject") or {}).get("assignment_id")
+                                  if isinstance(record.get("subject"), Mapping) else None,
+                                  "usage": "routing_only"})
+        target_classes = sorted(tag for tag in tags if tag.startswith("target:"))
+        facets = sorted(tag for tag in tags if tag.split(":", 1)[0] in _FACET_NAMESPACES)
+        roles: set[str] = set()
+        reasons: list[str] = []
+        for tag in sorted(tags):
+            mapped = FACET_COMPONENT_ROLES.get(tag)
             if mapped:
-                roles.add(mapped)
-                reasons.append(f"accepted {tag['basis']} tag {name} routes context; "
+                roles.update(mapped)
+                reasons.append(f"accepted {tags[tag]} tag {tag} routes the roles {', '.join(mapped)}; "
                                "it is not control proof or deployment evidence")
-        inference_record = {"status": "not_needed", "proposal_sha256": None}
-        ambiguity = []
-        if not roles:
-            ambiguity.append("deterministic signals do not resolve component purpose/trust role")
-            if inference is not None:
-                request = {
-                    "schema": "appsec-review/component-inference-request/1",
-                    "component_id": component_id,
-                    "project_id": project_id,
-                    "paths": _bounded_strings(raw.get("paths", ()), limit=50),
-                    "languages": _bounded_strings(raw.get("languages", ()), limit=20, length=64),
-                    "frameworks": _bounded_strings(raw.get("frameworks", ()), limit=20, length=64),
-                    "tags": _bounded_strings(raw.get("tags", ()), limit=30, length=64),
-                    "evidence": citations[:20],
-                    "allowed_roles": sorted(COMPONENT_ROLES),
-                }
-                proposal = dict(inference(request))
-                proposed = proposal.get("roles")
-                if (not isinstance(proposed, list) or len(proposed) > 4 or
-                        any(value not in COMPONENT_ROLES for value in proposed)):
-                    inference_record = {"status": "rejected", "proposal_sha256": _hash(proposal)}
-                else:
-                    roles.update(str(value) for value in proposed)
-                    reasons.append("bounded inference resolved an otherwise ambiguous purpose/trust role")
-                    ambiguity.clear()
-                    inference_record = {"status": "accepted", "proposal_sha256": _hash(proposal)}
-        confidence = "high" if roles and inference_record["status"] == "not_needed" else (
-            "medium" if roles else "low")
+        if "target:mobile" in tags and not roles & MOBILE_ROLES:
+            roles.update(MOBILE_ROLES)
+            reasons.append("target:mobile without a platform tag routes both mobile roles; the platform is unknown")
+        gaps = ([] if target_classes else
+                ["collation assigned no target class to this component; applicability cannot be determined"])
         result = {
-            "schema": "appsec-review/component-classification/1",
+            "schema": CLASSIFICATION_SCHEMA,
             "target_id": str(raw.get("target_id", "target")),
             "project_id": project_id,
             "component_id": component_id,
+            "target_classes": target_classes,
+            "facets": facets,
             "roles": sorted(roles),
-            "confidence": confidence,
+            "confidence": "high" if target_classes else "low",
             "reasons": reasons,
+            "tag_citations": sorted(tag_citations, key=lambda item: (item["tag"], str(item["identity"]))),
             "evidence": citations,
             "assessment_mode": assessment_mode,
             "routing_context": routing,
             "evidence_fingerprint": raw.get("evidence_fingerprint"),
             "limitations": list(raw.get("limitations", ())),
-            "ambiguity": ambiguity,
+            "ambiguity": list(gaps),
             "negative_evidence_limits": [
-                "absence from accepted bounded indexes is not evidence that a role is absent"
+                "absence from accepted bounded indexes is not evidence that a role or class is absent"
             ],
-            "gaps": list(ambiguity),
-            "inference": inference_record,
+            "gaps": gaps,
             "input_fingerprint": _hash(raw),
         }
         if assessment_mode == "assessment":
@@ -201,6 +169,32 @@ def characterize_components(
             result["classification_fingerprint"] = _hash(result)
         results.append(result)
     return tuple(sorted(results, key=lambda item: (item["project_id"], item["component_id"])))
+
+
+def target_class_ledger(classifications: Sequence[Mapping[str, Any]], rows: Sequence[Mapping[str, Any]]
+                        ) -> dict[str, Any]:
+    """``target-class-ledger/1``: per component and control family, whether the class admits the family.
+
+    A ``not_applicable`` verdict here is a result of positive class evidence, not a gap; the row
+    outcomes it summarises carry the same citations.
+    """
+    entries = []
+    for component in classifications:
+        cid = component["component_id"]
+        for family, required in sorted(FAMILY_TARGET_CLASSES.items()):
+            family_rows = [row for row in rows if row["component_id"] == cid and row["standard"] == family]
+            outcomes: dict[str, int] = {}
+            for row in family_rows:
+                outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
+            classes = list(component.get("target_classes", ()))
+            entries.append({
+                "component_id": cid, "family": family, "required_class": required, "target_classes": classes,
+                "verdict": ("applicable" if required in classes else
+                            "not_applicable" if classes else "cannot_determine"),
+                "outcomes": dict(sorted(outcomes.items())), "selected_controls": len(family_rows),
+                "citations": [item for item in component.get("tag_citations", ()) if item["tag"].startswith("target:")],
+            })
+    return {"schema": "appsec-review/target-class-ledger/1", "rule": "target-class-gate/1", "entries": entries}
 
 
 def select_profiles(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int = 2,
@@ -242,29 +236,49 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
                             "component": component["component_id"]})
             matched = roles.intersection(set(control.get("component_roles", ())))
             family_match = bool(roles.intersection(allowed))
-            if component.get("confidence") == "low" or not roles:
+            classes = set(component.get("target_classes", ()))
+            required_class = FAMILY_TARGET_CLASSES.get(family)
+            class_citations = [item for item in component.get("tag_citations", ())
+                               if str(item.get("tag", "")).startswith("target:")]
+            gated = True
+            if not classes:
+                outcome = "cannot_determine"
+                reason = "component target class is unresolved: collation assigned no target tag"
+                gaps = ["target class unresolved; no control of this component is dispatched"]
+            elif required_class is not None and required_class not in classes:
+                outcome = "not_applicable"
+                reason = (f"component target class {', '.join(sorted(classes))} excludes {family}: "
+                          f"{required_class} is required; basis "
+                          + ", ".join(str(item.get("assignment_id") or item.get("identity")) for item in class_citations))
+                gaps = []
+            elif component.get("confidence") == "low" or not roles:
+                gated = False
                 outcome = "cannot_determine"
                 reason = "component purpose/trust role is unresolved"
                 gaps = ["bounded component classification did not resolve applicability"]
             elif not family_match:
+                gated = False
                 outcome = "not_applicable"
                 reason = (f"positive classification evidence identifies roles outside the {family} routing boundary: "
                           + ", ".join(sorted(roles)))
                 gaps = []
             elif not matched:
+                gated = False
                 outcome = "not_applicable"
                 reason = ("positive classification evidence identifies no role named by this control: "
                           + ", ".join(sorted(roles)))
                 gaps = []
             elif control.get("evidence_mode") in {"dynamic_runtime", "manual_observation"} and not dynamic_authorized:
+                gated = False
                 outcome = "unsupported_missing_evidence"
                 reason = "the selected control requires separately authorized dynamic/runtime or manual evidence"
                 gaps = ["required dynamic/runtime or manual evidence is not authorized"]
             else:
+                gated = False
                 outcome = "applicable"
                 reason = "component roles and selected control routing rules intersect"
                 gaps = []
-            if assessment_mode == "assessment":
+            if assessment_mode == "assessment" and not gated:
                 from .obligations import procedure_for
                 rule = procedure_for(control)
                 # Routing uncertainty is not positive N/A evidence. A concrete accepted source
@@ -297,8 +311,9 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
                 "required_tools": list(control.get("required_tools", ())),
                 "outcome": outcome, "reason": reason, "evidence": citations,
                 "confidence": component["confidence"], "gaps": gaps,
+                "target_classes": sorted(classes), "target_class_citations": class_citations,
                 "assessment_mode": assessment_mode,
-                "rule_version": "applicability-rules/1",
+                "rule_version": "applicability-rules/2",
             }
             if outcome not in APPLICABILITY_OUTCOMES:
                 raise AssertionError("invalid applicability outcome")

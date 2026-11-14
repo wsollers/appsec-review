@@ -60,8 +60,8 @@ def test_rank_is_deterministic_and_records_its_basis(scope) -> None:
     assert (svc["sii"].value, svc["sii"].state, svc["sii"].reason) == (None, "unknown", "no_record")
     record = ranked[0].rank_record()
     assert record["position"] == 1 and record["unit_count"] == 4
-    assert [item["signal"] for item in record["basis"]] == ["lps", "sii", "hotspot", "tag_density", "lead_hints",
-                                                             "advisory_kev", "advisory_epss"]
+    assert [item["signal"] for item in record["basis"]] == ["lps", "sii", "hotspot", "tag_density", "facets",
+                                                             "lead_hints", "advisory_kev", "advisory_epss"]
     # The native unit has no advisory lead: a true zero. The svc unit's requests advisory is KEV-listed
     # (CVE-2026-0001) with EPSS percentile 0.97.
     assert (native["advisory_kev"].value, native["advisory_epss"].value) == (0, 0)
@@ -150,7 +150,7 @@ def test_operation_rank_invalidates_the_old_label_count_rank(scope, unit_max_fil
     assert all(_signals(unit)["tag_density"].value in (0, None)
                for unit in build_units(scope, collect_leads(scope), unit_max_files=unit_max_files))
     assert (KEV_POINTS, EPSS_POINTS) == (RankWeights().advisory_kev, RankWeights().advisory_epss) == (250, 250)
-    assert RANK_RULE == "appsec-review/review-unit-rank/3"
+    assert RANK_RULE == "appsec-review/review-unit-rank/4"
 
 
 def test_changed_rank_weights_reorder_units_deterministically(scope) -> None:
@@ -202,3 +202,27 @@ def test_invalid_rank_weights_are_rejected(value, message) -> None:
         RankWeights.from_mapping(value)
     with pytest.raises(ValueError):
         PackageSettings.from_mapping({"rank_weights": value})
+
+
+def test_exposure_and_trust_facets_weight_a_unit_and_their_absence_is_zero_not_unknown(tmp_path) -> None:
+    """T-5008: a client-facing, user-tainted unit is hunted first; collation is exhaustive so no facet is 0."""
+    from appsec_review.review.ranking import RankWeights
+    fixture = build_accepted_index_set(tmp_path, facets=True)
+    scope = accept_manifest(fixture.run_root)
+    units = {unit.key: unit for unit in build_units(scope, collect_leads(scope), unit_max_files=200)}
+    by_signal = {key: {signal.signal: signal for signal in unit.signals} for key, unit in units.items()}
+    svc = next(value for key, value in by_signal.items() if "component:0001" in key)
+    native = next(value for key, value in by_signal.items() if "component:0002" in key)
+    assert (svc["facets"].value, svc["facets"].state) == (100, "available")      # exposure + trust
+    assert (native["facets"].value, native["facets"].state) == (50, "available")  # trust only
+    heavier = build_units(scope, collect_leads(scope), unit_max_files=200,
+                          weights=RankWeights(facet_exposure=400, facet_trust=600))
+    svc_unit = next(unit for unit in heavier if "component:0001" in unit.key)
+    assert next(signal for signal in svc_unit.signals if signal.signal == "facets").value == 1000
+    plain = build_accepted_index_set(tmp_path / "plain")
+    plain_scope = accept_manifest(plain.run_root)
+    for unit in build_units(plain_scope, collect_leads(plain_scope), unit_max_files=200):
+        facets = next(signal for signal in unit.signals if signal.signal == "facets")
+        assert (facets.value, facets.reason) == (0, None)
+    with pytest.raises(ValueError, match="facet_trust"):
+        RankWeights(facet_trust=1001)

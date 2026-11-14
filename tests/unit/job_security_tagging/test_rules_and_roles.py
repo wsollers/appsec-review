@@ -6,7 +6,7 @@ import json
 import pytest
 
 from appsec_review.jobs.job_security_tagging.taxonomy import TaxonomyError, parse_capability_rules
-from appsec_review.owasp_workbench.engine import characterize_components
+from appsec_review.owasp_workbench.engine import classify_components
 
 from .helpers import ROOT, taxonomy
 
@@ -65,48 +65,59 @@ def test_legacy_rules_remain_declared_and_pinned_rules_cover_only_supported_clas
 
 
 def classify(tag, basis):
-    return characterize_components([{
+    return classify_components([{
         "component_id": "component:app", "project_id": "project:app",
         "evidence": [{"source_identity": "accepted-component", "artifact_sha256": "a" * 64, "lines": [1, 1]}],
-        "routing_context": [{"tag": tag, "basis": basis}],
+        "routing_context": [{"identity": "asr:tag_assignment:" + "0" * 64, "name": tag, "tag": tag, "basis": basis,
+                             "subject": {"kind": "component", "logical_id": "c"}}],
     }])[0]
 
 
 @pytest.mark.parametrize("tag,role", [
-    ("func:authn:jwt", "authentication_identity"), ("func:authn:oauth2-client", "authentication_identity"),
-    ("func:session:cookie", "authentication_identity"),
-    ("func:crypto:password-hash", "cryptography_data_protection"),
-    ("func:crypto:symmetric", "cryptography_data_protection"),
-    ("func:crypto:cert-validation", "cryptography_data_protection"),
-    ("func:data:sql-query", "storage"), ("func:data:nosql-query", "storage"), ("func:data:orm", "storage"),
-    ("func:data:ldap-query", "storage"), ("func:net:http-client", "network"),
-    ("func:net:redirect", "network"),
+    ("role:auth", "authentication_identity"), ("role:session", "authentication_identity"),
+    ("role:authorization", "authentication_identity"),
+    ("role:crypto", "cryptography_data_protection"), ("asset:keys", "cryptography_data_protection"),
+    ("role:storage", "storage"), ("state:persistent-store", "storage"),
+    ("mechanism:networked-listener", "network"), ("role:build-glue", "build_supply_chain"),
+    ("role:test", "test_development_only"),
 ])
-def test_canonical_capabilities_route_with_their_original_basis(tag, role):
-    for basis in ("declared", "invoked"):
+def test_collation_facets_route_component_roles_with_their_recorded_basis(tag, role):
+    """T-5008: the workbench reads roles from facets; the keyword classifier is gone."""
+    for basis in ("declared", "invoked", "derived"):
         result = classify(tag, basis)
-        assert result["roles"] == [role]
+        assert role in result["roles"]
         assert any(basis in reason and "not control proof" in reason for reason in result["reasons"])
+        assert result["target_classes"] == [] and result["confidence"] == "low"
+
+
+def test_target_class_comes_only_from_a_derived_target_tag():
+    assert classify("target:cli", "derived")["target_classes"] == ["target:cli"]
+    assert classify("target:web-api", "derived")["roles"] == ["application_api_server"]
+    assert classify("target:cli", "declared")["target_classes"] == []
+    assert classify("target:cli", "derived")["confidence"] == "high"
 
 
 @pytest.mark.parametrize("tag,basis", [
-    ("func:auth:authentication", "invoked"), ("func:crypto:encryption", "invoked"),
-    ("func:authn:invented", "invoked"), ("func:crypto:invented", "invoked"),
-    ("func:authn:jwt", "derived"), ("func:authn:jwt", "reported"), ("func:authn:jwt", None),
-    ("func:crypto:symmetric", "confirmed"), ("surface:entry:remote-input", "invoked"),
-    ("cwe:89", "reported"), ("asvs5:v1", "derived"),
+    ("func:authn:jwt", "declared"), ("func:authn:jwt", "invoked"),      # capabilities route through facets now
+    ("func:crypto:symmetric", "invoked"), ("func:data:sql-query", "invoked"),
+    ("role:auth", "confirmed"), ("role:auth", None), ("surface:entry:remote-input", "invoked"),
+    ("cwe:89", "reported"), ("asvs5:v1", "derived"), ("role:invented", "declared"),
 ])
 def test_noncanonical_or_wrong_basis_tags_never_establish_component_role(tag, basis):
     result = classify(tag, basis)
-    assert result["roles"] == []
+    if tag == "role:invented":
+        # Grammatical but not a facet the workbench maps: nothing is routed, nothing is invented.
+        assert result["roles"] == []
+    else:
+        assert result["roles"] == []
     assert result["ambiguity"]
 
 
 def test_malformed_routing_context_cannot_establish_a_role():
-    result = characterize_components([{
+    result = classify_components([{
         "component_id": "component:app", "project_id": "project:app",
         "evidence": [{"source_identity": "accepted-component", "artifact_sha256": "a" * 64, "lines": [1, 1]}],
-        "routing_context": [None, "func:authn:jwt", {"tag": [], "basis": "invoked"},
-                            {"tag": "func:authn:jwt", "basis": ["invoked"]}],
+        "routing_context": [None, "role:auth", {"tag": [], "basis": "declared"},
+                            {"name": "role:auth", "basis": ["declared"]}, {"name": "ROLE:AUTH", "basis": "declared"}],
     }])[0]
-    assert not result["roles"] and result["ambiguity"]
+    assert not result["roles"] and not result["target_classes"] and result["ambiguity"]

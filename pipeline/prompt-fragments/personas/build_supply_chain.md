@@ -1,7 +1,7 @@
 ---
 id: build_supply_chain
-version: 1
-covers: ["cwe:494", "cwe:506", "cwe:1104", "cwe:1357", "cwe:1395", "infra:supply:*", "vuln:*"]
+version: 2
+covers: ["cwe:494", "cwe:506", "cwe:1104", "cwe:1357", "cwe:1395", "infra:supply:*", "vuln:*", "role:build-glue", "exposure:build-time"]
 standards: ["cwe", "capec", "attack", "ssdf", "slsa1", "scorecard"]
 max_tokens: 1500
 ---

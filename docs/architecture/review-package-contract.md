@@ -52,7 +52,7 @@ exact route registration is not proof of control enforcement.
 | `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |
 | `lead_menu[].weaknesses` | One block per CWE in `rule_cwe` (origin `rule`) and in the joined NVD records (origin `nvd`), at most eight: CWE id, name and abstraction from the run-pinned MITRE catalog (`source: mitre_catalog`), else from accepted `reference_intelligence` facts, else `unresolved`. |
 | `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the scanner-reported value is admitted, `assessed_severity` when an audited triage assessment is admitted, and `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
-| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/3` rank and basis. |
+| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/4` rank and basis. |
 | `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
@@ -362,7 +362,7 @@ The three view bounds live next to the package bounds:
 4. **Lane B.** Build accepted graph-operation units with exact source sites and bounded generated
    boundary context when supplied; retain component/build-unit path batches (`unit_max_files`)
    as whole-file fallback. Assign a located lead to at most one operation or fallback unit.
-   Rank units by `review-unit-rank/3`: the sum of available signals
+   Rank units by `review-unit-rank/4`: the sum of available signals
    in integer points 0–1000 (LPS, SII, hotspot, distinct invoked operation sites under the retained
    `tag_density` setting name, medium/low/info lead hints,
    `advisory_kev` = 250 when any advisory lead in the unit is KEV-listed, and `advisory_epss` =

@@ -317,6 +317,7 @@ def test_publication_unit_emits_the_actual_resolving_metrics_receipt(tmp_path, m
         "join.deterministic_join": {"joined": {"results": [row], "accounting": {}}, "artifact": {}},
         "standards_selection.select_profiles": {"selection": {"control_count": 1}},
         "standards_selection.ingest_catalogs": {"manifest": {"gaps": []}},
+        "applicability.build_matrix": {"ledger": {"schema": "appsec-review/target-class-ledger/1", "entries": []}},
         "characterization.load_inputs": {"retrieval_metrics": {"attempts": 2}},
         "publication.publish_indexes": {"manifest": {"sha256": "f" * 64}},
         "verification.independent_review": {"batch_results": [{

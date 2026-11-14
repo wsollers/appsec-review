@@ -457,6 +457,7 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
     lead_refs = {lead["ref"] for lead in leads}
     # A hunt package's context is unit-wide and referenced once (T-5000): it goes to a file, not into rows.
     unit_reference = package.get("unit_context") if isinstance(package.get("unit_context"), Mapping) else None
+    unit_facets = package.get("unit_facets") if isinstance(package.get("unit_facets"), Mapping) else None
     tag_refs, memory, other, unit_rows = [], [], [], []
     for entry in package.get("context", ()):
         ref, role = entry["id"], entry["role"]
@@ -593,6 +594,13 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
             "unit_context": ({"schema": unit_reference["schema"], "sha256": unit_reference["sha256"],
                               "size_bytes": unit_reference["size_bytes"], "counts": dict(unit_reference["counts"]),
                               "file": UNIT_CONTEXT_FILE} if unit_reference is not None else None),
+            # Collation facets of the hunted unit (T-5008): closed tag ids and the obligations they derive.
+            # Routing data for the hunt, never evidence; nothing free-text reaches the worker here.
+            "facets": ({"rule": unit_facets["rule"], "tags": [row["tag"] for row in unit_facets.get("tags", ())],
+                        "target_classes": list(unit_facets.get("target_classes", ())),
+                        "obligations": [{"obligation": item["obligation"], "basis_tags": list(item["basis_tags"])}
+                                        for item in unit_facets.get("obligations", ())]}
+                       if unit_facets else None),
         }
         operation = scope.get("operation")
         if operation is not None:

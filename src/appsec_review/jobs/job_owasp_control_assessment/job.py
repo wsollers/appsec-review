@@ -14,10 +14,10 @@ from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.owasp_workbench import (
-    assess_batch, build_applicability, build_finding_packages, characterize_components,
+    assess_batch, build_applicability, build_finding_packages, classify_components,
     compose, control_records, deterministic_join, fingerprint_inputs, load_catalogs,
     partition_work, pin_bundle, publish_manifest, publish_shard, select_profiles,
-    standards_manifest, verify_results,
+    standards_manifest, target_class_ledger, verify_results,
 )
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, DATASETS
 from appsec_review.runtime.inputs import feed_input_identity
@@ -137,12 +137,14 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
 
     def classify(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("characterization.load_inputs")
-        values = characterize_components(loaded["components"],
+        # T-5008: classes and roles come from the accepted collation tags; the workbench has no classifier.
+        values = classify_components(loaded["components"],
             max_components=int(unit.job.config.settings["max_components"]),
             assessment_mode=loaded["assessment_mode"])
         artifact = _artifact(unit, "component-classifications.json", {
-            "schema": "appsec-review/component-classification-set/1", "components": values})
+            "schema": "appsec-review/component-classification-set/2", "components": values})
         return {"classifications": values, "artifact": artifact,
+                "target_classes": {value["component_id"]: value["target_classes"] for value in values},
                 "gap_count": sum(len(value["gaps"]) for value in values)}
 
     def applicability(unit: UnitContext) -> Mapping[str, Any]:
@@ -155,7 +157,10 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             "schema": "appsec-review/control-applicability-set/1", "rows": rows})
         counts = {outcome: sum(row["outcome"] == outcome for row in rows)
                   for outcome in sorted({row["outcome"] for row in rows})}
-        return {"rows": rows, "artifact": artifact, "outcome_counts": counts}
+        ledger = target_class_ledger(unit.output("characterization.classify_components")["classifications"], rows)
+        return {"rows": rows, "artifact": artifact, "outcome_counts": counts,
+                "ledger": ledger, "ledger_artifact": _artifact(unit, "target-class-ledger.json", ledger),
+                "dispatchable_rows": sum(row["outcome"] in {"applicable", "conditional"} for row in rows)}
 
     def partition(unit: UnitContext) -> Mapping[str, Any]:
         settings = unit.job.config.settings
@@ -373,7 +378,11 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         value["telemetry"] = [batch["metrics"] for batch in unit.output(
             "verification.independent_review").get("batch_results", [])]
         value["input_retrieval"] = unit.output("characterization.load_inputs").get("retrieval_metrics", {})
-        value["gaps"] = sorted(set([*value["gaps"], *value["limitations"]]))
+        # Limitations describe the method; gaps are missing coverage. A target whose class admits no
+        # family ends with a not-applicable ledger and no gap (T-5008).
+        value["target_class_ledger"] = unit.output("applicability.build_matrix")["ledger"]
+        value["gaps"] = sorted(set([*value["gaps"],
+                                    *unit.output("standards_selection.ingest_catalogs")["manifest"]["gaps"]]))
         artifact = _artifact(unit, "owasp-workbench-result.json", value)
         unit.job.events.write("OWASP_ASSESSMENT_RECORDED", unit_id=unit.unit_id,
                               metrics_receipt=artifact)
@@ -405,7 +414,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
            "applicability.build_matrix", "batching.partition_work", "batching.build_packages",
            "join.deterministic_join")),
         u("publication.publish_handoff", publish,
-          ("standards_selection.select_profiles", "join.deterministic_join", "publication.publish_indexes",
+          ("standards_selection.select_profiles", "standards_selection.ingest_catalogs",
+           "applicability.build_matrix", "join.deterministic_join", "publication.publish_indexes",
            *tuple(f"validation.{cell}" for cell in CELLS))),
     )
     identity = None
