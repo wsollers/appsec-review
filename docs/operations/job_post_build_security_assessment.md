@@ -1,7 +1,7 @@
 ---
 title: "post_build_security_assessment"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_post_build_security_assessment"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"

@@ -1,7 +1,7 @@
 ---
 title: "review_package_assembly"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_review_package_assembly"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"

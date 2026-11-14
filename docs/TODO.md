@@ -159,6 +159,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
 | T-157 | [Declare language and applicability metadata for intelligence matrices](#t-157-declare-language-and-applicability-metadata-for-intelligence-matrices) | pipeline | open |
 | T-158 | [Close the documented test-tier enforcement gaps](#t-158-close-the-documented-test-tier-enforcement-gaps) | testing | open |
+| T-159 | [Preserve SVF module partial reasons in canonical outcomes](#t-159-preserve-svf-module-partial-reasons-in-canonical-outcomes) | graph | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2531,6 +2532,30 @@ until each is rewritten into the entry format when it is next touched.
   `tests/unit/conftest.py`, `tests/conftest.py`, `tests/time_budgets.py`,
   `tests/test_time_budgets.py`, `tests/test_000_unit_environment_guard.py`,
   `deploy/dagster/bin/ops_test_guard.py`, `deploy/dagster/bin/stepwise.py`.
+
+### T-159 — Preserve SVF module partial reasons in canonical outcomes
+
+- **State:** open
+- **Area:** graph
+- **Why:** the Stage 6 source audit found SVF module coverage retaining partial reasons while
+  the aggregate status/gaps are derived from a narrower string list. Root outcome projection
+  reads declared unit control fields, not nested scope objects or SQLite coverage, so it cannot
+  recover an omitted module reason. The detailed coverage is present; this is a mismatch with
+  aggregate accounting, not loss of all SVF evidence or a demonstrated live failure.
+- **Scope:** reproduce the module-partial/root-summary disagreement with a focused canned
+  fixture, then carry each applicable module reason and scope into canonical producer outcomes
+  without duplicating unrelated reasons or changing the closed status vocabulary. Preserve
+  useful alias records, native provenance and detailed coverage. Do not broaden this into the
+  separate conditional coverage/profile cache-identity concerns: frozen configuration and
+  admitted repair currently block the suggested bounds-only stale-return scenario.
+- **Done when:** independent fast unit cases cover a module-only partial reason, complete and
+  unavailable modules, and aggregation/publication; root coverage and scoped canonical gaps
+  agree with retained module rows without treating non-applicability as failure.
+- **Refs:** T-132, `src/appsec_review/jobs/job_svf_alias_analysis/job.py`
+  (module coverage, scope summary and aggregate return),
+  `src/appsec_review/runtime/handoff.py` (`_producer_outcome`),
+  `docs/architecture/code-intelligence.md`, `docs/architecture/runtime-interchange.md`,
+  `docs/operations/job_svf_alias_analysis.md`.
 
 ## Legacy backlog
 

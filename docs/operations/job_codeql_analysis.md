@@ -1,7 +1,7 @@
 ---
 title: "codeql_analysis"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "code intelligence"
 status: "current"
 jobs: ["job_codeql_analysis"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"

@@ -1,7 +1,7 @@
 ---
 title: "svf_alias_analysis"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "code intelligence"
 status: "current"
 jobs: ["job_svf_alias_analysis"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
@@ -274,6 +274,11 @@ flowchart LR
 ```
 
 ## Gaps
+
+[T-159](../TODO.md) records an accounting limitation: module-level partial reasons can survive
+in coverage rows without reaching the aggregate gap list. Root outcomes do not inspect those
+nested rows. Acceptance must compare module coverage with the root summary rather than treating
+an empty aggregate gap list as complete SVF coverage.
 
 Text reasons are wrapped as `producer_reported_gap` by
 [interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope), normally

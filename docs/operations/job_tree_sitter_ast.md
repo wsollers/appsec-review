@@ -1,7 +1,7 @@
 ---
 title: "tree_sitter_ast"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "code intelligence"
 status: "current"
 jobs: ["job_tree_sitter_ast"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"

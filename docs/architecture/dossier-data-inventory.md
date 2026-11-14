@@ -8,6 +8,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Dossier data, queries and provenance
 
+> Current subsystem view: [Reporting and metrics](reporting-and-metrics.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
+
 This inventory records its original source checkpoint. Current job and dataset declarations
 are in the [generated inventory](../generated/inventory.json).
 

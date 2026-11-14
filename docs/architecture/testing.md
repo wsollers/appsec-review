@@ -57,7 +57,7 @@ in [T-158](../TODO.md). No integration, acceptance or live validation is implied
 
 | Tier | Location | Collected by bare `pytest` | Who runs it | May use |
 | --- | --- | --- | --- | --- |
-| Unit | `tests/unit/<job_id>/`, `tests/unit/<package>/`; helpers in `tests/shared/` | yes | anyone, on every change, smallest relevant selection | the job's own code and canned fixtures only: no Docker, tools, models, network or Dagster (enforced by `tests/unit/conftest.py`); 10 s per test |
+| Unit | `tests/unit/<job_id>/`, `tests/unit/<package>/`; helpers in `tests/shared/` | yes | anyone, on every change, smallest relevant selection | the job's own code and canned fixtures only: no real Docker, tools, models, network or Dagster; selected boundary guards in `tests/unit/conftest.py`, with the enforcement limits above; 10 s per test |
 | Pre-walk legacy paths | `tests/test_*.py` and `tests/<area>/` outside the tier directories | yes, until T-113 moves each job | inspect and select narrowly; the path is not a unit-safety guarantee | inherited behavior may violate the forward contract; unit guards and the unit path budget do not apply automatically |
 | Integration | `tests/integration/<job_id>/` (older files directly under `tests/integration/`) | no; only when named explicitly with `--allow-heavy` | the user, on explicit request | Docker, tool images, target checkouts and models against fixtures; 300 s per test |
 | Acceptance | `tests/acceptance/<job_id>/`, driven by `scripts/run-tests.* --acceptance <profile>`; the former live tier (`tests/live/`, `tests/test_live_*.py`) folds in here as the walk reaches each job | no | the user, on explicit request | the Dagster stack, Docker, real models and targets: one job at a time, validated per job (the stepwise process); 1800 s per test for the former live files |
@@ -114,13 +114,13 @@ of its behavior, not exemptions from the forward contract.
 
 `tests/unit/<job_id>/` holds the code-level tests of one job (`tests/unit/<package>/` for shared
 code, `tests/shared/` for helpers every tier may use). Everything under `tests/unit/` runs under
-`tests/unit/conftest.py`, which enforces the tier instead of relying on review:
+`tests/unit/conftest.py`, which enforces these selected boundaries:
 
 - the `unit` time budget (`unit_time_budget_seconds`, 10 s for setup, call and teardown together)
   fails the test that crosses it, through the same `PhaseClock` as the integration and live tiers;
 - starting `docker`, `podman`, `claude`, `codex`, `gh` or a Dagster process is refused before it
   runs, unless the executable is a fake the test wrote under the pytest base temp;
-- a socket may connect to loopback only;
+- IP socket connections are restricted to loopback; Unix sockets remain allowed;
 - `execute_job`, `materialize` and `execute_in_process` are refused once `dagster` is imported;
 - `os.fsync` is a no-op, because durability is not what a unit test checks.
 
@@ -128,7 +128,8 @@ A refusal raises `UnitTierViolation`; these selected entrypoint guards are not a
 process/network sandbox ([T-158](../TODO.md)). The fix is a fake at the boundary, a canned fixture, or a
 move to `tests/integration/` or `tests/acceptance/`. Tests still at the root of `tests/` are the
 pre-walk suite: T-113 moves each job's tests into its folder, replacing those that ran whole job
-graphs or engines with code-level tests, and carries no budget until then.
+graphs or engines with code-level tests. Those paths have no default unit budget; an explicit
+budget marker can still apply.
 
 ### The test-tier walk (T-113)
 

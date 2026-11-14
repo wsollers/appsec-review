@@ -1,7 +1,7 @@
 ---
 title: "profile_data"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_profile_data"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"

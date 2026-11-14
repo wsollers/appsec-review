@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-from scripts.docs_support import KINDS, SUBSYSTEMS
+from scripts.docs_support import KINDS, SUBSYSTEMS, frontmatter
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +120,15 @@ def test_committed_ledger_covers_tracked_documentation() -> None:
     document = json.loads((ROOT / LEDGER).read_text(encoding="utf-8"))
     # Include the new ledger itself before its first commit, without absorbing others' drafts.
     _validate(document, ROOT, _tracked_documents() | {LEDGER})
+
+
+def test_canonical_job_ledger_matches_authored_metadata(doc_pages, doc_inventory) -> None:
+    rows = {row["path"]: row for row in json.loads((ROOT / LEDGER).read_text())["documents"]}
+    for job in doc_inventory["jobs"].values():
+        path = job["page"]
+        metadata, _ = frontmatter(doc_pages[path])
+        assert rows[path]["kind"] == metadata["kind"], path
+        assert rows[path]["subsystem"] == metadata["subsystem"], path
 
 
 @pytest.mark.parametrize(("path", "expected"), [

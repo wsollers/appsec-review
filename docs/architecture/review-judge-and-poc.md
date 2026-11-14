@@ -2,11 +2,13 @@
 title: "Judge role and proof-of-concept generation"
 kind: "architecture"
 subsystem: "review inference and guidance"
-status: "current"
+status: "historical"
 jobs: ["job_inference_security_review", "job_language_build", "job_poc_generation", "job_sanitizer_build", "job_test_coverage"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Judge role and proof-of-concept generation
+
+> Current subsystem view: [Review inference and guidance](review-inference-and-guidance.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
 
 Status: design; implementation follows this document. It extends
 [review protocol v2](review-protocol-v2.md) and does not change the claim ledger rules (R4 predicates, R5

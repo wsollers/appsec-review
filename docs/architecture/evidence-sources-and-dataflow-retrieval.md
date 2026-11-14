@@ -8,6 +8,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Evidence sources, dataflow precomputation, and model-facing retrieval
 
+> Current subsystem view: [Code intelligence](code-intelligence.md), [Scanners and evidence collection](scanners-and-evidence-collection.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
+
 Status: design for implementation planning. Rows marked `indexed` exist in the pipeline today;
 `blocked` and `planned` rows are not implemented by this document.
 For the current producer inventory and reusable index boundaries, see

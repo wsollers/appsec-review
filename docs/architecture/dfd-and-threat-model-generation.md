@@ -8,6 +8,8 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Generated data-flow diagram and threat model
 
+> Current subsystem view: [Review inference and guidance](review-inference-and-guidance.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
+
 This is the historical design record. The current declared contract is generated in
 [the job page](../operations/job_threat_model_generation.md).
 

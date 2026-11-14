@@ -507,6 +507,14 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/code-intelligence.md",
+      "reason": "Keep the T-132 source-grounded subsystem view and its links to preserved decisions, canonical jobs and named coverage gaps.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
       "disposition": "merge-into",
       "kind": "architecture",
       "merge_target": "docs/operations/codeql-analysis.md",
@@ -627,6 +635,14 @@
       "subsystem": "review inference and guidance"
     },
     {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/images-and-deployment.md",
+      "reason": "Keep the T-132 source-grounded image, source-mount, signing and deployment boundary view.",
+      "subsystem": "images and deployment"
+    },
+    {
       "decision_record": true,
       "disposition": "revise",
       "kind": "architecture",
@@ -732,11 +748,27 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/reporting-and-metrics.md",
+      "reason": "Keep the T-132 source-grounded reporting and metrics view without treating designed audit products as produced evidence.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/architecture/retrieval-surfaces.md",
       "reason": "Reconcile Retrieval surfaces: tools, MCP, review cells, and skills with its implementation and link generated facts from the subsystem dive in T-132.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/review-inference-and-guidance.md",
+      "reason": "Keep the T-132 source-grounded review and bounded-guidance view with explicit production versus design boundaries.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": true,
@@ -769,6 +801,22 @@
       "path": "docs/architecture/review-protocol-v2.md",
       "reason": "Separate the current Review protocol v2: the model-facing layer view from its preserved decisions and link the subsystem dive in T-132.",
       "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/runtime-interchange.md",
+      "reason": "Keep the T-132 source-grounded runtime, input authority, canonical outcome and manifest boundary view.",
+      "subsystem": "runtime interchange"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/scanners-and-evidence-collection.md",
+      "reason": "Keep the T-132 source-grounded scanner and evidence collection view with raw-output, observation and coverage distinctions.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": true,
@@ -820,6 +868,14 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/target-acquisition-and-build.md",
+      "reason": "Keep the T-132 source-grounded acquisition, topology, workspace and capture view reconciled to Wave1a declarations.",
+      "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
       "disposition": "revise",
       "kind": "architecture",
       "path": "docs/architecture/telemetry.md",
@@ -833,6 +889,14 @@
       "path": "docs/architecture/test-coverage-ingestion.md",
       "reason": "Reconcile Test-coverage ingestion with its implementation and link generated facts from the subsystem dive in T-132.",
       "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/testing-and-operations.md",
+      "reason": "Keep the T-132 testing and operations view linked to the single enforcement table, charter and recovery procedure.",
+      "subsystem": "testing and operations"
     },
     {
       "decision_record": false,
@@ -1292,379 +1356,379 @@
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_artifact_indexing.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_artifact_security_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_binary_evidence_indexing.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_build_environment_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_build_iteration.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_change_context_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_ci_configuration_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_clang_static_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_code_graph_index.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_codeql_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_cpg_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_cpp_compiled_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_cpp_symbol_index.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_debug_symbol_indexing.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_dependency_intelligence.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_document_issue_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_dossier_publication.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_evidence_collection.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_final_publication_gate.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_final_report_publication.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_image_pin_verification.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "images and deployment"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_inference_security_review.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_language_build.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_model_connectivity.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_openvex_export.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_owasp_control_assessment.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_poc_generation.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_post_build_security_assessment.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_profile_data.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_project_build.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_remediation_planning.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_remediation_validation.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_review_data_indexing.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
       "subsystem": "runtime interchange"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_review_intake.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_review_package_assembly.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_review_prioritization.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_sanitizer_build.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_security_tagging.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_source_history_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_svf_alias_analysis.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_target_acquisition.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_target_analysis_plan.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_target_catalog.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "target acquisition and build"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_test_coverage.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_third_party_data_sync.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_threat_model_generation.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "review inference and guidance"
     },
     {
       "decision_record": false,
-      "disposition": "revise",
+      "disposition": "keep",
       "kind": "operations",
       "path": "docs/operations/job_tree_sitter_ast.md",
-      "reason": "Keep the generated job contract here and author its process and acceptance under T-130.",
-      "subsystem": "runtime interchange"
+      "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": true,

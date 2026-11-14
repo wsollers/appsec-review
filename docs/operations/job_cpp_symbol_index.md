@@ -1,7 +1,7 @@
 ---
 title: "cpp_symbol_index"
 kind: "operations"
-subsystem: "runtime interchange"
+subsystem: "code intelligence"
 status: "current"
 jobs: ["job_cpp_symbol_index"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"

@@ -16,59 +16,26 @@ retrieval core how.
 
 ## Accepted index sets
 
-One run may contain `source`, `observations`, `components`, `build`, `artifacts`,
-`build_security`, `compiled`, `analysis`, `evidence`, `history`, `tags`, `priority`,
-`precomputed`, `inventory`, `links`, `documents`, and `graph` shards (`INDEX_NAMES` in `retrieval/index.py`). A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
-target snapshot, producer artifacts, tool/image/rule identity, parser and normalizer identities,
-mapping implementation, schema, and upstream manifests. Thus an observation change does not
-invalidate an unrelated compile or AST shard, while a composed evidence index or finding package
-can include the observation manifest as an upstream dependency.
+The closed index-name vocabulary is `INDEX_NAMES` in
+[`retrieval/index.py`](../../src/appsec_review/retrieval/index.py). Physical identity is the
+composite `(logical name, shard_id)`: different producers or bounded scopes can publish separate
+shards without a global index-build barrier. Each shard declares its own fingerprint and source
+identity. The exact fingerprint inputs and reuse unit are producer-specific, not a guarantee
+that every producer binds the same set of settings or artifacts.
 
-The current catalog job produces source, component, build, and bounded declaration-analysis
-shards. Static evidence collection builds one observations shard per producer as soon as that
-producer is normalized. Physical identity is the composite `(logical name, shard_id)`, so Gitleaks,
-Semgrep, Syft, Checkov, and every other configured producer can publish independently without a
-global index-build barrier. The final manifest only verifies receipts and shard hashes and composes
-them with the accepted catalog manifest. A shard is inference authority only after that manifest is
-bound to an accepted handoff. Later CodeQL/IR branches use the same contract and may overlap
-unrelated scanners and indexers.
+The [generated inventory](../generated/inventory.json) is the declaration map for indexes,
+datasets and retrieval routes. The [code-intelligence dive](code-intelligence.md),
+[scanner dive](scanners-and-evidence-collection.md) and
+[canonical job pages](../operations/README.md) explain actual production and invalidation.
+These replace a second hand-maintained producer inventory here. In particular, artifact
+indexing has both admitted catalog/source inputs and build-produced inputs; it is not restricted
+to one language-build handoff.
 
-The target analysis planner adds a separately fingerprinted `analysis` shard with shard id
-`target-analysis-plan`. It indexes accepted component routing, scanner reasons, generic build-unit
-identities, and validated but non-executable inferred build recipes. The shard keeps the catalog
-manifest as an explicit upstream and is queryable by
-the existing bounded `search`, `find`, `trace`, and `coverage` MCP filters; no filesystem search or
-new write-capable interface is exposed.
-
-The produced-artifact indexer consumes only the accepted language-build handoff and verified
-workspace manifests. It publishes `artifacts` catalog shards per build unit and artifact family,
-plus member and relationship shards per build unit in deterministic bounded batches (the
-language-build receipt is their reuse and invalidation unit). Artifact
-catalog fingerprints exclude scanners and MCP transport, so scanner changes cannot rebuild catalogs
-and transport changes rebuild nothing. See
-[artifact indexing](../operations/artifact-indexing.md#build-unit-batch-shards).
-
-The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard, and
-binary/symbol shard per accepted case. The independent clangd job adds one symbol shard per accepted
-case, and the deprecated Joern job (disabled by default) would add one CPG-observation shard per accepted case. The separate cross-language
-CodeQL job adds an observation shard per accepted language scope. A
-blocked producer still publishes an unavailable-coverage shard with zero observations, so absence
-cannot be mistaken for clean coverage. Compile and linker relationships that lack an exact output
-map are explicitly non-exact and carry their ambiguity reason.
-
-The post-build assessment adds one `build_security` shard per accepted C++ case. These shards hold
-redacted build-action provenance, compile-unit and linked-artifact identities, exact relationships
-where the accepted build emitted them, deterministic hardening results, and evidence-validated
-model observations. The dedicated `query_build_security` read tool accepts exact scopes for
-project, build root/action, configuration, compile unit, linked artifact, producer, and shard.
-It opens only accepted immutable SQLite shards and never exposes protected argv artifacts.
-
-The security-tagging job adds one `tags` shard per display family (code facts, controls, weakness,
-threat, gap). Each `tag_assignment` entity carries a basis-qualified record from the
-[security tag taxonomy](security-tag-taxonomy.md), an `OBSERVED_AT` relation to its subject, and,
-for derived tags, `DERIVED_FROM` relations to the observed assignments that produced it. The job's
-manifest carries every upstream shard, so it replaces the accepted manifest without hiding earlier
-evidence.
+An accepted manifest verifies and composes physical shard identities and upstream references.
+It does not prove that every declared producer ran, every language is covered or every artifact
+is queryable. Raw/protected payloads and sanitized inventory metadata have distinct access
+boundaries. Producer-local coverage and canonical outcomes must be inspected together; an empty
+query is not a clean-coverage result.
 
 `runs/<run-id>/data/indices/accepted.json` binds one manifest to an accepted job handoff. Before
 opening a database, retrieval verifies the pointer, handoff status and hash, manifest membership in
@@ -77,27 +44,28 @@ name, and fingerprint. SQLite is opened read-only with immutable mode. Missing, 
 incomplete inputs are gaps or integrity failures, never an empty-result proof that the target is
 clean.
 
+An attempt can instead use its claim-bound input manifest through
+[`resolve_context_manifest`](../../src/appsec_review/retrieval/core.py). It verifies that
+manifest's retained path and digest rather than silently switching to a newer accepted pointer.
+The helper falls back to the accepted-pointer path only when the context has no manifest pin;
+the applicable [input contract](job-input-contracts.md) still governs runtime reads.
+
 ## Identity and location contract
 
-Logical identities are versioned hashes of entity kind, target snapshot, and producer-native
-identity. Supported kinds (`EntityKind` in `retrieval/model.py`) are `source_file`, `source_span`,
-`symbol`, `component`, `project`, `build_action`, `compile_unit`, `object_file`, `library`,
-`executable`, `build_artifact`, `package`, `archive_member`, `bytecode_module`, `managed_assembly`,
-`wasm_module`, `ast_node`, `ir_entity`, `tool_observation`, `evidence_artifact`,
-`finding_package`, `change`, `history_signal`, `hotspot`, `change_context_signal`, `review_unit`,
-`deployment_event`, `tag_assignment`, `priority_item`, `review_signal`, `review_flow_step`,
-`review_context_file`, `precomputed_fact`, `dataset`, `dataset_audit`, `coverage_cell`,
-`dependency_package`, `advisory`, `document_record`, and the code-graph kinds `call_site`,
-`sink_site`, `entry_point`, `flow_summary`, `dataflow_path`, `guard_fact`, and `range_fact`.
-Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
-`REFERENCES`, `CALLS`, `CONTAINS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `DEPENDS_ON`,
-`OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, `CONTRADICTS`, `FLOWS_TO` (ordered CodeQL flow
-steps), `GUARDS`, `SAME_AS`, and `AFFECTED_BY`.
+Logical identities are versioned hashes of entity kind, target snapshot and producer-native
+identity. `EntityKind` and `RelationKind` in
+[`retrieval/model.py`](../../src/appsec_review/retrieval/model.py) own the closed vocabularies.
+Relations preserve exactness or explicit ambiguity; a shared graph format does not turn a
+heuristic association into proof.
 
 A resolving source location binds the target snapshot, normalized relative path, file hash,
 byte/line/column span, producer-native location, mapping method, confidence, and ambiguity.
-Heuristic relationships must be marked non-exact and carry an ambiguity explanation. Excerpt reads
-re-hash the current target file and fail with an explicit gap when it changed after indexing.
+Heuristic relationships must be marked non-exact and carry an ambiguity explanation.
+Locations can be absent; not every normalized entity is a source span.
+[`read_source_bytes`](../../src/appsec_review/retrieval/source_resolution.py) verifies the
+appropriate source domain: target files are re-hashed, generated source requires its accepted
+backing and detached-object identity, and binary pseudo-source requires its separate accepted
+backing. Missing, changed or invalid backing fails explicitly instead of becoming a guessed path.
 
 ## Query boundary
 

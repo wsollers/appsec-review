@@ -145,6 +145,10 @@ bounded path while still publishing zero security observations and no general CP
 
 ## Named gaps
 
+[T-159](../TODO.md) tracks the SVF module-reason/root-outcome discrepancy described above.
+The module coverage survives; canonical aggregate accounting does not reconstruct those nested
+reasons. This is source-inspected, not a newly reproduced live failure.
+
 The registry is [docs/TODO.md](../TODO.md); the following are scoped references, not another backlog.
 No item or known limitation automatically joins a walk's user-approved expected-gap list.
 

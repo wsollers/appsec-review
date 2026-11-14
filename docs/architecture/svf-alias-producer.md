@@ -2,11 +2,13 @@
 title: "SVF points-to producer"
 kind: "architecture"
 subsystem: "code intelligence"
-status: "current"
+status: "historical"
 jobs: ["job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpp_compiled_analysis", "job_inference_security_review", "job_svf_alias_analysis"]
 last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # SVF points-to producer
+
+> Current subsystem view: [Code intelligence](code-intelligence.md). This record preserves its original decisions and validation limits; unfinished proposals are not treated as delivered.
 
 Status: **implemented 2026-10-16, opt-in.** It is verified offline against recorded real tool output,
 and live against the pinned image on a synthetic fixture and on a copied multi-vulnerability C/C++
