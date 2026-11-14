@@ -686,8 +686,11 @@ until each is rewritten into the entry format when it is next touched.
   - GCC counterpart to `audit-buildenv-cpp` (`CC=gcc CXX=g++`, sanitizer runtimes, `-fanalyzer`)
     and a recorded retry on GCC when the clang build fails; needs a second native profile per
     family in `job_project_build`.
-  - Decide whether archived `audit-native` capabilities (SVF, CodeChecker) earn a bounded image;
-    retire or replace the deferred `audit-native`, `audit-codeql`, `audit-lsp-vendor` entries.
+  - SVF now has a dedicated image and producer. Its live fixture still loads an unbound catalog
+    and compares the absent `image_id`, so an installed image can be skipped. Bind that fixture
+    to the host-owned effective configuration and cover image selection offline before any
+    separately authorized live run. Decide the remaining CodeChecker/deferred
+    `audit-native`, `audit-codeql`, `audit-lsp-vendor` entries independently.
   - Share only explicit LSP payload layers; add language-server fixtures.
   - Binary analysis: a specialized capability only when BLint/Syft/Grype/Trivy fail a job contract;
     no curl-to-shell installers, no duplicated scanners.
@@ -696,11 +699,18 @@ until each is rewritten into the entry format when it is next touched.
   - ScanCode: evaluate a fixed release; compare incremental value with Syft before enabling.
   - Microsoft SBOM Tool / SBOM Assembly: stay replaced by Syft unless a contract proves a gap.
   - Document conversion: complete hashed `.deb` closure for pandoc/poppler; PDF/DOCX fixtures.
-  - `tool-report-latex`: call it from a publication job, drop `manual = true`, pin `image_id`,
-    add a pdftoppm visual check.
+  - `tool-report-latex` is already called by dossier publication; correct its stale catalog
+    purpose text rather than claiming the integration is missing. Any change to its manual
+    catalog policy and the pdftoppm visual check remains a separate decision/validation.
+    Observed image IDs belong in host bindings, not the tracked catalog.
+  - Correct `buildenv-native-toolchain`'s purpose description: Java, Android and .NET images
+    do not all inherit that image. README corrections do not change the authoritative catalog.
   - Dagster: orchestration is a deployment concern; do not restore its archived image.
 - **Done when:** each bullet is either closed or promoted to its own T-item.
-- **Refs:** `containers/README.md`, `containers/buildenv/README.md`.
+- **Refs:** `containers/README.md`, `containers/buildenv/README.md`, T-051,
+  `containers/catalog.toml`, `tests/live/test_svf_live.py`,
+  `src/appsec_review/jobs/job_dossier_publication/job.py`,
+  `src/appsec_review/reporting/dossier_render.py`.
 
 ### T-051 — Host-local image pins: bind the observed image ID into the run
 
