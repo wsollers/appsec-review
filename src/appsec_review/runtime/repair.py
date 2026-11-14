@@ -211,7 +211,12 @@ def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str 
         leases = read_document(ledger)
         if leases.get("schema") != "appsec-review/resource-leases/1" or not isinstance(leases.get("leases"), dict):
             reasons.append("resource lease ledger is unsupported")
-        elif any(not entry.get("persistent") for entry in leases["leases"].values()):
+        elif any(not entry.get("persistent") and not (
+                     current_dispatch is not None and entry.get("dispatch") == current_dispatch
+                     and not entry.get("quarantine"))
+                 for entry in leases["leases"].values()):
+            # Leases the live dispatch's own units hold (its jobs run in parallel) are not retained
+            # leases of a stopped run; a quarantined lease is, whoever took it.
             reasons.append("retained host resource leases require existing cleanup verification")
     for path in sorted((run_root / "data/jobs").glob("*/attempts/*/claim.json")):
         claim = read_document(path)

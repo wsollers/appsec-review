@@ -370,6 +370,27 @@ def test_parallel_workers_of_the_live_dagster_dispatch_are_not_stopped_workers(t
                                             orchestration={"system": "dagster", "run_id": "dispatch-other"})
 
 
+def test_leases_of_the_live_dagster_dispatch_are_not_retained_leases(tmp_path):
+    """Sibling jobs of one dispatch hold resource leases while they run; a rerun job's begin must not
+    read them as leases a stopped run left behind. Regression for smoke-cpp run 2026-11-14-0001,
+    dispatch 94d89f59, which refused three begins with "retained host resource leases require
+    existing cleanup verification"."""
+    config, (job,), _ = fixture(tmp_path)
+    outcome = JobRunner(config).run(job)
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    ledger = config.runtime.metadata_dir / "resource-admission/leases.json"
+    lease = {"pid": 1, "process_identity": "x", "containers": [], "reservation": {"cpu": 1, "memory_mb": 1},
+             "limits": {"cpu": 1, "memory_mb": 1, "io_slots": 1}, "action": "scan", "dispatch": "dispatch-live"}
+    atomic_json(ledger, {"schema": "appsec-review/resource-leases/1", "leases": {"a": lease}})
+    message = "retained host resource leases require existing cleanup verification"
+    assert message in stopped_reasons(config, root)
+    assert message not in stopped_reasons(config, root, current_dispatch="dispatch-live")
+    assert message in stopped_reasons(config, root, current_dispatch="dispatch-other")
+    atomic_json(ledger, {"schema": "appsec-review/resource-leases/1",
+                         "leases": {"a": {**lease, "quarantine": "cleanup uncertain"}}})
+    assert message in stopped_reasons(config, root, current_dispatch="dispatch-live")
+
+
 def test_failure_manifest_is_reference_only_and_redacts_environment(tmp_path, monkeypatch):
     config, (job,), _ = fixture(tmp_path)
     monkeypatch.setenv("MODEL_TOKEN", "do-not-disclose")
