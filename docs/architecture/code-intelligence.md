@@ -171,8 +171,8 @@ No item or known limitation automatically joins a walk's user-approved expected-
 - **T-147, T-157:** missing exact task/dataset and language/applicability metadata; generated
   inventory cells are declarations, not execution evidence.
 
-The SVF aggregate propagation detail above has no exact dedicated TODO at this source boundary.
-It is reported for coordinator triage, not silently assigned to T-126 or repaired by this document.
+The SVF aggregate propagation detail is tracked by T-159, not silently assigned to T-126 or
+repaired by this document.
 
 ## Jobs and pages
 

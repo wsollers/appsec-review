@@ -10,8 +10,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## As built today
 
-This is the current-state view of runtime source at
-`80e04db89504a4b9f276aa1e336ad703235dd10c`, followed by documentation-only changes.
+This view starts from runtime source at `80e04db89504a4b9f276aa1e336ad703235dd10c`;
+the relevant handlers remain unchanged through `dd6e025ce82a69d4b755a013e78723b2eb3ee772`,
+which also contains T-150's pure contracts but not its production wiring.
 The metadata watermark remains the repository's existing reconciliation value. A later main
 landing must be reconciled against its exact source, not a planned contract or a conversation.
 In particular, T-150's complete protected decision products are not implemented at this boundary.
@@ -181,8 +182,8 @@ These are pointers into the [single TODO registry](../TODO.md), not a second bac
 | T-151, T-152, T-153 | Operation coverage obligations, scoped proposition/polarity binding and verified evidence-request resolution. |
 | T-154, T-155, T-156 | Labelled stage-loss audit, fair bounded hunt allocation and execution-bound investigation/omission receipts. |
 
-T-150 is not on the inspected runtime base. No prospective audit sidecar, reader, worker input or
-MCP grant is asserted to exist. Reconciliation requires the exact source landing; existing
+T-150's pure contract module is present, but no prospective audit sidecar, reader, worker input or
+MCP grant is asserted to exist. Production reconciliation requires the exact source landing; existing
 ledger/cell artifacts must not be renamed into that promised product.
 
 ## Jobs and pages

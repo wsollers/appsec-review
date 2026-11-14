@@ -17,8 +17,9 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 `9c41d5e45f8bbcc5bb473db52b4cf72c0507fa16`. The acquisition and debug-decision declaration
 corrections below are present; their payload writers are unchanged. The frontmatter retains
 the documentation program's existing reconciliation watermark.
-[T-150](../TODO.md#t-150-publish-complete-protected-review-decision-products) remains unlanded
-in this worktree and is not included in this implementation description. This reconciliation
+[T-150](../TODO.md#t-150-publish-complete-protected-review-decision-products) subsequently landed
+pure contracts at `dd6e025ce82a69d4b755a013e78723b2eb3ee772`; its production audit wiring is
+not implemented at this boundary and changes no acquisition/build behavior here. This reconciliation
 performed documentation checks, not new compiler, image, Dagster or live-review validation.
 
 The subsystem turns an explicit target selection into an accepted source inventory, planning

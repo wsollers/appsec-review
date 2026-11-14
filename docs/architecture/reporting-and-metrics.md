@@ -10,9 +10,10 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 
 ## As built today
 
-This view is grounded in runtime source at `80e04db89504a4b9f276aa1e336ad703235dd10c`
-and the subsequent documentation-only job pages. It does not claim later main changes or
-unlanded T-150 decision products. The existing reconciliation watermark is unchanged.
+This view starts from runtime source at `80e04db89504a4b9f276aa1e336ad703235dd10c`;
+the relevant handlers remain unchanged through `dd6e025ce82a69d4b755a013e78723b2eb3ee772`.
+T-150's pure contracts are present there, but its production decision products are not.
+The existing reconciliation watermark is unchanged.
 
 ### Certification precedes presentation
 
