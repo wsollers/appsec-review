@@ -102,7 +102,7 @@ The reviewed initial source is `528b3fa681d9e33113932c9fc4abf9ddbc53b6e5`. Its d
 | --- | --- |
 | Existing cross-owner private dependencies | Named legacy debt, retained individually instead of refactoring unrelated jobs. Public producer/consumer imports are not exempted because they are allowed by design. |
 | Ruff F811 in `jobs/job_target_analysis_plan/job.py` | Existing duplicate `replace` import; narrow cleanup is deferred to that module's owner. |
-| Ruff Python-3.11 syntax diagnostic in `reporting/html.py` | Existing 3.12-only f-string syntax despite the advertised 3.11 minimum. CI executes on 3.12; this is an explicit unresolved compatibility gap, not a new claim of 3.11 conformance. |
+| Ruff Python-3.11 syntax diagnostic in `reporting/html.py` | Existing 3.12-only f-string syntax despite the advertised 3.11 minimum. CI executes on 3.12; [T-160](../TODO.md) tracks this compatibility gap, not a claim of 3.11 conformance. |
 | Bandit B506 in `debug_symbols/_reader_pdb.py` and `rulepacks/sei_cert/pack.py` | Reviewed custom `yaml.SafeLoader` subclasses with bounded/strict constructors; Bandit does not infer these subclasses. Bind their containing functions rather than ignoring all YAML loads. |
 | Bandit B102 in `signing/bootstrap.py`, `signing/import_hook.py`, `signing/sitecustomize_shim.py` | Deliberate execution of explicitly loaded verifier/verified module bytes. Retained exact enclosing-function baselines; not a global `exec` exemption or a new audit of the signing design. |
 
@@ -149,10 +149,10 @@ named coverage limitations, static timings, baseline counts and unit output.
 Set **Offline development quality / quality** as a required check through repository settings
 if enforcement on GitHub is desired; checking in a workflow does not configure branch protection.
 
-Package 01 owns the job-to-unit-test manifest/selector. This allowlist is intentionally not a
-competing registry. Adopt that public selector only after it exists on main and retains the
-same offline/fail-closed guarantees. Until then, developers must run additional affected unit
-files explicitly when a change needs more than the sentinels.
+The public [job test selector](../operations/job-test-selection.md) now exists. This quality
+allowlist remains a separate bounded sentinel selection; the implementation does not delegate to
+that selector. Any integration must preserve the same offline/fail-closed guarantees. Developers
+still select additional affected unit coverage when a change needs more than these sentinels.
 
 ## Manual integration and acceptance (not default gates)
 

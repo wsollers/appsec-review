@@ -8,9 +8,11 @@ last reconciled: "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4"
 ---
 # Run readiness: preparing a host for review runs
 
-The one-time preparation of a review host, after which the fix–test–restart loop never rebuilds an
-image. It is Phase 0 of T-057 (`docs/TODO.md`). Everything here is operator-run on the host; nothing
-in it is executed by jobs or agents. Each step names the document that owns its details.
+The operator preparation of a review host, after which a routine source-only repair reloads the
+measured application sources instead of rebuilding an unchanged tooling image. It is Phase 0 of
+T-057 (`docs/TODO.md`). These host procedures are not executed by review jobs and require explicit
+operator authorization; this page does not authorize an agent to provision or launch anything.
+Each step names the document that owns its details.
 
 ## Decisions this runbook fixes
 
@@ -32,10 +34,10 @@ in it is executed by jobs or agents. Each step names the document that owns its 
   and the Windows file bridge is far too slow for a mounted package. Keep it a clone that tracks
   `main`; `F:\repos\appsec-review` stays the editing checkout.
 - **Image enforcement stays `disabled` for the first runs.** Module signing of the mounted sources is
-  on by default and needs the key at `start`/`reload`; container-image verification
-  (`[signing] image_enforcement = "required"`) is turned on once the loop works, so a signing
-  refusal is never mistaken for a run break. Sign the images anyway (step 4) so the switch is one
-  configuration line later.
+  on by default and needs the key at `start`/`reload`. A later change to
+  `[signing] image_enforcement = "required"` is a separate operator policy decision, not an
+  automatic consequence of a working loop. Explicit lifecycle/image verification still checks
+  signatures while general launch enforcement is disabled.
 
 ### Docker Desktop on the same machine: three traps (WSOLLERS1, 2026-11-08)
 
@@ -78,8 +80,10 @@ why; steps 6–8 are run by hand.
    `docker info` answers from it (an engine that is installed but not running fails here: `sudo
    systemctl start docker`, or `sudo service docker start` without systemd); the checkout is on
    ext4 (`df -T .` shows `ext4`, not `9p`/`drvfs`); `core.autocrlf` is off so signed bytes match
-   (`.gitattributes` pins LF). Python 3.13 with this checkout's dependencies in `.venv`; OpenSSL 3 at
-   `/usr/bin/openssl`.
+   (`.gitattributes` pins LF). The readiness implementation requires Python 3.11 or newer and this
+   checkout's own installed `.venv`; the documented deployment/quality baseline is 3.12, with
+   the advertised-minimum renderer gap tracked by [T-160](../TODO.md). OpenSSL must be available
+   for the configured signing procedure.
 2. **Key and anchor** (`docs/operations/signing.md`, "Operator runbook" step 1). Once per operator:
 
    ```bash

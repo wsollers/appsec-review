@@ -160,6 +160,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-157 | [Declare language and applicability metadata for intelligence matrices](#t-157-declare-language-and-applicability-metadata-for-intelligence-matrices) | pipeline | open |
 | T-158 | [Close the documented test-tier enforcement gaps](#t-158-close-the-documented-test-tier-enforcement-gaps) | testing | open |
 | T-159 | [Preserve SVF module partial reasons in canonical outcomes](#t-159-preserve-svf-module-partial-reasons-in-canonical-outcomes) | graph | open |
+| T-160 | [Reconcile the advertised Python minimum with renderer syntax](#t-160-reconcile-the-advertised-python-minimum-with-renderer-syntax) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2566,6 +2567,25 @@ until each is rewritten into the entry format when it is next touched.
   `src/appsec_review/runtime/handoff.py` (`_producer_outcome`),
   `docs/architecture/code-intelligence.md`, `docs/architecture/runtime-interchange.md`,
   `docs/operations/job_svf_alias_analysis.md`.
+
+### T-160 — Reconcile the advertised Python minimum with renderer syntax
+
+- **State:** open
+- **Area:** testing
+- **Why:** `pyproject.toml` advertises Python >=3.11, while `reporting/html.py` reuses the outer
+  quote inside an f-string, syntax introduced in Python 3.12. The quality baseline retains the
+  corresponding `ruff:invalid-syntax` diagnostic. The documented deployment/quality environment
+  uses 3.12, so its success does not establish compatibility with the advertised minimum.
+- **Scope:** resolve the supported-minimum decision and the affected syntax without silently
+  raising the package requirement through a documentation edit. Verify the HTML renderer and
+  affected import path with the actual lowest supported interpreter; a newer interpreter's
+  `ast.parse(feature_version=...)` is not sufficient proof for this lexical feature. Prune the
+  exact obsolete quality-baseline diagnostic only after its cause is fixed.
+- **Done when:** declared Python support, renderer syntax and setup documentation agree;
+  focused unit/syntax checks pass on the actual minimum interpreter, and the baseline does
+  not retain or broaden the resolved exception.
+- **Refs:** T-130, `pyproject.toml`, `src/appsec_review/reporting/html.py`,
+  `quality/baseline.json`, `docs/development/quality-gates.md`, `README.md`.
 
 ## Legacy backlog
 

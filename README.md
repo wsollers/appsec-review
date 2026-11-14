@@ -6,7 +6,7 @@ evidence collection) against a local target checkout. Every job writes immutable
 `runs/<run-id>/`. Missing, skipped, or failed coverage is recorded as a named gap, never as a clean
 result.
 
-For a one-page view of how a run works, from cloning the repository to the final report, start
+For a one-page view of how a run works, from acquiring a pinned target to the final report, start
 with [`docs/overview.md`](docs/overview.md).
 
 The repository is mid-rebuild. Repository-agent rules live only in [`AGENTS.md`](AGENTS.md), which
@@ -60,10 +60,10 @@ explicit bounded unit/contract allowlist, never integration, acceptance or live 
 | Requirement | Why |
 | --- | --- |
 | Git | Clone this repository and the review target. |
-| Python 3.11 or newer (3.12 matches the deployment image) | The `appsec-review` package and its CLI. |
+| Python 3.12 | Matches the deployment/quality environment. Package metadata advertises >=3.11, but renderer syntax still has a [known minimum-version gap](docs/TODO.md#t-160-reconcile-the-advertised-python-minimum-with-renderer-syntax). |
 | Docker Engine with the Compose v2 plugin, or Docker Desktop | Tool images, isolated builds, the cve-bin-tool database builder, and the Dagster stack. |
 | Claude Code CLI (`claude`), signed in; or the opt-in Copilot SDK setup | Default model calls use `claude-cli`; `copilot-dev` and `copilot-prod` use a separate Copilot subscription login. An unavailable model blocks intake. |
-| Disk space | Feed data, tool images, and CodeQL databases are large. The cve-bin-tool database alone is about 530 MB for the full NVD. |
+| Disk space | Feed data, tool images and CodeQL databases are large; space depends on the selected inputs and coverage. |
 | `NVD_API_KEY` (optional) | Uses the authenticated NVD rate during metadata sync. |
 
 All runtime settings (models, timeouts, worker counts, schedules, feed sources) live in
@@ -78,16 +78,17 @@ declared releases, resource admission, required builder readiness and rollout li
 
 ### Software inventory
 
-Everything below is declared in the file named in the last column; nothing else is required.
+The files in the last column declare these dependencies. Individual build/provider adapters can
+require additional commissioned capabilities; the tables are not an exhaustive host-readiness proof.
 
 **Required to run**
 
 | Requirement | Needed for | Where declared |
 | --- | --- | --- |
-| Python >= 3.11 and declared runtime dependencies (including `zstandard==0.25.0` for Grype), installed by `pip install -e .` | The package and the `appsec-review` and `appsec-review-mcp` commands | `pyproject.toml` (`requires-python`, `dependencies`) |
+| Declared runtime dependencies installed in the checkout's environment; use Python 3.12 for this setup | The package and its CLI; the advertised >=3.11 minimum has the T-160 renderer limitation above | `pyproject.toml` (`requires-python`, `dependencies`) |
 | Docker with `docker buildx` (`--load`, `--network none`) | Operator tool/build-environment provisioning and container execution; review-time derived images use the bounded builder below | `containers/build.py`, `src/appsec_review/container_runtime/` |
 | Claude Code CLI `claude` on `PATH`, signed in | Model calls; `provider = "claude-cli"` | `appsec-review.toml`, `src/appsec_review/inference/claude_cli.py` |
-| Tool images (below), built locally | Every analysis job that is not a coverage gap | `containers/catalog.toml` |
+| Tool images (below), provisioned locally | Image references selected by readiness and execution policy; a catalog declaration is not proof that its tool ran | `containers/catalog.toml` |
 
 **Required to test (host virtual environment, `pip install -e ".[test]"`)**
 
@@ -115,18 +116,13 @@ Everything below is declared in the file named in the last column; nothing else 
 | Built tool, build-environment and CodeQL images | Live, integration and full-tier tests (skipped, naming the missing image) | `containers/catalog.toml` |
 | `NVD_API_KEY` | Authenticated NVD rate during metadata sync | `docs/operations/third-party-data-sync.md` |
 
-**Tool images.** `containers/catalog.toml` is the authoritative list (32 enabled tool images, four
-runtime bases, ten build environments); [`containers/README.md`](containers/README.md) explains building
-them, and each `containers/tools/<name>/tool.toml` or `Dockerfile` pins its inputs. By purpose:
-C/C++ (`native-cpp` toolchain with Clang 18, `clang-static-analysis` with Clang-Tidy and the Static
-Analyzer, `clangd-indexer`, `cppcheck`, `infer`, `svf`), code property graph and binaries (`joern`,
-`ghidra`, `blint`, `tree-sitter`), SAST (`semgrep`, `opengrep`, `gosec`, `pmd`, `spotbugs`,
-`phpstan`, `phpcs`, `psalm`, `mobsfscan`, `shellcheck`), secrets, IaC and CI (`gitleaks`, `checkov`,
-`hadolint`, `actionlint`, `zizmor`), dependencies and SBOM (`trivy`, `grype`, `syft`,
-`osv-scanner`), report rendering (`report-latex`), and support (`git`, `sqlite-fts`). The
-`cve-bin-tool` image is deferred for redesign, and `sbomasm` and `microsoft-sbom-tool` are replaced by `syft`.
-Clang 18 comes from those images, not from the host; the host needs `clang++-18` only for the
-opt-in live test above.
+**Tool images.** [`containers/catalog.toml`](containers/catalog.toml) owns the image declarations;
+the [generated inventory](docs/generated/inventory.json) and
+[tool-purpose matrix](docs/generated/matrix-tool-bucket.md) project them without a second
+hand-maintained list here. [`containers/README.md`](containers/README.md) explains provisioning.
+Each image's recipe and lock files own its input versions. Managed compiler readers come from
+their declared images; host compiler requirements belong to the explicitly selected native or
+live-test boundary.
 
 **Native SBOMs use SPDX 2.3 JSON.** Dependency intelligence augments the source inventory with
 bounded vendored/header-only discovery, without requiring CMake, Conan, or a successful build.
@@ -142,11 +138,11 @@ see [Unity builds](docs/operations/unity-build.md).
 
 **CodeQL** is not in the catalog. Its licensed payload (CLI, extractors, query packs) is not in this
 repository: on any Linux Docker host (native Linux or WSL 2, not Windows PowerShell)
-`containers/tools/codeql/build-source-image.sh` downloads the pinned CodeQL bundle and
-`github/codeql-coding-standards@v2.62.0` packs, verifies their SHA-256, and builds
-`audit-codeql:local` and `audit-codeql:custom-2.27.0` from this repository's Dockerfiles.
-Its execution image ID and declared component releases are configured in `appsec-review.toml`;
-customer review execution does not hash supplied assets or their lock file. See
+`containers/tools/codeql/build-source-image.sh` acquires the declared CodeQL bundle and
+coding-standard packs, verifies their pinned hashes and builds the recipe's source/custom tags.
+Observed execution image IDs and preinstalled runtime declarations belong to the host-owned
+`deploy/dagster/host-pins.toml`; recipe and release declarations remain separate. Customer evidence
+processing excludes supplied tooling bytes; deployment integrity verification is a separate boundary. See
 [`containers/tools/codeql/README.md`](containers/tools/codeql/README.md),
 [`LICENSE.md`](containers/tools/codeql/LICENSE.md) and
 [`docs/operations/codeql-analysis.md`](docs/operations/codeql-analysis.md). Without it, CodeQL
@@ -164,8 +160,9 @@ Hash-pinned downloads for the images are fetched and checked by `containers/buil
 | Windows through WSL 2 | Supported | Supported | Supported (recommended on Windows) |
 | Native Windows (PowerShell) | Supported | Supported | Supported with container Claude sign-in |
 
-The pipeline is a Linux x86-64 execution vertical: builds, scanners, and CodeQL all run in Linux
-containers. On a Windows machine, WSL 2 is the most direct route.
+The default execution vertical is Linux x86-64. Individual build adapters can use separately
+commissioned native or platform-specific capabilities; the table is not proof of every target
+family's support. On a Windows machine, WSL 2 is the normal repository-development route.
 
 For repository development and tests, use Linux or WSL with the checkout on the Linux filesystem
 (for example, `~/src/appsec-review`, not `/mnt/c/...`). Windows-mounted checkouts can fail POSIX
@@ -192,11 +189,12 @@ the corresponding provenance/lock procedure.
 
 ## Setup on Linux
 
-Install the prerequisites (Debian/Ubuntu shown; use your distribution's equivalents elsewhere):
+Install the prerequisites (shown for a Debian/Ubuntu release whose approved repositories provide
+Python 3.12; provision that interpreter separately on older distributions):
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git python3 python3-venv python3-pip
+sudo apt-get install -y git python3.12 python3.12-venv
 ```
 
 Install Docker Engine and the Compose plugin by following
@@ -221,7 +219,7 @@ Clone the repository and create a virtual environment:
 ```bash
 git clone https://github.com/wsollers/appsec-review.git
 cd appsec-review
-python3 -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[test]"
@@ -294,7 +292,7 @@ ownership for `runs/` and `data/` only works on the Linux side.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git python3 python3-venv python3-pip
+sudo apt-get install -y git python3.12 python3.12-venv
 docker version
 docker compose version
 ```
@@ -344,7 +342,7 @@ Then follow the same clone and virtual-environment steps as Linux:
 cd ~
 git clone https://github.com/wsollers/appsec-review.git
 cd appsec-review
-python3 -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[test]"
@@ -359,11 +357,9 @@ Install Git for Windows, Python 3.12 from <https://www.python.org/downloads/wind
 python.exe to PATH*), and Docker Desktop (WSL 2 engine). Apply the `.wslconfig` memory limit shown
 in the WSL section; Docker Desktop uses the same virtual machine.
 
-Avoid CRLF conversion in shell scripts and fixtures before cloning:
-
-```powershell
-git config --global core.autocrlf input
-```
+The committed `.gitattributes` and `.editorconfig` control line endings; preserve byte-pinned
+inputs rather than relying on a global `core.autocrlf` change. This operator setup option does not
+grant repository agents permission to develop or test on native Windows.
 
 Clone the repository and create a virtual environment in PowerShell:
 
@@ -460,15 +456,10 @@ shared native toolchain image). The Bash and PowerShell launchers call the same 
 before each build, and Docker build steps run without network access. Results go to
 `runs/container-builds/<run-id>/`. See [`containers/README.md`](containers/README.md) for details.
 
-Two images need their inputs acquired before the first build:
-
-```bash
-containers/tools/native-cpp/acquire_assets.sh        # C/C++ package closure for tool-native-cpp
-```
-
-`tool-tree-sitter` takes its wheels and grammars from
-[`containers/tools/tree-sitter/acquire_assets.py`](containers/tools/tree-sitter/README.md), run in
-the acquisition container its README describes.
+Image-specific acquisition helpers and required local assets are documented in
+[container operations](containers/README.md) and each image's README. Acquisition can require
+network access even when the subsequent Docker build is networkless. Use those declarations
+rather than assuming every image has the same pre-build procedure.
 
 Linux or WSL:
 
@@ -494,23 +485,24 @@ To build only a few images:
 containers/build-all.sh build tool-gitleaks tool-semgrep tool-infer
 ```
 
-The CodeQL images build on any Linux Docker host (native Linux or WSL 2) with one command,
-`containers/tools/codeql/build-source-image.sh`, which fetches the pinned, hash-verified CodeQL and builds `audit-codeql:local` and the pinned `audit-codeql:custom-2.27.0`.
+The CodeQL images use the Linux-host command `containers/tools/codeql/build-source-image.sh`,
+which acquires hash-verified payloads and builds the recipe's declared tags.
 No proprietary CodeQL payload is committed; see
 [`containers/tools/codeql/LICENSE.md`](containers/tools/codeql/LICENSE.md) and
 [`docs/operations/codeql-analysis.md`](docs/operations/codeql-analysis.md). Without it, CodeQL scopes
 are recorded as coverage gaps.
 
-Images move forward; they are not reproduced byte for byte. Upstream archives change, so a rebuild
-or re-acquisition can produce new bytes and a new image ID. When that happens, rebuild, smoke the
-image, and record the result: the new size and SHA-256 in its `assets.lock.json`, and the new image
-ID in its pins (`image_id` in the catalog, the build profiles in `appsec-review.toml`, and CodeQL's
-`source_image_id`). Pins are host-local and are never compared across machines. See
+Images move forward; a rebuild is not a byte-for-byte reproduction guarantee. An intentional
+recipe or payload update requires its acquisition/lock verification and an authorized build/smoke.
+Do not refresh a hash merely to accept unexpected download or newline drift. The image owner
+records observed IDs in ignored host bindings, never in the tracked recipe/catalog. Bindings
+belong to the selected daemon and are not copied from another host. See
 [Moving forward, not reproducing](containers/README.md#moving-forward-not-reproducing).
 
-The pipeline never builds images. The operator rebuilds them on the host with `containers/build.py`,
-re-pins them with `appsec-review update-image-pins --write`, and signs them with
-`appsec-review signing sign-image --all-pinned --private-key <key>`. Every review then verifies at its
+The operator provisions catalog/tooling images with `containers/build.py`, updates local bindings
+with `appsec-review update-image-pins --write`, and uses the configured signing procedure.
+Some review build paths can request bounded derived images from an explicitly commissioned builder;
+this is not unrestricted image construction by a worker. Every review then verifies at its
 start (`job_image_pin_verification`) that every enabled catalog image, build profile and CodeQL source
 image resolves on the local daemon to exactly its pin, and fails before intake naming every missing
 image or moved tag. See
@@ -521,17 +513,10 @@ see [`docs/operations/signing.md`](docs/operations/signing.md).
 
 ## Sync third-party metadata
 
-Vulnerability and threat-reference data is fetched by `job_third_party_data_sync`. It refreshes
-six branches:
-
-| Branch | Publishes to | Contents |
-| --- | --- | --- |
-| `nvd_sync` | `data/feeds/nvd/` | NVD CVE 2.0 yearly feeds, then incremental last-modified windows. |
-| `osv_sync` | `data/feeds/osv/` | OSV archives for PyPI, crates.io, npm, Go, Maven, Packagist, NuGet and RubyGems (about 291,000 records, 573 MB uncompressed) plus a SQLite lookup index. |
-| `mitre_sync` | `data/feeds/mitre/` | Enterprise ATT&CK, CAPEC, and CWE (all three mandatory); Mobile and ICS ATT&CK are optional selections. |
-| `cve_bin_tool_db_build` | `data/feeds/cve-bin-tool/` | cve-bin-tool database built offline in Docker from the NVD snapshot above. |
-| `kev_sync` | `data/feeds/kev/` | CISA Known Exploited Vulnerabilities catalog and SQLite lookup index. |
-| `epss_sync` | `data/feeds/epss/` | FIRST daily EPSS scores and SQLite lookup index. |
+Vulnerability and threat-reference data is fetched by `job_third_party_data_sync`. Its
+[canonical job contract](docs/operations/job_third_party_data_sync.md) lists the configured feed
+branches and their publication boundaries, including scanner database synchronization. This
+standalone maintenance job is not an unconditional node of every review.
 
 Each publication is an immutable, hash-manifested snapshot, and `current.json` moves only after
 validation. A failed refresh keeps the previous last-known-good snapshot. Host-level status
@@ -586,31 +571,14 @@ See [Grype database synchronization](docs/operations/third-party-data-sync.md#gr
 For a full Dagster review, start with the
 [review startup guide: required inputs, features and flags](docs/operations/review-startup.md).
 It includes PowerShell/WSL and Linux launch sequences, all `review-start` options, and the
-TOML-only feature gates. The direct CLI below runs a smaller graph.
+TOML-only feature gates. The direct CLI and Dagster use the same enabled semantic graph from
+[`orchestration.topology`](src/appsec_review/orchestration/topology.py), projected from typed
+job input and scheduling contracts. The CLI executes a deterministic topological order; Dagster
+can schedule independent branches concurrently. The [generated inventory](docs/generated/inventory.json)
+and [canonical job pages](docs/operations/README.md) describe declarations, not observed run coverage.
+Standalone maintenance and internal build transactions are not unconditional graph nodes.
 
-The direct CLI runs this linear graph:
-
-```text
-model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
-  -> ci_configuration_analysis -> source_history_analysis
-  -> target_analysis_plan
-  -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
-  -> artifact_indexing -> test_coverage -> profile_data -> debug_symbol_indexing -> artifact_security_analysis
-  -> evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
-  -> sanitizer_build -> cpp_symbol_index -> cpg_analysis (deprecated; only when enabled)
-  -> svf_alias_analysis (opt-in; only when enabled) -> binary_evidence_indexing
-  -> post_build_security_assessment -> dependency_intelligence
-  -> codeql_analysis -> review_prioritization
-  -> code_graph_index -> security_tagging
-  -> owasp_control_assessment (enabled by default)
-  -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review (chains before seal)
-  -> poc_generation -> remediation_planning -> remediation_validation -> dossier_publication
-  -> final_publication_gate -> openvex_export (automatic local generation; explicit opt-out)
-  -> final_report_publication
-```
-
-The completion producers above run before one certified gate when enabled. The direct driver
+Enabled completion producers run before one certified gate. The direct driver
 dispatches post-gate export and report sequentially, but they are independent graph peers:
 the report consumes only the gate snapshot, never OpenVEX output.
 
@@ -700,12 +668,10 @@ $env:PYTHONPATH = "src"
 python -m appsec_review start --target targets/appsec-multi-vuln
 ```
 
-The direct graph leaves out CI configuration analysis and post-build security assessment,
-including when those jobs are enabled. Use Dagster's `wave1_review` job, which runs every
-enabled registered review job except the standalone
-`third_party_data_sync` job, when you need those branches. The direct graph is linear, so its
-order is an execution order rather than a claim that every adjacent job consumes its predecessor.
-`third_party_data_sync` remains a separate scheduled metadata job.
+CI configuration analysis and post-build security assessment are included on both execution
+surfaces when enabled. The direct order is an execution order, not a claim that every adjacent
+job consumes its predecessor. Typed contracts govern actual consumption; standalone maintenance
+and internal transactions retain their separate dispatch boundaries.
 
 The [OWASP assessment](docs/architecture/owasp-control-workbench.md) is enabled by default
 with `mode = "assessment"` in all shipped profiles. Set
@@ -722,8 +688,7 @@ Downstream OWASP interpretations remain provisional and indirect for every final
 review roles must retrieve original evidence. See [settings, outputs and limits](docs/operations/owasp-control-assessment.md).
 Direct `start`, `resume` and `plan-resume` select tagging and OWASP in this order when enabled.
 `--force-from` can name either job in `resume`/`plan-resume`, but cannot bypass a disabled-job gate.
-This shared ordering is not full graph parity: CI/post-build remain Dagster additions and
-third-party metadata sync remains standalone.
+Third-party metadata sync remains standalone rather than becoming a required review predecessor.
 
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
@@ -764,17 +729,17 @@ See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 ## Model profiles: dev and prod
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
-scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` is an opt-in
-Haiku development profile using a separate Copilot subscription login. Other values are errors. The
+scripts (`-Profile prod` in PowerShell). The default is `dev`; Copilot profiles opt into a
+separate subscription login. Other values are errors. The
 stack's profile is the container default; `review-start --profile` picks another profile of the same
 provider family (Claude or Copilot) for one run, and a family switch needs a stack restart.
 
-| Profile | Models | Limits |
+| Profile | Authoritative settings | Purpose |
 | --- | --- | --- |
-| `dev` (default) | Haiku 5.5, the checked-in `appsec-review.toml` | today's small limits, for testing |
-| `prod` | Sonnet 5.5, with an Opus 5.5 independent verifier (`profiles/prod.toml`) | larger token limits and budgets for real reviews |
-| `copilot-dev` | Haiku 5.5 through the Copilot SDK (`profiles/copilot-dev.toml`) | unchanged dev limits; Git and inference accounts stay separate |
-| `copilot-prod` | Sonnet 5.5 through Copilot, with Opus 5.5 verifier and judge (`profiles/copilot-prod.toml`) | unchanged prod limits, reasoning and role bindings; opt-in only |
+| `dev` (default) | [Central configuration](appsec-review.toml) | Development sizing; not a production test environment |
+| `prod` | [Production profile](profiles/prod.toml) | Explicit production model, reasoning and budget selections |
+| `copilot-dev` | [Copilot development profile](profiles/copilot-dev.toml) | Opt-in Copilot provider; Git and inference accounts stay separate |
+| `copilot-prod` | [Copilot production profile](profiles/copilot-prod.toml) | Opt-in production selections through the Copilot provider |
 
 For Copilot installation, separate-account login, catalog verification and deployment commands, see
 [Copilot with a separate GitHub identity](docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).
@@ -799,24 +764,27 @@ do when a work account names a model differently are in
 
 ## Prepare an end-to-end run
 
-A review host runs a new end-to-end review in this order. Record the commit of every result (`git
+A review host can prepare a new end-to-end review in this order. This is a manual operator
+sequence, not authorization for an agent to build images or run integration/acceptance checks
+while repairing code. Record the commit of every result (`git
 rev-parse HEAD` in this repository and in the target), and do not pull, reinstall or switch branches
 in a checkout while a run or test suite uses it.
 
-1. Update this checkout to `origin/main` and reinstall into its own `.venv`; confirm the import path
-   as shown in the setup section.
+1. Update the checkout through its serialized integration owner. Refresh its own `.venv` only
+   for dependency changes or missing dependencies; confirm the import path as shown above.
 2. Check out the target at the commit pinned in the evaluator lock
    ([Download the acceptance target](#download-the-acceptance-target)).
-3. Build and smoke every enabled image, acquiring inputs first where needed
-   ([Build the tool container images](#build-the-tool-container-images)). Record new image IDs in
-   their pins on that host, then sign them with the operator key
+3. Verify the required provisioned image identities. When a tooling/payload change requires an
+   explicitly authorized build and smoke, follow
+   [image provisioning](#build-the-tool-container-images). Record new host bindings and apply
+   the configured signing procedure
    ([`docs/operations/signing.md`](docs/operations/signing.md#operator-runbook)).
-4. Sync third-party metadata if it is older than you want
+4. Refresh selected third-party metadata when its configured freshness policy requires it
    ([Sync third-party metadata](#sync-third-party-metadata)).
-5. Run the nothing-to-find review on the pinned images
+5. If explicitly selected for this validation, run the nothing-to-find review on the pinned images
    ([End-to-end review of a target with nothing to find](#end-to-end-review-of-a-target-with-nothing-to-find)).
-   It must pass: a finding on that target is a false positive to fix, and a failed job is a break to
-   fix, before a real review is trusted.
+   Attribute any unexpected observation or job failure against the fixture and source.
+   This integration check is not an implicit gate for every repair or merge.
 6. Start the review ([Run a review](#run-a-review) or the Dagster `wave1_review` job) and leave the
    checkout and target alone until it finishes.
 
@@ -857,7 +825,7 @@ you may set `APPSEC_UNSIGNED_MODULES=1` in `deploy/dagster/.env` to skip per-lau
 The mounted checkout must be on WSL ext4 or native Linux, never under `/mnt/c` or `/mnt/f`.
 The one-time preparation of a host — daemon context, key and committed anchor, image build, pin and
 sign, CodeQL cache, stack, gate run — is [Run readiness](docs/operations/run-readiness.md); after it,
-no step of the fix–test–restart loop rebuilds an image.
+the routine source-only repair loop reloads rather than rebuilding an unchanged tooling image.
 
 On native Windows, run the same commands in PowerShell, then sign in to the container CLI with
 `docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login`.
@@ -865,7 +833,8 @@ The [serial smoke runner](deploy/dagster/README.md#serial-smoke-tests) verifies 
 printing its credentials.
 
 The console is at <http://localhost:3000> (bound to `127.0.0.1` only). `targets/` is mounted
-writable (acquisition creates checkouts there and builds write their outputs into the checkout),
+writable for acquisition; build-workspace custody is a separate boundary described in
+[acquisition and build](docs/architecture/target-acquisition-and-build.md),
 and the default review target is `/opt/app/targets/appsec-multi-vuln`. To review a
 different checkout under `targets/`, set `APPSEC_REVIEW_TARGET` in `deploy/dagster/.env` to its
 container path, for example:
@@ -894,10 +863,10 @@ scripts/review-watch.sh --run DAGSTER_UUID
 python deploy/dagster/bin/verify.py --run-id DAGSTER_UUID --evidence runs/metadata/dagster-verification/DAGSTER_UUID.json
 ```
 
-After you change application code, rebuild and reload only the code location:
+After an application-code-only change, use the measured-source reload path, without rebuilding
+the tooling image. Deployment verification remains a separately authorized operator action:
 
 ```bash
-python deploy/dagster/bin/lifecycle.py build
 python deploy/dagster/bin/lifecycle.py reload
 python deploy/dagster/bin/verify.py
 ```
@@ -923,22 +892,24 @@ Dagster tests are skipped when the `dagster` extra is not installed, and live or
 tests are skipped, naming what is missing, until the opt-in requirements in the
 [Software inventory](#software-inventory) are met.
 
-Bare `pytest` collects only unit tests; `tests/integration`, `tests/acceptance`, `tests/live` and
-`tests/test_live_*.py` run only when named explicitly. The first test of every session,
-`tests/test_000_unit_environment_guard.py`, fails if the shell exports production configuration
-(for example `APPSEC_REVIEW_PROFILE=prod`, an overlay, `APPSEC_NATIVE_*` or `DAGSTER_HOME`). Each
-unit test must be independent and finish in under 10 seconds; the run ends with a list of those
-that do not, and every test's timing is kept in `<basetemp>.timings.sqlite`.
+Implicit collection excludes `tests/integration`, `tests/acceptance`, `tests/live` and root
+`tests/test_live_*.py`; it still includes legacy paths not yet certified as code-level units.
+The environment guard rejects production bindings when invoked. Xdist runs its controller
+preflight, while explicit serial selection can omit the guard module. Each unit must be
+independent and under ten seconds, but current path-budget and interception limits are detailed
+in the [enforcement table](docs/architecture/testing.md#forward-contract-and-enforcement).
+Timing records and named skips are evidence about the check, not proof of complete coverage.
 
 Use a named base directory beneath `test/tmp/` for every session, and a bounded worker count:
 
 ```bash
-python -m pytest -q tests/test_static_adapters.py --basetemp=test/tmp/static-adapters
-python -m pytest -q -n 8 --shuffle-seed=1234 tests/test_static_adapters.py --basetemp=test/tmp/static-shuffled
-python -m pytest -q -rfEs -n 8 --basetemp=test/tmp/unit-gate      # the whole unit tier
+python -m pytest -q -n 8 --shuffle-seed=1234 tests/unit/job_debug_symbol_indexing/test_contract.py \
+  --basetemp=test/tmp/debug-symbol-contract
 ```
 
-Standards, tiers and the working loop are in
+Long or multi-file selections use `scripts/run-tests.sh`, not an unbounded whole-suite command.
+Integration, acceptance and live checks require explicit user authorization even when their
+paths can be selected. Standards, tiers and the working loop are in
 [`docs/architecture/testing.md`](docs/architecture/testing.md).
 
 ### Bounded integration acceptance
@@ -1042,9 +1013,9 @@ docker run --rm appsec-review-dagster-test
 ## Working with other agent sessions
 
 Several agent sessions (cloud sessions, sessions on review hosts, Codex) may change, build and test
-this repository at once. GitHub is their shared record: claim work early with a draft pull request,
-keep pull requests small, merge `origin/main` before pushing, and never rebase or force-push a
-shared branch. Host-specific values have single owners: image pins belong to the session on the
+this repository at once. Use the coordinator's explicit file ownership and exact-commit
+handoffs, then serialize local integration. A task does not implicitly authorize a pull request
+or push. Never rebase or force-push shared history. Host-specific values have single owners: image pins belong to the session on the
 review host that built and smoked those images, asset locks to the session that acquired them, and
 target checkouts to the repository owner. The procedure is
 [`.claude/skills/multi-session-coordination/SKILL.md`](.claude/skills/multi-session-coordination/SKILL.md).
