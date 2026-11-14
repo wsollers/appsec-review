@@ -329,7 +329,7 @@ def test_deciding_roles_keep_joint_support_and_contradiction_provenance() -> Non
                   deciding_actor_roles=roles, required_predicates=(Predicate.AFFECTED_CONSTRUCT,))
     assert set(dec.deciding_actor_roles) == set(roles)
     assert c.from_document(dec.to_dict(), expected_origin=origin()) == dec
-    with pytest.raises(IntegrityError, match="omit counted"):
+    with pytest.raises(IntegrityError, match="recorded row"):
         replace(dec, deciding_actor_roles=(Role.BLUE_TEAM_REFUTER,))
     with pytest.raises(IntegrityError, match="judge"):
         replace(dec, deciding_actor_roles=(*roles, Role.ADJUDICATION_JUDGE))
@@ -813,9 +813,12 @@ def test_continued_deciding_roles_and_proposals_keep_their_original_identity() -
     rel = relation("deciding", role=Role.BLUE_TEAM_REFUTER)
     ref = c.make_continuation(c.ReferenceField.RELATIONS, "audit/relations.jsonl", (rel,),
                               origin=origin(), claim_id=link("claim-1"))
-    record = replace(decision(), context=replace(context(), continuations=(ref,)))
+    record = replace(decision(), context=replace(context(), continuations=(ref,)),
+                     stage=c.Stage.ADJUDICATION, outcome="supported",
+                     deciding_row=DecidingRow.SUPPORTED, deciding_row_absence_reason=None,
+                     required_predicates=(Predicate.AFFECTED_CONSTRUCT,))
     manifest, shards = single_bundle(record)
-    with pytest.raises(IntegrityError, match="continued relation provenance"):
+    with pytest.raises(IntegrityError, match="recorded row"):
         c.validate_bundle(manifest, shards, expected_origin=origin(), continuations={ref.path: (rel,)},
                           manifest_reference=c.ManifestRef.of("audit/manifest.json", manifest))
     record = replace(record, deciding_actor_roles=(Role.BLUE_TEAM_REFUTER,))
@@ -1251,3 +1254,207 @@ def test_terminal_and_semantic_populations_coexist_without_double_inference() ->
     assert next(item.emitted for item in manifest.coverage if item.population == c.Population.PROPOSALS) == 0
     for record in records:
         assert_typed_tree(record, c.from_document(record.to_dict(), expected_origin=origin()))
+
+
+def attributed_relation(identity: str, predicate: Predicate, kind: RelationKind, role: Role, *,
+                        counted: bool = True) -> c.RelationRef:
+    return replace(relation(identity, role=role, kind=kind, counted=counted), predicate=predicate)
+
+
+def recorded_decision(row: DecidingRow | None, rows: tuple[c.RelationRef, ...],
+                      required: tuple[Predicate, ...], roles: tuple[Role, ...]) -> c.DecisionRecord:
+    outcomes = {
+        DecidingRow.DUPLICATE: "duplicate", DecidingRow.OUT_OF_SCOPE: "out_of_scope",
+        DecidingRow.UNRESOLVED_CONTRADICTION: "insufficient_evidence",
+        DecidingRow.DIRECT_CONTRADICTION: "not_reachable", DecidingRow.CONFIRMED: "confirmed",
+        DecidingRow.SUPPORTED: "supported", DecidingRow.INSUFFICIENT_EVIDENCE: "insufficient_evidence",
+    }
+    return replace(decision(), context=context(relations=rows),
+                   stage=c.Stage.ADMISSION if row is None else c.Stage.ADJUDICATION,
+                   outcome="admitted" if row is None else outcomes[row], deciding_row=row,
+                   deciding_row_absence_reason=c.AbsenceReason.NOT_APPLICABLE if row is None else None,
+                   deciding_actor_roles=roles, required_predicates=required)
+
+
+@pytest.mark.parametrize("row", [None, *list(DecidingRow)])
+def test_deciding_roles_follow_each_recorded_row_without_replacing_its_outcome(row: DecidingRow | None) -> None:
+    construct = attributed_relation("construct", Predicate.AFFECTED_CONSTRUCT, RelationKind.SUPPORTS,
+                                    Role.RED_TEAM_ANALYST)
+    blue = attributed_relation("blue-guard", Predicate.MISSING_OR_INEFFECTIVE_GUARD, RelationKind.CONTRADICTS,
+                               Role.BLUE_TEAM_REFUTER)
+    verifier = attributed_relation("verifier-guard", Predicate.MISSING_OR_INEFFECTIVE_GUARD,
+                                   RelationKind.CONTRADICTS, Role.INDEPENDENT_VERIFIER)
+    guard_support = attributed_relation("guard-support", Predicate.MISSING_OR_INEFFECTIVE_GUARD,
+                                        RelationKind.SUPPORTS, Role.RED_TEAM_ANALYST)
+    optional = attributed_relation("optional", Predicate.SECURITY_IMPACT, RelationKind.SUPPORTS,
+                                   Role.HYPOTHESIS_HUNTER)
+    uncounted = attributed_relation("uncounted", Predicate.MISSING_OR_INEFFECTIVE_GUARD, RelationKind.SUPPORTS,
+                                    Role.HYPOTHESIS_HUNTER, counted=False)
+    judge = replace(relation("judge", role=Role.ADJUDICATION_JUDGE, counted=False),
+                    noncounted_reason=c.NoncountedReason.JUDGE_NONDECIDING)
+    required = (Predicate.AFFECTED_CONSTRUCT, Predicate.MISSING_OR_INEFFECTIVE_GUARD)
+    if row == DecidingRow.UNRESOLVED_CONTRADICTION:
+        rows = (construct, guard_support, blue, verifier, optional, uncounted, judge)
+        expected = (Role.BLUE_TEAM_REFUTER, Role.INDEPENDENT_VERIFIER, Role.RED_TEAM_ANALYST)
+    elif row == DecidingRow.DIRECT_CONTRADICTION:
+        rows = (construct, blue, verifier, optional, uncounted, judge)
+        expected = (Role.BLUE_TEAM_REFUTER, Role.INDEPENDENT_VERIFIER)
+    elif row == DecidingRow.CONFIRMED:
+        rows = (construct, guard_support, optional, uncounted, judge)
+        expected = (Role.RED_TEAM_ANALYST,)
+    elif row == DecidingRow.SUPPORTED:
+        rows = (construct, optional, uncounted, judge)
+        expected = (Role.RED_TEAM_ANALYST,)
+    elif row == DecidingRow.INSUFFICIENT_EVIDENCE:
+        rows = (optional, uncounted, judge)
+        expected = ()
+    else:
+        rows = (construct, blue, verifier, optional, uncounted, judge)
+        expected = ()
+    before = tuple(canonical_json(item.to_dict()) for item in rows)
+    assert c.deciding_roles(row, required, rows) == expected
+    assert c.deciding_roles(row, frozenset(required), rows[::-1]) == expected
+    assert tuple(canonical_json(item.to_dict()) for item in rows) == before
+    record = recorded_decision(row, rows, required, expected)
+    assert set(record.context.relations) == set(rows)
+    restored = c.from_document(record.to_dict(), expected_origin=origin())
+    assert_typed_tree(record, restored)
+    assert restored.deciding_row == row and restored.outcome == record.outcome
+    validate_single(restored, {})
+
+
+def test_attribution_uses_polarity_per_required_predicate_not_every_counted_role() -> None:
+    required = (Predicate.AFFECTED_CONSTRUCT, Predicate.MISSING_OR_INEFFECTIVE_GUARD,
+                Predicate.SOURCE_TO_SINK_REACHABILITY)
+    rows = (
+        attributed_relation("conflict-support", required[0], RelationKind.SUPPORTS, Role.RED_TEAM_ANALYST),
+        attributed_relation("conflict-contradiction", required[0], RelationKind.CONTRADICTS, Role.BLUE_TEAM_REFUTER),
+        attributed_relation("unopposed-contradiction", required[1], RelationKind.CONTRADICTS, Role.INDEPENDENT_VERIFIER),
+        attributed_relation("unrelated-support", required[2], RelationKind.SUPPORTS, Role.BLUE_TEAM_REFUTER),
+        attributed_relation("optional-support", Predicate.SECURITY_IMPACT, RelationKind.SUPPORTS, Role.HYPOTHESIS_HUNTER),
+    )
+    assert c.deciding_roles(DecidingRow.UNRESOLVED_CONTRADICTION, required, rows) == (
+        Role.BLUE_TEAM_REFUTER, Role.RED_TEAM_ANALYST)
+    assert c.deciding_roles(DecidingRow.DIRECT_CONTRADICTION, required, rows) == (Role.INDEPENDENT_VERIFIER,)
+    for row in (DecidingRow.CONFIRMED, DecidingRow.SUPPORTED):
+        assert c.deciding_roles(row, required, rows) == (Role.BLUE_TEAM_REFUTER, Role.RED_TEAM_ANALYST)
+    # This is attribution of the supplied row, not selection of R3 despite the conflict.
+    record = recorded_decision(DecidingRow.DIRECT_CONTRADICTION, rows, required, (Role.INDEPENDENT_VERIFIER,))
+    assert record.deciding_row is DecidingRow.DIRECT_CONTRADICTION
+    assert record.outcome == "not_reachable"
+    assert len(record.context.relations) == 5
+    assert c.deciding_roles(DecidingRow.DIRECT_CONTRADICTION, (), rows) == ()
+
+
+@pytest.mark.parametrize("roles", [
+    (), (Role.BLUE_TEAM_REFUTER,),
+    (Role.BLUE_TEAM_REFUTER, Role.INDEPENDENT_VERIFIER, Role.RED_TEAM_ANALYST),
+    (Role.BLUE_TEAM_REFUTER, Role.INDEPENDENT_VERIFIER, Role.HYPOTHESIS_HUNTER),
+    (Role.BLUE_TEAM_REFUTER, Role.INDEPENDENT_VERIFIER, Role.INDEPENDENT_VERIFIER),
+])
+def test_dismissal_declared_roles_must_equal_joint_decisive_roles(roles: tuple[Role, ...]) -> None:
+    rows = (
+        relation("unrelated-red-support", role=Role.RED_TEAM_ANALYST),
+        attributed_relation("blue-dismissal", Predicate.MISSING_OR_INEFFECTIVE_GUARD,
+                            RelationKind.CONTRADICTS, Role.BLUE_TEAM_REFUTER),
+        attributed_relation("verifier-dismissal", Predicate.MISSING_OR_INEFFECTIVE_GUARD,
+                            RelationKind.CONTRADICTS, Role.INDEPENDENT_VERIFIER),
+    )
+    required = (Predicate.AFFECTED_CONSTRUCT, Predicate.MISSING_OR_INEFFECTIVE_GUARD)
+    with pytest.raises(IntegrityError):
+        recorded_decision(DecidingRow.DIRECT_CONTRADICTION, rows, required, roles)
+
+
+@pytest.mark.parametrize("row", [
+    DecidingRow.UNRESOLVED_CONTRADICTION, DecidingRow.DIRECT_CONTRADICTION,
+    DecidingRow.CONFIRMED, DecidingRow.SUPPORTED,
+])
+def test_exact_attribution_agrees_for_inline_and_continued_populations(row: DecidingRow) -> None:
+    construct = relation("construct-support", role=Role.RED_TEAM_ANALYST)
+    blue = attributed_relation("blue", Predicate.MISSING_OR_INEFFECTIVE_GUARD,
+                               RelationKind.CONTRADICTS if row in (
+                                   DecidingRow.UNRESOLVED_CONTRADICTION, DecidingRow.DIRECT_CONTRADICTION)
+                               else RelationKind.SUPPORTS, Role.BLUE_TEAM_REFUTER)
+    required = (Predicate.AFFECTED_CONSTRUCT, Predicate.MISSING_OR_INEFFECTIVE_GUARD)
+    inline = (construct,)
+    if row == DecidingRow.UNRESOLVED_CONTRADICTION:
+        inline += (attributed_relation("guard-support", required[1], RelationKind.SUPPORTS, Role.RED_TEAM_ANALYST),)
+    if row == DecidingRow.SUPPORTED:
+        required += (Predicate.ATTACKER_INPUT_CONTROL,)
+    rows = (*inline, blue)
+    expected = (Role.BLUE_TEAM_REFUTER,) if row == DecidingRow.DIRECT_CONTRADICTION else (
+        Role.BLUE_TEAM_REFUTER, Role.RED_TEAM_ANALYST)
+    direct = recorded_decision(row, rows, required, expected)
+    ref = c.make_continuation(c.ReferenceField.RELATIONS, "audit/attribution-relations.jsonl", (blue,),
+                              origin=origin(), claim_id=link("claim-1"))
+    continued = replace(direct, context=replace(direct.context, relations=inline, continuations=(ref,)))
+    assert c.deciding_roles(row, required, rows) == direct.deciding_actor_roles == continued.deciding_actor_roles
+    validate_single(direct, {})
+    validate_single(continued, {ref.path: (blue,)})
+    assert direct.outcome == continued.outcome and direct.deciding_row == continued.deciding_row
+    for bad_roles in ((), (*expected, Role.HYPOTHESIS_HUNTER)):
+        malformed = replace(continued, deciding_actor_roles=bad_roles)
+        with pytest.raises(IntegrityError, match="recorded row"):
+            validate_single(malformed, {ref.path: (blue,)})
+    with pytest.raises(IntegrityError, match="supplied reference continuations"):
+        validate_single(continued, {})
+
+
+def test_continued_support_can_remove_r4_attribution_without_changing_the_recorded_row() -> None:
+    blue = relation("blue-contra", role=Role.BLUE_TEAM_REFUTER, kind=RelationKind.CONTRADICTS)
+    red = relation("red-support", role=Role.RED_TEAM_ANALYST)
+    required = (Predicate.AFFECTED_CONSTRUCT,)
+    ref = c.make_continuation(c.ReferenceField.RELATIONS, "audit/opposing-support.jsonl", (red,),
+                              origin=origin(), claim_id=link("claim-1"))
+    direct = recorded_decision(DecidingRow.DIRECT_CONTRADICTION, (blue, red), required, ())
+    partial = replace(direct, context=replace(direct.context, relations=(blue,), continuations=(ref,)))
+    assert c.deciding_roles(DecidingRow.DIRECT_CONTRADICTION, required, (blue,)) == (Role.BLUE_TEAM_REFUTER,)
+    assert c.deciding_roles(DecidingRow.DIRECT_CONTRADICTION, required, (blue, red)) == ()
+    validate_single(partial, {ref.path: (red,)})
+    assert partial.outcome == "not_reachable"
+    assert partial.deciding_row is DecidingRow.DIRECT_CONTRADICTION
+    with pytest.raises(IntegrityError, match="recorded row"):
+        validate_single(replace(partial, deciding_actor_roles=(Role.BLUE_TEAM_REFUTER,)), {ref.path: (red,)})
+
+
+@pytest.mark.parametrize("row", [
+    None, DecidingRow.DUPLICATE, DecidingRow.OUT_OF_SCOPE, DecidingRow.INSUFFICIENT_EVIDENCE,
+])
+def test_application_only_attribution_is_empty_even_with_declared_continuations(row: DecidingRow | None) -> None:
+    rel = relation()
+    ref = c.make_continuation(c.ReferenceField.RELATIONS, "audit/accounted-relations.jsonl", (rel,),
+                              origin=origin(), claim_id=link("claim-1"))
+    record = recorded_decision(row, (), (Predicate.AFFECTED_CONSTRUCT,), ())
+    record = replace(record, context=replace(record.context, continuations=(ref,)))
+    validate_single(record, {ref.path: (rel,)})
+    with pytest.raises(IntegrityError, match="recorded row"):
+        replace(record, deciding_actor_roles=(Role.INDEPENDENT_VERIFIER,))
+
+
+def test_only_relations_continuations_defer_attribution_and_judge_never_gains_authority() -> None:
+    rel = relation()
+    ref = c.make_continuation(c.ReferenceField.SOURCES, "audit/source-refs.jsonl", (source("new"),),
+                              origin=origin(), claim_id=link("claim-1"))
+    record = recorded_decision(DecidingRow.SUPPORTED, (rel,), (Predicate.AFFECTED_CONSTRUCT,),
+                               (Role.INDEPENDENT_VERIFIER,))
+    record = replace(record, context=replace(record.context, continuations=(ref,)))
+    with pytest.raises(IntegrityError, match="recorded row"):
+        replace(record, deciding_actor_roles=())
+    with pytest.raises(IntegrityError, match="judge"):
+        replace(record, deciding_actor_roles=(Role.INDEPENDENT_VERIFIER, Role.ADJUDICATION_JUDGE))
+    with pytest.raises(IntegrityError, match="cannot be counted"):
+        replace(rel, actor_role=Role.ADJUDICATION_JUDGE)
+
+
+@pytest.mark.parametrize(("row", "required", "relations", "message"), [
+    ("unknown_row", (), (), "closed row"),
+    (True, (), (), "closed row"),
+    (DecidingRow.SUPPORTED, ("invented_predicate",), (), "closed row"),
+    (DecidingRow.SUPPORTED, None, (), "closed row"),
+    (DecidingRow.SUPPORTED, (), None, "typed relation"),
+    (DecidingRow.SUPPORTED, (), ({},), "typed relation"),
+    (DecidingRow.SUPPORTED, (), (relation(), relation()), "attribution relation identities"),
+])
+def test_attribution_helper_rejects_malformed_closed_inputs(row, required, relations, message) -> None:
+    with pytest.raises(IntegrityError, match=message):
+        c.deciding_roles(row, required, relations)

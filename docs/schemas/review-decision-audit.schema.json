@@ -149,7 +149,10 @@
         "producing_cell_id": {"$ref": "#/$defs/id"},
         "actor_role": {"$ref": "#/$defs/role"},
         "admissibility": {"enum": ["direct", "direct_for_mapped_predicate", "analyst_assessed", "indirect"]},
-        "counted": {"type": "boolean"},
+        "counted": {
+          "type": "boolean",
+          "description": "Counted in original predicate accounting, not necessarily decisive for the recorded adjudication row."
+        },
         "noncounted_reason": {"enum": [null, "analyst_assessed", "indirect", "incomplete", "judge_nondeciding", "qualifying", "not_required", "not_evaluated"]},
         "source": {"$ref": "#/$defs/source_ref"}
       },
@@ -233,7 +236,10 @@
         "basis_status": {"enum": ["unstated", "narrative_only", "cited_nondeciding", "existing_policy"]},
         "deciding_row": {"enum": [null, "r1_duplicate", "r2_out_of_scope", "r3_unresolved_contradiction", "r4_direct_contradiction", "r5_confirmed", "r6_supported", "r7_insufficient_evidence"]},
         "deciding_row_absence_reason": {"oneOf": [{"$ref": "#/$defs/absence"}, {"type": "null"}]},
-        "deciding_actor_roles": {"type": "array", "items": {"$ref": "#/$defs/role"}, "maxItems": 14, "uniqueItems": true},
+        "deciding_actor_roles": {
+          "type": "array", "items": {"$ref": "#/$defs/role"}, "maxItems": 14, "uniqueItems": true,
+          "description": "Exact roles derived from the recorded row, required predicates and complete inline plus continued relation population; never all counted roles by default."
+        },
         "actor_role": {
           "description": "Original producing role, not deciding authority or an endorsement of a semantic outcome.",
           "oneOf": [{"$ref": "#/$defs/role"}, {"type": "null"}]
