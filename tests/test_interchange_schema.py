@@ -65,11 +65,19 @@ def test_schema_accepts_shared_serialized_records(record):
     {"outcomes": None}, {"coverage": {"disposition": "not_affected", "gap_count": 0, "retry_required": False}},
     {"coverage": {"disposition": "complete", "gap_count": 1, "retry_required": False}},
     {"coverage": {"disposition": "complete", "gap_count": 0, "retry_required": True}},
+    {"content_sha256": "zz"}, {"content_sha256": "A" * 64}, {"content_sha256": None},
 ])
 def test_schema_rejects_bad_envelope_shape(mutation):
     value = handoff_fixture()
     value.update(mutation)
     assert not VALIDATOR.is_valid(value)
+
+
+def test_schema_admits_the_optional_evidence_content_identity():
+    value = handoff_fixture()
+    assert "content_sha256" not in value and VALIDATOR.is_valid(value)
+    value["content_sha256"] = "0" * 64
+    VALIDATOR.validate(value)
 
 
 @pytest.mark.parametrize("artifact_mutation", [

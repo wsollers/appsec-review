@@ -765,6 +765,27 @@ def test_shared_producer_change_invalidates_its_real_consumer_not_an_independent
     assert any("cached computation from job_a" in reason for reason in decisions[1].reasons)
 
 
+def test_a_rerun_producer_publishes_an_equivalent_handoff_and_descendants_inherit_the_identity(tmp_path):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+    def accepted(job_id):
+        pointer = json.loads((root / f"data/jobs/{job_id}/latest.json").read_bytes())
+        return json.loads((root / pointer["handoff_path"]).read_bytes())
+    a1, b1 = accepted("job_a"), accepted("job_b")
+    assert len(a1["content_sha256"]) == 64 and len(b1["content_sha256"]) == 64
+    assert a1["content_sha256"] != b1["content_sha256"]
+    second = graph.run(target_root=tmp_path, source_fingerprint="none", run_id=first["run_id"], force_from="job_a")
+    a2, b2 = accepted("job_a"), accepted("job_b")
+    assert a2["attempt_id"] != a1["attempt_id"] and second["jobs"]["job_a"]["handoff_sha256"] != first["jobs"]["job_a"]["handoff_sha256"]
+    # Same evidence, new attempt: the file hash differs, the content identity does not; the descendant inherits it.
+    assert a2["content_sha256"] == a1["content_sha256"]
+    assert b2["content_sha256"] == b1["content_sha256"]
+    assert b2["upstream_handoff_sha256"] != b1["upstream_handoff_sha256"]
+
+
 def _dataset(job_id):
     from appsec_review.runtime.datasets import artifact_only
     from appsec_review.storage.shared import RECEIPT_SCHEMA

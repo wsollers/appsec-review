@@ -805,6 +805,13 @@ class JobRunner:
         if accepted:
             handoff["resolving_paths"]["result"] = attempt + "/result.json"
         handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
+        if accepted:
+            # Evidence-body identity (docs/architecture/job-interchange.md): absent, never guessed, when a
+            # pinned upstream predates it, so equivalence stays transitive.
+            from appsec_review.runtime.equivalence import handoff_content_sha256
+            identity = handoff_content_sha256(context.run_root, handoff, gaps=list(outcomes.get("gaps", [])))
+            if identity is not None:
+                handoff["content_sha256"] = identity
         if (context.config.job_id in {"job_target_analysis_plan", "job_build_environment_analysis"}
                 and len(canonical_json(handoff)) > 32 * 1024 * 1024):
             raise ValueError("planning/environment handoff exceeds its bounded accepted reader")

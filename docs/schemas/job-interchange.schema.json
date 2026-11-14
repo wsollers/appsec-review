@@ -299,6 +299,8 @@
         "input_manifest": {"$ref": "#/$defs/nullableArtifactReference"},
         "dataset_contract_sha256": {"$ref": "#/$defs/sha256"},
         "input_set_sha256": {"$ref": "#/$defs/sha256"},
+        "content_sha256": {"$ref": "#/$defs/sha256",
+                           "description": "Optional evidence-body identity (docs/architecture/job-interchange.md, evidence header and body); absent on handoffs that predate it or whose pinned upstreams lack one."},
         "coverage": {"$ref": "#/$defs/coverageSummary"},
         "outcomes": {"$ref": "#/$defs/nullableArtifactReference"},
         "resolving_paths": {
