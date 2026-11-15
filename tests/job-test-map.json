@@ -529,11 +529,13 @@
     },
     "job_sanitizer_build": {
       "unit": [
-        "tests/test_sanitizer_build.py::test_invalid_settings_are_rejected",
-        "tests/test_sanitizer_build.py::test_unknown_and_missing_settings_are_rejected",
-        "tests/test_sanitizer_build.py::test_single_sanitizer_configuration_changes_the_flags"
+        "tests/unit/job_sanitizer_build/test_contract.py",
+        "tests/unit/job_sanitizer_build/test_handlers.py",
+        "tests/unit/job_sanitizer_build/test_settings_and_evidence.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py"
+      ],
       "acceptance": [],
       "live": ["tests/live/test_sanitizer_live.py"]
     },

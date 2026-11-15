@@ -3106,6 +3106,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   located points-to/object/indirect-call shard builders with accessor priority and truncation
   bounds, container/module/compile failure isolation, checkpoint reuse, and handoff publication;
   437/437 job-package lines [100.0%] and 149/150 branches [99.33%] covered across all 4 modules).
+  job_sanitizer_build (26/47; 3 unit files, 57 cases: pinned 6-input / 2-dataset contract and
+  3-unit DAG topology, typed sanitizer settings/flags/environment injection and masking-argument
+  conflict detection, ELF symbol-table/DT_NEEDED runtime evidence verification, protected command
+  custody/hash/redaction replay, dependency-tree/bookkeeping/count-bound cataloging, DockerFake
+  build-unit outcomes, image/timeout/manifest-bound failure isolation, and handoff publication;
+  `GraphRunner` suite relocated to `tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py`;
+  421/422 job-package lines [99.76%] and 133/134 branches [99.25%] covered across all 5 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

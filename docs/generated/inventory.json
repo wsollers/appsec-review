@@ -36365,14 +36365,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py"
+        ],
         "live": [
           "tests/live/test_sanitizer_live.py"
         ],
         "unit": [
-          "tests/test_sanitizer_build.py::test_invalid_settings_are_rejected",
-          "tests/test_sanitizer_build.py::test_unknown_and_missing_settings_are_rejected",
-          "tests/test_sanitizer_build.py::test_single_sanitizer_configuration_changes_the_flags"
+          "tests/unit/job_sanitizer_build/test_contract.py",
+          "tests/unit/job_sanitizer_build/test_handlers.py",
+          "tests/unit/job_sanitizer_build/test_settings_and_evidence.py"
         ]
       },
       "workers": 2
@@ -44783,7 +44785,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "0bc46d4b22f278439a51dfffc4c440992c5e80dce06c7f80d42279135f1305a3"
+    "tests/job-test-map.json": "b59c9017d83160ba8fc9bb102d58d1b90b91e40a1f92d0311ca724ca70c7618f"
   },
   "tool_policy": {
     "disable_grype": true,
