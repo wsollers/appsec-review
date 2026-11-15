@@ -1369,8 +1369,8 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
    Reject evaluator-root input, remove target-owned agent-guidance identities from cell scope, and
    classify each accepted source file's `disposition` (`test`, `vendored`, `generated`, `example`
    or `first_party`) against `settings.source_dispositions`.
-2. In `scope.assemble_scope`, retain components, source/build languages, evidence-map identity and
-   upstream scope gaps. Freeze the manifest hash for all subsequent work.
+2. In `scope.assemble_scope`, retain components, source/build languages, deterministically ordered
+   `evidence_map` tuples and upstream scope gaps. Freeze the manifest hash for all subsequent work.
 
 ### `triage`
 
@@ -1385,14 +1385,20 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
 ### `packages`
 
 1. In `packages.assemble_lead_packages` and `packages.assemble_hunt_packages`, assemble the
-   same accepted scope into separate lane manifests and select each lane's packages. Hunt unit
-   assembly restricts candidate units to `first_party` files; lead assembly records observations on
+   same accepted scope into separate lane manifests and select each lane's packages. Operation
+   discovery (`graph_operations`) excludes `entry_point`/`sink_site` facts in non-`first_party`
+   sources with one `skipped` behavior gap per disposition. Hunt unit assembly restricts candidate
+   units to `first_party` files, writes unit-wide context, `unit-facets/2` and
+   `hunt-facet-obligations/1` once per hunted unit under `unit-context/<sha256>.json`
+   (`package-unit-context/2`), and references it by SHA-256 from each hunt partition
+   (`appsec-review/review-package/7`, `package-view/5`); lead assembly records observations on
    non-`first_party` files and `lead_filters.stylistic` rules under `outside_review_scope` with
    explicit `exclusion` provenance, `source_dispositions` and `counts.dispositions`
    ([review scope](inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
 2. Bind bounded source slices, lead-family admission, operation questions and any admitted
    generated model context. Routing context does not replace original source/tool evidence.
-3. Rank lead packages by effective severity and hunt packages by unit position; retain caps,
+3. Rank lead packages by effective severity and hunt packages by unit position (`review-unit-rank/4`,
+   including `exposure:client-facing` and `trust:user-tainted` facet weights); retain caps,
    exclusions, missing strategy/specialist inputs and fallback scope.
 4. Bind package content, dependency shard identities, assembly/admissibility/predicate-policy
    versions and accepted CWE set. Missing/stale CWE reference retains a fallback gap.
@@ -1432,7 +1438,10 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
 1. In `adjudicate.apply_policy`, require the merged ledger head to match the verified projection.
 2. Apply the ordered policy: duplicate, out-of-scope, unresolved contradiction, direct
    contradiction, fully satisfied required predicates with independent verification, partial
-   support, or insufficient evidence.
+   support, or insufficient evidence. When `settings.warrant_policy.enabled` is true (default
+   `false`), enforce `predicate-warrant/1` subject/sink/operand/config binding (`WARRANT_POLICY_SHA256`)
+   across R5 contradiction and required-predicate evaluation and record warrant continuations for
+   `decision_audit`.
 3. Only the full direct-predicate/independence condition yields `confirmed`. Partial support is
    `supported`; missing direct evidence and unresolved contradictions remain explicit gaps.
    Judge verdicts do not override this table.

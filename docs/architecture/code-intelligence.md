@@ -174,6 +174,8 @@ No item or known limitation automatically joins a walk's user-approved expected-
   inventory cells are declarations, not execution evidence.
 - **T-164:** construction-time validation of `IndexIdentity.producer["job"]` (`job_debug_symbol_indexing`
   now emits `producer["job"]`; synthetic test fixtures remain to migrate).
+- **T-5016, T-5017:** first-party AST and symbol index quality scorecard cross-checked against
+  CodeQL, and network-output sink classification parity between `sink_sites` and `dataflow_paths`.
 
 The SVF aggregate propagation detail is tracked by T-159, not silently assigned to T-126 or
 repaired by this document.

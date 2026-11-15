@@ -59,7 +59,12 @@ All 47 registered factories attach the contract declared in their `datasets.py` 
 are review-graph jobs (including disabled jobs); `job_build_iteration` is an internal transaction,
 and `job_third_party_data_sync` is external maintenance. `Job.consumes` and module `CONSUMES` are
 compatibility projections, not independent input declarations. Registry/config parity and exact
-producer output/schema relationships are checked by `indexing.input_matrix.job_contract_matrix`.
+producer output/schema relationships are checked by `indexing.input_matrix.job_contract_matrix` and
+`tests/test_consumes_parity.py` (`test_every_input_requirement_matches_its_producer_declaration`,
+which verifies that every handoff-channel `InputRequirement` matches its producer's declared schema
+and authority). Shared contract helpers such as `jobs/decision_audit_inputs.py` import specific
+producer `datasets` modules directly so per-job static `common` import closures (`T-163`) stay
+scoped to the affected producer.
 
 The shared topology combines `schedule_after` with semantic input predecessors, projects disabled
 vertices out, and removes redundant scheduling edges. Direct and Dagster dispatch use the same
