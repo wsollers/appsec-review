@@ -482,11 +482,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "merge-into",
+      "disposition": "keep",
       "kind": "architecture",
-      "merge_target": "docs/operations/ci-configuration-analysis.md",
       "path": "docs/architecture/ci-configuration-analysis.md",
-      "reason": "Consolidate the short CI lane overview and its nonexecution boundary into the CI job page, retaining a pointer during the merge transition.",
+      "reason": "Retain a one-release pointer page after consolidating the CI lane overview and nonexecution boundary into docs/operations/ci-configuration-analysis.md.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -523,11 +522,10 @@
     },
     {
       "decision_record": false,
-      "disposition": "merge-into",
+      "disposition": "keep",
       "kind": "architecture",
-      "merge_target": "docs/operations/codeql-analysis.md",
       "path": "docs/architecture/cross-language-codeql.md",
-      "reason": "Consolidate the short CodeQL stage and identity overview into the CodeQL job page instead of maintaining two task inventories.",
+      "reason": "Retain a one-release pointer page after consolidating the CodeQL stage and checkpoint-identity overview into docs/operations/codeql-analysis.md.",
       "subsystem": "code intelligence"
     },
     {

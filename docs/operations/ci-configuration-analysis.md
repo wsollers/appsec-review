@@ -8,9 +8,32 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # Operating CI configuration analysis
 
-Run this job after `job_target_catalog`; the standard Dagster review graph enforces that order. Configuration lives under `[jobs.job_ci_configuration_analysis]` in `appsec-review.toml`, including provider routing, worker counts, bounds, correlation identity, and reviewed ruleset identity.
+`job_ci_configuration_analysis` is a source-only review lane running after `job_target_catalog`
+(enforced by the standard Dagster review graph). It accepts the immutable target catalog, discovers
+a fixed set of native CI definition paths, classifies providers, fans out provider/tool tasks,
+normalizes observations, attaches conservative pipeline/workflow/stage/job/step context, publishes
+one immutable observation shard per tool branch, performs exact-only correlation, and joins
+coverage deterministically. Configuration lives under `[jobs.job_ci_configuration_analysis]` in
+`appsec-review.toml`, including provider routing, worker counts, bounds, correlation identity, and
+reviewed ruleset identity.
 
-Before a live run, build the enabled pinned images for Zizmor, Checkov, and actionlint using the repository container process. Missing images do not trigger downloads: the affected branch records an unavailable-tool gap and the other provider/tool branches continue. All commands in the target definitions are inert data.
+The lane never contacts a CI controller or provider API. It never evaluates YAML, Groovy, or Kotlin
+DSL, never loads Jenkins or TeamCity plugins, never expands generators, never starts a build, and
+never executes commands found in a pipeline; all commands in target definitions are inert data.
+Before a live run, build the enabled pinned images for Zizmor, Checkov, and actionlint using the
+repository container process. External linters run only through the pinned container executor with
+no network, a read-only target, non-root identity, dropped capabilities, bounded resources, and an
+explicit cataloged file argument. Missing images do not trigger downloads: the affected branch
+records an unavailable-tool gap and the other provider/tool branches continue. Structured failure
+fallbacks do not override an active execution-safety stop, and publication's own success does not
+erase the scan-unit gaps carried in verified outcomes.
+
+GitHub Actions routes to pinned Zizmor offline mode, Checkov's `github_actions` framework, pinned
+actionlint, and bounded structural rules. Azure Pipelines, GitLab CI, CircleCI, and Bitbucket
+Pipelines route to their explicit Checkov frameworks plus bounded structural validation. Jenkins
+and TeamCity Kotlin use source-backed structural parsing and reviewed rules; controller, plugin,
+generator, extension, and dynamic scripted semantics remain named gaps. Other recognized CI
+definitions are classified as `supported_discovery_without_linter`.
 
 Accepted outputs include:
 
@@ -22,6 +45,14 @@ Accepted outputs include:
 - exact-only canonical findings;
 - a coverage join naming every missing or partial provider/tool branch, plus a separately
   counted `not_applicable_inputs` summary.
+
+Raw output remains hash-bound run-owned evidence; bounded normalized observations are the retrieval
+surface, not arbitrary raw-payload access. Canonical records merge only identical provider, path,
+source span, category and normalized-message keys. Ambiguous source mappings must also match their
+byte ranges and mapping provenance; similar or merely co-located observations are not merged.
+Observation fingerprints bind snapshot, normalized artifact and hierarchy, provider/tool/framework,
+ruleset, settings and parser/normalizer/mapping identities. Canonical evidence fingerprints bind the
+exact correlation document.
 
 External linters receive only definitions their declared input support accepts
 (`appsec_review.tool_inputs`): actionlint and Checkov's `github_actions` framework read workflow
@@ -48,4 +79,9 @@ one `CI_TOOL_SCANNED` per provider/tool branch, and `CI_ANALYSIS_PUBLISHED`.
 
 Use the MCP `query_ci_configuration` tool to filter accepted shards by provider, pipeline, workflow, stage, job, step, tool, rule, category, canonical finding, or shard. Source excerpts remain hash-verified through the ordinary retrieval API.
 
-For benchmark evaluation, complete the review first. Then start a separate evaluator with the accepted run mounted read-only and the guide repository mounted separately. Never expose the guide checkout to review workers, tool containers, retrieval indexing, MCP, or prompts. Any guide path or answer prose appearing in a run artifact is an oracle-leak failure.
+The public target repository is blind: target-specific expected findings, vulnerable locations,
+remediation, and scoring material belong only to the separate evaluator guide and must never be
+mounted into or indexed by a review run. For benchmark evaluation, complete the review first. Then
+start a separate evaluator with the accepted run mounted read-only and the guide repository mounted
+separately. Never expose the guide checkout to review workers, tool containers, retrieval indexing,
+MCP, or prompts. Any guide path or answer prose appearing in a run artifact is an oracle-leak failure.

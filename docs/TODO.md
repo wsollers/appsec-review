@@ -137,7 +137,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | done (2026-11-14, docs/docs-sync.json) |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | done (2026-11-14, docs/architecture/testing.md) |
 | T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | done (2026-11-14, docs/architecture/README.md) |
-| T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
+| T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | done (2026-11-14, Stage 7: merged ci-configuration-analysis and cross-language-codeql into operations pages with one-release pointers; docs/docs-ledger.json) |
 | T-134 | [Smoke targets: one minimal buildable repository per language, plus the guide](#t-134-smoke-targets-one-minimal-buildable-repository-per-language-plus-the-guide) | testing | done (2026-11-13, nine repositories and the guide published at v1.0.0; see T-135 to T-145 and docs/operations/test-targets.md) |
 | T-135 | [Create the C and C++ smoke target appsec-review-smoke-cpp](#t-135-create-the-c-and-c-smoke-target-appsec-review-smoke-cpp) | testing | done (2026-11-13, appsec-review-smoke-cpp v1.0.0 = bededb650d0c; Syft gap recorded in the guide) |
 | T-136 | [Create the Java smoke target appsec-review-smoke-java](#t-136-create-the-java-smoke-target-appsec-review-smoke-java) | testing | done (2026-11-13, appsec-review-smoke-java v1.0.0 = 3219d1700d69; mvn -o fails offline in the image, recorded as a gap) |
@@ -2134,7 +2134,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-133 — Apply approved documentation merges and retirements
 
-- **State:** blocked
+- **State:** done (2026-11-14, Stage 7: merged ci-configuration-analysis and cross-language-codeql into operations pages with one-release pointers; docs/docs-ledger.json)
 - **Area:** pipeline
 - **Blocked by:** T-132
 - **Why:** duplicate and obsolete non-decision documents remain after current pages exist;

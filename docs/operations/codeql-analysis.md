@@ -12,10 +12,27 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 language build, artifact index, artifact-security analysis, C++ compiled analysis, post-build
 assessment, static-evidence, and tree-sitter handoffs in Dagster's `wave1_review`. The job never
 discovers a second target snapshot: it plans from accepted artifacts and verifies every source hash
-before use.
+before use. The shared implementation lives in `src/appsec_review/codeql/` and
+`src/appsec_review/jobs/job_codeql_analysis/`; language-specific jobs do not own a second CodeQL
+runtime, SARIF normalizer, or retrieval schema.
 The [canonical job page](job_codeql_analysis.md) links generated step, input and dataset
-declarations. Database, query, normalization and export are actions inside `execution.scopes`,
-not independent configured steps.
+declarations. The configured job has three steps, and its execution step schedules internal actions
+rather than separate configured steps:
+
+1. `plan.inventory` validates the pinned runtime live and partitions accepted target/build scopes.
+2. `execution.scopes` preflights runtime declarations, then advances each ready scope concurrently
+   (bounded by resource admission and execution-safety policy; an active fail-stop policy may stop
+   before a scope-local fallback is published) through database creation/reuse, independently
+   configured query profiles, bounded SARIF normalization and optional graph export.
+3. `acceptance.publish_handoff` composes the accepted retrieval manifest and publishes scope,
+   query and export dispositions.
+
+Checkpoint and cache identities bind target and file hashes, accepted handoffs, build receipt and
+protected argv, environment image, dependency identity, declared CodeQL/extractor/runner/query
+releases, limits, query profile, database tree, and normalizer release; supplied platform trees are
+not customer-evidence fingerprints. Query profiles have independent checkpoints and SARIF
+artifacts, so changing or failing a custom suite does not invalidate the database or erase the
+default-suite result.
 
 ## Supported coverage
 
