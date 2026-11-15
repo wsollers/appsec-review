@@ -46,8 +46,14 @@
       "live": []
     },
     "job_binary_evidence_indexing": {
-      "unit": ["tests/test_binary_evidence_indexing.py"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_binary_evidence_indexing/test_contract.py",
+        "tests/unit/job_binary_evidence_indexing/test_handlers.py",
+        "tests/test_binary_evidence_indexing.py"
+      ],
+      "integration": [
+        "tests/integration/job_binary_evidence_indexing/test_binary_evidence_indexing_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -114,7 +120,12 @@
       "live": ["tests/live/test_ci_configuration_analysis_multivuln.py"]
     },
     "job_clang_static_analysis": {
-      "unit": ["tests/test_clang_static_analysis.py"],
+      "unit": [
+        "tests/unit/job_clang_static_analysis/test_clang_static_analysis.py",
+        "tests/unit/job_clang_static_analysis/test_clang_static_tool.py",
+        "tests/unit/job_clang_static_analysis/test_contract.py",
+        "tests/unit/job_clang_static_analysis/test_seeded_clang_static.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": ["tests/live/test_seeded_clang_live.py"]
@@ -137,27 +148,46 @@
     },
     "job_cpg_analysis": {
       "unit": [
+        "tests/unit/job_cpg_analysis/test_contract.py",
+        "tests/unit/job_cpg_analysis/test_export_and_seeded.py",
+        "tests/unit/job_cpg_analysis/test_handlers.py",
         "tests/test_cpg_export.py",
-        "tests/test_cpp_index_jobs.py::test_cpg_job_retains_the_cpg_but_claims_no_coverage",
-        "tests/test_cpp_index_jobs.py::test_cpg_job_is_disabled_by_default_and_runs_no_joern"
+        "tests/test_seeded_cpg.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
     "job_cpp_compiled_analysis": {
       "unit": [
-        "tests/test_cpp_compiled_analysis.py::test_compile_database_normalization_preserves_only_reviewed_build_semantics",
-        "tests/test_cpp_compiled_analysis.py::test_infer_compile_database_uses_stable_read_only_container_paths",
-        "tests/test_cpp_compiled_analysis.py::test_clang_ast_loader_accepts_bounded_concatenated_declarations"
+        "tests/unit/job_cpp_compiled_analysis/test_clang_cfg.py",
+        "tests/unit/job_cpp_compiled_analysis/test_compile_and_replay.py",
+        "tests/unit/job_cpp_compiled_analysis/test_contract.py",
+        "tests/unit/job_cpp_compiled_analysis/test_job_pipeline.py",
+        "tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py",
+        "tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py",
+        "tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": [
+        "tests/live/test_seeded_clang_live.py"
+      ]
     },
     "job_cpp_symbol_index": {
-      "unit": ["tests/test_cpp_index_jobs.py::test_symbol_index_publishes_accepted_symbols_with_complete_coverage"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_cpp_symbol_index/test_contract.py",
+        "tests/unit/job_cpp_symbol_index/test_clangd_yaml.py",
+        "tests/unit/job_cpp_symbol_index/test_handlers.py",
+        "tests/unit/job_cpp_symbol_index/test_symbol_budget.py"
+      ],
+      "integration": [
+        "tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -516,11 +546,13 @@
     },
     "job_sanitizer_build": {
       "unit": [
-        "tests/test_sanitizer_build.py::test_invalid_settings_are_rejected",
-        "tests/test_sanitizer_build.py::test_unknown_and_missing_settings_are_rejected",
-        "tests/test_sanitizer_build.py::test_single_sanitizer_configuration_changes_the_flags"
+        "tests/unit/job_sanitizer_build/test_contract.py",
+        "tests/unit/job_sanitizer_build/test_handlers.py",
+        "tests/unit/job_sanitizer_build/test_settings_and_evidence.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py"
+      ],
       "acceptance": [],
       "live": ["tests/live/test_sanitizer_live.py"]
     },
@@ -567,9 +599,9 @@
     },
     "job_svf_alias_analysis": {
       "unit": [
-        "tests/test_svf_alias_analysis.py::test_link_command_becomes_one_module_and_unlinked_units_stand_alone",
-        "tests/test_svf_alias_analysis.py::test_unresolved_archives_and_inputs_are_named_open_world_reasons",
-        "tests/test_svf_alias_analysis.py::test_module_bound_omits_trailing_modules_with_a_gap_and_ids_are_deterministic"
+        "tests/unit/job_svf_alias_analysis/test_contract.py",
+        "tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py",
+        "tests/unit/job_svf_alias_analysis/test_svf_tool.py"
       ],
       "integration": [],
       "acceptance": [],

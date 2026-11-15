@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | `tests/live/test_seeded_clang_live.py` |
-| unit | `tests/test_clang_static_analysis.py` |
+| unit | `tests/unit/job_clang_static_analysis/test_clang_static_analysis.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_tool.py`<br>`tests/unit/job_clang_static_analysis/test_contract.py`<br>`tests/unit/job_clang_static_analysis/test_seeded_clang_static.py` |
 
 ### Dagster placement
 

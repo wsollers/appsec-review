@@ -37,7 +37,7 @@ from appsec_review.tool_inputs import (
 from tests.unit.job_artifact_security_analysis import support as asa_tests
 from tests.artifact_input_support import recorded_graph
 from tests.unit.job_ci_configuration_analysis import support as ci_tests
-from tests import test_clang_static_analysis as clang_tests
+from tests.unit.job_clang_static_analysis import support as clang_tests
 from tests.unit.job_evidence_collection import support as evidence_tests
 
 

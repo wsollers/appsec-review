@@ -62,9 +62,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_binary_evidence_indexing/test_binary_evidence_indexing_graph.py` |
 | live | None declared |
-| unit | `tests/test_binary_evidence_indexing.py` |
+| unit | `tests/unit/job_binary_evidence_indexing/test_contract.py`<br>`tests/unit/job_binary_evidence_indexing/test_handlers.py`<br>`tests/test_binary_evidence_indexing.py` |
 
 ### Dagster placement
 

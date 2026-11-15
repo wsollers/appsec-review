@@ -367,7 +367,7 @@ def test_malformed_outputs_stop_before_gap_conversion(tmp_path, surface):
                         "test_scan_isolates_linter_failure_and_stops_active_guardian"),
                     "evidence": ("tests.unit.job_evidence_collection.test_job_graph",
                         "test_execute_tool_isolates_scanner_failure_and_stops_active_guardian"),
-                    "symbols": ("tests.test_cpp_index_jobs",
+                    "symbols": ("tests.unit.job_cpp_symbol_index.test_handlers",
                         "test_failed_clangd_run_is_scoped_unavailable_coverage"),
                     "codeql_export": ("tests.test_codeql_export_step",
                         "test_timeout_or_nonzero_exit_is_a_scope_gap_that_spares_siblings"),

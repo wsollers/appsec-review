@@ -90,9 +90,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
-| live | None declared |
-| unit | `tests/test_cpp_compiled_analysis.py::test_compile_database_normalization_preserves_only_reviewed_build_semantics`<br>`tests/test_cpp_compiled_analysis.py::test_infer_compile_database_uses_stable_read_only_container_paths`<br>`tests/test_cpp_compiled_analysis.py::test_clang_ast_loader_accepts_bounded_concatenated_declarations` |
+| integration | `tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py` |
+| live | `tests/live/test_seeded_clang_live.py` |
+| unit | `tests/unit/job_cpp_compiled_analysis/test_clang_cfg.py`<br>`tests/unit/job_cpp_compiled_analysis/test_compile_and_replay.py`<br>`tests/unit/job_cpp_compiled_analysis/test_contract.py`<br>`tests/unit/job_cpp_compiled_analysis/test_job_pipeline.py`<br>`tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py`<br>`tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py`<br>`tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py` |
 
 ### Dagster placement
 

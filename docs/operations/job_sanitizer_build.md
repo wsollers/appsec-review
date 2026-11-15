@@ -63,9 +63,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py` |
 | live | `tests/live/test_sanitizer_live.py` |
-| unit | `tests/test_sanitizer_build.py::test_invalid_settings_are_rejected`<br>`tests/test_sanitizer_build.py::test_unknown_and_missing_settings_are_rejected`<br>`tests/test_sanitizer_build.py::test_single_sanitizer_configuration_changes_the_flags` |
+| unit | `tests/unit/job_sanitizer_build/test_contract.py`<br>`tests/unit/job_sanitizer_build/test_handlers.py`<br>`tests/unit/job_sanitizer_build/test_settings_and_evidence.py` |
 
 ### Dagster placement
 

@@ -84,3 +84,101 @@ def test_unresolved_entries_carry_a_reason_and_resolved_keys_are_exact() -> None
 
 def test_a_zero_seed_section_is_recognised_as_skipped() -> None:
     assert record.skipped({"gaps": [seeding.NO_SEEDS_GAP]}) and not record.skipped(SECTION)
+
+
+def test_demangle_metadata_and_ir_edge_cases(monkeypatch) -> None:
+    # Demangler branches: short/non-_Z, internal _ZL, nested qualifiers rVK, ctors C1..C3,
+    # dtors D0..D2, invalid ctor/dtor at start, invalid lengths, empty N..E, templates.
+    assert llvm_ir.demangle("plain_c") is None
+    assert llvm_ir.demangle("_Z1") is None
+    assert llvm_ir.demangle("_ZL6helperv") == "helper"
+    assert llvm_ir.demangle("_ZNK3net6Packet4sizeEv") == "net::Packet::size"
+    assert llvm_ir.demangle("_ZN3net6PacketC1Ev") == "net::Packet::Packet"
+    assert llvm_ir.demangle("_ZN3net6PacketD0Ev") == "net::Packet::~Packet"
+    assert llvm_ir.demangle("_ZNC1Ev") is None
+    assert llvm_ir.demangle("_ZND1Ev") is None
+    assert llvm_ir.demangle("_ZNE") is None
+    assert llvm_ir.demangle("_ZN0aE") is None
+    assert llvm_ir.demangle("_ZN99shortE") is None
+    assert llvm_ir.demangle("_ZN3foo!E") is None
+    assert llvm_ir.demangle("_Zbad") is None
+    assert llvm_ir.demangle("_Z4tmplIiEv") is None
+
+    # Helpers and _Metadata edge cases: escaped strings, non-int, absolute DIFile, scope cycle/stop.
+    assert llvm_ir._string(None) is None
+    assert llvm_ir._string("unquoted") == "unquoted"
+    assert llvm_ir._string('"a\\"b\\5Cc"') == 'a"b\\c'
+    assert llvm_ir._int("not-an-int") is None
+    meta = llvm_ir._Metadata([
+        '!1 = !DIFile(filename: "/abs/file.cpp", directory: "/ignored")',
+        '!2 = !DIFile(filename: "rel.cpp", directory: "")',
+        '!3 = !DINamespace(name: "ns", scope: !6)',
+        '!4 = !DICompositeType(tag: DW_TAG_structure_type, name: "Cls", scope: !3)',
+        '!5 = distinct !DILexicalBlock(scope: !4)',
+        '!6 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus)',
+        '!7 = distinct !DISubprogram(name: "method", scope: !5, file: !1, line: 10)',
+        '!8 = distinct !DILexicalBlock(scope: !8)',
+        '!9 = distinct !DISubprogram(name: "cycled", scope: !8, file: !2, line: 4)',
+    ])
+    assert meta.location("1") == (None, None)
+    assert meta.file_path("3") is None
+    assert meta.file_path("1") == "/abs/file.cpp"
+    assert meta.file_path("2") == "rel.cpp"
+    assert meta.qualified_name("7") == "ns::Cls::method"
+    assert meta.qualified_name("9") == "cycled"
+
+    # Dominators with unreachable block and multi-predecessor diamond.
+    doms = llvm_ir._dominators(
+        ("entry", "left", "right", "merge", "dead"),
+        {"entry": ("left", "right"), "left": ("merge",), "right": ("merge",), "merge": (), "dead": ("merge",)},
+        "entry",
+    )
+    assert doms["entry"] is None and doms["merge"] == "entry" and "dead" not in doms
+
+    # parse_module edge cases: no !dbg -> unparsed, multiline switch, llvm.* intrinsic skipped,
+    # undemangled _Z counted, indirect call counted, MAX_CALLS and MAX_DEF_USE caps, empty body.
+    monkeypatch.setattr(llvm_ir, "MAX_CALLS", 2)
+    monkeypatch.setattr(llvm_ir, "MAX_DEF_USE", 1)
+    ir_text = "\n".join([
+        'define void @no_debug() {',
+        '  ret void',
+        '}',
+        'define void @empty_fn() !dbg !10 {',
+        '}',
+        'define i32 @complex(i32 %x, ptr %fp) !dbg !11 {',
+        'entry:',
+        '  ; comment ignored',
+        '  %a = add i32 %x, 1, !dbg !12',
+        '  %b = add i32 %a, 2, !dbg !12',
+        '  %unused = add i32 3, 4, !dbg !12',
+        '  %useb = add i32 %b, 5, !dbg !12',
+        '  call void @llvm.memcpy.p0.p0.i64(ptr null, ptr null, i64 0, i1 false), !dbg !12',
+        '  call void @_Z4tmplIiEv(), !dbg !12',
+        '  call void @callee_two(), !dbg !12',
+        '  call void @callee_three(), !dbg !12',
+        '  call void %fp(i32 %useb), !dbg !12',
+        '  switch i32 %a, label %sw.default [',
+        '    i32 0, label %sw.zero',
+        '  ], !dbg !12',
+        'sw.zero:',
+        '  br label %sw.default',
+        'sw.default:',
+        '  ret i32 %a, !dbg !12',
+        '}',
+        '!10 = distinct !DISubprogram(name: "empty_fn", file: !20, line: 1)',
+        '!11 = distinct !DISubprogram(name: "", file: !20, line: 5)',
+        '!12 = !DILocation(line: 7, column: 3, scope: !11)',
+        '!20 = !DIFile(filename: "src/edge.cpp", directory: "/scratch/source")',
+    ])
+    parsed = llvm_ir.parse_module(ir_text)
+    assert parsed.unparsed == ("no_debug: no debug subprogram",)
+    assert parsed.undemangled == 1
+    by_name = {fn.linkage_name: fn for fn in parsed.functions}
+    assert by_name["empty_fn"].key == "empty_fn"
+    assert by_name["empty_fn"].flow()["entry"] is None
+    comp = by_name["complex"]
+    assert comp.indirect_calls == 1
+    assert set(comp.truncated) == {"calls", "def_use"}
+    assert len(comp.calls) == 2
+    assert len(comp.def_use) == 1
+    assert set(comp.blocks[0].successors) == {"bb1", "bb2"}

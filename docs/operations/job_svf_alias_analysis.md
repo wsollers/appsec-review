@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | `tests/live/test_svf_live.py` |
-| unit | `tests/test_svf_alias_analysis.py::test_link_command_becomes_one_module_and_unlinked_units_stand_alone`<br>`tests/test_svf_alias_analysis.py::test_unresolved_archives_and_inputs_are_named_open_world_reasons`<br>`tests/test_svf_alias_analysis.py::test_module_bound_omits_trailing_modules_with_a_gap_and_ids_are_deterministic` |
+| unit | `tests/unit/job_svf_alias_analysis/test_contract.py`<br>`tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py`<br>`tests/unit/job_svf_alias_analysis/test_svf_tool.py` |
 
 ### Dagster placement
 

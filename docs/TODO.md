@@ -3105,6 +3105,58 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py` and
   multivuln target suite relocated to `tests/live/test_ci_configuration_analysis_multivuln.py`;
   560/560 job-package lines [100.0%] and 188/188 branches [100.0%] covered across all 5 modules).
+  job_cpp_compiled_analysis (23/47; 7 unit files, 71 cases: pinned 22-input / 8-dataset contract
+  and 9-unit DAG topology, Clang CFG parser/renderer/bounds, LLVM IR demangler/dominator/def-use
+  parser, seeded IR+AST neighborhood replay and resume identity, compile/link database
+  normalization, workspace custody verification, whole-program AST/IR/Infer/binary branch handlers,
+  checkpoint release gating, and handoff publication; `JobRunner`/`GraphRunner` cases relocated to
+  `tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py` with live
+  seeded Clang mapped at `tests/live/test_seeded_clang_live.py`; 1763/1786 job-package lines
+  [98.71%] and 690/728 branches [94.78%] covered, with all 6 modules >=97.1% lines and >=92.6%
+  branches).
+  job_clang_static_analysis (24/47; 4 unit files, 32 cases: pinned 21-input / 4-dataset contract
+  and 3-unit DAG topology, Clang-Tidy and Static Analyzer wrapper driver/plist normalization,
+  checker-name pattern rejection, output/diagnostic/trace bounds, execution timeout/OOM/limit/
+  unavailable isolation, accepted-source mapping, seeded unit selection, neighborhood diagnostic
+  labelling, checkpoint invalidation/resume, and immutable handoff publication; 368/368 job-package
+  lines [100.0%] and 116/116 branches [100.0%] covered across all 4 modules).
+  job_svf_alias_analysis (25/47; 3 unit files, 33 cases: pinned 1-input / 3-dataset contract and
+  3-unit DAG topology, link-unit and translation-unit module planning with static-archive expansion
+  and open-world attribution, SVF wrapper bitcode argv/link/Andersen time-limit/debug-loss driver,
+  located points-to/object/indirect-call shard builders with accessor priority and truncation
+  bounds, container/module/compile failure isolation, checkpoint reuse, and handoff publication;
+  437/437 job-package lines [100.0%] and 149/150 branches [99.33%] covered across all 4 modules).
+  job_sanitizer_build (26/47; 3 unit files, 57 cases: pinned 6-input / 2-dataset contract and
+  3-unit DAG topology, typed sanitizer settings/flags/environment injection and masking-argument
+  conflict detection, ELF symbol-table/DT_NEEDED runtime evidence verification, protected command
+  custody/hash/redaction replay, dependency-tree/bookkeeping/count-bound cataloging, DockerFake
+  build-unit outcomes, image/timeout/manifest-bound failure isolation, and handoff publication;
+  `GraphRunner` suite relocated to `tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py`;
+  421/422 job-package lines [99.76%] and 133/134 branches [99.25%] covered across all 5 modules).
+  job_cpp_symbol_index (27/47; 4 unit files, 30 cases: pinned 21-input / 4-dataset contract and
+  3-unit DAG topology, strict clangd YAML subset parser with multi-line scalar folding and
+  truncation/cap/malformed-structure rejection, first-party symbol-budget prioritization,
+  accepted-source URI mapping and post-acceptance tamper detection, aggregated CALLS/REFERENCES
+  edge normalization, timeout/OOM/truncation/missing-TU failure isolation, scope checkpoint reuse,
+  and handoff publication; `GraphRunner` suite relocated to
+  `tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py`; 348/348 job-package
+  lines [100.0%] and 134/134 branches [100.0%] covered across all 4 modules).
+  job_binary_evidence_indexing (28/47; 3 unit files, 31 cases: pinned 5-input / 3-dataset
+  contract and 3-unit DAG topology, accepted binary-evidence upstream loading with lineage/hash
+  pin verification, frozen publication verification and post-intake tamper refusal, managed-code
+  routing without located pseudo-C grants, bounded function/call/string/import SQLite shard
+  builders with thunk/truncation/gap accounting, `RetrievalCore` excerpt lookup, and dataset
+  ownership scan; `GraphRunner`/`JobRunner` suite relocated to
+  `tests/integration/job_binary_evidence_indexing/test_binary_evidence_indexing_graph.py`;
+  288/288 job-package lines [100.0%] and 88/88 branches [100.0%] covered across all 3 modules).
+  job_cpg_analysis (29/47; 5 unit files, 36 cases: pinned 21-input / 6-dataset contract and 3-unit
+  DAG topology, disabled-by-default and enabled wave1 topology parity, `joern-export --repr=all`
+  CSV parser with symlink/file-size/row/per-function bounds and orphan/cut accounting, seeded C/C++
+  unit selection/regex/argv/failure-reason mapping, `c2cpg` and `joern-export` timeout/OOM/size-
+  limit/empty-method failure isolation, symlinked-CPG refusal, checkpoint reuse and manifest-tamper
+  detection, bounded `cpg_function` SQLite shard publication, and dataset ownership scan;
+  `GraphRunner` suite relocated to `tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py`;
+  421/421 job-package lines [100.0%] and 136/136 branches [100.0%] covered across all 5 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
