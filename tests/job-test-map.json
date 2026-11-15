@@ -758,8 +758,27 @@
       "live": []
     },
     "job_threat_model_generation": {
-      "unit": ["tests/test_threat_model_generation_job.py"],
-      "integration": ["tests/integration/test_threat_model_generation.py"],
+      "unit": [
+        "tests/unit/job_threat_model_generation/test_contract.py",
+        "tests/unit/job_threat_model_generation/test_handlers.py",
+        "tests/test_threat_model_assembly.py",
+        "tests/test_threat_model_codec.py",
+        "tests/test_threat_model_contract.py",
+        "tests/test_threat_model_documents.py",
+        "tests/test_threat_model_generation_job.py",
+        "tests/test_threat_model_index_view.py",
+        "tests/test_threat_model_lane_interactions.py",
+        "tests/test_threat_model_lane_structure.py",
+        "tests/test_threat_model_reference.py",
+        "tests/test_threat_model_render.py",
+        "tests/test_threat_model_schemas.py",
+        "tests/test_threat_model_threats.py",
+        "tests/test_threat_model_validation.py"
+      ],
+      "integration": [
+        "tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py",
+        "tests/integration/test_threat_model_generation.py"
+      ],
       "acceptance": ["tests/acceptance/test_threat_model_generation.py"],
       "live": []
     },

@@ -42262,11 +42262,26 @@
           "tests/acceptance/test_threat_model_generation.py"
         ],
         "integration": [
+          "tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py",
           "tests/integration/test_threat_model_generation.py"
         ],
         "live": [],
         "unit": [
-          "tests/test_threat_model_generation_job.py"
+          "tests/unit/job_threat_model_generation/test_contract.py",
+          "tests/unit/job_threat_model_generation/test_handlers.py",
+          "tests/test_threat_model_assembly.py",
+          "tests/test_threat_model_codec.py",
+          "tests/test_threat_model_contract.py",
+          "tests/test_threat_model_documents.py",
+          "tests/test_threat_model_generation_job.py",
+          "tests/test_threat_model_index_view.py",
+          "tests/test_threat_model_lane_interactions.py",
+          "tests/test_threat_model_lane_structure.py",
+          "tests/test_threat_model_reference.py",
+          "tests/test_threat_model_render.py",
+          "tests/test_threat_model_schemas.py",
+          "tests/test_threat_model_threats.py",
+          "tests/test_threat_model_validation.py"
         ]
       },
       "workers": 2
@@ -44848,7 +44863,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "56cb8313303d88ca30312a7f2f9317926eadfb7bb99da83901f4efe784f33f85"
+    "tests/job-test-map.json": "6134cdbc4198185be4cbbcc3b187e6bf11f6c77966f708643dc9a48a23135752"
   },
   "tool_policy": {
     "disable_grype": true,
