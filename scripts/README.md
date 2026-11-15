@@ -87,6 +87,14 @@ offline: structural checks over the published records, and per-planted-item scor
 user supplies the answer key. It writes `data/verification/smoke-score.json` and `.txt` under the
 run and changes nothing else ([test targets](../docs/operations/test-targets.md#scoring-a-smoke-run-t-5019)).
 
+`scripts/cell-outcomes.py --run runs/<run-id> [--attempt attempt_0001] [--write]` reports where an inference
+review run spent its cells: per role, attempt outcomes and the reasons attempts ended, retrieval tool errors,
+token and turn counts; per package, attempts and successes; and model-call wall time by outcome and failure
+code from the execution receipts. It reads ledgers, cell attempt receipts and model execution receipts, works on
+a run that is still in its lanes (cells of an unsealed lane appear as `unattributed`), and writes
+`data/verification/cell-outcomes.json` and `.txt` only with `--write`. Its numbers describe the run's spend,
+never the target (T-5028).
+
 ## CodeQL
 
 | Script | Purpose |

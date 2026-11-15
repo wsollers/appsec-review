@@ -44619,6 +44619,7 @@
     "src/appsec_review/provenance.py": "51d966a35af68293cd8a758770295c088e3c5b44234c1376a7ed99fa8a4450fc",
     "src/appsec_review/reporting/__init__.py": "5546750238dd0c4e2addb7ff1442a525067780d4855ca56fb8d96cb0cf57b2c7",
     "src/appsec_review/reporting/__main__.py": "c377dead429ffeb96560f42b4c98456b1082ea89570d352b92dd48c8e3e50a5a",
+    "src/appsec_review/reporting/cell_outcomes.py": "c6452e99b967d91f5403dbf75c271f40280d5fb938a42b147cac482f7a9b0e94",
     "src/appsec_review/reporting/digest.py": "1a981eee247cd9a0c3ce1dc305832ac98a1f5251dee4956034152bf7da0b2601",
     "src/appsec_review/reporting/dossier_render.py": "50f553a6ccffaf1e50d19138099f900f12a2cdaec4f3c18a56751cf0fda75496",
     "src/appsec_review/reporting/dossiers.py": "17e070aaf56c65e20bad5f73a477bc9c9c4edddfa48e52194169ed2a62a6c2e7",
