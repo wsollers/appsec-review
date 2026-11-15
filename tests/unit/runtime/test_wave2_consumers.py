@@ -171,7 +171,7 @@ def test_tree_sitter_consumer_admission_accepts_split_and_rejects_stale_schema(t
         for item in index_inputs
     ), job_id="job_wave2_ts_stale", name="wave2_ts_stale")
     runner, run_root, target, snapshot, _ts_job, _intake, _catalog, ts_out = run_tree_sitter_publication(
-        tmp_path, extra_jobs=(index_probe, reader_probe, stale_probe),
+        tmp_path, extra_jobs=(index_probe, reader_probe, stale_probe), recorded_upstream=True,
     )
     for probe, expects_acceptance in ((index_probe, False), (reader_probe, True)):
         out = runner.run(probe, run_id=run_root.name, target_root=target, source_fingerprint=snapshot,
@@ -227,7 +227,7 @@ class FakeBlameExecutor:
 def test_change_context_line_attribution_records_and_enforces_tree_sitter_reads(tmp_path: Path) -> None:
     runner, run_root, target, snapshot, _ts_job, _intake_out, catalog_out, ts_out = run_tree_sitter_publication(
         tmp_path, extra_job_ids=("job_change_context_analysis",),
-        disabled_jobs=("job_source_history_analysis",),
+        disabled_jobs=("job_source_history_analysis",), recorded_upstream=True,
     )
     app_sha = file_sha256(target / "src" / "app.js")
     app_size = (target / "src" / "app.js").stat().st_size
@@ -310,7 +310,7 @@ def test_change_context_line_attribution_records_and_enforces_tree_sitter_reads(
 
 def test_review_prioritization_units_record_and_enforce_tree_sitter_reads(tmp_path: Path) -> None:
     runner, run_root, target, snapshot, _ts_job, intake_out, catalog_out, ts_out = run_tree_sitter_publication(
-        tmp_path, extra_job_ids=("job_review_prioritization",),
+        tmp_path, extra_job_ids=("job_review_prioritization",), recorded_upstream=True,
     )
     priority_job = build_prioritization()
     claim = runner.begin_attempt(

@@ -28,7 +28,7 @@ from appsec_review.jobs.job_tree_sitter_ast.datasets import DATASETS as TS_DATAS
 from appsec_review.jobs.job_tree_sitter_ast.normalize import NORMALIZER_SCHEMA
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
 from appsec_review.retrieval.index import INDEX_SCHEMA
-from appsec_review.runtime import JobRunner
+from appsec_review.runtime import Job, JobRunner, Unit, UnitExecutor
 from appsec_review.runtime.datasets import read_dataset_contract, validate_declarations
 from appsec_review.runtime.resume import ResumePlanner
 from appsec_review.storage import RunStore, atomic_json, file_sha256
@@ -41,6 +41,12 @@ ROOT = Path(__file__).resolve().parents[3]
 ASA_SCHEMA = "appsec-review/artifact-security-analysis/1"
 ASA_OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
 TS_SCHEMA = "appsec-review/tree-sitter-ast/1"
+_TS_IMAGE_ID = load_catalog(ROOT).tool("tool-tree-sitter").expected_image_id
+_TS_LOCK = json.loads((ROOT / "containers" / "tools" / "tree-sitter" / "assets.lock.json").read_text(encoding="utf-8"))
+_BASE_DECLARED_TOML = declare_releases(
+    (ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+    **{key: "fixture/1" for key in ("platform", "validation", *(adapter.tool_id for adapter in ADAPTERS.values()))},
+)
 
 
 def owners(datasets, relative: str):
@@ -57,9 +63,7 @@ def configured_runner(tmp_path: Path, job_ids: tuple[str, ...], *, extra_jobs: t
     if not (root / "rules").exists():
         (root / "rules").mkdir(parents=True, exist_ok=True)
         (root / "rules" / "semgrep").symlink_to(ROOT / "rules" / "semgrep")
-    components = ("platform", "validation", *(adapter.tool_id for adapter in ADAPTERS.values()))
-    text = declare_releases((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
-                            **{key: "fixture/1" for key in components})
+    text = _BASE_DECLARED_TOML
     for disabled_id in disabled_jobs:
         header = f"[jobs.{disabled_id}.settings]\n"
         if header not in text:
@@ -157,8 +161,8 @@ def run_asa_publication(tmp_path: Path, *, datasets_override=None, extra_jobs: t
 class FakeTreeSitterExecutor:
     def __init__(self, fail_languages: frozenset[str] = frozenset()) -> None:
         self.fail_languages = fail_languages
-        self.image_id = load_catalog(ROOT).tool("tool-tree-sitter").expected_image_id
-        self.lock = json.loads((ROOT / "containers" / "tools" / "tree-sitter" / "assets.lock.json").read_text())
+        self.image_id = _TS_IMAGE_ID
+        self.lock = _TS_LOCK
 
     def resolve_image(self, _tool) -> str:
         return self.image_id
@@ -213,10 +217,94 @@ class FakeTreeSitterExecutor:
         )
 
 
+def _fast_intake_and_catalog(runner: JobRunner, target: Path, snapshot: str):
+    real_intake = build_intake()
+    real_catalog = build_catalog()
+
+    def publish_intake(unit) -> dict[str, Any]:
+        doc_path = unit.unit_root / "review-intake.json"
+        atomic_json(doc_path, {"schema": "appsec-review/review-intake/1", "fingerprint": {"sha256": snapshot}})
+        ref = {"path": doc_path.relative_to(unit.job.run_root).as_posix(),
+               "sha256": file_sha256(doc_path), "size_bytes": doc_path.stat().st_size}
+        return {"schema": "appsec-review/review-intake/1", "artifact": ref, "artifacts": [ref],
+                "gaps": [], "terminal_status": "SUCCEEDED"}
+
+    intake_units = (Unit("publish_intake.publish_handoff", publish_intake),)
+    intake = Job(
+        "job_review_intake", real_intake.name, UnitExecutor(intake_units).execute,
+        units=intake_units,
+        datasets=tuple(replace(d, required=False) for d in real_intake.datasets),
+        contract=real_intake.contract,
+        schema_identity=real_intake.schema_identity,
+        input_identity=lambda _: snapshot,
+    )
+    intake_out = runner.run(intake, target_root=target, source_fingerprint=snapshot)
+    run_id = intake_out["status"]["run_id"]
+    run_root = runner.runs.resolve(run_id)
+
+    def publish_catalog(unit) -> dict[str, Any]:
+        art_dir = unit.job.attempt_root / "artifacts" / "catalog"
+        files = []
+        for path in sorted(p for p in target.rglob("*") if p.is_file()):
+            rel = path.relative_to(target).as_posix()
+            lang = "Ruby" if path.suffix == ".rb" else "JavaScript"
+            files.append({
+                "path": rel, "sha256": file_sha256(path), "size_bytes": path.stat().st_size,
+                "language": lang, "generated": False, "delivery_role": "production",
+                "first_party": True, "vendored": False,
+            })
+        part_path = art_dir / "partition.json"
+        comp_path = art_dir / "components.json"
+        build_path = art_dir / "build-targets.json"
+        atomic_json(part_path, {"files": files, "gaps": []})
+        atomic_json(comp_path, {"components": [{"component_id": "comp:root", "root": "."}]})
+        atomic_json(build_path, {"targets": []})
+        manifest_path = run_root / "data" / "indices" / "manifests" / "catalog-fast.json"
+        write_manifest(manifest_path, run_id=run_id, target_snapshot=snapshot, target_root=target, indexes=[])
+
+        def ref(p: Path) -> dict[str, Any]:
+            return {"path": p.relative_to(run_root).as_posix(), "sha256": file_sha256(p), "size_bytes": p.stat().st_size}
+
+        part_ref, comp_ref, build_ref, mf_ref = ref(part_path), ref(comp_path), ref(build_path), ref(manifest_path)
+        cat_path = art_dir / "target-catalog.json"
+        atomic_json(cat_path, {
+            "schema": "appsec-review/target-catalog/1",
+            "source_fingerprint": snapshot,
+            "artifacts": {
+                "repository_discovery.partition_repository": part_ref,
+                "component_discovery.catalog_components": comp_ref,
+                "build_discovery.catalog_build_targets": build_ref,
+            },
+        })
+        cat_ref = ref(cat_path)
+        return {
+            "schema": "appsec-review/target-catalog/1",
+            "artifact": cat_ref,
+            "index_manifest": mf_ref,
+            "artifacts": [cat_ref, part_ref, comp_ref, build_ref, mf_ref],
+            "gaps": [],
+            "terminal_status": "SUCCEEDED",
+        }
+
+    cat_units = (Unit("publish_catalog.publish_handoff", publish_catalog),)
+    catalog = Job(
+        "job_target_catalog", real_catalog.name, UnitExecutor(cat_units).execute,
+        units=cat_units,
+        datasets=tuple(replace(d, required=False) for d in real_catalog.datasets),
+        contract=real_catalog.contract,
+        schema_identity=real_catalog.schema_identity,
+        input_identity=lambda _: snapshot,
+    )
+    catalog_out = runner.run(catalog, run_id=run_id, target_root=target, source_fingerprint=snapshot,
+                             upstream_handoffs={"job_review_intake": intake_out["handoff_sha256"]})
+    return run_id, run_root, intake_out, catalog_out
+
+
 def run_tree_sitter_publication(tmp_path: Path, *, fail_languages: frozenset[str] = frozenset(),
                                 datasets_override=None, extra_jobs: tuple[Any, ...] = (),
                                 extra_job_ids: tuple[str, ...] = (),
-                                disabled_jobs: tuple[str, ...] = ()):
+                                disabled_jobs: tuple[str, ...] = (),
+                                recorded_upstream: bool = True):
     job_ids = ("job_review_intake", "job_target_catalog", "job_tree_sitter_ast", *extra_job_ids)
     runner = configured_runner(tmp_path, job_ids, extra_jobs=extra_jobs, disabled_jobs=disabled_jobs)
     target = tmp_path / "target"
@@ -226,13 +314,16 @@ def run_tree_sitter_publication(tmp_path: Path, *, fail_languages: frozenset[str
         (target / "web").mkdir(parents=True, exist_ok=True)
         (target / "web" / "broken.rb").write_text("def bad\n  1\nend\n", encoding="utf-8")
     snapshot = source_fingerprint(target)
-    intake = build_intake()
-    catalog = build_catalog()
-    intake_out = runner.run(intake, target_root=target, source_fingerprint=snapshot)
-    run_id = intake_out["status"]["run_id"]
-    run_root = runner.runs.resolve(run_id)
-    catalog_out = runner.run(catalog, run_id=run_id, target_root=target, source_fingerprint=snapshot,
-                             upstream_handoffs={"job_review_intake": intake_out["handoff_sha256"]})
+    if recorded_upstream:
+        run_id, run_root, intake_out, catalog_out = _fast_intake_and_catalog(runner, target, snapshot)
+    else:
+        intake = build_intake()
+        catalog = build_catalog()
+        intake_out = runner.run(intake, target_root=target, source_fingerprint=snapshot)
+        run_id = intake_out["status"]["run_id"]
+        run_root = runner.runs.resolve(run_id)
+        catalog_out = runner.run(catalog, run_id=run_id, target_root=target, source_fingerprint=snapshot,
+                                 upstream_handoffs={"job_review_intake": intake_out["handoff_sha256"]})
     ts_job = build_tree_sitter(executor_factory=lambda _unit: FakeTreeSitterExecutor(fail_languages))
     if datasets_override is not None:
         ts_job = replace(ts_job, datasets=datasets_override)
@@ -365,7 +456,11 @@ def test_tree_sitter_declarations_failed_scope_schema_and_inventory_ownership(tm
     accepted_doc = json.loads((run_root / accepted_ref["path"]).read_text(encoding="utf-8"))
     assert accepted_doc["schema"] == TS_SCHEMA
 
-    all_jobs = (build_intake(), build_catalog(), ts_job)
+    all_jobs = (
+        replace(build_intake(), datasets=tuple(replace(d, required=False) for d in build_intake().datasets)),
+        replace(build_catalog(), datasets=tuple(replace(d, required=False) for d in build_catalog().datasets)),
+        ts_job,
+    )
     outs_by_job = {
         "job_review_intake": intake_out,
         "job_target_catalog": catalog_out,
