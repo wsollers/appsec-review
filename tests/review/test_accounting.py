@@ -175,4 +175,5 @@ def test_ratio_bounds() -> None:
 def test_event_kinds_are_closed() -> None:
     assert [kind.value for kind in EventKind] == [
         "claim_proposed", "relation_added", "evidence_request_opened", "evidence_request_closed",
-        "duplicate_marked", "state_transition", "gap_recorded", "cell_terminal", "judge_verdict"]
+        "duplicate_marked", "state_transition", "gap_recorded", "cell_terminal", "judge_verdict",
+        "chain_proposed", "chain_challenged", "chain_decided"]
