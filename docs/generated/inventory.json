@@ -39293,9 +39293,9 @@
           "tests/live/test_svf_live.py"
         ],
         "unit": [
-          "tests/test_svf_alias_analysis.py::test_link_command_becomes_one_module_and_unlinked_units_stand_alone",
-          "tests/test_svf_alias_analysis.py::test_unresolved_archives_and_inputs_are_named_open_world_reasons",
-          "tests/test_svf_alias_analysis.py::test_module_bound_omits_trailing_modules_with_a_gap_and_ids_are_deterministic"
+          "tests/unit/job_svf_alias_analysis/test_contract.py",
+          "tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py",
+          "tests/unit/job_svf_alias_analysis/test_svf_tool.py"
         ]
       },
       "workers": 2
@@ -44783,7 +44783,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "8163c4ab42d095ca3d4ab2a6c31d2b2731ab56d788547197e8f951fa381d73d4"
+    "tests/job-test-map.json": "0bc46d4b22f278439a51dfffc4c440992c5e80dce06c7f80d42279135f1305a3"
   },
   "tool_policy": {
     "disable_grype": true,

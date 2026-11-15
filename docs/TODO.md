@@ -3100,6 +3100,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   unavailable isolation, accepted-source mapping, seeded unit selection, neighborhood diagnostic
   labelling, checkpoint invalidation/resume, and immutable handoff publication; 368/368 job-package
   lines [100.0%] and 116/116 branches [100.0%] covered across all 4 modules).
+  job_svf_alias_analysis (25/47; 3 unit files, 33 cases: pinned 1-input / 3-dataset contract and
+  3-unit DAG topology, link-unit and translation-unit module planning with static-archive expansion
+  and open-world attribution, SVF wrapper bitcode argv/link/Andersen time-limit/debug-loss driver,
+  located points-to/object/indirect-call shard builders with accessor priority and truncation
+  bounds, container/module/compile failure isolation, checkpoint reuse, and handoff publication;
+  437/437 job-package lines [100.0%] and 149/150 branches [99.33%] covered across all 4 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
