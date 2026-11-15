@@ -182,7 +182,7 @@ def test_a_path_in_two_nested_scopes_seeds_both_and_a_changed_shard_is_refused(t
 
 def _raw() -> dict[str, Any]:
     raw = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
-    return raw["jobs"][JOB]["settings"]
+    return {**raw["jobs"][JOB]["settings"], "source_image_id": "sha256:" + "1" * 64}
 
 
 def test_central_toml_defaults_to_seeded_mode_and_validates_the_depth_bounds() -> None:
@@ -250,7 +250,9 @@ def test_staging_writes_headerless_csv_with_proper_quoting(tmp_path: Path) -> No
     profile = _export_profile(_settings(), "cpp")
     assert profile is not None
     root = tmp_path / "run" / "data" / "codeql" / "scopes" / scope.scope_id
-    unit = SimpleNamespace(job=SimpleNamespace(repository_root=ROOT), unit_id="export.scopes")
+    unit = SimpleNamespace(
+        job=SimpleNamespace(repository_root=ROOT, config=SimpleNamespace(typed_settings=_settings("seeded"))),
+        unit_id="export.scopes")
     rows = [("src/b, odd.cpp", 5, 6), ('q"uote.cpp', 1, 1), ("a.cpp", 10, 12)]
     _stage_export(unit, root, root / "export", profile, mode="seeded", depth=4, seed_rows=rows)
     assert (root / "export" / "scope.csv").read_text(encoding="utf-8") == "seeded,4\n"

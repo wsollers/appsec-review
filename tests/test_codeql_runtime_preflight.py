@@ -13,6 +13,7 @@ from appsec_review.jobs.job_codeql_analysis.datasets import DATASETS
 from appsec_review.jobs.job_codeql_analysis.planning import CodeQLScope, SCOPE_SCHEMA
 from appsec_review.runtime import Job, JobRunner, Unit, UnitContext
 from tests.capture_fakes import build_capture_toml
+from tests.host_pins_support import fixture_bindings, write_host_pins
 from tests.test_codeql_predecessor import _table
 from tests.test_codeql_preinstalled import BASE, RELEASES, SOURCE, USER, declaration, settings_value
 
@@ -75,15 +76,19 @@ def harness(tmp_path, monkeypatch):
 
     def destination(settings):
         path = tmp_path / "appsec-review.toml"
+        entries = list(settings["preinstalled_runtimes"])
         path.write_text(
             '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n' + build_capture_toml()
             + '\n[jobs.job_codeql_analysis]\nname = "fixture"\nworkers = 1\n'
             + _table("jobs.job_codeql_analysis.settings",
                      {key: value for key, value in settings.items() if key != "preinstalled_runtimes"})
-            + "".join(_table("[jobs.job_codeql_analysis.settings.preinstalled_runtimes]", entry)
-                      for entry in settings["preinstalled_runtimes"])
             + _table("review_policy", policy))
-        config = load_config(path)
+        host = write_host_pins(
+            tmp_path / "host-pins.toml",
+            images={**fixture_bindings(), settings["source_image_tag"]: settings["source_image_id"]},
+            runtimes=entries,
+        )
+        config = load_config(path, host_pins=host)
         job = Job(predecessor.JOB, "fixture", lambda context: {},
                   units=(Unit("execution.scopes", lambda context: {}),), datasets=DATASETS)
         runner = JobRunner(config)

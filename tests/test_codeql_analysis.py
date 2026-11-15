@@ -289,7 +289,8 @@ def test_central_codeql_asset_lock_matches_tracked_lock() -> None:
 
 def test_go_extended_suite_missing_from_lock_reproduces_review_failure() -> None:
     config = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
-    settings = parse_codeql_settings(config["jobs"]["job_codeql_analysis"]["settings"])
+    settings = parse_codeql_settings({**config["jobs"]["job_codeql_analysis"]["settings"],
+                                      "source_image_id": IMAGE})
     lock = load_asset_lock(ROOT)
     scope = build_codeql_plan(
         source_fingerprint="f" * 64, files=[source("go/main.go")],
