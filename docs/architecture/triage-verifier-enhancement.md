@@ -892,3 +892,61 @@ Focused unit and regression checkpoints (commits `c12d9ef45` and `f881795d8` plu
 - `tests/unit/review_warrants/{test_warrants,test_optin_wiring,test_pipeline_audit_wiring}.py` + `tests/unit/review_decision_audit_producer/test_capture.py`: **30 passed in 6.64 seconds** (`--parallel --test-workers 2 --shuffle-seed 1525`), zero tests over 10 seconds.
 - Broad review/audit/contract regression sweep across `tests/unit/review_warrants/*`, `tests/unit/review_decision_audit_{producer,consumers}/*`, `tests/review/test_{evidence,adjudication,scoring,scoring_factors,predicate_admission,guard_bounds_mapping,numeric_reasoning,inference_review_schemas}.py`, and `tests/test_downstream_input_contracts.py`: **1,173 cases verified** (`1,170 passed` on initial sweep + `3` stub-context `SimpleNamespace` cases in `test_capture.py` fixed via `_warrants_enabled` and re-verified green), zero tests over 10 seconds.
 - Integration, acceptance, live Dagster/model runs, paired labelled corpus execution, and deployment reload remain **NOT RUN**.
+
+## T-153 implementation record
+
+T-153 (`TRI-C`) implements canonical evidence-obligation deduplication, warranted semantic
+reconciliation, deterministic terminal ledger closure, exact accounting invariants, and
+protected decision-audit `request_resolutions` projection within existing package rounds and
+budgets, without adding a second request state machine, automatic producer/specialist
+commissioning, or cross-package scope grants.
+
+Implemented surfaces:
+
+- [Canonical obligation contract and reconciler](../../src/appsec_review/review/evidence_obligations.py)
+  (`appsec-review/evidence-obligation/1`, `appsec-review/lane-evidence-obligations/1`,
+  `OBLIGATION_POLICY_VERSION = "evidence-obligation/1"`, `evob-<sha256>`) and
+  [closed JSON Schema](../schemas/evidence-obligation.schema.json), reusing
+  `warrants.bind_claim_subject` and `warrants.evaluate_warrant` so an obligation closes as
+  `satisfied` only when admitted scoped evidence warrants the exact subject/anchor/kind
+  without unresolved opposite-polarity warranted contradiction.
+- [Transport-vs-semantic receipt boundary](../../src/appsec_review/review/evidence_obligations.py)
+  (`CoverageReceiptRef`, `join_transport_receipts`), preserving `HUNT-C` (`T-156`) transport
+  states (`served`/`delivered`/`empty`/`denied`/`budget_exhausted`) separately from `TRI-C`
+  semantic outcomes (`pending_tri_c_reconciliation` before reconciliation and
+  `legacy_resolution_unknown` for historical delivery-only receipts).
+- [Team round convergence, triage, and lane sealing](../../src/appsec_review/jobs/job_inference_security_review/teams.py)
+  (`_reconcile_team`, `_round_state` semantic round fingerprint, `_pending_requests` open-only
+  forwarding with `max_evidence_requests` cutoff tracking, `_triage` withdrawn-claim tracking,
+  and `_seal` lane `evidence-obligations.json` artifact + specialist referral gap emission only
+  for unresolved obligations).
+- [Claim ledger, exact accounting, and protected decision audit](../../src/appsec_review/review/ledger.py)
+  ([`accounting.py`](../../src/appsec_review/review/accounting.py),
+  [`audit.py`](../../src/appsec_review/jobs/job_inference_security_review/audit.py),
+  [`decision_audit/projection.py`](../../src/appsec_review/review/decision_audit/projection.py),
+  `common.schema.json`, `ledger-event.schema.json`): ledger `open_request`/`close_request`
+  carry canonical `obligation_id`, `reason_code`, `relation_ids`, `warrant_ids`, and
+  `superseded_by`; `exact_accounting` enforces warranted `satisfied` refs, unique primary
+  closure per obligation, and valid `superseded` targets; and `publish_decision_audit`
+  verifies lane `evidence_obligations` and projects `FutureReferences.request_resolutions`
+  with `continuations/request_resolutions/` overflow shards (retaining `not_produced` when
+  lane artifacts are absent).
+
+### Verification summary
+
+Focused unit and regression checkpoints (Increment 1 commit `47c58f775` plus pipeline,
+ledger, accounting, schema, and decision-audit wiring):
+
+- `tests/unit/review_obligations/{test_evidence_obligations,test_pipeline_reconciliation}.py`,
+  `tests/unit/review_warrants/{test_warrants,test_optin_wiring,test_pipeline_audit_wiring}.py`,
+  `tests/review/test_ledger.py`, and `tests/review/test_inference_review_schemas.py`:
+  **167 passed in 10.78 seconds** (`--parallel --test-workers 2 --shuffle-seed 42`), zero
+  tests over 10 seconds.
+- `tests/review/test_obligations.py` and
+  `tests/unit/review_decision_audit_producer/test_{projection,publication,integrity,review_fixes}.py`:
+  **183 passed in 14.45 seconds** (`--parallel --test-workers 2 --shuffle-seed 42`), zero
+  tests over 10 seconds.
+- `tests/unit/review_decision_audit_consumers/test_{reader,reader_edges,control_budget,dossier,query}.py`:
+  **197 passed in 30.19 seconds** (`--parallel --test-workers 2 --shuffle-seed 42`), zero
+  tests over 10 seconds.
+- Integration, acceptance, live Dagster/model runs, and deployment reload remain **NOT RUN**.

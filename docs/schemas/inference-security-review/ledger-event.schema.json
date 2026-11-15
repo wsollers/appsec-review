@@ -210,6 +210,9 @@
               "specialist": {
                 "$ref": "compact-investigation.schema.json#/$defs/specialist"
               },
+              "obligation_id": {
+                "$ref": "common.schema.json#/$defs/obligation_id"
+              },
               "round": {
                 "$ref": "common.schema.json#/$defs/round"
               },
@@ -262,6 +265,28 @@
               },
               "round": {
                 "$ref": "common.schema.json#/$defs/round"
+              },
+              "obligation_id": {
+                "$ref": "common.schema.json#/$defs/obligation_id"
+              },
+              "reason_code": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "relation_ids": {
+                "$ref": "common.schema.json#/$defs/relation_ids"
+              },
+              "warrant_ids": {
+                "$ref": "common.schema.json#/$defs/warrant_ids"
+              },
+              "superseded_by": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/obligation_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           }

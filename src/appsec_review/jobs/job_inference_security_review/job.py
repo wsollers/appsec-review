@@ -458,6 +458,10 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             document["chain_seeds"]["path"] = _artifact(run_root, Path(document["chain_seeds"]["path"]))["path"]
             if document.get("poc_basis"):
                 document["poc_basis"]["path"] = _artifact(run_root, Path(document["poc_basis"]["path"]))["path"]
+            if document.get("evidence_obligations"):
+                document["evidence_obligations"]["path"] = _artifact(
+                    run_root, Path(document["evidence_obligations"]["path"])
+                )["path"]
             if document.get("warrants"):
                 document["warrants"]["path"] = _artifact(run_root, Path(document["warrants"]["path"]))["path"]
             gaps = [f"{lane.value}: {document['counts'].get('gaps', 0)} gaps"] if document["counts"].get("gaps") else []
