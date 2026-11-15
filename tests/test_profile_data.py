@@ -165,7 +165,7 @@ def test_ingestion_fails_on_changed_hash_and_invalid_origin(tmp_path: Path) -> N
 def test_job_contract_is_generic_and_declares_profile_datasets() -> None:
     job = build_job()
     assert job.job_id == "job_profile_data" and job.name == "profile_data"
-    assert job.consumes == ("job_target_catalog", "job_language_build", "job_artifact_indexing")
+    assert job.consumes == ("job_artifact_indexing", "job_language_build", "job_target_catalog")
     assert [unit.unit_id for unit in job.units] == [
         "load.accepted_inputs", "normalize.profile_data", "index.profile_data", "acceptance.publish_handoff"]
     assert {item.output_kind for item in job.datasets} == {"profile_data", "profile_data_handoff"}

@@ -1247,7 +1247,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                     raise ValueError("project build variants contain invalid runtime facts")
         if job_id == "job_language_build":
             allowed_language_settings = {
-                "command_timeout_seconds", "output_bytes", "artifact_count_limit", "build_capture",
+                "enabled", "command_timeout_seconds", "output_bytes", "artifact_count_limit", "build_capture",
                 "compiler_artifact_collection_mode", "compiler_artifact_collection_overrides",
                 "dotnet", "go", "node", "python", "rust", "php", "jvm", "wasm",
             }
@@ -1255,6 +1255,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             if unknown_language_settings:
                 raise ValueError("jobs.job_language_build.settings has unknown settings: " +
                                  ", ".join(sorted(unknown_language_settings)))
+            if "enabled" in settings and type(settings["enabled"]) is not bool:
+                raise ValueError("jobs.job_language_build.settings.enabled must be a boolean")
             artifact_mode = _processing_mode(
                 settings.get("compiler_artifact_collection_mode", ProcessingMode.REQUIRED.value),
                 "jobs.job_language_build.settings.compiler_artifact_collection_mode")

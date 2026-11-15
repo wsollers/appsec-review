@@ -48,7 +48,8 @@ from appsec_review.jobs.job_language_build.datasets import CONTRACT as LANGUAGE_
 
 CONTRACT = JobContract(
     inputs=(
-        *(replace(item, availability=Availability.OPTIONAL, missing=MissingPolicy.GAP)
+        *(item if (item.producer, item.output_kind) == ("job_project_build", "handoff")
+          else replace(item, availability=Availability.OPTIONAL, missing=MissingPolicy.GAP)
           for item in LANGUAGE_CONTRACT.inputs),
         InputRequirement("build_controller", "iteration_request",
                          "appsec-review/build-iteration-request/1", channel=InputChannel.TRANSACTION,

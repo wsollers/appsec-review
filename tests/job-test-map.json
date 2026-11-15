@@ -57,7 +57,8 @@
         "tests/unit/job_build_iteration/test_job_graph.py",
         "tests/unit/job_build_iteration/test_controller.py",
         "tests/unit/job_build_iteration/test_executor_capture.py",
-        "tests/unit/job_build_iteration/test_workspace_resume.py"
+        "tests/unit/job_build_iteration/test_workspace_resume.py",
+        "tests/unit/runtime/test_wave3_contracts.py"
       ],
       "integration": [
         "tests/integration/job_build_iteration/test_controller_recovery.py",
@@ -73,7 +74,8 @@
         "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
         "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
         "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push",
-        "tests/unit/runtime/test_wave2_consumers.py"
+        "tests/unit/runtime/test_wave2_consumers.py",
+        "tests/unit/runtime/test_wave3_contracts.py"
       ],
       "integration": [],
       "acceptance": [],
@@ -373,7 +375,10 @@
       "live": []
     },
     "job_profile_data": {
-      "unit": ["tests/test_profile_data.py"],
+      "unit": [
+        "tests/test_profile_data.py",
+        "tests/unit/runtime/test_wave3_contracts.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
@@ -545,7 +550,10 @@
       "live": []
     },
     "job_test_coverage": {
-      "unit": ["tests/test_test_coverage.py"],
+      "unit": [
+        "tests/test_test_coverage.py",
+        "tests/unit/runtime/test_wave3_contracts.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []

@@ -48,7 +48,8 @@ def owners(datasets, relative: str):
             if any(compile_glob(pattern).fullmatch(relative) for pattern in item.artifacts)]
 
 
-def configured_runner(tmp_path: Path, job_ids: tuple[str, ...], *, extra_jobs: tuple[Any, ...] = ()) -> JobRunner:
+def configured_runner(tmp_path: Path, job_ids: tuple[str, ...], *, extra_jobs: tuple[Any, ...] = (),
+                      disabled_jobs: tuple[str, ...] = ()) -> JobRunner:
     root = tmp_path / "repo"
     root.mkdir(parents=True, exist_ok=True)
     if not (root / "containers").exists():
@@ -59,6 +60,11 @@ def configured_runner(tmp_path: Path, job_ids: tuple[str, ...], *, extra_jobs: t
     components = ("platform", "validation", *(adapter.tool_id for adapter in ADAPTERS.values()))
     text = declare_releases((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
                             **{key: "fixture/1" for key in components})
+    for disabled_id in disabled_jobs:
+        header = f"[jobs.{disabled_id}.settings]\n"
+        if header not in text:
+            raise AssertionError(f"missing settings header for {disabled_id}")
+        text = text.replace(header, f"{header}enabled = false\n", 1)
     for extra in extra_jobs:
         if f"[jobs.{extra.job_id}]" not in text:
             text += f'\n[jobs.{extra.job_id}]\nname="{extra.name}"\nworkers=1\n'
@@ -209,9 +215,10 @@ class FakeTreeSitterExecutor:
 
 def run_tree_sitter_publication(tmp_path: Path, *, fail_languages: frozenset[str] = frozenset(),
                                 datasets_override=None, extra_jobs: tuple[Any, ...] = (),
-                                extra_job_ids: tuple[str, ...] = ()):
+                                extra_job_ids: tuple[str, ...] = (),
+                                disabled_jobs: tuple[str, ...] = ()):
     job_ids = ("job_review_intake", "job_target_catalog", "job_tree_sitter_ast", *extra_job_ids)
-    runner = configured_runner(tmp_path, job_ids, extra_jobs=extra_jobs)
+    runner = configured_runner(tmp_path, job_ids, extra_jobs=extra_jobs, disabled_jobs=disabled_jobs)
     target = tmp_path / "target"
     (target / "src").mkdir(parents=True, exist_ok=True)
     (target / "src" / "app.js").write_text("function check(x) {\n  return x + 1;\n}\n", encoding="utf-8")
