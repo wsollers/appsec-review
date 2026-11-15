@@ -30,9 +30,15 @@ the dated designs below explain decisions, not additional implemented capability
 
 Tree-sitter is an independent source lane. Its
 [planner](../../src/appsec_review/jobs/job_tree_sitter_ast/model.py) partitions accepted files by
-component, translation scope, language and bounded chunk. Its
+component, translation scope, language and bounded chunk, ordering `first_party` files ahead of
+non-first-party files under the frozen source-disposition table
+(`src/appsec_review/config/first_party.py`, [T-5016](../TODO.md)) so the container node budget is
+spent on first-party code first and vendored budget exclusions are counted rather than reported as
+gaps. Its
 [execution boundary](../../src/appsec_review/jobs/job_tree_sitter_ast/scope_execution.py) separates
-target and generated-source mounts and verifies grammar/image identities. The
+target and generated-source mounts, verifies grammar/image identities, and separates normalized
+JSONL shards (`tree_sitter_node_shards`), per-scope dispositions (`tree_sitter_scope_results`) and
+attempt acceptance (`tree_sitter_acceptance`). The
 [projection](../../src/appsec_review/jobs/job_tree_sitter_ast/projection.py) attaches selected
 syntax fields to existing nodes without resolving names. Parse coverage and projection coverage
 are separate: a valid tree can have only partial or unavailable syntax projection.
@@ -42,30 +48,43 @@ found during review. The [compiled producer](../../src/appsec_review/jobs/job_cp
 verifies materialized workspaces/source maps, normalizes compile/link data, and runs its separate
 compiled, AST, IR, Infer and binary branches. The
 [scope helper](../../src/appsec_review/jobs/cpp_index_scopes.py) is the common input boundary for
-clangd, Clang static analysis, Joern and SVF. Unsupported compile inputs are separate skip
-decisions, not failed supported translation units. Infer and Clang diagnostics stay scanner
-observations even when their traces help graph analysis.
+clangd, Clang static analysis, Joern and SVF; `job_cpp_symbol_index` treats `COMPLETED_WITH_GAPS`
+compiled catalogs as usable (`_USABLE_BUILD_STATUSES`) and admits symbols `first_party` first under
+`max_symbols_per_scope`. Unsupported compile inputs are separate skip decisions, not failed
+supported translation units. Infer and Clang diagnostics stay scanner observations even when their
+traces help graph analysis.
 
 The [CodeQL handler](../../src/appsec_review/jobs/job_codeql_analysis/job.py) has configured
 `plan`, `execution` and `acceptance` steps. Inside execution, ready scopes independently advance
 through database creation, query profiles, normalization and optional export. Query suites and
-graph export are distinct consumers of a verified database. Failed-query SARIF can be retained as
+graph export are distinct consumers of a verified database; databases build the whole unit so calls
+into vendored code resolve, while query results in non-`first_party` files are counted under
+`excluded_results` instead of published. Failed-query SARIF can be retained as
 incomplete diagnostic evidence without producing successful observations; zero observations is
 explicitly not a clean classification. Manual database creation uses admitted replay/environment
 identities rather than inventing a build command.
 
 The [graph producer](../../src/appsec_review/jobs/job_code_graph_index/job.py) reads accepted exports,
-normalizes them with the graph catalog and source mapping, cross-checks available native producers,
-and correlates scanner code flows. Its seven fact families are defined in the
-[graph contract](../../src/appsec_review/graph/contract.py). It publishes family shards, database
-cards and [bounded producer neighborhoods](../../src/appsec_review/jobs/job_code_graph_index/producers.py).
+normalizes them with the graph catalog (`appsec-review/graph-catalog/1` revision 2, classifying
+`send`/`sendto`/`sendmsg`/`write`/`writev` as `network_output` and `fwrite` as `file_write`, with
+each `dataflow_path` copying its sink site's classification under [T-5017](../TODO.md)) and source
+mapping, drops non-`first_party` facts with per-family `excluded_<disposition>` counts while
+retaining paths with a first-party endpoint and function symbols as callee boundaries, cross-checks
+available secondary producers, and correlates scanner code flows. Its seven fact families are
+defined in the [graph contract](../../src/appsec_review/graph/contract.py). It publishes family
+shards, database cards, [bounded producer neighborhoods](../../src/appsec_review/jobs/job_code_graph_index/producers.py),
+and a per-run [graph quality scorecard](../../src/appsec_review/graph/scorecard.py)
+(`code_graph_scorecard`, `appsec-review/graph-quality-scorecard/1`,
+[closed schema](../schemas/graph-quality-scorecard.schema.json)).
 These neighborhoods retain their producer-specific kinds and origins; adding an analyzer diagnostic
 or a Joern function row does not make it an independent primary dataflow result.
 
 Cross-checking is specific, not a generic vote. The
-[call cross-check](../../src/appsec_review/graph/crosscheck.py) uses supported clangd/AST/IR evidence;
-the [SVF cross-check](../../src/appsec_review/graph/svf_crosscheck.py) distinguishes closed-world
-contradiction from open-world absence. Uncovered and secondary-only sites remain explicit.
+[call cross-check](../../src/appsec_review/graph/crosscheck.py) uses supported clangd/AST/IR
+evidence plus `tree-sitter` syntax call expressions matched by exact span (agreeing on matching
+callee text, `partial` when text differs, and emitting bounded `secondary_only` facts without
+contradicting); the [SVF cross-check](../../src/appsec_review/graph/svf_crosscheck.py) distinguishes
+closed-world contradiction from open-world absence. Uncovered and secondary-only sites remain explicit.
 Disagreement can remove direct eligibility; incomplete sources do not refute an otherwise positive
 fact. Seeded mode records seeds, unresolved selections, depth/frontier bounds and omitted extent.
 No-seed execution is not whole-program fallback, and a seeded neighborhood is not complete coverage.
@@ -174,8 +193,9 @@ No item or known limitation automatically joins a walk's user-approved expected-
   inventory cells are declarations, not execution evidence.
 - **T-164:** construction-time validation of `IndexIdentity.producer["job"]` (`job_debug_symbol_indexing`
   now emits `producer["job"]`; synthetic test fixtures remain to migrate).
-- **T-5016, T-5017:** first-party AST and symbol index quality scorecard cross-checked against
-  CodeQL, and network-output sink classification parity between `sink_sites` and `dataflow_paths`.
+- **T-5016, T-5017:** live `smoke-cpp` scorecard scoring and `src/request.cpp` path-eligibility
+  verification over the implemented first-party graph scoping, `tree-sitter` cross-check,
+  `code_graph_scorecard` and `network_output`/`file_write` sink classifications.
 
 The SVF aggregate propagation detail is tracked by T-159, not silently assigned to T-126 or
 repaired by this document.

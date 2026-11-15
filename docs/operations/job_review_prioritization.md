@@ -299,8 +299,9 @@ and source custody; it does not dispatch an LLM despite the score's historical n
 
 ### `load`
 
-1. In `load.accepted_inputs`, verify accepted intake, catalog and Tree-sitter results and require
-   their source snapshots to agree with the job fingerprint.
+1. In `load.accepted_inputs`, verify accepted intake, catalog and Tree-sitter results
+   (`tree_sitter_acceptance` and streamed `tree_sitter_node_shards` via `observe_output` read
+   receipts) and require their source snapshots to agree with the job fingerprint.
 2. Verify source backing and collect optional scanner, CodeQL and history handoff identities.
    Retain policy exclusions, including disabled-language coverage, rather than inventing syntax.
 

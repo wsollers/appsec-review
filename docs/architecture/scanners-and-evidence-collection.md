@@ -22,18 +22,22 @@ independent acceptance comparisons.
 [Evidence collection](../../src/appsec_review/jobs/job_evidence_collection/job.py) consumes the
 accepted target catalog and analysis plan, applies tool support and Swift/Grype policy, and
 checks rule/feed prerequisites before bounded scanner launch. Each adapter owns its argv,
-expected output and accepted exit convention. Scanner choice is not inferred from a filename in
-a generated inventory. The source lane includes worktree secrets, source diagnostics, directory
-Syft inventory, offline advisory matching, configuration checks and catalog-binary hardening.
-Grype consumes the accepted per-task Syft output; OSV partitions supported lockfiles and mounts only
-the required available ecosystem snapshots. Missing prerequisites and unselected/unsupported work
-retain distinct dispositions.
+expected output and accepted exit convention (including `cppcheck_scan`'s typed `CppcheckProfile`
+in `src/appsec_review/config/cppcheck.py`, which enables `warning` only by default and records the
+effective `argv` in `execution.json` under [T-5018](../TODO.md)). Scanner choice is not inferred
+from a filename in a generated inventory. The source lane includes worktree secrets, source
+diagnostics, directory Syft inventory, offline advisory matching, configuration checks and
+catalog-binary hardening. Grype consumes the accepted per-task Syft output; OSV partitions
+supported lockfiles and mounts only the required available ecosystem snapshots. Missing
+prerequisites and unselected/unsupported work retain distinct dispositions.
 
 [Artifact indexing](../../src/appsec_review/jobs/job_artifact_indexing/job.py) first establishes
 canonical retained-artifact identities, receipt-based archive membership and exact or explicitly
 ambiguous producing/linking relations. It does not scan archive contents to rediscover members.
 [Artifact security analysis](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py)
-then applies delivery/scope and format support to accepted produced or target-intake artifacts.
+then applies delivery/scope and format support to accepted produced or target-intake artifacts,
+separating per-scan `artifact_security_results` (`appsec-review/artifact-security-observation/1`)
+from `artifact_security_acceptance` (`appsec-review/artifact-security-analysis/1`).
 Platform content is not customer-artifact input. Unknown delivery is a coverage limitation, not
 proof that a binary ships or can be ignored.
 
@@ -193,8 +197,8 @@ expected in a particular walk or authorize live validation.
   successful scanner invocation alone are not sufficient acceptance.
 - **T-147, T-157:** exact task/dataset publication and language/applicability metadata. Generated
   inventories describe available declarations, not actual scanner execution or evidence consumption.
-- **T-5018:** configurable `cppcheck` profile turning style, performance and portability checks off
-  by default.
+- **T-5018:** live `smoke-cpp` observation-count verification for the default `warning`-only
+  `cppcheck` scan profile.
 
 ## Jobs and pages
 

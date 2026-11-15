@@ -2580,6 +2580,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/evidence-obligation.schema.json",
+      "reason": "Keep evidence-obligation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/final-report/common.schema.json",
       "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "reporting and metrics"
@@ -2599,6 +2607,14 @@
       "path": "docs/schemas/final-report/final-report.schema.json",
       "reason": "Keep final-report.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/graph-quality-scorecard.schema.json",
+      "reason": "Keep graph-quality-scorecard.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,

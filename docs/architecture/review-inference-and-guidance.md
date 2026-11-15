@@ -143,7 +143,12 @@ relations are retained, but judges do not set claim state.
 predicate-qualified evidence, handles contradiction and scope, and distinguishes partial support
 from confirmation with required evidence and independent verification. Blind context, distinct
 model identity, resolving evidence and correctness are different properties. Model agreement is
-not a vote that supplies a missing predicate.
+not a vote that supplies a missing predicate. For bounded follow-up requests ([T-153](../TODO.md)
+Increment 1), [`evidence_obligations.py`](../../src/appsec_review/review/evidence_obligations.py)
+and [`evidence-obligation.schema.json`](../schemas/evidence-obligation.schema.json) define
+`evidence-obligation/1` and `lane-evidence-obligations/1` with `evob-<sha256>` identities, shared
+`bind_claim_subject` derivation in `warrants.py`, and scoped warranted reconciliation; wiring into
+live package follow-up rounds remains open under T-153.
 
 The [post-lane stages](../../src/appsec_review/jobs/job_inference_security_review/stages.py)
 then score supported/confirmed claims from evidence-bound factors. Missing factors remain

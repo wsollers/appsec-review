@@ -424,26 +424,36 @@ Source: [handler graph](../../src/appsec_review/jobs/job_code_graph_index/job.py
 
 1. Read accepted CodeQL graph-export records and the accepted retrieval manifest. Verify the
    catalog release pin, export/source identities and source files for successful scopes.
-2. Assign secondary clangd, LLVM IR, Clang AST and SVF shards, analyzer observations, scanner
-   observations and optional priority context to matching scopes. Restore missing secondary
-   shards only through their own accepted producer handoffs, not arbitrary files.
-3. Bind those shard references and scope/export/release/settings identities. Reuse scope
-   checkpoints only when required graph/validation releases are declared and output hashes verify.
+2. Assign secondary clangd, LLVM IR, Clang AST, Tree-sitter (`tree-sitter`) and SVF shards,
+   analyzer observations, scanner observations and optional priority context to matching scopes.
+   Restore missing secondary shards only through their own accepted producer handoffs, not
+   arbitrary files.
+3. Bind those shard references, the frozen source-disposition table (`config/first_party.py`) and
+   scope/export/release/settings identities. Reuse scope checkpoints only when required
+   graph/validation releases are declared and output hashes verify.
 
 ### `normalize`
 
 1. For unreused scopes with successful exports, validate bounded export documents and map rows
-   against accepted source bytes and catalog classifications.
+   against accepted source bytes and catalog classifications (`appsec-review/graph-catalog/1`
+   revision 2, classifying `send`/`sendto`/`sendmsg`/`write`/`writev` as `network_output` and
+   `fwrite` as `file_write` under [T-5017](../TODO.md)).
 2. Build call sites, sinks, entry points, flow summaries, dataflow paths, guards and ranges,
    retaining ambiguity, unresolved operands, language-specific unavailability and truncation.
+   A `dataflow_path` copies its sink site's classification so eligibility cannot diverge from
+   `sink_site`. Drop facts located in non-`first_party` files with per-family
+   `excluded_<disposition>` counts while preserving paths with a first-party source or sink (plus
+   that sink site) and every function symbol as a callee boundary ([T-5016](../TODO.md)).
    Enforce path/step/text bounds; do not promote post-dominating-only checks to guarding predicates.
 3. Write a normalized stage with facts, symbols, relations and per-family coverage. Failed or
    absent exports skip this stage, not the later unavailable-family publication.
 
 ### `crosscheck`
 
-1. Read that stage and independent call producers. Compare supported call locations/targets;
-   preserve agree, disagree, partial and not-covered states and secondary-only sites.
+1. Read that stage and independent call producers (`clangd`, Clang AST, LLVM IR, and `tree-sitter`
+   syntax call expressions matched by exact span). Compare supported call locations/targets;
+   preserve agree, disagree, partial and not-covered states and bounded secondary-only sites
+   (syntax never contradicts).
 2. Apply analyzer sink corroboration when available, then SVF cross-checking. Only appropriately
    closed-world/complete points-to evidence can contradict a graph claim; open-world absence is
    not a refutation.
@@ -465,8 +475,10 @@ Source: [handler graph](../../src/appsec_review/jobs/job_code_graph_index/job.py
 
 1. Re-verify the current manifest and ensure every consumed secondary/analyzer/observation/priority
    shard is still present or explicitly restored. Missing consumed identities is an integrity error.
-2. Replace this producer's shards, compose restored shards and publish the verified manifest plus
-   `code-graph-summary.json`, with family coverage counts and scope/database/fact/reuse counts.
+2. Replace this producer's shards, compose restored shards and publish the verified manifest,
+   `code-graph-summary.json` (with family coverage counts and scope/database/fact/reuse counts),
+   and `graph-quality-scorecard.json` (`code_graph_scorecard`, `appsec-review/graph-quality-scorecard/1`,
+   [closed schema](../schemas/graph-quality-scorecard.schema.json)) plus `graph-quality-scorecard.txt`.
 
 ## Dataflow
 

@@ -239,8 +239,10 @@ Source: [job](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py),
 ### `plan`
 
 1. Select source-in-scope catalog files with languages. Assign the deepest component/build root,
-   separate generated translation scopes, route TSX explicitly, and chunk sorted files by count
-   and source bytes. Include relevant catalog exclusions in scope identity.
+   separate generated translation scopes, route TSX explicitly, order each scope's files
+   `first_party` first under the frozen review disposition table (`config/first_party.py`,
+   [T-5016](../TODO.md)), and chunk sorted files by count and source bytes. Include relevant
+   catalog exclusions and the disposition table in scope identity.
 2. Remove Swift scopes when policy disables Swift; partition other scopes by locked grammar.
    Preserve missing grammars, generated-source gaps and exclusions outside any source scope as
    unavailable/partial dispositions, not silently unplanned files.
@@ -251,20 +253,26 @@ Source: [job](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py),
    Require target and generated files to have separate source mounts.
 2. Reuse a verified fingerprinted JSONL/index pair or stage a bounded parser request. Generated
    bytes are immutable read-only backing, not writable aliases to scratch.
-3. Invoke the parser container; nonzero exit, timeout or OOM yields a failed scope. Missing declared
-   output, wrong grammar/image/lock identity or malformed trusted structure raises an exception.
+3. Invoke the parser container; nonzero exit, timeout or OOM yields a failed scope (carrying
+   explicit `appsec-review/tree-sitter-ast/1` schema metadata). Missing declared output, wrong
+   grammar/image/lock identity or malformed trusted structure raises an exception.
 4. Normalize accepted file records into located nodes and `CONTAINS` relationships; emit JSONL
-   and analysis SQLite. Retain parse diagnostics, node limits, omitted files and exclusions.
+   (`tree_sitter_node_shards`, `appsec-review/tree-sitter-normalizer/1`) and analysis SQLite
+   (`tree_sitter_ast`). Retain parse diagnostics, node limits, omitted files and exclusions;
+   vendored files the container node budget did not reach are counted under
+   `counts.dispositions.excluded_files` rather than emitted as a gap.
    Add syntax-projection coverage separately: a supported mapping is still a bounded unresolved
    syntax subset; an unmapped grammar has unavailable projection.
-5. Sort dispositions and aggregate files/bytes/nodes/diagnostics and reasons. Successful scope
-   count includes partial scopes with an index, not just completely parsed scopes.
+5. Sort dispositions (`tree_sitter_scope_results`, `appsec-review/tree-sitter-ast/1`) and aggregate
+   files/bytes/nodes/diagnostics and reasons. Successful scope count includes partial scopes with
+   an index, not just completely parsed scopes.
 
 ### `acceptance`
 
 1. Publish one attempt coverage shard across all dispositions, including unavailable scopes, and
    compose successful AST shards with the upstream manifest, replacing this producer's old shards.
-2. Write `accepted-tree-sitter-ast.json` with lock/image, generated-source backing, build handoff,
+2. Write `accepted-tree-sitter-ast.json` (`tree_sitter_acceptance`,
+   `appsec-review/tree-sitter-ast/1`) with lock/image, generated-source backing, build handoff,
    per-scope dispositions, counts, reasons and manifest. Item count is parsed nodes.
 
 ## Dataflow

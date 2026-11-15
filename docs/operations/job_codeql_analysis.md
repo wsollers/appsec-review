@@ -685,7 +685,10 @@ Source: [handler graph](../../src/appsec_review/jobs/job_codeql_analysis/job.py)
    pack/suite, and retain execution plus bounded SARIF. Invalid/missing/oversized SARIF is failure;
    failed bounded SARIF may be retained as incomplete native output, never successful observations.
 4. Normalize successful SARIF into observations, exact native-result selectors, source entities and
-   located supporting flow spans. Preserve unresolved locations and normalization gaps. Retain
+   located supporting flow spans. The database builds the whole unit so calls into vendored code
+   resolve, while query results located in non-`first_party` files under the frozen disposition
+   table (`config/first_party.py`, [T-5016](../TODO.md)) are counted per query (`excluded_results`)
+   instead of published. Preserve unresolved locations and normalization gaps. Retain
    execution/native provenance; zero normalized observations gets an explicit not-clean reason.
    Publish a scope/profile observations shard, including unavailable coverage for failed queries.
 5. Independently evaluate graph export: disabled or no pack is a not-applicable export with a

@@ -213,7 +213,9 @@ Generated task/tool bindings remain [T-147](../TODO.md); the following follows e
    timeout, exit, precondition and parser failures; OSV's documented unsupported-input result is
    a skip, not a clean vulnerability match.
 6. Bound stdout/stderr, diagnostic tails and exact parser input independently. Retain native output,
-   execution receipt and supported native report references. Missing provenance, malformed output,
+   execution receipt (`artifact_scanner_io`) and supported native report references, publishing
+   per-scan observation documents under `artifact_security_results`
+   (`appsec-review/artifact-security-observation/1`). Missing provenance, malformed output,
    truncated parser/report data or absent blint per-binary output yields reasons; oversized parser
    input cannot remain usable observations. Execution-safety may stop before fallback publication.
 
@@ -231,8 +233,11 @@ Generated task/tool bindings remain [T-147](../TODO.md); the following follows e
 
 ### `acceptance`
 
-1. Publish `accepted-analysis.json` with upstream identities, artifact count, scan-result count,
-   finding-record count, capability dispositions, installer-record coverage, reasons and manifest.
+1. Publish `accepted-analysis.json` (`artifact_security_acceptance`,
+   `appsec-review/artifact-security-analysis/1`, read by downstream consumers via `observe_output`
+   in `load_accepted_artifact_security_analysis`) with upstream identities, artifact count,
+   scan-result count, finding-record count, capability dispositions, installer-record coverage,
+   reasons and manifest.
 2. Distinguish `observation_count` here (scan results) from individual indexed finding records.
    Any retained reason yields completed-with-gaps; publication does not adjudicate exploitability.
 

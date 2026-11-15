@@ -247,8 +247,9 @@ and [operations](change-context-analysis.md).
 ### `attribute`
 
 1. Select exact, size-bounded files in descending churn order up to the attribution-file bound.
-   Read optional accepted Tree-sitter artifacts for the same snapshot; validate source hashes
-   and spans before mapping surviving lines to innermost functions.
+   Read optional accepted Tree-sitter artifacts (`tree_sitter_acceptance` and
+   `tree_sitter_node_shards`, recording `observe_output` read receipts) for the same snapshot;
+   validate source hashes and spans before mapping surviving lines to innermost functions.
 2. Run bounded Git blame and pseudonymize authors. Record unreliable or absent function mapping
    separately from file ownership. The current blame command names `HEAD`; do not infer that
    an independently moved checkout was revalidated solely from an old history handoff.
