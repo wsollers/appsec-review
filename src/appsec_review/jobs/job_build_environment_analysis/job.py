@@ -9,8 +9,12 @@ import re
 import time
 
 from appsec_review.config.loader import BuildEnvironmentSettings, parse_bounded_settings
-from appsec_review.interchange import GapCode, producer_gap
-from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
+from appsec_review.interchange import GapCode, decode_handoff as decode_handoff_envelope, producer_gap
+from appsec_review.runtime.inputs import (
+    decode_consumed_handoff as decode_handoff,
+    observe_handoff,
+    observe_output,
+)
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.storage import atomic_bytes, canonical_json
 from appsec_review.storage.shared import safe_path
@@ -111,6 +115,12 @@ def environment_contract(config, orchestration, upstream):
                        "NOT_RUN": "trusted standalone launch does not schedule the producer",
                        "OPTIONAL_PRIOR": "trusted standalone launch supplied optional prior evidence",
                        "EXPECTED_CURRENT": "workflow requires the current accepted producer"}[mode]}
+
+
+def optional_prior_environment_handoffs(contract):
+    if contract.get("mode") == "OPTIONAL_PRIOR" and isinstance(contract.get("reference"), str):
+        return {JOB_ID: contract["reference"]}
+    return {}
 
 
 def planning_environment_inputs(config, run_root, source_fingerprint, orchestration, upstream):
@@ -214,11 +224,14 @@ def load_environment(run_root, source_fingerprint, contract):
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     if contract["reference"] != pointer["handoff_sha256"]:
         raise ValueError("environment reference is not the accepted producer")
-    handoff = decode_handoff(_read(run_root, {
+    prior = mode == "OPTIONAL_PRIOR"
+    handoff = decode_handoff_envelope(_read(run_root, {
         "path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]},
         byte_limit=32 * 1024 * 1024),
         run_id=run_root.name, job_id=JOB_ID)
+    observe_handoff(run_root, handoff, prior=prior)
     identity = handoff["outputs"]["environment_analysis.publish_handoff"]["artifact"]
+    observe_output(run_root, JOB_ID, "build_environment", identity, prior=prior)
     value = validate_environment(_read(run_root, identity))
     if handoff["source_fingerprint"] != value["source_fingerprint"]:
         raise ValueError("environment handoff and artifact source differ")

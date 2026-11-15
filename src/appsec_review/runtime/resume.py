@@ -70,9 +70,10 @@ class ResumePlanner:
             job.job_id for job in jobs if job.propagate_handoff}
 
     def _accepted(self, job: Job, upstream: Mapping[str, str], *,
-                  ignore_upstream: bool = False) -> tuple[list[str], str | None]:
-        contract = None
-        if job.job_id == "job_target_analysis_plan":
+                  ignore_upstream: bool = False,
+                  contract: Mapping[str, Any] | None = None,
+                  current_environment: Mapping[str, Any] | None = None) -> tuple[list[str], str | None]:
+        if job.job_id == "job_target_analysis_plan" and contract is None:
             from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
             contract, upstream = planning_environment_inputs(
                 self.config, self.run_root, self.source_fingerprint, self.orchestration, upstream)
@@ -136,7 +137,8 @@ class ResumePlanner:
             from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
             from appsec_review.jobs.job_build_environment_analysis.job import load_environment
             # A planner reused by a graph still consumes the current accepted environment.
-            current = load_environment(self.run_root, self.source_fingerprint, contract)
+            current = (current_environment if current_environment is not None
+                       else load_environment(self.run_root, self.source_fingerprint, contract))
             stored = load_accepted_plan(self.run_root).get("build_environment")
             if stored != current:
                 reasons.append("planning environment availability identity changed")
@@ -163,6 +165,10 @@ class ResumePlanner:
             claim = read_document(safe_path(self.run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
             if claim.get("deployment_identity") != deployment_identity(self.config.runtime.repository_root):
                 reasons.append("deployment image/scripts identity changed")
+            if contract is not None:
+                from appsec_review.jobs.job_build_environment_analysis.job import optional_prior_environment_handoffs
+                if dict(claim.get("optional_prior_handoffs", {})) != optional_prior_environment_handoffs(contract):
+                    reasons.append("planning optional prior handoffs identity changed")
             from appsec_review.runtime.release import load_release
             from appsec_review.runtime.repair import ComputationAdmission
             from appsec_review.storage.shared import verify_receipt
@@ -199,8 +205,19 @@ class ResumePlanner:
 
     def accepted(self, job: Job, upstream: Mapping[str, str], *,
                  ignore_upstream: bool = False) -> tuple[tuple[str, ...], str | None]:
+        contract = None
+        current_environment = None
+        if job.job_id == "job_target_analysis_plan" and not ignore_upstream:
+            from appsec_review.jobs.job_build_environment_analysis.job import (
+                load_environment, planning_environment_inputs,
+            )
+            contract, upstream = planning_environment_inputs(
+                self.config, self.run_root, self.source_fingerprint, self.orchestration, upstream)
+            current_environment = load_environment(self.run_root, self.source_fingerprint, contract)
         try:
-            reasons, handoff_hash = self._accepted(job, upstream, ignore_upstream=ignore_upstream)
+            reasons, handoff_hash = self._accepted(
+                job, upstream, ignore_upstream=ignore_upstream,
+                contract=contract, current_environment=current_environment)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return (f"resume admission unavailable: {type(exc).__name__}: {exc}",), None
         return tuple(reasons), handoff_hash

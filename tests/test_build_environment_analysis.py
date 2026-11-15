@@ -135,12 +135,14 @@ def _published(tmp_path, *, reusable=False, mode="strict"):
     target.mkdir()
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if reusable:
+        from tests.release_support import write_release
         policy = '[review_policy]\nmode = "strict"\napproved_first_party_projects = []'
         assert text.count(policy) == 1 and text.count("[review_policy.releases]\n") == 1
         text = text.replace(policy,
             f'[review_policy]\nmode = "{mode}"\nproject_id = "synthetic-environment"\n'
             'approved_first_party_projects = ["synthetic-environment"]\n'
             f'target_root = {json.dumps(str(target))}\ncustody = "application_private_v1"')
+        write_release(tmp_path, ("job_review_intake", "job_target_catalog", JOB_ID, "job_target_analysis_plan"))
     config_path.write_bytes(text.encode("utf-8"))
     config = load_config(config_path)
     (target / "setup.sh").write_bytes(b"SDK_ROOT=tools/sdk\n")

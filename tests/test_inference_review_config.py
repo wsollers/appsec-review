@@ -62,6 +62,8 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     assert settings.retry.backoff_seconds == (2, 10)
     assert settings.rounds.max_rounds == 3
     assert settings.models["default"].max_queries == 40
+    # T-5023: the shipped first-pass worker limits; 32000/8000 exhausted every red-team cell on run 2026-11-15-0002.
+    assert (settings.models["default"].max_input_tokens, settings.models["default"].max_output_tokens) == (128000, 32000)
     verifier = settings.roles[Role.INDEPENDENT_VERIFIER]
     assert verifier.model_profile == "default" and verifier.workers == 4
     assert Role.BLUE_TEAM_REFUTER in verifier.require_distinct_from_roles
@@ -146,8 +148,8 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
      "must not name the role itself"),
     ('require_distinct_from_roles = ["hypothesis_hunter"', 'require_distinct_from_roles = ["oracle"',
      "require_distinct_from_roles has unknown values: oracle"),
-    ('reasoning = "high"\nmax_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries',
-     'reasoning = "extreme"\nmax_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries',
+    ('reasoning = "high"\nmax_input_tokens = 128000\nmax_output_tokens = 32000\nmax_queries',
+     'reasoning = "extreme"\nmax_input_tokens = 128000\nmax_output_tokens = 32000\nmax_queries',
      "reasoning must be one of"),
     ('"CWE-209" = { impact_class = "low"', '"CWE-209" = { impact_class = "severe"',
      "cwe_impact_overrides.CWE-209.impact_class must be one of"),

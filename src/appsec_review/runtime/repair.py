@@ -409,9 +409,16 @@ def _planning_repair_context(config: AppConfig, run_root: Path, jobs: Sequence[J
         raise ValueError("published planning environment context is invalid")
     context = {key: orchestration[key] for key in
                ("workflow", "environment_mode", "environment_reference") if key in orchestration}
+    prior = dict(claim.get("optional_prior_handoffs", {}))
+    if set(prior) & set(claim["upstream_handoffs"]):
+        raise ValueError("published planning claim has conflicting current and optional-prior lineages")
     if (any(not isinstance(value, str) for value in context.values())
-            or environment_contract(config, context, claim["upstream_handoffs"]) != launch):
+            or environment_contract(config, context, {**prior, **claim["upstream_handoffs"]}) != launch):
         raise ValueError("published planning environment context does not reproduce from its claim")
+    if launch.get("mode") == "OPTIONAL_PRIOR" and "environment_reference" not in context:
+        from appsec_review.jobs.job_build_environment_analysis.job import JOB_ID as ENV_JOB_ID
+        if ENV_JOB_ID in prior:
+            context["environment_reference"] = prior[ENV_JOB_ID]
     return context
 
 

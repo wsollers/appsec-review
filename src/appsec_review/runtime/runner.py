@@ -157,6 +157,8 @@ class JobRunner:
                 raise ValueError("managed attempt claim changed after preparation")
         if claim.get("reused"):
             from appsec_review.storage.admission import admit_upstreams
+            if dict(claim.get("optional_prior_handoffs", {})) != dict(persisted.get("optional_prior_handoffs", {})):
+                raise ValueError("reused claim differs from its persisted attempt claim")
             handoff_path = safe_path(run_root, str(claim["handoff_path"]))
             if file_sha256(handoff_path) != claim["handoff_sha256"]:
                 raise ValueError("reused handoff changed during Dagster execution")
@@ -169,6 +171,10 @@ class JobRunner:
                 raise ValueError("reused claim differs from its accepted handoff")
             with validation_scope(run_root, target_snapshot=context.evidence_target_snapshot):
                 admit_upstreams(context, claim.get("upstream_handoffs", {}))
+                if claim.get("optional_prior_handoffs") and job.contract is not None:
+                    from appsec_review.runtime.inputs import admit_inputs
+                    from appsec_review.runtime.selection import active_job_ids
+                    admit_inputs(context, set(active_job_ids(self.config, self.config.jobs)))
                 verify_handoff(run_root, handoff)
         return context
 
@@ -194,6 +200,7 @@ class JobRunner:
             review_policy=self.config.review_policy,
             evidence_target_snapshot=claim.get("evidence_target_snapshot"),
             upstream_handoffs=MappingProxyType(dict(claim.get("upstream_handoffs", {}))),
+            optional_prior_handoffs=MappingProxyType(dict(claim.get("optional_prior_handoffs", {}))),
             contract=job.contract,
             external_input_selection=claim.get("external_input_selection"),
             target_root=Path(str(target)).resolve() if target else None,
@@ -254,20 +261,20 @@ class JobRunner:
         if not job.units:
             raise ValueError(f"job does not expose orchestratable units: {job.job_id}")
         correlation = dict(orchestration or {})
-        from appsec_review.runtime.inputs import selected_handoffs
+        from appsec_review.runtime.inputs import resolve_job_inputs
         from appsec_review.runtime.selection import active_job_ids
         enabled_inputs = set(active_job_ids(self.config, self.config.jobs))
-        required_upstream = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled_inputs)
-        if job.job_id == "job_target_analysis_plan":
-            from appsec_review.jobs.job_build_environment_analysis.job import planning_environment_inputs
-            contract, required_upstream = planning_environment_inputs(
-                self.config, run_root, source_fingerprint, correlation, required_upstream)
-            correlation["build_environment_contract"] = canonical_json(contract).decode()
+        required_upstream, optional_prior, env_contract, _ = resolve_job_inputs(
+            self.config, job, run_root, source_fingerprint, correlation,
+            upstream_handoffs, enabled=enabled_inputs)
+        if env_contract is not None:
+            correlation["build_environment_contract"] = canonical_json(env_contract).decode()
         if any(not isinstance(key, str) or not isinstance(value, str) for key, value in correlation.items()):
             raise ValueError("orchestration correlation must contain string keys and values")
         from appsec_review.runtime.consume import consumable_handoffs, upstream_scope
         consumable = consumable_handoffs(run_root, job.job_id, job.consumes, required_upstream)
-        with upstream_scope(run_root, job.job_id, required_upstream, contract=job.contract):
+        with upstream_scope(run_root, job.job_id, required_upstream, contract=job.contract,
+                            optional_prior_handoffs=optional_prior):
             input_identity, external_input_selection = job.bind_input_identity(
                 target_root, run_root, repository_root=self.config.runtime.repository_root)
         attempts = run_root / "data" / "jobs" / job.job_id / "attempts"
@@ -293,6 +300,7 @@ class JobRunner:
             "resolved_config_sha256": self.config.resolved_sha256,
             "review_policy": self.config.review_policy.view(),
             "upstream_handoffs": required_upstream,
+            "optional_prior_handoffs": optional_prior,
             # Available accepted producers are metadata, never a grant to read them.
             "consumable_handoffs": consumable,
             "input_identity": input_identity,
@@ -337,7 +345,8 @@ class JobRunner:
         try:
             with review_scope(self.config.runtime.repository_root, run_root, target_root), \
                     validation_scope(run_root), operation_span(context.events, "attempt.prepare_inputs"), \
-                    upstream_scope(run_root, job.job_id, claim["upstream_handoffs"], contract=job.contract):
+                    upstream_scope(run_root, job.job_id, claim["upstream_handoffs"], contract=job.contract,
+                                   optional_prior_handoffs=claim["optional_prior_handoffs"]):
                 snapshot = resolve_evidence_target(context, claim["upstream_handoffs"])
                 claim["evidence_target_snapshot"] = snapshot
                 context = replace(context, evidence_target_snapshot=snapshot)
@@ -393,19 +402,15 @@ class JobRunner:
         if run_id is not None:
             run_root = self.runs.resolve(str(run_id))
             self._bind_configuration(run_root)
-            from appsec_review.runtime.inputs import selected_handoffs
+            from appsec_review.runtime.inputs import resolve_job_inputs
             from appsec_review.runtime.selection import active_job_ids
-            upstream = selected_handoffs(job, run_root, kwargs.get("upstream_handoffs"),
-                                         enabled=set(active_job_ids(self.config, self.config.jobs)))
-            if job.job_id == "job_target_analysis_plan":
-                from appsec_review.jobs.job_build_environment_analysis.job import (
-                    load_environment, planning_environment_inputs,
-                )
-                contract, required_upstream = planning_environment_inputs(
-                    self.config, run_root, source_fingerprint, kwargs.get("orchestration") or {}, upstream)
+            required_upstream, optional_prior, contract, upstream = resolve_job_inputs(
+                self.config, job, run_root, source_fingerprint, kwargs.get("orchestration"),
+                kwargs.get("upstream_handoffs"),
+                enabled=set(active_job_ids(self.config, self.config.jobs)))
+            if contract is not None:
+                from appsec_review.jobs.job_build_environment_analysis.job import load_environment
                 load_environment(run_root, source_fingerprint, contract)
-            else:
-                required_upstream = upstream
             reasons, handoff_hash = ResumePlanner(
                 self.config, run_root, (job,), source_fingerprint,
                 target_root=kwargs.get("target_root"),
@@ -461,6 +466,8 @@ class JobRunner:
                 if not isinstance(original_claim, Mapping) or any(
                         original_claim.get(key) != value for key, value in expected_claim.items()):
                     raise ValueError("accepted attempt claim binding differs from its handoff")
+                if dict(original_claim.get("optional_prior_handoffs", {})) != optional_prior:
+                    raise ValueError("accepted attempt optional-prior binding differs from requested inputs")
                 self._context_from_claim(job, original_claim)
                 claim = {"schema": "appsec-review/attempt-claim/1", "run_id": str(run_id),
                          "job_id": job.job_id, "attempt_id": handoff["attempt_id"],
@@ -474,10 +481,10 @@ class JobRunner:
                          "handoff_sha256": handoff_hash,
                          "repository_root": str(self.config.runtime.repository_root),
                          "resolved_config_sha256": self.config.resolved_sha256}
-                if job.job_id == "job_target_analysis_plan":
+                if contract is not None:
                     claim["orchestration"]["build_environment_contract"] = canonical_json(contract).decode()
                 for key in ("evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256",
-                            "external_input_selection"):
+                            "external_input_selection", "optional_prior_handoffs"):
                     if key in original_claim:
                         claim[key] = original_claim[key]
                 if "review_policy" in original_claim:

@@ -13,9 +13,13 @@ SCHEMA = "appsec-review/unit-checkpoint/1"
 
 
 def input_key(claim: Mapping[str, Any]) -> str:
-    return digest({key: claim.get(key) for key in (
-        "resolved_config_sha256", "job_id", "source_fingerprint", "job_config_sha256",
-        "component_identities", "upstream_handoffs", "input_identity", "deployment_identity")})
+    prior = claim.get("optional_prior_handoffs")
+    return digest({
+        **{key: claim.get(key) for key in (
+            "resolved_config_sha256", "job_id", "source_fingerprint", "job_config_sha256",
+            "component_identities", "upstream_handoffs", "input_identity", "deployment_identity")},
+        **({"optional_prior_handoffs": dict(prior)} if prior else {}),
+    })
 
 
 def portable(value: Any) -> bool:

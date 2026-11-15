@@ -3041,11 +3041,13 @@ retry_on_invalid_output = true
 backoff_seconds = [2, 10]
 
 [jobs.job_inference_security_review.settings.models.default]
+# T-5023: 32000/8000 ended 134 of 144 lead-lane cells on cell_token_cap before any claim on smoke-cpp run
+# 2026-11-15-0002 (the request byte bound is max_input_tokens * 4; thinking counts against output).
 provider = "claude-cli"
 model = "claude-haiku-5-5"
 reasoning = "high"
-max_input_tokens = 32000
-max_output_tokens = 8000
+max_input_tokens = 128000
+max_output_tokens = 32000
 max_queries = 40
 max_turns = 12
 timeout_seconds = 600
