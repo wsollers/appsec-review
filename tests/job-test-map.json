@@ -621,15 +621,20 @@
     },
     "job_tree_sitter_ast": {
       "unit": [
-        "tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific",
-        "tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically",
-        "tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation",
-        "tests/unit/runtime/test_wave2_contracts.py",
-        "tests/unit/runtime/test_wave2_consumers.py"
+        "tests/unit/job_tree_sitter_ast/test_contract.py",
+        "tests/unit/job_tree_sitter_ast/test_model.py",
+        "tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py",
+        "tests/unit/job_tree_sitter_ast/test_scope_execution.py",
+        "tests/unit/job_tree_sitter_ast/test_generated_sources.py",
+        "tests/unit/job_tree_sitter_ast/test_job_and_dagster.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_tree_sitter_ast/test_container_parser_routes.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": [
+        "tests/integration/test_tree_sitter_ast_live.py"
+      ]
     }
   },
   "common_contracts": {

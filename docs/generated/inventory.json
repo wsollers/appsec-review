@@ -42650,14 +42650,19 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
-        "live": [],
+        "integration": [
+          "tests/integration/job_tree_sitter_ast/test_container_parser_routes.py"
+        ],
+        "live": [
+          "tests/integration/test_tree_sitter_ast_live.py"
+        ],
         "unit": [
-          "tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific",
-          "tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically",
-          "tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation",
-          "tests/unit/runtime/test_wave2_contracts.py",
-          "tests/unit/runtime/test_wave2_consumers.py"
+          "tests/unit/job_tree_sitter_ast/test_contract.py",
+          "tests/unit/job_tree_sitter_ast/test_model.py",
+          "tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py",
+          "tests/unit/job_tree_sitter_ast/test_scope_execution.py",
+          "tests/unit/job_tree_sitter_ast/test_generated_sources.py",
+          "tests/unit/job_tree_sitter_ast/test_job_and_dagster.py"
         ]
       },
       "workers": 8
@@ -44242,7 +44247,7 @@
     "src/appsec_review/jobs/job_image_pin_verification/job.py": "1d4ae5ae2e1bfab9c7046939fe6e118b6274146258fe2bf51557fa0ae685745b",
     "src/appsec_review/jobs/job_image_pin_verification/pins.py": "4ea6ffcd81475a35e75bde7316360a4f68eeb37ddccb630847bed6b1cbc8e9ab",
     "src/appsec_review/jobs/job_inference_security_review/__init__.py": "056c3c7d7e437b22762e7fe9b79d47560bf191833d6833acd2d2c6c8bd70da5a",
-    "src/appsec_review/jobs/job_inference_security_review/audit.py": "aa31b07fc31e1dc0782e474cea5f9b1ec7ef02769d5a8c886b5f51c7b84cc970",
+    "src/appsec_review/jobs/job_inference_security_review/audit.py": "f7593f51182c28e2a3601c24ab9fe47539b46128a55c01f503f4546f05371b45",
     "src/appsec_review/jobs/job_inference_security_review/chains.py": "8fcd6acc7d207c7a69e051c5780ab559f16e1bb228b7b3149d0ba9a1a090e319",
     "src/appsec_review/jobs/job_inference_security_review/datasets.py": "e7afe558a5779d2dd8954bf33f01f42670321cffbcb1ce9b47dd324f616935d3",
     "src/appsec_review/jobs/job_inference_security_review/job.py": "48a3a2d6607d51259f2180a485c299b9a86a698b8da5b02602fac2454b6680d6",
@@ -44574,7 +44579,7 @@
     "src/appsec_review/review/decision_audit/__init__.py": "e26d1b28ee1c448c94164c9366828795c1ba61e8ed01ee77f409c54de208bf69",
     "src/appsec_review/review/decision_audit/contracts.py": "a6480606e620d292d2915f8120de73bc2a7f74304a6a82bf5f954451748e206b",
     "src/appsec_review/review/decision_audit/metadata.py": "b9b3fe4bde2277648810d089f60f33f837875a51b188757b115128b48d60740e",
-    "src/appsec_review/review/decision_audit/projection.py": "76d494973eabeaa48027d30d3aaeddbd38db395f127f1cc27207f15708876292",
+    "src/appsec_review/review/decision_audit/projection.py": "9c53980685ee51f2fd4dce04e9594ec5c35b05eedd2fc4df1350cbf14a17d031",
     "src/appsec_review/review/decision_audit/publication.py": "667c42b31caf6cbce61a65ab97c54c867a60aedb0eaec1987f62479d1c19ea04",
     "src/appsec_review/review/decision_audit/query.py": "507b0f24fdf0da2045bce3aaa172a13ad5f8781a647598fb9a753deb79b173f7",
     "src/appsec_review/review/decision_audit/reader.py": "ff09de47f01ae0c994c2b978249f6f861dbe66b9b41234a809dc6b61ef6641eb",
@@ -44718,7 +44723,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "198a757fc6aba3aceacbde239911c7e3ce7871f1f2bedb0b665a20abc5257f4e"
+    "tests/job-test-map.json": "1a7ead872f32b7ac2ed929518468edac195002dcd511de3ef7a660bf8c7ef10a"
   },
   "tool_policy": {
     "disable_grype": true,

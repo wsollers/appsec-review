@@ -3008,7 +3008,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   job_target_analysis_plan (5 unit files, 143 cases plus shared Wave 4 contract suite: contract,
   partitioning, planning, feedback and handlers; 16 whole-graph cases preserved in
   `tests/integration/job_target_analysis_plan/`; 975/1002 job-package lines (97.31%) and 395/418
-  branches (94.50%) covered).
+  branches (94.50%) covered); job_tree_sitter_ast (6 unit files, 29 cases plus shared Wave 2
+  contract suite: contract, model, normalization/projection, scope execution, generated sources,
+  JobRunner and Dagster dynamic fan-out; 2 container/grammar-package cases preserved in
+  `tests/integration/job_tree_sitter_ast/`; 761/768 job-package lines (99.09%) and 240/246
+  branches (97.56%) covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the

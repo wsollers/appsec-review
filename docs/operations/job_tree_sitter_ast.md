@@ -80,9 +80,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
-| live | None declared |
-| unit | `tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific`<br>`tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically`<br>`tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation`<br>`tests/unit/runtime/test_wave2_contracts.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
+| integration | `tests/integration/job_tree_sitter_ast/test_container_parser_routes.py` |
+| live | `tests/integration/test_tree_sitter_ast_live.py` |
+| unit | `tests/unit/job_tree_sitter_ast/test_contract.py`<br>`tests/unit/job_tree_sitter_ast/test_model.py`<br>`tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py`<br>`tests/unit/job_tree_sitter_ast/test_scope_execution.py`<br>`tests/unit/job_tree_sitter_ast/test_generated_sources.py`<br>`tests/unit/job_tree_sitter_ast/test_job_and_dagster.py` |
 
 ### Dagster placement
 
