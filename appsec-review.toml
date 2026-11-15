@@ -2536,6 +2536,24 @@ workers = 4
 [jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs_normalize]
 [jobs.job_evidence_collection.steps.source_sast.tasks.spotbugs_index]
 [jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_scan]
+# T-5018: the cppcheck scan profile (src/appsec_review/config/cppcheck.py). `enable` names the cppcheck
+# check classes to run, from the closed set warning, style, performance, portability, information,
+# unusedFunction, missingInclude. style, performance, portability and information are readability and
+# maintainability checks (unusedStructMember, variableScope, constVariablePointer, constParameterPointer,
+# unreadVariable, ...) with no security signal: under the former fixed warning,style,performance,portability
+# argv the cpp smoke 2026-11-14-0003 produced 553 cppcheck observations, 330 of them unusedStructMember, so
+# the shipped profile runs `warning` only. `suppressions` lists cppcheck message ids, each passed as
+# --suppress=<id>. `extra_args` admits only the allow-listed options --check-level=, --std=, --platform=,
+# --library=, --max-ctu-depth=, --max-configs= and --inconclusive; any other flag, an unknown class or a
+# malformed id is refused at load by key. The adapter fixes --inline-suppr, --xml, --xml-version=2 and the
+# report path after this profile, and the container-execution receipt records the effective argv. Widen it
+# only in this recipe (runtime profiles and capacity overlays refuse the key); the review's
+# [[jobs.job_inference_security_review.settings.lead_filters.stylistic]] rule (T-167) still keeps a widened
+# class out of the lead menus. Semantic.
+[jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_scan.settings]
+enable = ["warning"]
+suppressions = []
+extra_args = ["--check-level=normal"]
 [jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_normalize]
 [jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_index]
 [jobs.job_evidence_collection.steps.source_sast.tasks.pmd_scan]

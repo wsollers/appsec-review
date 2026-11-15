@@ -90,6 +90,9 @@ class ExecutionResult:
     file_size_limit_bytes: int | None = None
     file_size_limit_reached: bool = False
     environment_sha256: Mapping[str, str] = field(default_factory=dict)
+    # The effective argv as executed, so a receipt shows a configured scanner profile (T-5018) and not
+    # only its hash.
+    argv: tuple[str, ...] = ()
 
     @property
     def terminal_status(self) -> str:
@@ -380,6 +383,7 @@ class ContainerExecutor:
                                      and outcome.exit_code == FILE_SIZE_SIGNAL_EXIT),
             environment_sha256={key: hashlib.sha256(value.encode("utf-8")).hexdigest()
                                 for key, value in sorted((request.environment or {}).items())},
+            argv=tuple(request.argv),
         )
         receipt = asdict(result)
         receipt["terminal_status"] = result.terminal_status

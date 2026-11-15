@@ -29,6 +29,7 @@ from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 from .signing import SigningConfig, parse_signing
 from .host_pins import HostPins, HOST_PINS_LAYER, apply_host_pins, load_host_pins
+from . import cppcheck
 
 
 class ProcessingMode(str, Enum):
@@ -1207,6 +1208,11 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                     raise ValueError(
                         f"jobs.{job_id}.steps.{step_id}.tasks.{task_id}.settings must be a table"
                     )
+                if (job_id, step_id, task_id) == (cppcheck.JOB_ID, cppcheck.STEP_ID, cppcheck.TASK_ID):
+                    # T-5018: validated at load, frozen in the resolved document the run stores.
+                    task_settings = cppcheck.parse_cppcheck_profile(task_settings).view()
+                    resolved_document["jobs"][job_id]["steps"][step_id]["tasks"][task_id]["settings"] = (
+                        dict(task_settings))
                 tasks[task_id] = TaskConfig(
                     task_id=task_id,
                     workers=int(task_value.get("workers", 1)),
