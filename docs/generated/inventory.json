@@ -21585,8 +21585,8 @@
         },
         "models": {
           "default": {
-            "max_input_tokens": 32000,
-            "max_output_tokens": 8000,
+            "max_input_tokens": 128000,
+            "max_output_tokens": 32000,
             "max_queries": 40,
             "max_turns": 12,
             "model": "claude-haiku-5-5",
@@ -21967,8 +21967,8 @@
         },
         "models": {
           "default": {
-            "max_input_tokens": 32000,
-            "max_output_tokens": 8000,
+            "max_input_tokens": 128000,
+            "max_output_tokens": 32000,
             "max_queries": 40,
             "max_turns": 12,
             "model": "claude-haiku-5-5",
@@ -43922,7 +43922,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "5e8700c7aed5c74fa40ab747c00e5bdb85d6f59e04b1571420460da70a18a4b7",
+    "appsec-review.toml": "38fb18f3a327646019c7180e49494b229e7a8e6bff4a3bae212c213a9bab4e48",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
     "docs/intelligence-buckets.json": "29e398870efeb2e8d8947281156a39f8654739f4710a63192474722f852e067a",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",

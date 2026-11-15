@@ -234,8 +234,8 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
   },
   "models": {
     "default": {
-      "max_input_tokens": 32000,
-      "max_output_tokens": 8000,
+      "max_input_tokens": 128000,
+      "max_output_tokens": 32000,
       "max_queries": 40,
       "max_turns": 12,
       "model": "claude-haiku-5-5",
