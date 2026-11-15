@@ -675,7 +675,9 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
             if fail_tool == adapter.tool_id:
                 raise RuntimeError(f"injected bounded failure: {adapter.tool_id}{subject}")
             result = executor.execute(ExecutionRequest(
-                tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
+                tool_id=adapter.tool_id,
+                argv=adapter.argv(tool.executable, selection,
+                                  unit.job.config.step(unit.step_id).task(unit.task_id).settings),
                 target_root=execution_target, scratch_root=scratch,
                 extra_mounts=mounts, environment=environment, memory=memory,
                 accepted_exit_codes=frozenset(adapter.accepted_exit_codes),

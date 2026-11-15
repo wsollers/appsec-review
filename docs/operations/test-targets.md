@@ -146,6 +146,15 @@ shows the file and lead counts per disposition; compare them with the answer key
 which all live in first-party code. The first smoke run under these settings decides whether the `dev`
 budget now carries `inference_security_review` to completion (T-165 "Done when").
 
+Run `2026-11-14-0003` also predates the typed cppcheck profile (T-5018). Its 553 cppcheck observations
+came from the former fixed `--enable=warning,style,performance,portability` argv, 330 of them
+`unusedStructMember`, 74 `variableScope`, 46 `constVariablePointer`, 19 `constParameterPointer` and 10
+`unreadVariable`. The shipped profile now enables `warning` only, so the next cpp smoke should show a
+cppcheck observation count without those families (on the order of tens, not hundreds); the
+container-execution receipt under the scan unit's scratch directory records the argv the run used, and
+the `stylistic` lead count should fall accordingly. A count near 553 means the run did not pick up the
+profile ([evidence collection](job_evidence_collection.md#source_sast)).
+
 CodeQL coverage of a smoke needs the host's preinstalled CodeQL runtimes declared for the source image
 and for the build profile the smoke compiles with (`native` for cpp; `java`, `go` and `dotnet` for
 those smokes), as [review startup](review-startup.md#before-the-first-launch) describes; `review-start`

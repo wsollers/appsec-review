@@ -309,7 +309,25 @@ Shared admission and provenance rules live in
    install Composer dependencies, and Psalm may lack required configuration/stubs.
 3. For Cppcheck, sanitize an accepted compile database down to cataloged units and harmless
    source-analysis arguments, or use its selected source mode. Missing/unreadable/empty usable
-   compile metadata blocks that path; captured commands are not executed.
+   compile metadata blocks that path; captured commands are not executed. The argv follows the
+   typed scan profile
+   `[jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_scan.settings]`
+   ([T-5018](../TODO.md), `src/appsec_review/config/cppcheck.py`): `enable` names the cppcheck
+   check classes from the closed set `warning`, `style`, `performance`, `portability`,
+   `information`, `unusedFunction`, `missingInclude`; `suppressions` lists message ids passed as
+   `--suppress=<id>`; `extra_args` admits only `--check-level=`, `--std=`, `--platform=`,
+   `--library=`, `--max-ctu-depth=`, `--max-configs=` and `--inconclusive`. An unknown class, a
+   malformed id or any other flag is refused at load by key. The shipped profile enables `warning`
+   only: `style`, `performance`, `portability` and `information` are readability checks
+   (`unusedStructMember`, `variableScope`, `constVariablePointer`, ...) with no security signal.
+   `--inline-suppr --xml --xml-version=2` and the report path are fixed after the profile, the
+   resolved configuration under `runs/<run-id>/data/configuration/` freezes the profile, the
+   checkpoint identity includes it, and the container-execution receipt (`execution.json`) records
+   the effective `argv`. Widening is a recipe edit: runtime profiles and capacity overlays refuse
+   the key. The review-side
+   `[[jobs.job_inference_security_review.settings.lead_filters.stylistic]]` rule (T-167) is the
+   second line of defence and still keeps a widened class out of the lead menus
+   ([review scope](inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
 4. For PMD, use the security-focused rules and bounded supplied file list. For SpotBugs, require
    accepted catalog bytecode inputs rather than assuming Java source was compiled here.
 5. Parse reports with native selectors; retain SEI CERT errors/unscanned inputs and exact skip
