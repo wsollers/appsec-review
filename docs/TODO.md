@@ -193,7 +193,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5018 | [Configurable cppcheck profile: turn style, performance and portability checks off by default](#t-5018-configurable-cppcheck-profile-turn-style-performance-and-portability-checks-off-by-default) | scanners | open |
 | T-5019 | [Smoke-run verification harness: did the run do the right thing and produce the right things](#t-5019-smoke-run-verification-harness-did-the-run-do-the-right-thing-and-produce-the-right-things) | testing | open |
 | T-5020 | [Repair the five review unit tests broken by merge debt on main](#t-5020-repair-the-five-review-unit-tests-broken-by-merge-debt-on-main) | testing | done (2026-11-14, `scope.py` `evidence_map` ordering + review test/fixture repairs) |
-| T-5021 | [Make the evidence-collection job unit test fast and green again](#t-5021-make-the-evidence-collection-job-unit-test-fast-and-green-again) | testing | open |
+| T-5021 | [Make the evidence-collection job unit test fast and green again](#t-5021-make-the-evidence-collection-job-unit-test-fast-and-green-again) | testing | done (2026-11-15, T-113 `job_evidence_collection` walk; 17 GB OSV host-feed copy eliminated, 98 unit cases in ~6–10 s) |
 | T-5022 | [Dependency intelligence: native resolution proposals fail the response contract and the recordings cannot say why](#t-5022-dependency-intelligence-native-resolution-proposals-fail-the-response-contract-and-the-recordings-cannot-say-why) | pipeline | open |
 | T-5023 | [Right-size red-team cell budgets: the lead lane spent its token cap on thinking and retrieval and raised no claim](#t-5023-right-size-red-team-cell-budgets-the-lead-lane-spent-its-token-cap-on-thinking-and-retrieval-and-raised-no-claim) | review | open |
 | T-5024 | [The expand retrieval tool raises KeyError inside red-team cells and the ledger keeps no traceback](#t-5024-the-expand-retrieval-tool-raises-keyerror-inside-red-team-cells-and-the-ledger-keeps-no-traceback) | review | open |
@@ -2891,12 +2891,12 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-5021 — Make the evidence-collection job unit test fast and green again
 
-- **State:** open
+- **State:** done (2026-11-15, T-113 `job_evidence_collection` walk; 17 GB `data/feeds/osv` host-feed copy replaced with `write_osv_feed`, 98 unit cases in ~6–10 s)
 - **Area:** testing
 - **Why:** `tests/test_evidence_collection_job.py::test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints` runs the whole job graph twice and takes 103 s at `ba7d1fb8`, 126 s on `graph-quality` (`5d0586dd`) and 202 s on the merged main (`1c144707`), ten to twenty times the 10 s unit limit; under `-n 4` the file no longer finishes inside a 300 s window, which read as a hang during the 2026-11-15 integration. It also fails on every tree (`tool-shellcheck` terminal_status is not `FAILED`), as does `test_job_refuses_dispatch_without_graph_target`; both are in the baseline failure list, not merge regressions.
 - **Scope:** fix the two assertions against the behaviour that is now correct; split the long case so each unit test exercises one disposition or reuse path with the heavy job dispatch faked at the container boundary; find what each merged change added to the per-run cost (the T-5016 disposition resolution and the T-5018 profile parsing both run at config load).
 - **Done when:** the file passes alone and under `-n 4 --shuffle-seed=<seed>` with every case under 10 s on an idle host; the two failing cases are green with their assertions intact.
-- **Refs:** T-5020, T-5016, T-5018, `tests/test_evidence_collection_job.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`.
+- **Refs:** T-113, T-5020, T-5016, T-5018, `tests/unit/job_evidence_collection/`, `tests/integration/job_evidence_collection/test_evidence_collection_graph.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`. Root cause of the 103–202 s wall clock: `fixture()` copied `ROOT / "data/feeds/osv"` (17 GB host feed directory) per test into `tmp_path` before driving `GraphRunner` four times; replaced with a synthetic `write_osv_feed` zip snapshot and direct unit-handler tests under `tests/unit/job_evidence_collection/` (all 98 unit cases finish in 6–10 s total, 0 cases >10 s).
 
 ### T-5022 — Dependency intelligence: native resolution proposals fail the response contract and the recordings cannot say why
 
@@ -2905,7 +2905,7 @@ until each is rewritten into the entry format when it is next touched.
 - **Why:** On smoke-cpp run `2026-11-14-0005`, `job_dependency_intelligence` was the longest job (1644 s, 1030 declared gaps) and 79 of its 177 model calls failed identically: `expected exactly one appsec-review/native-dependency-resolution-proposal/1 JSON object, found 0` (raised by the transport parser, `src/appsec_review/inference/claude_cli.py`, from the native resolution task in `src/appsec_review/jobs/job_dependency_intelligence/resolution.py` and `inference.py`). Each failed call's recording under `data/inference-recordings/job_dependency_intelligence/` holds `request`, `error`, `key`, `origin` and `sequence` but no reply text, stop reason or usage, so the run cannot show whether the worker answered with prose, a fenced block, several objects, a truncated reply or nothing. The smoke targets plant true-positive and fixed dependency findings that this resolution feeds; until it works, dependency recall in the T-5019 scorer stays near zero and about 27 minutes and 85 model calls per run are wasted.
 - **Scope:** (1) on a schema failure the inference recording retains the raw reply text (bounded), the stop reason and the provider usage, and the job's gap names the failure class, so a failed proposal is diagnosable from the run; (2) reproduce one recorded request offline against the recorded prompt and runtime skill, identify why no object is returned (prompt shape, output budget, fencing, multi-object replies, model refusing on an empty candidate list), and fix the contract, the guidance or the budget in the typed configuration, not in free-form prompt text; (3) stop re-asking: a proposal that fails twice for the same candidate set is one recorded gap, not 79 calls; (4) do not read the smoke answer key; the recorded requests from `runs/2026-11-14-0005` are the fixture.
 - **Done when:** unit tests show a schema-failing reply is recorded with its text, stop reason and usage, and that a repeated failure for the same candidate set is bounded; a replayed 0005 request yields exactly one valid proposal with the fixed guidance or budget; the next cpp smoke shows the job's failed-call count near zero and its wall clock well under the 1644 s baseline.
-- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/resolution.py`, `inference.py`, `native_inference_runtime.py`, `src/appsec_review/inference/claude_cli.py`, `src/appsec_review/inference/recording.py`, the registered runtime skill for the native resolution task in `pipeline/guidance/registry.json`, `runs/2026-11-14-0005/data/inference-recordings/job_dependency_intelligence/` (host-local), T-5019, T-5001. Root cause (2026-11-15, offline from the 0005 recordings): all 79 failed replies were complete proposal objects without a `schema` field (55 fenced, 24 bare, every `stop_reason` `end_turn`, none truncated, empty or refused); the task prompt never named `schema` as a field, only the repair instruction did, which is why 67 of 73 first-attempt failures passed on the retry. Fixed by the parser accepting the exact proposal field set, the task guidance naming the `schema` field, the evidence allowlist no longer offering `"None"`, schema failures recording `failure_class`, `stop_reason`, `usage` and `raw_response_truncated`, a per-unit candidate-set memo and the typed `inference_failure_limit`. Fixtures: `tests/fixtures/dependency_intelligence/t5022/`; tests in `tests/test_claude_cli_inference.py`, `tests/test_model_recording.py`, `tests/test_dependency_intelligence.py`. Still open until the next cpp smoke confirms the failed-call count and wall clock. Also seen in 0005 and not addressed here: six resolution and several curation calls ended in `ExecutionLimit: model_token_cap` because the CLI counts thinking tokens in `output_tokens` against `max_output_tokens = 4000`.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/resolution.py`, `inference.py`, `native_inference_runtime.py`, `src/appsec_review/inference/claude_cli.py`, `src/appsec_review/inference/recording.py`, the registered runtime skill for the native resolution task in `pipeline/guidance/registry.json`, `runs/2026-11-14-0005/data/inference-recordings/job_dependency_intelligence/` (host-local), T-5019, T-5001. Root cause (2026-11-15, offline from the 0005 recordings): all 79 failed replies were complete proposal objects without a `schema` field (55 fenced, 24 bare, every `stop_reason` `end_turn`, none truncated, empty or refused); the task prompt never named `schema` as a field, only the repair instruction did, which is why 67 of 73 first-attempt failures passed on the retry. Fixed by the parser accepting the exact proposal field set, the task guidance naming the `schema` field, the evidence allowlist no longer offering `"None"`, schema failures recording `failure_class`, `stop_reason`, `usage` and `raw_response_truncated`, a per-unit candidate-set memo and the typed `inference_failure_limit`. Fixtures: `tests/fixtures/dependency_intelligence/t5022/`; tests in `tests/test_claude_cli_inference.py`, `tests/test_model_recording.py`, `tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`. Still open until the next cpp smoke confirms the failed-call count and wall clock. Also seen in 0005 and not addressed here: six resolution and several curation calls ended in `ExecutionLimit: model_token_cap` because the CLI counts thinking tokens in `output_tokens` against `max_output_tokens = 4000`.
 
 ### T-5023 — Right-size red-team cell budgets: the lead lane spent its token cap on thinking and retrieval and raised no claim
 
@@ -3015,6 +3015,76 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   branches (97.56%) covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
+  Project-build re-gate: 8 unit files, 187 cases (contract, family-recipe helpers, repair,
+  enforcement, recovery and step handlers), with all prior unit and integration cases preserved;
+  1265/1317 job-package lines (96.05%) and 481/524 branches (91.79%) covered.
+  Language-build re-gate: 30 unit files, 769 cases (pinned 23-input / 5-dataset contract, Python,
+  .NET, native/capture, Rust, PHP, Go, JVM, Node, checkpoint reuse/tamper enforcement and
+  iterative production lanes), with all prior unit, integration and acceptance cases preserved;
+  6436/7039 job-package lines (91.43%) and 2710/3216 branches (84.27%) covered.
+  Build-iteration re-gate: 6 unit files, 51 cases plus shared Wave 3 contract suite (60 mapped
+  cases: admission, contract, Dagster iteration definition/invocation, controller, capture and
+  workspace resume), with all prior unit and integration cases preserved; 99/99 job-package lines
+  (100.0%) and 14/14 branches (100.0%) covered.
+  Debug-symbol-indexing re-gate: 15 unit files, 195 cases plus shared Wave 1a contract suite (221
+  mapped cases: contract, decision, probe/privacy, sources/bounds, extraction, normalization,
+  accepted loader, publication, workflow and metrics), with all prior unit, integration and
+  acceptance cases preserved; 503/518 job-package lines (97.10%) and 206/218 branches (94.50%)
+  covered.
+  job_test_coverage (4 unit files, 66 cases plus shared Wave 3 contract suite [75 mapped cases]:
+  pinned 19-input / 3-dataset contract and admission/handler prerequisites, LCOV/Cobertura/JaCoCo/
+  LLVM parsers, path binding/bounds/origin/custody ingestion, validators, disabled-upstream
+  fallbacks, shard reuse and accepted loader; target-backed multivuln fixture suite moved to
+  `tests/live/test_multivuln_coverage_fixtures.py`; 556/556 job-package lines [100.0%] and
+  230/230 branches [100.0%] covered).
+  job_profile_data (4 unit files, 51 cases plus shared Wave 3 contract suite [60 mapped cases]:
+  pinned 19-input / 3-dataset contract and admission/handler prerequisites, folded-stacks/perf-
+  script/callgrind/llvm-sample parsers, format detection/ranking/context-only semantics/bounds/
+  origin/custody ingestion, validators, disabled-upstream fallbacks, shard reuse and accepted
+  loader; 498/499 job-package lines [99.80%, 100% reachable] and 213/218 branches [97.71%, 100%
+  reachable] covered).
+  job_artifact_security_analysis (5 unit files, 33 cases plus shared Wave 2 contract/consumer
+  selectors [42 mapped cases]: pinned 4-input / 3-dataset contract, binary/archive/Wasm/media
+  format classification and archive bounds, BLint/SpotBugs/Grype/OSV/built-in finding extraction
+  and truncation bounds, bounded scanner parsers and ContainerScannerRunner staging/offline feeds,
+  accepted-artifact lineage/custody, installer-record coverage/attribution, checkpoint reuse/tamper
+  enforcement, shard reuse and accepted loader; 12 whole-graph cases preserved in
+  `tests/integration/job_artifact_security_analysis/`; 1207/1213 job-package lines [99.51%] and
+  515/520 branches [99.04%] covered).
+  Third-party-data-sync re-gate: 9 unit files, 198 cases (pinned maintenance contract and
+  `feed_sync_work` artifact-glob ownership across all 21 `TOPOLOGY` tasks, `job.py` validator and
+  step-handler wiring, atomic publication/HttpDownloader/snapshot provenance, `cve-bin-tool`
+  Docker/native builder and NVD snapshot verification, OSV/KEV/EPSS/MITRE/Grype/NVD feed sync,
+  pagination, XML/SQLite bounds and chain cycle checks), with whole-graph/live cases preserved in
+  `tests/integration/job_third_party_data_sync/`; 1922/1978 job-package lines (97.17%; `job.py`,
+  `datasets.py` and `publication.py` at 100%) and 634/692 branches (91.62%) covered.
+  job_evidence_collection (6 unit files, 98 cases plus shared Wave 5 contract suite [107 mapped
+  cases], closing T-5021: pinned 4-input / 5-dataset contract across all 62 graph units,
+  observation redaction/bounds/deduplication, all 20 scanner adapters, configurable `cppcheck`
+  profile validation, SEI CERT rulepack hash/lock verification, checkpoint reuse/retry-required
+  markers, OSV per-project chunking, Swift staging, execution-safety latch, producer shard cache,
+  manifest assembly and handoff publication; 17 GB `data/feeds/osv` host-feed copy eliminated;
+  whole-graph cases preserved in `tests/integration/job_evidence_collection/` and live container
+  case in `tests/live/test_evidence_collection_multivuln.py`; 1365/1398 job-package lines [97.64%]
+  and 453/490 branches [92.45%] covered, with every module >=96.7% lines and >=91.0% branches).
+  job_dependency_intelligence (21/47; 13 unit files, 665 cases: pinned 5-input / 15-dataset
+  contract, registry/topology parity, direct 9-unit handler execution across accepted upstream
+  loading, native discovery, component curation, metadata investigation, repository inference,
+  deduplication, OpenSSF Scorecard client/cache/transport validation, SPDX 2.3 baseline+native
+  merge and provenance binding, Unity inventory discovery, and SQLite inventory shard publication;
+  `JobRunner` orchestration cases relocated to
+  `tests/integration/job_dependency_intelligence/test_native_sbom_job.py`; 4452/4606 job-package
+  lines [96.66%] and 1938/2094 branches [92.55%] covered, with all 17 modules >=95.2% lines and
+  >=90.2% branches).
+  job_ci_configuration_analysis (22/47; 5 unit files, 120 cases: pinned 1-input / 7-dataset
+  contract and 49-unit DAG topology, exact CI definition discovery across all 8 providers, all 10
+  static CI rules, pipeline/stage/job/step hierarchy extraction, native Checkov and Zizmor output
+  decoders, generic JSONL/Checkov diagnostics, secret redaction, exact-only duplicate correlation,
+  linter failure isolation with execution-safety guardian latch, and SQLite observation/evidence
+  shard publication; whole-graph `GraphRunner` suite relocated to
+  `tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py` and
+  multivuln target suite relocated to `tests/live/test_ci_configuration_analysis_multivuln.py`;
+  560/560 job-package lines [100.0%] and 188/188 branches [100.0%] covered across all 5 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

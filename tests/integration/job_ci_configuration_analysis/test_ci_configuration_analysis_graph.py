@@ -1,9 +1,9 @@
 """job_ci_configuration_analysis through the real runner (job pass 07).
 
-Unit tests: the real configuration, the real GraphRunner with intake and the catalog, a small synthetic
+Integration tests: the real configuration, the real GraphRunner with intake and the catalog, a small synthetic
 target under tmp_path, and a fake only at the container boundary (tests/ci_support.FakeExecutor). No
 Docker, no model, no network, no targets/ checkout. The static rules, discovery and correlation key are
-unit-tested in tests/test_ci_configuration_analysis.py; this file proves what the job publishes, how its
+unit-tested in tests/unit/job_ci_configuration_analysis/; this file proves what the job publishes, how its
 bounded gaps become producer-gap/1 records, how a failing or unavailable linter is reported while its
 siblings survive, and the job's telemetry.
 
@@ -33,7 +33,7 @@ from appsec_review.storage.shared import publication_scope
 from tests.ci_support import DIGEST, FakeExecutor, checkov_workflow_permissions, zizmor_finding
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 WORKFLOW = """name: build
 on:

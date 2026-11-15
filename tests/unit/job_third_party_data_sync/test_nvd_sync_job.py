@@ -287,3 +287,94 @@ def test_bad_year_hash_never_advances_pointer(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="uncompressed hash or size mismatch"):
         publisher.sync("bad-hash")
     assert not (settings.feed_root / "current.json").exists()
+
+
+def test_nvd_models_and_incremental_validation_cover_remaining_edges(tmp_path: Path) -> None:
+    import io
+    for bad_values, msg in (
+        ({"feed_root": "nvd", "first_year": 1998}, "first_year cannot precede CVE year 1999"),
+        ({"feed_root": "nvd", "page_size": 0}, "page_size must be between 1 and 2000"),
+        ({"feed_root": "nvd", "max_window_days": 121}, "max_window_days must be between 1 and 120"),
+        ({"feed_root": "nvd", "api_key_env": "BAD-ENV"}, "api_key_env is invalid"),
+        ({"feed_root": "nvd", "request_delay_without_key_seconds": -1}, "request delays cannot be negative"),
+        ({"feed_root": "nvd", "max_download_bytes": 0}, "NVD download bounds must be positive"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            NvdSettings.from_mapping(tmp_path, bad_values)
+
+    from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync import feed as nvd_feed
+    assert nvd_feed.utcnow().tzinfo is not None
+    with pytest.raises(ValueError, match="timestamp must be a string"):
+        nvd_feed.parse_time(123)
+    with pytest.raises(ValueError, match="timestamp must include an offset"):
+        nvd_feed.parse_time("2026-10-12T00:00:00")
+    with pytest.raises(ValueError, match="incomplete NVD metadata"):
+        nvd_feed.parse_meta(b"size:10\n")
+    with pytest.raises(ValueError, match="invalid NVD metadata sha256"):
+        nvd_feed.parse_meta(b"lastModifiedDate:2026-10-12T00:00:00Z\nsize:1\ngzSize:1\nsha256:bad\n")
+    with pytest.raises(ValueError, match="has no vulnerabilities array"):
+        list(nvd_feed.iter_vulnerabilities(io.BytesIO(b'{"other": 1}')))
+    with pytest.raises(ValueError, match="truncated NVD vulnerabilities array"):
+        list(nvd_feed.iter_vulnerabilities(io.BytesIO(b'{"vulnerabilities": [{"cve":')))
+    with pytest.raises(ValueError, match="must be an object"):
+        list(nvd_feed.iter_vulnerabilities(io.BytesIO(b'{"vulnerabilities": [123]}')))
+    with pytest.raises(ValueError, match="invalid NVD CVE identity"):
+        nvd_feed._cve_id({"cve": {"id": "BAD"}})
+
+    settings = NvdSettings.from_mapping(tmp_path, {"feed_root": "nvd_sync_edge", "first_year": 2026})
+    pub = NvdPublisher(settings, client=FakeClient(b'{"vulnerabilities":[]}'),
+                       clock=lambda: datetime(2026, 10, 21, tzinfo=timezone.utc), pause=lambda _: None)
+    with pytest.raises(ValueError, match="coordinator identity is required"):
+        pub.sync("   ")
+
+    # Incremental replay when parent index is absent + verify edge checks
+    pointer = pub.sync("coord-1")
+    snap_dir = settings.feed_root / "snapshots" / pointer["snapshot_id"]
+    (snap_dir / "index" / "nvd.sqlite").unlink()
+
+    class ApiClient(FakeClient):
+        def get_bytes(self, url, api_key=None):
+            if "cves/2.0" in url:
+                return json.dumps({
+                    "format": "NVD_CVE", "version": "2.0", "startIndex": 0,
+                    "totalResults": 1, "resultsPerPage": 1,
+                    "vulnerabilities": [vulnerability("CVE-2026-2222")],
+                }).encode()
+            return super().get_bytes(url, api_key)
+
+    pub2 = NvdPublisher(settings, client=ApiClient(b'{"vulnerabilities":[]}'),
+                        clock=lambda: datetime(2026, 10, 22, tzinfo=timezone.utc), pause=lambda _: None)
+    pointer2 = pub2.sync("coord-2", api_key="secret-key")
+    assert pub2.verify()["snapshot_id"] == pointer2["snapshot_id"]
+    assert pub2.verify()["index"]["record_count"] == 1
+
+    # Incremental pagination & clock errors + verify chain errors
+    pub_backwards = NvdPublisher(settings, client=ApiClient(b'{"vulnerabilities":[]}'),
+                                 clock=lambda: datetime(2026, 10, 1, tzinfo=timezone.utc), pause=lambda _: None)
+    with pytest.raises(ValueError, match="clock precedes the published NVD cursor"):
+        pub_backwards.sync("coord-backwards")
+
+    for api_doc, err_msg in (
+        ({"format": "OTHER", "version": "2.0"}, "unexpected NVD API format/version"),
+        ({"format": "NVD_CVE", "version": "2.0", "startIndex": 9, "vulnerabilities": []}, "pagination discontinuity"),
+        ({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "vulnerabilities": [], "totalResults": -1, "resultsPerPage": 0}, "invalid NVD API pagination"),
+        ({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "vulnerabilities": [], "totalResults": 5, "resultsPerPage": 0}, "empty nonterminal page"),
+    ):
+        class BadApiClient(FakeClient):
+            doc = api_doc
+            def get_bytes(self, url, api_key=None):
+                return json.dumps(self.doc).encode() if "cves/2.0" in url else super().get_bytes(url, api_key)
+
+        pub_bad_api = NvdPublisher(settings, client=BadApiClient(b'{"vulnerabilities":[]}'),
+                                   clock=lambda: datetime(2026, 10, 23, tzinfo=timezone.utc), pause=lambda _: None)
+        with pytest.raises(ValueError, match=err_msg):
+            pub_bad_api.sync("coord-bad-api")
+
+    # _chain cycle detection
+    snap2_manifest_path = settings.feed_root / "snapshots" / pointer2["snapshot_id"] / "manifest.json"
+    snap2_manifest = json.loads(snap2_manifest_path.read_text(encoding="utf-8"))
+    snap2_manifest_path.write_text(json.dumps({**snap2_manifest, "parent_snapshot_id": pointer2["snapshot_id"]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="NVD snapshot parent cycle"):
+        pub2._chain(pointer2["snapshot_id"])
+
+

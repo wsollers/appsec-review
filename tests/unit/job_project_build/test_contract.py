@@ -7,10 +7,18 @@ document the job hands downstream lands inside its own declared artifact glob.
 from __future__ import annotations
 
 from fnmatch import fnmatch
+import json
+from pathlib import Path
 
-from appsec_review.jobs.job_project_build.datasets import CONTRACT, DATASETS
+from jsonschema import Draft202012Validator, ValidationError
+import pytest
+
+from appsec_review.jobs.job_project_build.datasets import CONSUMES, CONTRACT, DATASETS
 from appsec_review.jobs.job_project_build.job import SCHEMA, build_job
-from appsec_review.runtime.contracts import Availability, DispatchClass, MissingPolicy, TargetAccess
+from appsec_review.jobs.job_project_build.repair import REPAIR_SCHEMA, apply_repair
+from appsec_review.runtime.contracts import (
+    Availability, DispatchClass, EvidenceAuthority, InputChannel, MissingPolicy, TargetAccess,
+)
 
 
 def test_inputs_name_every_upstream_job_and_the_plan_handoff_is_the_one_hard_requirement() -> None:
@@ -64,4 +72,53 @@ def test_the_published_dispatch_document_lands_inside_its_declared_artifact_glob
 def test_the_job_carries_the_contract_and_declarations_it_was_built_from() -> None:
     job = build_job()
     assert job.contract is CONTRACT and job.datasets is DATASETS
-    assert job.consumes == CONTRACT.consumes
+    assert job.consumes == CONTRACT.consumes == CONSUMES
+
+
+def test_every_input_requirement_and_dataset_field_is_pinned() -> None:
+    for item in CONTRACT.inputs:
+        expected_authority = (
+            EvidenceAuthority.OPERATIONAL
+            if item.producer == "job_build_environment_analysis"
+            else EvidenceAuthority.PRODUCER_EVIDENCE
+        )
+        assert item.authority is expected_authority
+        if (item.producer, item.output_kind) == ("job_target_analysis_plan", "handoff"):
+            assert item.availability is Availability.REQUIRED
+            assert item.missing is MissingPolicy.REJECT
+            assert item.channel is InputChannel.HANDOFF
+        else:
+            assert item.availability is Availability.OPTIONAL
+            assert item.missing is MissingPolicy.GAP
+            assert item.channel is InputChannel.HANDOFF
+    declared = {item.output_kind: item for item in DATASETS}
+    assert declared["topology_refinement_inputs"].disposition == "protected"
+    assert declared["project_build_dispatch"].disposition == "artifact_only"
+    assert declared["probe_workspaces"].disposition == "protected"
+    assert declared["image_build_streams"].disposition == "protected"
+    assert all(item.reason for item in DATASETS)
+
+
+@pytest.mark.parametrize("boundary", ["runtime", "json-schema"])
+def test_repair_contract_rejects_legacy_schema(boundary: str) -> None:
+    """The job-pass contract admits the current schema only, not a compatible older version."""
+    recipe = {"image_profile": "native", "system_packages": [], "environment": {},
+              "dependency_files": [], "reason": "accepted fixture recipe"}
+    proposal = {"schema": REPAIR_SCHEMA, "system_packages": ["libssl-dev"], "environment": {},
+                "package_manager": None, "dependency_restores": [], "reason": "fixture repair"}
+    legacy = {**proposal, "schema": "appsec-review/build-image-repair/2"}
+    if boundary == "runtime":
+        repaired = apply_repair(recipe, proposal, build_system="cmake")
+        assert repaired["system_packages"] == ["libssl-dev"]
+        assert recipe["system_packages"] == []
+        with pytest.raises(ValueError, match="repair proposal schema is unsupported"):
+            apply_repair(recipe, legacy, build_system="cmake")
+    else:
+        path = Path(__file__).resolve().parents[3] / "docs/schemas/build-image-repair.schema.json"
+        schema = json.loads(path.read_bytes())
+        assert schema["$id"] == REPAIR_SCHEMA == "appsec-review/build-image-repair/3"
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+        validator.validate(proposal)
+        with pytest.raises(ValidationError):
+            validator.validate(legacy)

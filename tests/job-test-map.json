@@ -28,11 +28,17 @@
     },
     "job_artifact_security_analysis": {
       "unit": [
-        "tests/test_artifact_security_analysis.py",
-        "tests/unit/runtime/test_wave2_contracts.py",
-        "tests/unit/runtime/test_wave2_consumers.py"
+        "tests/unit/job_artifact_security_analysis/test_contract.py",
+        "tests/unit/job_artifact_security_analysis/test_formats.py",
+        "tests/unit/job_artifact_security_analysis/test_findings.py",
+        "tests/unit/job_artifact_security_analysis/test_scanners.py",
+        "tests/unit/job_artifact_security_analysis/test_job_graph.py",
+        "tests/unit/runtime/test_wave2_contracts.py::test_artifact_security_declarations_and_real_publication_ownership",
+        "tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_consumers_declare_exact_results_and_no_unused_acceptance",
+        "tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_acceptance_loader_and_admission_enforce_observe_output"
       ],
       "integration": [
+        "tests/integration/job_artifact_security_analysis/test_artifact_security_graph.py",
         "tests/integration/test_installer_record_scans.py",
         "tests/integration/job_artifact_indexing/test_artifact_input_contracts.py"
       ],
@@ -62,6 +68,7 @@
     },
     "job_build_iteration": {
       "unit": [
+        "tests/unit/job_build_iteration/test_admission.py",
         "tests/unit/job_build_iteration/test_contract.py",
         "tests/unit/job_build_iteration/test_job_graph.py",
         "tests/unit/job_build_iteration/test_controller.py",
@@ -94,13 +101,17 @@
     },
     "job_ci_configuration_analysis": {
       "unit": [
-        "tests/test_ci_configuration_analysis.py::test_discovery_is_exact_bounded_and_prompt_text_is_inert",
-        "tests/test_ci_configuration_analysis.py::test_spans_hierarchy_redaction_and_exact_only_correlation",
-        "tests/test_ci_configuration_analysis.py::test_dag_exposes_parallel_provider_branches_and_deterministic_join"
+        "tests/unit/job_ci_configuration_analysis/test_contract.py",
+        "tests/unit/job_ci_configuration_analysis/test_discovery_and_static_rules.py",
+        "tests/unit/job_ci_configuration_analysis/test_checkov_locations.py",
+        "tests/unit/job_ci_configuration_analysis/test_zizmor_output.py",
+        "tests/unit/job_ci_configuration_analysis/test_job_graph.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py"
+      ],
       "acceptance": [],
-      "live": ["tests/test_ci_configuration_analysis.py::test_live_target_acceptance_is_static_offline_resumable_and_queryable"]
+      "live": ["tests/live/test_ci_configuration_analysis_multivuln.py"]
     },
     "job_clang_static_analysis": {
       "unit": ["tests/test_clang_static_analysis.py"],
@@ -180,11 +191,24 @@
     },
     "job_dependency_intelligence": {
       "unit": [
-        "tests/test_dependency_intelligence.py::test_native_detection_covers_link_loader_and_metadata_and_deduplicates",
-        "tests/test_dependency_intelligence.py::test_native_detection_records_command_bounds",
-        "tests/test_dependency_intelligence.py::test_normalization_prefers_package_repository_metadata_and_deduplicates"
+        "tests/unit/job_dependency_intelligence/test_contract.py",
+        "tests/unit/job_dependency_intelligence/test_datasets.py",
+        "tests/unit/job_dependency_intelligence/test_dependency_intelligence.py",
+        "tests/unit/job_dependency_intelligence/test_edge_branches.py",
+        "tests/unit/job_dependency_intelligence/test_job_graph.py",
+        "tests/unit/job_dependency_intelligence/test_native_component_curation.py",
+        "tests/unit/job_dependency_intelligence/test_native_discovery.py",
+        "tests/unit/job_dependency_intelligence/test_native_inference_runtime.py",
+        "tests/unit/job_dependency_intelligence/test_native_inference_wiring.py",
+        "tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py",
+        "tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py",
+        "tests/unit/job_dependency_intelligence/test_native_spdx.py",
+        "tests/unit/job_dependency_intelligence/test_unity_inventory.py"
       ],
-      "integration": ["tests/integration/test_dependency_job_acceptance.py"],
+      "integration": [
+        "tests/integration/job_dependency_intelligence/test_native_sbom_job.py",
+        "tests/integration/test_dependency_job_acceptance.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -208,10 +232,21 @@
       "live": ["tests/integration/test_dossier_live.py"]
     },
     "job_evidence_collection": {
-      "unit": ["tests/test_evidence_collection_job.py"],
-      "integration": ["tests/integration/test_signal_job_acceptance.py"],
+      "unit": [
+        "tests/unit/job_evidence_collection/test_contract.py",
+        "tests/unit/job_evidence_collection/test_evidence.py",
+        "tests/unit/job_evidence_collection/test_adapters.py",
+        "tests/unit/job_evidence_collection/test_cppcheck_profile.py",
+        "tests/unit/job_evidence_collection/test_rulepacks_and_checkpoints.py",
+        "tests/unit/job_evidence_collection/test_job_graph.py",
+        "tests/unit/runtime/test_wave5_contracts.py"
+      ],
+      "integration": [
+        "tests/integration/job_evidence_collection/test_evidence_collection_graph.py",
+        "tests/integration/test_signal_job_acceptance.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": ["tests/live/test_evidence_collection_multivuln.py"]
     },
     "job_final_publication_gate": {
       "unit": [
@@ -315,7 +350,9 @@
         "tests/unit/job_language_build/test_python.py",
         "tests/unit/job_language_build/test_rust.py",
         "tests/unit/job_language_build/test_wasm.py",
-        "tests/unit/job_language_build/test_upstream_gap_contract.py"
+        "tests/unit/job_language_build/test_upstream_gap_contract.py",
+        "tests/unit/job_language_build/test_adapters_and_capture.py",
+        "tests/unit/job_language_build/test_execution_lanes.py"
       ],
       "integration": [
         "tests/integration/job_language_build/test_language_build_graph.py",
@@ -387,10 +424,15 @@
     },
     "job_profile_data": {
       "unit": [
-        "tests/test_profile_data.py",
+        "tests/unit/job_profile_data/test_contract.py",
+        "tests/unit/job_profile_data/test_parsers.py",
+        "tests/unit/job_profile_data/test_ingestion.py",
+        "tests/unit/job_profile_data/test_job_graph.py",
         "tests/unit/runtime/test_wave3_contracts.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/test_signal_job_acceptance.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -399,9 +441,11 @@
         "tests/unit/job_project_build/test_job_graph.py",
         "tests/unit/job_project_build/test_contract.py",
         "tests/unit/job_project_build/test_project_build_helpers.py",
+        "tests/unit/job_project_build/test_family_recipe_helpers.py",
         "tests/unit/job_project_build/test_repair.py",
         "tests/unit/job_project_build/test_enforcement.py",
-        "tests/unit/job_project_build/test_build_recovery.py"
+        "tests/unit/job_project_build/test_build_recovery.py",
+        "tests/unit/job_project_build/test_handlers.py"
       ],
       "integration": [
         "tests/integration/job_project_build/test_executor.py",
@@ -582,15 +626,23 @@
     },
     "job_test_coverage": {
       "unit": [
-        "tests/test_test_coverage.py",
+        "tests/unit/job_test_coverage/test_contract.py",
+        "tests/unit/job_test_coverage/test_parsers.py",
+        "tests/unit/job_test_coverage/test_ingestion.py",
+        "tests/unit/job_test_coverage/test_job_graph.py",
         "tests/unit/runtime/test_wave3_contracts.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/test_signal_job_acceptance.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": [
+        "tests/live/test_multivuln_coverage_fixtures.py"
+      ]
     },
     "job_third_party_data_sync": {
       "unit": [
+        "tests/unit/job_third_party_data_sync/test_contract.py",
         "tests/unit/job_third_party_data_sync/test_job_graph.py",
         "tests/unit/job_third_party_data_sync/test_publication.py",
         "tests/unit/job_third_party_data_sync/test_cve_bin_tool_database.py",

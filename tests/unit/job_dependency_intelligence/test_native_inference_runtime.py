@@ -25,7 +25,7 @@ from appsec_review.observability.events import EventLog
 from appsec_review.storage import canonical_json
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 MODEL = {
     "enabled": True, "provider": "claude-cli", "model": "configured-model", "reasoning": "high",
     "max_input_tokens": 32768, "max_output_tokens": 8192, "timeout_seconds": 19, "retries": 0,

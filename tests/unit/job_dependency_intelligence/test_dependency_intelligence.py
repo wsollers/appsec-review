@@ -215,7 +215,7 @@ def test_native_inference_is_injectable_and_pins_registered_guidance(tmp_path: P
             "confidence": .6, "evidence_refs": ["cmd-1"], "rationale": "bounded evidence"})
     model = {"enabled": True, "provider": "fake", "model": "fake", "reasoning": "low",
              "max_input_tokens": 10000, "max_output_tokens": 1000, "timeout_seconds": 7, "retries": 0}
-    resolved, gap = resolve_with_inference(dependency, repository_root=Path(__file__).parents[1],
+    resolved, gap = resolve_with_inference(dependency, repository_root=Path(__file__).parents[3],
         run_root=tmp_path, model=model, supported_hosts=("github.com",), infer=fake_infer,
         max_candidate_bytes=10000)
     assert gap is None and resolved["exact_repository_identity"] is False
@@ -297,7 +297,7 @@ def test_scorecard_malformed_and_request_bounds_are_typed() -> None:
 
 
 def test_guidance_and_job_public_api_are_registered() -> None:
-    root = Path(__file__).parents[1]
+    root = Path(__file__).parents[3]
     registry = load_registry(root)
     assert registry["roles"]["native_dependency_resolver"]["responsibility"]
     assert registry["personas"]["dependency_repository_investigator"]["viewpoint"]
@@ -307,12 +307,17 @@ def test_guidance_and_job_public_api_are_registered() -> None:
     assert [unit.unit_id for unit in job.units][2:7] == [
         "resolution.curate_components", "resolution.investigate_components",
         "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch"]
-    assert job.consumes == ("job_target_catalog", "job_language_build", "job_artifact_indexing",
-                            "job_evidence_collection")
+    assert job.consumes == (
+        "job_artifact_indexing", "job_cpp_compiled_analysis", "job_evidence_collection",
+        "job_language_build", "job_target_catalog",
+    )
     assert {item.output_kind for item in job.datasets} == {
         "dependency_context", "scorecard_responses", "dependency_intelligence_handoff",
         "native_discovery", "native_spdx", "native_sbom_provenance", "native_sbom_metrics",
-        "native_component_curation", "native_metadata_investigation", "native_inference_metrics"}
+        "native_component_curation", "native_metadata_investigation", "native_inference_metrics",
+        "native_inputs", "unity_inventory", "native_inference_inputs", "native_inference_io",
+        "native_sbom_conversion",
+    }
 
 
 def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) -> None:
@@ -370,7 +375,7 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
 
 
 # ----------------------------------------------------------------------------------------- T-5022
-T5022 = Path(__file__).parent / "fixtures" / "dependency_intelligence" / "t5022"
+T5022 = Path(__file__).parents[2] / "fixtures" / "dependency_intelligence" / "t5022"
 PROPOSAL = "appsec-review/native-dependency-resolution-proposal/1"
 MODEL = {"enabled": True, "provider": "fake", "model": "fake", "reasoning": "low",
          "max_input_tokens": 32000, "max_output_tokens": 4000, "timeout_seconds": 7, "retries": 1}
@@ -389,7 +394,7 @@ def _dependency(fixture: dict, dependency_id: str = "dependency-a") -> dict:
 
 
 def _resolve(dependency, infer, *, budget=None, tmp_path, model=MODEL):
-    return resolve_with_inference(dependency, repository_root=Path(__file__).parents[1], run_root=tmp_path,
+    return resolve_with_inference(dependency, repository_root=Path(__file__).parents[3], run_root=tmp_path,
                                   model=model, supported_hosts=("github.com", "gitlab.com"), infer=infer,
                                   max_candidate_bytes=32768, budget=budget)
 
@@ -525,6 +530,6 @@ def test_the_failure_limit_is_a_positive_integer(limit) -> None:
 
 def test_the_central_configuration_declares_the_failure_limit() -> None:
     import tomllib
-    settings = tomllib.loads((Path(__file__).parents[1] / "appsec-review.toml").read_text(encoding="utf-8"))[
+    settings = tomllib.loads((Path(__file__).parents[3] / "appsec-review.toml").read_text(encoding="utf-8"))[
         "jobs"]["job_dependency_intelligence"]["settings"]
     assert type(settings["inference_failure_limit"]) is int and settings["inference_failure_limit"] >= 1

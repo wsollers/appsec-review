@@ -33,8 +33,8 @@ from appsec_review.tool_inputs import (
     osv_ecosystem, osv_missing_ecosystems, partition_artifacts, partition_formats,
 )
 
-from tests import test_artifact_security_analysis as asa_tests
-from tests import test_evidence_collection_job as evidence_tests
+from tests.unit.job_artifact_security_analysis import support as asa_tests
+from tests.unit.job_evidence_collection import support as evidence_tests
 
 
 ROOT = Path(__file__).parents[1]

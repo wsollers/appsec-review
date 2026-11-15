@@ -269,3 +269,77 @@ def test_real_http_truncation_resumes_from_the_written_offset(tmp_path: Path):
         finally:
             server.shutdown()
             thread.join(timeout=5)
+
+
+def test_http_nvd_client_covers_headers_retry_after_and_bound_rejections(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import io
+    import urllib.error
+    import urllib.request
+
+    c = feed.HttpNvdClient(max_attempts=2, retry_delay_seconds=0.01, retry_max_delay_seconds=1.0,
+                           max_api_response_bytes=8, max_download_bytes=8, pause=lambda _: None)
+    assert c._headers("k")["apiKey"] == "k"
+
+    # Non-retryable HTTP status raises immediately; invalid Retry-After falls back; oversize Retry-After raises
+    err_404 = urllib.error.HTTPError("https://nvd.example/x", 404, "Not Found", {}, io.BytesIO(b""))
+    with pytest.raises(urllib.error.HTTPError):
+        c._retry(err_404, 1)
+
+    err_bad_ra = urllib.error.HTTPError("https://nvd.example/x", 429, "Too Many", {"Retry-After": "not-a-date"}, io.BytesIO(b""))
+    c._retry(err_bad_ra, 1)
+
+    err_big_ra = urllib.error.HTTPError("https://nvd.example/x", 503, "Busy", {"Retry-After": "999"}, io.BytesIO(b""))
+    with pytest.raises(urllib.error.HTTPError):
+        c._retry(err_big_ra, 1)
+
+    with pytest.raises(ValueError):
+        c._retry(ValueError("boom"), 1)
+
+    # get_bytes status != 200, declared oversize, stream oversize
+    class FakeResp(io.BytesIO):
+        def __init__(self, body: bytes, status: int = 200, headers: dict[str, str] | None = None):
+            super().__init__(body)
+            self.status = status
+            self.headers = headers or {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.close()
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: FakeResp(b"x", status=204))
+    with pytest.raises(ValueError, match="HTTP 204"):
+        c.get_bytes("https://nvd.example/x")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: FakeResp(b"x", headers={"Content-Length": "99"}))
+    with pytest.raises(ValueError, match="exceeds configured byte bound"):
+        c.get_bytes("https://nvd.example/x")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: FakeResp(b"0123456789"))
+    with pytest.raises(ValueError, match="exceeded configured byte bound"):
+        c.get_bytes("https://nvd.example/x")
+
+    # download expected_size bound, existing destination, partial cleanup, Content-Length mismatch, non-200/206 status
+    dest = tmp_path / "existing.gz"
+    dest.write_bytes(b"1")
+    with pytest.raises(FileExistsError):
+        c.download("https://nvd.example/d", dest)
+    with pytest.raises(ValueError, match="expected download size exceeds"):
+        c.download("https://nvd.example/d", tmp_path / "d2.gz", expected_size=99)
+
+    d3 = tmp_path / "d3.gz"
+    d3.with_suffix(".gz.partial").write_bytes(b"leftover")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: FakeResp(b"abcd", headers={"Content-Length": "99"}))
+    with pytest.raises(ValueError, match="exceeds configured byte bound"):
+        c.download("https://nvd.example/d", d3)
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: FakeResp(b"abcd", headers={"Content-Length": "5"}))
+    with pytest.raises(ValueError, match="disagrees with feed metadata"):
+        c.download("https://nvd.example/d", tmp_path / "d4.gz", expected_size=4)
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: FakeResp(b"abcd", status=202))
+    with pytest.raises(ValueError, match="returned HTTP 202"):
+        c.download("https://nvd.example/d", tmp_path / "d5.gz")
+

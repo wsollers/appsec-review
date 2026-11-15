@@ -354,3 +354,210 @@ def test_feed_pins_now_parameter_controls_staleness(tmp_path: Path) -> None:
     set_published_at(kev, "2026-10-12T00:00:00.000Z")
     later = datetime(2026, 11, 30, tzinfo=timezone.utc)
     assert pin_feeds(tmp_path, {"kev": kev}, now=later, overrides={"kev": 7})["kev"]["stale"] is True
+
+
+def test_kev_epss_mitre_and_nvd_index_cover_settings_lookups_and_validation_edges(tmp_path: Path) -> None:
+    import zipfile
+
+    # KEV settings & lookup & malformed branches
+    for bad_kev, msg in (
+        ({"feed_root": "k", "url": ""}, "KEV feed_root and url are required"),
+        ({"feed_root": "k", "url": KEV_URL, "allowed_hosts": []}, "KEV allowed_hosts"),
+        ({"feed_root": "k", "url": KEV_URL, "sha256": "bad"}, "KEV sha256 pin"),
+        ({"feed_root": "k", "url": KEV_URL, "max_records": 0}, "KEV bounds must be positive"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            kev_feed.KevSettings.from_mapping(tmp_path, bad_kev)
+
+    ks = kev_settings(tmp_path / "kev_edge")
+    bad_json = tmp_path / "bad_kev.json"
+    bad_json.write_bytes(b"{not-json")
+    with pytest.raises(ValueError, match="not valid JSON"):
+        kev_feed.normalize(ks, {"source": {"path": str(bad_json)}}, tmp_path / "wk1")
+    oversize_kev = tmp_path / "over_kev.json"
+    oversize_kev.write_bytes(b"x" * 20)
+    with pytest.raises(ValueError, match="KEV source exceeds"):
+        kev_feed.normalize(kev_settings(tmp_path / "kev_over", max_source_bytes=5), {"source": {"path": str(oversize_kev)}}, tmp_path / "wk2")
+    with pytest.raises(ValueError, match="KEV dateAdded must be an ISO date"):
+        _kev_cycle(tmp_path / "kev_int_date", kev_document([kev_entry("CVE-2026-0001", dateAdded=123)]))
+    with pytest.raises(ValueError, match="KEV vulnerability entry must be an object"):
+        _kev_cycle(tmp_path / "kev_non_obj", {"catalogVersion": "1", "dateReleased": "2026-10-10", "vulnerabilities": ["bad"]})
+    # Pre-existing kev.sqlite is unlinked cleanly + lookup hit/miss
+    (tmp_path / "kev_lookup" / "work").mkdir(parents=True)
+    (tmp_path / "kev_lookup" / "work" / "kev.sqlite").write_bytes(b"stale")
+    ident_kev = _kev_cycle(tmp_path / "kev_lookup", kev_document([kev_entry("CVE-2026-0001")]))
+    with sqlite3.connect(Path(ident_kev["directory"]) / "index" / "kev.sqlite") as conn:
+        assert kev_feed.lookup(conn, "CVE-2026-0001")["cve_id"] == "CVE-2026-0001"
+        assert kev_feed.lookup(conn, "CVE-2099-9999") is None
+
+    # EPSS settings & lookup & malformed branches
+    for bad_epss, msg in (
+        ({"feed_root": "e", "url": ""}, "EPSS feed_root and url are required"),
+        ({"feed_root": "e", "url": EPSS_URL, "allowed_hosts": [""]}, "EPSS allowed_hosts"),
+        ({"feed_root": "e", "url": EPSS_URL, "sha256": "xyz"}, "EPSS sha256 pin"),
+        ({"feed_root": "e", "url": EPSS_URL, "timeout_seconds": 0}, "EPSS bounds must be positive"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            epss_feed.EpssSettings.from_mapping(tmp_path, bad_epss)
+
+    oversize_epss = tmp_path / "over_epss.gz"
+    oversize_epss.write_bytes(b"x" * 20)
+    with pytest.raises(ValueError, match="EPSS source exceeds"):
+        epss_feed.normalize(epss_settings(tmp_path / "epss_over", max_source_bytes=5), {"source": {"path": str(oversize_epss)}}, tmp_path / "we1")
+
+    for raw_csv, msg in (
+        (b"#model_version:v1,score_date:bad\ncve,epss,percentile\nCVE-2026-0001,0.1,0.2\n", "score_date"),
+        (b"#score_date:2026-10-11\ncve,epss,percentile\nCVE-2026-0001,0.1,0.2\n", "model_version"),
+        (b"#model_version:v1,score_date:2026-10-11\ncve,epss,percentile\n\nCVE-2026-0001,abc,0.2\n", "not a number"),
+        (b"#model_version:v1,score_date:2026-10-11\ncve,epss,percentile\nCVE-2026-0001,0.1\n", "three columns"),
+        (b"#model_version:v1,score_date:2026-10-11\ncve,epss,percentile\nBAD-ID,0.1,0.2\n", "invalid CVE id"),
+        (b"#model_version:v1,score_date:2026-10-11\ncve,epss,percentile\n\n", "contains no scores"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            _epss_cycle(tmp_path / f"epss_{msg[:6]}", gzip.compress(raw_csv, mtime=0))
+    with pytest.raises(ValueError, match="record count exceeded"):
+        _epss_cycle(tmp_path / "epss_maxrec", epss_bytes([("CVE-2026-0001", 0.1, 0.2), ("CVE-2026-0002", 0.2, 0.3)]), max_records=1)
+
+    (tmp_path / "epss_lookup" / "work").mkdir(parents=True)
+    (tmp_path / "epss_lookup" / "work" / "epss.sqlite").write_bytes(b"stale")
+    ident_epss = _epss_cycle(tmp_path / "epss_lookup", epss_bytes([("CVE-2026-0001", 0.42, 0.97)]))
+    with sqlite3.connect(Path(ident_epss["directory"]) / "index" / "epss.sqlite") as conn:
+        assert epss_feed.lookup(conn, "CVE-2026-0001")["epss"] == 0.42
+        assert epss_feed.lookup(conn, "CVE-2099-9999") is None
+
+    # MITRE settings, fetch, XML safety, normalize, and verify
+    base_sources = {
+        "enterprise_attack": {"kind": "attack", "url": "https://raw.githubusercontent.com/mitre/enterprise.json", "version": "16.1"},
+        "capec": {"kind": "capec", "url": "https://raw.githubusercontent.com/mitre/capec.json", "version": "3.9"},
+        "cwe": {"kind": "cwe", "url": "https://cwe.mitre.org/data/xml/cwec.xml.zip", "version": "4.20"},
+    }
+    for bad_mitre, msg in (
+        ({"feed_root": "m", "source_selections": None, "sources": {}}, "required"),
+        ({"feed_root": "m", "source_selections": ["cwe"], "sources": base_sources}, "MITRE defaults must include"),
+        ({"feed_root": "m", "source_selections": [*mitre_feed.REQUIRED_DEFAULTS, "unknown"], "sources": base_sources}, "duplicated or unknown"),
+        ({"feed_root": "m", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS), "sources": {"cwe": base_sources["cwe"]}}, "not configured"),
+        ({"feed_root": "m", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS), "sources": {**base_sources, "cwe": {**base_sources["cwe"], "sha256": "bad"}}}, "sha256 is invalid"),
+        ({"feed_root": "m", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS), "sources": {**base_sources, "cwe": {**base_sources["cwe"], "kind": "wrong"}}}, "fields are invalid"),
+        ({"feed_root": "m", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS), "sources": base_sources, "max_records": 0}, "bounds must be positive"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            mitre_feed.MitreSettings.from_mapping(tmp_path, bad_mitre)
+
+    ms = mitre_feed.MitreSettings.from_mapping(
+        tmp_path,
+        {"feed_root": "mitre_full", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS), "sources": base_sources},
+    )
+    zbuf = tmp_path / "cwe_src.zip"
+    with zipfile.ZipFile(zbuf, "w") as zf:
+        zf.writestr("cwe.xml", cwe_xml(CWE_FIXTURE))
+
+    class MultiDownloader:
+        def __init__(self, payloads: dict[str, bytes]):
+            self.payloads = payloads
+
+        def download(self, url, destination, *, max_bytes, allowed_hosts):
+            import hashlib
+            body = self.payloads[url]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(body)
+            return {"url": url, "sha256": hashlib.sha256(body).hexdigest(), "size_bytes": len(body),
+                    "etag": None, "last_modified": None, "retrieved_at": "2026-10-12T00:00:00.000Z"}
+
+    bundle_attack = json.dumps({
+        "type": "bundle",
+        "objects": [
+            "skip-non-dict",
+            {"type": "note"},
+            {"type": "attack-pattern", "name": "T1", "external_references": [{"external_id": "T1059"}]},
+        ],
+    }).encode()
+    bundle_capec = json.dumps({
+        "type": "bundle",
+        "objects": [{"id": "capec--1", "type": "attack-pattern", "name": "C1", "external_references": [{}]}],
+    }).encode()
+    dl_map = {
+        base_sources["enterprise_attack"]["url"]: bundle_attack,
+        base_sources["capec"]["url"]: bundle_capec,
+        base_sources["cwe"]["url"]: zbuf.read_bytes(),
+    }
+    fetched_m = mitre_feed.fetch(ms, tmp_path / "mw", MultiDownloader(dl_map))
+    norm_m = mitre_feed.normalize(ms, fetched_m, tmp_path / "mw")
+    mitre_feed.publish(ms, fetched_m, norm_m)
+    assert mitre_feed.verify(ms)["record_count"] == 4
+
+    ms_pin = mitre_feed.MitreSettings.from_mapping(
+        tmp_path,
+        {"feed_root": "mitre_pin", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS),
+         "sources": {**base_sources, "cwe": {**base_sources["cwe"], "sha256": "0" * 64}}},
+    )
+    with pytest.raises(ValueError, match="MITRE pinned source hash mismatch"):
+        mitre_feed.fetch(ms_pin, tmp_path / "mw_pin", MultiDownloader(dl_map))
+
+    # _xml_bytes safety checks & STIX / CWE version / max_records checks
+    empty_zip = tmp_path / "empty.zip"
+    with zipfile.ZipFile(empty_zip, "w"):
+        pass
+    with pytest.raises(ValueError, match="exactly one XML document"):
+        mitre_feed._xml_bytes(empty_zip, 1024)
+
+    unsafe_zip = tmp_path / "unsafe.zip"
+    with zipfile.ZipFile(unsafe_zip, "w") as zf:
+        zf.writestr("../escape.xml", b"<x/>")
+    with pytest.raises(ValueError, match="unsafe CWE archive member"):
+        mitre_feed._xml_bytes(unsafe_zip, 1024)
+
+    dtd_zip = tmp_path / "dtd.zip"
+    with zipfile.ZipFile(dtd_zip, "w") as zf:
+        zf.writestr("cwe.xml", b"<!DOCTYPE foo><Catalog/>")
+    with pytest.raises(ValueError, match="prohibited DTD"):
+        mitre_feed._xml_bytes(dtd_zip, 1024)
+
+    bad_stix = tmp_path / "bad_stix.json"
+    bad_stix.write_text('{"type": "other"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="not a bundle"):
+        mitre_feed.normalize(ms, {"sources": {"capec": {"kind": "capec", "path": str(bad_stix)}}}, tmp_path / "mw_bad1")
+
+    wrong_ver_zip = tmp_path / "wrong_ver.zip"
+    with zipfile.ZipFile(wrong_ver_zip, "w") as zf:
+        zf.writestr("cwe.xml", b'<Weakness_Catalog Version="9.99"/>')
+    with pytest.raises(ValueError, match="CWE version mismatch"):
+        mitre_feed.normalize(ms, {"sources": {"cwe": {"kind": "cwe", "version": "4.16", "path": str(wrong_ver_zip)}}}, tmp_path / "mw_bad2")
+
+    ms_small = mitre_feed.MitreSettings.from_mapping(
+        tmp_path,
+        {"feed_root": "mitre_small", "source_selections": list(mitre_feed.REQUIRED_DEFAULTS), "sources": base_sources, "max_records": 1},
+    )
+    with pytest.raises(ValueError, match="MITRE record count exceeded"):
+        mitre_feed.normalize(ms_small, fetched_m, tmp_path / "mw_bad3")
+
+    # nvd_sync/index.py validation edges
+    bad_layer = tmp_path / "bad_layer.jsonl.gz"
+    with gzip.open(bad_layer, "wt", encoding="utf-8") as stream:
+        stream.write('"not-an-object"\n')
+    with pytest.raises(ValueError, match="NVD metadata line is not an object"):
+        nvd_index.build_index(tmp_path / "bad1.sqlite", [bad_layer])
+
+    bad_cve_layer = tmp_path / "bad_cve.jsonl.gz"
+    with gzip.open(bad_cve_layer, "wt", encoding="utf-8") as stream:
+        stream.write(json.dumps({"id": "NOT-CVE"}) + "\n")
+    with pytest.raises(ValueError, match="invalid NVD metadata identity"):
+        nvd_index.build_index(tmp_path / "bad2.sqlite", [bad_cve_layer])
+
+    # Whitespace-only Scope tag and Category XML node in mitre_sync
+    import xml.etree.ElementTree as ET
+    assert mitre_feed.weakness_consequences(
+        ET.fromstring('<Weakness ID="9"><Common_Consequences><Consequence><Scope>   </Scope></Consequence></Common_Consequences></Weakness>')
+    ) == ([], False)
+    cat_zip = tmp_path / "cat.zip"
+    with zipfile.ZipFile(cat_zip, "w") as zf:
+        zf.writestr("cwe.xml", b'<Weakness_Catalog Version="4.20"><Categories><Category ID="1" Name="Cat" Status="Stable"/></Categories></Weakness_Catalog>')
+    cat_norm = mitre_feed.normalize(ms, {"sources": {"cwe": {"kind": "cwe", "version": "4.20", "path": str(cat_zip)}}}, tmp_path / "mw_cat")
+    assert cat_norm["record_count"] == 1
+
+    non_dict_metric_layer = tmp_path / "metric_edge.jsonl.gz"
+    with gzip.open(non_dict_metric_layer, "wt", encoding="utf-8") as stream:
+        stream.write("\n")
+        stream.write(json.dumps({"id": "CVE-2026-0099", "last_modified": "2026-01-01T00:00:00Z", "metrics": ["skip"]}) + "\n")
+    summary = nvd_index.build_index(tmp_path / "ok_edge.sqlite", [non_dict_metric_layer])
+    assert summary["record_count"] == 1
+

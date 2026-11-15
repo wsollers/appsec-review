@@ -27,7 +27,7 @@ from appsec_review.owasp_workbench import assessment
 from appsec_review.runtime import UnitContext
 from appsec_review.storage import canonical_json
 from tests.test_build_topology_feedback import _inputs
-from tests.test_native_inference_runtime import MODEL, proposer
+from tests.unit.job_dependency_intelligence.test_native_inference_runtime import MODEL, proposer
 from tests.test_poc_writer import BRIEF, CLAIM, SCHEMAS, with_models
 from tests.unit.job_project_build.test_project_build_helpers import _repair_recipe, _repair_unit
 from tests.test_remediation_models import model as remediation_model

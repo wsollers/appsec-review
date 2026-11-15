@@ -20,7 +20,7 @@ from appsec_review.media_assets import (
 from appsec_review.runtime import GraphRunner
 from appsec_review.tool_inputs import InputSupport, partition_artifacts, support
 
-from tests import test_artifact_security_analysis as asa_tests
+from tests.unit.job_artifact_security_analysis import support as asa_tests
 
 
 CATALOGERS = ("artifact:tool-syft", "artifact:tool-grype")

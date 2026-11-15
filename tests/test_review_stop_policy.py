@@ -361,12 +361,12 @@ def test_malformed_outputs_stop_before_gap_conversion(tmp_path, surface):
                 replay_failures(tmp_path, "ast", [{"target_path": "source.c"}])
             else:
                 module_name, name = {
-                    "artifact": ("tests.test_artifact_security_analysis",
-                        "test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings"),
-                    "ci": ("tests.test_ci_configuration_analysis",
-                        "test_failed_linter_is_a_gap_and_sibling_results_survive"),
-                    "evidence": ("tests.test_evidence_collection_job",
-                        "test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints"),
+                    "artifact": ("tests.unit.job_artifact_security_analysis.test_job_graph",
+                        "test_scan_one_isolates_scanner_failure_and_retains_stopped_diagnostics"),
+                    "ci": ("tests.unit.job_ci_configuration_analysis.test_job_graph",
+                        "test_scan_isolates_linter_failure_and_stops_active_guardian"),
+                    "evidence": ("tests.unit.job_evidence_collection.test_job_graph",
+                        "test_execute_tool_isolates_scanner_failure_and_stops_active_guardian"),
                     "symbols": ("tests.test_cpp_index_jobs",
                         "test_failed_clangd_run_is_scoped_unavailable_coverage"),
                     "codeql_export": ("tests.test_codeql_export_step",

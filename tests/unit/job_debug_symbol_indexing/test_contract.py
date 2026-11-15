@@ -16,18 +16,21 @@ from pathlib import Path
 
 from appsec_review.debug_symbols.contract import DECISION_SCHEMA, INDEX_NAME, JOB_ID, QUERY_TOOL
 from appsec_review.jobs.job_artifact_indexing.datasets import DATASETS as ARTIFACT_DATASETS
+from appsec_review.jobs.job_debug_symbol_indexing import job as job_module
 from appsec_review.jobs.job_debug_symbol_indexing.datasets import CONSUMES, CONTRACT, DATASETS
 from appsec_review.jobs.job_debug_symbol_indexing.job import _TOPOLOGY, SCHEMA, build_job
 from appsec_review.jobs.job_language_build.datasets import DATASETS as LANGUAGE_DATASETS
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.retrieval import INDEX_SCHEMA
 from appsec_review.retrieval.index import INDEX_NAMES
+from appsec_review.runtime import consume
 from appsec_review.runtime.contracts import (
     Availability, CoveragePolicy, DispatchClass, EvidenceAuthority, InputChannel, MissingPolicy, TargetAccess,
 )
 from appsec_review.runtime.datasets import METADATA_ROUTE
+from appsec_review.storage import file_sha256
 from tests.unit.job_debug_symbol_indexing.support import (
-    ELF, accepted_inputs, artifact, catalog_shard, decide, extractor, handlers, job_context, manifest, unit,
+    ELF, HANDOFF_SHA, accepted_inputs, artifact, catalog_shard, decide, extractor, handlers, job_context, manifest, unit,
 )
 
 HANDOFF = "appsec-review/job-handoff/2"
@@ -150,6 +153,42 @@ def test_shard_ids_of_both_lanes_are_claimed_by_the_symbol_prefix_and_nothing_el
 
 
 # --- the files the handlers write ------------------------------------------------------------------
+
+def test_target_decision_document_matches_its_declared_schema(tmp_path: Path, monkeypatch) -> None:
+    context = job_context(tmp_path)
+    binary = artifact(context.run_root, "bin/program", ELF)
+    upstream = manifest(context.run_root, [catalog_shard(context.run_root, [binary])])
+    calls = []
+
+    def load_artifacts(run_root):
+        calls.append(("artifact-index", run_root))
+        return {
+            "source_fingerprint": context.source_fingerprint,
+            "index_manifest": upstream,
+            "target_artifacts": [binary["reference"]],
+            "handoff_sha256": HANDOFF_SHA,
+            "gaps": [],
+        }
+
+    def has_language_build(run_root, job_id):
+        calls.append((job_id, run_root))
+        return False
+
+    monkeypatch.setattr(job_module, "load_accepted_artifact_index", load_artifacts)
+    monkeypatch.setattr(consume, "has_accepted_upstream", has_language_build)
+    result = handlers(build_job(extractor=extractor()))["decide.target"](unit(context, "decide.target"))
+    assert calls == [("artifact-index", context.run_root), ("job_language_build", context.run_root)]
+    assert result["terminal_status"] == "SUCCEEDED"
+    reference = result["artifact"]
+    assert _claimed(reference["path"]) == ["target_decision"]
+    path = context.run_root / reference["path"]
+    assert file_sha256(path) == reference["sha256"]
+    assert path.stat().st_size == reference["size_bytes"]
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["artifacts"] == [binary]
+    assert document["schema"] == DECISION_SCHEMA == "appsec-review/debug-symbol-decision/2"
+    assert document["schema"] == _declared()["target_decision"].schema, "target_decision schema drift"
+
 
 def test_every_published_document_lands_inside_its_glob_with_its_declared_schema(tmp_path: Path, monkeypatch) -> None:
     context = job_context(tmp_path)

@@ -26,7 +26,7 @@ from appsec_review.storage.shared import reference
 from tests.handoff_fixture import write_fixture_handoff
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 SNAPSHOT = "f" * 64
 RUN_ID = "2026-10-28-0001"
 CREATED = "2026-10-28T00:00:00Z"
@@ -206,7 +206,7 @@ def _real_syft_publication(tmp_path):
     from appsec_review.jobs.job_evidence_collection import build_job as evidence_job
     from appsec_review.jobs.job_evidence_collection.job import _assemble_manifest
     from appsec_review.runtime import Unit
-    from tests.test_evidence_collection_job import FakeExecutor
+    from tests.unit.job_evidence_collection.support import FakeExecutor
     from tests.integration.job_target_analysis_plan.test_target_analysis_plan_graph import _fixture, _run
 
     config, target = _fixture(tmp_path, {
@@ -565,21 +565,3 @@ def test_publication_task_reuse_does_not_repeat_discovery_or_conversion(tmp_path
     assert calls and len(calls) == 1
     assert repeated["artifact"] == accepted["sbom"]["artifact"]
     assert first["handoff"]["status"] == "ACCEPTED"
-
-
-def test_structured_syft_identity_survives_parser_and_envelope(tmp_path: Path) -> None:
-    payload = canonical_json({"artifacts": [{
-        "id": "native-zlib", "name": "zlib", "version": "1.3.1",
-        "purl": "pkg:generic/zlib@1.3.1", "metadata": {"repository": "https://github.com/madler/zlib"},
-        "locations": [{"path": "vendor/zlib/zlib.h"}],
-    }]})
-    records = _syft_parser(payload)
-    envelope = build_envelope(tool={"id": "tool-syft"}, target_fingerprint=SNAPSHOT,
-        applicability={}, coverage_scope={}, gaps=[], raw_artifacts=[], parser_identity="test",
-        observations=records, cataloged_paths=["vendor/zlib/zlib.h"],
-        terminal_status="SUCCEEDED", run_root=tmp_path)
-    row = envelope["records"][0]
-    assert row["version"] == "1.3.1"
-    assert row["purl"] == "pkg:generic/zlib@1.3.1"
-    assert row["repository_url"] == "https://github.com/madler/zlib"
-    assert row["raw_selector"] == "/artifacts/0"

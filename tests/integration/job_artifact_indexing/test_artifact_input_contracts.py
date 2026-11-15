@@ -13,7 +13,7 @@ from appsec_review.jobs.job_artifact_indexing import build_job as indexing_job
 from appsec_review.jobs.job_artifact_security_analysis import build_job as security_job
 from appsec_review.runtime import JobRunner
 from tests.downstream_contract_fixture import configuration
-from tests.test_artifact_security_analysis import _fixture
+from tests.unit.job_artifact_security_analysis.support import _fixture
 
 
 @pytest.mark.parametrize("factory", (indexing_job, security_job), ids=("indexing", "security"))

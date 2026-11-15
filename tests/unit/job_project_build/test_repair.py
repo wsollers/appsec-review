@@ -6,7 +6,8 @@ import pytest
 
 from appsec_review.jobs.job_project_build.repair import (
     MAX_DEPENDENCY_RESTORES, MAX_REPAIR_ENVIRONMENT, MAX_SYSTEM_PACKAGES, REPAIR_SCHEMA, FailureKind,
-    RepairStopped, apply_repair, diagnose_failure, image_repair_errors, proposal_identity, repair_options,
+    RepairStopped, _restore_records, apply_repair, diagnose_failure, image_repair_errors,
+    proposal_identity, repair_options, validate_repair_proposal,
 )
 from tests.unit.job_project_build.test_project_build_helpers import _repair, _repair_recipe
 
@@ -127,3 +128,64 @@ def test_not_image_repairable_and_no_op_proposals_stop_the_repair_loop_with_type
     assert repaired["reason"].endswith("Image repair: bounded repair") and "image_repairs" not in repaired
     with pytest.raises(RepairStopped):
         apply_repair(repaired, _repair(system_packages=["libssl-dev"]), build_system="cmake")
+
+
+def test_validate_repair_proposal_and_apply_repair_cover_all_guard_branches() -> None:
+    py_recipe = _repair_recipe("python", "pkg", ["pkg/pyproject.toml", "pkg/requirements-build.txt"],
+                               build_system="python", commands=[["python", "-m", "build"]])
+    refusal = {"schema": REPAIR_SCHEMA, "outcome": "NOT_IMAGE_REPAIRABLE", "reason": "unproven"}
+    assert proposal_identity(refusal) == proposal_identity({**refusal, "reason": "other"})
+
+    assert validate_repair_proposal("not-a-mapping", recipe=py_recipe, build_system="python") == (  # type: ignore[arg-type]
+        "repair proposal fields are invalid",
+    )
+    assert "repair reason must be non-empty" in validate_repair_proposal(
+        {**_repair(), "reason": "   "}, recipe=py_recipe, build_system="python"
+    )[0]
+    assert any("system_packages must contain at most" in err for err in validate_repair_proposal(
+        {**_repair(), "system_packages": "not-a-list"}, recipe=py_recipe, build_system="python"
+    ))
+    assert "system_packages contains duplicates" in validate_repair_proposal(
+        _repair(system_packages=["libssl-dev", "libssl-dev"]), recipe=py_recipe, build_system="python"
+    )
+    assert any("environment must be an object" in err for err in validate_repair_proposal(
+        {**_repair(), "environment": []}, recipe=py_recipe, build_system="python"
+    ))
+    assert "environment value is not allowed for PIP_BREAK_SYSTEM_PACKAGES" in validate_repair_proposal(
+        _repair(environment={"PIP_BREAK_SYSTEM_PACKAGES": "2"}), recipe=py_recipe, build_system="python"
+    )
+
+    node_locked = _repair_recipe("node", "web", ["web/package.json", "web/package-lock.json"],
+                                 build_system="node", commands=[["npm", "run", "build"]])
+    node_errors = validate_repair_proposal(_repair(package_manager="pnpm"), recipe=node_locked, build_system="node")
+    assert "package_manager cannot override the manager of an accepted lockfile" in node_errors
+    assert "package_manager conflicts with the package manager the recipe runs" in node_errors
+
+    node_unlocked = _repair_recipe("node", "web", ["web/package.json"],
+                                   build_system="node", commands=[["pnpm", "build"]])
+    assert validate_repair_proposal(_repair(package_manager="pnpm"), recipe=node_unlocked, build_system="node") == ()
+
+    assert any("dependency_restores must list at most" in err for err in validate_repair_proposal(
+        {**_repair(), "dependency_restores": "bad"}, recipe=py_recipe, build_system="python"
+    ))
+    assert "dependency_restores entries must be objects with only manifest" in validate_repair_proposal(
+        _repair(dependency_restores=[{"manifest": 123}]), recipe=py_recipe, build_system="python"
+    )
+    dup = validate_repair_proposal(
+        _repair(dependency_restores=[{"manifest": "pkg/requirements-build.txt"},
+                                     {"manifest": "pkg/requirements-build.txt"}]),
+        recipe=py_recipe, build_system="python",
+    )
+    assert any("dependency_restores repeats" in err for err in dup)
+    unrestorable = validate_repair_proposal(
+        _repair(dependency_restores=[{"manifest": "pkg/pyproject.toml"}]),
+        recipe=py_recipe, build_system="python",
+    )
+    assert any("python cannot restore dependencies from pkg/pyproject.toml" in err for err in unrestorable)
+
+    with pytest.raises(ValueError, match="python cannot restore dependencies from pkg/pyproject.toml"):
+        _restore_records(py_recipe, "python", [{"manifest": "pkg/pyproject.toml"}])
+
+    with_env = {**py_recipe, "environment": {"PIP_BREAK_SYSTEM_PACKAGES": "1"}}
+    with pytest.raises(ValueError, match="repair environment would replace accepted recipe environment"):
+        apply_repair(with_env, _repair(environment={"PIP_BREAK_SYSTEM_PACKAGES": "1"}), build_system="python")

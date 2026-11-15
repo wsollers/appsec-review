@@ -20,8 +20,10 @@ from appsec_review.jobs.job_language_build.job import (
     EXECUTOR_IDENTITY, RECEIPT_SCHEMA, SCHEMA, _artifact, _safe_artifact, build_job,
 )
 from appsec_review.runtime.contracts import (
-    Availability, DispatchClass, EvidenceAuthority, MissingPolicy, TargetAccess,
+    Availability, CoveragePolicy, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
+    MissingPolicy, TargetAccess,
 )
+from appsec_review.runtime.datasets import DatasetDeclaration
 
 FAMILIES = ("native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm")
 
@@ -153,3 +155,77 @@ def test_the_job_carries_the_contract_and_declarations_it_was_built_from() -> No
     assert job.contract is CONTRACT and job.datasets is DATASETS
     assert job.consumes == CONTRACT.consumes
     assert (job.job_id, job.name, job.schema_identity) == ("job_language_build", "language_build", SCHEMA)
+
+
+def test_every_input_requirement_and_dataset_declaration_field_is_pinned() -> None:
+    assert CONTRACT.inputs == (
+        InputRequirement("job_build_environment_analysis", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.OPERATIONAL, availability=Availability.OPTIONAL,
+                         missing=MissingPolicy.GAP, coverage=CoveragePolicy.ALLOW_PARTIAL,
+                         channel=InputChannel.HANDOFF),
+        InputRequirement("job_build_environment_analysis", "build_environment",
+                         "appsec-review/build-environment-analysis/1",
+                         authority=EvidenceAuthority.OPERATIONAL, availability=Availability.OPTIONAL,
+                         missing=MissingPolicy.GAP, coverage=CoveragePolicy.ALLOW_PARTIAL,
+                         channel=InputChannel.HANDOFF),
+        InputRequirement("job_project_build", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE, availability=Availability.REQUIRED,
+                         missing=MissingPolicy.REJECT, coverage=CoveragePolicy.ALLOW_PARTIAL,
+                         channel=InputChannel.HANDOFF),
+        InputRequirement("job_project_build", "topology_refinement_inputs",
+                         "appsec-review/build-topology-refinement/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_project_build", "project_build_dispatch",
+                         "appsec-review/project-build-dispatch/3",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_project_build", "probe_workspaces", "application/octet-stream",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_project_build", "image_build_streams", "text/plain",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "model_preflight", "appsec-review/model-preflight/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "binary_evidence", "appsec-review/binary-evidence-intake/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_review_intake", "review_intake", "appsec-review/review-intake/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "planning_feedback_cache",
+                         "appsec-review/target-analysis-proposal/3",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "analysis_plan", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_analysis_plan", "analysis_plan_documents",
+                         "appsec-review/target-analysis-plan/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "target_artifact_inputs",
+                         "appsec-review/target-artifact-intake/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "source_files", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "declaration_symbols", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "components", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "target_documents", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "build_units", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "catalog_documents", "appsec-review/target-catalog/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+    )
+    for item in DATASETS:
+        assert isinstance(item, DatasetDeclaration)
+        assert item.store == "retrieval"
+        assert item.required is False
+        assert item.shard_suffixes == ()
+        assert item.authority is EvidenceAuthority.PRODUCER_EVIDENCE
+        if item.disposition == "indexed":
+            assert item.reason is None and item.query_route and item.indexes
+        else:
+            assert item.reason and item.artifacts
+            assert item.query_route == "query_dataset_inventory (sanitized identity, hash, status and coverage only)"
