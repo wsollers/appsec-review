@@ -3094,6 +3094,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   seeded Clang mapped at `tests/live/test_seeded_clang_live.py`; 1763/1786 job-package lines
   [98.71%] and 690/728 branches [94.78%] covered, with all 6 modules >=97.1% lines and >=92.6%
   branches).
+  job_clang_static_analysis (24/47; 4 unit files, 32 cases: pinned 21-input / 4-dataset contract
+  and 3-unit DAG topology, Clang-Tidy and Static Analyzer wrapper driver/plist normalization,
+  checker-name pattern rejection, output/diagnostic/trace bounds, execution timeout/OOM/limit/
+  unavailable isolation, accepted-source mapping, seeded unit selection, neighborhood diagnostic
+  labelling, checkpoint invalidation/resume, and immutable handoff publication; 368/368 job-package
+  lines [100.0%] and 116/116 branches [100.0%] covered across all 4 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

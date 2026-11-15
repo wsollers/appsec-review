@@ -114,7 +114,12 @@
       "live": ["tests/live/test_ci_configuration_analysis_multivuln.py"]
     },
     "job_clang_static_analysis": {
-      "unit": ["tests/test_clang_static_analysis.py"],
+      "unit": [
+        "tests/unit/job_clang_static_analysis/test_clang_static_analysis.py",
+        "tests/unit/job_clang_static_analysis/test_clang_static_tool.py",
+        "tests/unit/job_clang_static_analysis/test_contract.py",
+        "tests/unit/job_clang_static_analysis/test_seeded_clang_static.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": ["tests/live/test_seeded_clang_live.py"]
