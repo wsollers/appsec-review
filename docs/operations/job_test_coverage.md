@@ -29,27 +29,16 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L390) |
-| `index` | `index.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L333) |
-| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L313) |
-| `normalize` | `normalize.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L327) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L430) |
+| `index` | `index.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L372) |
+| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L337) |
+| `normalize` | `normalize.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L366) |
 
 ### Accepted input declarations
 
 | Producer | Dataset | Schema | Channel | Availability | Missing policy |
 | --- | --- | --- | --- | --- | --- |
-| `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
-| `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_artifact_indexing` | `artifact_relationships` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_artifact_indexing` | `artifact_index_summary` | `appsec-review/artifact-indexing/1` | handoff | optional | gap |
-| `job_language_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
-| `job_language_build` | `topology_refinement_inputs` | `appsec-review/build-topology-refinement/1` | handoff | optional | gap |
-| `job_language_build` | `build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_language_build` | `jvm_build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | optional | gap |
-| `job_language_build` | `build_workspaces` | `application/octet-stream` | handoff | optional | gap |
-| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_target_catalog` | `target_artifact_inputs` | `appsec-review/target-artifact-intake/1` | handoff | optional | gap |
 | `job_target_catalog` | `source_files` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `declaration_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -57,6 +46,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_target_catalog` | `target_documents` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `build_units` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `catalog_documents` | `appsec-review/target-catalog/1` | handoff | optional | gap |
+| `job_language_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | when_producer_enabled | reject |
+| `job_language_build` | `topology_refinement_inputs` | `appsec-review/build-topology-refinement/1` | handoff | optional | gap |
+| `job_language_build` | `build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_language_build` | `jvm_build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | optional | gap |
+| `job_language_build` | `build_workspaces` | `application/octet-stream` | handoff | optional | gap |
+| `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | when_producer_enabled | reject |
+| `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_artifact_indexing` | `artifact_relationships` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_artifact_indexing` | `artifact_index_summary` | `appsec-review/artifact-indexing/1` | handoff | optional | gap |
 
 ### Published dataset declarations
 
@@ -78,7 +78,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_test_coverage.py` |
+| unit | `tests/test_test_coverage.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
 
 ### Dagster placement
 
@@ -91,99 +91,99 @@ Declared predecessors: `job_artifact_indexing`.
 ```mermaid
 flowchart LR
   job["job_test_coverage"]
-  producer0["job_artifact_indexing"]
+  producer0["job_target_catalog"]
   input0["handoff"]
   input_schema0["appsec-review/job-handoff/2"]
   producer0 --> input0 --> job
   input0 -. schema .-> input_schema0
-  producer1["job_artifact_indexing"]
-  input1["artifact_catalog"]
-  input_schema1["appsec-review/retrieval-index/2"]
+  producer1["job_target_catalog"]
+  input1["target_artifact_inputs"]
+  input_schema1["appsec-review/target-artifact-intake/1"]
   producer1 --> input1 --> job
   input1 -. schema .-> input_schema1
-  producer2["job_artifact_indexing"]
-  input2["archive_members"]
+  producer2["job_target_catalog"]
+  input2["source_files"]
   input_schema2["appsec-review/retrieval-index/2"]
   producer2 --> input2 --> job
   input2 -. schema .-> input_schema2
-  producer3["job_artifact_indexing"]
-  input3["artifact_relationships"]
+  producer3["job_target_catalog"]
+  input3["declaration_symbols"]
   input_schema3["appsec-review/retrieval-index/2"]
   producer3 --> input3 --> job
   input3 -. schema .-> input_schema3
-  producer4["job_artifact_indexing"]
-  input4["artifact_index_summary"]
-  input_schema4["appsec-review/artifact-indexing/1"]
+  producer4["job_target_catalog"]
+  input4["components"]
+  input_schema4["appsec-review/retrieval-index/2"]
   producer4 --> input4 --> job
   input4 -. schema .-> input_schema4
-  producer5["job_language_build"]
-  input5["handoff"]
-  input_schema5["appsec-review/job-handoff/2"]
+  producer5["job_target_catalog"]
+  input5["target_documents"]
+  input_schema5["appsec-review/retrieval-index/2"]
   producer5 --> input5 --> job
   input5 -. schema .-> input_schema5
-  producer6["job_language_build"]
-  input6["topology_refinement_inputs"]
-  input_schema6["appsec-review/build-topology-refinement/1"]
+  producer6["job_target_catalog"]
+  input6["build_units"]
+  input_schema6["appsec-review/retrieval-index/2"]
   producer6 --> input6 --> job
   input6 -. schema .-> input_schema6
-  producer7["job_language_build"]
-  input7["build_actions"]
-  input_schema7["appsec-review/retrieval-index/2"]
+  producer7["job_target_catalog"]
+  input7["catalog_documents"]
+  input_schema7["appsec-review/target-catalog/1"]
   producer7 --> input7 --> job
   input7 -. schema .-> input_schema7
   producer8["job_language_build"]
-  input8["jvm_build_actions"]
-  input_schema8["appsec-review/retrieval-index/2"]
+  input8["handoff"]
+  input_schema8["appsec-review/job-handoff/2"]
   producer8 --> input8 --> job
   input8 -. schema .-> input_schema8
   producer9["job_language_build"]
-  input9["language_build_receipts"]
-  input_schema9["appsec-review/language-build-handoff/2"]
+  input9["topology_refinement_inputs"]
+  input_schema9["appsec-review/build-topology-refinement/1"]
   producer9 --> input9 --> job
   input9 -. schema .-> input_schema9
   producer10["job_language_build"]
-  input10["build_workspaces"]
-  input_schema10["application/octet-stream"]
+  input10["build_actions"]
+  input_schema10["appsec-review/retrieval-index/2"]
   producer10 --> input10 --> job
   input10 -. schema .-> input_schema10
-  producer11["job_target_catalog"]
-  input11["handoff"]
-  input_schema11["appsec-review/job-handoff/2"]
+  producer11["job_language_build"]
+  input11["jvm_build_actions"]
+  input_schema11["appsec-review/retrieval-index/2"]
   producer11 --> input11 --> job
   input11 -. schema .-> input_schema11
-  producer12["job_target_catalog"]
-  input12["target_artifact_inputs"]
-  input_schema12["appsec-review/target-artifact-intake/1"]
+  producer12["job_language_build"]
+  input12["language_build_receipts"]
+  input_schema12["appsec-review/language-build-handoff/2"]
   producer12 --> input12 --> job
   input12 -. schema .-> input_schema12
-  producer13["job_target_catalog"]
-  input13["source_files"]
-  input_schema13["appsec-review/retrieval-index/2"]
+  producer13["job_language_build"]
+  input13["build_workspaces"]
+  input_schema13["application/octet-stream"]
   producer13 --> input13 --> job
   input13 -. schema .-> input_schema13
-  producer14["job_target_catalog"]
-  input14["declaration_symbols"]
-  input_schema14["appsec-review/retrieval-index/2"]
+  producer14["job_artifact_indexing"]
+  input14["handoff"]
+  input_schema14["appsec-review/job-handoff/2"]
   producer14 --> input14 --> job
   input14 -. schema .-> input_schema14
-  producer15["job_target_catalog"]
-  input15["components"]
+  producer15["job_artifact_indexing"]
+  input15["artifact_catalog"]
   input_schema15["appsec-review/retrieval-index/2"]
   producer15 --> input15 --> job
   input15 -. schema .-> input_schema15
-  producer16["job_target_catalog"]
-  input16["target_documents"]
+  producer16["job_artifact_indexing"]
+  input16["archive_members"]
   input_schema16["appsec-review/retrieval-index/2"]
   producer16 --> input16 --> job
   input16 -. schema .-> input_schema16
-  producer17["job_target_catalog"]
-  input17["build_units"]
+  producer17["job_artifact_indexing"]
+  input17["artifact_relationships"]
   input_schema17["appsec-review/retrieval-index/2"]
   producer17 --> input17 --> job
   input17 -. schema .-> input_schema17
-  producer18["job_target_catalog"]
-  input18["catalog_documents"]
-  input_schema18["appsec-review/target-catalog/1"]
+  producer18["job_artifact_indexing"]
+  input18["artifact_index_summary"]
+  input_schema18["appsec-review/artifact-indexing/1"]
   producer18 --> input18 --> job
   input18 -. schema .-> input_schema18
   output0["test_coverage"]

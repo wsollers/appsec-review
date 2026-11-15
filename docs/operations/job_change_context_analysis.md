@@ -43,12 +43,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Producer | Dataset | Schema | Channel | Availability | Missing policy |
 | --- | --- | --- | --- | --- | --- |
-| `job_source_history_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
-| `job_source_history_analysis` | `history_signals` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_source_history_analysis` | `history_documents` | `appsec-review/source-history-analysis/2` | handoff | optional | gap |
-| `job_source_history_analysis` | `raw_git_history` | `application/octet-stream` | handoff | optional | gap |
-| `job_source_history_analysis` | `history_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
-| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_target_catalog` | `target_artifact_inputs` | `appsec-review/target-artifact-intake/1` | handoff | optional | gap |
 | `job_target_catalog` | `source_files` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `declaration_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -56,6 +51,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_target_catalog` | `target_documents` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `build_units` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `catalog_documents` | `appsec-review/target-catalog/1` | handoff | optional | gap |
+| `job_source_history_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | when_producer_enabled | reject |
+| `job_source_history_analysis` | `history_signals` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_source_history_analysis` | `history_documents` | `appsec-review/source-history-analysis/2` | handoff | optional | gap |
+| `job_source_history_analysis` | `raw_git_history` | `application/octet-stream` | handoff | optional | gap |
+| `job_source_history_analysis` | `history_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow`<br>`tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days`<br>`tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push`<br>`tests/unit/runtime/test_wave2_consumers.py` |
+| unit | `tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow`<br>`tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days`<br>`tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
 
 ### Dagster placement
 
@@ -99,69 +99,69 @@ Declared predecessors: `job_tree_sitter_ast`.
 ```mermaid
 flowchart LR
   job["job_change_context_analysis"]
-  producer0["job_source_history_analysis"]
+  producer0["job_target_catalog"]
   input0["handoff"]
   input_schema0["appsec-review/job-handoff/2"]
   producer0 --> input0 --> job
   input0 -. schema .-> input_schema0
-  producer1["job_source_history_analysis"]
-  input1["history_signals"]
-  input_schema1["appsec-review/retrieval-index/2"]
+  producer1["job_target_catalog"]
+  input1["target_artifact_inputs"]
+  input_schema1["appsec-review/target-artifact-intake/1"]
   producer1 --> input1 --> job
   input1 -. schema .-> input_schema1
-  producer2["job_source_history_analysis"]
-  input2["history_documents"]
-  input_schema2["appsec-review/source-history-analysis/2"]
+  producer2["job_target_catalog"]
+  input2["source_files"]
+  input_schema2["appsec-review/retrieval-index/2"]
   producer2 --> input2 --> job
   input2 -. schema .-> input_schema2
-  producer3["job_source_history_analysis"]
-  input3["raw_git_history"]
-  input_schema3["application/octet-stream"]
+  producer3["job_target_catalog"]
+  input3["declaration_symbols"]
+  input_schema3["appsec-review/retrieval-index/2"]
   producer3 --> input3 --> job
   input3 -. schema .-> input_schema3
-  producer4["job_source_history_analysis"]
-  input4["history_tool_io"]
-  input_schema4["appsec-review/container-execution/1"]
+  producer4["job_target_catalog"]
+  input4["components"]
+  input_schema4["appsec-review/retrieval-index/2"]
   producer4 --> input4 --> job
   input4 -. schema .-> input_schema4
   producer5["job_target_catalog"]
-  input5["handoff"]
-  input_schema5["appsec-review/job-handoff/2"]
+  input5["target_documents"]
+  input_schema5["appsec-review/retrieval-index/2"]
   producer5 --> input5 --> job
   input5 -. schema .-> input_schema5
   producer6["job_target_catalog"]
-  input6["target_artifact_inputs"]
-  input_schema6["appsec-review/target-artifact-intake/1"]
+  input6["build_units"]
+  input_schema6["appsec-review/retrieval-index/2"]
   producer6 --> input6 --> job
   input6 -. schema .-> input_schema6
   producer7["job_target_catalog"]
-  input7["source_files"]
-  input_schema7["appsec-review/retrieval-index/2"]
+  input7["catalog_documents"]
+  input_schema7["appsec-review/target-catalog/1"]
   producer7 --> input7 --> job
   input7 -. schema .-> input_schema7
-  producer8["job_target_catalog"]
-  input8["declaration_symbols"]
-  input_schema8["appsec-review/retrieval-index/2"]
+  producer8["job_source_history_analysis"]
+  input8["handoff"]
+  input_schema8["appsec-review/job-handoff/2"]
   producer8 --> input8 --> job
   input8 -. schema .-> input_schema8
-  producer9["job_target_catalog"]
-  input9["components"]
+  producer9["job_source_history_analysis"]
+  input9["history_signals"]
   input_schema9["appsec-review/retrieval-index/2"]
   producer9 --> input9 --> job
   input9 -. schema .-> input_schema9
-  producer10["job_target_catalog"]
-  input10["target_documents"]
-  input_schema10["appsec-review/retrieval-index/2"]
+  producer10["job_source_history_analysis"]
+  input10["history_documents"]
+  input_schema10["appsec-review/source-history-analysis/2"]
   producer10 --> input10 --> job
   input10 -. schema .-> input_schema10
-  producer11["job_target_catalog"]
-  input11["build_units"]
-  input_schema11["appsec-review/retrieval-index/2"]
+  producer11["job_source_history_analysis"]
+  input11["raw_git_history"]
+  input_schema11["application/octet-stream"]
   producer11 --> input11 --> job
   input11 -. schema .-> input_schema11
-  producer12["job_target_catalog"]
-  input12["catalog_documents"]
-  input_schema12["appsec-review/target-catalog/1"]
+  producer12["job_source_history_analysis"]
+  input12["history_tool_io"]
+  input_schema12["appsec-review/container-execution/1"]
   producer12 --> input12 --> job
   input12 -. schema .-> input_schema12
   producer13["job_tree_sitter_ast"]

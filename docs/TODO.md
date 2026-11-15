@@ -2977,6 +2977,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   downstream Tree-sitter consumers on `tree-sitter-normalizer/1` shards, and wires
   `observe_output` in `load_accepted_artifact_security_analysis`, `job_change_context_analysis`
   and `job_review_prioritization`.
+  Wave 3 (`7b1f8817e`) enforces `REQUIRED`/`REJECT` and `WHEN_ENABLED`/`REJECT` envelope
+  admission across `job_build_iteration`, `job_change_context_analysis`, `job_test_coverage`
+  and `job_profile_data`, adds graceful disabled-producer gap publication and verified manifest
+  lineage, and records the read-only eight-job optional-handoff audit.
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:

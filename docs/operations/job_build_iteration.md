@@ -38,7 +38,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | --- | --- | --- | --- | --- | --- |
 | `job_build_environment_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_build_environment_analysis` | `build_environment` | `appsec-review/build-environment-analysis/1` | handoff | optional | gap |
-| `job_project_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_project_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_project_build` | `topology_refinement_inputs` | `appsec-review/build-topology-refinement/1` | handoff | optional | gap |
 | `job_project_build` | `project_build_dispatch` | `appsec-review/project-build-dispatch/3` | handoff | optional | gap |
 | `job_project_build` | `probe_workspaces` | `application/octet-stream` | handoff | optional | gap |
@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_build_iteration/test_controller_recovery.py`<br>`tests/integration/job_build_iteration/test_build_recipe_replay.py`<br>`tests/integration/job_build_iteration/test_build_iteration_executor.py`<br>`tests/integration/job_build_iteration/test_build_iteration_cli.py` |
 | live | None declared |
-| unit | `tests/unit/job_build_iteration/test_contract.py`<br>`tests/unit/job_build_iteration/test_job_graph.py`<br>`tests/unit/job_build_iteration/test_controller.py`<br>`tests/unit/job_build_iteration/test_executor_capture.py`<br>`tests/unit/job_build_iteration/test_workspace_resume.py` |
+| unit | `tests/unit/job_build_iteration/test_contract.py`<br>`tests/unit/job_build_iteration/test_job_graph.py`<br>`tests/unit/job_build_iteration/test_controller.py`<br>`tests/unit/job_build_iteration/test_executor_capture.py`<br>`tests/unit/job_build_iteration/test_workspace_resume.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
 
 ### Dagster placement
 
