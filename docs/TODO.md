@@ -193,6 +193,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5018 | [Configurable cppcheck profile: turn style, performance and portability checks off by default](#t-5018-configurable-cppcheck-profile-turn-style-performance-and-portability-checks-off-by-default) | scanners | open |
 | T-5019 | [Smoke-run verification harness: did the run do the right thing and produce the right things](#t-5019-smoke-run-verification-harness-did-the-run-do-the-right-thing-and-produce-the-right-things) | testing | open |
 | T-5020 | [Repair the five review unit tests broken by merge debt on main](#t-5020-repair-the-five-review-unit-tests-broken-by-merge-debt-on-main) | testing | done (2026-11-14, `scope.py` `evidence_map` ordering + review test/fixture repairs) |
+| T-5021 | [Make the evidence-collection job unit test fast and green again](#t-5021-make-the-evidence-collection-job-unit-test-fast-and-green-again) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2883,6 +2884,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** fix each assertion against the behaviour that is now correct (or the behaviour, where the test is right), keeping the assertions meaningful; find why the reassembly byte differs; make the slow package/unit cases faster or narrower without weakening them.
 - **Done when:** `tests/unit/review_behavior`, `tests/review/test_packages.py`, `tests/review/test_scope.py`, `tests/review/test_units.py` pass shuffled with `-n 4`, and no case in them is over 10 s on an idle host.
 - **Refs:** T-165, T-167, T-5000, T-5008, commits `6f792d04`, `c53039a3`, `54fa8c9b`.
+
+### T-5021 — Make the evidence-collection job unit test fast and green again
+
+- **State:** open
+- **Area:** testing
+- **Why:** `tests/test_evidence_collection_job.py::test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints` runs the whole job graph twice and takes 103 s at `ba7d1fb8`, 126 s on `graph-quality` (`5d0586dd`) and 202 s on the merged main (`1c144707`), ten to twenty times the 10 s unit limit; under `-n 4` the file no longer finishes inside a 300 s window, which read as a hang during the 2026-11-15 integration. It also fails on every tree (`tool-shellcheck` terminal_status is not `FAILED`), as does `test_job_refuses_dispatch_without_graph_target`; both are in the baseline failure list, not merge regressions.
+- **Scope:** fix the two assertions against the behaviour that is now correct; split the long case so each unit test exercises one disposition or reuse path with the heavy job dispatch faked at the container boundary; find what each merged change added to the per-run cost (the T-5016 disposition resolution and the T-5018 profile parsing both run at config load).
+- **Done when:** the file passes alone and under `-n 4 --shuffle-seed=<seed>` with every case under 10 s on an idle host; the two failing cases are green with their assertions intact.
+- **Refs:** T-5020, T-5016, T-5018, `tests/test_evidence_collection_job.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`.
 
 ## Legacy backlog
 
