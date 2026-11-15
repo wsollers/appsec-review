@@ -10,6 +10,7 @@ from typing import Any
 from appsec_review.graph.contract import GRAPH_FACT_SCHEMA, SinkClass, SourceClass, ineligibility_reasons
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError
+from appsec_review.review.dispositions import FIRST_PARTY
 from appsec_review.review.scope import AcceptedScope, ScopeGap
 
 RULE = "appsec-review/behavior-context/1"
@@ -73,6 +74,7 @@ def graph_operations(scope: AcceptedScope, *, limit: int) -> tuple[tuple[Operati
         return (), (ScopeGap("behavior", "run", "missing", "no accepted graph operations; path fallback retained"),)
     groups: dict[tuple[Any, ...], list[Mapping[str, Any]]] = defaultdict(list)
     gaps: list[ScopeGap] = []
+    excluded: dict[str, int] = {}
     for number, row in enumerate(scope.store.entities(shards, kinds=("entry_point", "sink_site"), limit=limit + 1)):
         if number == limit:
             gaps.append(ScopeGap("behavior", "run", "truncated",
@@ -99,6 +101,11 @@ def graph_operations(scope: AcceptedScope, *, limit: int) -> tuple[tuple[Operati
                 or declared.get("build_unit_id") not in (None, build.build_unit_id if build else None)):
             gaps.append(ScopeGap("behavior", identity, "ambiguous", "operation source/component/build ownership unresolved"))
             continue
+        if source.disposition != FIRST_PARTY:
+            # Review units cover first-party files only (T-165); an operation in vendored, sdk, generated
+            # or test code has no unit to attach to and is counted here rather than modelled.
+            excluded[source.disposition] = excluded.get(source.disposition, 0) + 1
+            continue
         first, last = location.get("start_line"), location.get("end_line")
         # ShardSet's bounded location projection omits snapshot; AcceptedScope verified the shard's.
         if (type(first) is not int or type(last) is not int or not 1 <= first <= last
@@ -108,6 +115,10 @@ def graph_operations(scope: AcceptedScope, *, limit: int) -> tuple[tuple[Operati
                location["file_sha256"], first, last, location.get("start_byte"), location.get("end_byte"))
         groups[key].append({"identity": identity, "role": "entry_point" if kind == "entry_point" else "sink",
                             "class": classification})
+    for disposition in sorted(excluded):
+        gaps.append(ScopeGap("behavior", "run", "skipped",
+                             f"{excluded[disposition]} operation facts in {disposition} sources are not "
+                             "reviewed as operations; first-party units only"))
     operations = []
     for key, rows in groups.items():
         component, build, source, path, digest, first, last, *_ = key

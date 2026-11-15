@@ -192,6 +192,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5017 | [Classify network output sinks and make dataflow-path sink classification agree with sink sites](#t-5017-classify-network-output-sinks-and-make-dataflow-path-sink-classification-agree-with-sink-sites) | graph | open |
 | T-5018 | [Configurable cppcheck profile: turn style, performance and portability checks off by default](#t-5018-configurable-cppcheck-profile-turn-style-performance-and-portability-checks-off-by-default) | scanners | open |
 | T-5019 | [Smoke-run verification harness: did the run do the right thing and produce the right things](#t-5019-smoke-run-verification-harness-did-the-run-do-the-right-thing-and-produce-the-right-things) | testing | open |
+| T-5020 | [Repair the five review unit tests broken by merge debt on main](#t-5020-repair-the-five-review-unit-tests-broken-by-merge-debt-on-main) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2873,6 +2874,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** a `scripts/smoke-score.py` (or `appsec-review smoke-score`) that takes a completed run and an answer key the user supplies on the command line, and reports per planted item (true-positive code, true-positive dependency, fixed code, fixed dependency, false positive, high-complexity function): was it a lead, in scope, packaged, claimed, confirmed by the judge, reported, with the citing lines; plus the counts the smoke guide defines (precision/recall over planted items, time per job, model calls, budget use) and the structural checks that need no key (every first-party file appears in a unit, every planted file has facet tags under T-5008, no vendored lead, CodeQL paths eligible). Output is a document under the run and a one-screen summary; it never changes the run.
 - **Done when:** the scorer runs against run `2026-11-14-0005` (or its successor) with the cpp answer key supplied by the user and produces the per-item table and the structural checks; unit tests cover the scorer with a synthetic run and key; `docs/operations/test-targets.md` documents its use.
 - **Refs:** `docs/operations/test-targets.md`, `~/smoke-work/tools/answer-key-schema.md` (host-local), `src/appsec_review/reporting/`, T-134, T-5016.
+
+### T-5020 — Repair the five review unit tests broken by merge debt on main
+
+- **State:** open
+- **Area:** testing
+- **Why:** On main at `54fa8c9b` (after merging first-party-scope, package-context, owasp-value and collation-pass) five unit tests fail independently of any run fix, each at HEAD with and without the fault-16 change: `tests/unit/review_behavior/test_contract_and_view.py::test_central_bounds_reach_the_real_package_settings` pins `RANK_RULE` `/3` and `ASSEMBLY_RULE` `/13` (now `/4` and `/14`); `tests/unit/review_behavior/test_handler_wiring.py::test_real_assembly_handler_supplies_original_core_and_preserves_cutoff_sources[lead|hunt]` stubs `collect_leads` with a lambda that does not accept the T-167 `filters` keyword; `tests/review/test_packages.py::test_reassembly_and_shuffled_inputs_are_byte_identical` differs at one byte of the admission record; `tests/review/test_scope.py::test_swapped_manifest_blocks_acceptance` expects `manifest integrity mismatch` but acceptance now raises `accepted index set failed verification: target evidence integrity mismatch`. The `tests/review/test_packages.py` and `tests/review/test_units.py` cases also take 35-45 s each on a loaded host, over the 10 s unit limit.
+- **Scope:** fix each assertion against the behaviour that is now correct (or the behaviour, where the test is right), keeping the assertions meaningful; find why the reassembly byte differs; make the slow package/unit cases faster or narrower without weakening them.
+- **Done when:** `tests/unit/review_behavior`, `tests/review/test_packages.py`, `tests/review/test_scope.py`, `tests/review/test_units.py` pass shuffled with `-n 4`, and no case in them is over 10 s on an idle host.
+- **Refs:** T-165, T-167, T-5000, T-5008, commits `6f792d04`, `c53039a3`, `54fa8c9b`.
 
 ## Legacy backlog
 

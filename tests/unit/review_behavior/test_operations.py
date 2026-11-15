@@ -62,6 +62,21 @@ def test_ineligible_facts_leave_a_named_gap_not_an_operation(change):
     assert not operations and len(gaps) == 1
 
 
+def test_vendored_operation_facts_are_counted_not_modelled_and_units_still_build():
+    """Regression for smoke-cpp run 2026-11-14-0007: CodeQL sink sites in vendored files became operations,
+    but fallback units cover first-party files only (T-165), so package assembly raised "operation does not
+    belong to exactly one fallback review unit"."""
+    vendored = SourceFile("third_party/lib.cpp", "src:vendored", "C++", disposition="vendored")
+    row = graph_row()
+    row["location"]["path"] = vendored.path
+    scope = Scope(graph=[graph_row(), row], extra_sources=(vendored,))
+    operations, gaps = graph_operations(scope, limit=10)
+    assert [operation.path for operation in operations] == [PATH]
+    assert len(gaps) == 1 and gaps[0].state == "skipped" and "1 operation facts in vendored" in gaps[0].reason
+    units = build_units(scope, collection(), unit_max_files=4, operations=operations)
+    assert all(vendored.path not in unit.paths for unit in units)
+
+
 @pytest.mark.parametrize("field,value", [("start_line", 0), ("end_line", 1), ("start_line", True),
                                        ("target_snapshot", "foreign")])
 def test_invalid_accepted_source_identity_is_integrity_failure(field, value):
