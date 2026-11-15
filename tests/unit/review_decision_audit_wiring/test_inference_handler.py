@@ -86,7 +86,7 @@ def test_publication_passes_actual_collection_triage_pins_and_chain_cells_withou
     collection = LeadCollection(() if population == "empty" else (lead,), (), {}, None)
     collector_calls = []
 
-    def collect(scope, assessments, *, filters):
+    def collect(scope, assessments, *, filters=None):
         collector_calls.append((scope, assessments, filters))
         return collection
 
@@ -148,7 +148,7 @@ def test_only_named_unavailability_publishes_descriptor_and_honest_status(
     f = publication_fixture(tmp_path, monkeypatch, enabled=detail != "disabled", status=status, incomplete=incomplete)
     collection = LeadCollection((), (), {}, None)
     collector_calls = []
-    monkeypatch.setattr(job, "collect_leads", lambda *args, **kwargs: collector_calls.append(args) or collection)
+    monkeypatch.setattr(job, "collect_leads", lambda *args, **kwargs: collector_calls.append((args, kwargs)) or collection)
 
     def unavailable(**kwargs):
         assert (f.root / kwargs["inputs"].handoff["path"]).read_bytes() == f.handoff_bytes

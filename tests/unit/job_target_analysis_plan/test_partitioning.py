@@ -15,13 +15,18 @@ from appsec_review.jobs.build_discovery import discover_build_units
 from appsec_review.jobs.job_target_analysis_plan import build_job
 from appsec_review.jobs.job_target_analysis_plan.job import _verify_source_topology
 from appsec_review.jobs.job_target_analysis_plan.planning import (
-    PROPOSAL_SCHEMA, ambiguity_reasons, bounded_feedback, deterministic_plan,
-    prepare_feedback_request, summarize_catalog, validate_plan,
+    PROPOSAL_SCHEMA,
+    ambiguity_reasons,
+    bounded_feedback,
+    deterministic_plan,
+    prepare_feedback_request,
+    summarize_catalog,
+    validate_plan,
 )
 from appsec_review.storage import canonical_json
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def _catalog(count=14, padding=8000):
@@ -48,7 +53,8 @@ def _catalog(count=14, padding=8000):
     }
 
 
-def _resolve(tmp_path, catalog, *, limits=None, max_input_tokens=200000, abstain=False):
+def _resolve(tmp_path, catalog, *, limits=None, max_input_tokens=200000, abstain=False,
+             enabled=True, custom_infer="default", target_root=None, repository_root=None):
     limits = limits or PlanningFeedbackSettings()
     summary = summarize_catalog(catalog, max_items=2000, max_bytes=524288, sample_per_prefix=20)
     plan = deterministic_plan(catalog, summary)
@@ -61,7 +67,7 @@ def _resolve(tmp_path, catalog, *, limits=None, max_input_tokens=200000, abstain
     }
     requests = []
 
-    def infer(request, *, timeout_seconds):
+    def default_infer(request, *, timeout_seconds):
         requests.append(request)
         assert timeout_seconds > 0
         assert len(canonical_json(asdict(request))) <= min(limits.max_request_bytes, max_input_tokens * 4)
@@ -82,16 +88,20 @@ def _resolve(tmp_path, catalog, *, limits=None, max_input_tokens=200000, abstain
         return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "component_proposals": [],
                             "build_recipes": recipes, "hints": [], "abstentions": []})
 
-    job = build_job(infer=infer)
+    infer_fn = default_infer if custom_infer == "default" else custom_infer
+    job = build_job(infer=infer_fn)
+    job_ns = SimpleNamespace(
+        config=SimpleNamespace(settings={"feedback": asdict(limits), "model": {
+            "enabled": enabled, "provider": "offline-scripted", "model": "synthetic/1", "reasoning": "low",
+            "max_input_tokens": max_input_tokens, "max_output_tokens": 64000,
+            "retries": 1, "timeout_seconds": 300, "workers": 2}}),
+        tools=SimpleNamespace(enable_swift=False), repository_root=repository_root or ROOT, run_root=tmp_path,
+        run_id="synthetic-byte-partitions", attempt_id="attempt_0001", target_root=target_root,
+    )
     unit = SimpleNamespace(
         unit_id="analysis_decisions.resolve_ambiguity", output=outputs.__getitem__,
-        job=SimpleNamespace(
-            config=SimpleNamespace(settings={"feedback": asdict(limits), "model": {
-                "enabled": True, "provider": "offline-scripted", "model": "synthetic/1", "reasoning": "low",
-                "max_input_tokens": max_input_tokens, "max_output_tokens": 64000,
-                "retries": 3, "timeout_seconds": 300, "workers": 2}}),
-            tools=SimpleNamespace(enable_swift=False), repository_root=ROOT, run_root=tmp_path,
-            run_id="synthetic-byte-partitions", attempt_id="attempt_0001", target_root=None))
+        job=job_ns,
+    )
     result = next(item for item in job.units if item.unit_id == unit.unit_id).handler(unit)
     validate_plan(result["plan"], catalog)
     _verify_source_topology(canonical_json(result["plan"]))
@@ -285,3 +295,118 @@ def test_byte_splitting_retains_family_system_and_image_profile_boundaries(tmp_p
         ("node", "node", "node"), ("node", "node", "node")]
     assert sorted(unit_id for request in requests for unit_id in request.allowed_build_units) == sorted(
         unit["build_unit_id"] for unit in catalog["build_units"])
+
+
+def test_resolve_ambiguity_handles_not_needed_disabled_unavailable_failed_and_document_reads(tmp_path):
+    # 1. No ambiguities -> NOT_NEEDED
+    plain_catalog = {
+        "source_fingerprint": "plain", "catalog_handoff_sha256": "c" * 64,
+        "files": [{"path": "README.md", "sha256": "1" * 64, "size_bytes": 5, "language": "Markdown"}],
+        "components": [{"component_id": "component:0001", "root": ".", "manifest": None}],
+        "projects": [], "build_files": [], "build_units": [], "gaps": [],
+        "accepted_artifacts": [], "compile_databases": [],
+    }
+    res_plain, _ = _resolve(tmp_path / "plain", plain_catalog)
+    assert res_plain["plan"]["model"]["status"] == "NOT_NEEDED"
+
+    # 2.Disabled model -> DISABLED + named gap
+    cat_one = _catalog(1, padding=0)
+    res_disabled, _ = _resolve(tmp_path / "disabled", cat_one, enabled=False)
+    assert res_disabled["plan"]["model"]["status"] == "DISABLED"
+    assert any("model is disabled" in g for g in res_disabled["gaps"])
+
+    # 3. infer is None -> UNAVAILABLE + named gap
+    res_unavail, _ = _resolve(tmp_path / "unavail", cat_one, custom_infer=None)
+    assert res_unavail["plan"]["model"]["status"] == "UNAVAILABLE"
+    assert any("model is unavailable" in g for g in res_unavail["gaps"])
+
+    # 4. Ambiguity present (generated/vendor gap) + only Unity build units -> NOT_NEEDED
+    unity_text = "scriptingBackend: 1\n"
+    unity_file = {
+        "path": "game/ProjectSettings/ProjectSettings.asset",
+        "sha256": hashlib.sha256(unity_text.encode()).hexdigest(),
+        "size_bytes": len(unity_text),
+    }
+    unity_unit = {
+        "build_unit_id": "unity-1",
+        "root": "game",
+        "family": "dotnet",
+        "build_system": "unity",
+        "required_image_profile": "dotnet",
+        "markers": [{"path": unity_file["path"], "sha256": unity_file["sha256"]}],
+        "descriptor_package": {"documents": [{**unity_file, "content": unity_text}], "bounds": {}, "gaps": []},
+    }
+    unity_catalog = {
+        "source_fingerprint": "unity", "catalog_handoff_sha256": "c" * 64,
+        "files": [unity_file], "components": [], "projects": [], "build_files": [],
+        "build_units": [unity_unit], "gaps": ["generated exclusion"],
+        "accepted_artifacts": [], "compile_databases": [],
+    }
+    res_unity, _ = _resolve(tmp_path / "unity", unity_catalog)
+    assert res_unity["plan"]["model"]["status"] == "NOT_NEEDED"
+
+    # 5. All groups fail -> FAILED
+    res_failed, _ = _resolve(
+        tmp_path / "failed",
+        cat_one,
+        custom_infer=lambda *_a, **_kw: (_ for _ in ()).throw(TimeoutError("timeout")),
+    )
+    assert res_failed["plan"]["model"]["status"] == "FAILED"
+
+    # 6. infer_group read_document: target_root=None raises ValueError; real target_root reads file bytes
+    note_bytes = b"additive planning note\n"
+    note_file = {"path": "node-00/note.txt", "sha256": hashlib.sha256(note_bytes).hexdigest(), "size_bytes": len(note_bytes)}
+    cat_ev = _catalog(1, padding=0)
+    cat_ev["files"].append(note_file)
+    with pytest.raises(ValueError, match="planning evidence source custody is missing"):
+        _resolve(
+            tmp_path / "no-target",
+            cat_ev,
+            custom_infer=lambda _req, **_kw: ModelResult({
+                "schema": PROPOSAL_SCHEMA,
+                "action": "need_evidence",
+                "requests": [{"path": note_file["path"], "sha256": note_file["sha256"], "reason": "read note"}],
+            }),
+            target_root=None,
+        )
+
+    target = tmp_path / "real-target"
+    (target / "node-00").mkdir(parents=True)
+    (target / "node-00/note.txt").write_bytes(note_bytes)
+    seen = []
+
+    def ev_infer(req, *, timeout_seconds):
+        seen.append(req)
+        if len(seen) == 1:
+            return ModelResult({
+                "schema": PROPOSAL_SCHEMA,
+                "action": "need_evidence",
+                "requests": [{"path": note_file["path"], "sha256": note_file["sha256"], "reason": "read note"}],
+            })
+        unit = req.summary["build_units"][0]
+        return ModelResult({
+            "schema": PROPOSAL_SCHEMA,
+            "action": "final",
+            "component_proposals": [],
+            "build_recipes": [{
+                "schema": "appsec-review/build-recipe/1",
+                "build_unit_id": unit["build_unit_id"],
+                "image_profile": "node",
+                "source_dir": unit["root"],
+                "build_dir": unit["root"] + "/build",
+                "system_packages": [],
+                "environment": {},
+                "dependency_files": [m["path"] for m in unit["markers"]],
+                "configure_commands": [],
+                "build_commands": [["npm", "run", "build"]],
+                "expected_outputs": [unit["root"] + "/build"],
+                "network_required": True,
+                "reason": "accepted after evidence read",
+            }],
+            "hints": [],
+            "abstentions": [],
+        })
+
+    res_ev, _ = _resolve(tmp_path / "with-target", cat_ev, custom_infer=ev_infer, target_root=target)
+    assert res_ev["plan"]["model"]["status"] == "ACCEPTED"
+    assert res_ev["plan"]["planning_evidence"][0]["path"] == "node-00/note.txt"

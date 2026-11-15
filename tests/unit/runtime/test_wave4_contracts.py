@@ -39,6 +39,15 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def _seed_env_run(tmp_path: Path, *, mode: str = "strict"):
+    from dataclasses import replace as dc_replace
+    import hashlib
+    from appsec_review.jobs.job_review_intake.datasets import DATASETS as INTAKE_DATASETS
+    from appsec_review.jobs.job_target_catalog.datasets import DATASETS as CATALOG_DATASETS
+    from appsec_review.retrieval import EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, write_manifest
+    from appsec_review.runtime.datasets import dataset_contract
+    from appsec_review.storage import atomic_json, file_sha256
+    from tests.handoff_fixture import write_fixture_handoff
+
     config_path = tmp_path / "appsec-review.toml"
     target = tmp_path / "target"
     target.mkdir()
@@ -56,24 +65,106 @@ def _seed_env_run(tmp_path: Path, *, mode: str = "strict"):
     )
     config_path.write_bytes(text.encode("utf-8"))
     config = load_config(config_path)
-    (target / "setup.sh").write_bytes(b"SDK_ROOT=tools/sdk\n")
+    setup_bytes = b"SDK_ROOT=tools/sdk\n"
+    (target / "setup.sh").write_bytes(setup_bytes)
     fp = source_fingerprint(target)
     runner = JobRunner(config)
     run_id, run_root = RunStore(config.runtime.runs_dir).create(datetime.now(timezone.utc))
-    intake = runner.run(build_intake(), run_id=run_id, target_root=target, source_fingerprint=fp)
-    catalog = runner.run(
-        build_catalog(),
-        run_id=run_id,
-        target_root=target,
-        source_fingerprint=fp,
-        upstream_handoffs={"job_review_intake": intake["handoff_sha256"]},
-    )
+    runner._bind_configuration(run_root)
+
+    def _ref(rel: str, payload: dict) -> dict:
+        p = run_root / rel
+        atomic_json(p, payload)
+        return {"path": rel, "sha256": file_sha256(p), "size_bytes": p.stat().st_size}
+
+    intake_att = run_root / "data/jobs/job_review_intake/attempts/attempt_0001"
+    intake_decls = tuple(dc_replace(d, required=False) for d in INTAKE_DATASETS)
+    atomic_json(intake_att / "claim.json", {
+        "dataset_contract": dataset_contract("job_review_intake", sorted({d.step for d in intake_decls}), intake_decls),
+    })
+    intake_doc = _ref("data/jobs/job_review_intake/attempts/attempt_0001/artifacts/intake.json", {
+        "schema": "appsec-review/review-intake/1", "source_fingerprint": fp,
+    })
+    intake_hp = write_fixture_handoff(run_root, intake_att / "handoff.json", {
+        "job_id": "job_review_intake", "source_fingerprint": fp,
+        "outputs": {"intake_publication.publish_handoff": {"artifact": intake_doc}},
+    })
+    intake_sha = file_sha256(intake_hp)
+    atomic_json(intake_att.parent.parent / "latest.json", {
+        "schema": "appsec-review/latest-handoff/1", "attempt_id": "attempt_0001",
+        "handoff_path": intake_hp.relative_to(run_root).as_posix(), "handoff_sha256": intake_sha,
+    })
+    intake = {"handoff_sha256": intake_sha, "handoff": json.loads(intake_hp.read_bytes())}
+
+    cat_att = run_root / "data/jobs/job_target_catalog/attempts/attempt_0001"
+    cat_decls = tuple(dc_replace(d, required=False) for d in CATALOG_DATASETS)
+    atomic_json(cat_att / "claim.json", {
+        "dataset_contract": dataset_contract("job_target_catalog", sorted({d.step for d in cat_decls}), cat_decls),
+    })
+    part = _ref("data/jobs/job_target_catalog/partition.json", {
+        "schema": "appsec-review/repository-partition/1", "source_fingerprint": fp,
+        "files": [{"path": "setup.sh", "sha256": hashlib.sha256(setup_bytes).hexdigest(), "size_bytes": len(setup_bytes), "language": "Shell"}],
+        "gaps": [],
+    })
+    proj = _ref("data/jobs/job_target_catalog/projects.json", {"schema": "appsec-review/project-catalog/1", "projects": [], "gaps": []})
+    comp = _ref("data/jobs/job_target_catalog/components.json", {
+        "schema": "appsec-review/component-catalog/1",
+        "components": [{"component_id": "component:0001", "root": ".", "manifest": None}], "gaps": [],
+    })
+    builds = _ref("data/jobs/job_target_catalog/builds.json", {"schema": "appsec-review/build-systems/4", "systems": [], "source_only_scopes": [], "gaps": []})
+    comp_db = _ref("data/jobs/job_target_catalog/compile-db.json", {"schema": "appsec-review/compile-commands/1", "files": [], "gaps": []})
+    targets_ref = _ref("data/jobs/job_target_catalog/targets.json", {"schema": "appsec-review/build-targets/2", "targets": [], "gaps": []})
+    cat_ref = _ref("data/jobs/job_target_catalog/attempts/attempt_0001/artifacts/catalog/target-catalog.json", {
+        "schema": "appsec-review/target-catalog/1", "source_fingerprint": fp,
+        "artifacts": {
+            "repository_discovery.partition_repository": part,
+            "repository_discovery.discover_projects": proj,
+            "component_discovery.catalog_components": comp,
+            "build_discovery.discover_build_systems": builds,
+            "build_discovery.discover_compile_commands": comp_db,
+            "build_discovery.catalog_build_targets": targets_ref,
+        },
+    })
+    sqlite_path = run_root / "data/indices/source/target-catalog-fixture.sqlite"
+    builder = IndexBuilder(sqlite_path, name="source", fingerprint="e" * 64, target_snapshot=fp, shard_id="target-catalog-files")
+    setup_entry = {"path": "setup.sh", "sha256": hashlib.sha256(setup_bytes).hexdigest(), "size_bytes": len(setup_bytes), "language": "Shell"}
+    sid = LogicalIdentity.derive(EntityKind.SOURCE_FILE, fp, {"path": setup_entry["path"], "sha256": setup_entry["sha256"]})
+    builder.add_entity(EntityRecord(sid, setup_entry["path"], "source_file", setup_entry["path"], setup_entry))
+    builder.add_coverage("catalog", "complete", None)
+    sqlite_sha = builder.build()
+    shard_id = IndexIdentity("source", "appsec-review/retrieval-index/2", sqlite_sha, "e" * 64,
+                             sqlite_path.relative_to(run_root).as_posix(), {"job": "job_target_catalog"}, (), "target-catalog-files")
+    manifest_path = run_root / "data/indices/manifests/target-catalog.json"
+    write_manifest(manifest_path, run_id=run_id, target_snapshot=fp, target_root=target, indexes=[shard_id])
+    manifest_ref = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
+    sqlite_ref = {"path": sqlite_path.relative_to(run_root).as_posix(), "sha256": sqlite_sha, "size_bytes": sqlite_path.stat().st_size}
+    cat_hp = write_fixture_handoff(run_root, cat_att / "handoff.json", {
+        "job_id": "job_target_catalog", "source_fingerprint": fp,
+        "upstream_handoff_sha256": {"job_review_intake": intake_sha},
+        "artifacts": [part, proj, comp, builds, comp_db, targets_ref, cat_ref, manifest_ref, sqlite_ref],
+        "outputs": {"publish_catalog.publish_handoff": {"artifact": cat_ref, "index_manifest": manifest_ref}},
+    })
+    cat_sha = file_sha256(cat_hp)
+    atomic_json(cat_att.parent.parent / "latest.json", {
+        "schema": "appsec-review/latest-handoff/1", "attempt_id": "attempt_0001",
+        "handoff_path": cat_hp.relative_to(run_root).as_posix(), "handoff_sha256": cat_sha,
+    })
+    atomic_json(run_root / "data/indices/accepted.json", {
+        "schema": "appsec-review/accepted-index-set/1",
+        "run_id": run_id,
+        "handoff_path": cat_hp.relative_to(run_root).as_posix(),
+        "handoff_sha256": cat_sha,
+        "manifest_path": manifest_path.relative_to(run_root).as_posix(),
+        "manifest_sha256": manifest_ref["sha256"],
+    })
+    catalog = {"handoff_sha256": cat_sha, "handoff": json.loads(cat_hp.read_bytes())}
+
     env_out = runner.run(
         build_env(),
         run_id=run_id,
         target_root=target,
         source_fingerprint=fp,
-        upstream_handoffs={"job_target_catalog": catalog["handoff_sha256"]},
+        upstream_handoffs={"job_target_catalog": cat_sha},
     )
     return config, runner, run_id, run_root, target, fp, intake, catalog, env_out
 

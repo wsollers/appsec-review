@@ -6442,11 +6442,15 @@
       "tests": {
         "acceptance": [],
         "integration": [
-          "tests/integration/test_build_topology_environment_lifecycle.py"
+          "tests/integration/test_build_topology_environment_lifecycle.py",
+          "tests/integration/job_build_environment_analysis/test_build_environment_graph.py",
+          "tests/integration/job_build_environment_analysis/test_build_environment_job_graph.py"
         ],
         "live": [],
         "unit": [
-          "tests/test_build_environment_analysis.py",
+          "tests/unit/job_build_environment_analysis/test_analysis.py",
+          "tests/unit/job_build_environment_analysis/test_contract.py",
+          "tests/unit/job_build_environment_analysis/test_handlers.py",
           "tests/unit/runtime/test_wave4_contracts.py"
         ]
       },
@@ -7495,12 +7499,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_change_context_analysis/test_change_context_graph.py"
+        ],
         "live": [],
         "unit": [
-          "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
-          "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
-          "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push",
+          "tests/unit/job_change_context_analysis/test_attribution.py",
+          "tests/unit/job_change_context_analysis/test_contract.py",
+          "tests/unit/job_change_context_analysis/test_handlers.py",
+          "tests/unit/job_change_context_analysis/test_metrics.py",
+          "tests/unit/job_change_context_analysis/test_settings_and_sources.py",
           "tests/unit/runtime/test_wave2_consumers.py",
           "tests/unit/runtime/test_wave3_contracts.py"
         ]
@@ -39452,12 +39460,15 @@
       "strict_gaps": true,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_target_acquisition/test_target_acquisition.py"
+        ],
         "live": [],
         "unit": [
-          "tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets",
-          "tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories",
-          "tests/test_target_acquisition.py::test_url_and_path_safety_primitives",
+          "tests/unit/job_target_acquisition/test_configuration.py",
+          "tests/unit/job_target_acquisition/test_contract.py",
+          "tests/unit/job_target_acquisition/test_handlers.py",
+          "tests/unit/job_target_acquisition/test_job_graph.py",
           "tests/unit/runtime/test_wave1a_contracts.py"
         ]
       },
@@ -39975,11 +39986,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_target_analysis_plan/test_target_analysis_plan_graph.py"
+        ],
         "live": [],
         "unit": [
-          "tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable",
-          "tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap",
+          "tests/unit/job_target_analysis_plan/test_contract.py",
+          "tests/unit/job_target_analysis_plan/test_partitioning.py",
+          "tests/unit/job_target_analysis_plan/test_planning.py",
+          "tests/unit/job_target_analysis_plan/test_feedback.py",
+          "tests/unit/job_target_analysis_plan/test_handlers.py",
           "tests/unit/runtime/test_wave4_contracts.py"
         ]
       },
@@ -40262,7 +40278,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.build_targets",
               "id": "build_discovery.catalog_build_targets",
               "internal_tools": [],
-              "line": 266,
+              "line": 388,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40280,7 +40296,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.build_systems",
               "id": "build_discovery.discover_build_systems",
               "internal_tools": [],
-              "line": 218,
+              "line": 312,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40298,7 +40314,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.compile_commands",
               "id": "build_discovery.discover_compile_commands",
               "internal_tools": [],
-              "line": 258,
+              "line": 376,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40322,7 +40338,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.components",
               "id": "component_discovery.catalog_components",
               "internal_tools": [],
-              "line": 294,
+              "line": 419,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40340,7 +40356,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.dependencies",
               "id": "component_discovery.catalog_dependencies",
               "internal_tools": [],
-              "line": 306,
+              "line": 431,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40367,7 +40383,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.publish",
               "id": "publish_catalog.publish_handoff",
               "internal_tools": [],
-              "line": 568,
+              "line": 761,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40388,7 +40404,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.validate_catalog",
               "id": "publish_catalog.validate_catalog",
               "internal_tools": [],
-              "line": 555,
+              "line": 747,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40412,7 +40428,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.census",
               "id": "repository_discovery.census_languages",
               "internal_tools": [],
-              "line": 186,
+              "line": 271,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40431,7 +40447,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.projects",
               "id": "repository_discovery.discover_projects",
               "internal_tools": [],
-              "line": 193,
+              "line": 278,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40447,7 +40463,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.partition",
               "id": "repository_discovery.partition_repository",
               "internal_tools": [],
-              "line": 143,
+              "line": 223,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40471,7 +40487,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.component_index",
               "id": "retrieval_indexes.build_component_index",
               "internal_tools": [],
-              "line": 437,
+              "line": 599,
               "pool": "index",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40489,7 +40505,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.path_index",
               "id": "retrieval_indexes.build_path_index",
               "internal_tools": [],
-              "line": 339,
+              "line": 483,
               "pool": "index",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40507,7 +40523,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.symbol_index",
               "id": "retrieval_indexes.build_symbol_index",
               "internal_tools": [],
-              "line": 379,
+              "line": 530,
               "pool": "index",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40525,7 +40541,7 @@
               "handler": "appsec_review.jobs.job_target_catalog.job.build_job.<locals>.document_index",
               "id": "retrieval_indexes.build_target_documents",
               "internal_tools": [],
-              "line": 458,
+              "line": 620,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_target_catalog/job.py",
@@ -40538,16 +40554,25 @@
           "workers": 1
         }
       },
-      "strict_gaps": false,
+      "strict_gaps": true,
       "tests": {
         "acceptance": [],
         "integration": [
-          "tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent"
+          "tests/integration/job_target_catalog/test_catalog_graph.py",
+          "tests/integration/job_target_catalog/test_catalog_path_graph.py",
+          "tests/integration/job_target_catalog/test_catalog_documents_graph.py"
         ],
         "live": [],
         "unit": [
-          "tests/test_cataloging_languages.py",
-          "tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps"
+          "tests/unit/job_target_catalog/test_cataloging_languages.py",
+          "tests/unit/job_target_catalog/test_contract.py",
+          "tests/unit/job_target_catalog/test_descriptor_discovery.py",
+          "tests/unit/job_target_catalog/test_discovery.py",
+          "tests/unit/job_target_catalog/test_documents.py",
+          "tests/unit/job_target_catalog/test_graph.py",
+          "tests/unit/job_target_catalog/test_helpers.py",
+          "tests/unit/job_target_catalog/test_indexes.py",
+          "tests/unit/runtime/test_wave5_contracts.py"
         ]
       },
       "workers": 1
@@ -44367,9 +44392,9 @@
     "src/appsec_review/jobs/job_target_analysis_plan/datasets.py": "b6f5aea56dcace2f9756f5f754b5df3fea3b3db2a7719cb127c041362c20b1a1",
     "src/appsec_review/jobs/job_target_analysis_plan/job.py": "8b8fc52fef1bef720fb72a0f7354f0c956585adeb4b822479072c6394fe2c863",
     "src/appsec_review/jobs/job_target_analysis_plan/planning.py": "f28b789a77b2acb1fec172b41c506a1f5f522461af9495ee53d8cd28d13780b4",
-    "src/appsec_review/jobs/job_target_catalog/__init__.py": "fa68dfe0297a7bbe3c80c6cdb43d651673c744830c0950bbc9442a4cf0fc0c18",
+    "src/appsec_review/jobs/job_target_catalog/__init__.py": "fc1aa1e0b9ea058c4686c49636311e4c6f06ba8508b02ec8c44aa90364705793",
     "src/appsec_review/jobs/job_target_catalog/datasets.py": "82c2f4b0829c28b4e9e7241bdc32c725ad04d9a56c828a06df39ff909fbc69e6",
-    "src/appsec_review/jobs/job_target_catalog/job.py": "9cf57cbcc7fefc1beceda16cb280e9566071887fb4f911085d6e6a3969af87fa",
+    "src/appsec_review/jobs/job_target_catalog/job.py": "98dcd101479f163f35a2b8bce7ad1a11aaec1fac7dd2368c6402772dd5b591ba",
     "src/appsec_review/jobs/job_test_coverage/__init__.py": "9098dc06c1c41b5a5dfc533c7667b75df1d6ba722b103bbd824f1c4d9a730b64",
     "src/appsec_review/jobs/job_test_coverage/datasets.py": "66c004f194bbd0cad06050637c2f25d887997da09687e305212b342f01bcb163",
     "src/appsec_review/jobs/job_test_coverage/job.py": "fe778027a28c62559006aa3241f18586a372a4ba8d5ba6902bda22e3bf27405a",
@@ -44693,7 +44718,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "b851f9d99cb4f990d6e132a5691fcb308c97cfcf21781e50c9889ba1cf646ecd"
+    "tests/job-test-map.json": "198a757fc6aba3aceacbde239911c7e3ce7871f1f2bedb0b665a20abc5257f4e"
   },
   "tool_policy": {
     "disable_grype": true,

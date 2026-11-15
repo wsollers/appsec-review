@@ -62,7 +62,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | done (2026-11-12, branch t052-docker-engine-tests; moved to tests/integration and tests/live, see Refs) |
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | done (2026-11-11, 962ed773) |
-| T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
+| T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | done (2026-11-15, 4ea6146a7) |
 | T-056 | [Build discovery test program: build points, total assignment, case matrix](#t-056-build-discovery-test-program-build-points-total-assignment-case-matrix) | topology | open |
 | T-060 | [Track findings across revisions with a stable identity](#t-060-track-findings-across-revisions-with-a-stable-identity) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
 | T-061 | [Verify a fix by re-checking the prior finding](#t-061-verify-a-fix-by-re-checking-the-prior-finding) | review | in-progress |
@@ -848,7 +848,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-055 — Catalog gaps as records so job_target_catalog can be strict
 
-- **State:** open
+- **State:** done (2026-11-15, 4ea6146a7)
 - **Area:** topology
 - **Why:** `job_target_catalog` emits free-text and `{path, reason}` gaps from the inventory,
   engine discovery, unsupported-build detection and the four retrieval-index builders
@@ -2991,13 +2991,29 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   433 cases: contract, acquisition, parsing, configuration, signals, indexes and publication;
   31 graph cases preserved in `tests/integration/job_source_history_analysis/`, 12 old claims
   replaced by named code-level tests; one unreachable line and six defensive/unreachable
-  branches individually explained in the host-local report). The unit manager resumed in
-  registry order; job_target_acquisition is blocked on its published `/2` versus declared `/1`
-  schema mismatch, and job_target_catalog is blocked on the typed-gap migration in T-055.
+  branches individually explained in the host-local report);   job_target_acquisition (4 unit files, 85 cases plus shared Wave 1a contract suite: contract,
+  configuration, graph and handlers; 6 graph cases preserved in
+  `tests/integration/job_target_acquisition/`; 113/113 job-package lines and 24/24 branches
+  covered); job_target_catalog (8 unit files, 123 cases plus shared Wave 5 contract suite:
+  contract, languages, descriptor bounds, discovery, documents, graph, helpers and indexes;
+  3 graph files preserved in `tests/integration/job_target_catalog/`; 496/496 job-package lines
+  and 150/150 branches covered); job_change_context_analysis (5 unit files, 29 cases plus shared
+  Wave 2 and Wave 3 contract suites: contract, attribution, handlers, metrics and
+  settings/sources; 3 graph cases preserved in `tests/integration/job_change_context_analysis/`;
+  1349/1349 job-package lines and 476/476 branches covered); job_build_environment_analysis
+  (3 unit files, 54 cases plus shared Wave 4 contract suite: contract, static script analysis,
+  validators and handlers; 12 graph cases and `_published` helper preserved in
+  `tests/integration/job_build_environment_analysis/`; 274/274 job-package lines and 121/122
+  branches covered, with one unreachable FIFO revisit branch documented in the host-local report);
+  job_target_analysis_plan (5 unit files, 143 cases plus shared Wave 4 contract suite: contract,
+  partitioning, planning, feedback and handlers; 16 whole-graph cases preserved in
+  `tests/integration/job_target_analysis_plan/`; 975/1002 job-package lines (97.31%) and 395/418
+  branches (94.50%) covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
-  The remaining 29-job inventory is paused for approved bounded repair waves. Wave 1a
-  (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
+  Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
+  remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
+  consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
   Wave 1c (`4b875e0ea`) aligns image-repair proposal validation and its JSON schema on
@@ -3015,6 +3031,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   verification, repair-context reproduction, downstream plan-consumer propagation, and observed
   `handoff` plus `build_environment` read receipts across `job_build_environment_analysis` and
   `job_target_analysis_plan`.
+  Wave 5 (`4ea6146a7`) migrates `job_target_catalog` to `strict_gaps=True` with `producer-gap/1`
+  records, resolving `gap_id` SQLite coverage rows, and typed `CatalogError` classes (`T-055`
+  done), and establishes that unit-tier gap assertions follow each job's registered
+  `strict_gaps` contract (`producer-gap/1` when strict, normalized `legacy` publication while
+  explicitly listed on `LEGACY_FREE_TEXT_GAPS` pending `T-089`).
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:

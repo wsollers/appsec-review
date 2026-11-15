@@ -1,6 +1,6 @@
-"""job_target_catalog through the real runner over the topology fixture monorepo.
+"""Pre-walk suite pending replacement: job_target_catalog whole-graph integration.
 
-Unit tests: the real configuration, the real GraphRunner (intake as the producer, built without a
+The the real configuration, the real GraphRunner (intake as the producer, built without a
 provider check), the committed fixture under test/topology/monorepo as the target. No Docker, no
 model, no network. Discovery's own decisions are unit-tested in tests/test_build_discovery.py; this
 file proves what the published catalog carries for a monorepo and how the job fails and reports.
@@ -23,7 +23,7 @@ from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "test" / "topology" / "monorepo"
 JOB_ID = "job_target_catalog"
 
@@ -124,7 +124,7 @@ def test_a_failing_unit_fails_the_attempt_keeps_upstream_evidence_and_publishes_
     step, task = unit_id.split(".")
     receipt = json.loads(next(run_root.rglob(f"jobs/{JOB_ID}/attempts/*/steps/{step}/tasks/{task}/status.json"))
                          .read_text(encoding="utf-8"))
-    assert receipt["status"] == "FAILED" and receipt["error"]["type"] == "RuntimeError"
+    assert receipt["status"] == "FAILED" and receipt["error"]["type"] == "TargetCatalogFailed"
     if unit_id != "repository_discovery.partition_repository":
         # Units the failed one did not depend on still ran and left their artifacts.
         assert next(run_root.rglob(f"jobs/{JOB_ID}/attempts/*/**/repository-partition.json")).is_file()
@@ -165,7 +165,7 @@ def test_configured_topology_matches_the_job() -> None:
     built = build_catalog()
     # Units are ordered by dependency (discover_projects follows discover_build_systems); the set matches.
     assert {unit.unit_id for unit in built.units} == {f"{step}.{task}" for step, tasks in TOPOLOGY.items() for task in tasks}
-    assert not built.strict_gaps, "the catalog still publishes free-text index gaps (legacy list; T-055)"
+    assert built.strict_gaps
 
 
 def test_catalog_publishes_postman_requests_not_environments_and_keeps_real_parse_gaps(tmp_path: Path) -> None:
@@ -202,7 +202,8 @@ def test_catalog_publishes_postman_requests_not_environments_and_keeps_real_pars
     result = json.loads((attempt / "steps/retrieval_indexes/tasks/build_target_documents/result.json").read_text())
     core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
     gap = f"{malformed.relative_to(target).as_posix()}: parse_error (invalid Postman collection)"
-    assert result["gaps"] == [
+    assert all(item["schema"] == "appsec-review/producer-gap/1" for item in result["gaps"])
+    assert [item["reason"] for item in result["gaps"]] == [
         f"{kind}: no accepted target document"
         for kind in ("design", "dfd", "openapi", "threat_model", "unit_test")
     ] + [gap]

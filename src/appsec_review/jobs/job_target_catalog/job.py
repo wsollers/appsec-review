@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 import hashlib
 import json
@@ -9,6 +9,9 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
+from appsec_review.interchange import (
+    GAP_SCHEMA, GapCode, path_gap_records, producer_gap,
+)
 from appsec_review.jobs.cataloging import (
     BUILD_FILES, PROJECT_FILES, PROJECT_FILE_SUFFIXES, Bounds, inventory, write_json,
 )
@@ -41,9 +44,29 @@ TOPOLOGY = {
 }
 
 
+class CatalogError(Exception):
+    """Base error for bounded target catalog failures."""
+
+
+class CatalogConfigurationError(CatalogError, ValueError):
+    """Target catalog configuration or missing target root is invalid."""
+
+
+class CatalogIntegrityError(CatalogError, ValueError):
+    """Accepted target bytes, path custody or catalog artifact integrity failed."""
+
+
+class CatalogDocumentIntegrityError(CatalogIntegrityError, InventoryIntegrityError):
+    """Accepted target document path custody or SHA-256 integrity failed."""
+
+
+class TargetCatalogFailed(CatalogError, RuntimeError):
+    """Bounded target catalog execution failed."""
+
+
 def _target(unit: UnitContext) -> Path:
     if unit.job.target_root is None:
-        raise ValueError("review target is required")
+        raise CatalogConfigurationError("review target is required")
     return unit.job.target_root
 
 
@@ -72,11 +95,65 @@ def _gap_text(value: Any) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, Mapping):
+        if value.get("schema") == GAP_SCHEMA:
+            return str(value["reason"])
         path = value.get("path")
         reason = value.get("reason")
         if path is not None and reason is not None:
             return f"{path}: {reason}"
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _dedup_gaps(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    ordered: list[dict[str, Any]] = []
+    for record in records:
+        gid = str(record["gap_id"])
+        if gid not in seen:
+            seen.add(gid)
+            ordered.append(dict(record))
+    return ordered
+
+
+def _gap_reasons(records: Iterable[Any]) -> list[str]:
+    return [_gap_text(item) for item in records]
+
+
+def _coverage_gap_ids(records: Iterable[Mapping[str, Any]]) -> str | None:
+    ids = [str(record["gap_id"]) for record in records]
+    return ",".join(ids[:10]) if ids else None
+
+
+def _inventory_gap_items(partition: Mapping[str, Any]) -> list[dict[str, str]]:
+    if "inventory_gaps" in partition:
+        raw_items = partition["inventory_gaps"]
+    else:
+        raw_items = partition.get("gaps", ())
+    items: list[dict[str, str]] = []
+    for item in raw_items:
+        if isinstance(item, Mapping):
+            if item.get("schema") == GAP_SCHEMA:
+                scope = str(item.get("scope_id") or "<inventory>")
+                reason = str(item.get("reason") or "gap")
+                prefix = f"{scope}: "
+                if reason.startswith(prefix):
+                    reason = reason[len(prefix):]
+                items.append({"path": scope, "reason": reason})
+            else:
+                entry = {"path": str(item.get("path") or "."),
+                         "reason": str(item.get("reason") or "gap")}
+                detail = str(item.get("detail") or "").strip()
+                if detail:
+                    entry["detail"] = detail
+                items.append(entry)
+        else:
+            text = str(item)
+            if ": " in text:
+                path_part, reason_part = text.split(": ", 1)
+                items.append({"path": path_part, "reason": reason_part})
+            else:
+                items.append({"path": "<inventory>", "reason": text})
+    return items
 
 
 # Largest build descriptor build discovery reads to find build points. The root meson.build of a
@@ -104,7 +181,10 @@ def descriptor_reader(target: Path, accepted: Mapping[str, Mapping[str, Any]], *
         if int(identity["size_bytes"]) > limit:
             unread[relative] = int(identity["size_bytes"])
             return None
-        path = safe_path(target, relative)
+        try:
+            path = safe_path(target, relative)
+        except ValueError as error:
+            raise CatalogIntegrityError(str(error)) from error
         if not path.is_file():
             return None
         try:
@@ -112,7 +192,7 @@ def descriptor_reader(target: Path, accepted: Mapping[str, Mapping[str, Any]], *
             if (len(raw) != identity["size_bytes"] or
                     hashlib.sha256(raw).hexdigest() != identity["sha256"]):
                 changed.append(relative)
-                raise ValueError("engine/build descriptor differs from the accepted catalog")
+                raise CatalogIntegrityError("engine/build descriptor differs from the accepted catalog")
             return raw.decode("utf-8")
         except (OSError, UnicodeError):
             return None
@@ -129,16 +209,16 @@ def unread_descriptor_gaps(unread: Mapping[str, int], *, limit: int = BUILD_DESC
 
 def _validate_config(context, result) -> None:
     if tuple(context.config.steps) != tuple(TOPOLOGY):
-        raise ValueError("target catalog topology does not match configuration")
+        raise CatalogConfigurationError("target catalog topology does not match configuration")
     for step, tasks in TOPOLOGY.items():
         if tuple(context.config.step(step).tasks) != tasks:
-            raise ValueError(f"target catalog task order mismatch: {step}")
+            raise CatalogConfigurationError(f"target catalog task order mismatch: {step}")
 
 
 def build_job(*, fail_task: str | None = None) -> Job:
     def maybe_fail(unit: UnitContext) -> None:
         if unit.unit_id == fail_task:
-            raise RuntimeError(f"injected bounded failure: {fail_task}")
+            raise TargetCatalogFailed(f"injected bounded failure: {fail_task}")
 
     def partition(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -151,17 +231,20 @@ def build_job(*, fail_task: str | None = None) -> Job:
         from appsec_review.storage.shared import put_bytes, safe_path
         target_artifacts = []
         for candidate in snapshot["artifact_candidates"]:
-            path = safe_path(_target(unit), candidate["path"])
+            try:
+                path = safe_path(_target(unit), candidate["path"])
+            except ValueError as error:
+                raise CatalogIntegrityError(str(error)) from error
             kind, file_format = binary_role(path)
             with path.open("rb") as stream:
                 payload = stream.read(candidate["size_bytes"] + 1)
             if (len(payload) != candidate["size_bytes"]
                     or hashlib.sha256(payload).hexdigest() != candidate["sha256"]):
-                raise ValueError("target artifact changed during bounded intake")
+                raise CatalogIntegrityError("target artifact changed during bounded intake")
             reference = put_bytes(unit.job.run_root, payload)
             if (reference["sha256"] != candidate["sha256"]
                     or reference["size_bytes"] != candidate["size_bytes"]):
-                raise ValueError("target artifact changed during intake publication")
+                raise CatalogIntegrityError("target artifact changed during intake publication")
             target_artifacts.append({
                 **reference, "schema": "appsec-review/target-artifact-intake/1",
                 "target_relative_path": candidate["path"],
@@ -176,8 +259,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
         doc = {"schema": "appsec-review/repository-partition/1", "source_fingerprint": unit.job.source_fingerprint,
                "partitions": [{"path": key, "file_count": groups[key]} for key in sorted(groups)],
                **snapshot, "target_artifacts": target_artifacts}
+        gap_records = _dedup_gaps(path_gap_records(unit.unit_id, snapshot["gaps"]))
         return {"artifact": _artifact(unit, "repository-partition.json", doc),
-                "files": snapshot["files"], "gaps": snapshot["gaps"],
+                "files": snapshot["files"], "gaps": gap_records,
+                "inventory_gaps": list(snapshot["gaps"]),
                 "file_discovery": snapshot["file_discovery"],
                 "target_artifacts": target_artifacts,
                 "configured_exclusions": snapshot["configured_exclusions"],
@@ -188,7 +273,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         counts = Counter(item["language"] or "Other" for item in unit.output("repository_discovery.partition_repository")["files"])
         doc = {"schema": "appsec-review/language-census/1",
                "languages": [{"language": key, "file_count": counts[key]} for key in sorted(counts)]}
-        return {"artifact": _artifact(unit, "language-census.json", doc), **doc}
+        return {"artifact": _artifact(unit, "language-census.json", doc), **doc, "gaps": []}
 
     def projects(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -210,10 +295,19 @@ def build_job(*, fail_task: str | None = None) -> Job:
                           if PurePosixPath(item["path"]).name == "ProjectVersion.txt")
             found.append({"manifest": marker["path"], "root": project["root"],
                           "sha256": marker["sha256"], "engine": project["engine"]})
+        gap_records = [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, str(text), unit_id=unit.unit_id,
+                         scope_id="engine_discovery")
+            for text in engine_discovery["gaps"]
+        ]
+        if not found:
+            gap_records.append(producer_gap(GapCode.EMPTY_RESULT, "no recognized project manifests",
+                                            unit_id=unit.unit_id, scope_id="projects"))
+        gap_records = _dedup_gaps(gap_records)
         doc = {"schema": "appsec-review/project-catalog/1", "projects": found,
                "engine_observations": engine_discovery["observations"],
-               "gaps": engine_discovery["gaps"] + ([] if found else ["no recognized project manifests"])}
-        return {"artifact": _artifact(unit, "projects.json", doc), **doc}
+               "gaps": _gap_reasons(gap_records)}
+        return {"artifact": _artifact(unit, "projects.json", doc), **doc, "gaps": gap_records}
 
     def build_systems(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -230,42 +324,71 @@ def build_job(*, fail_task: str | None = None) -> Job:
         from appsec_review.jobs.engine_discovery import discover_unity
         engines = discover_unity(files, read_text=lambda descriptor, _limit: read_text(descriptor["path"]))
         if changed_descriptors:
-            raise ValueError("engine/build descriptor differs from the accepted catalog: " +
-                             ", ".join(sorted(set(changed_descriptors))))
-        inventory = discover_build_inventory(files, read_text=read_text, engine_discovery=engines)
-        units = inventory["units"]
-        orphans = inventory["orphaned_sources"]
-        gaps = [*unsupported_build_gaps(files, units), *engines["gaps"],
-                *unread_descriptor_gaps(unread_descriptors)]
+            raise CatalogIntegrityError("engine/build descriptor differs from the accepted catalog: " +
+                                        ", ".join(sorted(set(changed_descriptors))))
+        inventory_out = discover_build_inventory(files, read_text=read_text, engine_discovery=engines)
+        units = inventory_out["units"]
+        orphans = inventory_out["orphaned_sources"]
+        gap_records: list[dict[str, Any]] = [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, text, unit_id=unit.unit_id,
+                         scope_id="unsupported_build")
+            for text in unsupported_build_gaps(files, units)
+        ]
+        gap_records.extend(
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, str(text), unit_id=unit.unit_id,
+                         scope_id="engine_discovery")
+            for text in engines["gaps"]
+        )
+        for path, size in sorted(unread_descriptors.items()):
+            if is_build_descriptor(PurePosixPath(path)):
+                reason = (f"build descriptor not read: {path}: {size} bytes exceeds the "
+                          f"{BUILD_DESCRIPTOR_READ_BYTES}-byte read bound; "
+                          "its build points and driven directories are unknown")
+                gap_records.append(producer_gap(GapCode.TRUNCATED, reason, unit_id=unit.unit_id,
+                                                scope_id=path))
         # Orphaned sources are knowledge the review reports (dead code, build drift, an abandoned
         # port, or a build we did not understand); they are a coverage fact here, never a build.
         if orphans:
             by_language = Counter(item["language"] for item in orphans)
-            gaps.append("orphaned sources: " + ", ".join(f"{count} {language}" for language, count in sorted(by_language.items())))
+            orphan_reason = "orphaned sources: " + ", ".join(
+                f"{count} {language}" for language, count in sorted(by_language.items()))
+            gap_records.append(producer_gap(GapCode.PRODUCER_REPORTED_GAP, orphan_reason,
+                                            unit_id=unit.unit_id, scope_id="orphaned_sources"))
+        if not gap_records and not units:
+            gap_records.append(producer_gap(GapCode.EMPTY_RESULT, "no recognized build system",
+                                            unit_id=unit.unit_id, scope_id="build_systems"))
+        gap_records = _dedup_gaps(gap_records)
+        gap_reasons = _gap_reasons(gap_records)
         # build-systems/4 (2026-11-08, plan §2.1 decision 1): units carry build points with member
         # paths/descriptors, ``drives``/``driven_by`` and ``descriptors``; ``folded_roots`` and
         # ``demoted_markers`` name every marker directory that is not a unit, with the reason.
         doc = {"schema": "appsec-review/build-systems/4", "systems": systems, "build_units": units,
-               "orphaned_sources": orphans, "folded_roots": inventory["folded_roots"],
-               "demoted_markers": inventory["demoted_markers"], "engine_discovery": engines,
+               "orphaned_sources": orphans, "folded_roots": inventory_out["folded_roots"],
+               "demoted_markers": inventory_out["demoted_markers"], "engine_discovery": engines,
                "source_only_scopes": source_only_scopes(files, units),
-               "gaps": gaps or ([] if units else ["no recognized build system"])}
+               "gaps": gap_reasons}
         unit.job.events.write("BUILD_SYSTEMS_DISCOVERED", unit_id=unit.unit_id, unit_count=len(units),
                               orphaned_source_count=len(orphans), source_only_scope_count=len(doc["source_only_scopes"]),
                               gap_count=len(doc["gaps"]))
-        return {"artifact": _artifact(unit, "build-systems.json", doc), **doc}
+        return {"artifact": _artifact(unit, "build-systems.json", doc), **doc,
+                "gap_reasons": gap_reasons, "gaps": gap_records}
 
     def compile_commands(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         commands = [item for item in unit.output("repository_discovery.partition_repository")["files"]
                     if Path(item["path"]).name == "compile_commands.json"]
+        gap_records = ([] if commands else [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, "compile_commands.json not present",
+                         unit_id=unit.unit_id, scope_id="compile_commands.json")
+        ])
         doc = {"schema": "appsec-review/compile-commands/1", "files": commands,
-               "gaps": [] if commands else ["compile_commands.json not present"]}
-        return {"artifact": _artifact(unit, "compile-commands.json", doc), **doc}
+               "gaps": _gap_reasons(gap_records)}
+        return {"artifact": _artifact(unit, "compile-commands.json", doc), **doc, "gaps": gap_records}
 
     def build_targets(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        build_units = unit.output("build_discovery.discover_build_systems")["build_units"]
+        systems_out = unit.output("build_discovery.discover_build_systems")
+        build_units = systems_out["build_units"]
         files = unit.output("repository_discovery.partition_repository")["files"]
         targets = []
         for item in build_units:
@@ -284,12 +407,14 @@ def build_job(*, fail_task: str | None = None) -> Job:
                       "project_type": facts.get("kind", "unity" if item.get("engine") else "generic") if facts else "generic",
                       "descriptor_facts": facts or {}}
             targets.append({**target, "required_image_profile": required_image_profile(target)})
+        upstream_reasons = list(systems_out.get("gap_reasons", _gap_reasons(systems_out.get("gaps", ()))))
         doc = {"schema": "appsec-review/build-targets/2", "targets": targets,
                "engine_discovery": {
-                   key: unit.output("build_discovery.discover_build_systems")["engine_discovery"][key]
+                   key: systems_out["engine_discovery"][key]
                    for key in ("counts", "observations", "gaps")},
-               "gaps": unit.output("build_discovery.discover_build_systems")["gaps"]}
-        return {"artifact": _artifact(unit, "build-targets.json", doc), **doc}
+               "gaps": upstream_reasons}
+        return {"artifact": _artifact(unit, "build-targets.json", doc), **doc,
+                "build_gap_reasons": upstream_reasons, "gaps": []}
 
     def components(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -306,11 +431,15 @@ def build_job(*, fail_task: str | None = None) -> Job:
     def dependencies(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         records = []
-        gaps = []
+        gap_records: list[dict[str, Any]] = []
         for component in unit.output("component_discovery.catalog_components")["components"]:
             manifest = component["manifest"]
             if not manifest:
-                gaps.append(f"{component['component_id']}: no manifest for dependency extraction")
+                gap_records.append(producer_gap(
+                    GapCode.PRODUCER_REPORTED_GAP,
+                    f"{component['component_id']}: no manifest for dependency extraction",
+                    unit_id=unit.unit_id, scope_id=str(component["component_id"]),
+                ))
                 continue
             path = _target(unit) / manifest
             try:
@@ -328,23 +457,40 @@ def build_job(*, fail_task: str | None = None) -> Job:
                                                       "section": section},
                             }))
                             if section == "dependencies":
-                                gaps.append(f"{manifest}#{section}.{name}: dependency delivery status is unknown")
+                                scope_ref = f"{manifest}#{section}.{name}"
+                                gap_records.append(producer_gap(
+                                    GapCode.PRODUCER_REPORTED_GAP,
+                                    f"{scope_ref}: dependency delivery status is unknown",
+                                    unit_id=unit.unit_id, scope_id=scope_ref,
+                                ))
                 else:
-                    gaps.append(f"{manifest}: dependency parser deferred for this manifest type")
+                    gap_records.append(producer_gap(
+                        GapCode.PRODUCER_REPORTED_GAP,
+                        f"{manifest}: dependency parser deferred for this manifest type",
+                        unit_id=unit.unit_id, scope_id=str(manifest),
+                    ))
             except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-                gaps.append(f"{manifest}: parse failed ({type(exc).__name__})")
-        doc = {"schema": "appsec-review/dependency-catalog/1", "dependencies": records, "gaps": gaps}
-        return {"artifact": _artifact(unit, "dependencies.json", doc), **doc}
+                gap_records.append(producer_gap(
+                    GapCode.PARSER_ERROR,
+                    f"{manifest}: parse failed ({type(exc).__name__})",
+                    unit_id=unit.unit_id, scope_id=str(manifest),
+                ))
+        gap_records = _dedup_gaps(gap_records)
+        doc = {"schema": "appsec-review/dependency-catalog/1", "dependencies": records,
+               "gaps": _gap_reasons(gap_records)}
+        return {"artifact": _artifact(unit, "dependencies.json", doc), **doc, "gaps": gap_records}
 
     def path_index(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        partition = unit.output("repository_discovery.partition_repository")
-        fingerprint = _fingerprint(unit, "source", [partition["artifact"]])
+        partition_out = unit.output("repository_discovery.partition_repository")
+        fingerprint = _fingerprint(unit, "source", [partition_out["artifact"]])
         path = unit.job.run_root / "data" / "indices" / "source" / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="source", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
-        gaps = [_gap_text(gap) for gap in partition["gaps"]]
-        for item in partition["files"]:
+        gap_records: list[dict[str, Any]] = list(
+            path_gap_records(unit.unit_id, _inventory_gap_items(partition_out))
+        )
+        for item in partition_out["files"]:
             if not source_in_scope(item):
                 continue
             identity = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
@@ -357,7 +503,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
                     text = source.read_text(encoding="utf-8")
                     line_count = max(1, len(text.splitlines()))
                 except (OSError, UnicodeError):
-                    gaps.append(f"{item['path']}: text decode failed")
+                    gap_records.append(producer_gap(
+                        GapCode.PARSER_ERROR, f"{item['path']}: text decode failed",
+                        unit_id=unit.unit_id, scope_id=str(item["path"]),
+                    ))
             location = SourceLocation(
                 target_snapshot=unit.job.source_fingerprint, path=item["path"], file_sha256=item["sha256"],
                 start_byte=0, end_byte=item["size_bytes"], start_line=1, end_line=line_count,
@@ -367,35 +516,40 @@ def build_job(*, fail_task: str | None = None) -> Job:
             builder.add_entity(EntityRecord(identity, item["path"], item["path"], text,
                                              {"language": item["language"], "size_bytes": item["size_bytes"],
                                               "generated": bool(item.get("generated")), **scope_fields(item)}, location))
-        builder.add_coverage("target-files", "complete" if not gaps else "partial",
-                             None if not gaps else "; ".join(gaps[:10]))
+        gap_records = _dedup_gaps(gap_records)
+        builder.add_coverage("target-files", "complete" if not gap_records else "partial",
+                             _coverage_gap_ids(gap_records))
         sha256 = builder.build()
         index = IndexIdentity("source", "appsec-review/retrieval-index/2", sha256, fingerprint,
                               path.relative_to(unit.job.run_root).as_posix(),
-                              {"job": "job_target_catalog", "unit": unit.unit_id}, tuple(gaps))
+                              {"job": "job_target_catalog", "unit": unit.unit_id},
+                              tuple(_gap_reasons(gap_records)))
         return {"artifact": _run_artifact(unit, path), "index_identity": asdict(index),
-                "item_count": len(partition["files"]), "gaps": gaps}
+                "item_count": len(partition_out["files"]), "gaps": gap_records}
 
     def symbol_index(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         symbols = []
-        gaps = []
-        partition = unit.output("repository_discovery.partition_repository")
-        fingerprint = _fingerprint(unit, "analysis", [partition["artifact"]])
+        gap_records: list[dict[str, Any]] = []
+        partition_out = unit.output("repository_discovery.partition_repository")
+        fingerprint = _fingerprint(unit, "analysis", [partition_out["artifact"]])
         path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
         pattern = re.compile(r"^\s*(?:def|class|function|func|interface|struct|enum)\s+([A-Za-z_$][\w$]*)")
-        for item in partition["files"]:
+        for item in partition_out["files"]:
             if not source_in_scope(item) or item["language"] is None:
                 continue
             if item["size_bytes"] > 16 * 1024 * 1024:
-                gaps.append(f"{item['path']}: symbol source byte bound reached")
+                gap_records.append(producer_gap(
+                    GapCode.TRUNCATED, f"{item['path']}: symbol source byte bound reached",
+                    unit_id=unit.unit_id, scope_id=str(item["path"]),
+                ))
                 continue
-            path = _target(unit) / item["path"]
+            source_path = _target(unit) / item["path"]
             try:
                 offset = 0
-                for number, line in enumerate(path.read_text(encoding="utf-8", errors="strict").splitlines(keepends=True), 1):
+                for number, line in enumerate(source_path.read_text(encoding="utf-8", errors="strict").splitlines(keepends=True), 1):
                     match = pattern.match(line)
                     if match:
                         symbol_id = LogicalIdentity.derive(EntityKind.SYMBOL, unit.job.source_fingerprint,
@@ -417,22 +571,30 @@ def build_job(*, fail_task: str | None = None) -> Job:
                                                             symbol_id.value, True, 1.0))
                         symbols.append(symbol_id.value)
                     if len(symbols) >= 50_000:
-                        gaps.append("symbol index bound reached")
+                        gap_records.append(producer_gap(
+                            GapCode.TRUNCATED, "symbol index bound reached",
+                            unit_id=unit.unit_id, scope_id="symbols",
+                        ))
                         break
                     offset += len(line.encode())
             except (OSError, UnicodeError):
-                gaps.append(f"{item['path']}: text decode failed")
+                gap_records.append(producer_gap(
+                    GapCode.PARSER_ERROR, f"{item['path']}: text decode failed",
+                    unit_id=unit.unit_id, scope_id=str(item["path"]),
+                ))
             if len(symbols) >= 50_000:
                 break
-        builder.add_coverage("declarations", "complete" if not gaps else "partial",
-                             None if not gaps else "; ".join(gaps[:10]))
+        gap_records = _dedup_gaps(gap_records)
+        builder.add_coverage("declarations", "complete" if not gap_records else "partial",
+                             _coverage_gap_ids(gap_records))
         index_path = builder.path
         sha256 = builder.build()
         index = {"name": "analysis", "schema": "appsec-review/retrieval-index/2", "sha256": sha256,
                  "fingerprint": fingerprint, "relative_path": index_path.relative_to(unit.job.run_root).as_posix(),
-                 "producer": {"job": "job_target_catalog", "unit": unit.unit_id}, "gaps": gaps}
+                 "producer": {"job": "job_target_catalog", "unit": unit.unit_id},
+                 "gaps": _gap_reasons(gap_records)}
         return {"artifact": _run_artifact(unit, index_path), "index_identity": index,
-                "item_count": len(symbols), "gaps": gaps}
+                "item_count": len(symbols), "gaps": gap_records}
 
     def component_index(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -457,12 +619,12 @@ def build_job(*, fail_task: str | None = None) -> Job:
 
     def document_index(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        partition = unit.output("repository_discovery.partition_repository")
-        entries = select_document_inventory(partition["files"])
+        partition_out = unit.output("repository_discovery.partition_repository")
+        entries = select_document_inventory(partition_out["files"])
         settings = unit.job.config.typed_settings
         fingerprint = index_fingerprint(
             name="documents", target_snapshot=unit.job.source_fingerprint,
-            producer_artifacts=[partition["artifact"]],
+            producer_artifacts=[partition_out["artifact"]],
             tool_identity={"producer": "job_target_catalog", "limits": {
                 "files": settings.max_files, "file_bytes": settings.max_file_bytes,
                 "records": settings.max_records, "chunk_lines": settings.max_chunk_lines,
@@ -481,16 +643,40 @@ def build_job(*, fail_task: str | None = None) -> Job:
         )
         kinds = {entry["kind"] for entry in entries}
         coverage_kinds = (KINDS - ADDITIONAL_INTERFACE_KINDS) | kinds
-        gaps = []
-        for kind in sorted(coverage_kinds - kinds):
-            gaps.append(f"{kind}: no accepted target document")
-        gaps.extend(f"{item['path'] or '<inventory>'}: {item['reason']} ({item['detail']})"
-                    for item in result.gaps)
-        for item in partition["gaps"]:
-            gaps.append(f"source inventory {item['path']}: {item['reason']}")
-        if len(gaps) > 200:
-            omitted = len(gaps) - 200
-            gaps = [*gaps[:200], f"target document gaps truncated: {omitted} additional gap(s)"]
+        gap_records: list[dict[str, Any]] = [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, f"{kind}: no accepted target document",
+                         unit_id=unit.unit_id, scope_id=f"target-documents:{kind}")
+            for kind in sorted(coverage_kinds - kinds)
+        ]
+        collector_entries = []
+        for item in result.gaps:
+            doc_path = str(item.get("path") or "<inventory>")
+            doc_reason = str(item.get("reason") or "gap")
+            doc_detail = str(item.get("detail") or "").strip()
+            collector_entries.append({
+                "path": doc_path,
+                "reason": f"{doc_reason} ({doc_detail})" if doc_detail else doc_reason,
+            })
+        gap_records.extend(path_gap_records(unit.unit_id, collector_entries))
+        for item in _inventory_gap_items(partition_out):
+            inv_reason = f"source inventory {item['path']}: {item['reason']}"
+            if item.get("detail"):
+                inv_reason = f"{inv_reason}: {item['detail']}"
+            gap_records.append(producer_gap(
+                GapCode.PRODUCER_REPORTED_GAP, inv_reason,
+                unit_id=unit.unit_id, scope_id=item["path"],
+            ))
+        gap_records = _dedup_gaps(gap_records)
+        if len(gap_records) > 200:
+            omitted = len(gap_records) - 200
+            gap_records = [
+                *gap_records[:200],
+                producer_gap(
+                    GapCode.TRUNCATED,
+                    f"target document gaps truncated: {omitted} additional gap(s)",
+                    unit_id=unit.unit_id, scope_id="target-documents",
+                ),
+            ]
         builder = IndexBuilder(path, name="documents", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
         identities: dict[str, str] = {}
@@ -501,10 +687,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 target_root = _target(unit).resolve()
                 source = (target_root / source_path).resolve()
                 if target_root not in source.parents or not source.is_file():
-                    raise InventoryIntegrityError(f"accepted target source missing or escaped: {source_path}")
+                    raise CatalogDocumentIntegrityError(f"accepted target source missing or escaped: {source_path}")
                 raw = source.read_bytes()
                 if hashlib.sha256(raw).hexdigest() != record["file_sha256"]:
-                    raise InventoryIntegrityError(f"accepted target source hash mismatch: {source_path}")
+                    raise CatalogDocumentIntegrityError(f"accepted target source hash mismatch: {source_path}")
                 offsets = []
                 position = 0
                 for line in raw.splitlines(keepends=True):
@@ -513,7 +699,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 line_offsets[source_path] = offsets
             offsets = line_offsets[source_path]
             if not 1 <= record["line"] <= record["end_line"] <= len(offsets):
-                raise ValueError(f"document source location cannot be resolved: {source_path}")
+                raise CatalogIntegrityError(f"document source location cannot be resolved: {source_path}")
             start = offsets[record["line"] - 1][0]
             end = offsets[record["end_line"] - 1][1]
             identity = LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, unit.job.source_fingerprint,
@@ -538,19 +724,25 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 bool(link["exact"]), 1.0 if link["exact"] else 0.5,
                 payload={"relation": link["relation"], "authority": link["authority"]},
             ))
+        scoped_gap_id = {str(rec["scope_id"]): str(rec["gap_id"]) for rec in gap_records if rec.get("scope_id")}
         for kind in sorted(coverage_kinds):
             count = sum(record["kind"] == kind for record in result.records)
-            builder.add_coverage(f"target-documents:{kind}",
-                                 "complete" if count and not gaps else "partial" if count else "unavailable",
-                                 gaps[0] if gaps else None)
-        builder.add_coverage("target-documents", "complete" if not gaps else "partial",
-                             "; ".join(gaps[:10])[:1000] if gaps else None)
+            area = f"target-documents:{kind}"
+            status = "complete" if count and not gap_records else "partial" if count else "unavailable"
+            coverage_gap = (
+                None if status == "complete"
+                else scoped_gap_id.get(area, str(gap_records[0]["gap_id"]) if gap_records else None)
+            )
+            builder.add_coverage(area, status, coverage_gap)
+        builder.add_coverage("target-documents", "complete" if not gap_records else "partial",
+                             _coverage_gap_ids(gap_records))
         sha = builder.build()
         index = IndexIdentity("documents", "appsec-review/retrieval-index/2", sha, fingerprint,
                               path.relative_to(unit.job.run_root).as_posix(),
-                              {"job": "job_target_catalog", "unit": unit.unit_id}, tuple(gaps))
+                              {"job": "job_target_catalog", "unit": unit.unit_id},
+                              tuple(_gap_reasons(gap_records)))
         return {"artifact": _run_artifact(unit, path), "index_identity": asdict(index),
-                "item_count": len(result.records), "link_count": len(result.links), "gaps": gaps}
+                "item_count": len(result.records), "link_count": len(result.links), "gaps": gap_records}
 
     def validate_catalog(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -561,9 +753,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
             path = unit.job.run_root / artifact["path"]
             from appsec_review.storage import file_sha256
             if not path.is_file() or file_sha256(path) != artifact["sha256"]:
-                raise ValueError(f"catalog artifact failed validation: {dependency}")
+                raise CatalogIntegrityError(f"catalog artifact failed validation: {dependency}")
+        upstream_gaps = sum((_gap_reasons(unit.output(item)["gaps"]) for item in required), [])
         return {"status": "VALID", "validated": list(required),
-                "gaps": sum((list(unit.output(item)["gaps"]) for item in required), [])}
+                "upstream_gaps": upstream_gaps, "gaps": []}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
@@ -581,39 +774,66 @@ def build_job(*, fail_task: str | None = None) -> Job:
         build_path = unit.job.run_root / "data" / "indices" / "build" / f"{build_fingerprint}.sqlite"
         build_index = IndexBuilder(build_path, name="build", fingerprint=build_fingerprint,
                                    target_snapshot=unit.job.source_fingerprint)
-        targets = unit.output("build_discovery.catalog_build_targets")["targets"]
+        targets_out = unit.output("build_discovery.catalog_build_targets")
+        targets = targets_out["targets"]
         for target in targets:
             identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
                                               {"id": target["build_unit_id"], "root": target.get("root")})
             build_index.add_entity(EntityRecord(identity, target["build_unit_id"], target.get("build_system", target["build_unit_id"]),
                                                 " ".join(str(value) for value in target.values()), target))
-        build_gaps = list(unit.output("build_discovery.catalog_build_targets")["gaps"])
+        build_gap_reasons = list(
+            targets_out.get("build_gap_reasons", _gap_reasons(targets_out.get("gaps", ())))
+        )
         compile_files = unit.output("build_discovery.discover_compile_commands")["files"]
         for item in compile_files:
             identity = LogicalIdentity.derive(EntityKind.COMPILE_UNIT, unit.job.source_fingerprint,
                                               {"path": item["path"], "sha256": item["sha256"]})
             build_index.add_entity(EntityRecord(identity, item["path"], item["path"], item["path"],
                                                 {"compile_database_sha256": item["sha256"]}))
-        build_index.add_coverage("build-actions", "complete" if targets else "partial",
-                                 None if targets else "no build targets discovered")
-        build_index.add_coverage("compile-units", "complete" if compile_files else "unavailable",
-                                 None if compile_files else "compile_commands.json not present")
+        publish_gap_records: list[dict[str, Any]] = [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, reason, unit_id=unit.unit_id, scope_id="build")
+            for reason in build_gap_reasons
+        ]
+        no_targets_gap_id: str | None = None
+        if not targets:
+            no_targets_record = producer_gap(
+                GapCode.EMPTY_RESULT, "no build targets discovered",
+                unit_id=unit.unit_id, scope_id="build-actions",
+            )
+            publish_gap_records.append(no_targets_record)
+            no_targets_gap_id = str(no_targets_record["gap_id"])
+        no_compile_gap_id: str | None = None
+        if not compile_files:
+            no_compile_record = producer_gap(
+                GapCode.PRODUCER_REPORTED_GAP, "compile_commands.json not present",
+                unit_id=unit.unit_id, scope_id="compile-units",
+            )
+            publish_gap_records.append(no_compile_record)
+            no_compile_gap_id = str(no_compile_record["gap_id"])
+        publish_gap_records = _dedup_gaps(publish_gap_records)
+        build_index.add_coverage("build-actions", "complete" if targets else "partial", no_targets_gap_id)
+        build_index.add_coverage("compile-units", "complete" if compile_files else "unavailable", no_compile_gap_id)
         build_sha = build_index.build()
         build_identity = {"name": "build", "schema": "appsec-review/retrieval-index/2", "sha256": build_sha,
                           "fingerprint": build_fingerprint,
                           "relative_path": build_path.relative_to(unit.job.run_root).as_posix(),
                           "producer": {"job": "job_target_catalog", "unit": unit.unit_id},
-                          "gaps": build_gaps}
+                          "gaps": build_gap_reasons}
         indexes = [IndexIdentity(**{**unit.output(name)["index_identity"],
                                    "gaps": tuple(unit.output(name)["index_identity"].get("gaps", ()))})
                    for name in ("retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index",
                                 "retrieval_indexes.build_component_index", "retrieval_indexes.build_target_documents")]
-        indexes.append(IndexIdentity(**{**build_identity, "gaps": tuple(build_gaps)}))
+        indexes.append(IndexIdentity(**{**build_identity, "gaps": tuple(build_gap_reasons)}))
         manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / f"catalog-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
                        target_root=_target(unit), indexes=indexes)
+        raw_validation = dict(unit.output("publish_catalog.validate_catalog"))
+        validation_gaps = list(
+            raw_validation.pop("upstream_gaps", _gap_reasons(raw_validation.get("gaps", ())))
+        )
+        validation_doc = {**raw_validation, "gaps": validation_gaps}
         doc = {"schema": "appsec-review/target-catalog/1", "source_fingerprint": unit.job.source_fingerprint,
-               "artifacts": outputs, "validation": unit.output("publish_catalog.validate_catalog"),
+               "artifacts": outputs, "validation": validation_doc,
                "security_findings": []}
         artifact = _artifact(unit, "target-catalog.json", doc)
         unit.job.events.write("REVIEW_SCOPE_CATALOGED", unit_id=unit.unit_id,
@@ -623,7 +843,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
             catalog_receipt=artifact, metrics_semantics="appsec-review/review-metrics-semantics/1")
         return {"schema": doc["schema"], "artifact": artifact,
                 "index_manifest": _run_artifact(unit, manifest_path),
-                "gaps": doc["validation"]["gaps"] + build_gaps}
+                "gaps": publish_gap_records}
 
     u = Unit
     units = (
@@ -650,4 +870,4 @@ def build_job(*, fail_task: str | None = None) -> Job:
     return Job("job_target_catalog", "target_catalog", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity="appsec-review/target-catalog-job/1",
                implementation_identity=implementation, validation_identity=validation, units=units,
-               datasets=DATASETS, contract=CONTRACT)
+               strict_gaps=True, datasets=DATASETS, contract=CONTRACT)

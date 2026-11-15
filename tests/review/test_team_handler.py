@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 import json
+import os
 from pathlib import Path
+import shutil
 import time
 from types import MappingProxyType, SimpleNamespace
 
@@ -14,7 +16,6 @@ from referencing import Registry, Resource
 from appsec_review.config import load_config
 from appsec_review.inference import ModelResult
 from appsec_review.inference.errors import ProviderError
-from appsec_review.jobs.job_inference_security_review import build_job
 from appsec_review.jobs.job_inference_security_review import teams as team_handler
 from appsec_review.jobs.job_inference_security_review.job import (
     TARGET_GUIDANCE, _excluded, package_works, review_context,
@@ -26,7 +27,6 @@ from appsec_review.review.budget import JobBudget
 from appsec_review.review.ledger import merge_shards, project
 from appsec_review.review.models import CellStatus, ClaimState, GapClass, Lane, Role
 from appsec_review.review.scope import SourceFile
-from appsec_review.runtime.runner import JobRunner
 from tests.fixtures.inference_review.acceptance import JOB, ROOT, write_config
 from tests.fixtures.inference_review.builder import build_accepted_index_set
 from tests.fixtures.inference_review.fake_infer import NARRATIVES, ScriptedInfer
@@ -49,36 +49,219 @@ class Recording:
         return [item for item in self.requests if item.role == role]
 
 
+@pytest.fixture(scope="session")
+def _prepared_template(tmp_path_factory):
+    import threading
+    from appsec_review.guidance.coverage import crosswalk_tags
+    from appsec_review.jobs.job_inference_security_review.job import (
+        EVIDENCE_RULES, JOB_ID, _artifact, _membership, _taxonomy,
+    )
+    from appsec_review.retrieval import RetrievalCore
+    from appsec_review.review import tool_rules
+    from appsec_review.review.claims import normalize_cwe
+    from appsec_review.review.identity import sha256_hex
+    from appsec_review.review.lead_families import collect_leads
+    from appsec_review.review.lead_triage import menu_effective_severity
+    from appsec_review.review.packages import (
+        ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages,
+    )
+    from appsec_review.review.references import load_cwe_reference
+    from appsec_review.review.scope import accept_manifest
+    from appsec_review.review.slicing.sources import AcceptedSliceSources
+    from appsec_review.storage import atomic_json, bounded_file_lock
+
+    basetemp = Path(tmp_path_factory.getbasetemp())
+    session_root = basetemp.parent if basetemp.name.startswith("popen-gw") else basetemp
+    base = session_root / "team-handler-template"
+    ready_path = base / "ready.json"
+    # Durability is tested in storage unit/integration suites; unit team handler tests check semantics.
+    with pytest.MonkeyPatch.context() as mp:
+        mp.delenv("APPSEC_REVIEW_CONFIG_OVERLAY", raising=False)
+        mp.setattr(os, "fsync", lambda descriptor: None)
+        with bounded_file_lock(session_root / "team-handler-template.lock", 60.0):
+            if not ready_path.is_file():
+                shutil.rmtree(base, ignore_errors=True)
+                base.mkdir(parents=True, exist_ok=True)
+                config = write_config(base, base / "runs", overrides={"backoff_seconds": [0]},
+                                      extra=job_tables("job_third_party_data_sync"))
+                settings = load_config(config).job(JOB).typed_settings
+                built = build_accepted_index_set(base, config=config, publish_v1_packages=False)
+                scope = accept_manifest(built.run_root)
+                evidence_map = scope.evidence_map()
+                evidence_map_path = built.run_root / "data" / "jobs" / JOB_ID / "evidence-map.json"
+                atomic_json(evidence_map_path, evidence_map)
+                scope_out = {
+                    "artifact": _artifact(built.run_root, evidence_map_path),
+                    "source_languages": {item.identity: item.language for item in scope.source_files if item.language},
+                    "build_unit_languages": {item.build_unit_id: list(item.languages) for item in scope.build_units},
+                }
+                core = RetrievalCore(built.runs_dir, built.run_id, manifest_sha256=scope.manifest_sha256)
+                reference = load_cwe_reference(built.run_root)
+                assembly = assemble_packages(
+                    scope, PackageSettings.from_review_settings(settings),
+                    collection=collect_leads(scope, filters=settings.lead_filters),
+                    cwe_reference=reference,
+                    slice_sources=AcceptedSliceSources(scope, core=core),
+                    behavior_core=core,
+                )
+                manifest_path = publish_packages(
+                    assembly, built.run_root / "data" / "jobs" / JOB_ID / "assembly", run_root=built.run_root,
+                )
+                excluded = _excluded(scope)
+                positions = {row["unit_key"]: row["position"] for row in assembly.manifest["units"]}
+                leads = [lead for package in assembly.packages for lead in package.document()["lead_menu"]]
+                fallback = {normalize_cwe(cwe) for lead in leads for cwe in lead.get("rule_cwe", ())}
+                _vocabulary, crosswalk = _taxonomy(ROOT)
+                fallback |= {normalize_cwe(tag.split(":", 1)[1]) for tag in crosswalk_tags(crosswalk)
+                             if tag.startswith("cwe:")}
+                reference = reference.with_fallback(frozenset(item for item in fallback if item))
+                cwe_ids = sorted(item for item in reference.accepted_ids if item)
+                rule_predicates = {
+                    lead["observation_id"]: [item.value for item in tool_rules.lead_predicates(lead)]
+                    for lead in sorted(leads, key=lambda item: item["observation_id"])
+                }
+                units = [
+                    {"unit_key": row["unit_key"], "position": row["position"], "hunted": row["hunted"],
+                     "source_ids": row["source_ids"], "coverage_scope": row["coverage_scope"]}
+                    for row in assembly.manifest["units"]
+                ]
+                lane_counts = {
+                    item.value: sum(1 for package in assembly.packages if package.lane == item.value)
+                    for item in Lane
+                }
+                docs = {}
+                for lane in (Lane.LEAD, Lane.HUNT):
+                    mine = [package for package in assembly.packages if package.lane == lane.value]
+                    entities = {
+                        package.package_id: tuple(sorted(set(package.resolved()["retrieval"]["entity_ids"]) - excluded))
+                        for package in mine
+                    }
+                    membership = _membership(scope, {item for values in entities.values() for item in values})
+                    records = []
+                    for package in mine:
+                        document = package.document()
+                        rank = (
+                            (0 if menu_effective_severity(document["lead_menu"][0]) == "critical" else 1,
+                             package.package_id)
+                            if lane is Lane.LEAD else (int(positions[package.unit_key]), package.package_id)
+                        )
+                        sanitized = {
+                            key: value for key, value in document.items()
+                            if key not in {"package_id", "manifest_sha256", "input_fingerprint", "run_id"}
+                        }
+                        shards = sorted({label for identity in entities[package.package_id]
+                                         for label in membership.get(identity, ())})
+                        basis = sha256_hex({"package": sanitized, "shards": shards, "assembly": ASSEMBLY_RULE,
+                                            **EVIDENCE_RULES})
+                        records.append({
+                            "package_id": package.package_id, "kind": package.kind, "lane": lane.value,
+                            "sha256": package.sha256, "unit_key": package.unit_key, "rank": list(rank),
+                            "basis": basis, "dependency_shards": shards,
+                            "entities": list(entities[package.package_id]),
+                            "path": (manifest_path.parent / "packages" / f"{package.package_id}.json")
+                            .resolve().relative_to(built.run_root.resolve()).as_posix(),
+                        })
+                    docs[lane.value] = {
+                        "schema": "appsec-review/inference-review-lane-packages/1", "lane": lane.value,
+                        "package_manifest": _artifact(built.run_root, manifest_path),
+                        "package_manifest_content_sha256": assembly.manifest["content_sha256"],
+                        "lane_counts": lane_counts,
+                        "packages": sorted(records, key=lambda item: (item["rank"], item["package_id"])),
+                        "admission": assembly.manifest["admission"],
+                        "accepted_cwe_ids": cwe_ids,
+                        "cwe_reference": reference.record(),
+                        "rule_predicates": rule_predicates,
+                        "units": units,
+                    }
+                ready_path.write_text(
+                    json.dumps({
+                        "run_id": built.run_id,
+                        "runs_dir": str(built.runs_dir),
+                        "run_root": str(built.run_root),
+                        "ids": dict(built.ids),
+                        "manifest_sha256": scope.manifest_sha256,
+                        "scope_out": scope_out,
+                        "docs": docs,
+                    }),
+                    encoding="utf-8",
+                )
+        ready = json.loads(ready_path.read_text(encoding="utf-8"))
+        config = base / "appsec-review.toml"
+        settings = load_config(config).job(JOB).typed_settings
+        fixture = SimpleNamespace(
+            run_id=ready["run_id"],
+            runs_dir=Path(ready["runs_dir"]),
+            run_root=Path(ready["run_root"]),
+            ids=dict(ready["ids"]),
+        )
+        docs = ready["docs"]
+        manifest_sha256 = ready["manifest_sha256"]
+        # Build one base ReviewContext on a throwaway copy so fixture.run_root has no initialized budget ledger.
+        ctx_runs = tmp_path_factory.mktemp("ctx-template") / "runs"
+        ctx_root = ctx_runs / fixture.run_id
+        shutil.copytree(fixture.run_root, ctx_root)
+        base_ctx = review_context(
+            run_root=ctx_root, run_id=fixture.run_id, attempt_root=ctx_runs / "template-attempt",
+            repository_root=ROOT, settings=settings, infer=ScriptedInfer({"ids": fixture.ids}),
+            manifest_sha256=manifest_sha256, packages_doc=docs["lead"], scope_out=ready["scope_out"],
+        )
+        base_contexts = {"lead": base_ctx, "hunt": base_ctx}
+    return SimpleNamespace(
+        fixture=fixture, settings=settings, docs=docs,
+        manifest_sha256=manifest_sha256, base_contexts=base_contexts,
+        bundles={}, views={}, resolves={}, names={}, locations={}, cache_lock=threading.Lock(),
+    )
+
+
 @pytest.fixture()
-def prepared(tmp_path: Path, monkeypatch):
+def prepared(tmp_path: Path, monkeypatch, _prepared_template):
+    from appsec_review.jobs.job_inference_security_review.job import JOB_ID, ReviewTeamSemaphore
+    from appsec_review.retrieval import RetrievalCore
+    from appsec_review.review.result_cache import cache_from_settings
+
     monkeypatch.delenv("APPSEC_REVIEW_CONFIG_OVERLAY", raising=False)
-    base = tmp_path / "review"
-    base.mkdir()
-    config = write_config(base, base / "runs", overrides={"backoff_seconds": [0]},
-                          extra=job_tables("job_third_party_data_sync"))
-    # The run is bound to the configuration its attempts resolve, not the repository default.
-    fixture = build_accepted_index_set(tmp_path / "review", config=config)
-    job = build_job(infer=ScriptedInfer({"ids": fixture.ids}), repository_root=ROOT)
-    runner = JobRunner(load_config(config))
-    claim = runner.begin_attempt(job, run_id=fixture.run_id,
-                                 upstream_handoffs=fixture.upstream_handoffs)
-    outputs = {}
-    for unit in ("scope.accept_manifest", "scope.assemble_scope", "triage.lead_severity", "packages.assemble_lead_packages",
-                 "packages.assemble_hunt_packages"):
-        outputs[unit] = runner.execute_or_reuse_unit(job, claim, unit)
-    settings = load_config(config).job(JOB).typed_settings
+    monkeypatch.setattr(os, "fsync", lambda descriptor: None)
+    runs_dir = tmp_path / "review" / "runs"
+    run_root = runs_dir / _prepared_template.fixture.run_id
+    shutil.copytree(_prepared_template.fixture.run_root, run_root)
+    fixture = SimpleNamespace(
+        run_id=_prepared_template.fixture.run_id,
+        runs_dir=runs_dir,
+        run_root=run_root,
+        ids=dict(_prepared_template.fixture.ids),
+    )
+    settings = _prepared_template.settings
 
     def documents(lane: str) -> dict:
-        return json.loads((fixture.run_root / outputs[f"packages.assemble_{lane}_packages"]["artifact"]["path"])
-                          .read_text())
+        return json.loads(json.dumps(_prepared_template.docs[lane]))
 
     def context(infer, *, lane: str = "lead", attempt: str = "a", **changes):
         changes.setdefault("rounds", replace(settings.rounds, max_rounds=1, stable_rounds_required=1))
-        return review_context(run_root=fixture.run_root, run_id=fixture.run_id,
-                              attempt_root=tmp_path / "attempts" / attempt, repository_root=ROOT,
-                              settings=replace(settings, **changes) if changes else settings, infer=infer,
-                              manifest_sha256=outputs["scope.accept_manifest"]["manifest_sha256"],
-                              packages_doc=documents(lane), scope_out=outputs["scope.assemble_scope"])
+        resolved = replace(settings, **changes) if changes else settings
+        core = RetrievalCore(fixture.runs_dir, fixture.run_id,
+                             manifest_sha256=_prepared_template.manifest_sha256)
+        same_packages = resolved.packages == settings.packages
+        return replace(
+            _prepared_template.base_contexts[lane],
+            run_root=fixture.run_root,
+            settings=resolved,
+            core=core,
+            infer=infer,
+            attempt_id=Path(tmp_path / "attempts" / attempt).name,
+            result_cache=cache_from_settings(resolved.result_cache, fixture.run_id),
+            receipts_root=fixture.run_root / "data" / "jobs" / JOB_ID / "cells",
+            budget=JobBudget.for_run(fixture.run_root, resolved.budgets, new_timing_mode="active_v2"),
+            semaphore=ReviewTeamSemaphore.for_run(fixture.run_root, resolved.teams.review_teams),
+            max_page_size=resolved.packages.max_page_size,
+            max_depth=resolved.packages.max_depth,
+            _bundles=_prepared_template.bundles,
+            _pinned=set(),
+            _views=_prepared_template.views if same_packages else {},
+            _resolves=_prepared_template.resolves,
+            _names=_prepared_template.names,
+            _locations=_prepared_template.locations,
+            _lock=_prepared_template.cache_lock,
+        )
 
     def work(lane: str, lead_key: str):
         identity = fixture.ids[lead_key]
@@ -149,7 +332,15 @@ def test_lane_dispatch_and_shared_reservations_follow_profile(tmp_path, monkeypa
 
 
 def test_hunt_triage_orders_by_direct_support_then_claim_id_and_caps(prepared) -> None:
-    ctx = prepared.context(prepared.infer, lane="hunt")
+    def quick_verifier(request, *, timeout_seconds):
+        if request.role == "independent_verifier":
+            return ScriptedInfer._final({"disposition": "insufficient_evidence", "per_predicate": {},
+                                         "why": NARRATIVES["verifier"]})
+        return prepared.infer(request, timeout_seconds=timeout_seconds)
+
+    no_judge = MappingProxyType({**prepared.settings.roles, Role.ADJUDICATION_JUDGE: replace(
+        prepared.settings.roles[Role.ADJUDICATION_JUDGE], enabled=False)})
+    ctx = prepared.context(quick_verifier, lane="hunt", roles=no_judge)
     result = run_team(ctx, prepared.work("hunt", "sast_critical"), launch=True)
     decisions = [item for item in result.triage if item["decision"] != "rejected"]
     admitted = [item for item in decisions if item["decision"] == "admitted"]
@@ -256,14 +447,31 @@ def test_a_verifier_citing_irrelevant_but_real_evidence_is_not_independent(prepa
 
 
 def test_duplicate_proposal_merges_into_the_lead_claim_and_is_counted(prepared) -> None:
-    lead_ctx = prepared.context(prepared.infer, lane="lead")
-    hunt_ctx = prepared.context(prepared.infer, lane="hunt")
+    def quick_review(request, *, timeout_seconds):
+        if request.role == "independent_verifier":
+            return ScriptedInfer._final({"disposition": "insufficient_evidence", "per_predicate": {},
+                                         "why": NARRATIVES["verifier"]})
+        return prepared.infer(request, timeout_seconds=timeout_seconds)
+
+    def only_duplicate_claim(request, result):
+        if request.role == "hypothesis_hunter" and "claims" in result:
+            result["claims"] = [item for item in result["claims"] if item.get("id") == "c1"]
+
+    budgets = replace(prepared.settings.budgets, budget_team_packages=3)
+    single_red = replace(prepared.settings.teams, red_per_team=1)
+    no_judge = MappingProxyType({**prepared.settings.roles, Role.ADJUDICATION_JUDGE: replace(
+        prepared.settings.roles[Role.ADJUDICATION_JUDGE], enabled=False)})
+    lead_ctx = prepared.context(quick_review, lane="lead", budgets=budgets, teams=single_red, roles=no_judge)
+    hunt_ctx = prepared.context(_rewriting(quick_review, only_duplicate_claim), lane="hunt",
+                                budgets=budgets, teams=single_red, roles=no_judge)
+    lead_works = [prepared.work("lead", "sast_critical"), prepared.work("lead", "sast_unknown")]
+    hunt_works = package_works(prepared.fixture.run_root, prepared.documents("hunt"))
     shards = prepared.tmp / "shards"
-    lead = run_lane(lead_ctx, Lane.LEAD, package_works(prepared.fixture.run_root, prepared.documents("lead")),
-                    other_lane_count=2, ledger_path=shards / "lead.jsonl", stream="lead_review.teams",
+    lead = run_lane(lead_ctx, Lane.LEAD, lead_works,
+                    other_lane_count=len(hunt_works), ledger_path=shards / "lead.jsonl", stream="lead_review.teams",
                     signal_dir=prepared.tmp / "lanes")
-    hunt = run_lane(hunt_ctx, Lane.HUNT, package_works(prepared.fixture.run_root, prepared.documents("hunt")),
-                    other_lane_count=9, ledger_path=shards / "hunt.jsonl", stream="hunt_review.teams",
+    hunt = run_lane(hunt_ctx, Lane.HUNT, hunt_works,
+                    other_lane_count=len(lead_works), ledger_path=shards / "hunt.jsonl", stream="hunt_review.teams",
                     signal_dir=prepared.tmp / "lanes")
     projection = project(merge_shards([shards / "lead.jsonl", shards / "hunt.jsonl"]).events)
     merged = [view for view in projection.claims.values() if len(view.proposal_lanes) > 1]
@@ -285,7 +493,7 @@ def test_duplicate_proposal_merges_into_the_lead_claim_and_is_counted(prepared) 
     assert {gap.reason for gap in accounting.violations} == {"claim_not_final"}
     assert accounting.duplicate_proposals == 1 and accounting.lane(Lane.HUNT).duplicate_proposals == 1
     assert accounting.claims_by_state[ClaimState.DUPLICATE] == 0
-    assert lead["allocation"] == {"lead": 9, "hunt": 1} == hunt["allocation"]
+    assert lead["allocation"] == {"lead": 2, "hunt": 1} == hunt["allocation"]
     assert json.loads((prepared.tmp / "lanes" / "hunt.json").read_text())["queue_empty"] is True
 
 
@@ -293,7 +501,8 @@ def test_duplicate_proposal_merges_into_the_lead_claim_and_is_counted(prepared) 
 
 
 def test_provider_and_schema_failures_are_typed_gaps_with_terminal_records(prepared) -> None:
-    result = run_team(prepared.context(prepared.infer), prepared.work("lead", "dep_high"), launch=True)
+    single_red = replace(prepared.settings.teams, red_per_team=1)
+    result = run_team(prepared.context(prepared.infer, teams=single_red), prepared.work("lead", "dep_high"), launch=True)
     [verifier] = [item for item in result.cells if item.role is Role.INDEPENDENT_VERIFIER]
     assert verifier.status is CellStatus.FAILED and verifier.attempts == prepared.settings.retry.max_attempts
     [claim_id] = result.verifier_gaps
@@ -305,7 +514,8 @@ def test_provider_and_schema_failures_are_typed_gaps_with_terminal_records(prepa
             return ModelResult(proposal={"action": "final", "result": {"schema": "wrong"}})
         return prepared.infer(request, timeout_seconds=timeout_seconds)
 
-    result = run_team(prepared.context(malformed, attempt="b"), prepared.work("lead", "sast_high"), launch=True)
+    result = run_team(prepared.context(malformed, attempt="b", teams=single_red),
+                      prepared.work("lead", "sast_high"), launch=True)
     blues = [item for item in result.cells if item.role is Role.BLUE_TEAM_REFUTER]
     assert blues and {item.status for item in blues} == {CellStatus.INVALID}
     assert any(gap.gap_class is GapClass.SCHEMA_ERROR and gap.subject_id == blues[0].cell_id for gap in result.gaps)
@@ -393,7 +603,15 @@ def test_rerunning_a_team_reuses_every_succeeded_cell(prepared) -> None:
     assert not recording.requests
     assert again.counts["cells_reused"] == len(first.cells) == 7          # 3 red, 2 blue, verifier, judge
     assert again.cells == first.cells and again.relations == first.relations
-    assert again.independence == first.independence
+    assert again.independence.keys() == first.independence.keys()
+    for claim_id, first_records in first.independence.items():
+        again_records = again.independence[claim_id]
+        assert len(again_records) == len(first_records)
+        for first_item, again_item in zip(first_records, again_records, strict=True):
+            assert {k: v for k, v in again_item.items() if k != "audit"} == {
+                k: v for k, v in first_item.items() if k != "audit"}
+            assert first_item["audit"]["request_markers_absent"] is True
+            assert again_item["audit"] == {**first_item["audit"], "request_markers_absent": None}
 
 
 def test_resuming_exhausted_team_reconstructs_prior_claims_without_new_calls(prepared):
@@ -525,9 +743,11 @@ def test_lead_accounting_and_named_gaps_reach_the_lane(prepared) -> None:
             return
         result["claims"][0]["missing"] = ["no deployment snapshot in the package"]
 
-    ctx = prepared.context(_rewriting(prepared.infer, enrich), lane="lead")
+    single_red = replace(prepared.settings.teams, red_per_team=1)
+    ctx = prepared.context(_rewriting(prepared.infer, enrich), lane="lead", teams=single_red)
+    selected_works = [prepared.work("lead", "sast_critical"), prepared.work("lead", "sast_unknown")]
     shards = prepared.tmp / "seeded"
-    lane = run_lane(ctx, Lane.LEAD, package_works(prepared.fixture.run_root, prepared.documents("lead")),
+    lane = run_lane(ctx, Lane.LEAD, selected_works,
                     other_lane_count=2, ledger_path=shards / "ledger.jsonl", stream="lead_review.teams",
                     signal_dir=prepared.tmp / "lanes-seeded")
     outcomes = {lead: summary["outcome"] for leads in lane["lead_accounting"].values() for lead, summary in leads.items()}

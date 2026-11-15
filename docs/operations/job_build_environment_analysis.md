@@ -62,9 +62,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | `tests/integration/test_build_topology_environment_lifecycle.py` |
+| integration | `tests/integration/test_build_topology_environment_lifecycle.py`<br>`tests/integration/job_build_environment_analysis/test_build_environment_graph.py`<br>`tests/integration/job_build_environment_analysis/test_build_environment_job_graph.py` |
 | live | None declared |
-| unit | `tests/test_build_environment_analysis.py`<br>`tests/unit/runtime/test_wave4_contracts.py` |
+| unit | `tests/unit/job_build_environment_analysis/test_analysis.py`<br>`tests/unit/job_build_environment_analysis/test_contract.py`<br>`tests/unit/job_build_environment_analysis/test_handlers.py`<br>`tests/unit/runtime/test_wave4_contracts.py` |
 
 ### Dagster placement
 

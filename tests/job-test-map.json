@@ -47,10 +47,16 @@
     },
     "job_build_environment_analysis": {
       "unit": [
-        "tests/test_build_environment_analysis.py",
+        "tests/unit/job_build_environment_analysis/test_analysis.py",
+        "tests/unit/job_build_environment_analysis/test_contract.py",
+        "tests/unit/job_build_environment_analysis/test_handlers.py",
         "tests/unit/runtime/test_wave4_contracts.py"
       ],
-      "integration": ["tests/integration/test_build_topology_environment_lifecycle.py"],
+      "integration": [
+        "tests/integration/test_build_topology_environment_lifecycle.py",
+        "tests/integration/job_build_environment_analysis/test_build_environment_graph.py",
+        "tests/integration/job_build_environment_analysis/test_build_environment_job_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -74,13 +80,15 @@
     },
     "job_change_context_analysis": {
       "unit": [
-        "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
-        "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
-        "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push",
+        "tests/unit/job_change_context_analysis/test_attribution.py",
+        "tests/unit/job_change_context_analysis/test_contract.py",
+        "tests/unit/job_change_context_analysis/test_handlers.py",
+        "tests/unit/job_change_context_analysis/test_metrics.py",
+        "tests/unit/job_change_context_analysis/test_settings_and_sources.py",
         "tests/unit/runtime/test_wave2_consumers.py",
         "tests/unit/runtime/test_wave3_contracts.py"
       ],
-      "integration": [],
+      "integration": ["tests/integration/job_change_context_analysis/test_change_context_graph.py"],
       "acceptance": [],
       "live": []
     },
@@ -525,31 +533,50 @@
     },
     "job_target_acquisition": {
       "unit": [
-        "tests/test_target_acquisition.py::test_configuration_refuses_unsafe_or_incomplete_targets",
-        "tests/test_target_acquisition.py::test_configuration_refuses_duplicate_ids_and_escaping_directories",
-        "tests/test_target_acquisition.py::test_url_and_path_safety_primitives",
+        "tests/unit/job_target_acquisition/test_configuration.py",
+        "tests/unit/job_target_acquisition/test_contract.py",
+        "tests/unit/job_target_acquisition/test_handlers.py",
+        "tests/unit/job_target_acquisition/test_job_graph.py",
         "tests/unit/runtime/test_wave1a_contracts.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_target_acquisition/test_target_acquisition.py"
+      ],
       "acceptance": [],
       "live": []
     },
     "job_target_analysis_plan": {
       "unit": [
-        "tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable",
-        "tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap",
+        "tests/unit/job_target_analysis_plan/test_contract.py",
+        "tests/unit/job_target_analysis_plan/test_partitioning.py",
+        "tests/unit/job_target_analysis_plan/test_planning.py",
+        "tests/unit/job_target_analysis_plan/test_feedback.py",
+        "tests/unit/job_target_analysis_plan/test_handlers.py",
         "tests/unit/runtime/test_wave4_contracts.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_target_analysis_plan/test_target_analysis_plan_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
     "job_target_catalog": {
       "unit": [
-        "tests/test_cataloging_languages.py",
-        "tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps"
+        "tests/unit/job_target_catalog/test_cataloging_languages.py",
+        "tests/unit/job_target_catalog/test_contract.py",
+        "tests/unit/job_target_catalog/test_descriptor_discovery.py",
+        "tests/unit/job_target_catalog/test_discovery.py",
+        "tests/unit/job_target_catalog/test_documents.py",
+        "tests/unit/job_target_catalog/test_graph.py",
+        "tests/unit/job_target_catalog/test_helpers.py",
+        "tests/unit/job_target_catalog/test_indexes.py",
+        "tests/unit/runtime/test_wave5_contracts.py"
       ],
-      "integration": ["tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent"],
+      "integration": [
+        "tests/integration/job_target_catalog/test_catalog_graph.py",
+        "tests/integration/job_target_catalog/test_catalog_path_graph.py",
+        "tests/integration/job_target_catalog/test_catalog_documents_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
