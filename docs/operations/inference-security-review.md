@@ -70,8 +70,8 @@ uses `default`:
 provider = "claude-cli"          # claude-cli | anthropic-api
 model = "claude-haiku-5-5"       # development default; upgrade for real reviews
 reasoning = "high"
-max_input_tokens = 32000
-max_output_tokens = 8000
+max_input_tokens = 128000        # per turn; the request byte bound is 4x this (T-5023)
+max_output_tokens = 32000        # per turn; thinking tokens count
 max_queries = 40                 # retrieval requests per cell
 max_turns = 12                   # model turns per cell
 timeout_seconds = 600            # per-cell deadline
