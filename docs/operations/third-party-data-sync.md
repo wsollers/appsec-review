@@ -276,7 +276,8 @@ pointer, manifest, and every manifest-hashed file verify and the manifest hashes
 (`index/nvd.sqlite`, `index/osv.sqlite`, `index/mitre.sqlite`, `index/kev.sqlite`,
 `index/epss.sqlite`); otherwise it is `unavailable` with a reason. A snapshot whose `published_at` is
 older than `feed_max_age_days` (default 14), or its entry in `feed_max_age_days_overrides`
-(`kev = 7`, `epss = 3`), is pinned with `stale: true`. Products that join a stale or unavailable feed
+(`kev = 7`, `epss = 3`, `mitre = 365`: the MITRE release is version-pinned and nearly static), is
+pinned with `stale: true`. Products that join a stale or unavailable feed
 record named gaps (`stale_feed`, `<feed>_stale_feed`, `<feed>_feed_unavailable`) and publish
 `stale`/`partial` coverage; they never publish an empty result as complete. The inference review
 validates claim CWEs only against a fresh pinned MITRE catalog and records a gap when it falls back.

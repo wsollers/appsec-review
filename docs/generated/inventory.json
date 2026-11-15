@@ -33149,7 +33149,8 @@
         "feed_max_age_days": 14,
         "feed_max_age_days_overrides": {
           "epss": 3,
-          "kev": 7
+          "kev": 7,
+          "mitre": 365
         },
         "fts_image_validation": "optional",
         "fts_max_input_bytes": 16777216,
@@ -43953,7 +43954,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "ef9b79f1100a1be3e119629e483d039cb859a57ea1a9eb82ee59e408259fcac5",
+    "appsec-review.toml": "c32164673fd66a8c6e103db3744569119183a639b6c5d8a6faa3f8852d45f727",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
     "docs/intelligence-buckets.json": "29e398870efeb2e8d8947281156a39f8654739f4710a63192474722f852e067a",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",

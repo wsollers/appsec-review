@@ -539,7 +539,8 @@ Remaining gaps after this batch:
   build or deployment; dynamic expressions and external workflows are unresolved.
 - Reference feeds are pinned per run only when a verified `current.json` snapshot exists under the
   configured feed root and its manifest hashes the feed's `index/*.sqlite`; a snapshot older than
-  `feed_max_age_days` (or its `feed_max_age_days_overrides` entry: `kev = 7`, `epss = 3`) is pinned
+  `feed_max_age_days` (or its `feed_max_age_days_overrides` entry: `kev = 7`, `epss = 3`,
+  `mitre = 365`) is pinned
   as stale and every joining product records a `stale_feed` gap and `stale` coverage. CAPEC/ATT&CK
   relationships are not normalized. NVD `vulnStatus` is recorded, but CVE "disputed" tags are not
   captured by the index.

@@ -1134,8 +1134,10 @@ max_build_exec_events = 20000
 max_commands_per_action = 64
 feed_max_age_days = 14
 # Per-feed freshness bounds that override feed_max_age_days; a pinned snapshot older than its bound
-# is pinned as stale and every product joining it records a stale_feed gap.
-feed_max_age_days_overrides = { kev = 7, epss = 3 }
+# is pinned as stale and every product joining it records a stale_feed gap. The MITRE feed is a
+# version-pinned CWE/CAPEC/ATT&CK release whose content changes a few times a year, so its bound is
+# a year; the exploitation feeds stay tight.
+feed_max_age_days_overrides = { kev = 7, epss = 3, mitre = 365 }
 # How dependency_advisories treats an inventory dependency whose package the pinned OSV index lists:
 # "disabled" publishes every listed advisory as an unverified lead; "index" decides each one against
 # the advisory's affected versions and ranges (appsec_review.osv_matching), keeping undecided ones

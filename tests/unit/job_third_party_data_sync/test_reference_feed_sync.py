@@ -320,6 +320,28 @@ def test_feed_pins_expose_kev_and_epss_and_mark_stale_by_per_feed_bound(tmp_path
     assert pins["osv"]["status"] == "unavailable" and pins["nvd"]["status"] == "unavailable"
 
 
+def test_repository_config_gives_the_version_pinned_mitre_feed_a_long_freshness_bound(tmp_path: Path) -> None:
+    """The MITRE CWE release is pinned by version and nearly static; the configured override keeps a weeks-old
+    snapshot current while an exploitation feed of the same age is stale (run 2026-11-15-0003 reported
+    mitre_stale_feed on every scored claim from a 29-day-old catalog under the 14-day default)."""
+    import tomllib
+
+    settings = tomllib.loads((Path(__file__).parents[3] / "appsec-review.toml").read_text(encoding="utf-8"))[
+        "jobs"]["job_review_data_indexing"]["settings"]
+    overrides = {str(key): int(value) for key, value in settings["feed_max_age_days_overrides"].items()}
+    assert overrides["mitre"] >= 180 and overrides["kev"] <= 14 and overrides["epss"] <= 14
+    mitre = publish_mitre(tmp_path / "mitre", {"CWE-79": ("XSS", "Base", [])}, tmp_path / "w1")
+    kev = publish_kev(tmp_path / "kev", kev_document([kev_entry("CVE-2026-0001")]), tmp_path / "w2")
+    old = (FIXED_NOW - timedelta(days=29)).isoformat().replace("+00:00", "Z")
+    set_published_at(mitre, old)
+    set_published_at(kev, old)
+    pins = pin_feeds(tmp_path, {"mitre": mitre, "kev": kev}, max_age_days=int(settings["feed_max_age_days"]),
+                     overrides=overrides)
+    assert pins["mitre"]["status"] == "pinned" and pins["mitre"]["stale"] is False
+    assert pins["mitre"]["max_age_days"] == overrides["mitre"]
+    assert pins["kev"]["status"] == "pinned" and pins["kev"]["stale"] is True
+
+
 def test_a_manifest_without_its_index_file_is_not_pinned(tmp_path: Path) -> None:
     kev = publish_kev(tmp_path / "kev", kev_document([kev_entry("CVE-2026-0001")]), tmp_path / "w")
     (Path(verify_current(kev, "kev")["directory"]) / "index" / "kev.sqlite").unlink()
