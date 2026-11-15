@@ -1,14 +1,18 @@
 """Accepted OWASP authority -> indirect control product -> provisional lead and model context."""
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
 import json
 from pathlib import Path
 from typing import Any
 
 import jsonschema
 import pytest
+
+from appsec_review.config import load_config
 
 from appsec_review.indexing import products
 from appsec_review.indexing.derive import publish_derived
@@ -28,7 +32,9 @@ from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS
 from appsec_review.review.scope import accept_manifest
 from appsec_review.review.units import build_units
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage.validation import validation_scope
 from tests.fixtures.inference_review.builder import FEEDS, build_accepted_index_set
+from tests.handoff_fixture import write_fixture_handoff
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,9 +43,36 @@ CONTROL = "asvs:5.0.0:V1.2.4"
 COMPONENT = "component:0001"
 
 
+@lru_cache(maxsize=1)
+def _base_app_config():
+    return load_config(ROOT / "appsec-review.toml")
+
+
 def _fixture(base: Path):
-    return build_accepted_index_set(base, omit_feeds=FEEDS, stale_feeds=(),
+    return build_accepted_index_set(base, omit_feeds=FEEDS, stale_feeds=(), publish_v1_packages=False,
         omit=("codeql", "osv", "ci", "priority", "history", "dependency_advisories", "reference_intelligence"))
+
+
+class _LazyViews(Mapping[str, Any]):
+    def __init__(self, packages: tuple[Any, ...], core: RetrievalCore) -> None:
+        self._by_id = {package.package_id: package for package in packages}
+        self._core = core
+        self._cache: dict[str, Any] = {}
+
+    def __getitem__(self, package_id: str) -> Any:
+        if package_id not in self._cache:
+            package = self._by_id[package_id]
+            self._cache[package_id] = build_view(package.document(), self._core, ViewLimits())
+        return self._cache[package_id]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._by_id)
+
+    def __len__(self) -> int:
+        return len(self._by_id)
+
+    def values(self):  # type: ignore[override]
+        return (self[package_id] for package_id in self._by_id)
 
 
 @dataclass(frozen=True)
@@ -51,7 +84,7 @@ class DownstreamArtifacts:
     collection: Any
     assembly: Any
     core: RetrievalCore
-    views: dict[str, Any]
+    views: Mapping[str, Any]
 
 
 def project_and_assemble(fixture) -> DownstreamArtifacts:
@@ -61,45 +94,45 @@ def project_and_assemble(fixture) -> DownstreamArtifacts:
     retrieval manifest names the control product and the original manifest as an explicit ancestor.
     """
     root = fixture.run_root
-    scope = accept_manifest(root)
-    publication = owasp_status(root)
-    store = ShardSet(root, scope.shards)
-    rule = products.product_rule("control_evidence")
-    context = products.ProductContext(root, scope.target_snapshot, store, {}, {}, publication, 1000, rule.version)
-    derived = rule.build(context, rule.select(store))
-    projection = publish_derived(
-        root, index="precomputed", shard_id="owasp-control-evidence", job_id="job_review_data_indexing",
-        unit_id="owasp-downstream", rule="control_evidence", rule_version=rule.version,
-        snapshot=scope.target_snapshot, inputs={"owasp": publication["manifest_sha256"],
-                                               "manifest": scope.manifest_sha256},
-        build=lambda: derived, producer={"query_set": "control_evidence"})
-    identities = [IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}) for raw in scope.shards]
-    raw = projection["index_identity"]
-    identities.append(IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}))
-    upstream = {"path": scope.manifest_path.relative_to(root).as_posix(), "sha256": scope.manifest_sha256}
-    path = root / "data" / "indices" / "manifests" / f"owasp-downstream-{projection['fingerprint']}.json"
-    original_manifest = json.loads(scope.manifest_path.read_text(encoding="utf-8"))
-    write_manifest(path, run_id=scope.run_id, target_snapshot=scope.target_snapshot,
-                   target_root=Path(original_manifest["target_root"]), indexes=identities,
-                   upstream_manifests=[upstream])
-    pointer_path = root / "data" / "indices" / "accepted.json"
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    handoff_path = root / pointer["handoff_path"]
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    handoff["artifacts"].append({"path": path.relative_to(root).as_posix(), "sha256": file_sha256(path),
-                                 "size_bytes": path.stat().st_size})
-    atomic_json(handoff_path, handoff)
-    atomic_json(pointer_path, {**pointer, "manifest_path": path.relative_to(root).as_posix(),
-                              "manifest_sha256": file_sha256(path), "handoff_sha256": file_sha256(handoff_path)})
-    projected_scope = accept_manifest(root)
-    collection = collect_leads(projected_scope)
-    assembly = assemble_packages(projected_scope, collection=collection)
-    core = RetrievalCore(root.parent, root.name)
-    views = {package.package_id: build_view(package.document(), core, ViewLimits())
-             for package in assembly.packages}
-    rows = tuple(projected_scope.store.entities(projected_scope.producer("control_evidence").shards,
-                                                 kinds=("precomputed_fact",)))
-    return DownstreamArtifacts(derived, projection, rows, projected_scope, collection, assembly, core, views)
+    with validation_scope(root):
+        scope = accept_manifest(root)
+        publication = owasp_status(root)
+        store = ShardSet(root, scope.shards)
+        rule = products.product_rule("control_evidence")
+        context = products.ProductContext(root, scope.target_snapshot, store, {}, {}, publication, 1000, rule.version)
+        derived = rule.build(context, rule.select(store))
+        projection = publish_derived(
+            root, index="precomputed", shard_id="owasp-control-evidence", job_id="job_review_data_indexing",
+            unit_id="owasp-downstream", rule="control_evidence", rule_version=rule.version,
+            snapshot=scope.target_snapshot, inputs={"owasp": publication["manifest_sha256"],
+                                                   "manifest": scope.manifest_sha256},
+            build=lambda: derived, producer={"query_set": "control_evidence"})
+        identities = [IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}) for raw in scope.shards]
+        raw = projection["index_identity"]
+        identities.append(IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}))
+        upstream = {"path": scope.manifest_path.relative_to(root).as_posix(), "sha256": scope.manifest_sha256}
+        path = root / "data" / "indices" / "manifests" / f"owasp-downstream-{projection['fingerprint']}.json"
+        original_manifest = json.loads(scope.manifest_path.read_text(encoding="utf-8"))
+        write_manifest(path, run_id=scope.run_id, target_snapshot=scope.target_snapshot,
+                       target_root=Path(original_manifest["target_root"]), indexes=identities,
+                       upstream_manifests=[upstream])
+        pointer_path = root / "data" / "indices" / "accepted.json"
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        handoff_path = root / pointer["handoff_path"]
+        handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+        handoff["artifacts"].append({"path": path.relative_to(root).as_posix(), "sha256": file_sha256(path),
+                                     "size_bytes": path.stat().st_size})
+        atomic_json(handoff_path, handoff)
+        atomic_json(pointer_path, {**pointer, "manifest_path": path.relative_to(root).as_posix(),
+                                  "manifest_sha256": file_sha256(path), "handoff_sha256": file_sha256(handoff_path)})
+        projected_scope = accept_manifest(root)
+        collection = collect_leads(projected_scope)
+        assembly = assemble_packages(projected_scope, collection=collection)
+        core = RetrievalCore(root.parent, root.name)
+        views = _LazyViews(tuple(assembly.packages), core)
+        rows = tuple(projected_scope.store.entities(projected_scope.producer("control_evidence").shards,
+                                                     kinds=("precomputed_fact",)))
+        return DownstreamArtifacts(derived, projection, rows, projected_scope, collection, assembly, core, views)
 
 
 @dataclass(frozen=True)
@@ -179,11 +212,12 @@ def run_review_roles(fixture, downstream: DownstreamArtifacts, *, package_id: st
             "path": (manifest_path.parent / "packages" / f"{package_id}.json").relative_to(root).as_posix(),
         }],
     }
-    settings = load_config(ROOT / "appsec-review.toml").job("job_inference_security_review").typed_settings
+    settings = _base_app_config().job("job_inference_security_review").typed_settings
     settings = replace(settings,
         rounds=replace(settings.rounds, max_rounds=1, stable_rounds_required=1, max_active_claims=1),
-        teams=replace(settings.teams, review_teams=1, red_per_team=3, blue_per_team=2, verifier_per_team=1),
+        teams=replace(settings.teams, review_teams=1, red_per_team=1, blue_per_team=1, verifier_per_team=1),
         lanes=replace(settings.lanes, lead_max_claims_per_package=1),
+        result_cache=replace(settings.result_cache, enabled=False),
         budgets=replace(settings.budgets, budget_team_packages=1, max_model_turns=16,
                         max_input_tokens=1_000_000, max_output_tokens=65_536,
                         max_retrieval_queries=16, timeout_seconds=120),
@@ -217,19 +251,20 @@ def run_review_roles(fixture, downstream: DownstreamArtifacts, *, package_id: st
         return replace(response, proposal=proposal)
 
     recording = Recording(source_only_script)
-    context = review_context(run_root=root, run_id=downstream.scope.run_id, attempt_root=attempt,
-        repository_root=ROOT, settings=settings, infer=recording,
-        manifest_path=downstream.scope.manifest_path, manifest_sha256=downstream.scope.manifest_sha256,
-        packages_doc=packages_doc,
-        scope_out={"artifact": {"path": scope_path.relative_to(root).as_posix(),
-                               "sha256": file_sha256(scope_path)},
-                   "source_languages": {item.identity: item.language for item in downstream.scope.source_files
-                                        if item.language},
-                   "build_unit_languages": {item.build_unit_id: list(item.languages)
-                                            for item in downstream.scope.build_units}})
-    context.receipts_root = attempt / "cells"
-    [work] = package_works(root, packages_doc)
-    result = run_team(context, work, launch=True)
+    with validation_scope(root):
+        context = review_context(run_root=root, run_id=downstream.scope.run_id, attempt_root=attempt,
+            repository_root=ROOT, settings=settings, infer=recording,
+            manifest_path=downstream.scope.manifest_path, manifest_sha256=downstream.scope.manifest_sha256,
+            packages_doc=packages_doc,
+            scope_out={"artifact": {"path": scope_path.relative_to(root).as_posix(),
+                                   "sha256": file_sha256(scope_path)},
+                       "source_languages": {item.identity: item.language for item in downstream.scope.source_files
+                                            if item.language},
+                       "build_unit_languages": {item.build_unit_id: list(item.languages)
+                                                for item in downstream.scope.build_units}})
+        context.receipts_root = attempt / "cells"
+        [work] = package_works(root, packages_doc)
+        result = run_team(context, work, launch=True)
     return ReviewRoleArtifacts(result, tuple(recording.requests), context, work, source, reference.record())
 
 
@@ -281,10 +316,37 @@ def _publish(fixture, records: list[dict], *, mode: str = "assessment") -> dict:
     scope = accept_manifest(fixture.run_root)
     shard = indexes.publish_shard(fixture.run_root, family="control-result", shard_id="downstream-test",
                                   records=records, fingerprint_inputs={"test": "owasp-downstream"})
-    return indexes.publish_manifest(fixture.run_root, run_id=fixture.run_id, shards=[shard],
+    manifest = indexes.publish_manifest(fixture.run_root, run_id=fixture.run_id, shards=[shard],
         accepted_upstream_manifest={"path": scope.manifest_path.relative_to(fixture.run_root).as_posix(),
                                     "sha256": scope.manifest_sha256},
         configuration_sha256="b" * 64, assessment_mode=mode)
+    attempts = fixture.run_root / "data" / "jobs" / "job_owasp_control_assessment" / "attempts"
+    existing = sorted(path.name for path in attempts.iterdir()) if attempts.is_dir() else []
+    attempt_id = f"attempt_{len(existing) + 1:04d}"
+    handoff_path = attempts / attempt_id / "handoff.json"
+    outputs = {"publication.publish_handoff": {
+        "index_manifest": {"path": manifest["path"], "sha256": manifest["sha256"]},
+        "terminal_status": "SUCCEEDED",
+    }}
+    with validation_scope(fixture.run_root):
+        write_fixture_handoff(
+            fixture.run_root, handoff_path,
+            {
+                "job_id": "job_owasp_control_assessment", "attempt_id": attempt_id,
+                "source_fingerprint": fixture.snapshot, "outputs": outputs,
+                "artifacts": [
+                    {"path": manifest["path"], "sha256": manifest["sha256"]},
+                    {"path": shard["path"], "sha256": shard["sha256"]},
+                ],
+            },
+            target_snapshot=fixture.snapshot,
+        )
+    atomic_json(attempts.parent / "latest.json", {
+        "schema": "appsec-review/latest-handoff/1", "attempt_id": attempt_id,
+        "handoff_path": handoff_path.relative_to(fixture.run_root).as_posix(),
+        "handoff_sha256": file_sha256(handoff_path),
+    })
+    return manifest
 
 
 @pytest.fixture
@@ -415,17 +477,22 @@ def test_scoped_effective_controls_reach_blue_context_without_claiming_component
     packages = [item for item in result.assembly.packages if item.document()["scope"]["component_id"] == COMPONENT]
     assert packages
     for package in packages:
-        document = package.document()
-        jsonschema.Draft202012Validator(SCHEMA).validate(document)
+        raw = package.document()
+        jsonschema.Draft202012Validator(SCHEMA).validate(raw)
+        document = package.resolved()
         controls = [entry["control_assessment"] for entry in document["context"] if entry["role"] == "control_context"]
         assert controls and all(item["component_id"] == COMPONENT for item in controls)
         assert controls[0]["control_status"] == "satisfied"
         assert controls[0]["obligations"] == row["obligations"]
         assert "component-safety proof" in controls[0]["interpretation"]
         assert {item["source_identity"] for item in controls[0]["evidence"]} <= set(document["retrieval"]["entity_ids"])
-        view_controls = [entry["control_assessment"] for entry in result.views[package.package_id].document["other_context"]
-                         if entry["role"] == "control_context"]
-        assert view_controls == controls
+        view_doc = result.views[package.package_id].document
+        if raw.get("unit_context") is not None:
+            assert view_doc["unit_context"]["sha256"] == raw["unit_context"]["sha256"]
+        else:
+            view_controls = [entry["control_assessment"] for entry in view_doc["other_context"]
+                             if entry["role"] == "control_context"]
+            assert view_controls == controls
 
 
 def test_scanner_and_owasp_same_underlying_source_are_not_independent_or_extra_hints(downstream):

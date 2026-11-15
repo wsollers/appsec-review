@@ -409,7 +409,7 @@ def test_acceptance_re_resolves_and_rejects_another_site_in_the_same_entity(tmp_
     assert first["citation_checks"][0]["resolution"] == "resolved"
     assert first["citation_checks"][0]["subject_binding"]
     assert not first["supporting"]
-    assert "truncated" in first["gaps"][0]
+    assert "incomplete" in first["gaps"][0]
     assert second["citation_checks"][0]["resolution"] == "resolved"
     assert not second["citation_checks"][0]["subject_binding"] and not second["supporting"]
     assert "named subject" in second["gaps"][0]

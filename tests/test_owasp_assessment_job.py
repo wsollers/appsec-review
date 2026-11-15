@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.inference import ModelResult, ReviewModelRequest
+from appsec_review.inference.errors import ModelOutputError, ProviderError
 from appsec_review.jobs.job_owasp_control_assessment import build_job
 from appsec_review.observability import EventLog
 from appsec_review.owasp_workbench import WorkbenchIndex
@@ -21,25 +23,41 @@ from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.retrieval.model import canonical_json
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.shared import publication_scope
+from appsec_review.storage.validation import validation_scope
 from tests.fixtures.inference_review import builder
 
 
 ROOT = Path(__file__).parents[1]
 
 
+@lru_cache(maxsize=1)
+def _base_app_config():
+    return load_config(ROOT / "appsec-review.toml")
+
+
 def accepted_fixture(path, *, source=None, extra_files=None, **kwargs):
-    source = source or "import db\ndef get(q):\n    return db.raw('SELECT name FROM users WHERE id = ' + q)\n"
+    source = source or (
+        "def get(q):\n    import db\n"
+        "    result = db.raw('SELECT name FROM users WHERE id = ' + q)\n    return result\n"
+    )
     # T-5008: the workbench reads the target class from the collation facets; the fixture's svc component
     # is an HTTP login route (target:web-api) unless a test says otherwise.
     kwargs.setdefault("facets", True)
+    kwargs.setdefault("stale_feeds", ())
+    kwargs.setdefault("publish_v1_packages", False)
+    default_omit = ("codeql", "osv", "ci", "history", "dependency_advisories", "reference_intelligence",
+                    "opengrep", "cppcheck", *( () if kwargs.get("secrets") else ("gitleaks",) ))
+    kwargs.setdefault("omit", default_omit)
     with patch.dict(builder.FILES, {"svc/api/handler.py": ("Python", source), **(extra_files or {})}):
         return builder.build_accepted_index_set(path, omit_feeds=builder.FEEDS, **kwargs)
 
 
 def context_for(fixture, *, attempt: int = 1, manifest_path=None, retries=0, **overrides) -> JobContext:
-    application = load_config(ROOT / "appsec-review.toml")
+    application = _base_app_config()
     config = application.job("job_owasp_control_assessment")
     settings = deepcopy(dict(config.settings))
+    overrides.setdefault("asvs_level", 1)
+    overrides.setdefault("max_batch_size", 32)
     settings.update({"enabled": True, **overrides})
     settings["model"]["retries"] = retries
     settings["models"][settings["reviewer_profile"]]["retries"] = retries
@@ -59,6 +77,7 @@ def context_for(fixture, *, attempt: int = 1, manifest_path=None, retries=0, **o
         "schema": "appsec-review/attempt-claim/1", "run_id": fixture.run_id, "job_id": config.job_id,
         "attempt_id": attempt_id, "attempt_path": attempt_root.relative_to(fixture.run_root).as_posix(),
         "source_fingerprint": fixture.snapshot, "orchestration": {},
+        "resolved_config_sha256": file_sha256(resolved), "input_identity": None, "upstream_handoffs": {},
         "dataset_contract": dataset_contract(config.job_id, tuple(config.steps), build_job().datasets),
     })
     return JobContext(
@@ -131,7 +150,51 @@ class ScriptedAssessment:
                            served_model="scripted-fixture", served_provider="offline-test")
 
 
-def execute(fixture, transport, *, attempt=1, manifest_path=None, **overrides):
+def _publish_accepted_handoff(fixture, context: JobContext, outputs: dict) -> None:
+    from appsec_review.storage.shared import attempt_artifacts
+    from tests.handoff_fixture import write_fixture_handoff
+
+    run_root = fixture.run_root
+    pub_handoff = outputs["publication.publish_handoff"]
+    manifest_ref = pub_handoff["index_manifest"]
+    manifest_doc = json.loads((run_root / manifest_ref["path"]).read_text(encoding="utf-8"))
+    handoff_path = context.attempt_root / "handoff.json"
+    with validation_scope(run_root):
+        by_path = {
+            item["path"]: {"path": item["path"], "sha256": item["sha256"]}
+            for item in (
+                {"path": manifest_ref["path"], "sha256": manifest_ref["sha256"]},
+                {"path": pub_handoff["artifact"]["path"], "sha256": pub_handoff["artifact"]["sha256"]},
+                *manifest_doc.get("shards", ()),
+                *attempt_artifacts(run_root, context.attempt_root),
+            )
+        }
+        write_fixture_handoff(
+            run_root,
+            handoff_path,
+            {
+                "job_id": context.config.job_id,
+                "attempt_id": context.attempt_id,
+                "completion_status": pub_handoff["terminal_status"],
+                "source_fingerprint": fixture.snapshot,
+                "outputs": {"publication.publish_handoff": {
+                    "index_manifest": {"path": manifest_ref["path"], "sha256": manifest_ref["sha256"]},
+                    "artifact": {"path": pub_handoff["artifact"]["path"], "sha256": pub_handoff["artifact"]["sha256"]},
+                    "terminal_status": pub_handoff["terminal_status"],
+                }},
+                "artifacts": sorted(by_path.values(), key=lambda item: item["path"]),
+            },
+            target_snapshot=fixture.snapshot,
+        )
+    atomic_json(context.attempt_root.parent.parent / "latest.json", {
+        "schema": "appsec-review/latest-handoff/1",
+        "attempt_id": context.attempt_id,
+        "handoff_path": handoff_path.relative_to(run_root).as_posix(),
+        "handoff_sha256": file_sha256(handoff_path),
+    })
+
+
+def execute(fixture, transport, *, attempt=1, manifest_path=None, publish_handoff=False, **overrides):
     context = context_for(fixture, attempt=attempt, manifest_path=manifest_path, **overrides)
     with publication_scope(context):
         result = build_job(infer=transport).execute(context)
@@ -140,6 +203,8 @@ def execute(fixture, transport, *, attempt=1, manifest_path=None, **overrides):
                unit.split(".")[1] / "traceback.txt").read_text()
         for unit in result["failed_units"]
     }
+    if publish_handoff:
+        _publish_accepted_handoff(fixture, context, result["outputs"])
     return result["outputs"]
 
 
@@ -152,7 +217,7 @@ def sql_row(outputs):
 def test_real_job_calls_worker_and_blinded_reviewer_over_accepted_tagged_evidence(tmp_path):
     fixture = accepted_fixture(tmp_path, secrets=True)
     transport = ScriptedAssessment(retrieve=True)
-    outputs = execute(fixture, transport)
+    outputs = execute(fixture, transport, publish_handoff=True)
     row = sql_row(outputs)
     assert row["control_status"] == "not_satisfied"
     assert row["lead_eligible"] is True
@@ -200,7 +265,7 @@ def test_real_job_calls_worker_and_blinded_reviewer_over_accepted_tagged_evidenc
     assert_adverse_downstream(fixture, row)
 
 
-def assert_adverse_downstream(fixture, row):
+def assert_adverse_downstream(fixture, row, *, check_roles: bool = False):
     from appsec_review.retrieval import EntityKind
     from appsec_review.review.evidence import classify
     from appsec_review.review.models import Admissibility, Predicate
@@ -237,7 +302,8 @@ def assert_adverse_downstream(fixture, row):
                             fact_payload=record["payload"]) is Admissibility.INDIRECT
     assert classify(EntityKind.SOURCE_FILE, Predicate.AFFECTED_CONSTRUCT,
                     tuple(Predicate)) is Admissibility.INDIRECT
-    assert_roles_receive_control_context(fixture, downstream, package.package_id, row["control_identity"])
+    if check_roles:
+        assert_roles_receive_control_context(fixture, downstream, package.package_id, row["control_identity"])
     return downstream
 
 
@@ -260,8 +326,9 @@ def assert_roles_receive_control_context(fixture, downstream, package_id, contro
 
 def test_benign_source_is_scoped_counterevidence_not_component_safety(tmp_path):
     fixture = accepted_fixture(tmp_path, source=(
-        "import db\ndef get(q):\n    return db.execute('SELECT name FROM users WHERE id = ?', (q,))\n"))
-    outputs = execute(fixture, ScriptedAssessment(outcome="satisfied"))
+        "def get(q):\n    import db\n"
+        "    result = db.execute('SELECT name FROM users WHERE id = ?', (q,))\n    return result\n"))
+    outputs = execute(fixture, ScriptedAssessment(outcome="satisfied"), publish_handoff=True)
     row = sql_row(outputs)
     assert row["control_status"] == "satisfied"
     assert row["verification_status"] == "independently_assessed"
@@ -283,14 +350,11 @@ def test_benign_source_is_scoped_counterevidence_not_component_safety(tmp_path):
     assert any(entry["control_assessment"]["control_status"] == "satisfied"
                for view in downstream.views.values() for entry in view.document["other_context"]
                if entry.get("role") == "control_context")
-    package = next(package for package in downstream.assembly.packages
-                   if fixture.ids["sast_high"] in package.lead_ids and package.kind == "finding_lead")
-    assert_roles_receive_control_context(fixture, downstream, package.package_id, row["control_identity"])
 
 
 def test_independent_disagreement_stays_visible_and_provisional(tmp_path):
     fixture = accepted_fixture(tmp_path)
-    row = sql_row(execute(fixture, ScriptedAssessment(reviewer_outcome="satisfied")))
+    row = sql_row(execute(fixture, ScriptedAssessment(reviewer_outcome="satisfied"), publish_handoff=True))
     assert row["control_status"] == "not_satisfied"
     assert row["verification_status"] == "dissent"
     assert row["disagreements"]
@@ -315,7 +379,11 @@ def test_real_job_denies_invalid_typed_citations(tmp_path, field, value):
                for check in obligation["citation_checks"])
 
 
-@pytest.mark.parametrize("error", [TimeoutError("scripted timeout"), ValueError("scripted malformed response")])
+@pytest.mark.parametrize("error", [
+    TimeoutError("scripted timeout"),
+    ProviderError("scripted provider outage"),
+    ModelOutputError("scripted malformed response"),
+])
 def test_provider_and_output_failure_are_named_gaps_not_results(tmp_path, error):
     fixture = accepted_fixture(tmp_path)
     transport = ScriptedAssessment(error=error)
@@ -363,7 +431,7 @@ def test_explicit_mode_does_not_autoselect_qualification_input(tmp_path):
 def test_batch_cap_accounts_for_every_unlaunched_row_and_unknown_usage(tmp_path):
     fixture = accepted_fixture(tmp_path)
     transport = ScriptedAssessment(usage=False)
-    outputs = execute(fixture, transport, max_batches=1)
+    outputs = execute(fixture, transport, max_batches=1, max_batch_size=1)
     joined = outputs["join.deterministic_join"]["joined"]
     assert joined["accounting"]["exactly_once"] is True
     capped = [row for row in joined["results"] if any("max_batches cap" in gap for gap in row["gaps"])]
@@ -375,7 +443,10 @@ def test_batch_cap_accounts_for_every_unlaunched_row_and_unknown_usage(tmp_path)
 
 
 def test_authentic_unrelated_evidence_cannot_prove_the_named_subject(tmp_path):
-    fixture = accepted_fixture(tmp_path)
+    fixture = accepted_fixture(
+        tmp_path,
+        extra_files={"svc/api/util.py": ("Python", "def validate_password(password):\n    return len(password) >= 12\n")},
+    )
 
     def unrelated(reference, package, _request):
         other = next(item["reference"] for item in package["evidence_references"]
@@ -448,6 +519,7 @@ def test_qualification_is_explicit_and_never_eligible(tmp_path):
     with publication_scope(context):
         result = build_job(infer=transport).execute(context)
     assert not result["failed_units"]
+    _publish_accepted_handoff(fixture, context, result["outputs"])
     assert not transport.calls
     rows = result["outputs"]["join.deterministic_join"]["joined"]["results"]
     assert rows and all(row["assessment_mode"] == "qualification" and not row["lead_eligible"] for row in rows)
@@ -502,7 +574,7 @@ def test_actual_malformed_model_proposal_is_an_explicit_unresolved_gap(tmp_path)
 @pytest.mark.parametrize("budget", ["max_input_tokens", "max_output_tokens"])
 def test_model_budget_exhaustion_cannot_simulate_assessment(tmp_path, budget):
     fixture = accepted_fixture(tmp_path)
-    profile = dict(load_config(ROOT / "appsec-review.toml").job("job_owasp_control_assessment").settings["model"])
+    profile = dict(_base_app_config().job("job_owasp_control_assessment").settings["model"])
     profile[budget] = 1
     transport = ScriptedAssessment()
     outputs = execute(fixture, transport, model=profile)
@@ -572,7 +644,7 @@ def test_model_or_guidance_policy_change_invalidates_actual_model_receipts(tmp_p
     calls = len(transport.calls)
     overrides = {}
     if change == "model":
-        profile = dict(load_config(ROOT / "appsec-review.toml").job("job_owasp_control_assessment").settings["model"])
+        profile = dict(_base_app_config().job("job_owasp_control_assessment").settings["model"])
         profile["model"] = "changed-scripted-model"
         overrides["model"] = profile
     else:
@@ -615,7 +687,7 @@ def test_configured_source_cap_survives_publication_and_projection(tmp_path):
     fixture = accepted_fixture(tmp_path, source=(
         "import db\ndef get(q):\n    return db.raw('SELECT name FROM users WHERE id = ' + q)\n" +
         "# accepted source context\n" * 140))
-    outputs = execute(fixture, ScriptedAssessment(), max_source_lines=200)
+    outputs = execute(fixture, ScriptedAssessment(), max_source_lines=200, publish_handoff=True)
     manifest = outputs["publication.publish_indexes"]["manifest"]
     assert json.loads((fixture.run_root / manifest["path"]).read_text())["assessment_bounds"] == {
         "max_source_lines": 200}

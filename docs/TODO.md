@@ -3172,6 +3172,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   Dagster acceptance check relocated to `tests/live/test_post_build_security_live.py`; 1176/1201
   job-package lines [97.92%] and 464/506 branches [91.70%] covered, with all 5 modules >=97.8%
   lines and >=91.1% branches).
+  job_owasp_control_assessment (33/47; 17 unit files, 472 cases: pinned 4-input / 6-dataset
+  contract and 11-unit DAG topology, input/output validator custody and exactly-once accounting
+  enforcement, grammatical target-class applicability gating, subject selection/acceptance/
+  discovery boundaries, ASVS/MASVS catalog integrity, proof procedures and evidence binding,
+  4-cell parallel batch execution with `max_batches` cap and retry/backoff telemetry, blinded
+  independent reviewer verification, SQLite index publication, and downstream triage/review-role
+  projection; Dagster `.execute_in_process()` and 4-job role-delivery suite relocated to
+  `tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py`; 227/227
+  job-package lines [100.0%] and 44/44 branches [100.0%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

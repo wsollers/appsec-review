@@ -219,25 +219,47 @@ def test_latest_bad_receipt_is_a_gap_not_a_fallback_to_old_coverage(tmp_path, fa
 
 @pytest.mark.parametrize("role", ["red_team_analyst", "blue_team_refuter", "independent_verifier"])
 def test_review_guard_reports_real_dispatch_and_checks_budget_first(tmp_path, role):
+    from appsec_review.inference.execution import CallContext, Execution
     from appsec_review.jobs.job_inference_security_review.teams import _Guard
     from appsec_review.review.cells import CellBudgetExceeded
     from appsec_review.review.models import Lane
     charges = []
-    ctx = SimpleNamespace(run_root=tmp_path, run_id="run", attempt_id="attempt",
-        budget=SimpleNamespace(cell_launch_allowed=lambda: True, charge=lambda **kw: charges.append(kw)),
-        infer=lambda *args, **kwargs: ModelResult({}, input_tokens=5, output_tokens=2))
-    cell = SimpleNamespace(spec=SimpleNamespace(lane=Lane.HUNT, package_id="package"))
+    can_reserve = True
+    ctx = SimpleNamespace(
+        run_root=tmp_path, run_id="run", attempt_id="attempt",
+        budget=SimpleNamespace(
+            snapshot=lambda: SimpleNamespace(timing_mode="wall_clock_v1"),
+            reserve_call=lambda **kw: "res-1" if can_reserve else None,
+            settle_call=lambda _res, *, usage, dispatched: (
+                charges.append({
+                    "model_turns": 1,
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
+                }) if dispatched and usage is not None else None
+            ),
+            usage_exhausted=lambda: "max_model_turns",
+        ),
+        infer=lambda *args, **kwargs: ModelResult({}, input_tokens=5, output_tokens=2),
+    )
+    cell = SimpleNamespace(cell_id="cell", spec=SimpleNamespace(lane=Lane.HUNT, package_id="package"))
     profile = SimpleNamespace(timeout_seconds=10, max_input_tokens=100, max_output_tokens=100)
     guard = _Guard(ctx, cell, profile, capture=False)
-    guard(request(role), timeout_seconds=10)
+    execution = Execution(
+        timeout_seconds=10, max_calls=2,
+        context=CallContext(
+            tmp_path, "run", "job_inference_security_review", "attempt",
+            "hunt_review", "teams", package_id="package", lane="hunt",
+        ),
+        accounting=guard,
+    )
+    execution.call(guard.dispatch, request(role), timeout_seconds=10)
     assert guard.dispatches == 1 and charges == [{"model_turns": 1, "input_tokens": 5, "output_tokens": 2}]
     call = aggregate_run_metrics(tmp_path)["model_invocations"][0]
     assert (call["job_id"], call["role"], call["lane"], call["package_id"]) == (
         "job_inference_security_review", role, "hunt", "package")
-    ctx.budget.cell_launch_allowed = lambda: False
-    ctx.budget.usage_exhausted = lambda: "max_model_turns"
+    can_reserve = False
     with pytest.raises(CellBudgetExceeded):
-        guard(request(role), timeout_seconds=10)
+        execution.call(guard.dispatch, request(role), timeout_seconds=10)
     assert len(aggregate_run_metrics(tmp_path)["model_invocations"]) == 1
 
 
@@ -259,16 +281,23 @@ def test_downstream_milestones_and_reuse_are_not_inference_or_confirmation(tmp_p
 
 @pytest.mark.parametrize("disposition", ["fresh", "reused", "not_launched"])
 def test_review_cell_terminal_metrics_cover_reuse_and_not_launched(tmp_path, monkeypatch, disposition):
+    from appsec_review.inference.execution import Execution
     from appsec_review.jobs.job_inference_security_review import teams
-    from appsec_review.review.cells import CellOutcome
+    from appsec_review.review.cells import CellNotLaunched, CellOutcome
     from appsec_review.review.models import CellStatus, Lane, Role
     allowed = disposition != "not_launched"
     profile = SimpleNamespace(timeout_seconds=10, max_input_tokens=100, max_output_tokens=100)
     ctx = SimpleNamespace(run_root=tmp_path, run_id="run", attempt_id="attempt",
-        settings=SimpleNamespace(retry=SimpleNamespace(max_attempts=1, retry_on_timeout=True,
-            retry_on_provider_error=True, retry_on_invalid_output=False)),
-        budget=SimpleNamespace(cell_launch_allowed=lambda: allowed, charge=lambda **kw: None,
-                               usage_exhausted=lambda: "max_model_turns"),
+        settings=SimpleNamespace(retry=SimpleNamespace(max_attempts=1, backoff_seconds=(),
+            retry_on_timeout=True, retry_on_provider_error=True, retry_on_invalid_output=False)),
+        budget=SimpleNamespace(
+            snapshot=lambda: SimpleNamespace(timing_mode="wall_clock_v1"),
+            reserve_call=lambda **kw: "res-1" if allowed else None,
+            settle_call=lambda _res, *, usage, dispatched: None,
+            cell_launch_allowed=lambda: allowed,
+            charge=lambda **kw: None,
+            usage_exhausted=lambda: "max_model_turns",
+        ),
         infer=lambda *args, **kwargs: ModelResult({}), profile=lambda role: profile,
         core=None, receipts_root=tmp_path / "receipts", result_cache=None)
     cell = SimpleNamespace(cell_id="cell", spec=SimpleNamespace(
@@ -277,8 +306,14 @@ def test_review_cell_terminal_metrics_cover_reuse_and_not_launched(tmp_path, mon
     record, _ = teams._not_launched(cell, "unit fixture")
     record = replace(record, status=CellStatus.SUCCEEDED, attempts=1)
     def reuse_or_run(spec, *, infer, **kwargs):
+        if not kwargs["launch_allowed"]():
+            raise CellNotLaunched("new_cell_not_admitted")
         if disposition == "fresh":
-            infer(request("independent_verifier"), timeout_seconds=10)
+            Execution(
+                timeout_seconds=10, max_calls=1,
+                context=kwargs["execution_context"],
+                accounting=kwargs["accounting"],
+            ).call(infer, request("independent_verifier"), timeout_seconds=10)
         return CellOutcome(record, {}, (), (), (), disposition == "reused", {"queries": 4})
     monkeypatch.setattr(teams, "reuse_or_run", reuse_or_run)
     teams._run(ctx, cell, lambda result: [])

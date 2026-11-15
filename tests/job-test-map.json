@@ -455,14 +455,28 @@
     },
     "job_owasp_control_assessment": {
       "unit": [
-        "tests/test_owasp_assessment_job.py",
-        "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
-        "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+        "tests/unit/job_owasp_control_assessment/test_contract.py",
         "tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py",
+        "tests/unit/job_owasp_control_assessment/test_package_projection.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+        "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
         "tests/unit/job_owasp_control_assessment/test_subject_settings.py",
-        "tests/unit/job_owasp_control_assessment/test_package_projection.py"
+        "tests/unit/job_owasp_control_assessment/test_target_class.py",
+        "tests/unit/job_owasp_control_assessment/test_target_class_job.py",
+        "tests/test_owasp_assessment_job.py",
+        "tests/test_owasp_catalog_integrity.py",
+        "tests/test_owasp_downstream.py",
+        "tests/test_owasp_evidence_binding.py",
+        "tests/test_owasp_indexes.py",
+        "tests/test_owasp_proof_procedures.py",
+        "tests/test_owasp_telemetry.py",
+        "tests/test_owasp_workbench.py",
+        "tests/orchestration/dagster/test_owasp_workbench.py"
       ],
-      "integration": ["tests/integration/job_owasp_control_assessment/test_subject_selection.py"],
+      "integration": [
+        "tests/integration/job_owasp_control_assessment/test_subject_selection.py",
+        "tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py"
+      ],
       "acceptance": ["tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"],
       "live": []
     },

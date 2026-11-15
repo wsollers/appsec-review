@@ -26546,16 +26546,28 @@
           "tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"
         ],
         "integration": [
-          "tests/integration/job_owasp_control_assessment/test_subject_selection.py"
+          "tests/integration/job_owasp_control_assessment/test_subject_selection.py",
+          "tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py"
         ],
         "live": [],
         "unit": [
-          "tests/test_owasp_assessment_job.py",
-          "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
-          "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+          "tests/unit/job_owasp_control_assessment/test_contract.py",
           "tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py",
+          "tests/unit/job_owasp_control_assessment/test_package_projection.py",
+          "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+          "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
           "tests/unit/job_owasp_control_assessment/test_subject_settings.py",
-          "tests/unit/job_owasp_control_assessment/test_package_projection.py"
+          "tests/unit/job_owasp_control_assessment/test_target_class.py",
+          "tests/unit/job_owasp_control_assessment/test_target_class_job.py",
+          "tests/test_owasp_assessment_job.py",
+          "tests/test_owasp_catalog_integrity.py",
+          "tests/test_owasp_downstream.py",
+          "tests/test_owasp_evidence_binding.py",
+          "tests/test_owasp_indexes.py",
+          "tests/test_owasp_proof_procedures.py",
+          "tests/test_owasp_telemetry.py",
+          "tests/test_owasp_workbench.py",
+          "tests/orchestration/dagster/test_owasp_workbench.py"
         ]
       },
       "workers": 8
@@ -44830,7 +44842,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "e9747d48f82c9afdff29ba44730c72ae2475f544313ea0fefdc96b818bdd16d7"
+    "tests/job-test-map.json": "d624b2b5ef5d28b83c7b6a1c1b22e425cbac9cd02ec22c02cb103bdf2cdd45be"
   },
   "tool_policy": {
     "disable_grype": true,
