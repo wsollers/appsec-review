@@ -1,0 +1,477 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/evidence-obligation.schema.json",
+  "title": "Evidence Obligation and Lane Obligation Artifact Contracts",
+  "description": "Canonical deduplicated evidence obligation, deterministic warranted resolution, and HUNT-C transport-receipt join contract (TRI-C / T-153).",
+  "oneOf": [
+    {"$ref": "#/$defs/obligation"},
+    {"$ref": "#/$defs/lane_obligations"}
+  ],
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "obligation_id": {
+      "type": "string",
+      "pattern": "^evob-[0-9a-f]{64}$"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^evreq-[0-9a-f]{64}$"
+    },
+    "claim_id": {
+      "type": "string",
+      "pattern": "^claim-[0-9a-f]{64}$"
+    },
+    "cell_id": {
+      "type": "string",
+      "pattern": "^cell-[0-9a-f]{64}$"
+    },
+    "relation_id": {
+      "type": "string",
+      "pattern": "^evrel-[0-9a-f]{64}$"
+    },
+    "warrant_id": {
+      "type": "string",
+      "pattern": "^warrant-[0-9a-f]{64}$"
+    },
+    "gap_id": {
+      "type": "string",
+      "pattern": "^gap-[0-9a-f]{64}$"
+    },
+    "logical_id": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 512,
+      "pattern": "^asr:[a-z0-9_]+:.+$"
+    },
+    "sink_logical_id": {
+      "type": "string",
+      "minLength": 14,
+      "maxLength": 512,
+      "pattern": "^asr:sink_site:.+$"
+    },
+    "predicate": {
+      "type": "string",
+      "enum": [
+        "affected_construct",
+        "attacker_input_control",
+        "source_to_sink_reachability",
+        "missing_or_ineffective_guard",
+        "configuration_enables",
+        "security_impact"
+      ]
+    },
+    "requested_kind": {
+      "type": "string",
+      "enum": [
+        "source_line",
+        "compiled_view",
+        "dataflow",
+        "configuration",
+        "build_provenance",
+        "deployment",
+        "run_artifact",
+        "other",
+        "source_span",
+        "ast_node",
+        "ir_entity",
+        "symbol",
+        "call_site",
+        "sink_site",
+        "entry_point",
+        "dataflow_path",
+        "guard_fact",
+        "range_fact",
+        "build_action",
+        "compile_unit",
+        "object_file",
+        "library",
+        "executable",
+        "build_artifact",
+        "package",
+        "archive_member",
+        "bytecode_module",
+        "managed_assembly",
+        "wasm_module",
+        "tool_observation",
+        "evidence_artifact",
+        "binary_function",
+        "binary_call_site"
+      ]
+    },
+    "specialist": {
+      "type": "string",
+      "enum": [
+        "authentication_session",
+        "authorization_access_control",
+        "cryptography_data_protection",
+        "mobile_platform",
+        "build_supply_chain",
+        "memory_safety_native",
+        "injection_interpreters",
+        "parsing_deserialization",
+        "network_api_surface",
+        "filesystem_resources",
+        "business_logic_abuse",
+        "ci_cd_pipeline",
+        "cloud_container_deployment",
+        "generalist"
+      ]
+    },
+    "required_evidence_class": {
+      "type": "string",
+      "enum": [
+        "guard_or_range_fact",
+        "structured_flow",
+        "build_configuration",
+        "compiled_or_ir_entity",
+        "construct_presence",
+        "deployment_or_artifact",
+        "uncommissioned_semantics",
+        "scoped_direct_evidence"
+      ]
+    },
+    "obligation_state": {
+      "type": "string",
+      "enum": [
+        "open",
+        "satisfied",
+        "unsatisfied",
+        "superseded",
+        "withdrawn"
+      ]
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "open_pending",
+        "satisfied_by_warranted_evidence",
+        "unresolved_contradiction",
+        "outside_package",
+        "producer_uncommissioned",
+        "evidence_unavailable",
+        "incomplete_mapping",
+        "retrieval_cap",
+        "model_budget",
+        "timed_out",
+        "invalid_response",
+        "no_decisive_evidence",
+        "superseded_by_obligation",
+        "withdrawn_claim_capped"
+      ]
+    },
+    "budget_disposition": {
+      "type": "string",
+      "enum": [
+        "within_budget",
+        "follow_up_request_cutoff",
+        "max_rounds_cutoff",
+        "cell_budget_exhausted",
+        "claims_per_package_cap",
+        "max_active_claims",
+        "package_not_launched"
+      ]
+    },
+    "subject_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "affected_entity_ids",
+        "operation_id",
+        "sink_id",
+        "build_scope_id"
+      ],
+      "properties": {
+        "affected_entity_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/logical_id"}
+        },
+        "operation_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/logical_id"},
+            {"type": "null"}
+          ]
+        },
+        "sink_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/sink_logical_id"},
+            {"type": "null"}
+          ]
+        },
+        "build_scope_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/non_empty_string"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "coverage_receipt_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_id",
+        "artifact_sha256",
+        "canonical_request_id",
+        "delivery_state",
+        "semantic_resolution"
+      ],
+      "properties": {
+        "receipt_id": {"$ref": "#/$defs/non_empty_string"},
+        "artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "canonical_request_id": {
+          "oneOf": [
+            {"$ref": "#/$defs/obligation_id"},
+            {"type": "null"}
+          ]
+        },
+        "delivery_state": {
+          "type": "string",
+          "enum": [
+            "served",
+            "delivered",
+            "empty",
+            "denied",
+            "budget_exhausted",
+            "legacy_delivery_only"
+          ]
+        },
+        "semantic_resolution": {
+          "type": "string",
+          "enum": [
+            "pending_tri_c_reconciliation",
+            "legacy_resolution_unknown",
+            "satisfied",
+            "unsatisfied",
+            "superseded",
+            "withdrawn"
+          ]
+        }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relation_ids",
+        "warrant_ids",
+        "read_receipt_refs",
+        "evaluated_round",
+        "resolution_rule",
+        "reason_code",
+        "polarity",
+        "superseded_by"
+      ],
+      "properties": {
+        "relation_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/relation_id"}
+        },
+        "warrant_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/warrant_id"}
+        },
+        "read_receipt_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/sha256"}
+        },
+        "evaluated_round": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resolution_rule": {
+          "const": "evidence-obligation/1"
+        },
+        "reason_code": {"$ref": "#/$defs/reason_code"},
+        "polarity": {
+          "oneOf": [
+            {"enum": ["supports", "contradicts", "conflicted"]},
+            {"type": "null"}
+          ]
+        },
+        "superseded_by": {
+          "oneOf": [
+            {"$ref": "#/$defs/obligation_id"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "obligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "obligation_id",
+        "policy_version",
+        "origin_request_ids",
+        "claim_id",
+        "predicate",
+        "subject_binding",
+        "anchors",
+        "question",
+        "canonical_question",
+        "requested_kind",
+        "requested_specialist",
+        "origin_cell_ids",
+        "round_opened",
+        "required_evidence_class",
+        "admissible_producer_ids",
+        "scope_ceiling",
+        "completeness_required",
+        "state",
+        "resolution",
+        "coverage_receipt_refs",
+        "remaining_gap_ids",
+        "attempted_retrieval_ids",
+        "budget_disposition"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/evidence-obligation/1"},
+        "obligation_id": {"$ref": "#/$defs/obligation_id"},
+        "policy_version": {"const": "evidence-obligation/1"},
+        "origin_request_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/request_id"}
+        },
+        "claim_id": {"$ref": "#/$defs/claim_id"},
+        "predicate": {"$ref": "#/$defs/predicate"},
+        "subject_binding": {"$ref": "#/$defs/subject_binding"},
+        "anchors": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/logical_id"}
+        },
+        "question": {"$ref": "#/$defs/non_empty_string"},
+        "canonical_question": {"$ref": "#/$defs/non_empty_string"},
+        "requested_kind": {"$ref": "#/$defs/requested_kind"},
+        "requested_specialist": {
+          "oneOf": [
+            {"$ref": "#/$defs/specialist"},
+            {"type": "null"}
+          ]
+        },
+        "origin_cell_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/cell_id"}
+        },
+        "round_opened": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_evidence_class": {"$ref": "#/$defs/required_evidence_class"},
+        "admissible_producer_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/non_empty_string"}
+        },
+        "scope_ceiling": {"$ref": "#/$defs/non_empty_string"},
+        "completeness_required": {"type": "boolean"},
+        "state": {"$ref": "#/$defs/obligation_state"},
+        "resolution": {"$ref": "#/$defs/resolution"},
+        "coverage_receipt_refs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/coverage_receipt_ref"}
+        },
+        "remaining_gap_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/gap_id"}
+        },
+        "attempted_retrieval_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/logical_id"}
+        },
+        "budget_disposition": {"$ref": "#/$defs/budget_disposition"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "satisfied"}}},
+          "then": {
+            "properties": {
+              "resolution": {
+                "properties": {
+                  "reason_code": {"const": "satisfied_by_warranted_evidence"},
+                  "relation_ids": {"minItems": 1},
+                  "warrant_ids": {"minItems": 1},
+                  "read_receipt_refs": {"minItems": 1},
+                  "polarity": {"enum": ["supports", "contradicts"]},
+                  "superseded_by": {"type": "null"}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"state": {"const": "superseded"}}},
+          "then": {
+            "properties": {
+              "resolution": {
+                "properties": {
+                  "reason_code": {"const": "superseded_by_obligation"},
+                  "superseded_by": {"$ref": "#/$defs/obligation_id"},
+                  "polarity": {"type": "null"}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"state": {"const": "open"}}},
+          "then": {
+            "properties": {
+              "resolution": {
+                "properties": {
+                  "reason_code": {"const": "open_pending"},
+                  "relation_ids": {"maxItems": 0},
+                  "warrant_ids": {"maxItems": 0},
+                  "polarity": {"type": "null"},
+                  "superseded_by": {"type": "null"}
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lane_obligations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "lane",
+        "policy_version",
+        "count",
+        "items"
+      ],
+      "properties": {
+        "schema": {"const": "appsec-review/lane-evidence-obligations/1"},
+        "lane": {"enum": ["lead", "hunt"]},
+        "policy_version": {"const": "evidence-obligation/1"},
+        "count": {"type": "integer", "minimum": 0},
+        "items": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/obligation"}
+        }
+      }
+    }
+  }
+}
