@@ -3028,8 +3028,11 @@ reason = "cppcheck style, performance, portability and information checks (unuse
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200
 max_model_turns = 12000
-max_input_tokens = 60000000
-max_output_tokens = 6000000
+# Sized for the per-call limits in models.default (128000 in / 32000 out): smoke-cpp run 2026-11-15-0003
+# launched 496 cells, spent 5.1M output tokens in 686 turns (about 7.4k per turn, mostly thinking) and the
+# 6M output ceiling then refused 405 cell launches. 48M output covers 496 cells x 12 turns x 8k tokens.
+max_input_tokens = 480000000
+max_output_tokens = 48000000
 max_retrieval_queries = 40000
 timeout_seconds = 28800
 

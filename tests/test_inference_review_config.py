@@ -58,7 +58,7 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
             settings.lanes.hunt_max_claims_per_package) == (3, 50, 5)
     assert settings.budgets.budget_team_packages == 200
     assert settings.budgets.max_model_turns == 12000
-    assert (settings.budgets.max_input_tokens, settings.budgets.max_output_tokens) == (60_000_000, 6_000_000)
+    assert (settings.budgets.max_input_tokens, settings.budgets.max_output_tokens) == (480_000_000, 48_000_000)
     assert settings.retry.backoff_seconds == (2, 10)
     assert settings.rounds.max_rounds == 3
     assert settings.models["default"].max_queries == 40

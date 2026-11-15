@@ -175,7 +175,7 @@ The overlay leaves the selected profile's team count unchanged, so prod and copi
 [`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml) is the
 capacity for a [smoke-target](test-targets.md#smoke-runs) review under `dev`: 8 review teams, the
 `inference_teams` pool at 2 so both lane units run, and prod's four I/O slots and scanner pool of 4.
-It changes no model, package or budget setting; the dev job budget (6,000,000 output tokens) still
+It changes no model, package or budget setting; the dev job budget (48,000,000 output tokens) still
 bounds a smoke run, and exhausting it records budget gaps, not a failure.
 Profile defaults are applied before capacity overlays, and the final resolved settings are frozen
 per run. Existing overlays are not silently overwritten.
@@ -454,7 +454,7 @@ model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retriev
 | Lead / hunt claims per package across rounds | 3 / 5 | 3 / 5 |
 | Hunt units / attack-chain cap | 50 / 50 | 50 / 50 |
 | Model turns / retrieval queries | 12,000 / 40,000 | 60,000 / 200,000 |
-| Input / output tokens | 60,000,000 / 6,000,000 | 600,000,000 / 60,000,000 |
+| Input / output tokens | 480,000,000 / 48,000,000 | 600,000,000 / 60,000,000 |
 | Job timeout | 28,800 seconds | 86,400 seconds |
 
 The approved 1,000-claim production cap doubles the old finite 500 ceiling: it admits the
