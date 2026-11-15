@@ -55,7 +55,7 @@ from appsec_review.review.adjudication import adjudicate
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
 from appsec_review.review.cells import CellBudgetExceeded, CellNotLaunched, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
 from appsec_review.review.result_cache import Memo
-from appsec_review.review.claims import normalize_claim
+from appsec_review.review.claims import merge_preconditions, normalize_claim
 from appsec_review.review.compact import Expander, expand_blue, expand_judge, expand_red, expand_verifier
 from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.evidence import resolve_relation, resolve_warranted_relation, satisfies
@@ -179,7 +179,11 @@ class ReviewContext:
     allow_new_calls: bool = True
     # The run's blue-cell result memo (``review.result_cache``); ``None`` when disabled.
     result_cache: Any = None
+    # Lane A's accepted (R5/R6) seeds, supplied to lane B so hunters do not re-propose lead claims
+    # and can hunt variants of confirmed ones; ``None`` when no other lane's results were supplied.
+    cross_lane_seeds: tuple[Mapping[str, Any], ...] | None = None
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _symbols: dict[str, str | None] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
     _views: dict[str, PackageView] = field(default_factory=dict)
     _resolves: dict[str, bool] = field(default_factory=dict)
@@ -237,6 +241,58 @@ class ReviewContext:
         with self._lock:
             self._resolves[identity] = found
         return found
+
+    def enclosing_symbol(self, identity: str) -> str | None:
+        """The accepted ``symbol`` enclosing a site identity (claim identity fold, R7), or ``None``.
+
+        A graph fact names its enclosing function; any other located entity is matched against the
+        symbols indexed on its path, taking the tightest range that contains its start line.
+        """
+        with self._lock:
+            if identity in self._symbols:
+                return self._symbols[identity]
+        symbol = None
+        try:
+            rows = self.core.find(identity=identity, limit=1)["results"]
+        except (ValueError, LookupError):
+            rows = []
+        row = rows[0] if rows else None
+        if row is not None:
+            payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+            result = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
+            function = result.get("enclosing_function") if isinstance(result.get("enclosing_function"), Mapping) else {}
+            named = function.get("symbol")
+            if isinstance(named, str) and named.startswith("asr:symbol:") and self.resolves(named):
+                symbol = named
+            else:
+                location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
+                symbol = self._symbol_at(location.get("path"), location.get("start_line"))
+        with self._lock:
+            self._symbols[identity] = symbol
+        return symbol
+
+    def _symbol_at(self, path: Any, line: Any) -> str | None:
+        if not isinstance(path, str) or not isinstance(line, int):
+            return None
+        best: tuple[int, str] | None = None
+        cursor = None
+        for _page in range(16):
+            try:
+                page = self.core.find(kind=EntityKind.SYMBOL.value, path=path, limit=self.max_page_size, cursor=cursor)
+            except (ValueError, LookupError):
+                return None
+            for row in page.get("results", ()):
+                location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
+                start, end = location.get("start_line"), location.get("end_line")
+                if not (isinstance(start, int) and isinstance(end, int) and start <= line <= end):
+                    continue
+                candidate = (end - start, str(row["identity"]))
+                if best is None or candidate < best:
+                    best = candidate
+            cursor = page.get("next_cursor") or page.get("cursor")
+            if not page.get("has_more") or not cursor:
+                break
+        return best[1] if best else None
 
     def entity_name(self, identity: str) -> str | None:
         with self._lock:
@@ -331,6 +387,7 @@ class TeamResult:
     judge_verdicts: list[JudgeVerdict] = field(default_factory=list)
     judging: dict[str, Any] = field(default_factory=dict)         # claim id -> judge cells / why none was selected
     rounds: list[dict[str, Any]] = field(default_factory=list)
+    seeds: list[dict[str, Any]] = field(default_factory=list)   # the last round's accepted R5/R6 seeds
     package_entities: frozenset[str] | None = None
     warrant_scope: WarrantScope = field(default_factory=WarrantScope)
     withdrawn_claims: dict[str, BudgetDisposition] = field(default_factory=dict)
@@ -1068,6 +1125,7 @@ def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any
     for round_index in range(ctx.settings.rounds.max_rounds):
         _team_body(ctx, work, routing, reds, result)
         known, fingerprint = _round_state(ctx, work, result)
+        result.seeds = [dict(item) for item in known]
         stable = stable + 1 if fingerprint == previous else 0
         result.rounds.append({"round": round_index, "state_sha256": fingerprint, "stable_rounds": stable,
                               "accepted_claim_ids": [item["claim_id"] for item in known],
@@ -1094,8 +1152,11 @@ def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any
     if stop != "stable":
         result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id,
                                     f"follow_up_cutoff:{stop}", round=work.round_index))
-    result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id,
-                                "cross_package_and_cross_lane_variant_seeds_unavailable"))
+    # Lane B hunts variants of lane A's accepted seeds (``cross_lane_seeds``); a hunt team that ran
+    # without them names the missing supply. Lane A runs first and has no other lane to draw on.
+    if work.lane is Lane.HUNT and getattr(ctx, "cross_lane_seeds", None) is None:
+        result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id,
+                                    "cross_package_and_cross_lane_variant_seeds_unavailable"))
 
 
 def _pending_requests(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> tuple[Mapping[str, Any], ...]:
@@ -1409,7 +1470,8 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
                     weakness_cwe=weakness["id"] if weakness else None,
                     security_predicate=proposal["security_predicate"],
                     preconditions=proposal["attacker_entry"]["preconditions"], statement=proposal["statement"],
-                    accepted_cwe_ids=ctx.accepted_cwe_ids, origin_cell_ids=(cell.cell_id,))
+                    accepted_cwe_ids=ctx.accepted_cwe_ids, enclosing_symbol=ctx.enclosing_symbol,
+                    origin_cell_ids=(cell.cell_id,))
             except (ValueError, KeyError, TypeError) as exc:
                 result.gaps.append(make_gap(GapClass.EVIDENCE_GAP, f"hypothesis:{cell.cell_id}:{reference}",
                                             f"gate:closed_vocabulary: {exc}"))
@@ -1425,6 +1487,9 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
                                          "poc_basis": dict(proposal["poc_basis"])})
             group = groups.setdefault(claim.claim_id, {"claim": claim, "cells": [], "items": [],
                                                        "gaps": [], "persona": cell.spec.persona})
+            if group["claim"].preconditions != claim.preconditions:
+                group["claim"] = replace(group["claim"],
+                                         preconditions=merge_preconditions(group["claim"], claim))
             group["cells"].append(cell)
             group["items"].append((cell, proposal, red, seen))
             group["gaps"].extend(normalized.gaps)
@@ -1675,6 +1740,8 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
     ordered = [replace(work, active_claim_limit=(claim_cap // total +
                        (index + lane_offset < claim_cap % total)) if index < launches and total else 0)
                for index, work in enumerate(ordered)]
+    if lane is Lane.HUNT and getattr(ctx, "cross_lane_seeds", None) is not None:
+        ordered = [seeded_work(work, ctx.cross_lane_seeds) for work in ordered]
     with ThreadPoolExecutor(max_workers=max(1, ctx.settings.teams.review_teams), thread_name_prefix=lane.value) as pool:
         futures = []
         for index, work in enumerate(ordered):
@@ -1684,6 +1751,32 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
         teams = [future.result() for future in futures]
     _signal(signal_dir, lane, ordered, allocation, queue_empty=True)
     return _seal(ctx, lane, teams, allocation, ledger_path, stream)
+
+
+def seeded_work(work: PackageWork, seeds: Sequence[Mapping[str, Any]]) -> PackageWork:
+    """A hunt work item that knows lane A's claims: every lead claim id is a prior claim, and the
+    accepted seeds whose evidence touches the unit's entities are its known claims (variant seeds when
+    confirmed). Seeds elsewhere in the target are not pulled into the unit."""
+    scope = set(work.entities)
+    known = tuple(sorted((dict(seed) for seed in seeds
+                          if scope.intersection(seed.get("evidence_entities", ()))
+                          or scope.intersection(seed.get("affected_entities", ()))),
+                         key=lambda item: str(item["claim_id"])))
+    prior = tuple(sorted({str(seed["claim_id"]) for seed in seeds} | set(work.prior_claim_ids)))
+    return replace(work, known_claims=known, prior_claim_ids=prior)
+
+
+def lead_seeds(lane_document: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """The accepted seeds a sealed lane document carries (``variant_seeds``), plus one id-only entry for
+    every proposed claim that no package accepted, so the other lane knows the whole claim set."""
+    seeds: dict[str, Mapping[str, Any]] = {}
+    for package_seeds in (lane_document.get("variant_seeds") or {}).values():
+        for seed in package_seeds:
+            seeds.setdefault(str(seed["claim_id"]), dict(seed))
+    for claim_id in lane_document.get("proposals", {}):
+        seeds.setdefault(str(claim_id), {"claim_id": str(claim_id), "state": ClaimState.PROPOSED.value,
+                                         "affected_entities": [], "evidence_entities": []})
+    return tuple(seeds[key] for key in sorted(seeds))
 
 
 def _exploratory(work: PackageWork) -> bool:
@@ -1830,6 +1923,7 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "judging": {claim_id: value for team in teams for claim_id, value in sorted(team.judging.items())},
         "routing": {team.package_id: team.routing for team in teams},
         "rounds": {team.package_id: team.rounds for team in teams},
+        "variant_seeds": {team.package_id: team.seeds for team in teams if team.seeds},
         "exploration": {team.package_id: {"status": "explored" if team.launched else "not_launched",
                                          "residual_coverage": "bounded_review_not_clean"
                                          if team.launched else "budget_or_worker_gap"}

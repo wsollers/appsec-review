@@ -661,8 +661,13 @@ back to `persona_sweep` with the next-ranked persona.
   carries attaches to that claim as relations, and accounting counts it per lane as
   `duplicate_proposals`. The `duplicate` claim state is reserved for distinct claim ids judged
   equivalent; in slice 1 such near-duplicates stay separate claims nominated as
-  `possible_duplicates` (R7). In round 0 the two lanes run in parallel, so hunters receive no lane A
-  claims and the gate's "existing claim" check is package-local.
+  `possible_duplicates` (R7). Lane B runs after lane A and receives its sealed claim set
+  (`teams.lead_seeds`): every lane A claim id is a prior claim for every hunt unit, and the accepted
+  R5/R6 seeds whose evidence touches a unit's entities are that unit's known claims, so hunters do
+  not re-report them and the `variant` strategy can hunt variants of confirmed lead claims from the
+  first follow-up round. A hunt team that ran without that supply records the coverage gap
+  `cross_package_and_cross_lane_variant_seeds_unavailable`; lane A records none, having no other
+  lane to draw on.
 - **Triage gate.** A lane B hypothesis passes deterministic gate checks:
   - it cites only resolvable locations;
   - it uses the closed R4 predicate and precondition vocabularies;
@@ -1928,8 +1933,9 @@ adapter has no dynamic outputs, cannot express the round cycle, and assigns pool
   | `completeness.audit` | `application` |
   | `publication.publish_claim_ledger`, `publication.publish_handoff` | `lifecycle` |
 
-  `lead_review.teams` depends only on lead packages, and `hunt_review.teams` only on hunt packages,
-  so the two lanes run in parallel. Each team handler runs red, package-local normalization, triage
+  `lead_review.teams` depends on the lead packages; `hunt_review.teams` depends on the hunt packages
+  and on `lead_review.teams`, whose sealed lane document supplies the lane A claims and accepted
+  seeds (`variant_seeds`) to every hunt unit. Each team handler runs red, package-local normalization, triage
   (lane B only), and the blue and blind-verifier cells for one package, writing one receipt per
   cell. `merge.claims` deduplicates across packages and lanes by canonical identity.
   `adjudicate.apply_policy` then applies R5 to the merged set.
@@ -2152,13 +2158,20 @@ resolve to the same model.
 
 ### R7 Claim identity normalization
 
-- Affected entities are accepted logical identities. A span is normalized to its enclosing
-  `symbol` when an accepted symbol index covers it; otherwise it stays a `source_span`.
+- Affected entities are accepted logical identities. A site identity (`source_span`, `call_site`,
+  `sink_site`, `ast_node`, `ir_entity`, `tool_observation`) is normalized to its enclosing `symbol`
+  when the accepted indices resolve one (a graph fact's `enclosing_function`, else the tightest
+  indexed symbol range on its path containing its line); otherwise it stays as cited. A
+  `source_file` cited beside a resolved symbol is dropped, since it names where the symbol was read
+  rather than a second affected construct. Cells that cite one defect through different entity
+  kinds therefore propose one claim.
 - The weakness is a CWE id validated against the run-pinned MITRE CWE catalog (the `mitre_sync`
   `cwe` source, `index/mitre.sqlite`, pinned by `job_review_data_indexing`), with no parent
   roll-up. An id the catalog does not contain is dropped from identity with an `evidence_gap`.
-- Preconditions and the security predicate are enum members. Statement and mechanism prose are
-  excluded from identity.
+- Preconditions and the security predicate are enum members. Preconditions, statement and
+  mechanism prose are excluded from identity (`claim/3`); proposals of one identity with different
+  attacker-entry assumptions merge into one claim carrying the union of their preconditions
+  (`claims.merge_preconditions`).
 - The security predicate is a member of the closed, versioned `security-predicates/1`
   vocabulary (`review/models.py::SecurityPredicate`, schema `common#/$defs/security_predicate`,
   used by the claim and `red-discovery-result/1` schemas). It is the claim's security

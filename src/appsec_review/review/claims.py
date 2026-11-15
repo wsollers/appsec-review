@@ -1,8 +1,11 @@
 """Claim identity normalization (design R7).
 
-Identity covers the sorted accepted affected entities, the validated CWE, the security predicate
-(a ``security-predicates/1`` member), and the sorted closed preconditions. Statement prose, lane,
-package, and origin are excluded, so the same condition found in both lanes merges by identity.
+Identity covers the sorted accepted affected entities, the validated CWE and the security predicate
+(a ``security-predicates/1`` member). Statement prose, preconditions, lane, package, and origin are
+excluded, so the same condition found by several cells, packages or lanes merges by identity. Site
+identities (spans, call and sink sites, AST and IR nodes, tool observations) fold to their enclosing
+symbol when the accepted indices resolve it, so cells that cite the same defect through different
+entity kinds propose the same claim.
 """
 from __future__ import annotations
 
@@ -19,7 +22,16 @@ from appsec_review.review.obligations import parse_precondition
 
 # Version 2: the security predicate is a closed security-predicates/1 member and the vocabulary
 # version is part of the identity body (claim ids changed once with this vocabulary).
-CLAIM_IDENTITY_VERSION = 2
+# Version 3: preconditions left the identity (they are merged onto the claim instead), and site
+# identities fold to their enclosing symbol, so one defect cited through different entity kinds or
+# attacker-entry assumptions is one claim.
+CLAIM_IDENTITY_VERSION = 3
+# Entity kinds that name a place inside a function rather than a construct of their own; each folds
+# to its enclosing symbol when the lookup resolves one.
+FOLDED_KINDS = frozenset({
+    EntityKind.SOURCE_SPAN, EntityKind.CALL_SITE, EntityKind.SINK_SITE, EntityKind.AST_NODE,
+    EntityKind.IR_ENTITY, EntityKind.TOOL_OBSERVATION,
+})
 _CWE = re.compile(r"^CWE-0*([1-9][0-9]{0,5})$")
 
 SymbolLookup = Callable[[str], "str | None"]
@@ -52,11 +64,15 @@ def normalize_security_predicate(value: str | SecurityPredicate) -> tuple[Securi
 
 
 def normalize_entities(entities: Iterable[str], enclosing_symbol: SymbolLookup | None = None) -> tuple[str, ...]:
-    """Return sorted unique accepted identities, mapping spans to an enclosing symbol when known."""
+    """Return sorted unique accepted identities, folding site identities to an enclosing symbol when known.
+
+    A ``source_file`` beside a resolved symbol is dropped: the file names where the symbol was read,
+    not a second affected construct.
+    """
     normalized: set[str] = set()
     for value in entities:
         identity = LogicalIdentity.parse(str(value).strip())
-        if identity.kind is EntityKind.SOURCE_SPAN and enclosing_symbol is not None:
+        if identity.kind in FOLDED_KINDS and enclosing_symbol is not None:
             symbol = enclosing_symbol(identity.value)
             if symbol is not None:
                 resolved = LogicalIdentity.parse(symbol)
@@ -66,17 +82,24 @@ def normalize_entities(entities: Iterable[str], enclosing_symbol: SymbolLookup |
         normalized.add(identity.value)
     if not normalized:
         raise ValueError("a claim requires at least one affected entity")
+    if any(LogicalIdentity.parse(item).kind is EntityKind.SYMBOL for item in normalized):
+        normalized = {item for item in normalized if LogicalIdentity.parse(item).kind is not EntityKind.SOURCE_FILE}
     return tuple(sorted(normalized))
 
 
 def claim_identity(affected_entities: Sequence[str], weakness_cwe: str | None,
-                   security_predicate: SecurityPredicate | str, preconditions: Sequence[str]) -> str:
+                   security_predicate: SecurityPredicate | str) -> str:
     """The canonical claim id; ``security_predicate`` must be a ``security-predicates/1`` member."""
     return make_id("claim", CLAIM_IDENTITY_VERSION, {
         "affected_entities": list(affected_entities), "weakness_cwe": weakness_cwe,
         "security_predicate": SecurityPredicate(security_predicate).value,
-        "security_predicates": SECURITY_PREDICATES_VERSION, "preconditions": list(preconditions),
+        "security_predicates": SECURITY_PREDICATES_VERSION,
     })
+
+
+def merge_preconditions(*claims: Claim) -> tuple[str, ...]:
+    """The sorted union of the preconditions of claims that share one identity."""
+    return tuple(sorted({item for claim in claims for item in claim.preconditions}))
 
 
 def normalize_claim(*, lane: Lane, package_id: str, affected_entities: Iterable[str], weakness_cwe: str | None,
@@ -84,6 +107,9 @@ def normalize_claim(*, lane: Lane, package_id: str, affected_entities: Iterable[
                     accepted_cwe_ids: Collection[str], enclosing_symbol: SymbolLookup | None = None,
                     origin_cell_ids: Iterable[str] = (), round: int = 0) -> ClaimNormalization:
     """Normalize a worker claim; malformed entities or preconditions raise ``ValueError``.
+
+    Preconditions are kept on the claim but excluded from its identity; proposals that differ only
+    in their attacker-entry assumptions are one claim (``merge_preconditions``).
 
     A CWE that is malformed or absent from ``accepted_cwe_ids`` (the accepted MITRE CWE reference,
     no parent roll-up) is dropped from identity and reported as an ``evidence_gap``. A security
@@ -104,7 +130,7 @@ def normalize_claim(*, lane: Lane, package_id: str, affected_entities: Iterable[
             cwe = candidate
         else:
             rejected_cwe = True
-    claim_id = claim_identity(entities, cwe, predicate, conditions)
+    claim_id = claim_identity(entities, cwe, predicate)
     gaps: list[Gap] = []
     if rejected_cwe:
         gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim_id,

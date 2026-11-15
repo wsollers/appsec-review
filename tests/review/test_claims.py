@@ -4,7 +4,7 @@ import pytest
 
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.claims import (
-    claim_identity, normalize_claim, normalize_cwe, possible_duplicates,
+    claim_identity, merge_preconditions, normalize_claim, normalize_cwe, possible_duplicates,
 )
 from appsec_review.review.models import GapClass, Lane, SecurityPredicate
 
@@ -13,6 +13,10 @@ SPAN = LogicalIdentity.derive(EntityKind.SOURCE_SPAN, SNAP, {"n": "span"}).value
 SPAN2 = LogicalIdentity.derive(EntityKind.SOURCE_SPAN, SNAP, {"n": "span2"}).value
 SYMBOL = LogicalIdentity.derive(EntityKind.SYMBOL, SNAP, {"n": "copy"}).value
 OTHER = LogicalIdentity.derive(EntityKind.SYMBOL, SNAP, {"n": "other"}).value
+FILE = LogicalIdentity.derive(EntityKind.SOURCE_FILE, SNAP, {"n": "copy.c"}).value
+SITES = {kind: LogicalIdentity.derive(kind, SNAP, {"n": f"site-{kind.value}"}).value
+         for kind in (EntityKind.CALL_SITE, EntityKind.SINK_SITE, EntityKind.AST_NODE, EntityKind.IR_ENTITY,
+                      EntityKind.TOOL_OBSERVATION)}
 ACCEPTED = frozenset({"CWE-120", "CWE-787", "CWE-78"})
 
 
@@ -37,22 +41,31 @@ def test_identity_is_stable_under_ordering_whitespace_and_prose() -> None:
     assert variant.statement == "Totally different prose."
     assert variant.origin_cell_ids == ("cell-a", "cell-b")
     assert base.security_predicate is SecurityPredicate.MEMORY_CORRUPTION
-    assert base.claim_id == claim_identity(base.affected_entities, "CWE-120", SecurityPredicate.MEMORY_CORRUPTION,
-                                           ("attacker_controls_request_field",))
-    assert base.claim_id == claim_identity(base.affected_entities, "CWE-120", "memory_corruption",
-                                           ("attacker_controls_request_field",))
+    assert base.claim_id == claim_identity(base.affected_entities, "CWE-120", SecurityPredicate.MEMORY_CORRUPTION)
+    assert base.claim_id == claim_identity(base.affected_entities, "CWE-120", "memory_corruption")
     with pytest.raises(ValueError):
-        claim_identity(base.affected_entities, "CWE-120", "unbounded_copy", ("attacker_controls_request_field",))
+        claim_identity(base.affected_entities, "CWE-120", "unbounded_copy")
 
 
 @pytest.mark.parametrize("change", [
     {"weakness_cwe": "CWE-787"},
     {"security_predicate": "command_injection"},
-    {"preconditions": ["attacker_controls_request_field", "feature_flag_enabled"]},
     {"affected_entities": [SPAN]},
 ])
 def test_identity_changes_on_material_change(change) -> None:
     assert _claim(**change).claim.claim_id != _claim().claim.claim_id
+
+
+def test_preconditions_stay_on_the_claim_but_do_not_split_its_identity() -> None:
+    base = _claim().claim
+    conditional = _claim(preconditions=["attacker_controls_request_field", "feature_flag_enabled"]).claim
+    unconditional = _claim(preconditions=[]).claim
+    assert base.claim_id == conditional.claim_id == unconditional.claim_id
+    assert conditional.preconditions == ("attacker_controls_request_field", "feature_flag_enabled")
+    assert unconditional.preconditions == ()
+    assert merge_preconditions(unconditional, conditional, base) == ("attacker_controls_request_field",
+                                                                     "feature_flag_enabled")
+    assert merge_preconditions(unconditional) == ()
 
 
 def test_span_normalizes_to_enclosing_symbol_when_covered() -> None:
@@ -63,6 +76,24 @@ def test_span_normalizes_to_enclosing_symbol_when_covered() -> None:
     assert uncovered.affected_entities == (SPAN,)
     with pytest.raises(ValueError, match="non-symbol"):
         _claim(affected_entities=[SPAN], enclosing_symbol=lambda _: SPAN2)
+
+
+@pytest.mark.parametrize("kind", sorted(SITES, key=lambda item: item.value), ids=lambda item: item.value)
+def test_site_identities_fold_to_the_enclosing_symbol_and_drop_the_file(kind) -> None:
+    site = SITES[kind]
+    lookup = {site: SYMBOL}.get
+    folded = _claim(affected_entities=[site, FILE], enclosing_symbol=lookup).claim
+    direct = _claim(affected_entities=[SYMBOL], enclosing_symbol=lookup).claim
+    assert folded.affected_entities == (SYMBOL,)
+    assert folded.claim_id == direct.claim_id
+    # Without a resolving symbol the site and the file both stay: nothing is invented.
+    unresolved = _claim(affected_entities=[site, FILE], enclosing_symbol=lambda _: None).claim
+    assert unresolved.affected_entities == tuple(sorted((site, FILE)))
+    assert unresolved.claim_id != direct.claim_id
+    # A file alone is a construct of its own and is never dropped.
+    assert _claim(affected_entities=[FILE], enclosing_symbol=lookup).claim.affected_entities == (FILE,)
+    # A different symbol stays distinct.
+    assert _claim(affected_entities=[site], enclosing_symbol={site: OTHER}.get).claim.claim_id != direct.claim_id
 
 
 def test_unaccepted_cwe_is_dropped_with_gap() -> None:

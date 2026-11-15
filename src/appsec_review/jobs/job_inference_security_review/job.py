@@ -63,7 +63,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from . import audit, chains, stages
 from .datasets import CONTRACT, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
-from .teams import WARRANTS_SCHEMA, PackageWork, ReviewContext, lane_failure, run_lane
+from .teams import WARRANTS_SCHEMA, PackageWork, ReviewContext, lane_failure, lead_seeds, run_lane
 
 SCHEMA = "appsec-review/inference-security-review/1"
 TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"), "triage": ("lead_severity",),
@@ -440,6 +440,10 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                     manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
                     manifest_path=(run_root / unit.output("scope.accept_manifest")["manifest_path"]),
                     packages_doc=packages_doc, scope_out=scope_out)
+                if lane is Lane.HUNT:
+                    # Lane B runs after lane A and receives its sealed claims: hunters do not re-propose
+                    # them and hunt variants of the accepted seeds (teams.seeded_work).
+                    ctx.cross_lane_seeds = lead_seeds(_read(run_root, unit.output("lead_review.teams")["artifact"]))
                 document = run_lane(ctx, lane, works, other_lane_count=int(packages_doc["lane_counts"][other.value]),
                                     ledger_path=ledger_path, stream=unit.unit_id,
                                     signal_dir=unit.job.attempt_root / "lanes")
@@ -809,7 +813,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         Unit("packages.assemble_lead_packages", assemble(Lane.LEAD), ("triage.lead_severity",)),
         Unit("packages.assemble_hunt_packages", assemble(Lane.HUNT), ("triage.lead_severity",)),
         Unit("lead_review.teams", review(Lane.LEAD), ("packages.assemble_lead_packages",)),
-        Unit("hunt_review.teams", review(Lane.HUNT), ("packages.assemble_hunt_packages",)),
+        Unit("hunt_review.teams", review(Lane.HUNT), ("packages.assemble_hunt_packages", "lead_review.teams")),
         Unit("merge.claims", merge, ("lead_review.teams", "hunt_review.teams")),
         Unit("adjudicate.apply_policy", adjudicate_unit, ("merge.claims",)),
         Unit("scoring.score_claims", score, ("adjudicate.apply_policy",)),

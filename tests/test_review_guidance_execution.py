@@ -22,7 +22,9 @@ from appsec_review.review.scope import accept_manifest
 from appsec_review.runtime.runner import JobRunner
 from tests.fixtures.inference_review import builder
 from tests.fixtures.inference_review.acceptance import JOB, ROOT
-from tests.review.test_team_handler import Recording, prepared
+# ``prepared`` builds on the session-scoped ``_prepared_template``; both must be imported for the
+# fixture chain to resolve in this module.
+from tests.review.test_team_handler import Recording, _prepared_template, prepared  # noqa: F401
 from tests.test_inference_review_config import _variant
 
 
