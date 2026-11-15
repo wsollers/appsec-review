@@ -3129,6 +3129,14 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   ownership scan; `GraphRunner`/`JobRunner` suite relocated to
   `tests/integration/job_binary_evidence_indexing/test_binary_evidence_indexing_graph.py`;
   288/288 job-package lines [100.0%] and 88/88 branches [100.0%] covered across all 3 modules).
+  job_cpg_analysis (29/47; 5 unit files, 36 cases: pinned 21-input / 6-dataset contract and 3-unit
+  DAG topology, disabled-by-default and enabled wave1 topology parity, `joern-export --repr=all`
+  CSV parser with symlink/file-size/row/per-function bounds and orphan/cut accounting, seeded C/C++
+  unit selection/regex/argv/failure-reason mapping, `c2cpg` and `joern-export` timeout/OOM/size-
+  limit/empty-method failure isolation, symlinked-CPG refusal, checkpoint reuse and manifest-tamper
+  detection, bounded `cpg_function` SQLite shard publication, and dataset ownership scan;
+  `GraphRunner` suite relocated to `tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py`;
+  421/421 job-package lines [100.0%] and 136/136 branches [100.0%] covered across all 5 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

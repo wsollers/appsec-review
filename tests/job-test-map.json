@@ -148,11 +148,15 @@
     },
     "job_cpg_analysis": {
       "unit": [
+        "tests/unit/job_cpg_analysis/test_contract.py",
+        "tests/unit/job_cpg_analysis/test_export_and_seeded.py",
+        "tests/unit/job_cpg_analysis/test_handlers.py",
         "tests/test_cpg_export.py",
-        "tests/test_cpp_index_jobs.py::test_cpg_job_retains_the_cpg_but_claims_no_coverage",
-        "tests/test_cpp_index_jobs.py::test_cpg_job_is_disabled_by_default_and_runs_no_joern"
+        "tests/test_seeded_cpg.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },

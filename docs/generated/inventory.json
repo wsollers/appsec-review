@@ -12217,12 +12217,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py"
+        ],
         "live": [],
         "unit": [
+          "tests/unit/job_cpg_analysis/test_contract.py",
+          "tests/unit/job_cpg_analysis/test_export_and_seeded.py",
+          "tests/unit/job_cpg_analysis/test_handlers.py",
           "tests/test_cpg_export.py",
-          "tests/test_cpp_index_jobs.py::test_cpg_job_retains_the_cpg_but_claims_no_coverage",
-          "tests/test_cpp_index_jobs.py::test_cpg_job_is_disabled_by_default_and_runs_no_joern"
+          "tests/test_seeded_cpg.py"
         ]
       },
       "workers": 1
@@ -44794,7 +44798,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "8b22d99a6636eb7f51dac3a8dd751351067373e8fe18da8534a68d37bb21c658"
+    "tests/job-test-map.json": "923ba98c9746c2ac9fa880f21699dd4b237a71e6b24a733e96d96396e725b281"
   },
   "tool_policy": {
     "disable_grype": true,
