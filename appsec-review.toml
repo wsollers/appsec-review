@@ -2986,6 +2986,9 @@ max_depth = 4
 max_memory_context_entries = 24
 max_callers = 16
 caller_depth = 2
+# Lane A leads of one defect site share a finding-lead package: same path, within this many lines of a member and,
+# where graph facts name both enclosing functions, the same function (review.packages.cluster_leads). 0 disables.
+lead_cluster_lines = 8
 # Dataflow-bounded slice (review-protocol-v2.md section 4): a lead with a correlated dataflow_path is bounded
 # by that path, not call depth. Every named strategy runs and their lines are unioned; each line keeps its
 # highest-precision basis (compiler > syntax > lexical). Strategies without data report a named gap.

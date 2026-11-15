@@ -58,7 +58,7 @@ import hashlib
 from itertools import zip_longest
 import json
 from pathlib import Path
-from typing import Any
+from typing import Callable, Any
 
 from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, Family, GraphSettings
 from appsec_review.graph.settings import run_graph_settings
@@ -107,7 +107,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/7"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/14"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/15"
 UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/2"
 UNIT_FACETS_RULE = "appsec-review/unit-facets/2"
 HUNT_FACET_OBLIGATION_RULE = "appsec-review/hunt-facet-obligations/1"
@@ -137,6 +137,8 @@ CORRELATED_STATES = frozenset({"bridged", "partial"})
 _GRAPH_KINDS = tuple(sorted(kind.value for kind in FAMILY_KINDS.values()))
 MAX_WEAKNESSES = 8
 MAX_CORROBORATION = 16
+# Lead families whose observations name a source line and may therefore share a package (``cluster_leads``).
+CLUSTER_FAMILIES = frozenset({"source_sast", "codeql"})
 MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
 OBLIGATION_RULE = "appsec-review/package-obligations/2"
 SUPPRESSION_STATES = ("suppressed", "possibly_suppressed", "not_suppressed", "unknown")
@@ -176,6 +178,9 @@ class PackageSettings:
     max_memory_context_entries: int = 24
     max_callers: int = 16
     caller_depth: int = 2
+    # Lane A leads of one defect site share a package: same path, within this many lines of a member and,
+    # where graph facts name both enclosing functions, the same function (``cluster_leads``). 0 disables.
+    lead_cluster_lines: int = 8
     # Dataflow-bounded slice of a lead with a correlated path (review.slicing; review-protocol-v2.md section 4).
     slice_strategies: tuple[str, ...] = DEFAULT_SLICE_STRATEGIES
     max_slice_lines: int = 120
@@ -210,6 +215,9 @@ class PackageSettings:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= bound:
                 raise ValueError(f"{name} must be between 1 and {bound}")
+        if isinstance(self.lead_cluster_lines, bool) or not isinstance(self.lead_cluster_lines, int) \
+                or not 0 <= self.lead_cluster_lines <= 500:
+            raise ValueError("lead_cluster_lines must be between 0 and 500")
         object.__setattr__(self, "slice_strategies", validate_slice_strategies(self.slice_strategies))
         SliceBudget(self.max_slice_lines, self.max_slice_lines_per_function)
 
@@ -1253,6 +1261,47 @@ def trim_slice(record: dict[str, Any]) -> bool:
     return True
 
 
+def _same_function(ours: set[tuple[str | None, str]], theirs: set[tuple[str | None, str]]) -> bool:
+    symbols = {symbol for symbol, _name in ours if symbol} & {symbol for symbol, _name in theirs if symbol}
+    return bool(symbols) or bool({name for _s, name in ours} & {name for _s, name in theirs})
+
+
+def cluster_leads(leads: Iterable[Lead], enclosing: Callable[[str | None, int | None], set[tuple[str | None, str]]],
+                  window: int) -> list[tuple[Lead, ...]]:
+    """Group admitted leads that report one defect site, so one package reviews it once with every tool's view.
+
+    Two leads share a group when both belong to a source-location family (``CLUSTER_FAMILIES``), name the same
+    path with an exact line, lie within ``window`` lines of a member of the group and, where the accepted graph
+    facts name the enclosing function of both sides, name the same function. Membership is transitive within a
+    group, so observations spread along one function join it. Leads of other families, unlocated leads and every
+    lead when ``window`` is 0 stay alone. The result depends only on the leads and the facts, never on order.
+    """
+    ordered = sorted(leads, key=lambda item: (item.path or "", item.start_line or 0, item.observation_id))
+    groups: list[tuple[bool, list[Lead]]] = []
+    for lead in ordered:
+        clusterable = (window > 0 and lead.family in CLUSTER_FAMILIES and lead.location_exact
+                       and lead.path is not None and lead.start_line is not None)
+        if clusterable:
+            functions = enclosing(lead.path, lead.start_line)
+            for open_group, members in groups:
+                if not open_group or members[0].path != lead.path:
+                    continue
+                if min(abs(int(lead.start_line) - int(member.start_line)) for member in members) > window:
+                    continue
+                theirs: set[tuple[str | None, str]] = set()
+                for member in members:
+                    theirs |= enclosing(member.path, member.start_line)
+                if functions and theirs and not _same_function(functions, theirs):
+                    continue
+                members.append(lead)
+                break
+            else:
+                groups.append((True, [lead]))
+        else:
+            groups.append((False, [lead]))
+    return [tuple(members) for _open, members in groups]
+
+
 class _Assembler:
     def __init__(self, scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection,
                  cwe_reference: CweReference | None = None, graph_settings: GraphSettings | None = None,
@@ -1589,38 +1638,61 @@ class _Assembler:
 
     # Lane A ---------------------------------------------------------------------------------------
     def finding_lead(self, lead: Lead) -> Package:
+        return self.finding_leads((lead,))
+
+    def finding_leads(self, group: Sequence[Lead]) -> Package:
+        """One lane A package for the leads of one defect site (``cluster_leads``); a single lead is a group of one.
+
+        The package is anchored at its highest-severity lead, which is also the first menu entry and gives the
+        package its family: its line is the neighborhood's subject and the memory context's anchor. Every lead
+        keeps its own menu entry, evidence row, flows, duplicates, artifacts, graph context and gaps, and the
+        obligations are the union of the members' families.
+        """
+        leads = sorted(group, key=lambda item: (SEVERITY_ORDER[item.effective_severity], item.observation_id))
+        lead = leads[0]
+        members = {item.observation_id for item in leads}
         component_id, unit_id, component, unit = self._locate(lead)
         source = self.scope.source_for(lead.path)
         context: list[ContextEntry] = []
         sources = {source.identity} if source else set()
         artifacts: set[str] = set()
-        for identity, role in lead.related:
-            if role == "source":
-                sources.add(identity)
-            elif role == "artifact":
-                artifacts.add(identity)
-            else:
-                context.append(context_entry(identity, role))
+        for member in leads:
+            for identity, role in member.related:
+                if role == "source":
+                    sources.add(identity)
+                elif role == "artifact":
+                    artifacts.add(identity)
+                else:
+                    context.append(context_entry(identity, role))
         if component is not None:
             context.append(context_entry(component.identity, "component"))
         if unit is not None:
             context.append(context_entry(unit.identity, "build_unit"))
-        context.extend(self.scoped_tags(component_id, sources, (lead.path,) if lead.path else ()))
+        paths = tuple(dict.fromkeys(member.path for member in leads if member.path))
+        context.extend(self.scoped_tags(component_id, sources, paths))
         context.extend(self.control_context.get(component_id, ()))
-        if lead.duplicate_of:
-            context.append(context_entry(lead.duplicate_of, "duplicate_of"))
-        context.extend(context_entry(identity, "flow") for identity in lead.flow_ids)
-        artifact_records, artifact_entries, artifact_gaps = self.artifact_context.get(
-            lead.observation_id, ([], [], ()))
+        for member in leads:
+            if member.duplicate_of:
+                context.append(context_entry(member.duplicate_of, "duplicate_of"))
+            context.extend(context_entry(identity, "flow") for identity in member.flow_ids)
+        artifact_records: list[Any] = []
+        artifact_gaps: list[ScopeGap] = []
+        for member in leads:
+            records, artifact_entries, member_gaps = self.artifact_context.get(member.observation_id, ([], [], ()))
+            artifact_records.extend(records)
+            context.extend(artifact_entries)
+            artifact_gaps.extend(member_gaps)
         binary_only = bool(artifact_records) and lead.path is None
-        context.extend(artifact_entries)
-        context.extend(self.graph.lead_context(lead.observation_id))
-        partition_key = f"lead/{lead.observation_id}"
+        for member in leads:
+            context.extend(self.graph.lead_context(member.observation_id))
+        partition_key = (f"lead/{lead.observation_id}" if len(leads) == 1
+                         else "lead-group/" + sha256_hex(sorted(members)))
         memory = self.memory.lead_context(lead.path, lead.start_line, partition_key)
         context.extend(memory.entries)
         context_gaps = list(memory.gaps)
-        functions = self.graph.enclosing_functions(lead.path, lead.start_line) | {
-            (None, name) for name in memory.functions}
+        functions: set[tuple[str | None, str]] = {(None, name) for name in memory.functions}
+        for member in leads:
+            functions |= self.graph.enclosing_functions(member.path, member.start_line)
         if functions:
             callers, caller_omitted, by_name = self.graph.callers(
                 functions, depth=self.settings.caller_depth, limit=self.settings.max_callers)
@@ -1638,32 +1710,35 @@ class _Assembler:
             context_gaps.append(ScopeGap(CALLER_PRODUCER, partition_key, "unavailable",
                                          "no accepted fact names the function enclosing the lead's line; callers "
                                          "are not listed"))
-        families, graph_shards, graph_gaps = (self.graph.families(
-            unit_id, (lead.path,) if lead.path else (), partition_key) if not binary_only else ([], [], []))
+        families, graph_shards, graph_gaps = (self.graph.families(unit_id, paths, partition_key)
+                                              if not binary_only else ([], [], []))
         capped, omitted, gaps = self._cap(context, partition_key, lead.family)
         neighborhood, nb_entries, nb_gaps = self.lead_neighborhood(lead, partition_key, unit_id)
         self.bound_counts[neighborhood["bound"]["kind"]] += 1
         gaps.extend(nb_gaps)
         gaps.extend(graph_gaps)
         gaps.extend(context_gaps)
-        gaps.extend(lead.coverage_gaps)
+        for member in leads:
+            gaps.extend(member.coverage_gaps)
         gaps.extend(artifact_gaps)
-        subjects = {lead.observation_id, partition_key, *(identity for identity, _ in lead.related)}
-        if lead.path:
-            subjects.add(lead.path)
+        subjects = {partition_key, *members, *paths,
+                    *(identity for member in leads for identity, _ in member.related)}
         gaps.extend(gap for gap in self.collection.gaps if gap.scope in subjects)
-        # Reference-feed limitations belong only to the advisories actually joined to this lead.
-        for advisory in (lead.advisory or {}).get("advisories", ()):
-            for feed, reference in advisory.get("feeds", {}).items():
-                if reference.get("stale"):
-                    gaps.append(ScopeGap(feed, partition_key, "stale", "joined advisory reference feed is stale"))
-            gaps.extend(ScopeGap("advisory_reference", partition_key, "partial", str(reason))
-                        for reason in advisory.get("gaps", ()))
+        # Reference-feed limitations belong only to the advisories actually joined to these leads.
+        for member in leads:
+            for advisory in (member.advisory or {}).get("advisories", ()):
+                for feed, reference in advisory.get("feeds", {}).items():
+                    if reference.get("stale"):
+                        gaps.append(ScopeGap(feed, partition_key, "stale", "joined advisory reference feed is stale"))
+                gaps.extend(ScopeGap("advisory_reference", partition_key, "partial", str(reason))
+                            for reason in advisory.get("gaps", ()))
         if not lead.location_exact and not artifact_records:
             gaps.append(ScopeGap(lead.family, partition_key, "ambiguous",
                                  "lead location is unresolved or ambiguous; no source line is cited"))
         scope_record = {"component_id": component_id, "trust_boundary_id": None, "build_unit_id": unit_id,
                         "partition_key": partition_key, "source_ids": sorted(sources), "artifact_ids": sorted(artifacts)}
+        obligations = sorted({predicate for member in leads for predicate in OBLIGATIONS[member.family]},
+                             key=lambda item: item.value)
         trimmed = 0
         while True:
             merged = {(item.role, item.id): item for item in (*capped, *nb_entries)}
@@ -1673,11 +1748,11 @@ class _Assembler:
                               if trimmed else [])
             package_id, body = self._build(
                 kind="finding_lead", lead_family=lead.family, scope_record=scope_record, partition=(0, 1), rank=None,
-                menu=[(lead, component_id, unit_id)], context=[merged[key] for key in sorted(merged)],
-                obligations=OBLIGATIONS[lead.family],
+                menu=[(member, component_id, unit_id) for member in leads],
+                context=[merged[key] for key in sorted(merged)], obligations=obligations,
                 gaps=visible, truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": None},
                 graph_families=families, graph_shards=graph_shards,
-                graph_scopes=self.graph.scopes(unit_id, (lead.path,) if lead.path else ()) if not binary_only else (),
+                graph_scopes=self.graph.scopes(unit_id, paths) if not binary_only else (),
                 neighborhood=neighborhood)
             if len(body) <= self.settings.max_package_bytes:
                 gaps = visible
@@ -1686,7 +1761,7 @@ class _Assembler:
                 trimmed += 1
                 continue
             if not capped:
-                raise IntegrityError(f"finding-lead package for {lead.observation_id} exceeds max_package_bytes and "
+                raise IntegrityError(f"finding-lead package for {partition_key} exceeds max_package_bytes and "
                                      "cannot be partitioned; the membership gate is blocked")
             capped = capped[:-1]
             omitted += 1
@@ -1694,7 +1769,7 @@ class _Assembler:
                 lead.family, partition_key, "truncated",
                 f"{omitted} context entries omitted to respect max_package_bytes")]
         self.extra_gaps.extend(gap for gap in gaps if gap.state == "truncated")
-        return Package(package_id, "finding_lead", "lead", lead.family, partition_key, (lead.observation_id,),
+        return Package(package_id, "finding_lead", "lead", lead.family, partition_key, tuple(sorted(members)),
                        None, body)
 
     # Lane B ---------------------------------------------------------------------------------------
@@ -1883,7 +1958,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
     admitted = admitted_leads(collection, settings)
     admitted_ids = {lead.observation_id for lead in admitted}
-    packages = [assembler.finding_lead(lead) for lead in admitted]
+    groups = cluster_leads(admitted, assembler.graph.enclosing_functions, settings.lead_cluster_lines)
+    packages = [assembler.finding_leads(group) for group in groups]
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev,
                              settings.exploration_enabled, settings.exploration_reserve)
 

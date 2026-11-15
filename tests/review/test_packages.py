@@ -41,9 +41,20 @@ def assembly(scope):
 
 
 def _finding(assembly, fixture, key: str) -> dict:
+    """The finding-lead package that lists the lead ``key`` (leads of one defect site share a package)."""
     [document] = [item.document() for item in assembly.packages
-                  if item.kind == "finding_lead" and item.lead_ids == (fixture.ids[key],)]
+                  if item.kind == "finding_lead" and fixture.ids[key] in item.lead_ids]
     return document
+
+
+def _menu(document: dict, lead_id: str) -> dict:
+    [entry] = [item for item in document["lead_menu"] if item["observation_id"] == lead_id]
+    return entry
+
+
+# sast_critical and its opengrep duplicate sit on native/src/parse.c:3 and codeql_high on line 5 of the same
+# file: one defect site, one package, three menu entries.
+CLUSTER = ("sast_critical", "sast_duplicate", "codeql_high")
 
 
 def test_lane_a_admits_exactly_critical_high_and_unknown_across_families(fixture, assembly) -> None:
@@ -51,18 +62,20 @@ def test_lane_a_admits_exactly_critical_high_and_unknown_across_families(fixture
     packaged = [lead for item in findings for lead in item.lead_ids]
     assert sorted(packaged) == sorted(fixture.ids[key] for key in ADMITTED)
     assert not {fixture.ids[key] for key in NOT_ADMITTED} & set(packaged)
-    assert {item.lead_family for item in findings} == {"source_sast", "codeql", "dependency_advisory", "ci_rule"}
+    assert {item.lead_family for item in findings} == {"source_sast", "dependency_advisory", "ci_rule"}
+    for item in findings:   # a package takes the family of its highest-severity lead, the first menu entry
+        assert item.lead_family == item.document()["lead_menu"][0]["lead_family"]
     audit = assembly.manifest["audit"]["lane_a"]
     assert audit["status"] == "passed" and audit["expected"] == audit["packaged"] == len(ADMITTED)
     assert audit["by_family"]["source_sast"] == {"critical": 1, "high": 4, "unknown": 1}
     assert audit["suppressed"] == 1 and audit["duplicates"] == 1
 
-    unknown = _finding(assembly, fixture, "sast_unknown")["lead_menu"][0]
+    unknown = _menu(_finding(assembly, fixture, "sast_unknown"), fixture.ids["sast_unknown"])
     assert (unknown["reported_severity"], unknown["native_severity"]) == ("unknown", "SEVERE-ISH")
-    dependency = _finding(assembly, fixture, "dep_high")["lead_menu"][0]
+    dependency = _menu(_finding(assembly, fixture, "dep_high"), fixture.ids["dep_high"])
     assert (dependency["reported_severity"], dependency["severity_basis"]) == ("high", "advisory-cvss-band")
     assert dependency["rule_cwe"] == ["CWE-400"] and dependency["severity_rule"].endswith("/dependency_advisory/2")
-    codeql = _finding(assembly, fixture, "codeql_high")["lead_menu"][0]
+    codeql = _menu(_finding(assembly, fixture, "codeql_high"), fixture.ids["codeql_high"])
     assert codeql["reported_severity"] == "high" and codeql["lead_family"] == "codeql"
 
 
@@ -72,7 +85,7 @@ def test_suppressed_and_duplicate_leads_keep_their_packages_and_identity(fixture
     assert suppressed["lead_menu"][0]["observation_id"] == fixture.ids["sast_suppressed"]
     assert suppressed["lead_menu"][0]["rule_cwe"] == ["CWE-78"]
     duplicate = _finding(assembly, fixture, "sast_duplicate")
-    assert duplicate["lead_menu"][0]["duplicate_of"] == fixture.ids["sast_critical"]
+    assert _menu(duplicate, fixture.ids["sast_duplicate"])["duplicate_of"] == fixture.ids["sast_critical"]
     assert {"id": fixture.ids["sast_critical"], "kind": "tool_observation", "role": "duplicate_of"} in \
         duplicate["context"]
     assert duplicate["scope"]["component_id"] == "component:0002"
@@ -182,7 +195,7 @@ def test_manifest_lists_every_package_hash_input_gap_and_count(tmp_path: Path, f
     assert [item["package_id"] for item in manifest["packages"]] == [item.package_id for item in assembly.packages]
     assert {item["sha256"] for item in manifest["packages"]} == {item.sha256 for item in assembly.packages}
     assert len(manifest["inputs"]) == len(accept_manifest(fixture.run_root).shards)
-    assert manifest["counts"]["packages"]["finding_lead"] == len(ADMITTED)
+    assert manifest["counts"]["packages"]["finding_lead"] == len(ADMITTED) - len(CLUSTER) + 1
     assert manifest["counts"]["leads"]["dependency_advisory"]["low"] == 1
     out = tmp_path / "review"
     path = publish_packages(assembly, out)
@@ -242,13 +255,53 @@ def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(scop
 def test_missing_scanner_correlation_recomputes_duplicates_and_marks_suppression_unknown(tmp_path: Path) -> None:
     fixture = build_accepted_index_set(tmp_path, omit=("scanner_correlation",), publish_v1_packages=False)
     assembly = assemble_packages(accept_manifest(fixture.run_root))
-    suppressed = _finding(assembly, fixture, "sast_suppressed")["lead_menu"][0]
+    suppressed = _menu(_finding(assembly, fixture, "sast_suppressed"), fixture.ids["sast_suppressed"])
     assert suppressed["suppression_status"] == "unknown"
-    duplicate = _finding(assembly, fixture, "sast_duplicate")["lead_menu"][0]
+    duplicate = _menu(_finding(assembly, fixture, "sast_duplicate"), fixture.ids["sast_duplicate"])
     assert duplicate["duplicate_of"] == fixture.ids["sast_critical"]
     assert any(gap["producer"] == "scanner_correlation" and gap["state"] == "partial"
                for gap in assembly.manifest["gaps"])
     assert assembly.manifest["audit"]["lane_a"]["expected"] == len(ADMITTED)
+
+
+def test_leads_of_one_defect_site_share_one_package_and_the_window_is_typed(fixture, scope, assembly) -> None:
+    """T-5025: run 2026-11-15-0005 reviewed one use-after-free as four lead packages, one per tool observation."""
+    ids = sorted(fixture.ids[key] for key in CLUSTER)
+    [package] = [item for item in assembly.packages
+                 if item.kind == "finding_lead" and fixture.ids["codeql_high"] in item.lead_ids]
+    document = package.document()
+    assert list(package.lead_ids) == ids and len(document["lead_menu"]) == 3
+    assert package.partition_key.startswith("lead-group/")
+    assert document["scope"]["partition_key"] == package.partition_key
+    assert document["lead_menu"][0]["observation_id"] == fixture.ids["sast_critical"]
+    assert package.lead_family == "source_sast" and document["lead_family"] == "source_sast"
+    assert {entry["lead_family"] for entry in document["lead_menu"]} == {"source_sast", "codeql"}
+    assert sorted(item["entity_id"] for item in document["evidence"]) == ids
+    assert document["proof_obligations"] == sorted({"affected_construct", "attacker_input_control",
+                                                    "source_to_sink_reachability", "missing_or_ineffective_guard",
+                                                    "security_impact"})
+    entry = next(item for item in assembly.manifest["packages"] if item["package_id"] == package.package_id)
+    assert entry["lead_count"] == 3 and entry["partition_key"] == package.partition_key
+    assert assembly.manifest["audit"]["lane_a"]["status"] == "passed"
+    assert assembly.manifest["settings"]["lead_cluster_lines"] == 8
+    # Advisory leads share svc/api/handler.py:1 and never cluster: distinct advisories are distinct defects.
+    assert all(len(item.lead_ids) == 1 for item in assembly.packages
+               if item.kind == "finding_lead" and item.lead_family == "dependency_advisory")
+
+    def grouped(result):
+        return sorted(item.lead_ids for item in result.packages
+                      if item.kind == "finding_lead" and set(item.lead_ids) & set(ids))
+
+    alone = assemble_packages(scope, PackageSettings(lead_cluster_lines=0))
+    assert grouped(alone) == [(lead_id,) for lead_id in ids]
+    assert alone.manifest["audit"]["lane_a"]["status"] == "passed"
+    narrow = assemble_packages(scope, PackageSettings(lead_cluster_lines=1))
+    assert grouped(narrow) == sorted([(fixture.ids["codeql_high"],),
+                                      tuple(sorted((fixture.ids["sast_critical"], fixture.ids["sast_duplicate"])))])
+    with pytest.raises(ValueError, match="lead_cluster_lines"):
+        PackageSettings(lead_cluster_lines=-1)
+    with pytest.raises(ValueError, match="lead_cluster_lines"):
+        PackageSettings(lead_cluster_lines=True)
 
 
 def test_settings_are_typed_and_reject_unknown_keys() -> None:

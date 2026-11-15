@@ -270,7 +270,8 @@ authoritative. Inference `finding_lead` and `hunt` variants and the separate
 `document_hunt` variant carry accepted-manifest identity and applicable lead membership,
 history/complexity metrics, safe build-command and environment facts, graph/evidence references,
 retrieval scope and gaps. The package assembler audits that every lead admitted to lane A, from
-any family and including suppressed or deduplicated leads, has exactly one finding-lead package.
+any family and including suppressed or deduplicated leads, appears in exactly one finding-lead package (leads of one defect site share a package;
+`packages.lead_cluster_lines`, `cluster_leads`).
 Every hunt unit above the cutoff lists each of its leads exactly once in its menus. Leads in
 units below the cutoff are accounted for by that unit's `below_hunt_cutoff` gap. Reported scanner severity is a nomination signal, never
 adjudicated technical severity. Exact command lines, environment values and secrets remain
@@ -590,8 +591,13 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 - **Reported severity orders work only.** It is a nomination, never an adjudicated severity. The
   independent scorer assigns technical severity after adjudication, and only that score drives PoC
   eligibility and reporting.
-- **Packages.** Each admitted lead gets exactly one finding-lead package. The membership audit of
-  the [review package contract](review-package-contract.md) applies to every admitted family.
+- **Packages.** Admitted leads that report one defect site share one finding-lead package: leads of a
+  source-location family (`source_sast`, `codeql`) on the same path, within `packages.lead_cluster_lines`
+  of a member and, where graph facts name both enclosing functions, in the same function
+  (`review.packages.cluster_leads`). The package is anchored at its highest-severity lead; every lead keeps
+  its menu entry, evidence row and lead accounting, and appears in exactly one package. Other families
+  and unlocated leads get a package each. The membership audit of the
+  [review package contract](review-package-contract.md) applies to every admitted family.
 - **No triage.** Lane A has no triage gate: every claim from an admitted lead receives the full
   blue and verifier treatment, up to `lead_max_claims_per_package`.
 

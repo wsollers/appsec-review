@@ -182,6 +182,8 @@ class PackageAssemblySettings:
     max_view_type_declarations: int
     max_operation_records: int = 2000
     max_behavior_artifact_bytes: int = 8 * 1024 * 1024
+    # Lane A leads of one defect site share a package (review.packages.cluster_leads); 0 keeps one lead per package.
+    lead_cluster_lines: int = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -801,7 +803,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth",
         "max_view_bytes", "max_view_source_lines", "max_view_type_declarations",
         "slice_strategies", "max_slice_lines", "max_slice_lines_per_function"},
-        {"max_operation_records", "max_behavior_artifact_bytes"})
+        {"max_operation_records", "max_behavior_artifact_bytes", "lead_cluster_lines"})
     slice_strategies = packages_value["slice_strategies"]
     if not isinstance(slice_strategies, list):
         raise ValueError(f"{field}.slice_strategies must be an array of strategy names")
@@ -831,6 +833,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                    f"{field}.max_operation_records", 1, 100_000),
         max_behavior_artifact_bytes=_int(packages_value.get("max_behavior_artifact_bytes", 8 * 1024 * 1024),
                                          f"{field}.max_behavior_artifact_bytes", 1, 64 * 1024 * 1024),
+        lead_cluster_lines=_int(packages_value.get("lead_cluster_lines", 8), f"{field}.lead_cluster_lines", 0, 500),
     )
     if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
         raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "

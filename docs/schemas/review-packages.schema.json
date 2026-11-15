@@ -2150,7 +2150,7 @@
         },
         "assembly_rule": {
           "enum": ["appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13",
-                   "appsec-review/assemble-review-packages/14"]
+                   "appsec-review/assemble-review-packages/15"]
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

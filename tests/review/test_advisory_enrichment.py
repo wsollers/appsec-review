@@ -232,14 +232,14 @@ def test_packages_carry_bounded_advisory_context_and_weaknesses_under_schema_3(f
                                         "max_cvss": 8.7}
     assert lead["weaknesses"] == [{"cwe_id": "CWE-400", "name": "Uncontrolled Resource Consumption",
                                    "abstraction": "Class", "source": "mitre_catalog", "origin": "rule"}]
-    sast = next(item.document() for item in assembly.packages if item.lead_ids == (fixture.ids["sast_critical"],))
+    sast = next(item.document() for item in assembly.packages if fixture.ids["sast_critical"] in item.lead_ids)
     assert sast["lead_menu"][0]["advisory_context"] is None
     assert sast["lead_menu"][0]["weaknesses"][0]["cwe_id"] == "CWE-120"
     hunt = next(item.document() for item in assembly.packages if item.kind == "hunt")
     assert all("advisory_context" not in item and "admission_reasons" not in item for item in hunt["lead_menu"])
     # Without the catalog the weakness names come from accepted reference_intelligence facts.
     fallback = assemble_packages(scope)
-    sast = next(item.document() for item in fallback.packages if item.lead_ids == (fixture.ids["sast_critical"],))
+    sast = next(item.document() for item in fallback.packages if fixture.ids["sast_critical"] in item.lead_ids)
     assert sast["lead_menu"][0]["weaknesses"][0]["source"] == "reference_intelligence"
     for mutate in (lambda value: value["advisory_context"]["advisories"][0].update(extra=1),
                    lambda value: value["advisory_context"]["summary"].update(kev_listed="yes"),
