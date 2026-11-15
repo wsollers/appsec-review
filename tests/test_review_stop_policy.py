@@ -361,8 +361,8 @@ def test_malformed_outputs_stop_before_gap_conversion(tmp_path, surface):
                 replay_failures(tmp_path, "ast", [{"target_path": "source.c"}])
             else:
                 module_name, name = {
-                    "artifact": ("tests.test_artifact_security_analysis",
-                        "test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings"),
+                    "artifact": ("tests.unit.job_artifact_security_analysis.test_job_graph",
+                        "test_scan_one_isolates_scanner_failure_and_retains_stopped_diagnostics"),
                     "ci": ("tests.test_ci_configuration_analysis",
                         "test_failed_linter_is_a_gap_and_sibling_results_survive"),
                     "evidence": ("tests.test_evidence_collection_job",

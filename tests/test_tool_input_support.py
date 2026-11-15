@@ -34,7 +34,7 @@ from appsec_review.tool_inputs import (
     partition_formats, partition_paths,
 )
 
-from tests import test_artifact_security_analysis as asa_tests
+from tests.unit.job_artifact_security_analysis import support as asa_tests
 from tests.artifact_input_support import recorded_graph
 from tests import test_ci_configuration_analysis as ci_tests
 from tests import test_clang_static_analysis as clang_tests

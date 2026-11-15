@@ -3043,6 +3043,14 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   origin/custody ingestion, validators, disabled-upstream fallbacks, shard reuse and accepted
   loader; 498/499 job-package lines [99.80%, 100% reachable] and 213/218 branches [97.71%, 100%
   reachable] covered).
+  job_artifact_security_analysis (5 unit files, 33 cases plus shared Wave 2 contract/consumer
+  selectors [42 mapped cases]: pinned 4-input / 3-dataset contract, binary/archive/Wasm/media
+  format classification and archive bounds, BLint/SpotBugs/Grype/OSV/built-in finding extraction
+  and truncation bounds, bounded scanner parsers and ContainerScannerRunner staging/offline feeds,
+  accepted-artifact lineage/custody, installer-record coverage/attribution, checkpoint reuse/tamper
+  enforcement, shard reuse and accepted loader; 12 whole-graph cases preserved in
+  `tests/integration/job_artifact_security_analysis/`; 1207/1213 job-package lines [99.51%] and
+  515/520 branches [99.04%] covered).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
