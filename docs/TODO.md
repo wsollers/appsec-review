@@ -3037,6 +3037,12 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   fallbacks, shard reuse and accepted loader; target-backed multivuln fixture suite moved to
   `tests/live/test_multivuln_coverage_fixtures.py`; 556/556 job-package lines [100.0%] and
   230/230 branches [100.0%] covered).
+  job_profile_data (4 unit files, 51 cases plus shared Wave 3 contract suite [60 mapped cases]:
+  pinned 19-input / 3-dataset contract and admission/handler prerequisites, folded-stacks/perf-
+  script/callgrind/llvm-sample parsers, format detection/ranking/context-only semantics/bounds/
+  origin/custody ingestion, validators, disabled-upstream fallbacks, shard reuse and accepted
+  loader; 498/499 job-package lines [99.80%, 100% reachable] and 213/218 branches [97.71%, 100%
+  reachable] covered).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
