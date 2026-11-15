@@ -104,6 +104,18 @@ def validation_scope(root: Path, *, target_snapshot: str | None = None,
         _ACTIVE.reset(token)
 
 
+@contextmanager
+def isolated_validation_scope(root: Path, *, target_snapshot: str | None = None,
+                              policy_identity: str | None = None) -> Iterator[ValidationContext]:
+    """Verify an admitted optional-prior publication in its own snapshot scope without widening the caller."""
+    context = ValidationContext(root.resolve(), target_snapshot or "unknown", policy_identity or "strict-legacy")
+    token = _ACTIVE.set(context)
+    try:
+        yield context
+    finally:
+        _ACTIVE.reset(token)
+
+
 def verified_digest(root: Path, path: Path, expected: str) -> str:
     context = current_validation(root)
     if context is None:

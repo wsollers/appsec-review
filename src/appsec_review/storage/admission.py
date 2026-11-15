@@ -287,6 +287,18 @@ def admit_upstreams(context: Any, handoffs: Mapping[str, str]) -> None:
                 validation.records[("upstream-admission", job_id, digest)] = record
 
 
+def verify_optional_prior_admission(context: Any, handoff: Mapping[str, Any]) -> None:
+    """Authenticate an optional-prior publication in managed custody without adopting its target snapshot."""
+    if context.review_policy.mode is not AssuranceMode.FIRST_PARTY_MANAGED:
+        return
+    policy, _ = _frozen(context.run_root)
+    if policy != context.review_policy.view():
+        raise ValueError("managed consumer differs from frozen policy")
+    record = _read_admission(context.run_root, handoff)
+    if record is None or "handoff_binding" not in record:
+        raise ValueError("optional-prior evidence requires authenticated upstream origin")
+
+
 def create_admission(context: Any, handoff: Mapping[str, Any]) -> dict[str, Any] | None:
     if context.review_policy.mode is not AssuranceMode.FIRST_PARTY_MANAGED:
         return None

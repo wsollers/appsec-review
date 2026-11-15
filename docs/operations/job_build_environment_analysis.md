@@ -29,8 +29,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `environment_analysis` | `environment_analysis.analyze_scripts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_build_environment_analysis/job.py#L353) |
-| `environment_analysis` | `environment_analysis.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_build_environment_analysis/job.py#L390) |
+| `environment_analysis` | `environment_analysis.analyze_scripts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_build_environment_analysis/job.py#L366) |
+| `environment_analysis` | `environment_analysis.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_build_environment_analysis/job.py#L403) |
 
 ### Accepted input declarations
 
@@ -64,7 +64,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/test_build_topology_environment_lifecycle.py` |
 | live | None declared |
-| unit | `tests/test_build_environment_analysis.py` |
+| unit | `tests/test_build_environment_analysis.py`<br>`tests/unit/runtime/test_wave4_contracts.py` |
 
 ### Dagster placement
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import re
@@ -41,6 +41,7 @@ class _Scope:
     consumer_job_id: str
     upstream_handoffs: Mapping[str, str]
     contract: JobContract | None
+    optional_prior_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
 
 _ACTIVE: ContextVar[_Scope | None] = ContextVar("appsec_review_upstream_scope", default=None)
@@ -49,7 +50,8 @@ _ACTIVE: ContextVar[_Scope | None] = ContextVar("appsec_review_upstream_scope", 
 @contextmanager
 def upstream_scope(run_root: Path, consumer_job_id: str,
                    upstream_handoffs: Mapping[str, str], *,
-                   contract: JobContract | None = None) -> Iterator[None]:
+                   contract: JobContract | None = None,
+                   optional_prior_handoffs: Mapping[str, str] | None = None) -> Iterator[None]:
     """Bind typed permission and admitted producer digests, never an availability expansion."""
     if not _JOB.fullmatch(consumer_job_id):
         raise ValueError("invalid consumer job identity")
@@ -60,9 +62,20 @@ def upstream_scope(run_root: Path, consumer_job_id: str,
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise ValueError(f"pinned upstream digest for {job_id} is not a SHA-256")
         pins[job_id] = digest
+    prior_pins = {}
+    for job_id, digest in dict(optional_prior_handoffs or {}).items():
+        if not isinstance(job_id, str) or not _JOB.fullmatch(job_id):
+            raise ValueError("invalid pinned optional-prior job identity")
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError(f"pinned optional-prior digest for {job_id} is not a SHA-256")
+        prior_pins[job_id] = digest
+    overlap = sorted(set(pins) & set(prior_pins))
+    if overlap:
+        raise ValueError(f"conflicting current and optional-prior input lineages: {', '.join(overlap)}")
     if contract is not None:
         contract.validate(consumer_job_id)
-    token = _ACTIVE.set(_Scope(Path(run_root).resolve(), consumer_job_id, MappingProxyType(pins), contract))
+    token = _ACTIVE.set(_Scope(Path(run_root).resolve(), consumer_job_id, MappingProxyType(pins),
+                               contract, MappingProxyType(prior_pins)))
     try:
         yield
     finally:

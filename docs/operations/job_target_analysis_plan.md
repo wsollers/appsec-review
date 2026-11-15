@@ -104,7 +104,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable`<br>`tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap` |
+| unit | `tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable`<br>`tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap`<br>`tests/unit/runtime/test_wave4_contracts.py` |
 
 ### Dagster placement
 
