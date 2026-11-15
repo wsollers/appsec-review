@@ -157,7 +157,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-150 | [Publish complete protected review decision products](#t-150-publish-complete-protected-review-decision-products) | review | done (2026-11-13, 08d50a742) |
 | T-151 | [Bind hunt coverage obligations to accepted operation identities](#t-151-bind-hunt-coverage-obligations-to-accepted-operation-identities) | review | blocked |
 | T-152 | [Bind decisive evidence to scoped propositions and polarity](#t-152-bind-decisive-evidence-to-scoped-propositions-and-polarity) | evidence | done (2026-11-14, docs/architecture/triage-verifier-enhancement.md#t-152-implementation-record) |
-| T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | open |
+| T-153 | [Reconcile bounded evidence obligations with verified resolutions](#t-153-reconcile-bounded-evidence-obligations-with-verified-resolutions) | review | done (2026-11-15, docs/architecture/triage-verifier-enhancement.md#t-153-implementation-record) |
 | T-154 | [Audit labelled stage loss and dismissals by stratum](#t-154-audit-labelled-stage-loss-and-dismissals-by-stratum) | testing | blocked |
 | T-155 | [Allocate bounded hunt work fairly across surface and evidence strata](#t-155-allocate-bounded-hunt-work-fairly-across-surface-and-evidence-strata) | review | blocked |
 | T-156 | [Bind hunt investigation and omission coverage to execution receipts](#t-156-bind-hunt-investigation-and-omission-coverage-to-execution-receipts) | review | blocked |
@@ -2447,7 +2447,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-153 — Reconcile bounded evidence obligations with verified resolutions
 
-- **State:** open
+- **State:** done (2026-11-15, docs/architecture/triage-verifier-enhancement.md#t-153-implementation-record)
 - **Area:** review
 - **Blocked by:** T-150, T-152
 - **Blocks:** T-156
@@ -2977,6 +2977,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   downstream Tree-sitter consumers on `tree-sitter-normalizer/1` shards, and wires
   `observe_output` in `load_accepted_artifact_security_analysis`, `job_change_context_analysis`
   and `job_review_prioritization`.
+  Wave 3 (`7b1f8817e`) enforces `REQUIRED`/`REJECT` and `WHEN_ENABLED`/`REJECT` envelope
+  admission across `job_build_iteration`, `job_change_context_analysis`, `job_test_coverage`
+  and `job_profile_data`, adds graceful disabled-producer gap publication and verified manifest
+  lineage, and records the read-only eight-job optional-handoff audit.
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:

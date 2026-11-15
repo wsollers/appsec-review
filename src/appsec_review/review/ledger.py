@@ -253,12 +253,15 @@ class LedgerWriter:
 
     def open_request(self, request_id: str, claim_id: str, predicate: Predicate, requested_kind: str, *,
                      round: int = 0, origin_cell_id: str | None = None, anchors: Iterable[str] = (),
-                     question: str | None = None, specialist: str | None = None) -> dict[str, Any]:
+                     question: str | None = None, specialist: str | None = None,
+                     obligation_id: str | None = None) -> dict[str, Any]:
         details: dict[str, Any] = {}
         if question is not None:
             details["question"] = _bounded(question)
         if specialist is not None:
             details["specialist"] = specialist
+        if obligation_id is not None:
+            details["obligation_id"] = obligation_id
         anchors = sorted(set(anchors))
         if anchors:
             details["anchors"] = anchors
@@ -267,10 +270,25 @@ class LedgerWriter:
             "round": round, "origin_cell_id": origin_cell_id, **details})
 
     def close_request(self, request_id: str, claim_id: str, outcome: EvidenceRequestOutcome, *, reason: str,
-                      round: int = 0) -> dict[str, Any]:
+                      round: int = 0, obligation_id: str | None = None, reason_code: str | None = None,
+                      relation_ids: Iterable[str] = (), warrant_ids: Iterable[str] = (),
+                      superseded_by: str | None = None) -> dict[str, Any]:
+        details: dict[str, Any] = {}
+        if obligation_id is not None:
+            details["obligation_id"] = obligation_id
+        if reason_code is not None:
+            details["reason_code"] = reason_code
+        sorted_relations = sorted(set(relation_ids))
+        if sorted_relations:
+            details["relation_ids"] = sorted_relations
+        sorted_warrants = sorted(set(warrant_ids))
+        if sorted_warrants:
+            details["warrant_ids"] = sorted_warrants
+        if superseded_by is not None:
+            details["superseded_by"] = superseded_by
         return self.append(EventKind.EVIDENCE_REQUEST_CLOSED, request_id, {
             "claim_id": claim_id, "outcome": EvidenceRequestOutcome(outcome).value,
-            "reason": _bounded(reason), "round": round})
+            "reason": _bounded(reason), "round": round, **details})
 
     def record_gap(self, gap: Gap) -> dict[str, Any]:
         return self.append(EventKind.GAP_RECORDED, gap.gap_id, {"gap": gap_json(gap)})
@@ -496,6 +514,11 @@ class EvidenceRequestView:
     anchors: tuple[str, ...] = ()
     question: str | None = None
     specialist: str | None = None
+    obligation_id: str | None = None
+    reason_code: str | None = None
+    relation_ids: tuple[str, ...] = ()
+    warrant_ids: tuple[str, ...] = ()
+    superseded_by: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,7 +561,12 @@ class Projection:
                                    "outcomes": [outcome.value for outcome in view.outcomes],
                                    **({"anchors": list(view.anchors)} if view.anchors else {}),
                                    **({"question": view.question} if view.question is not None else {}),
-                                   **({"specialist": view.specialist} if view.specialist is not None else {})}
+                                   **({"specialist": view.specialist} if view.specialist is not None else {}),
+                                   **({"obligation_id": view.obligation_id} if view.obligation_id is not None else {}),
+                                   **({"reason_code": view.reason_code} if view.reason_code is not None else {}),
+                                   **({"relation_ids": list(view.relation_ids)} if view.relation_ids else {}),
+                                   **({"warrant_ids": list(view.warrant_ids)} if view.warrant_ids else {}),
+                                   **({"superseded_by": view.superseded_by} if view.superseded_by is not None else {})}
                                   for _, view in sorted(self.evidence_requests.items())],
         }
 
@@ -733,15 +761,30 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
             raise IntegrityError(f"evidence request for unknown claim: {request_id}")
         source = opened[request_id][0] if opened.get(request_id) else None
         if source and any(any(body.get(key) != source.get(key) for key in (
-                "predicate", "requested_kind", "anchors", "question", "specialist"))
+                "predicate", "requested_kind", "anchors", "question", "specialist", "obligation_id"))
                           for body in opened[request_id]):
             raise IntegrityError(f"evidence request changes its question or scope: {request_id}")
+        obligation_ids = {
+            body["obligation_id"]
+            for body in opened.get(request_id, []) + closed.get(request_id, [])
+            if body.get("obligation_id") is not None
+        }
+        if len(obligation_ids) > 1:
+            raise IntegrityError(f"evidence request changes obligation_id: {request_id}")
+        close_source = closed[request_id][0] if closed.get(request_id) else None
         requests[request_id] = EvidenceRequestView(
             request_id, first["claim_id"], Predicate(source["predicate"]) if source else None,
             source["requested_kind"] if source else None, len(opened.get(request_id, ())),
             tuple(sorted(EvidenceRequestOutcome(body["outcome"]) for body in closed.get(request_id, ()))),
             tuple(source.get("anchors", ())) if source else (), source.get("question") if source else None,
-            source.get("specialist") if source else None)
+            source.get("specialist") if source else None,
+            obligation_id=next(iter(obligation_ids)) if obligation_ids else None,
+            reason_code=close_source.get("reason_code") if close_source else None,
+            relation_ids=tuple(sorted({rel for body in closed.get(request_id, ())
+                                       for rel in body.get("relation_ids", ())})),
+            warrant_ids=tuple(sorted({wid for body in closed.get(request_id, ())
+                                      for wid in body.get("warrant_ids", ())})),
+            superseded_by=close_source.get("superseded_by") if close_source else None)
     return Projection(
         head=ledger_head(ordered),
         claims=dict(sorted(claims.items())),

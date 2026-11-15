@@ -19,6 +19,14 @@
       "type": "string",
       "pattern": "^evreq-[0-9a-f]{64}$"
     },
+    "obligation_id": {
+      "type": "string",
+      "pattern": "^evob-[0-9a-f]{64}$"
+    },
+    "warrant_id": {
+      "type": "string",
+      "pattern": "^warrant-[0-9a-f]{64}$"
+    },
     "review_id": {
       "type": "string",
       "pattern": "^review-[0-9a-f]{64}$"
@@ -400,6 +408,22 @@
         "$ref": "#/$defs/entity_id"
       },
       "maxItems": 64,
+      "uniqueItems": true
+    },
+    "relation_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation_id"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "warrant_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warrant_id"
+      },
+      "maxItems": 256,
       "uniqueItems": true
     },
     "predicate_citations": {

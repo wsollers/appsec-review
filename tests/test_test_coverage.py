@@ -173,7 +173,7 @@ def test_ingestion_rejects_unknown_artifact_origin(tmp_path: Path) -> None:
 def test_job_contract_is_generic_and_declares_the_bounded_workflow() -> None:
     job = build_job()
     assert job.job_id == "job_test_coverage" and job.name == "test_coverage"
-    assert job.consumes == ("job_target_catalog", "job_language_build", "job_artifact_indexing")
+    assert job.consumes == ("job_artifact_indexing", "job_language_build", "job_target_catalog")
     assert [unit.unit_id for unit in job.units] == [
         "load.accepted_inputs", "normalize.coverage", "index.coverage", "acceptance.publish_handoff"]
     assert {item.output_kind for item in job.datasets} == {"test_coverage", "test_coverage_handoff"}

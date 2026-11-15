@@ -227,6 +227,7 @@ class FakeBlameExecutor:
 def test_change_context_line_attribution_records_and_enforces_tree_sitter_reads(tmp_path: Path) -> None:
     runner, run_root, target, snapshot, _ts_job, _intake_out, catalog_out, ts_out = run_tree_sitter_publication(
         tmp_path, extra_job_ids=("job_change_context_analysis",),
+        disabled_jobs=("job_source_history_analysis",),
     )
     app_sha = file_sha256(target / "src" / "app.js")
     app_size = (target / "src" / "app.js").stat().st_size

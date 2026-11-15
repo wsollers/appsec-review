@@ -81,7 +81,9 @@ def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], s
         raise CoverageIntegrityError(f"accepted {job_id} handoff is required: {exc}") from exc
 
 
-def _load_catalog_files(run_root: Path) -> tuple[list[Mapping[str, Any]], str, Mapping[str, str]]:
+def _load_catalog_files(
+    run_root: Path,
+) -> tuple[list[Mapping[str, Any]], str, Mapping[str, str], str | None, Mapping[str, Any] | None]:
     handoff, handoff_sha = _accepted_handoff(run_root, "job_target_catalog")
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
@@ -93,6 +95,14 @@ def _load_catalog_files(run_root: Path) -> tuple[list[Mapping[str, Any]], str, M
     catalog = json.loads(_safe_file(run_root, identity, "target catalog").read_text(encoding="utf-8"))
     if catalog.get("schema") != "appsec-review/target-catalog/1":
         raise CoverageIntegrityError("target catalog schema is unsupported")
+    raw_manifest = published.get("index_manifest") if isinstance(published, Mapping) else None
+    catalog_manifest = (
+        raw_manifest if isinstance(raw_manifest, Mapping) and any(
+            item.get("path") == raw_manifest.get("path") and item.get("sha256") == raw_manifest.get("sha256")
+            for item in handoff.get("artifacts", ()) if isinstance(item, Mapping))
+        else None
+    )
+    fingerprint = catalog.get("source_fingerprint")
     partition_identity = catalog.get("artifacts", {}).get("repository_discovery.partition_repository")
     if not isinstance(partition_identity, Mapping):
         raise CoverageIntegrityError("target catalog source inventory is unavailable")
@@ -108,7 +118,21 @@ def _load_catalog_files(run_root: Path) -> tuple[list[Mapping[str, Any]], str, M
         if item["path"] in hashes:
             raise CoverageIntegrityError("target source inventory contains a duplicate path")
         hashes[item["path"]] = str(item["sha256"])
-    return files, handoff_sha, hashes
+    return files, handoff_sha, hashes, (str(fingerprint) if fingerprint is not None else None), catalog_manifest
+
+
+def _fallback_upstream_manifest(unit: UnitContext, catalog_manifest: Mapping[str, Any] | None) -> dict[str, Any]:
+    if unit.job.input_manifest_path is not None and unit.job.input_manifest_sha256 is not None:
+        identity = {"path": unit.job.input_manifest_path.relative_to(unit.job.run_root).as_posix(),
+                    "sha256": str(unit.job.input_manifest_sha256)}
+        path = _safe_file(unit.job.run_root, identity, "attempt input manifest")
+        load_verified_manifest(unit.job.run_root, path, str(identity["sha256"]))
+        return {**identity, "size_bytes": path.stat().st_size}
+    if not isinstance(catalog_manifest, Mapping):
+        raise CoverageIntegrityError("upstream index manifest is unavailable")
+    path = _safe_file(unit.job.run_root, catalog_manifest, "target catalog manifest")
+    load_verified_manifest(unit.job.run_root, path, str(catalog_manifest["sha256"]))
+    return dict(catalog_manifest)
 
 
 def _format(path: str, data: bytes) -> str | None:
@@ -311,18 +335,33 @@ def _validate_config(context, _result) -> None:
 
 def build_job() -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
-        _files, catalog_handoff_sha, hashes = _load_catalog_files(unit.job.run_root)
-        language = load_accepted_language_build(unit.job.run_root)
-        artifacts = load_accepted_artifact_index(unit.job.run_root)
-        if (language.get("source_fingerprint") != unit.job.source_fingerprint or
-                artifacts.get("source_fingerprint") != unit.job.source_fingerprint):
+        from appsec_review.runtime.consume import has_accepted_upstream
+        _files, catalog_handoff_sha, hashes, catalog_fingerprint, catalog_manifest = _load_catalog_files(
+            unit.job.run_root)
+        if catalog_fingerprint is not None and catalog_fingerprint != unit.job.source_fingerprint:
             raise CoverageIntegrityError("coverage inputs disagree with the accepted target snapshot")
-        return {"receipts": language.get("receipts", ()), "catalog_hashes": hashes,
-                "upstream_handoffs": {
-                    "job_target_catalog": catalog_handoff_sha,
-                    "job_language_build": language["language_build_handoff_sha256"],
-                    "job_artifact_indexing": artifacts["handoff_sha256"],
-                }, "upstream_manifest": artifacts["index_manifest"]}
+        language = (load_accepted_language_build(unit.job.run_root)
+                    if has_accepted_upstream(unit.job.run_root, "job_language_build") else None)
+        artifacts = (load_accepted_artifact_index(unit.job.run_root)
+                     if has_accepted_upstream(unit.job.run_root, "job_artifact_indexing") else None)
+        if ((language is not None and language.get("source_fingerprint") != unit.job.source_fingerprint) or
+                (artifacts is not None and artifacts.get("source_fingerprint") != unit.job.source_fingerprint)):
+            raise CoverageIntegrityError("coverage inputs disagree with the accepted target snapshot")
+        load_gaps: list[str] = []
+        upstream_handoffs: dict[str, str] = {"job_target_catalog": catalog_handoff_sha}
+        if language is not None:
+            upstream_handoffs["job_language_build"] = language["language_build_handoff_sha256"]
+        else:
+            load_gaps.append("language_build_unavailable: job_language_build producer disabled")
+        if artifacts is not None:
+            upstream_handoffs["job_artifact_indexing"] = artifacts["handoff_sha256"]
+            upstream_manifest = artifacts["index_manifest"]
+        else:
+            load_gaps.append("artifact_indexing_unavailable: job_artifact_indexing producer disabled")
+            upstream_manifest = _fallback_upstream_manifest(unit, catalog_manifest)
+        return {"receipts": language.get("receipts", ()) if language is not None else (),
+                "catalog_hashes": hashes, "upstream_handoffs": upstream_handoffs,
+                "upstream_manifest": upstream_manifest, "gaps": load_gaps}
 
     def normalize(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_inputs")
@@ -384,13 +423,15 @@ def build_job() -> Job:
                        target_root=unit.job.target_root or unit.job.repository_root,
                        indexes=(*existing, *current), upstream_manifests=(upstream_identity,))
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
+        gaps = list(dict.fromkeys([*loaded.get("gaps", ()), *normalized["gaps"]]))
         return {"indexes": [asdict(item) for item in current], "index_manifest": _artifact(unit, manifest_path),
-                "gaps": normalized["gaps"]}
+                "gaps": gaps}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_inputs")
         normalized = unit.output("normalize.coverage")
         indexed = unit.output("index.coverage")
+        gaps = list(dict.fromkeys([*loaded.get("gaps", ()), *normalized["gaps"]]))
         totals = CoverageTotals()
         for value in normalized["units"]:
             raw = value["totals"]
@@ -403,13 +444,13 @@ def build_job() -> Job:
                     "parser_identity": PARSER_IDENTITY, "normalizer_identity": NORMALIZER_IDENTITY,
                     "mapping_identity": MAPPING_IDENTITY,
                     "build_units": normalized["units"], "totals": totals.as_dict(),
-                    "gaps": normalized["gaps"], "index_manifest": indexed["index_manifest"]}
+                    "gaps": gaps, "index_manifest": indexed["index_manifest"]}
         path = unit.job.attempt_root / "artifacts" / "test-coverage" / "accepted-test-coverage.json"
         artifact = _artifact(unit, path, document)
         return {"schema": TEST_COVERAGE_HANDOFF_SCHEMA, "artifact": artifact,
                 "index_manifest": indexed["index_manifest"], "item_count": len(normalized["units"]),
-                "gaps": normalized["gaps"], "terminal_status": "COMPLETED_WITH_GAPS" if normalized["gaps"] else
-                                                         "SUCCEEDED" if normalized["units"] else "NOT_APPLICABLE"}
+                "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
+                                                 "SUCCEEDED" if normalized["units"] else "NOT_APPLICABLE"}
 
     units = (
         Unit("load.accepted_inputs", load),

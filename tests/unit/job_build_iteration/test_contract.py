@@ -39,13 +39,16 @@ def _claimed(path: str) -> list[str]:
 
 # --- inputs ----------------------------------------------------------------------------------------
 
-def test_inputs_are_the_language_build_inputs_made_optional_plus_one_required_transaction() -> None:
+def test_inputs_require_project_build_handoff_and_iteration_request_while_keeping_other_lanes_optional() -> None:
     inherited = CONTRACT.inputs[:-1]
     assert len(inherited) == len(LANGUAGE_CONTRACT.inputs) == len(CONTRACT.inputs) - 1
     for ours, theirs in zip(inherited, LANGUAGE_CONTRACT.inputs, strict=True):
         assert (ours.producer, ours.output_kind, ours.schema, ours.authority, ours.channel, ours.coverage) == (
             theirs.producer, theirs.output_kind, theirs.schema, theirs.authority, theirs.channel, theirs.coverage)
-        assert ours.availability is Availability.OPTIONAL and ours.missing is MissingPolicy.GAP, ours
+        if (ours.producer, ours.output_kind) == ("job_project_build", "handoff"):
+            assert ours.availability is Availability.REQUIRED and ours.missing is MissingPolicy.REJECT, ours
+        else:
+            assert ours.availability is Availability.OPTIONAL and ours.missing is MissingPolicy.GAP, ours
     by_job: dict[str, set[str]] = {}
     for requirement in inherited:
         by_job.setdefault(requirement.producer, set()).add(requirement.output_kind)
@@ -67,7 +70,10 @@ def test_inputs_are_the_language_build_inputs_made_optional_plus_one_required_tr
     assert request.availability is Availability.REQUIRED and request.missing is MissingPolicy.REJECT
     required = [(item.producer, item.output_kind) for item in CONTRACT.inputs
                 if item.availability is Availability.REQUIRED or item.missing is MissingPolicy.REJECT]
-    assert required == [("build_controller", "iteration_request")]
+    assert required == [
+        ("job_project_build", "handoff"),
+        ("build_controller", "iteration_request"),
+    ]
 
 
 def test_the_transaction_is_dispatched_internally_and_never_propagates_a_graph_handoff() -> None:

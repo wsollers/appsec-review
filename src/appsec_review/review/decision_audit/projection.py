@@ -13,6 +13,7 @@ from appsec_review.review.ledger import Projection
 from appsec_review.review.lead_families import LeadCollection
 from appsec_review.review.models import Admissibility, CellStatus, IntegrityError, Predicate, RelationKind, Role
 from appsec_review.review.secret_redaction import redact_message
+from appsec_review.review.evidence_obligations import ObligationState, obligation_from_json
 from appsec_review.review.warrants import WarrantResult, warrant_from_json
 from appsec_review.storage import canonical_json
 
@@ -85,6 +86,7 @@ class ProjectionInputs:
     lead_sources: Mapping[str, c.SourceRef]
     additional_expected_cells: Mapping[str, str]
     warrants: Mapping[str, Document] = field(default_factory=dict)
+    request_resolutions: Mapping[str, Document] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -182,6 +184,42 @@ class _Projector:
                 self.claim_warrants[warrant.claim_id].append(ref)
                 if rel.producing_cell_id:
                     self.cell_warrants[(warrant.claim_id, rel.producing_cell_id)].append(ref)
+        self.obligation_refs: dict[str, c.SourceRef] = {}
+        self.claim_resolutions: dict[str, list[c.SourceRef]] = defaultdict(list)
+        self.cell_resolutions: dict[tuple[str, str], list[c.SourceRef]] = defaultdict(list)
+        accepted_requests = set(inputs.projection.evidence_requests)
+        for lane_name, ob_doc in sorted(inputs.request_resolutions.items()):
+            items = ob_doc.value.get("items")
+            if (not isinstance(items, list)
+                    or ob_doc.value.get("count") != len(items)
+                    or ob_doc.value.get("lane") != lane_name):
+                raise IntegrityError("malformed lane evidence obligations document")
+            for raw in items:
+                ob = obligation_from_json(raw)
+                if ob.claim_id not in inputs.projection.claims:
+                    raise IntegrityError("evidence obligation names a claim absent from the accepted projection")
+                if not set(ob.origin_request_ids).issubset(accepted_requests):
+                    raise IntegrityError("evidence obligation names a request absent from the accepted projection")
+                accepted_rels = {item.relation_id: item for item in inputs.projection.relations.get(ob.claim_id, ())}
+                if not set(ob.resolution.relation_ids).issubset(accepted_rels):
+                    raise IntegrityError("evidence obligation resolution names a relation absent from the accepted projection")
+                if ob.obligation_id in self.obligation_refs:
+                    raise IntegrityError("duplicate evidence obligation in decision audit")
+                uses = (
+                    (c.EvidenceUse.READ, c.EvidenceUse.CITED)
+                    if ob.state is ObligationState.SATISFIED
+                    else (c.EvidenceUse.READ,)
+                )
+                ref = ob_doc.ref(ob.obligation_id, *uses)
+                self.obligation_refs[ob.obligation_id] = ref
+                self.claim_resolutions[ob.claim_id].append(ref)
+                for origin_cell in ob.origin_cell_ids:
+                    if origin_cell:
+                        self.cell_resolutions[(ob.claim_id, origin_cell)].append(ref)
+                for rel_id in ob.resolution.relation_ids:
+                    rel = accepted_rels[rel_id]
+                    if rel.producing_cell_id:
+                        self.cell_resolutions[(ob.claim_id, rel.producing_cell_id)].append(ref)
 
     def add(self, record: c.Product) -> c.Product:
         if len(self.records) >= self.settings.max_records:
@@ -233,7 +271,7 @@ class _Projector:
         return tuple(sorted(by_key.values(), key=lambda row: canonical_json(row.to_dict())))
 
     def context(self, subject: c.Subject, *, sources=(), relations=(), proposals=(), warrants=None,
-                text=None, gaps=()) -> c.Context:
+                request_resolutions=None, text=None, gaps=()) -> c.Context:
         if not sources:
             sources = (self.i.projection_document.ref(),)
         warrant_values: tuple[c.SourceRef, ...] = ()
@@ -244,11 +282,26 @@ class _Projector:
                 if warrants is None else tuple(warrants)
             )
             warrant_values = self._dedup_sources(raw_warrants)
+        resolution_values: tuple[c.SourceRef, ...] = ()
+        if self.i.request_resolutions:
+            if request_resolutions is not None:
+                raw_resolutions = tuple(request_resolutions)
+            elif subject.claim_id.value is None:
+                raw_resolutions = ()
+            elif subject.cell_id.value is not None:
+                raw_resolutions = tuple(
+                    self.cell_resolutions.get((subject.claim_id.value, subject.cell_id.value), ())
+                )
+            else:
+                raw_resolutions = tuple(self.claim_resolutions.get(subject.claim_id.value, ()))
+            resolution_values = self._dedup_sources(raw_resolutions)
         fields = {c.ReferenceField.SOURCES: tuple(sources), c.ReferenceField.RELATIONS: tuple(relations),
                   c.ReferenceField.ORIGIN_PROPOSALS: tuple(proposals)}
         inline = {}
         refs: list[c.ContinuationRef] = []
-        room = c.MAX_INLINE_REFERENCES - (1 if warrant_values else 0)
+        reserved_warrants = 1 if warrant_values else 0
+        reserved_resolutions = 1 if resolution_values else 0
+        room = c.MAX_INLINE_REFERENCES - reserved_warrants - reserved_resolutions
         for field_name, values in fields.items():
             values = tuple(sorted(values, key=lambda row: canonical_json(row.to_dict())))
             inline[field_name] = values[:room]
@@ -258,16 +311,32 @@ class _Projector:
         future = _FUTURE
         if self.i.warrants:
             if warrant_values:
-                warrant_room = room + 1
+                warrant_room = room + reserved_warrants
                 inline_warrants = warrant_values[:warrant_room]
+                room = warrant_room - len(inline_warrants)
                 self._spill_field(c.ReferenceField.WARRANTS, warrant_values[warrant_room:], subject.claim_id, refs)
-                future = replace(_FUTURE, warrants=c.OptionalSources(inline_warrants, None))
+                future = replace(future, warrants=c.OptionalSources(inline_warrants, None))
             else:
                 absence = (
                     c.AbsenceReason.NOT_APPLICABLE
                     if subject.claim_id.value is None else c.AbsenceReason.NOT_PRODUCED
                 )
-                future = replace(_FUTURE, warrants=c.OptionalSources((), absence))
+                future = replace(future, warrants=c.OptionalSources((), absence))
+        if self.i.request_resolutions:
+            if resolution_values:
+                res_room = room + reserved_resolutions
+                inline_resolutions = resolution_values[:res_room]
+                room = res_room - len(inline_resolutions)
+                self._spill_field(
+                    c.ReferenceField.REQUEST_RESOLUTIONS, resolution_values[res_room:], subject.claim_id, refs
+                )
+                future = replace(future, request_resolutions=c.OptionalSources(inline_resolutions, None))
+            else:
+                absence = (
+                    c.AbsenceReason.NOT_APPLICABLE
+                    if subject.claim_id.value is None else c.AbsenceReason.NOT_PRODUCED
+                )
+                future = replace(future, request_resolutions=c.OptionalSources((), absence))
         if len(refs) > c.MAX_INLINE_REFERENCES:
             raise AuditUnavailable("continuation_reference_limit")
         if len(set(gaps)) > c.MAX_INLINE_REFERENCES:

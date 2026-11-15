@@ -41,6 +41,9 @@ class ViolationCode(StrEnum):
     EVIDENCE_REQUEST_NOT_OPENED = "evidence_request_not_opened"
     EVIDENCE_REQUEST_NOT_TERMINAL = "evidence_request_not_terminal"
     EVIDENCE_REQUEST_MULTIPLE_TERMINAL = "evidence_request_multiple_terminal"
+    EVIDENCE_REQUEST_UNWARRANTED_SATISFIED = "evidence_request_unwarranted_satisfied"
+    EVIDENCE_OBLIGATION_DUPLICATE_PRIMARY = "evidence_obligation_duplicate_primary"
+    EVIDENCE_REQUEST_INVALID_SUPERSEDED = "evidence_request_invalid_superseded"
     PARTITION_MISMATCH = "partition_mismatch"
     LEAD_PACKAGE_UNEXPECTED = "lead_package_unexpected"
     LEAD_OUTCOME_INVALID = "lead_outcome_invalid"
@@ -199,7 +202,9 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
             violations.append(violation(ViolationCode.PACKAGE_LANE_MISMATCH, cell_id))
 
     request_outcomes: Counter[EvidenceRequestOutcome] = Counter()
-    for request_id, request in projection.evidence_requests.items():
+    primary_by_obligation: dict[str, list[str]] = {}
+    primary_claims_by_obligation: dict[str, set[str]] = {}
+    for request_id, request in sorted(projection.evidence_requests.items()):
         if request.opened != 1:
             violations.append(violation(ViolationCode.EVIDENCE_REQUEST_NOT_OPENED, request_id))
         if not request.outcomes:
@@ -207,7 +212,32 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
         elif len(request.outcomes) > 1:
             violations.append(violation(ViolationCode.EVIDENCE_REQUEST_MULTIPLE_TERMINAL, request_id))
         else:
-            request_outcomes[request.outcomes[0]] += 1
+            outcome = request.outcomes[0]
+            request_outcomes[outcome] += 1
+            if outcome is EvidenceRequestOutcome.SATISFIED and (
+                request.obligation_id is not None or request.relation_ids or request.warrant_ids
+            ):
+                accepted_rel_ids = {
+                    rel.relation_id for rel in projection.relations.get(request.claim_id, ())
+                }
+                if (request.obligation_id is None
+                        or not request.relation_ids
+                        or not request.warrant_ids
+                        or not set(request.relation_ids).issubset(accepted_rel_ids)):
+                    violations.append(violation(ViolationCode.EVIDENCE_REQUEST_UNWARRANTED_SATISFIED, request_id))
+            if request.obligation_id is not None and outcome is not EvidenceRequestOutcome.SUPERSEDED:
+                primary_by_obligation.setdefault(request.obligation_id, []).append(request_id)
+                primary_claims_by_obligation.setdefault(request.obligation_id, set()).add(request.claim_id)
+    for _ob_id, primary_ids in sorted(primary_by_obligation.items()):
+        for duplicate_id in primary_ids[1:]:
+            violations.append(violation(ViolationCode.EVIDENCE_OBLIGATION_DUPLICATE_PRIMARY, duplicate_id))
+    for request_id, request in sorted(projection.evidence_requests.items()):
+        if (len(request.outcomes) == 1
+                and request.outcomes[0] is EvidenceRequestOutcome.SUPERSEDED
+                and request.obligation_id is not None):
+            if (request.superseded_by is None
+                    or request.claim_id not in primary_claims_by_obligation.get(request.superseded_by, set())):
+                violations.append(violation(ViolationCode.EVIDENCE_REQUEST_INVALID_SUPERSEDED, request_id))
 
     lead_counts: dict[Lane, Counter[str]] = {lane: Counter() for lane in Lane}
     for package_id, leads in sorted((lead_accounting or {}).items()):

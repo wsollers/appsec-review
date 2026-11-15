@@ -59,6 +59,21 @@ from appsec_review.review.claims import normalize_claim
 from appsec_review.review.compact import Expander, expand_blue, expand_judge, expand_red, expand_verifier
 from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.evidence import resolve_relation, resolve_warranted_relation, satisfies
+from appsec_review.review.evidence_obligations import (
+    BudgetDisposition,
+    EvidenceObligation,
+    LANE_OBLIGATIONS_SCHEMA,
+    OBLIGATION_POLICY_VERSION,
+    ObligationReasonCode,
+    ObligationState,
+    coalesce_obligations,
+    ledger_closure_for_obligation,
+    obligation_json,
+    pending_followup_requests,
+    reconcile_obligations,
+    semantic_round_fingerprint,
+    submission_from_request,
+)
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
 from appsec_review.review.judge import (
@@ -316,6 +331,11 @@ class TeamResult:
     judge_verdicts: list[JudgeVerdict] = field(default_factory=list)
     judging: dict[str, Any] = field(default_factory=dict)         # claim id -> judge cells / why none was selected
     rounds: list[dict[str, Any]] = field(default_factory=list)
+    package_entities: frozenset[str] | None = None
+    warrant_scope: WarrantScope = field(default_factory=WarrantScope)
+    withdrawn_claims: dict[str, BudgetDisposition] = field(default_factory=dict)
+    cutoff_obligation_ids: set[str] = field(default_factory=set)
+    obligations: tuple[EvidenceObligation, ...] = ()
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
                                                             "cells_memo_reused": 0, "cells_not_launched": 0,
@@ -909,7 +929,8 @@ def _coverage_row(work: PackageWork, cell: _Cell) -> dict[str, Any]:
 
 def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launched_reason: str = "") -> TeamResult:
     """Run one package's team to terminal records. Only an :class:`IntegrityError` escapes."""
-    result = TeamResult(work.package_id, work.lane, work.unit_key, leads=_lead_ids(work))
+    result = TeamResult(work.package_id, work.lane, work.unit_key, leads=_lead_ids(work),
+                        package_entities=frozenset(work.entities), warrant_scope=_warrant_scope(work))
     routing = route(ctx, work)
     result.routing = {key: value for key, value in routing.items() if key != "gaps"}
     result.gaps.extend(routing["gaps"])
@@ -956,6 +977,50 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
     return result
 
 
+def _reconcile_team(
+    ctx: ReviewContext | None,
+    team: TeamResult,
+    *,
+    current_round: int,
+    terminal: bool,
+    gaps: Sequence[Gap] | None = None,
+    round_stop_reason: str | None = None,
+) -> tuple[EvidenceObligation, ...]:
+    """Coalesce and reconcile canonical ``TRI-C`` obligations for ``team``."""
+    dedup_requests = [
+        req for _, req in sorted({item["request_id"]: item for item in team.requests}.items())
+    ]
+    if not dedup_requests:
+        return ()
+    claims_by_id = {claim.claim_id: claim for claim in team.claims}
+    core = getattr(ctx, "core", None) if ctx is not None else None
+    coalesced = coalesce_obligations(
+        [submission_from_request(req) for req in dedup_requests],
+        claims_by_id=claims_by_id,
+        core=core,
+        scope=team.warrant_scope,
+        scope_ceiling=team.package_id,
+        admissible_producer_ids=getattr(ctx, "available_sources", ()) if ctx is not None else (),
+    )
+    return reconcile_obligations(
+        coalesced,
+        claims_by_id=claims_by_id,
+        relations=team.relations,
+        warrants_by_relation_id=team.warrants,
+        core=core,
+        scope=team.warrant_scope,
+        package_entities=team.package_entities,
+        cell_roles={cell.cell_id: cell.role.value for cell in team.cells},
+        cells=team.cells,
+        gaps=gaps if gaps is not None else team.gaps,
+        cutoff_obligation_ids=team.cutoff_obligation_ids,
+        withdrawn_claims=team.withdrawn_claims,
+        round_stop_reason=round_stop_reason,
+        evaluated_round=current_round,
+        terminal=terminal,
+    )
+
+
 def _round_state(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> tuple[list[dict[str, Any]], str]:
     """Only deterministic R5 states, with R6 independence, can supply accepted seed facts."""
     known = []
@@ -983,11 +1048,16 @@ def _round_state(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> t
                       "preconditions": list(claim.preconditions), "affected_entities": list(claim.affected_entities),
                       "evidence_entities": entities, "evidence_relations": sorted(decision.counted_relation_ids),
                       "adjudication_id": decision.adjudication_id, "policy_sha256": decision.policy_sha256})
+    result.obligations = _reconcile_team(ctx, result, current_round=work.round_index, terminal=False)
+    obligation_fp = semantic_round_fingerprint(result.obligations)
     # Actor/receipt/round identity is not new evidence and cannot defeat convergence.
     semantic_evidence = sorted({(item.claim_id, item.entity_id, item.predicate.value, item.kind.value,
                                 item.admissibility.value, item.complete)
                                for item in result.relations if item.provenance is None})
-    return known, sha256_hex({"states": states, "evidence": semantic_evidence})
+    state_body: dict[str, Any] = {"states": states, "evidence": semantic_evidence}
+    if obligation_fp:
+        state_body["obligations"] = obligation_fp
+    return known, sha256_hex(state_body)
 
 
 def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], reds: list[_Cell],
@@ -1029,19 +1099,29 @@ def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any
 
 
 def _pending_requests(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> tuple[Mapping[str, Any], ...]:
-    unique = {}
+    existing_gap_ids = {gap.gap_id for gap in result.gaps}
+    added_outside = False
     for request in result.requests:
-        if not set(request["anchors"]).issubset(work.entities):
-            result.gaps.append(make_gap(GapClass.EVIDENCE_GAP, request["request_id"],
-                                        "follow_up_request_anchor_outside_package"))
+        if request["claim_id"] in result.withdrawn_claims:
             continue
-        body = {key: value for key, value in request.items() if key not in {"origin_cell_id", "request_id", "round"}}
-        unique[sha256_hex(body)] = body
+        if not set(request["anchors"]).issubset(work.entities):
+            gap = make_gap(GapClass.EVIDENCE_GAP, request["request_id"],
+                           "follow_up_request_anchor_outside_package")
+            if gap.gap_id not in existing_gap_ids:
+                existing_gap_ids.add(gap.gap_id)
+                result.gaps.append(gap)
+                added_outside = True
+    if result.package_entities is None:
+        result.package_entities = frozenset(work.entities)
+    if added_outside or not result.obligations:
+        result.obligations = _reconcile_team(ctx, result, current_round=work.round_index, terminal=False)
     limit = ctx.settings.red_output.max_evidence_requests
-    if len(unique) > limit:
+    pending, cutoff_ids = pending_followup_requests(result.obligations, max_requests=limit)
+    if cutoff_ids:
+        result.cutoff_obligation_ids.update(cutoff_ids)
         result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id, "follow_up_evidence_request_cutoff",
                                     round=work.round_index))
-    return tuple(unique[key] for key in sorted(unique)[:limit])
+    return pending
 
 
 def _skip(result: TeamResult, work: PackageWork, reds: list[_Cell], reason: str, gap_class: GapClass) -> None:
@@ -1423,12 +1503,16 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
                                             f"gate:unresolvable_citation ({len(unresolved)} identities)"))
                 result.triage.append({"claim_id": claim.claim_id, "decision": "rejected",
                                       "reason": "unresolvable_citation", "support": group["support"]})
+                result.requests.extend(group["requests"])
+                result.withdrawn_claims.setdefault(claim.claim_id, BudgetDisposition.WITHIN_BUDGET)
                 _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
                                  claim.claim_id, "rejected", "unresolvable_citation")
                 continue
         candidates.append(group)
     candidates.sort(key=lambda group: (-group["support"], group["claim"].claim_id))
     previous_admitted = {item["claim_id"] for item in result.triage if item["decision"] == "admitted"}
+    for admitted_id in previous_admitted:
+        result.withdrawn_claims.pop(admitted_id, None)
     repeated = [group for group in candidates if group["claim"].claim_id in previous_admitted]
     fresh = [group for group in candidates if group["claim"].claim_id not in previous_admitted]
     remaining = max(0, cap - len(previous_admitted))
@@ -1439,9 +1523,12 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
                                     f"triage: over the {work.lane.value} cap of {cap} claims per package"))
         result.triage.append({"claim_id": claim_id, "decision": "over_cap", "reason": "claims_per_package_cap",
                               "support": group["support"]})
+        result.requests.extend(group["requests"])
+        result.withdrawn_claims[claim_id] = BudgetDisposition.CLAIMS_PER_PACKAGE_CAP
         _audit_proposals(result, work, [(c, p) for c, p, _, _ in group["items"]],
                          claim_id, "over_cap", "claims_per_package_cap")
     for group in admitted:
+        result.withdrawn_claims.pop(group["claim"].claim_id, None)
         if group["claim"].claim_id not in previous_admitted:
             result.triage.append({"claim_id": group["claim"].claim_id, "decision": "admitted", "reason": None,
                                   "support": group["support"]})
@@ -1625,7 +1712,8 @@ def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledge
     """A lane that could not start: every package is a gapped package and the shard records it."""
     teams = []
     for work in sorted(packages, key=lambda item: (item.rank, item.package_id)):
-        team = TeamResult(work.package_id, lane, work.unit_key, leads=_lead_ids(work))
+        team = TeamResult(work.package_id, lane, work.unit_key, leads=_lead_ids(work),
+                          package_entities=frozenset(work.entities), warrant_scope=_warrant_scope(work))
         team.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"lane failure: {reason}"))
         teams.append(team)
     return _seal(None, lane, teams, {Lane.LEAD: 0, Lane.HUNT: 0}, ledger_path, stream,
@@ -1661,20 +1749,62 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
             writer.add_relation(relation, round=cell_rounds.get(relation.producing_cell_id, 0))
         for verdict in sorted(team.judge_verdicts, key=lambda item: item.verdict_id):
             writer.judge_verdict(verdict, round=cell_rounds.get(verdict.cell_id, 0))
+        terminal_round = max(cell_rounds.values(), default=0)
+        stop_reason = team.rounds[-1].get("stop_reason") if team.rounds else None
+        reconciled_obs = list(
+            _reconcile_team(
+                ctx, team, current_round=terminal_round, terminal=True,
+                gaps=team.gaps, round_stop_reason=stop_reason,
+            )
+        )
+        final_obs: list[EvidenceObligation] = []
+        req_to_ob: dict[str, EvidenceObligation] = {}
+        for ob in reconciled_obs:
+            if ob.requested_specialist and ob.state is ObligationState.UNSATISFIED:
+                gap = make_gap(GapClass.COVERAGE_GAP, ob.primary_request_id,
+                               f"unresolved_specialist_referral:{ob.requested_specialist}")
+                gaps.setdefault(gap.gap_id, gap)
+                ob = replace(ob, remaining_gap_ids=tuple(sorted({*ob.remaining_gap_ids, gap.gap_id})))
+            final_obs.append(ob)
+            for req_id in ob.origin_request_ids:
+                req_to_ob[req_id] = ob
+        team.obligations = tuple(final_obs)
+        admitted_claim_ids = {claim.claim_id for claim in team.claims}
         for request in sorted({item["request_id"]: item for item in team.requests}.values(),
                               key=lambda item: item["request_id"]):
+            if request["claim_id"] not in admitted_claim_ids:
+                continue
+            bound_ob = req_to_ob[request["request_id"]]
             writer.open_request(request["request_id"], request["claim_id"], Predicate(request["predicate"]),
                                 request["requested_kind"], origin_cell_id=request["origin_cell_id"],
                                 round=request.get("round", 0),
                                 anchors=request.get("anchors", ()), question=request.get("question"),
-                                specialist=request.get("specialist"))
-            writer.close_request(request["request_id"], request["claim_id"], EvidenceRequestOutcome.UNSATISFIED,
-                                 reason="bounded package rounds ended without a verified request resolution",
-                                 round=max(cell_rounds.values(), default=0))
-            if request.get("specialist"):
-                gap = make_gap(GapClass.COVERAGE_GAP, request["request_id"],
-                               f"unresolved_specialist_referral:{request['specialist']}")
-                gaps.setdefault(gap.gap_id, gap)
+                                specialist=request.get("specialist"),
+                                obligation_id=bound_ob.obligation_id)
+        for ob in sorted(team.obligations, key=lambda item: item.obligation_id):
+            if ob.claim_id not in admitted_claim_ids:
+                continue
+            primary_outcome, primary_reason = ledger_closure_for_obligation(ob)
+            writer.close_request(
+                ob.primary_request_id, ob.claim_id, primary_outcome,
+                reason=primary_reason,
+                round=ob.resolution.evaluated_round,
+                obligation_id=ob.obligation_id,
+                reason_code=ob.resolution.reason_code.value,
+                relation_ids=ob.resolution.relation_ids,
+                warrant_ids=ob.resolution.warrant_ids,
+                superseded_by=ob.resolution.superseded_by,
+            )
+            superseded_target = ob.resolution.superseded_by or ob.obligation_id
+            for dup_request_id in ob.origin_request_ids[1:]:
+                writer.close_request(
+                    dup_request_id, ob.claim_id, EvidenceRequestOutcome.SUPERSEDED,
+                    reason=f"coalesced into canonical obligation {superseded_target}",
+                    round=ob.resolution.evaluated_round,
+                    obligation_id=ob.obligation_id,
+                    reason_code=ObligationReasonCode.SUPERSEDED_BY_OBLIGATION.value,
+                    superseded_by=superseded_target,
+                )
         for gap in team.gaps:
             gaps.setdefault(gap.gap_id, gap)
     for gap_id in sorted(gaps):
@@ -1711,6 +1841,9 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "lead_accounting": {team.package_id: _lead_summary(team) for team in teams},
         "chain_seeds": seeds,
         "poc_basis": _poc_basis_artifact(lane, teams, Path(ledger_path).with_name("poc-basis.json")),
+        "evidence_obligations": _obligations_artifact(
+            lane, teams, Path(ledger_path).with_name("evidence-obligations.json")
+        ),
         "coverage": [row for team in teams for row in team.coverage],
         "capabilities": [row for team in teams for row in team.capabilities],
         "security_events": [dict(event) for team in teams for event in team.security_events],
@@ -1789,6 +1922,34 @@ def _warrants_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path) -> d
     atomic_json(path, {"schema": WARRANTS_SCHEMA, "lane": lane.value, "rule": WARRANT_RULE_VERSION,
                        "count": len(items), "items": items})
     return {"path": str(path), "schema": WARRANTS_SCHEMA, "count": len(items), "sha256": file_sha256(path)}
+
+
+def _obligations_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path) -> dict[str, Any]:
+    """Persist the lane's canonical ``evidence-obligation/1`` records (``TRI-C``)."""
+    merged: dict[str, EvidenceObligation] = {}
+    for team in teams:
+        for ob in team.obligations:
+            existing = merged.get(ob.obligation_id)
+            if existing is not None and existing != ob:
+                raise IntegrityError(f"conflicting evidence obligations for {ob.obligation_id}")
+            merged[ob.obligation_id] = ob
+    items = [obligation_json(merged[oid]) for oid in sorted(merged)]
+    atomic_json(
+        path,
+        {
+            "schema": LANE_OBLIGATIONS_SCHEMA,
+            "lane": lane.value,
+            "policy_version": OBLIGATION_POLICY_VERSION,
+            "count": len(items),
+            "items": items,
+        },
+    )
+    return {
+        "path": str(path),
+        "schema": LANE_OBLIGATIONS_SCHEMA,
+        "count": len(items),
+        "sha256": file_sha256(path),
+    }
 
 
 def _merge_lists(items: Iterable[Mapping[str, list[Any]]]) -> dict[str, list[Any]]:

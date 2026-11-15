@@ -168,8 +168,20 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         catalog = _load_catalog(run_root)
         if catalog["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match the accepted catalog")
-        accepted = _accepted_handoff(run_root, "job_source_history_analysis", required=True)
-        assert accepted is not None
+        accepted = _accepted_handoff(run_root, "job_source_history_analysis", required=False)
+        if accepted is None:
+            reason = "source_history_unavailable"
+            unit.job.events.write("CHANGE_CONTEXT_HISTORY_UNAVAILABLE", reason=reason)
+            return {
+                "available": False, "reason": reason, "gaps": [], "history_gaps": [],
+                "terminal_status": "SKIPPED_NA",
+                "history_handoff_sha256": None, "history_identity": None,
+                "git": {"decision": "UNAVAILABLE", "reason": reason},
+                "source": {}, "review_records": None,
+                "components": catalog["components"],
+                "catalog_handoff_sha256": catalog["catalog_handoff_sha256"],
+                "snapshot_commit": None,
+            }
         handoff, handoff_sha = accepted
         document = load_accepted_history(run_root)
         assert document is not None

@@ -87,7 +87,7 @@ def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], s
         raise ProfileIntegrityError(f"accepted {job_id} handoff is required: {exc}") from exc
 
 
-def _load_catalog_identity(run_root: Path) -> tuple[str, str | None]:
+def _load_catalog_identity(run_root: Path) -> tuple[str, str | None, Mapping[str, Any] | None]:
     handoff, handoff_sha = _accepted_handoff(run_root, "job_target_catalog")
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
@@ -98,8 +98,29 @@ def _load_catalog_identity(run_root: Path) -> tuple[str, str | None]:
     catalog = json.loads(_safe_file(run_root, identity, "target catalog").read_text(encoding="utf-8"))
     if catalog.get("schema") != "appsec-review/target-catalog/1":
         raise ProfileIntegrityError("target catalog schema is unsupported")
+    raw_manifest = published.get("index_manifest") if isinstance(published, Mapping) else None
+    catalog_manifest = (
+        raw_manifest if isinstance(raw_manifest, Mapping) and any(
+            item.get("path") == raw_manifest.get("path") and item.get("sha256") == raw_manifest.get("sha256")
+            for item in handoff.get("artifacts", ()) if isinstance(item, Mapping))
+        else None
+    )
     fingerprint = catalog.get("source_fingerprint")
-    return handoff_sha, str(fingerprint) if fingerprint is not None else None
+    return handoff_sha, (str(fingerprint) if fingerprint is not None else None), catalog_manifest
+
+
+def _fallback_upstream_manifest(unit: UnitContext, catalog_manifest: Mapping[str, Any] | None) -> dict[str, Any]:
+    if unit.job.input_manifest_path is not None and unit.job.input_manifest_sha256 is not None:
+        identity = {"path": unit.job.input_manifest_path.relative_to(unit.job.run_root).as_posix(),
+                    "sha256": str(unit.job.input_manifest_sha256)}
+        path = _safe_file(unit.job.run_root, identity, "attempt input manifest")
+        load_verified_manifest(unit.job.run_root, path, str(identity["sha256"]))
+        return {**identity, "size_bytes": path.stat().st_size}
+    if not isinstance(catalog_manifest, Mapping):
+        raise ProfileIntegrityError("upstream index manifest is unavailable")
+    path = _safe_file(unit.job.run_root, catalog_manifest, "target catalog manifest")
+    load_verified_manifest(unit.job.run_root, path, str(catalog_manifest["sha256"]))
+    return dict(catalog_manifest)
 
 
 def detect_profile_format(path: str, data: bytes, declared_format: str | None = None) -> tuple[str | None, str | None]:
@@ -268,19 +289,32 @@ def _validate_config(context, _result) -> None:
 
 def build_job() -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
-        catalog_handoff_sha, catalog_fingerprint = _load_catalog_identity(unit.job.run_root)
-        language = load_accepted_language_build(unit.job.run_root)
-        artifacts = load_accepted_artifact_index(unit.job.run_root)
-        for value, label in ((language, "language-build"), (artifacts, "artifact-indexing")):
-            if value.get("source_fingerprint") != unit.job.source_fingerprint:
-                raise ProfileIntegrityError(f"{label} differs from the accepted target snapshot")
+        from appsec_review.runtime.consume import has_accepted_upstream
+        catalog_handoff_sha, catalog_fingerprint, catalog_manifest = _load_catalog_identity(unit.job.run_root)
         if catalog_fingerprint is not None and catalog_fingerprint != unit.job.source_fingerprint:
             raise ProfileIntegrityError("target catalog differs from the accepted target snapshot")
-        return {"receipts": language.get("receipts", ()),
-                "upstream_handoffs": {"job_target_catalog": catalog_handoff_sha,
-                                      "job_language_build": language["language_build_handoff_sha256"],
-                                      "job_artifact_indexing": artifacts["handoff_sha256"]},
-                "upstream_manifest": artifacts["index_manifest"]}
+        language = (load_accepted_language_build(unit.job.run_root)
+                    if has_accepted_upstream(unit.job.run_root, "job_language_build") else None)
+        artifacts = (load_accepted_artifact_index(unit.job.run_root)
+                     if has_accepted_upstream(unit.job.run_root, "job_artifact_indexing") else None)
+        for value, label in ((language, "language-build"), (artifacts, "artifact-indexing")):
+            if value is not None and value.get("source_fingerprint") != unit.job.source_fingerprint:
+                raise ProfileIntegrityError(f"{label} differs from the accepted target snapshot")
+        load_gaps: list[str] = []
+        upstream_handoffs: dict[str, str] = {"job_target_catalog": catalog_handoff_sha}
+        if language is not None:
+            upstream_handoffs["job_language_build"] = language["language_build_handoff_sha256"]
+        else:
+            load_gaps.append("language_build_unavailable: job_language_build producer disabled")
+        if artifacts is not None:
+            upstream_handoffs["job_artifact_indexing"] = artifacts["handoff_sha256"]
+            upstream_manifest = artifacts["index_manifest"]
+        else:
+            load_gaps.append("artifact_indexing_unavailable: job_artifact_indexing producer disabled")
+            upstream_manifest = _fallback_upstream_manifest(unit, catalog_manifest)
+        return {"receipts": language.get("receipts", ()) if language is not None else (),
+                "upstream_handoffs": upstream_handoffs,
+                "upstream_manifest": upstream_manifest, "gaps": load_gaps}
 
     def normalize(unit: UnitContext) -> Mapping[str, Any]:
         return ingest_profile_artifacts(unit.job.run_root, unit.output("load.accepted_inputs")["receipts"],
@@ -334,26 +368,28 @@ def build_job() -> Job:
                        target_root=unit.job.target_root or unit.job.repository_root,
                        indexes=(*existing, *current), upstream_manifests=(upstream_identity,))
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
+        gaps = list(dict.fromkeys([*loaded.get("gaps", ()), *normalized["gaps"]]))
         return {"indexes": [asdict(item) for item in current], "index_manifest": _artifact(unit, manifest_path),
-                "gaps": normalized["gaps"]}
+                "gaps": gaps}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_inputs")
         normalized = unit.output("normalize.profile_data")
         indexed = unit.output("index.profile_data")
+        gaps = list(dict.fromkeys([*loaded.get("gaps", ()), *normalized["gaps"]]))
         document = {"schema": PROFILE_DATA_HANDOFF_SCHEMA,
                     "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_handoff_sha256": loaded["upstream_handoffs"],
                     "parser_identity": PARSER_IDENTITY, "normalizer_identity": NORMALIZER_IDENTITY,
                     "mapping_identity": MAPPING_IDENTITY, "semantics": SEMANTICS,
                     "interpretation": normalized["interpretation"], "build_units": normalized["units"],
-                    "gaps": normalized["gaps"], "index_manifest": indexed["index_manifest"]}
+                    "gaps": gaps, "index_manifest": indexed["index_manifest"]}
         path = unit.job.attempt_root / "artifacts" / "profile-data" / "accepted-profile-data.json"
         artifact = _artifact(unit, path, document)
         return {"schema": PROFILE_DATA_HANDOFF_SCHEMA, "artifact": artifact,
                 "index_manifest": indexed["index_manifest"], "item_count": sum(
-                    len(value["rows"]) for value in normalized["units"]), "gaps": normalized["gaps"],
-                "terminal_status": "COMPLETED_WITH_GAPS" if normalized["gaps"] else
+                    len(value["rows"]) for value in normalized["units"]), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
                                    "SUCCEEDED" if normalized["units"] else "NOT_APPLICABLE"}
 
     units = (

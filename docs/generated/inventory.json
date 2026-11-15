@@ -6478,10 +6478,10 @@
           },
           {
             "authority": "producer_evidence",
-            "availability": "optional",
+            "availability": "required",
             "channel": "handoff",
             "coverage": "allow_partial",
-            "missing": "gap",
+            "missing": "reject",
             "output_kind": "handoff",
             "producer": "job_project_build",
             "schema": "appsec-review/job-handoff/2"
@@ -6700,7 +6700,7 @@
         "propagate_handoff": false,
         "schedule_after": [],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "79304bb42bcc337875c0e310c9ce2a851fc9d68fcaeea5c8558c424b77fe7e45",
+        "sha256": "52d7ab132626643401dde5ed67673f0c688ec74bf2c9ac231e3b68f318bffb2a",
         "target_access": "checkout"
       },
       "dagster": {
@@ -6844,7 +6844,8 @@
           "tests/unit/job_build_iteration/test_job_graph.py",
           "tests/unit/job_build_iteration/test_controller.py",
           "tests/unit/job_build_iteration/test_executor_capture.py",
-          "tests/unit/job_build_iteration/test_workspace_resume.py"
+          "tests/unit/job_build_iteration/test_workspace_resume.py",
+          "tests/unit/runtime/test_wave3_contracts.py"
         ]
       },
       "workers": 1
@@ -6855,61 +6856,11 @@
         "dispatch": "review_graph",
         "inputs": [
           {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "history_signals",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "history_documents",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/source-history-analysis/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "raw_git_history",
-            "producer": "job_source_history_analysis",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "history_tool_io",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
             "authority": "producer_evidence",
-            "availability": "optional",
+            "availability": "required",
             "channel": "handoff",
             "coverage": "allow_partial",
-            "missing": "gap",
+            "missing": "reject",
             "output_kind": "handoff",
             "producer": "job_target_catalog",
             "schema": "appsec-review/job-handoff/2"
@@ -6983,6 +6934,56 @@
             "output_kind": "catalog_documents",
             "producer": "job_target_catalog",
             "schema": "appsec-review/target-catalog/1"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "when_producer_enabled",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "reject",
+            "output_kind": "handoff",
+            "producer": "job_source_history_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "history_signals",
+            "producer": "job_source_history_analysis",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "history_documents",
+            "producer": "job_source_history_analysis",
+            "schema": "appsec-review/source-history-analysis/2"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "raw_git_history",
+            "producer": "job_source_history_analysis",
+            "schema": "application/octet-stream"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "history_tool_io",
+            "producer": "job_source_history_analysis",
+            "schema": "appsec-review/container-execution/1"
           },
           {
             "authority": "producer_evidence",
@@ -7060,7 +7061,7 @@
           "job_tree_sitter_ast"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "2836fd0b66f15f4accfacfdce8fae3d9ed5718d8b50d634a26c67c33eed78824",
+        "sha256": "19f36115c587a1faa3833983952a7d144df9b5c9f5d0b8ce54390d1cb66aab95",
         "target_access": "checkout"
       },
       "dagster": {
@@ -7499,7 +7500,8 @@
           "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
           "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
           "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push",
-          "tests/unit/runtime/test_wave2_consumers.py"
+          "tests/unit/runtime/test_wave2_consumers.py",
+          "tests/unit/runtime/test_wave3_contracts.py"
         ]
       },
       "workers": 1
@@ -22594,7 +22596,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.adjudicate_unit",
               "id": "adjudicate.apply_policy",
               "internal_tools": [],
-              "line": 517,
+              "line": 521,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22618,7 +22620,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.chain_compose",
               "id": "attack_chains.compose_candidates",
               "internal_tools": [],
-              "line": 574,
+              "line": 578,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22636,7 +22638,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.chain_challenge.<locals>.handler",
               "id": "attack_chains.refute_edges",
               "internal_tools": [],
-              "line": 609,
+              "line": 613,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22654,7 +22656,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.chain_challenge.<locals>.handler",
               "id": "attack_chains.verify_weakest_links",
               "internal_tools": [],
-              "line": 609,
+              "line": 613,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22678,7 +22680,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.completeness",
               "id": "completeness.audit",
               "internal_tools": [],
-              "line": 649,
+              "line": 653,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22751,7 +22753,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.merge",
               "id": "merge.claims",
               "internal_tools": [],
-              "line": 505,
+              "line": 509,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22817,7 +22819,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.publish_ledger",
               "id": "publication.publish_claim_ledger",
               "internal_tools": [],
-              "line": 684,
+              "line": 688,
               "pool": "lifecycle",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22835,7 +22837,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.publish_handoff",
               "id": "publication.publish_handoff",
               "internal_tools": [],
-              "line": 707,
+              "line": 711,
               "pool": "lifecycle",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -22899,7 +22901,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.score",
               "id": "scoring.score_claims",
               "internal_tools": [],
-              "line": 538,
+              "line": 542,
               "pool": "inference_score",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -28425,120 +28427,10 @@
         "inputs": [
           {
             "authority": "producer_evidence",
-            "availability": "optional",
+            "availability": "required",
             "channel": "handoff",
             "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_catalog",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "archive_members",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_relationships",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_index_summary",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/artifact-indexing/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_language_build",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "topology_refinement_inputs",
-            "producer": "job_language_build",
-            "schema": "appsec-review/build-topology-refinement/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "build_actions",
-            "producer": "job_language_build",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "jvm_build_actions",
-            "producer": "job_language_build",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "language_build_receipts",
-            "producer": "job_language_build",
-            "schema": "appsec-review/language-build-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "build_workspaces",
-            "producer": "job_language_build",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
+            "missing": "reject",
             "output_kind": "handoff",
             "producer": "job_target_catalog",
             "schema": "appsec-review/job-handoff/2"
@@ -28612,6 +28504,116 @@
             "output_kind": "catalog_documents",
             "producer": "job_target_catalog",
             "schema": "appsec-review/target-catalog/1"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "when_producer_enabled",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "reject",
+            "output_kind": "handoff",
+            "producer": "job_language_build",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "topology_refinement_inputs",
+            "producer": "job_language_build",
+            "schema": "appsec-review/build-topology-refinement/1"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "build_actions",
+            "producer": "job_language_build",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "jvm_build_actions",
+            "producer": "job_language_build",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "language_build_receipts",
+            "producer": "job_language_build",
+            "schema": "appsec-review/language-build-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "build_workspaces",
+            "producer": "job_language_build",
+            "schema": "application/octet-stream"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "when_producer_enabled",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "reject",
+            "output_kind": "handoff",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "artifact_catalog",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "archive_members",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "artifact_relationships",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "artifact_index_summary",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/artifact-indexing/1"
           }
         ],
         "propagate_handoff": true,
@@ -28619,7 +28621,7 @@
           "job_artifact_indexing"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "9fe09ee70e761667a438b8899d13ed57ad539c998aabfe48553ac57b2cf4b818",
+        "sha256": "a4786673266d52f5ed9ebe7c50b4cc87b89764fb7bbe9a53e8ce1f2f530fdf63",
         "target_access": "checkout"
       },
       "dagster": {
@@ -28721,7 +28723,7 @@
               "handler": "appsec_review.jobs.job_profile_data.job.build_job.<locals>.publish",
               "id": "acceptance.publish_handoff",
               "internal_tools": [],
-              "line": 340,
+              "line": 375,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_profile_data/job.py",
@@ -28746,7 +28748,7 @@
               "handler": "appsec_review.jobs.job_profile_data.job.build_job.<locals>.index",
               "id": "index.profile_data",
               "internal_tools": [],
-              "line": 289,
+              "line": 323,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_profile_data/job.py",
@@ -28768,7 +28770,7 @@
               "handler": "appsec_review.jobs.job_profile_data.job.build_job.<locals>.load",
               "id": "load.accepted_inputs",
               "internal_tools": [],
-              "line": 270,
+              "line": 291,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_profile_data/job.py",
@@ -28792,7 +28794,7 @@
               "handler": "appsec_review.jobs.job_profile_data.job.build_job.<locals>.normalize",
               "id": "normalize.profile_data",
               "internal_tools": [],
-              "line": 285,
+              "line": 319,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_profile_data/job.py",
@@ -28811,7 +28813,8 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_profile_data.py"
+          "tests/test_profile_data.py",
+          "tests/unit/runtime/test_wave3_contracts.py"
         ]
       },
       "workers": 4
@@ -40553,120 +40556,10 @@
         "inputs": [
           {
             "authority": "producer_evidence",
-            "availability": "optional",
+            "availability": "required",
             "channel": "handoff",
             "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_catalog",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "archive_members",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_relationships",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_index_summary",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/artifact-indexing/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_language_build",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "topology_refinement_inputs",
-            "producer": "job_language_build",
-            "schema": "appsec-review/build-topology-refinement/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "build_actions",
-            "producer": "job_language_build",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "jvm_build_actions",
-            "producer": "job_language_build",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "language_build_receipts",
-            "producer": "job_language_build",
-            "schema": "appsec-review/language-build-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "build_workspaces",
-            "producer": "job_language_build",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
+            "missing": "reject",
             "output_kind": "handoff",
             "producer": "job_target_catalog",
             "schema": "appsec-review/job-handoff/2"
@@ -40740,6 +40633,116 @@
             "output_kind": "catalog_documents",
             "producer": "job_target_catalog",
             "schema": "appsec-review/target-catalog/1"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "when_producer_enabled",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "reject",
+            "output_kind": "handoff",
+            "producer": "job_language_build",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "topology_refinement_inputs",
+            "producer": "job_language_build",
+            "schema": "appsec-review/build-topology-refinement/1"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "build_actions",
+            "producer": "job_language_build",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "jvm_build_actions",
+            "producer": "job_language_build",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "language_build_receipts",
+            "producer": "job_language_build",
+            "schema": "appsec-review/language-build-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "build_workspaces",
+            "producer": "job_language_build",
+            "schema": "application/octet-stream"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "when_producer_enabled",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "reject",
+            "output_kind": "handoff",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "artifact_catalog",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "archive_members",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "artifact_relationships",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/retrieval-index/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "artifact_index_summary",
+            "producer": "job_artifact_indexing",
+            "schema": "appsec-review/artifact-indexing/1"
           }
         ],
         "propagate_handoff": true,
@@ -40747,7 +40750,7 @@
           "job_artifact_indexing"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "9fe09ee70e761667a438b8899d13ed57ad539c998aabfe48553ac57b2cf4b818",
+        "sha256": "a4786673266d52f5ed9ebe7c50b4cc87b89764fb7bbe9a53e8ce1f2f530fdf63",
         "target_access": "checkout"
       },
       "dagster": {
@@ -40860,7 +40863,7 @@
               "handler": "appsec_review.jobs.job_test_coverage.job.build_job.<locals>.publish",
               "id": "acceptance.publish_handoff",
               "internal_tools": [],
-              "line": 390,
+              "line": 430,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_test_coverage/job.py",
@@ -40885,7 +40888,7 @@
               "handler": "appsec_review.jobs.job_test_coverage.job.build_job.<locals>.index",
               "id": "index.coverage",
               "internal_tools": [],
-              "line": 333,
+              "line": 372,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_test_coverage/job.py",
@@ -40907,7 +40910,7 @@
               "handler": "appsec_review.jobs.job_test_coverage.job.build_job.<locals>.load",
               "id": "load.accepted_inputs",
               "internal_tools": [],
-              "line": 313,
+              "line": 337,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_test_coverage/job.py",
@@ -40931,7 +40934,7 @@
               "handler": "appsec_review.jobs.job_test_coverage.job.build_job.<locals>.normalize",
               "id": "normalize.coverage",
               "internal_tools": [],
-              "line": 327,
+              "line": 366,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_test_coverage/job.py",
@@ -40950,7 +40953,8 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_test_coverage.py"
+          "tests/test_test_coverage.py",
+          "tests/unit/runtime/test_wave3_contracts.py"
         ]
       },
       "workers": 4
@@ -43978,7 +43982,7 @@
     "src/appsec_review/config/image_builder_service.py": "a2cbaa1f748c630ba1816afc31a29de62494f4036cab087f0a2c4c9aa6148d3a",
     "src/appsec_review/config/image_pin_verification.py": "ebc74bd6cef04001bef7237939e73f72f585fe34f1328f4caadae845616a240a",
     "src/appsec_review/config/inference_review.py": "fb0a7d7219332162edcf5764eaa036a908a857551185556b2f44f20260ced19b",
-    "src/appsec_review/config/loader.py": "fafcd84ea44a27e988a5b8f43601c1f7cccb08e39ebb721f0d56a481b72f570c",
+    "src/appsec_review/config/loader.py": "b09172dc6685796d168379c259a84988c3d4b611a17ba5b5c0d2ff8c0cd27822",
     "src/appsec_review/config/native_dagster.py": "b1be8153fa77a1a565ceff7449adc5a2e01adc031ce356abaf50c0d26bbc3bb7",
     "src/appsec_review/config/native_engine.py": "b21229a3ffafb5e87e4f339b7b0e6dc3489ee6611bc06c348e310da09d189fab",
     "src/appsec_review/config/owasp.py": "51185e78f4f3295b88896c3341509efab413283964c629a06c0f0e266fb8dcc5",
@@ -44116,12 +44120,12 @@
     "src/appsec_review/jobs/job_build_environment_analysis/datasets.py": "de93514b6de78690b911f68ce943203b91548819949715fa71759d80eb2a9b87",
     "src/appsec_review/jobs/job_build_environment_analysis/job.py": "bf9055cc3848035d573e66859ed81362746bf35b563930958d06c0aae3243089",
     "src/appsec_review/jobs/job_build_iteration/__init__.py": "4416558077b4fca9d006c43d47122241c68c2d8934706fa637dc71f71a17805d",
-    "src/appsec_review/jobs/job_build_iteration/datasets.py": "caef7e774d362d900b388a4b84c773e3f0517a39b53800abb79f8e196b8b2a15",
+    "src/appsec_review/jobs/job_build_iteration/datasets.py": "9e6c9fb9716fa8467c424c0371f8d8d107ba5ae8095c2314b180fae4aadc72e2",
     "src/appsec_review/jobs/job_build_iteration/job.py": "bc5600f4f975667aa18ebf353f23130a4c6de43b4d1b4fa9987275b9771aaee3",
     "src/appsec_review/jobs/job_change_context_analysis/__init__.py": "db224bd99c793618bf469bd707fe89baab2c1813041123bef91d3b8bd50d7b62",
     "src/appsec_review/jobs/job_change_context_analysis/attribution.py": "619c70af79307602cba3f4e1f9a391a7f24d1c65a777a807f938ce32cf3dc331",
-    "src/appsec_review/jobs/job_change_context_analysis/datasets.py": "3cd43bedb80bc627fbcb36aceb0b7e259144eb7030a4e6f1c9e719b5c11bba1c",
-    "src/appsec_review/jobs/job_change_context_analysis/job.py": "68f4e00e7540f8e048f199c4c61556fac49828cdf2bdc0ddce0519e74a7055cb",
+    "src/appsec_review/jobs/job_change_context_analysis/datasets.py": "b159357de2879f9ec88a7aaf3bd0034cb78cacf313f7e1f026fbeb4f3778243b",
+    "src/appsec_review/jobs/job_change_context_analysis/job.py": "c6495fadfb9dba3299bdba41c926a4b4c36b09226a957b268b2457790def5e88",
     "src/appsec_review/jobs/job_change_context_analysis/metrics.py": "9a9706b4fbc47ad117fbb229278120fe10fec3780e262c98b13e3add5eaf155c",
     "src/appsec_review/jobs/job_change_context_analysis/settings.py": "a5b323cb6ae59ffd99fbc1265a10c779ab1be1c2a700528ff98c94195ff7e4c3",
     "src/appsec_review/jobs/job_change_context_analysis/sources.py": "02621169312b4b1f40b4977d86daaa04ac9ae2bb9b071257e70cf436b8d24d8a",
@@ -44210,13 +44214,13 @@
     "src/appsec_review/jobs/job_image_pin_verification/job.py": "1d4ae5ae2e1bfab9c7046939fe6e118b6274146258fe2bf51557fa0ae685745b",
     "src/appsec_review/jobs/job_image_pin_verification/pins.py": "4ea6ffcd81475a35e75bde7316360a4f68eeb37ddccb630847bed6b1cbc8e9ab",
     "src/appsec_review/jobs/job_inference_security_review/__init__.py": "056c3c7d7e437b22762e7fe9b79d47560bf191833d6833acd2d2c6c8bd70da5a",
-    "src/appsec_review/jobs/job_inference_security_review/audit.py": "ab02f725cb11d1cd46c6147224eb325efeb6e5ed273f9589be50d661ccc04668",
+    "src/appsec_review/jobs/job_inference_security_review/audit.py": "aa31b07fc31e1dc0782e474cea5f9b1ec7ef02769d5a8c886b5f51c7b84cc970",
     "src/appsec_review/jobs/job_inference_security_review/chains.py": "8fcd6acc7d207c7a69e051c5780ab559f16e1bb228b7b3149d0ba9a1a090e319",
     "src/appsec_review/jobs/job_inference_security_review/datasets.py": "e7afe558a5779d2dd8954bf33f01f42670321cffbcb1ce9b47dd324f616935d3",
-    "src/appsec_review/jobs/job_inference_security_review/job.py": "a946d3c66643f2327f70a5f65ca78854a03e953e48cda1db9fc860ab7f236f11",
+    "src/appsec_review/jobs/job_inference_security_review/job.py": "48a3a2d6607d51259f2180a485c299b9a86a698b8da5b02602fac2454b6680d6",
     "src/appsec_review/jobs/job_inference_security_review/schemas.py": "3202bd3e0bb796c0fa07d15d0b6e753932a1d505a3b20021ebe6fa0c3f357fc9",
     "src/appsec_review/jobs/job_inference_security_review/stages.py": "7052bb40a41b7d57a73e7fc02cda32644607f079abd195f48aee0155728ca085",
-    "src/appsec_review/jobs/job_inference_security_review/teams.py": "efecbfe0c2960ba03ea2b4871518d2aba6c5d379fa2d6b19bc9187a659857141",
+    "src/appsec_review/jobs/job_inference_security_review/teams.py": "bbbae907a14eea18730ce43f7c884426b528b2946c719e5f2cdde6dd306a5cac",
     "src/appsec_review/jobs/job_language_build/__init__.py": "9cfa5d5894f7683b0425711e233917fa2d9f1c8d82d712433f1551093c06fd40",
     "src/appsec_review/jobs/job_language_build/capture.py": "dd71bef6015a152029d22d444a628349271fe33cbec75d16a89285c2b180b1af",
     "src/appsec_review/jobs/job_language_build/datasets.py": "9f3ef8ee5b7041153e2fedf871a37c7789ed70335170cc507894f24713c3baff",
@@ -44277,8 +44281,8 @@
     "src/appsec_review/jobs/job_post_build_security_assessment/hardening.py": "52fb08c0b988a02d0f7ba9a30f9bfb7fd9566d6471e555ae291f9a0dbc1276b9",
     "src/appsec_review/jobs/job_post_build_security_assessment/job.py": "ac182b52b577148050d209bee5636a7fb1c2b7c47a0cc3d77b815d5dd8947cec",
     "src/appsec_review/jobs/job_profile_data/__init__.py": "67fd64c100a25d39f508523c1c55064fbb15ab29f792c6834d71d09f892c5a8b",
-    "src/appsec_review/jobs/job_profile_data/datasets.py": "6be84066863305a87d25b86aa964f4a16b9be5b5ef3e1daf6343a474edcdb5cd",
-    "src/appsec_review/jobs/job_profile_data/job.py": "e7381c52873425a55681a1498af58f26960b63225b1c635712bd74de9d6e47e5",
+    "src/appsec_review/jobs/job_profile_data/datasets.py": "609ce299f184a1251a5cceefdebba4306f2f9742108807501d1107b91f97056c",
+    "src/appsec_review/jobs/job_profile_data/job.py": "3c9e6e0b4c4fb4659fc12e37e6ade11a1cff42a0591c329d4753801d061e3bdb",
     "src/appsec_review/jobs/job_profile_data/parsers.py": "5d23c39402c39214954aff642ca87133bd88ad6ef8eb7bb19324d926b07a8093",
     "src/appsec_review/jobs/job_project_build/__init__.py": "f215fd0d217c319061c3ea7eda2eddcd9f39c5feadc490da81fdd5312edc5738",
     "src/appsec_review/jobs/job_project_build/datasets.py": "4a5823f3110a509336a0f54d5d71193ef2f72153d1046661cbe2a753f1e7845e",
@@ -44364,8 +44368,8 @@
     "src/appsec_review/jobs/job_target_catalog/datasets.py": "82c2f4b0829c28b4e9e7241bdc32c725ad04d9a56c828a06df39ff909fbc69e6",
     "src/appsec_review/jobs/job_target_catalog/job.py": "9cf57cbcc7fefc1beceda16cb280e9566071887fb4f911085d6e6a3969af87fa",
     "src/appsec_review/jobs/job_test_coverage/__init__.py": "9098dc06c1c41b5a5dfc533c7667b75df1d6ba722b103bbd824f1c4d9a730b64",
-    "src/appsec_review/jobs/job_test_coverage/datasets.py": "abf6fad24606c12e5d291dfa1428b7d5602f5836d87aea2f4547c783c9d72abd",
-    "src/appsec_review/jobs/job_test_coverage/job.py": "b87b7ead8be5754ba151f9530cf39fb0899ded92bf8e7db776117990b1d8ada4",
+    "src/appsec_review/jobs/job_test_coverage/datasets.py": "66c004f194bbd0cad06050637c2f25d887997da09687e305212b342f01bcb163",
+    "src/appsec_review/jobs/job_test_coverage/job.py": "fe778027a28c62559006aa3241f18586a372a4ba8d5ba6902bda22e3bf27405a",
     "src/appsec_review/jobs/job_test_coverage/parsers.py": "5680b70e6605c35fa0992eb26a0fd122038154392d4b7368a6bcfad3a24957e4",
     "src/appsec_review/jobs/job_third_party_data_sync/__init__.py": "89065914966c45a73431ed21e2ea7a2a43ad334f34bb63d1533f6eb44f2fbe2a",
     "src/appsec_review/jobs/job_third_party_data_sync/datasets.py": "a7573af25349eda74b6074db157362d0a0dfd6d487649d3b65e70796232a0e87",
@@ -44525,7 +44529,7 @@
     "src/appsec_review/retrieval/syntax.py": "b8648b8e22bbbbcc418d63e888a529d4c5a891bf4a8e0a1188f20f2e50d2ceec",
     "src/appsec_review/retrieval/syntax_contract.py": "e6802caa852be48b4f35166c0fed0496a432cb0843e2e0d1d7e1dd5c014364c2",
     "src/appsec_review/review/__init__.py": "b7dfd402cd3df5d1ca3cb6e451e62098e88112415f35dee4b5f809c1edec25a3",
-    "src/appsec_review/review/accounting.py": "b22e5437805f1dc74ae2b2b828d157e661c6002ed4fe918a8eb48106c714fe55",
+    "src/appsec_review/review/accounting.py": "ef79bd5b7dd900022961e403d2d53647c2bea82c88f768590774dc593b57c22f",
     "src/appsec_review/review/adjudication.py": "4fc2242db997812fd9b265654f46fa27dcd52f9d7eda898905315c6bc25bfd02",
     "src/appsec_review/review/admission.py": "6cae1b08afe83e538f1b9f03643e1163ee4c12ff8781543a30882d8cec916312",
     "src/appsec_review/review/advisories.py": "ab01f17dd73532fd1ec2453e541cf39451652f50860ec207329d09f888d6a3aa",
@@ -44542,14 +44546,14 @@
     "src/appsec_review/review/decision_audit/__init__.py": "e26d1b28ee1c448c94164c9366828795c1ba61e8ed01ee77f409c54de208bf69",
     "src/appsec_review/review/decision_audit/contracts.py": "a6480606e620d292d2915f8120de73bc2a7f74304a6a82bf5f954451748e206b",
     "src/appsec_review/review/decision_audit/metadata.py": "b9b3fe4bde2277648810d089f60f33f837875a51b188757b115128b48d60740e",
-    "src/appsec_review/review/decision_audit/projection.py": "bc905323b0316a742f8f7e918ac2e987fa3ec48e2f7a4d788396e662b7b2bd73",
+    "src/appsec_review/review/decision_audit/projection.py": "76d494973eabeaa48027d30d3aaeddbd38db395f127f1cc27207f15708876292",
     "src/appsec_review/review/decision_audit/publication.py": "667c42b31caf6cbce61a65ab97c54c867a60aedb0eaec1987f62479d1c19ea04",
     "src/appsec_review/review/decision_audit/query.py": "507b0f24fdf0da2045bce3aaa172a13ad5f8781a647598fb9a753deb79b173f7",
     "src/appsec_review/review/decision_audit/reader.py": "ff09de47f01ae0c994c2b978249f6f861dbe66b9b41234a809dc6b61ef6641eb",
     "src/appsec_review/review/dispositions.py": "3b150091be996622bbc0637951a1f7a8cf3b973d5658e068232e9a7e09f840a8",
     "src/appsec_review/review/evaluation.py": "59beeb0caaa539dd2517c9982faf1c1cd0cfd22ad46a36d46b4d06fa4dbf0264",
     "src/appsec_review/review/evidence.py": "02c5c5dcc7e349f93ac7a559e499bda7a5ece668adaee2aefded20093e81a1cd",
-    "src/appsec_review/review/evidence_obligations.py": "65bcdb242f134f4b72fe64a532ae19f77a31c9fced21cfee2825c0f112f0f651",
+    "src/appsec_review/review/evidence_obligations.py": "0780cd1d36e2b55a54158aa9f6db508cc5dc646feed767d23ac17ad5eef3e853",
     "src/appsec_review/review/fact_summary.py": "24165e6f9dd20234203c61c8ae5f6c3621b286857b8965e8a6c408cd2ee7c124",
     "src/appsec_review/review/identity.py": "add52aa90754f0b74ccc4f1ee0c64f0eda0d9dae91fd81abeea64f35086c8166",
     "src/appsec_review/review/independence.py": "7703361d24f62fd96711a50dc051a66c957f1a81c21908dcd1a78c4e0291bf0f",
@@ -44559,7 +44563,7 @@
     "src/appsec_review/review/lead_filters.py": "65bd9675f7ae3873af91e88a79a7825a53940ce5ecb7850789900d8e68116bf3",
     "src/appsec_review/review/lead_triage.py": "d869bc450fb52b65cc69d1537d04b65a5836c0bcd852b234f44c8668e192ebfc",
     "src/appsec_review/review/lead_triage_settings.py": "da456d70389e1d0ea9fe50a76bac48ca5f3314e08213a31979295419a47f423a",
-    "src/appsec_review/review/ledger.py": "cb57a80384d50ece7a3e79f93efbd84710bd6086f7b432f969a6fd7e54e5f4a5",
+    "src/appsec_review/review/ledger.py": "31f33e3c44b133a8540f018d4d03aeed3a91a07b04d388bbbd41f20d248b3b68",
     "src/appsec_review/review/memory_context.py": "a7a3a606c94512decf9ca8c2950089effb33e43b1d83dfe44661ad2197af79fd",
     "src/appsec_review/review/models.py": "9bc0ff7d110946b42f9649d5f54c00ca90f47293e98360afc70d3db477eeabc1",
     "src/appsec_review/review/neighborhood.py": "1cdcc2c1b00a3b812ab335a2d8c31a6f019e4bb8f40586fb4c289c6ae1363134",
@@ -44686,7 +44690,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "e5e129b40b38c779c14a2580e78b775bbcc20b4fc9ea53190747b2a90f9a2a90"
+    "tests/job-test-map.json": "6fe8e4963aaa343482ba1e441c3ca575267aeb07cde31019708d7c82ba39e1d2"
   },
   "tool_policy": {
     "disable_grype": true,

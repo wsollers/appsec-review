@@ -36,6 +36,7 @@ from typing import AbstractSet, Any
 from appsec_review.retrieval.core import RetrievalCore, RetrievalGap, RetrievalIntegrityError
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity, RelationKind as IndexRelation
 from appsec_review.review.identity import sha256_hex
+from appsec_review.review.ledger import EvidenceRequestOutcome
 from appsec_review.review.models import (
     Admissibility, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass,
     IntegrityError, Predicate, RelationKind, SecurityPredicate,
@@ -67,25 +68,32 @@ _ABSTRACT_REQUESTED_KINDS: frozenset[str] = frozenset({
 })
 _ENTITY_KIND_VALUES: frozenset[str] = frozenset(item.value for item in EntityKind)
 VALID_REQUESTED_KINDS: frozenset[str] = _ABSTRACT_REQUESTED_KINDS | _ENTITY_KIND_VALUES
+VALID_SPECIALISTS: frozenset[str] = frozenset({
+    "authentication_session", "authorization_access_control", "cryptography_data_protection",
+    "mobile_platform", "build_supply_chain", "memory_safety_native", "injection_interpreters",
+    "parsing_deserialization", "network_api_surface", "filesystem_resources", "business_logic_abuse",
+    "ci_cd_pipeline", "cloud_container_deployment", "generalist",
+})
 
 _CONSTRUCT_ENTITY_KINDS: frozenset[EntityKind] = frozenset({
-    EntityKind.SOURCE_SPAN, EntityKind.AST_NODE, EntityKind.SYMBOL,
+    EntityKind.SOURCE_FILE, EntityKind.SOURCE_SPAN, EntityKind.AST_NODE, EntityKind.SYMBOL,
     EntityKind.CALL_SITE, EntityKind.SINK_SITE,
     EntityKind.BINARY_FUNCTION, EntityKind.BINARY_CALL_SITE,
 })
 
 _KIND_COMPATIBILITY: Mapping[str, frozenset[EntityKind]] = {
     "source_line": frozenset({
-        EntityKind.SOURCE_SPAN, EntityKind.AST_NODE, EntityKind.SYMBOL,
+        EntityKind.SOURCE_FILE, EntityKind.SOURCE_SPAN, EntityKind.AST_NODE, EntityKind.SYMBOL,
         EntityKind.CALL_SITE, EntityKind.SINK_SITE,
     }),
     "compiled_view": frozenset({
         EntityKind.IR_ENTITY, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
         EntityKind.EXECUTABLE, EntityKind.BINARY_FUNCTION, EntityKind.BINARY_CALL_SITE,
+        EntityKind.BINARY_IMPORT, EntityKind.BINARY_STRING,
         EntityKind.BYTECODE_MODULE, EntityKind.MANAGED_ASSEMBLY, EntityKind.WASM_MODULE,
     }),
     "dataflow": frozenset({
-        EntityKind.DATAFLOW_PATH, EntityKind.ENTRY_POINT,
+        EntityKind.DATAFLOW_PATH, EntityKind.FLOW_SUMMARY, EntityKind.ENTRY_POINT,
         EntityKind.GUARD_FACT, EntityKind.RANGE_FACT,
     }),
     "configuration": frozenset({
@@ -176,6 +184,10 @@ class RequestSubmission:
     origin_cell_id: str | None = None
     round: int = 0
     budget_disposition: BudgetDisposition = BudgetDisposition.WITHIN_BUDGET
+
+    def __post_init__(self) -> None:
+        if self.specialist is not None and self.specialist not in VALID_SPECIALISTS:
+            raise IntegrityError(f"unsupported obligation specialist: {self.specialist!r}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +311,8 @@ class EvidenceObligation:
             raise IntegrityError(f"malformed obligation claim_id: {self.claim_id!r}")
         if self.requested_kind not in VALID_REQUESTED_KINDS:
             raise IntegrityError(f"unsupported obligation requested_kind: {self.requested_kind!r}")
+        if self.requested_specialist is not None and self.requested_specialist not in VALID_SPECIALISTS:
+            raise IntegrityError(f"unsupported obligation requested_specialist: {self.requested_specialist!r}")
         if any(not _CELL_ID_RE.match(c) for c in self.origin_cell_ids):
             raise IntegrityError("obligation origin_cell_ids must match cell-<sha256>")
         if len(set(self.origin_cell_ids)) != len(self.origin_cell_ids):
@@ -456,7 +470,9 @@ def infer_required_evidence_class(
         return RequiredEvidenceClass.GUARD_OR_RANGE_FACT
     if requested_kind in {EntityKind.GUARD_FACT.value, EntityKind.RANGE_FACT.value}:
         return RequiredEvidenceClass.GUARD_OR_RANGE_FACT
-    if requested_kind in {"dataflow", EntityKind.DATAFLOW_PATH.value, EntityKind.ENTRY_POINT.value}:
+    if requested_kind in {
+        "dataflow", EntityKind.DATAFLOW_PATH.value, EntityKind.FLOW_SUMMARY.value, EntityKind.ENTRY_POINT.value,
+    }:
         return RequiredEvidenceClass.STRUCTURED_FLOW
     if predicate in {Predicate.ATTACKER_INPUT_CONTROL, Predicate.SOURCE_TO_SINK_REACHABILITY} and requested_kind == "other":
         return RequiredEvidenceClass.STRUCTURED_FLOW
@@ -467,12 +483,12 @@ def infer_required_evidence_class(
     if requested_kind in {
         "compiled_view", EntityKind.IR_ENTITY.value, EntityKind.OBJECT_FILE.value,
         EntityKind.LIBRARY.value, EntityKind.EXECUTABLE.value, EntityKind.BINARY_FUNCTION.value,
-        EntityKind.BINARY_CALL_SITE.value, EntityKind.BYTECODE_MODULE.value,
-        EntityKind.MANAGED_ASSEMBLY.value, EntityKind.WASM_MODULE.value,
+        EntityKind.BINARY_CALL_SITE.value, EntityKind.BINARY_IMPORT.value, EntityKind.BINARY_STRING.value,
+        EntityKind.BYTECODE_MODULE.value, EntityKind.MANAGED_ASSEMBLY.value, EntityKind.WASM_MODULE.value,
     }:
         return RequiredEvidenceClass.COMPILED_OR_IR_ENTITY
     if requested_kind in {
-        "source_line", EntityKind.SOURCE_SPAN.value, EntityKind.AST_NODE.value,
+        "source_line", EntityKind.SOURCE_FILE.value, EntityKind.SOURCE_SPAN.value, EntityKind.AST_NODE.value,
         EntityKind.SYMBOL.value, EntityKind.CALL_SITE.value, EntityKind.SINK_SITE.value,
     }:
         return RequiredEvidenceClass.CONSTRUCT_PRESENCE
@@ -1524,3 +1540,45 @@ def obligation_from_json(raw: Mapping[str, Any]) -> EvidenceObligation:
         )
     except ValueError as exc:
         raise IntegrityError(f"invalid evidence obligation content: {exc}") from exc
+
+
+def submission_from_request(request: Mapping[str, Any]) -> RequestSubmission:
+    """Convert an admitted or triage-retained team request dictionary into a :class:`RequestSubmission`."""
+    return RequestSubmission(
+        request_id=str(request["request_id"]),
+        claim_id=str(request["claim_id"]),
+        predicate=Predicate(request["predicate"]),
+        requested_kind=str(request["requested_kind"]),
+        anchors=tuple(str(item) for item in request.get("anchors", ())),
+        question=str(request.get("question") or ""),
+        origin_cell_id=str(request["origin_cell_id"]) if request.get("origin_cell_id") else None,
+        round=int(request.get("round", 0)),
+        specialist=str(request["specialist"]) if request.get("specialist") is not None else None,
+    )
+
+
+def ledger_closure_for_obligation(obligation: EvidenceObligation) -> tuple[EvidenceRequestOutcome, str]:
+    """Map a terminal :class:`EvidenceObligation` to its ledger outcome and bounded reason."""
+    if obligation.state is ObligationState.OPEN:
+        raise IntegrityError(f"cannot close ledger request for non-terminal obligation {obligation.obligation_id}")
+    reason_code = obligation.resolution.reason_code.value
+    if obligation.state is ObligationState.SATISFIED:
+        polarity = obligation.resolution.polarity.value if obligation.resolution.polarity else "resolved"
+        return (
+            EvidenceRequestOutcome.SATISFIED,
+            f"reconciled ({reason_code}, polarity={polarity}) for {obligation.obligation_id}",
+        )
+    if obligation.state is ObligationState.SUPERSEDED:
+        return (
+            EvidenceRequestOutcome.SUPERSEDED,
+            f"superseded ({reason_code}) by {obligation.resolution.superseded_by}",
+        )
+    if obligation.state is ObligationState.WITHDRAWN:
+        return (
+            EvidenceRequestOutcome.WITHDRAWN,
+            f"withdrawn ({reason_code}, budget={obligation.budget_disposition.value})",
+        )
+    return (
+        EvidenceRequestOutcome.UNSATISFIED,
+        f"unsatisfied ({reason_code}, budget={obligation.budget_disposition.value})",
+    )
