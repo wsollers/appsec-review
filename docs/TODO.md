@@ -3015,6 +3015,9 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   branches (97.56%) covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
+  Project-build re-gate: 8 unit files, 187 cases (contract, family-recipe helpers, repair,
+  enforcement, recovery and step handlers), with all prior unit and integration cases preserved;
+  1265/1317 job-package lines (96.05%) and 481/524 branches (91.79%) covered.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

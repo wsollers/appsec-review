@@ -399,9 +399,11 @@
         "tests/unit/job_project_build/test_job_graph.py",
         "tests/unit/job_project_build/test_contract.py",
         "tests/unit/job_project_build/test_project_build_helpers.py",
+        "tests/unit/job_project_build/test_family_recipe_helpers.py",
         "tests/unit/job_project_build/test_repair.py",
         "tests/unit/job_project_build/test_enforcement.py",
-        "tests/unit/job_project_build/test_build_recovery.py"
+        "tests/unit/job_project_build/test_build_recovery.py",
+        "tests/unit/job_project_build/test_handlers.py"
       ],
       "integration": [
         "tests/integration/job_project_build/test_executor.py",
