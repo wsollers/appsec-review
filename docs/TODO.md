@@ -3180,7 +3180,16 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   independent reviewer verification, SQLite index publication, and downstream triage/review-role
   projection; Dagster `.execute_in_process()` and 4-job role-delivery suite relocated to
   `tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py`; 227/227
-  job-package lines [100.0%] and 44/44 branches [100.0%] covered across all 3 modules).
+  job-package lines [100.0%] and 44/44 branches [100.0%] covered across all 3 modules);
+  job_security_tagging (34/47; 10 unit files, 210 cases: pinned 13-input / 2-dataset contract,
+  12-unit DAG topology and Dagster `wave1_review` ordering parity without `importorskip`,
+  vocabulary/capability-rules/crosswalk hash-pinned loading and conflict rejection, scope/custody/
+  manifest-drift fail-closed validators, behavioral source/graph/observation/coverage-gap
+  collectors, first-party facet collation and target-class derivation, optional recorded model-pass
+  proposal validation and bounds, crosswalk derivation, SQLite shard publication with `attest_existing`
+  reuse, and tag-cloud rollup; two `JobRunner` whole-graph tests relocated to
+  `tests/integration/job_security_tagging/test_security_tagging_jobrunner.py`; 1,641/1,674
+  job-package lines [98.0%] and 632/672 branches [94.0%] covered across all 9 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

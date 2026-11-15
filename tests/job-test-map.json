@@ -611,15 +611,20 @@
     "job_security_tagging": {
       "unit": [
         "tests/unit/job_security_tagging/test_behavioral_tags.py",
+        "tests/unit/job_security_tagging/test_collation.py",
+        "tests/unit/job_security_tagging/test_contract.py",
         "tests/unit/job_security_tagging/test_handler.py",
+        "tests/unit/job_security_tagging/test_model_pass.py",
+        "tests/unit/job_security_tagging/test_native_language_aliases.py",
         "tests/unit/job_security_tagging/test_reader.py",
         "tests/unit/job_security_tagging/test_rules_and_roles.py",
-        "tests/unit/job_security_tagging/test_native_language_aliases.py",
-        "tests/test_security_tagging.py::test_grammar_and_identifier_normalization",
-        "tests/test_security_tagging.py::test_namespace_basis_table_is_enforced",
-        "tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity"
+        "tests/orchestration/dagster/test_security_tagging.py",
+        "tests/test_security_tagging.py"
       ],
-      "integration": ["tests/integration/job_security_tagging/test_behavioral_tags.py"],
+      "integration": [
+        "tests/integration/job_security_tagging/test_behavioral_tags.py",
+        "tests/integration/job_security_tagging/test_security_tagging_jobrunner.py"
+      ],
       "acceptance": ["tests/acceptance/job_security_tagging/test_behavioral_tags.py"],
       "live": []
     },

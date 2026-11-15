@@ -38120,18 +38120,21 @@
           "tests/acceptance/job_security_tagging/test_behavioral_tags.py"
         ],
         "integration": [
-          "tests/integration/job_security_tagging/test_behavioral_tags.py"
+          "tests/integration/job_security_tagging/test_behavioral_tags.py",
+          "tests/integration/job_security_tagging/test_security_tagging_jobrunner.py"
         ],
         "live": [],
         "unit": [
           "tests/unit/job_security_tagging/test_behavioral_tags.py",
+          "tests/unit/job_security_tagging/test_collation.py",
+          "tests/unit/job_security_tagging/test_contract.py",
           "tests/unit/job_security_tagging/test_handler.py",
+          "tests/unit/job_security_tagging/test_model_pass.py",
+          "tests/unit/job_security_tagging/test_native_language_aliases.py",
           "tests/unit/job_security_tagging/test_reader.py",
           "tests/unit/job_security_tagging/test_rules_and_roles.py",
-          "tests/unit/job_security_tagging/test_native_language_aliases.py",
-          "tests/test_security_tagging.py::test_grammar_and_identifier_normalization",
-          "tests/test_security_tagging.py::test_namespace_basis_table_is_enforced",
-          "tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity"
+          "tests/orchestration/dagster/test_security_tagging.py",
+          "tests/test_security_tagging.py"
         ]
       },
       "workers": 4
@@ -44842,7 +44845,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "d624b2b5ef5d28b83c7b6a1c1b22e425cbac9cd02ec22c02cb103bdf2cdd45be"
+    "tests/job-test-map.json": "95bf85ba3d0e42a6345460aa2ab13d6d5cece5c6d49aecf04f932b24551db0f9"
   },
   "tool_policy": {
     "disable_grype": true,

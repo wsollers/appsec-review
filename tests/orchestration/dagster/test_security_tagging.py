@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-pytest.importorskip("dagster")
-
+from appsec_review.jobs.job_security_tagging.job import TOPOLOGY
 from appsec_review.orchestration.dagster import build_definitions
 
 
@@ -20,17 +17,24 @@ def test_security_tagging_follows_the_last_retrieval_manifest_publisher() -> Non
     assert definitions.get_job_def("security_tagging").name == "security_tagging"
     graph = definitions.get_job_def("wave1_review").graph
     names = {node.name for node in graph.node_defs}
+    expected_nodes = {
+        f"security_tagging__{step}__{task}"
+        for step, tasks in TOPOLOGY.items()
+        for task in tasks
+    }
+    assert expected_nodes <= names
     assert {
-        "security_tagging__taxonomy__load_taxonomy",
+        "binary_evidence_indexing__finalize",
+        "code_graph_index__finalize",
+        "dependency_intelligence__finalize",
+        "profile_data__finalize",
+        "test_coverage__finalize",
+    } <= _upstream(graph, "security_tagging__begin")
+    assert "security_tagging__finalize" in _upstream(graph, "owasp_control_assessment__begin")
+    assert _upstream(graph, "security_tagging__crosswalk__apply_crosswalk") >= {
         "security_tagging__collection__source_facts",
         "security_tagging__collection__observation_facts",
         "security_tagging__collection__coverage_gaps",
-        "security_tagging__crosswalk__apply_crosswalk",
-        "security_tagging__integrity__validate_assignments",
-        "security_tagging__publication__publish_handoff",
-    } <= names
-    assert {"codeql_analysis__finalize", "owasp_control_assessment__finalize"} <= _upstream(
-        graph, "security_tagging__begin")
-    assert _upstream(graph, "security_tagging__crosswalk__apply_crosswalk") >= {
-        "security_tagging__collection__source_facts", "security_tagging__collection__observation_facts",
-        "security_tagging__collection__coverage_gaps"}
+        "security_tagging__collation__collate_facets",
+        "security_tagging__collation__model_pass",
+    }
