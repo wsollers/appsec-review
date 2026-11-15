@@ -45,6 +45,12 @@ def test_real_assembly_handler_supplies_original_core_and_preserves_cutoff_sourc
         observed["publication"] = path
         return path
 
+    def collect(actual_scope, assessments=None, *, filters=None):
+        assert actual_scope is scope and assessments is None
+        assert filters == settings.lead_filters
+        observed["collect"] = filters
+        return collection
+
     monkeypatch.setattr(job, "_scope", lambda _: scope)
     monkeypatch.setattr(job, "_settings", lambda _: settings)
     monkeypatch.setattr(job, "load_cwe_reference", lambda _: reference)
@@ -52,7 +58,7 @@ def test_real_assembly_handler_supplies_original_core_and_preserves_cutoff_sourc
     monkeypatch.setattr(job, "AcceptedSliceSources", lambda scope, *, core: "source-boundary")
     monkeypatch.setattr(job, "assemble_packages", assemble)
     monkeypatch.setattr(job, "publish_packages", publish)
-    monkeypatch.setattr(job, "collect_leads", lambda *a: collection)
+    monkeypatch.setattr(job, "collect_leads", collect)
     monkeypatch.setattr(job, "_read", lambda *a: {"enabled": False})
     monkeypatch.setattr(job, "_excluded", lambda _: set())
     monkeypatch.setattr(job, "_membership", lambda *a: {})
@@ -70,4 +76,4 @@ def test_real_assembly_handler_supplies_original_core_and_preserves_cutoff_sourc
     assert output["units"] == manifest["units"]
     assert output["lane"] == lane and result["terminal_status"] == "SUCCEEDED"
     assert events == [("INFERENCE_REVIEW_PACKAGES_ASSEMBLED", {"lane": lane, "package_count": 0})]
-    assert set(observed) == {"assembly", "publication"}
+    assert set(observed) == {"collect", "assembly", "publication"}

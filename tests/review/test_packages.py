@@ -27,12 +27,17 @@ NOT_ADMITTED = {"sast_medium", "sast_low", "dep_low", "ci_medium"}
 
 @pytest.fixture(scope="module")
 def fixture(tmp_path_factory):
-    return build_accepted_index_set(tmp_path_factory.mktemp("pkg"))
+    return build_accepted_index_set(tmp_path_factory.mktemp("pkg"), publish_v1_packages=False)
 
 
 @pytest.fixture(scope="module")
-def assembly(fixture):
-    return assemble_packages(accept_manifest(fixture.run_root))
+def scope(fixture):
+    return accept_manifest(fixture.run_root)
+
+
+@pytest.fixture(scope="module")
+def assembly(scope):
+    return assemble_packages(scope)
 
 
 def _finding(assembly, fixture, key: str) -> dict:
@@ -209,8 +214,7 @@ def test_partitioned_hunt_menus_cover_every_lead_exactly_once(fixture) -> None:
     assert severities[0] == "critical" and severities[-1] == "unknown"
 
 
-def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(fixture) -> None:
-    scope = accept_manifest(fixture.run_root)
+def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(scope, assembly) -> None:
     capped = assemble_packages(scope, PackageSettings(max_context_entries=1))
     truncated = [item.resolved() for item in capped.packages if item.document()["truncation"]["omitted_context"]]
     assert truncated
@@ -226,7 +230,7 @@ def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(fixt
     assert any(gap["state"] == "truncated" for gap in capped.manifest["gaps"])
     assert capped.manifest["audit"]["lane_a"]["status"] == "passed"
 
-    largest = max(len(item.body) for item in assemble_packages(scope).packages if item.kind == "hunt")
+    largest = max(len(item.body) for item in assembly.packages if item.kind == "hunt")
     split = assemble_packages(scope, PackageSettings(max_package_bytes=largest - 1))
     assert all(len(item.body) < largest for item in split.packages)
     assert split.manifest["counts"]["packages"]["hunt"] > 4
@@ -236,7 +240,7 @@ def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(fixt
 
 
 def test_missing_scanner_correlation_recomputes_duplicates_and_marks_suppression_unknown(tmp_path: Path) -> None:
-    fixture = build_accepted_index_set(tmp_path, omit=("scanner_correlation",))
+    fixture = build_accepted_index_set(tmp_path, omit=("scanner_correlation",), publish_v1_packages=False)
     assembly = assemble_packages(accept_manifest(fixture.run_root))
     suppressed = _finding(assembly, fixture, "sast_suppressed")["lead_menu"][0]
     assert suppressed["suppression_status"] == "unknown"

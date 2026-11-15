@@ -202,6 +202,24 @@ def _days(count: int):
     return timedelta(days=count)
 
 
+_DEFAULT_CONFIG_CACHE: dict[tuple[str, int, tuple[tuple[str, str], ...]], Any] = {}
+
+
+def _load_fixture_config(config: Path | None):
+    import os
+    from appsec_review.config import load_config
+    if config is not None:
+        return load_config(config)
+    config_path = (Path(__file__).resolve().parents[3] / "appsec-review.toml").resolve()
+    env_key = tuple(sorted((k, v) for k, v in os.environ.items() if k.startswith("APPSEC_REVIEW_")))
+    cache_key = (str(config_path), config_path.stat().st_mtime_ns, env_key)
+    cached = _DEFAULT_CONFIG_CACHE.get(cache_key)
+    if cached is None:
+        cached = load_config(config_path)
+        _DEFAULT_CONFIG_CACHE[cache_key] = cached
+    return cached
+
+
 def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable[str] = (),
                              runs_dir: Path | None = None,
                              seed: int | None = None, history_change_count: int = 9,
@@ -211,7 +229,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              advisory_extra: dict[str, dict[str, Any]] | None = None,
                              secrets: bool = False, secret_extra: dict[str, Any] | None = None,
                              third_party: bool = False, config: Path | None = None,
-                             facets: bool | str = False) -> FixtureRun:
+                             facets: bool | str = False,
+                             publish_v1_packages: bool = True) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -219,10 +238,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     advisory_extra = dict(advisory_extra or {})
     runs_dir = Path(runs_dir) if runs_dir is not None else Path(base) / "runs"
     run_root = runs_dir / run_id
-    from appsec_review.config import load_config
     from appsec_review.runtime.runner import JobRunner
-    config_path = config or Path(__file__).resolve().parents[3] / "appsec-review.toml"
-    JobRunner(load_config(config_path))._bind_configuration(run_root)
+    JobRunner(_load_fixture_config(config))._bind_configuration(run_root)
     target = Path(base) / "target"
     files = dict(FILES)
     if secrets:
@@ -519,9 +536,10 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
         published.append("scanner_correlation")
 
     registry = builtin_registry()
+    built_jobs = {job_id: registry.build(job_id) for job_id in registry.job_ids()}
     owners = {str(item.producer["job"]) for item in identities} | {INDEXING_JOB}
     for owner in sorted(owners):
-        declarations = registry.build(owner).datasets
+        declarations = built_jobs[owner].datasets
         owned = [item for item in identities if item.producer["job"] == owner]
         for declaration in declarations:
             if not declaration.required or any(
@@ -539,90 +557,92 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                 path.relative_to(run_root).as_posix(), {"job": owner, "unit": declaration.step + ".fixture"},
                 (gap,), shard_id))
     identities = [IndexIdentity(**{**asdict(item), "producer": {
-        **item.producer, "unit": shard_owner(registry.build(str(item.producer["job"])).datasets,
+        **item.producer, "unit": shard_owner(built_jobs[str(item.producer["job"])].datasets,
                                             item.name, item.shard_id).step + ".fixture"}}) for item in identities]
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=run_id, target_snapshot=SNAPSHOT, target_root=target, indexes=identities)
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
     attempt = run_root / "data" / "jobs" / "job_review_data_indexing" / "attempts" / "attempt_0001"
     inputs_path = attempt / "steps" / "load" / "tasks" / "accepted_inputs" / "accepted-inputs.json"
+    from appsec_review.storage.validation import validation_scope
     from tests.handoff_fixture import write_fixture_handoff
-    handoffs = {}
-    for owner in sorted(owners - {INDEXING_JOB}):
-        owned = [item for item in identities if item.producer["job"] == owner]
-        producer_attempt = run_root / "data/jobs" / owner / "attempts/attempt_0001"
-        declarations = registry.build(owner).datasets
-        atomic_json(producer_attempt / "claim.json", {"dataset_contract": dataset_contract(
-            owner, sorted({item.step for item in declarations}), declarations)})
-        path = producer_attempt / "handoff.json"
-        write_fixture_handoff(run_root, path, {
-            "job_id": owner, "source_fingerprint": SNAPSHOT,
-            "completion_status": "COMPLETED_WITH_GAPS" if any(item.gaps for item in owned) else "SUCCEEDED",
-            "outputs": {item.producer["unit"] + "_" + str(number): {
-                "index_manifest": manifest, "index_identity": asdict(item), "gaps": list(item.gaps),
-                "terminal_status": "COMPLETED_WITH_GAPS" if item.gaps else "SUCCEEDED"}
-                for number, item in enumerate(owned)},
-            "artifacts": [{"path": item.relative_path, "sha256": item.sha256} for item in owned],
+    with validation_scope(run_root):
+        handoffs = {}
+        for owner in sorted(owners - {INDEXING_JOB}):
+            owned = [item for item in identities if item.producer["job"] == owner]
+            producer_attempt = run_root / "data/jobs" / owner / "attempts/attempt_0001"
+            declarations = built_jobs[owner].datasets
+            atomic_json(producer_attempt / "claim.json", {"dataset_contract": dataset_contract(
+                owner, sorted({item.step for item in declarations}), declarations)})
+            path = producer_attempt / "handoff.json"
+            write_fixture_handoff(run_root, path, {
+                "job_id": owner, "source_fingerprint": SNAPSHOT,
+                "completion_status": "COMPLETED_WITH_GAPS" if any(item.gaps for item in owned) else "SUCCEEDED",
+                "outputs": {item.producer["unit"] + "_" + str(number): {
+                    "index_manifest": manifest, "index_identity": asdict(item), "gaps": list(item.gaps),
+                    "terminal_status": "COMPLETED_WITH_GAPS" if item.gaps else "SUCCEEDED"}
+                    for number, item in enumerate(owned)},
+                "artifacts": [{"path": item.relative_path, "sha256": item.sha256} for item in owned],
+            })
+            handoffs[owner] = {"sha256": file_sha256(path), "path": path.relative_to(run_root).as_posix(),
+                               "attempt_id": "attempt_0001",
+                               "completion_status": json.loads(path.read_bytes())["completion_status"]}
+            atomic_json(producer_attempt.parent.parent / "latest.json", {
+                "handoff_path": handoffs[owner]["path"], "handoff_sha256": handoffs[owner]["sha256"]})
+        resolved = json.loads((run_root / "data/configuration/resolved.json").read_bytes())
+        job_steps = {name: sorted(value["steps"]) for name, value in resolved["jobs"].items()}
+        from appsec_review.jobs.job_review_data_indexing.job import downstream_jobs, _unit_statuses, owasp_status
+        from appsec_review.runtime.contracts import DispatchClass
+        from appsec_review.runtime.selection import resolved_job_is_enabled
+        from appsec_review.indexing.store import accepted_handoff
+        disabled = {key for key, value in resolved["jobs"].items() if not resolved_job_is_enabled(key, value)}
+        active = {key for key in job_steps if key not in disabled
+                  and built_jobs[key].contract.dispatch is DispatchClass.REVIEW_GRAPH} - downstream_jobs()
+        stage_handoffs = {key: handoffs.get(key) for key in sorted(active - {INDEXING_JOB})}
+        atomic_json(inputs_path, {
+            "schema": "appsec-review/review-data-indexing-inputs/2", "target_snapshot": SNAPSHOT,
+            "accepted_manifest": manifest, "shards": [asdict(item) for item in identities
+                                                      if item.producer["job"] != INDEXING_JOB],
+            "restored_shards": [], "shard_conflicts": [], "registry_jobs": sorted(active),
+            "registry_configuration_mismatch": [], "job_steps": {key: job_steps[key] for key in sorted(active)},
+            "registered_jobs": list(registry.job_ids()),
+            "dispatch_classes": {key: built_jobs[key].contract.dispatch.value for key in registry.job_ids()},
+            "file_job_steps": job_steps, "disabled_jobs": sorted(disabled),
+            "declarations": {key: [item.output_kind for item in built_jobs[key].datasets] for key in sorted(active)},
+            "consumes": {key: [name for name in built_jobs[key].consumes if name in active] for key in sorted(active)},
+            "handoffs": stage_handoffs, "feeds": pins, "owasp": owasp_status(run_root),
+            "unit_statuses": {key: _unit_statuses(run_root, accepted_handoff(run_root, key))
+                              for key, value in stage_handoffs.items() if value is not None},
         })
-        handoffs[owner] = {"sha256": file_sha256(path), "path": path.relative_to(run_root).as_posix(),
-                           "attempt_id": "attempt_0001",
-                           "completion_status": json.loads(path.read_bytes())["completion_status"]}
-        atomic_json(producer_attempt.parent.parent / "latest.json", {
-            "handoff_path": handoffs[owner]["path"], "handoff_sha256": handoffs[owner]["sha256"]})
-    resolved = json.loads((run_root / "data/configuration/resolved.json").read_bytes())
-    job_steps = {name: sorted(value["steps"]) for name, value in resolved["jobs"].items()}
-    from appsec_review.jobs.job_review_data_indexing.job import downstream_jobs, _unit_statuses, owasp_status
-    from appsec_review.runtime.contracts import DispatchClass
-    from appsec_review.runtime.selection import resolved_job_is_enabled
-    from appsec_review.indexing.store import accepted_handoff
-    disabled = {key for key, value in resolved["jobs"].items() if not resolved_job_is_enabled(key, value)}
-    active = {key for key in job_steps if key not in disabled
-              and registry.build(key).contract.dispatch is DispatchClass.REVIEW_GRAPH} - downstream_jobs()
-    stage_handoffs = {key: handoffs.get(key) for key in sorted(active - {INDEXING_JOB})}
-    atomic_json(inputs_path, {
-        "schema": "appsec-review/review-data-indexing-inputs/2", "target_snapshot": SNAPSHOT,
-        "accepted_manifest": manifest, "shards": [asdict(item) for item in identities
-                                                  if item.producer["job"] != INDEXING_JOB],
-        "restored_shards": [], "shard_conflicts": [], "registry_jobs": sorted(active),
-        "registry_configuration_mismatch": [], "job_steps": {key: job_steps[key] for key in sorted(active)},
-        "registered_jobs": list(registry.job_ids()),
-        "dispatch_classes": {key: registry.build(key).contract.dispatch.value for key in registry.job_ids()},
-        "file_job_steps": job_steps, "disabled_jobs": sorted(disabled),
-        "declarations": {key: [item.output_kind for item in registry.build(key).datasets] for key in sorted(active)},
-        "consumes": {key: [name for name in registry.build(key).consumes if name in active] for key in sorted(active)},
-        "handoffs": stage_handoffs, "feeds": pins, "owasp": owasp_status(run_root),
-        "unit_statuses": {key: _unit_statuses(run_root, accepted_handoff(run_root, key))
-                          for key, value in stage_handoffs.items() if value is not None},
-    })
-    inputs_artifact = {"path": inputs_path.relative_to(run_root).as_posix(), "sha256": file_sha256(inputs_path),
-                       "size_bytes": inputs_path.stat().st_size}
-    handoff_path = attempt / "handoff.json"
-    declarations = registry.build(INDEXING_JOB).datasets
-    atomic_json(attempt / "claim.json", {"dataset_contract": dataset_contract(
-        INDEXING_JOB, sorted({item.step for item in declarations}), declarations)})
-    write_fixture_handoff(run_root, handoff_path, {"job_id": INDEXING_JOB,
-                               "attempt_id": "attempt_0001", "status": "ACCEPTED",
-                               "completion_status": "COMPLETED_WITH_GAPS" if any(
-                                   item.gaps for item in identities if item.producer["job"] == INDEXING_JOB) else "SUCCEEDED",
-                               "artifacts": [manifest, *(
-                                   {"path": item.relative_path, "sha256": item.sha256}
-                                   for item in identities if item.producer["job"] == INDEXING_JOB)], "outputs": {
-                                   "load.accepted_inputs": {"artifact": inputs_artifact},
-                                   "publish.inventory_index": {"index_manifest": manifest},
-                                   **{item.producer["unit"] + "_" + str(number): {
-                                       "index_manifest": manifest, "index_identity": asdict(item),
-                                       "gaps": list(item.gaps),
-                                       "terminal_status": "COMPLETED_WITH_GAPS" if item.gaps else "SUCCEEDED"}
-                                      for number, item in enumerate(identities) if item.producer["job"] == INDEXING_JOB}},
-                               "upstream_handoff_sha256": {key: value["sha256"] for key, value in handoffs.items()},
-                               "source_fingerprint": SNAPSHOT})
-    point_latest_handoff(run_root, handoff_path)
-    atomic_json(run_root / "data" / "indices" / "accepted.json", {
-        "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,
-        "handoff_path": handoff_path.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff_path),
-        "manifest_path": manifest["path"], "manifest_sha256": manifest["sha256"]})
-    if "scanner_correlation" in published:
-        _publish_packages(run_root, registry)
+        inputs_artifact = {"path": inputs_path.relative_to(run_root).as_posix(), "sha256": file_sha256(inputs_path),
+                           "size_bytes": inputs_path.stat().st_size}
+        handoff_path = attempt / "handoff.json"
+        declarations = built_jobs[INDEXING_JOB].datasets
+        atomic_json(attempt / "claim.json", {"dataset_contract": dataset_contract(
+            INDEXING_JOB, sorted({item.step for item in declarations}), declarations)})
+        write_fixture_handoff(run_root, handoff_path, {"job_id": INDEXING_JOB,
+                                   "attempt_id": "attempt_0001", "status": "ACCEPTED",
+                                   "completion_status": "COMPLETED_WITH_GAPS" if any(
+                                       item.gaps for item in identities if item.producer["job"] == INDEXING_JOB) else "SUCCEEDED",
+                                   "artifacts": [manifest, *(
+                                       {"path": item.relative_path, "sha256": item.sha256}
+                                       for item in identities if item.producer["job"] == INDEXING_JOB)], "outputs": {
+                                       "load.accepted_inputs": {"artifact": inputs_artifact},
+                                       "publish.inventory_index": {"index_manifest": manifest},
+                                       **{item.producer["unit"] + "_" + str(number): {
+                                           "index_manifest": manifest, "index_identity": asdict(item),
+                                           "gaps": list(item.gaps),
+                                           "terminal_status": "COMPLETED_WITH_GAPS" if item.gaps else "SUCCEEDED"}
+                                          for number, item in enumerate(identities) if item.producer["job"] == INDEXING_JOB}},
+                                   "upstream_handoff_sha256": {key: value["sha256"] for key, value in handoffs.items()},
+                                   "source_fingerprint": SNAPSHOT})
+        point_latest_handoff(run_root, handoff_path)
+        atomic_json(run_root / "data" / "indices" / "accepted.json", {
+            "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,
+            "handoff_path": handoff_path.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff_path),
+            "manifest_path": manifest["path"], "manifest_sha256": manifest["sha256"]})
+        if publish_v1_packages and "scanner_correlation" in published:
+            _publish_packages(run_root, registry)
     return FixtureRun(runs_dir, run_root, run_id, target, SNAPSHOT, ids, tuple(published), pins)
 
 
