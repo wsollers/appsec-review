@@ -833,7 +833,6 @@
           "clang_static_raw",
           "clang_static_scope_coverage",
           "clang_static_summary",
-          "codeql_cache_initialization",
           "codeql_observations",
           "codeql_plan_and_summary",
           "codeql_predecessor_import",
@@ -8368,66 +8367,6 @@
       "schema": "appsec-review/clang-static-analysis-handoff/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_clang_static_analysis.datasets",
-      "stage": "artifact_only",
-      "store": "retrieval",
-      "target_access": "checkout"
-    },
-    {
-      "access": "sanitized_metadata_only",
-      "authority": "producer_evidence",
-      "bucket": "scanner_observations",
-      "dataset": "codeql_cache_initialization",
-      "description": "The run's record of initialising the shared CodeQL compile-cache volume (identity, creation time, runtime user) and its initialisation lock; written once per run by the executor.",
-      "family": "codeql",
-      "gap": [],
-      "job_enabled": true,
-      "mcp_tools": {
-        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
-        "gaps": [],
-        "state": "declared",
-        "values": [
-          "coverage",
-          "query_dataset_inventory"
-        ]
-      },
-      "producer": "job_codeql_analysis",
-      "producer_languages": {
-        "basis": "appsec-review.toml: jobs.job_codeql_analysis.settings.languages.*.source_languages; producer selectors, not per-dataset or observed coverage",
-        "gaps": [],
-        "state": "declared",
-        "values": [
-          "C",
-          "C#",
-          "C++",
-          "C/C++",
-          "GitHub Actions",
-          "Go",
-          "Java",
-          "JavaScript",
-          "Kotlin",
-          "Python",
-          "Ruby",
-          "Rust",
-          "TypeScript"
-        ]
-      },
-      "retrieval_indexes": {
-        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
-        "gaps": [],
-        "state": "not_applicable",
-        "values": []
-      },
-      "review_roles": {
-        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
-        "gaps": [],
-        "state": "declared",
-        "values": [
-          "completeness_reviewer"
-        ]
-      },
-      "schema": "appsec-review/codeql-cache-initialization/1",
-      "sensitivity": "internal",
-      "source": "docs/generated/inventory.json: jobs.job_codeql_analysis.datasets",
       "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
@@ -21561,7 +21500,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21656,7 +21594,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21751,7 +21688,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21846,7 +21782,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21941,7 +21876,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22036,7 +21970,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22131,7 +22064,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22226,7 +22158,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22321,7 +22252,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22576,7 +22506,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22671,7 +22600,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22766,7 +22694,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -23021,7 +22948,6 @@
         ],
         "state": "partial",
         "values": [
-          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
