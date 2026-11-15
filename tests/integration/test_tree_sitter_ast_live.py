@@ -2,7 +2,7 @@
 
 Skips, naming the gap, when Docker or the image is missing. ``APPSEC_TREE_SITTER_TEST_IMAGE`` may
 name a candidate image for the container test; the graph test runs only with the cataloged one.
-The routing, normalization and fake-engine checks stay in ``tests/test_tree_sitter_ast.py``.
+The routing, normalization and fake-engine checks live in ``tests/unit/job_tree_sitter_ast/``.
 """
 
 from __future__ import annotations
@@ -28,7 +28,9 @@ from appsec_review.jobs.job_tree_sitter_ast.normalize import NORMALIZER_SCHEMA
 from appsec_review.jobs.job_tree_sitter_ast.scope_execution import _write_container_request
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
-from tests.test_tree_sitter_ast import FIXTURE, ROOT
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = ROOT / "tests" / "fixtures" / "tree_sitter_target"
 
 DEFAULT_IMAGE = "appsec-review/tool-tree-sitter:1.0.0"
 IMAGE = os.environ.get("APPSEC_TREE_SITTER_TEST_IMAGE", DEFAULT_IMAGE)
