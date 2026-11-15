@@ -119,3 +119,49 @@ def test_small_examples_cover_async_authorization_configuration_and_invariants()
         requests = [request for item in answers if item["action"] == "final"
                     for request in item["result"].get("evidence_requests", [])]
         assert any(request["specialist"] == specialist for request in requests)
+
+
+def _closed_sets(name: str) -> list[tuple[str, list]]:
+    """Every closed vocabulary a worker can fail in ``name``: (where, values), following ``$ref`` once per target."""
+    documents = SCHEMAS.documents
+    found: list[tuple[str, list]] = []
+    seen: set[str] = set()
+
+    def walk(schema, document, where: str) -> None:
+        if not isinstance(schema, dict):
+            return
+        if "$ref" in schema:
+            target, _, pointer = schema["$ref"].partition("#")
+            key = (target or "self") + "#" + pointer
+            if key in seen:
+                return
+            seen.add(key)
+            node, root = SCHEMAS._resolve(schema["$ref"], document)
+            walk(node, root, where + "->" + pointer.rsplit("/", 1)[-1])
+            return
+        if "enum" in schema and "entity_kind" not in where:
+            found.append((where, list(schema["enum"])))
+        for key, value in schema.get("properties", {}).items():
+            walk(value, document, f"{where}.{key}")
+        for key in ("items", "additionalProperties", "not", "if", "then", "else"):
+            walk(schema.get(key), document, f"{where}.{key}")
+        for key in ("oneOf", "allOf"):
+            for index, branch in enumerate(schema.get(key, ())):
+                walk(branch, document, f"{where}.{key}[{index}]")
+
+    document = documents[f"{name}.schema.json"]
+    walk(document, document, "$")
+    return found
+
+
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_role_guidance_states_every_closed_vocabulary_value(role: str) -> None:
+    """Run 2026-11-15-0005 lost about 430 cell answers to values outside closed sets the prompt never listed
+    (security predicates, taint edge kinds and bases, node roles, requested kinds, specialists). The guidance
+    states every value the validator accepts, except the long entity-kind list, which the package labels carry."""
+    text = (ROOT / "pipeline" / "prompt-fragments" / "roles" / f"{role}.md").read_text(encoding="utf-8")
+    closed = _closed_sets(ROLES[role])
+    assert closed
+    missing = sorted({f"{where}: {value}" for where, values in closed for value in values
+                      if re.search(rf"(?<![A-Za-z0-9_]){re.escape(str(value))}(?![A-Za-z0-9_])", text) is None})
+    assert missing == []

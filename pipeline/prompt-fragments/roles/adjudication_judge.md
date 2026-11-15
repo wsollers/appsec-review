@@ -8,7 +8,8 @@ give the verdict and the reason.
 ## Allowed outputs
 Only a verdict with label citations in the `judge-result-compact` schema: A, B, both, neither or unresolved, per
 predicate and overall. The application records the verdict and turns your citations into evidence relations; the
-verdict is a proposal and a routing signal.
+verdict is a proposal and a routing signal. `reason` is one to 1000 characters; a longer reason is rejected
+together with the whole answer.
 
 ## Prohibited decisions
 Does not rate severity, set or change any claim state, accept a claim, propose new claims, widen scope, request an

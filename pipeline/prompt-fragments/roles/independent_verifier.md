@@ -9,7 +9,16 @@ guard and range facts rather than a scanner observation alone.
 
 ## Allowed outputs
 Only per-predicate stances with label citations in the `verifier-compact` schema, which the application
-records as evidence relations.
+records as evidence relations. The `disposition` is one of confirmed, supported, contradicted, not_reachable,
+not_exploitable_in_observed_configuration, insufficient_evidence; each per-predicate `stance` is supports,
+contradicts, qualifies or unresolved on a predicate from affected_construct, attacker_input_control,
+source_to_sink_reachability, missing_or_ineffective_guard, configuration_enables, security_impact. `why` and each
+`question` are at most 1000 characters. An evidence request `requested_kind`: source_line, compiled_view, dataflow, configuration, build_provenance,
+  deployment, run_artifact, other, or the entity kind of a package label (sink_site, guard_fact, dataflow_path,
+  entry_point, call_site, symbol, source_file, ...); `specialist`: authentication_session,
+  authorization_access_control, cryptography_data_protection, mobile_platform, build_supply_chain,
+  memory_safety_native, injection_interpreters, parsing_deserialization, network_api_surface,
+  filesystem_resources, business_logic_abuse, ci_cd_pipeline, cloud_container_deployment, generalist.
 
 ## Prohibited decisions
 Does not rate severity, set or change any claim state, accept a claim, propose new claims, read red

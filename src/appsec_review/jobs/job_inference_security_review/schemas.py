@@ -23,6 +23,13 @@ _SUPPORTED = _ANNOTATIONS | frozenset({
 _TYPES = {"object": dict, "array": list, "string": str, "boolean": bool}
 
 
+def _listed(values: Sequence[Any], limit: int = 24) -> str:
+    """The accepted values a rejection names, so a repair turn can choose one instead of guessing again."""
+    shown = [item if isinstance(item, str) else json.dumps(item, sort_keys=True) for item in values[:limit]]
+    rest = len(values) - len(shown)
+    return ", ".join(shown) + (f", ... {rest} more" if rest > 0 else "")
+
+
 class SchemaSet:
     """Every ``*.schema.json`` of one directory, addressed by file name."""
 
@@ -74,12 +81,14 @@ class SchemaSet:
         if "const" in schema and not _equal(value, schema["const"]):
             fail("does not equal the constant")
         if "enum" in schema and not any(_equal(value, item) for item in schema["enum"]):
-            fail("is not in the closed set")
+            fail(f"is not in the closed set ({_listed(schema['enum'])})")
         if isinstance(value, str):
-            if len(value) < schema.get("minLength", 0) or len(value) > schema.get("maxLength", math.inf):
-                fail("string length out of bounds")
+            low, high = schema.get("minLength", 0), schema.get("maxLength", math.inf)
+            if len(value) < low or len(value) > high:
+                fail(f"string length out of bounds ({len(value)} characters, allowed "
+                     f"{low}..{'any' if high == math.inf else high})")
             if "pattern" in schema and re.search(schema["pattern"], value) is None:
-                fail("does not match the declared pattern")
+                fail(f"does not match the declared pattern {schema['pattern']}")
         if _is_type(value, "number"):
             if "minimum" in schema and value < schema["minimum"]:
                 fail("below minimum")
@@ -102,7 +111,7 @@ class SchemaSet:
                 if key in properties:
                     self._check(item, properties[key], document, f"{where}.{key}", found, limit)
                 elif schema.get("additionalProperties") is False:
-                    fail(f"unexpected property {str(key)[:64]}")
+                    fail(f"unexpected property {str(key)[:64]}; allowed: {_listed(sorted(properties), 16) or 'none'}")
                 elif isinstance(schema.get("additionalProperties"), Mapping):
                     self._check(item, schema["additionalProperties"], document, f"{where}.{key}", found, limit)
         if "allOf" in schema:
@@ -111,13 +120,27 @@ class SchemaSet:
         if "oneOf" in schema:
             matches = sum(1 for branch in schema["oneOf"] if not self._branch_errors(value, branch, document))
             if matches != 1:
-                fail(f"matches {matches} oneOf branches, expected exactly one")
+                options = self._enum_union(schema["oneOf"], document)
+                fail(f"matches {matches} oneOf branches, expected exactly one"
+                     + (f" (allowed values: {_listed(options, 32)})" if options else ""))
         if "not" in schema and not self._branch_errors(value, schema["not"], document):
             fail("matches a forbidden schema")
         if "if" in schema:
             branch = "then" if not self._branch_errors(value, schema["if"], document) else "else"
             if branch in schema:
                 self._check(value, schema[branch], document, where, found, limit)
+
+    def _enum_union(self, branches: Sequence[Mapping[str, Any]], document: Mapping[str, Any]) -> list[Any] | None:
+        """The accepted values when every branch is a closed set (directly or through ``$ref``), else None."""
+        union: list[Any] = []
+        for branch in branches:
+            node, root = branch, document
+            while "$ref" in node and "enum" not in node:
+                node, root = self._resolve(node["$ref"], root)
+            if "enum" not in node:
+                return None
+            union.extend(item for item in node["enum"] if item not in union)
+        return union
 
     def _branch_errors(self, value: Any, schema: Mapping[str, Any], document: Mapping[str, Any]) -> list[str]:
         found: list[str] = []

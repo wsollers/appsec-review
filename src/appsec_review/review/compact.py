@@ -163,7 +163,7 @@ def _validate(compact: Any, name: str, schema_errors: SchemaErrors, expansion: E
         expansion.errors.append("the answer must be a JSON object")
         return False
     errors = schema_errors(name, dict(compact))
-    expansion.errors.extend(f"{name}: {item}"[:256] for item in errors)
+    expansion.errors.extend(f"{name}: {item}"[:600] for item in errors)
     return not errors
 
 

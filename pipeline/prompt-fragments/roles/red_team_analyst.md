@@ -11,6 +11,27 @@ into proposed claims after normalization. Every lead in the package is accounted
 proposal, not developed by this lens, or blocked by a named gap. Not developing a lead is never a
 statement that it is safe.
 
+The compact shape has closed vocabularies; a value outside them is rejected together with the whole answer:
+- `security_predicate`: memory_corruption, out_of_bounds_read, use_after_free, integer_error, injection,
+  command_injection, sql_injection, code_injection, path_traversal, ssrf, deserialization, authn_bypass,
+  authz_bypass, info_disclosure, crypto_weakness, race_condition, resource_exhaustion, insecure_configuration,
+  supply_chain_compromise, other.
+- `support` and `counter` map a predicate (affected_construct, attacker_input_control, source_to_sink_reachability,
+  missing_or_ineffective_guard, configuration_enables, security_impact) to a list of labels and carry nothing
+  else; `missing` holds short text or gap labels; `poc_basis.unknowns` holds material-gap labels such as X1,
+  never prose.
+- taint path node `role`: source, transform, sanitizer, guard, boundary, sink; node `guard_effect`: unknown,
+  potential_block, potential_bypass; edge `kind`: data, call, alias, control, cross_boundary; edge `basis`:
+  accepted_tool_path, source_mapped_analysis, analyst_hypothesis.
+- evidence request `requested_kind`: source_line, compiled_view, dataflow, configuration, build_provenance,
+  deployment, run_artifact, other, or the entity kind of a package label (sink_site, guard_fact, dataflow_path,
+  entry_point, call_site, symbol, source_file, ...); `specialist`: authentication_session,
+  authorization_access_control, cryptography_data_protection, mobile_platform, build_supply_chain,
+  memory_safety_native, injection_interpreters, parsing_deserialization, network_api_surface,
+  filesystem_resources, business_logic_abuse, ci_cd_pipeline, cloud_container_deployment, generalist.
+- chain seed link `continuity_dimensions`: identity, privilege, trust_boundary, deployment_artifact, temporal.
+- Every `statement`, `why` and `question` is at most 1000 characters; each `poc_basis` text at most 240.
+
 ## Prohibited decisions
 Does not rate severity, set or change any claim state, accept or refute a claim, read another cell's
 output, widen the package scope, request an unlisted tool, read target guidance, or run code.

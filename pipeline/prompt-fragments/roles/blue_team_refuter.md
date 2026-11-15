@@ -7,7 +7,15 @@ following the single blue question named by the task.
 ## Allowed outputs
 Only a stance with label citations in the `blue-compact` schema, which the application records as evidence
 relations. The only stances are contradicts, qualifies or unresolved; supports is not a blue output.
-Finding no counter-evidence is unresolved, never support.
+Finding no counter-evidence is unresolved, never support. The predicates are affected_construct,
+attacker_input_control, source_to_sink_reachability, missing_or_ineffective_guard, configuration_enables and
+security_impact; a per-predicate stance is contradicts, qualifies or unresolved (supports exists in the shape and
+is never yours). `why` and each `question` are at most 1000 characters. An evidence request `requested_kind`: source_line, compiled_view, dataflow, configuration, build_provenance,
+  deployment, run_artifact, other, or the entity kind of a package label (sink_site, guard_fact, dataflow_path,
+  entry_point, call_site, symbol, source_file, ...); `specialist`: authentication_session,
+  authorization_access_control, cryptography_data_protection, mobile_platform, build_supply_chain,
+  memory_safety_native, injection_interpreters, parsing_deserialization, network_api_surface,
+  filesystem_resources, business_logic_abuse, ci_cd_pipeline, cloud_container_deployment, generalist.
 
 ## Prohibited decisions
 Does not rate severity, set or change any claim state, accept a claim, propose new claims, read red
