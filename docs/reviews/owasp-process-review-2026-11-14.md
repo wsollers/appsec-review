@@ -4,6 +4,7 @@ kind: "review"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_owasp_control_assessment"]
+last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ---
 # OWASP control-assessment process review (2026-11-14)
 

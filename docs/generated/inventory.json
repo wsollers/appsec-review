@@ -1020,6 +1020,7 @@
       "code_graph_facts",
       "code_graph_stages",
       "code_graph_summary",
+      "codeql_cache_initialization",
       "codeql_graph_export",
       "codeql_observations",
       "codeql_plan_and_summary",
@@ -4773,6 +4774,7 @@
       "code_graph_facts": "dataflow",
       "code_graph_stages": "dataflow",
       "code_graph_summary": "dataflow",
+      "codeql_cache_initialization": "build_and_deployment",
       "codeql_graph_export": "dataflow",
       "codeql_observations": "scanner_observations",
       "codeql_plan_and_summary": "scanner_observations",
@@ -11033,6 +11035,32 @@
         "review_graph_member": true
       },
       "datasets": [
+        {
+          "artifacts": [
+            "data/codeql/cache-initialization/*.json",
+            "data/codeql/cache-initialization/*.lock"
+          ],
+          "authority": "producer_evidence",
+          "description": "The run's record of initialising the shared CodeQL compile-cache volume (identity, creation time, runtime user) and its initialisation lock; written once per run by the executor.",
+          "disposition": "artifact_only",
+          "family": "codeql",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "codeql_cache_initialization",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "run-owned bookkeeping of a host volume; nothing in it is target evidence",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/codeql-cache-initialization/1",
+          "sensitivity": "internal",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "execution",
+          "store": "retrieval"
+        },
         {
           "artifacts": [
             "data/codeql/scopes/*/exports/**",
@@ -43736,7 +43764,7 @@
   "source_hashes": {
     "appsec-review.toml": "6eb2b93899b488287e98833c0d9d6a5318eea164379765e590333b3f54b1a38e",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
-    "docs/intelligence-buckets.json": "73288d61359f3e9e659d93201f843886cf19787448a39f7814d2a83a22b1a922",
+    "docs/intelligence-buckets.json": "541835809db9bf707d70081434220e35b5360c154710a0d1765440e452c7f098",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",
     "src/appsec_review/__init__.py": "e8ee360d5e72b7f3ad9bf9b84ca9b734b76a9f9d2cf9730e4eabb11121ce692c",
     "src/appsec_review/__main__.py": "6eb6f048c25e857f17755bbc341b70b7184cb4026b743fba3eaecc6951f65fc3",
@@ -43955,7 +43983,7 @@
     "src/appsec_review/jobs/job_code_graph_index/producers.py": "7403abc9a1853c46666175cccf9ad2322b68f1f25e469f63c84f11e427014fbb",
     "src/appsec_review/jobs/job_code_graph_index/scopes.py": "3a97a6c72e081bf17d71f60de3da4e3d48d1963e1a2d38a5aae21617a2d6eee5",
     "src/appsec_review/jobs/job_codeql_analysis/__init__.py": "98bb3ee7784db54c122b3456fe82af9a66bd58e2b1c6bb7bef2db063ce6c1578",
-    "src/appsec_review/jobs/job_codeql_analysis/datasets.py": "13e11ebd8b0cfd428e0797f5809c272a82311a2fecb188c61b253726a7034b78",
+    "src/appsec_review/jobs/job_codeql_analysis/datasets.py": "9386df9d5e047e5d098bac6cf4cda36d4a3c6a0ffb9358d50e32fc1e28c6af36",
     "src/appsec_review/jobs/job_codeql_analysis/job.py": "64d9eefcc44580d77748478838c8a5b8c7c2d472da3169f7e2798f383980cbbf",
     "src/appsec_review/jobs/job_codeql_analysis/planning.py": "ad9048077d53de5569ec751639762b086ddff1613b398612981d93960459fe3e",
     "src/appsec_review/jobs/job_codeql_analysis/sarif.py": "c4d1ca86083a022b5de0c21158c1b2c4ed8175505533727fad53cbb3f2d08ea6",
@@ -44344,7 +44372,7 @@
     "src/appsec_review/review/advisories.py": "ab01f17dd73532fd1ec2453e541cf39451652f50860ec207329d09f888d6a3aa",
     "src/appsec_review/review/artifact_context.py": "d9311b862a0ed40ce190b836e94bdfedfa534a1c87b9fbe396f41c61fbd74036",
     "src/appsec_review/review/attack_chains.py": "468bfbcd251326b8ebba8242196f8c654601297b5d9b450547af0ce7038de764",
-    "src/appsec_review/review/behavior.py": "225e5b0a67d4b7fd3abcfb8bbaea257133caa5a1b3abd1147684593569d229a5",
+    "src/appsec_review/review/behavior.py": "78bec82279d6ffaedeb02a10aad0ea2200eb682904532b2c57d5d043e2d77a3b",
     "src/appsec_review/review/budget.py": "05dbce1ab760c97270d8609cf2645703e08c96d199f1108e86c34942ce3c735a",
     "src/appsec_review/review/capability.py": "09299561ea89b895644f6d675c63608392ba9b6c57e47dbb98f4df7074fd2125",
     "src/appsec_review/review/cell_retrieval.py": "0e2d2e025d66e0ec03fe354d581b5b4aaab0b795f45df3fe4409dab7c5ef291e",
@@ -44441,7 +44469,7 @@
     "src/appsec_review/runtime/plan.py": "c78999d58efb92fda76b294dc6806ef0f5b819a53e32340b0090236782638116",
     "src/appsec_review/runtime/registry.py": "cbdd2f283c5a6cdc605c031b3eb3d66cbe881a981c833edbfcadef84e495b892",
     "src/appsec_review/runtime/release.py": "6dfdbbbb1e459583142d73168b49e0f069214c5d7a2f0aa40d98f6bac84dce75",
-    "src/appsec_review/runtime/repair.py": "b4f7e47483534c433e0ad6d4840975674b5f63d071c124b06fa0bc87473dde13",
+    "src/appsec_review/runtime/repair.py": "8013da0d202aedc9af33046561a08f63238175db0d36200855ff3e82055d6cc9",
     "src/appsec_review/runtime/resources.py": "725147d84ef96f32a3f5295d810770f7f7480dbf40f06ef0b3d3ee8bc6b11c8a",
     "src/appsec_review/runtime/resume.py": "be8eb1db63b2daabec354d536b57366428c693030d531136757b32dc66d71b1d",
     "src/appsec_review/runtime/runner.py": "f5c6d24b6fc149ddce837eade877d4eeec291bde36ea41bcaf429827b8b5b947",

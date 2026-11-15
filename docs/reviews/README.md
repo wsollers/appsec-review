@@ -37,6 +37,8 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 | [Multivuln coverage fixtures implementation](multivuln-coverage-fixtures-implementation.md) | testing and operations | historical |
 | [Native SPDX enrichment implementation](native-sbom-implementation.md) | scanners and evidence collection | historical |
 | [OpenVEX findings export implementation](openvex-export-implementation.md) | reporting and metrics | historical |
+| [OWASP control-assessment process review, 2026-11-14](owasp-process-review-2026-11-14.md) | review inference and guidance | current |
+| [OWASP control-assessment value review, 2026-11-14](owasp-value-review-2026-11-14.md) | review inference and guidance | current |
 | [Profile data and dependency exposure implementation](profile-data-and-dependency-exposure-implementation.md) | scanners and evidence collection | historical |
 | [Second-opinion brief: review protocol v2, the judge role and PoC generation](review-protocol-second-opinion-brief.md) | review inference and guidance | historical |
 | [Scanner launch reduction: design](scanner-launch-reduction-design.md) | scanners and evidence collection | historical |

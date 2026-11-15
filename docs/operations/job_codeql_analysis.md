@@ -133,6 +133,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
+| `codeql_cache_initialization` | `execution` | `appsec-review/codeql-cache-initialization/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `codeql_graph_export` | `execution` | `appsec-review/codeql-graph-export/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `codeql_observations` | `execution` | `appsec-review/codeql-sarif-normalizer/3` | indexed | `observations` | `query_codeql`, `query_hotspots` |
 | `codeql_plan_and_summary` | `acceptance` | `appsec-review/codeql-analysis-handoff/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
@@ -615,26 +616,30 @@ flowchart LR
   input_schema89["appsec-review/container-execution/1"]
   producer89 --> input89 --> job
   input89 -. schema .-> input_schema89
-  output0["codeql_graph_export"]
-  output_schema0["appsec-review/codeql-graph-export/1"]
+  output0["codeql_cache_initialization"]
+  output_schema0["appsec-review/codeql-cache-initialization/1"]
   job --> output0
   output0 -. schema .-> output_schema0
-  output1["codeql_observations"]
-  output_schema1["appsec-review/codeql-sarif-normalizer/3"]
+  output1["codeql_graph_export"]
+  output_schema1["appsec-review/codeql-graph-export/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["codeql_plan_and_summary"]
-  output_schema2["appsec-review/codeql-analysis-handoff/1"]
+  output2["codeql_observations"]
+  output_schema2["appsec-review/codeql-sarif-normalizer/3"]
   job --> output2
   output2 -. schema .-> output_schema2
-  output3["codeql_predecessor_import"]
-  output_schema3["appsec-review/codeql-predecessor-import/1"]
+  output3["codeql_plan_and_summary"]
+  output_schema3["appsec-review/codeql-analysis-handoff/1"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["codeql_scope_material"]
-  output_schema4["application/octet-stream"]
+  output4["codeql_predecessor_import"]
+  output_schema4["appsec-review/codeql-predecessor-import/1"]
   job --> output4
   output4 -. schema .-> output_schema4
+  output5["codeql_scope_material"]
+  output_schema5["application/octet-stream"]
+  job --> output5
+  output5 -. schema .-> output_schema5
 ```
 
 <!-- generated:end -->

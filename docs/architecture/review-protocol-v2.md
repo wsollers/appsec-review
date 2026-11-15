@@ -469,7 +469,7 @@ model.
 Where this document left a choice open, the implementation took these. None of them changes R3, R4, R5 or R6.
 
 1. **Compact claim field.** The red claim names its closed consequence `security_predicate`, not `predicate`.
-2. **Package v6.** `appsec-review/review-package/6` stores the `neighborhood`; the labelled view is built at cell time
+2. **Package v7.** `appsec-review/review-package/7` (evolving <!-- historical:begin -->`appsec-review/review-package/6`<!-- historical:end --> via T-5000) stores the `neighborhood` (and, for hunt partitions, the shared `unit_context` reference); the labelled view is built at cell time
    and is not stored. The reuse basis stays the hash of the stored package. Non-material gaps stay in the stored
    package; the view writes them to a hash-referenced `gaps.jsonl` listed under `files`.
 3. **Extra labels.** `M` (SVF memory context), `O` (other context), and `A` (a claim's affected entities in blue and

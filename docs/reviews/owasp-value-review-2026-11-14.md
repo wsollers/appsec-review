@@ -255,7 +255,7 @@ structurally present (`obligations[].subject`, `observations[].citations`,
 `observations[].rationale` on an assessed row, `obligations.py:384-395`, `assessment.py:63-107`)
 but empty on every row this host has ever produced, and item 6 does not exist: the ledger is per
 row, and the first five rows of it are what every reviewer cell sees. The redesign below adds a
-`control-report/1` projection with exactly items 1 to 6 and makes it the only OWASP input to the
+<!-- historical:begin -->`control-report/1`<!-- historical:end --> projection with exactly items 1 to 6 and makes it the only OWASP input to the
 final report.
 
 ### 6. Cost versus value, and the recommendation
@@ -287,7 +287,7 @@ procedures) for the web targets where it would pay.
 
 **What the job produces.**
 
-1. `target-class/1`: one record per component: `{component_id, classes: [web_api | mobile |
+1. <!-- historical:begin -->`target-class/1`<!-- historical:end -->: one record per component: `{component_id, classes: [web_api | mobile |
    cli | library | build_tooling | test_only], basis: [tag assignment ids], confidence}`
    derived from `component:*`, `surface:entry:*`, `lang:*` and `platform:*` tags. Published as
    an `applicability` shard row and cited by every other record.
@@ -296,7 +296,7 @@ procedures) for the web targets where it would pay.
    chapter gets one `not_applicable` or `not_routed` row per chapter, not per control.
 3. `control-result` rows only for dispatched obligations, each with a bound first-party subject
    (`subject_selection` already produces `path`, `lines`, `ast_sha256`), the worker and reviewer
-   turn results, and the `control-report/1` projection of section 5 items 1 to 6.
+   turn results, and the <!-- historical:begin -->`control-report/1`<!-- historical:end --> projection of section 5 items 1 to 6.
 4. `coverage`: per family and chapter, counts of `not_applicable`, `not_routed`,
    `no_procedure`, `no_subject`, `cannot_verify`, `satisfied`, `not_satisfied`, replacing the
    614 free-text gaps with `producer-gap/1` records (F4).
@@ -331,7 +331,7 @@ Python-only recogniser bottleneck, because subject discovery becomes "units tagg
 `surface:entry:http-*`" rather than "Python AST decorators". The standalone assessor path stays
 for the four existing Python procedures until the hunt path is proven on `smoke-python`.
 
-**What reaches the report.** Exactly the `control-report/1` rows with a `satisfied` or
+**What reaches the report.** Exactly the <!-- historical:begin -->`control-report/1`<!-- historical:end --> rows with a `satisfied` or
 `not_satisfied` verdict (one line each: control, subject `path:lines`, verdict, agreement,
 change), followed by one coverage sentence per applicable family ("ASVS 5.0 L2: 3 of 12 routed
 chapters assessed; 9 chapters have no procedure") and, for non-applicable targets, one sentence
@@ -382,9 +382,9 @@ unit regression under 10 seconds unless noted.
    judge's accepted claim carries the control id; the workbench records the outcome as a
    `control-result` row. Tests: a hunt package for a route unit carries exactly one control
    obligation and its serialized request stays under the configured input budget (contrast F1);
-   an accepted `not_satisfied` claim produces a `control-report/1` row with `path:lines`; a unit
+   an accepted `not_satisfied` claim produces a <!-- historical:begin -->`control-report/1`<!-- historical:end --> row with `path:lines`; a unit
    without an entry tag carries no control obligation.
-7. **`control-report/1` projection and report section** (medium). The workbench publishes the
+7. **<!-- historical:begin -->`control-report/1`<!-- historical:end --> projection and report section** (medium). The workbench publishes the
    section-5 projection; `reporting/` renders one line per verdict row and one coverage sentence
    per family, nothing else. Tests: a result set with one `not_satisfied` and 276 other rows
    renders one finding line and one coverage sentence; a `not_applicable` ledger renders one

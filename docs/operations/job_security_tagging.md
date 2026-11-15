@@ -860,6 +860,8 @@ flowchart LR
 
 See the [handler](../../src/appsec_review/jobs/job_security_tagging/job.py),
 [collectors](../../src/appsec_review/jobs/job_security_tagging/producers.py),
+[collation collector](../../src/appsec_review/jobs/job_security_tagging/collation.py),
+[model pass](../../src/appsec_review/jobs/job_security_tagging/model_pass.py),
 [taxonomy validator](../../src/appsec_review/jobs/job_security_tagging/taxonomy.py) and
 [crosswalk evaluator](../../src/appsec_review/jobs/job_security_tagging/crosswalk.py).
 
@@ -887,6 +889,23 @@ See the [handler](../../src/appsec_review/jobs/job_security_tagging/job.py),
 3. In `collection.coverage_gaps`, turn noncomplete upstream coverage and missing required index
    families into reported gap tags. Merge duplicate assignment identities and enforce the
    assignment ceiling; overflow fails rather than silently dropping tags.
+
+### `collation`
+
+1. In `collation.collate_facets`, classify accepted source files under the resolved
+   `source_dispositions` table (`[jobs.job_security_tagging.settings.collation]`), read only
+   hash-verified first-party source bytes within configured per-file and per-component bounds,
+   evaluate lexical/path, tag-to-facet and facet-to-facet rules across the closed `role`,
+   `exposure`, `trust`, `mechanism`, `asset` and `state` namespaces, roll up facets per component,
+   derive `target:*` classes and publish `collation.json` (`appsec-review/collation-pass/1`) and
+   `facet-facts.json` (indexed under shard `facets`).
+2. In `collation.model_pass`, publish a disabled `unit-purposes.json` record with zero model calls
+   unless `settings.collation.model_pass.enabled` is true (`false` in every shipped profile). When
+   enabled, dispatch one bounded `unit_purpose` model request per first-party component and accept
+   `unit-purpose-proposal/1` claims only when every `role`/`asset` value is in the pinned
+   vocabulary, every claim cites a supplied `path:line` excerpt or deterministic assignment ID and
+   `purpose` is within 600 characters; rejected proposals or transport errors record a named gap
+   without altering deterministic facets.
 
 ### `crosswalk`
 
@@ -922,10 +941,13 @@ flowchart LR
   scope --> src["collection.source_facts"]
   scope --> obs["collection.observation_facts"]
   scope --> cov["collection.coverage_gaps"]
-  src --> cross["crosswalk.apply_crosswalk"]
+  src --> col["collation.collate_facets"]
+  col --> mpass["collation.model_pass"]
+  col --> cross["crosswalk.apply_crosswalk"]
+  mpass --> valid["integrity.validate_assignments"]
   obs --> cross
   cov --> cross
-  cross --> valid["integrity.validate_assignments"]
+  cross --> valid
   valid --> idx["publication.publish_index"]
   valid --> cloud["publication.publish_tag_cloud"]
   idx --> pub["publication.publish_handoff"]
@@ -983,4 +1005,23 @@ capability rules, crosswalk, component topology and accepted manifest. Changed o
 taxonomy invalidates the affected tagging projection; stale scope/taxonomy is rechecked within
 the attempt. The [runtime key](../architecture/jobs-and-runtime.md#wave-1-resumability) also
 requires exact upstream/configuration/component identities. Artifact-bearing results cannot be
-transplanted as portable failed-attempt checkpoints. This path dispatches no model.
+transplanted as portable failed-attempt checkpoints. When `settings.collation.model_pass.enabled`
+is `false` (the default), this path dispatches no model; when enabled, `collation.model_pass`
+executes through the recorded inference transport after deterministic collation.
+
+## Model usage
+
+Deterministic capability collection, `collation.collate_facets` and crosswalk derivation dispatch
+no model. Optional model usage lives solely in `collation.model_pass`
+([T-5008](../architecture/collation-pass.md#6-optional-model-pass-stage-4-default-off)), which is
+disabled by default (`[jobs.job_security_tagging.settings.collation.model_pass] enabled = false`
+in every shipped profile). When enabled, `collation.model_pass` invokes the specialized worker
+`unit_purpose` (role `unit_purpose_collator`, task `unit_purpose_collation`, runtime skill
+`unit-purpose-collation`, zero MCP tools) once per first-party component up to `max_components`
+through the application's recorded inference transport. Each request supplies only deterministic
+facet tags with assignment IDs, first-party paths, closed `role`/`asset` vocabulary values and
+bounded `path:line` excerpts (`max_excerpt_lines`). Replies must satisfy `unit-purpose-proposal/1`
+and cite supplied `path:line` spans or deterministic assignment IDs; accepted claims emit
+`reported` facet assignments (`producer = collation-model-pass`) and record the bounded component
+purpose in `unit-purposes.json`, while any invalid reply or provider failure leaves deterministic
+facets untouched and records a named gap.
