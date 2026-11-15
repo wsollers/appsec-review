@@ -28501,12 +28501,20 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
-        "live": [],
+        "integration": [
+          "tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py"
+        ],
+        "live": [
+          "tests/live/test_post_build_security_live.py"
+        ],
         "unit": [
-          "tests/test_post_build_security_assessment.py::test_redaction_normalization_and_malicious_inputs_do_not_escape",
-          "tests/test_post_build_security_assessment.py::test_compiler_linker_and_post_link_classification",
-          "tests/test_post_build_security_assessment.py::test_action_provenance_keeps_exact_identity_but_indexes_only_redacted_values"
+          "tests/unit/job_post_build_security_assessment/test_contract.py",
+          "tests/unit/job_post_build_security_assessment/test_hardening.py",
+          "tests/unit/job_post_build_security_assessment/test_assessment.py",
+          "tests/unit/job_post_build_security_assessment/test_binary_inspection.py",
+          "tests/unit/job_post_build_security_assessment/test_handlers.py",
+          "tests/test_family_binary_assessment.py",
+          "tests/orchestration/dagster/test_post_build_security.py"
         ]
       },
       "workers": 8
@@ -44822,7 +44830,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "21ce861a2d4ef201ca6ecd6e086a3da2677b256ff1853432624bf8992e6d7888"
+    "tests/job-test-map.json": "e9747d48f82c9afdff29ba44730c72ae2475f544313ea0fefdc96b818bdd16d7"
   },
   "tool_policy": {
     "disable_grype": true,

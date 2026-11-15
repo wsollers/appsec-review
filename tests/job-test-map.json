@@ -474,13 +474,21 @@
     },
     "job_post_build_security_assessment": {
       "unit": [
-        "tests/test_post_build_security_assessment.py::test_redaction_normalization_and_malicious_inputs_do_not_escape",
-        "tests/test_post_build_security_assessment.py::test_compiler_linker_and_post_link_classification",
-        "tests/test_post_build_security_assessment.py::test_action_provenance_keeps_exact_identity_but_indexes_only_redacted_values"
+        "tests/unit/job_post_build_security_assessment/test_contract.py",
+        "tests/unit/job_post_build_security_assessment/test_hardening.py",
+        "tests/unit/job_post_build_security_assessment/test_assessment.py",
+        "tests/unit/job_post_build_security_assessment/test_binary_inspection.py",
+        "tests/unit/job_post_build_security_assessment/test_handlers.py",
+        "tests/test_family_binary_assessment.py",
+        "tests/orchestration/dagster/test_post_build_security.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": [
+        "tests/live/test_post_build_security_live.py"
+      ]
     },
     "job_profile_data": {
       "unit": [

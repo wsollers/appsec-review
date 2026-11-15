@@ -3160,6 +3160,18 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py`; 851/859 job-package
   lines [99.07%] and 275/284 branches [96.83%] covered, with all 5 modules >=97.2% lines and
   >=93.7% branches).
+  job_post_build_security_assessment (32/47; 7 unit files, 55 cases: pinned 23-input / 2-dataset
+  contract and 7-unit DAG topology, family binary hardening expectations across Go/Rust/.NET/
+  Python/Node/Zig, compiler/linker/archiver/post-link classification and secret/path redaction,
+  ELF64/32, PE64/32, COFF, Mach-O, static-archive, LLVM bitcode and link-map binary inspection,
+  deterministic MSVC/GNU/ELF/PE mismatch and cross-TU checks, bounded inference validation and
+  retry handling, managed .NET PE filtering and wheel extension member extraction, immutable
+  `build_security` SQLite shard publication and reuse, and `RetrievalCore.query_build_security`
+  scopes; `JobRunner` suite relocated to
+  `tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py` and live
+  Dagster acceptance check relocated to `tests/live/test_post_build_security_live.py`; 1176/1201
+  job-package lines [97.92%] and 464/506 branches [91.70%] covered, with all 5 modules >=97.8%
+  lines and >=91.1% branches).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

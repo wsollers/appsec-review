@@ -1,30 +1,32 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import struct
 
 import pytest
 
-from appsec_review.jobs.job_post_build_security_assessment.assessment import (
-    INFERENCE_PROPOSAL_SCHEMA, classify_action, deterministic_checks, inspect_binary, normalize_action,
-    redact_argv, sanitize_environment, shard_fingerprint, validate_inference,
-)
-from appsec_review.jobs.job_post_build_security_assessment import build_job
-from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.config import AppConfig, load_config
 from appsec_review.inference import ModelRequest, ModelResult
+from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS
+from appsec_review.jobs.job_post_build_security_assessment import build_job
+from appsec_review.jobs.job_post_build_security_assessment.assessment import INFERENCE_PROPOSAL_SCHEMA
 from appsec_review.observability import aggregate_run_metrics
-from appsec_review.retrieval import (
-    EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RetrievalCore,
-    write_manifest,
-)
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.retrieval import RetrievalCore, write_manifest
 from appsec_review.runtime import JobRunner
+from appsec_review.runtime.datasets import dataset_contract
+from appsec_review.runtime.repair import WORKER_PROTOCOL, bind_release, worker_scope
+from appsec_review.storage import atomic_json, file_sha256
 from tests.capture_fakes import build_capture_toml
+from tests.handoff_fixture import write_fixture_handoff
 
+pytestmark = pytest.mark.integration
 
 RUN_ID = "2026-10-08-9001"
+
+BLOCKED_GAP = ("unit-blocked (projects/native/blocked): C/C++ analysis unavailable because the native "
+               "build failed upstream in job_language_build (BLOCKED)")
 
 
 def _elf64(path: Path, *, executable: bool = True) -> None:
@@ -35,191 +37,11 @@ def _elf64(path: Path, *, executable: bool = True) -> None:
     path.write_bytes(ident + header + stack)
 
 
-def _pe64(path: Path) -> None:
-    data = bytearray(0x80 + 24 + 0xF0)
-    data[:2] = b"MZ"
-    struct.pack_into("<I", data, 0x3C, 0x80)
-    data[0x80:0x84] = b"PE\0\0"
-    struct.pack_into("<HHIIIHH", data, 0x84, 0x8664, 0, 0, 0, 0, 0xF0, 0x0002)
-    struct.pack_into("<H", data, 0x98, 0x20B)
-    struct.pack_into("<H", data, 0x98 + 70, 0x0160)
-    path.write_bytes(data)
-
-
 def _archive(path: Path) -> None:
     payload = b"object"
     header = ("member.o/".ljust(16) + "0".ljust(12) + "0".ljust(6) + "0".ljust(6) +
               "100644".ljust(8) + str(len(payload)).ljust(10) + "`\n").encode("ascii")
     path.write_bytes(b"!<arch>\n" + header + payload)
-
-
-def _coff(path: Path) -> None:
-    header = struct.pack("<HHIIIHH", 0x8664, 1, 0, 60, 1, 0, 0)
-    section = b".text\0\0\0" + struct.pack("<IIIIIIHHI", 1, 0, 1, 60, 0, 0, 0, 0, 0x60000020)
-    path.write_bytes(header + section + b"\x90")
-
-
-def test_redaction_normalization_and_malicious_inputs_do_not_escape() -> None:
-    argv = ["clang++", "-DAPI_TOKEN=top-secret", "--password", "also-secret",
-            "C:\\Users\\victim\\project\\main.cpp", "-I/home/victim/private/include", "@/tmp/secret.rsp"]
-    redacted = redact_argv(argv)
-    encoded = json.dumps(redacted)
-    assert "top-secret" not in encoded and "also-secret" not in encoded
-    assert "C:/Users/victim" not in encoded and "/tmp/secret.rsp" not in encoded and "/home/victim" not in encoded
-    assert "<redacted>" in encoded and "<external-path>" in encoded
-    environment = sanitize_environment({"CFLAGS": "-O2", "API_TOKEN": "secret", "RANDOM": "host"})
-    assert environment["facts"]["CFLAGS"]["value"] == "-O2"
-    assert "API_TOKEN" not in environment["facts"] and environment["omitted_count"] == 2
-    with pytest.raises(ValueError, match="invalid"):
-        redact_argv(["clang", "bad\0argument"])
-
-
-@pytest.mark.parametrize(("argv", "kind"), [
-    (["clang", "-c", "a.c"], "compiler"), (["clang++", "a.o", "-o", "app"], "linker_driver"),
-    (["as", "a.s"], "assembler"), (["windres", "a.rc"], "resource_compiler"),
-    (["llvm-ar", "rcs", "lib.a", "a.o"], "archiver"), (["lib.exe", "/OUT:x.lib"], "librarian"),
-    (["ld.lld", "a.o"], "linker"), (["llvm-strip", "app"], "post_link"),
-])
-def test_compiler_linker_and_post_link_classification(argv: list[str], kind: str) -> None:
-    assert classify_action(argv) == kind
-
-
-def test_action_provenance_keeps_exact_identity_but_indexes_only_redacted_values() -> None:
-    action = normalize_action(
-        {"arguments": ["clang", "-c", "src/a.c", "-o", "a.o", "-DSECRET=value"],
-         "directory": "/home/user/build"}, action_id="action", run_id=RUN_ID,
-        target_snapshot="snapshot", project="project", build_root="build", configuration="Release",
-        producer={"job": "compile", "task": "a"},
-        toolchain={"executable": "clang", "image_digest": "sha256:" + "1" * 64},
-        protected_artifact={"path": "protected/action.json", "sha256": "2" * 64},
-    )
-    assert action["argv_sha256"]
-    assert "value" not in json.dumps(action["argv"])
-    assert action["declared_inputs"] == ["src/a.c"] and action["outputs"] == ["a.o"]
-    assert action["working_directory"].startswith("<external-path>")
-
-
-def test_elf_pe_coff_and_archive_are_inspected_without_execution(tmp_path: Path) -> None:
-    elf, pe, obj, archive = (tmp_path / name for name in ("app", "app.exe", "a.obj", "lib.a"))
-    _elf64(elf)
-    _pe64(pe)
-    _coff(obj)
-    _archive(archive)
-    values = [inspect_binary(path) for path in (elf, pe, obj, archive)]
-    assert [item["format"] for item in values] == ["ELF", "PE/COFF", "COFF", "archive"]
-    assert all(item["executed"] is False for item in values)
-    assert values[0]["hardening"]["nx_stack"] is True and values[0]["hardening"]["pie"] is False
-    assert values[1]["hardening"] == {"dynamic_base": True, "high_entropy_va": True,
-                                      "nx_compat": True, "guard_cf": False,
-                                      "safe_seh": None, "gs": None, "sdl": None}
-    assert values[2]["relocations"] == [] and values[3]["archive_members"][0]["name"] == "member.o"
-
-
-def _action(action_id: str, flags: list[str], *, project: str = "p") -> dict:
-    return {"classification": "compiler", "argv": ["clang", "-c", "a.c", *flags],
-            "build_action_id": action_id, "compile_unit_id": "cu-" + action_id, "project": project}
-
-
-def test_platform_applicability_mismatch_and_cross_tu_inconsistency() -> None:
-    actions = [_action("strong", ["-fstack-protector-strong", "-fPIE"]),
-               _action("weak", ["-fno-stack-protector"])]
-    artifact = {"artifact_id": "exe", "sha256": "a" * 64, "format": "ELF", "kind": "executable",
-                "hardening": {"pie": False, "relro": True, "now": False, "nx_stack": True,
-                              "control_flow": None, "stack_canary": None, "fortify": None}}
-    checks = deterministic_checks(actions, [artifact])
-    by_id = {item["check_id"]: item for item in checks}
-    assert by_id["command_binary.pie_mismatch"]["status"] == "FAIL"
-    assert by_id["cross_tu.inconsistent.gnu_stack_protector"]["status"] == "FAIL"
-    pe = {"artifact_id": "pe", "sha256": "b" * 64, "format": "PE/COFF", "kind": "executable",
-          "bits": 64, "hardening": {}}
-    pe_checks = deterministic_checks([], [pe])
-    assert next(item for item in pe_checks if item["check_id"] == "pe.safe_seh")["status"] == "NOT_APPLICABLE"
-
-
-def test_inference_is_observation_until_evidence_validation_confirms_or_refutes() -> None:
-    checks = [{"check_id": "bad", "status": "FAIL"}, {"check_id": "good", "status": "PASS"},
-              {"check_id": "unknown", "status": "UNKNOWN"}]
-    proposal = {"observations": [
-        {"claim": "bad posture", "check_id": "bad", "evidence_ids": ["e1"]},
-        {"claim": "incorrect model claim", "check_id": "good", "evidence_ids": ["e2"]},
-        {"claim": "needs evidence", "check_id": "unknown", "evidence_ids": ["e1"]},
-        {"claim": "invented", "check_id": "bad", "evidence_ids": ["made-up"]},
-    ]}
-    result = validate_inference(proposal, checks=checks, evidence_ids={"e1", "e2"})
-    assert [item["validation"] for item in result["observations"]] == ["CONFIRMED", "REFUTED", "UNVALIDATED"]
-    assert result["confirmed_count"] == result["refuted_count"] == 1 and len(result["rejections"]) == 1
-
-
-def test_fingerprint_selectively_invalidates_changed_command_and_dependent_binary() -> None:
-    base = dict(command_artifacts=[{"sha256": "1" * 64}], binary_hashes=["2" * 64],
-                tool_identity={"image": "3" * 64}, model_identity={"model": "m"},
-                upstream_manifest_sha256="4" * 64)
-    first = shard_fingerprint(**base)
-    assert first == shard_fingerprint(**base)
-    assert first != shard_fingerprint(**{**base, "command_artifacts": [{"sha256": "5" * 64}]})
-    assert first != shard_fingerprint(**{**base, "binary_hashes": ["6" * 64]})
-    unrelated = shard_fingerprint(**{**base, "command_artifacts": [{"sha256": "7" * 64}]})
-    assert unrelated != first  # another project/shard retains its own independent fingerprint
-
-
-def _retrieval_fixture(tmp_path: Path) -> RetrievalCore:
-    runs, run_root = tmp_path / "runs", tmp_path / "runs" / RUN_ID
-    target = tmp_path / "target"
-    target.mkdir()
-    attempt = run_root / "data" / "jobs" / "post" / "attempts" / "attempt_0001"
-    attempt.mkdir(parents=True)
-    fingerprint = "1" * 64
-    shard = "build-security-case-001"
-    path = run_root / "data" / "indices" / "build_security" / "fixture.sqlite"
-    builder = IndexBuilder(path, name="build_security", fingerprint=fingerprint,
-                           target_snapshot="snapshot", shard_id=shard)
-    identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, "snapshot", {"id": "action-1"})
-    builder.add_entity(EntityRecord(identity, "action-1", "action-1", "clang redacted",
-        {"project": "project-a", "build_root": "build-a", "configuration": "Release",
-         "build_action_id": "action-1", "compile_unit_id": "cu-1", "linked_artifact_ids": ["bin-1"],
-         "producer": {"job": "compile-job"}, "shard": shard}))
-    builder.add_coverage("post-build-security", "partial", "exact link timing unavailable")
-    sha = builder.build()
-    index = IndexIdentity("build_security", "appsec-review/retrieval-index/2", sha, fingerprint,
-                          path.relative_to(run_root).as_posix(), {"job": "post"},
-                          ("exact link timing unavailable",), shard)
-    manifest_path = run_root / "data" / "indices" / "manifest.json"
-    write_manifest(manifest_path, run_id=RUN_ID, target_snapshot="snapshot", target_root=target, indexes=(index,))
-    artifact = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
-    handoff_path = attempt / "handoff.json"
-    from tests.handoff_fixture import write_fixture_handoff
-    write_fixture_handoff(run_root, handoff_path, {"source_fingerprint": "snapshot", "status": "ACCEPTED",
-                               "job_id": "post", "artifacts": [artifact]})
-    atomic_json(run_root / "data" / "indices" / "accepted.json", {
-        "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
-        "handoff_path": handoff_path.relative_to(run_root).as_posix(),
-        "handoff_sha256": file_sha256(handoff_path), "manifest_path": artifact["path"],
-        "manifest_sha256": artifact["sha256"],
-    })
-    return RetrievalCore(runs, RUN_ID)
-
-
-def test_build_security_core_and_thin_mcp_support_every_scope(tmp_path: Path) -> None:
-    core = _retrieval_fixture(tmp_path)
-    adapter = RetrievalMcpAdapter(core)
-    scopes = {"project": "project-a", "build_root": "build-a", "build_action": "action-1",
-              "configuration": "Release", "compile_unit": "cu-1", "linked_artifact": "bin-1",
-              "producer": "compile-job", "shard": "build-security-case-001"}
-    for key, value in scopes.items():
-        response = adapter.call("query_build_security", {key: value})
-        assert len(response["results"]) == 1
-        assert any("exact link timing unavailable" in gap for gap in response["coverage_gaps"])
-    assert adapter.call("query_build_security", {"project": "missing"})["results"] == []
-
-
-def test_job_topology_is_parallel_per_case_and_publishes_after_all_shards() -> None:
-    job = build_job()
-    ids = {unit.unit_id: unit for unit in job.units}
-    assert len(job.units) == 7
-    assert ids["inspection.native_units"].dependencies == ("provenance.native_units",)
-    assert ids["inference.native_units"].dependencies == (
-        "provenance.native_units", "inspection.native_units", "deterministic.native_units")
-    assert ids["publication.publish_handoff"].dependencies == ("index.native_units",)
 
 
 def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
@@ -228,8 +50,9 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
              "[jobs.job_cpp_compiled_analysis.settings]", 'lane = "cpp"',
              "", "[jobs.job_post_build_security_assessment]", 'name = "post_build_security_assessment"',
              "workers = 4", "", "[jobs.job_post_build_security_assessment.settings.model]",
-             f"enabled = {'true' if model_enabled else 'false'}", 'provider = "fixture"', 'model = "fixture"', 'reasoning = "medium"',
-             "max_input_tokens = 32000", "max_output_tokens = 1000", "timeout_seconds = 10", "retries = 0", "",
+             f"enabled = {'true' if model_enabled else 'false'}", 'provider = "fixture"', 'model = "fixture"',
+             'reasoning = "medium"', "max_input_tokens = 32000", "max_output_tokens = 1000",
+             "timeout_seconds = 10", "retries = 0", "",
              "[jobs.job_post_build_security_assessment.steps.load]", "workers = 1",
              "[jobs.job_post_build_security_assessment.steps.load.tasks.accepted_cpp_build]", ""]
     for step in ("provenance", "inspection", "deterministic", "inference", "index"):
@@ -241,10 +64,6 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
     path = root / "appsec-review.toml"
     path.write_text("\n".join(lines) + "\n\n" + build_capture_toml(), encoding="utf-8")
     return path
-
-
-BLOCKED_GAP = ("unit-blocked (projects/native/blocked): C/C++ analysis unavailable because the native "
-               "build failed upstream in job_language_build (BLOCKED)")
 
 
 def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = False,
@@ -287,20 +106,17 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
         "directory": str(case_root / "build"), "file": str(source), "arguments": exact,
     }]), encoding="utf-8")
     outputs = {"catalog.projects": {"projects": {"unit-a": {
-            "terminal_status": "SUCCEEDED", "mapping": {"root": "projects/cpp/case-001", "build_system": "cmake"},
-            "outputs": [{"path": "build/app", "kind": "executable", "sha256": file_sha256(binary),
-                         "size_bytes": binary.stat().st_size},
-                        {"path": "build/app.o", "kind": "object", "sha256": file_sha256(object_file),
-                         "size_bytes": object_file.stat().st_size},
-                        {"path": "build/libapp.a", "kind": "library", "sha256": file_sha256(archive),
-                         "size_bytes": archive.stat().st_size}], "image_id": "sha256:" + "1" * 64,
-        }}}}
+        "terminal_status": "SUCCEEDED", "mapping": {"root": "projects/cpp/case-001", "build_system": "cmake"},
+        "outputs": [{"path": "build/app", "kind": "executable", "sha256": file_sha256(binary),
+                     "size_bytes": binary.stat().st_size},
+                    {"path": "build/app.o", "kind": "object", "sha256": file_sha256(object_file),
+                     "size_bytes": object_file.stat().st_size},
+                    {"path": "build/libapp.a", "kind": "library", "sha256": file_sha256(archive),
+                     "size_bytes": archive.stat().st_size}], "image_id": "sha256:" + "1" * 64,
+    }}}}
     if blocked_case:
-        # What job_cpp_compiled_analysis catalogs for a unit whose native build was refused upstream.
         outputs["catalog.projects"]["projects"]["unit-blocked"] = {
             "terminal_status": "COMPLETED_WITH_GAPS", "gaps": [BLOCKED_GAP]}
-    from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS
-    from appsec_review.runtime.datasets import dataset_contract
     fixture_config = worker_config or load_config(tmp_path / "appsec-review.toml")
     JobRunner(fixture_config)._bind_configuration(run_root)
     material = tuple(path for path in sorted(case_root.rglob("*")) if path.is_file())
@@ -316,9 +132,6 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
     atomic_json(result_path, result)
     result_artifact = {"path": result_path.relative_to(run_root).as_posix(), "sha256": file_sha256(result_path)}
     handoff_path = attempt / "handoff.json"
-    from tests.handoff_fixture import write_fixture_handoff
-    from contextlib import nullcontext
-    from appsec_review.runtime.repair import WORKER_PROTOCOL, bind_release, worker_scope
     if worker_config is not None:
         bind_release(worker_config, run_root)
     with (worker_scope(worker_config, run_root, preparing_job="job_cpp_compiled_analysis")
@@ -349,9 +162,22 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
 
 
 def _cpp_handoffs(runs: Path) -> dict[str, str]:
-    """The exact accepted C++ handoff identity the fixture published, as the graph would bind it."""
     latest = runs / RUN_ID / "data" / "jobs" / "job_cpp_compiled_analysis" / "latest.json"
     return {"job_cpp_compiled_analysis": json.loads(latest.read_text(encoding="utf-8"))["handoff_sha256"]}
+
+
+def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
+    assert request.schema == INFERENCE_PROPOSAL_SCHEMA
+    assert (request.provider, request.model) == ("fixture", "fixture") and timeout_seconds == 10
+    assert request.guidance and request.summary["schema"] == "appsec-review/build-security-inference-request/1"
+    action = request.summary["actions"][0]
+    artifact = request.summary["artifacts"][0]
+    return ModelResult({"observations": [
+        {"claim": "stack protection is missing", "check_id": "gnu.stack_protector",
+         "evidence_ids": [action["build_action_id"]]},
+        {"claim": "the non-PIE executable contradicts release posture", "check_id": "elf.pie",
+         "evidence_ids": [artifact["sha256"]]},
+    ]}, input_tokens=21, output_tokens=8, cache_tokens=3)
 
 
 def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp_path: Path) -> None:
@@ -435,7 +261,6 @@ def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
 
 
 def test_a_case_whose_build_was_blocked_upstream_completes_with_gaps_and_no_model_call(tmp_path: Path) -> None:
-    """Review 2026-11-11-0004: a blocked native build failed the inference stage with KeyError 'artifact'."""
     config = load_config(_post_build_config(tmp_path, model_enabled=True))
     runs, target = _accepted_cpp_fixture(tmp_path, blocked_case=True)
     outcome = JobRunner(config).run(build_job(infer=_context_inference),
@@ -453,23 +278,7 @@ def test_a_case_whose_build_was_blocked_upstream_completes_with_gaps_and_no_mode
     inference = outputs["inference.native_units"]["projects"]["unit-blocked"]
     assert inference["model_calls"] == 0 and inference["observations"] == []
     assert any("inference was not run" in gap for gap in inference["gaps"])
-    # The built sibling is still assessed by the model.
     assert outputs["inference.native_units"]["projects"]["unit-a"]["model_calls"] == 1
-
-
-def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
-    """Stands in for `appsec_review.inference.infer`, the job's only path to a model."""
-    assert request.schema == INFERENCE_PROPOSAL_SCHEMA
-    assert (request.provider, request.model) == ("fixture", "fixture") and timeout_seconds == 10
-    assert request.guidance and request.summary["schema"] == "appsec-review/build-security-inference-request/1"
-    action = request.summary["actions"][0]
-    artifact = request.summary["artifacts"][0]
-    return ModelResult({"observations": [
-        {"claim": "stack protection is missing", "check_id": "gnu.stack_protector",
-         "evidence_ids": [action["build_action_id"]]},
-        {"claim": "the non-PIE executable contradicts release posture", "check_id": "elf.pie",
-         "evidence_ids": [artifact["sha256"]]},
-    ]}, input_tokens=21, output_tokens=8, cache_tokens=3)
 
 
 def test_bounded_inference_records_tokens_and_validates_observations(tmp_path: Path) -> None:

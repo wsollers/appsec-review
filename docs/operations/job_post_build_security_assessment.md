@@ -115,9 +115,9 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
-| live | None declared |
-| unit | `tests/test_post_build_security_assessment.py::test_redaction_normalization_and_malicious_inputs_do_not_escape`<br>`tests/test_post_build_security_assessment.py::test_compiler_linker_and_post_link_classification`<br>`tests/test_post_build_security_assessment.py::test_action_provenance_keeps_exact_identity_but_indexes_only_redacted_values` |
+| integration | `tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py` |
+| live | `tests/live/test_post_build_security_live.py` |
+| unit | `tests/unit/job_post_build_security_assessment/test_contract.py`<br>`tests/unit/job_post_build_security_assessment/test_hardening.py`<br>`tests/unit/job_post_build_security_assessment/test_assessment.py`<br>`tests/unit/job_post_build_security_assessment/test_binary_inspection.py`<br>`tests/unit/job_post_build_security_assessment/test_handlers.py`<br>`tests/test_family_binary_assessment.py`<br>`tests/orchestration/dagster/test_post_build_security.py` |
 
 ### Dagster placement
 
