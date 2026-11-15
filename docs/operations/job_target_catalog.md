@@ -76,9 +76,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | `tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent` |
+| integration | `tests/integration/job_target_catalog/test_catalog_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_path_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_documents_graph.py` |
 | live | None declared |
-| unit | `tests/test_cataloging_languages.py`<br>`tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps`<br>`tests/unit/runtime/test_wave5_contracts.py` |
+| unit | `tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
 
 ### Dagster placement
 

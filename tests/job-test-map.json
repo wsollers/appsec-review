@@ -549,11 +549,21 @@
     },
     "job_target_catalog": {
       "unit": [
-        "tests/test_cataloging_languages.py",
-        "tests/test_wave1_resume.py::test_catalog_path_index_accepts_structured_inventory_gaps",
+        "tests/unit/job_target_catalog/test_cataloging_languages.py",
+        "tests/unit/job_target_catalog/test_contract.py",
+        "tests/unit/job_target_catalog/test_descriptor_discovery.py",
+        "tests/unit/job_target_catalog/test_discovery.py",
+        "tests/unit/job_target_catalog/test_documents.py",
+        "tests/unit/job_target_catalog/test_graph.py",
+        "tests/unit/job_target_catalog/test_helpers.py",
+        "tests/unit/job_target_catalog/test_indexes.py",
         "tests/unit/runtime/test_wave5_contracts.py"
       ],
-      "integration": ["tests/test_target_document_pipeline.py::test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent"],
+      "integration": [
+        "tests/integration/job_target_catalog/test_catalog_graph.py",
+        "tests/integration/job_target_catalog/test_catalog_path_graph.py",
+        "tests/integration/job_target_catalog/test_catalog_documents_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },

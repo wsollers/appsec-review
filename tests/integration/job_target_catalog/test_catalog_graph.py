@@ -1,6 +1,6 @@
-"""job_target_catalog through the real runner over the topology fixture monorepo.
+"""Pre-walk suite pending replacement: job_target_catalog whole-graph integration.
 
-Unit tests: the real configuration, the real GraphRunner (intake as the producer, built without a
+The the real configuration, the real GraphRunner (intake as the producer, built without a
 provider check), the committed fixture under test/topology/monorepo as the target. No Docker, no
 model, no network. Discovery's own decisions are unit-tested in tests/test_build_discovery.py; this
 file proves what the published catalog carries for a monorepo and how the job fails and reports.
@@ -23,7 +23,7 @@ from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
 from tests.telemetry_support import assert_job_lifecycle, job_events
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "test" / "topology" / "monorepo"
 JOB_ID = "job_target_catalog"
 

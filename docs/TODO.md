@@ -2991,14 +2991,18 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   433 cases: contract, acquisition, parsing, configuration, signals, indexes and publication;
   31 graph cases preserved in `tests/integration/job_source_history_analysis/`, 12 old claims
   replaced by named code-level tests; one unreachable line and six defensive/unreachable
-  branches individually explained in the host-local report); job_target_acquisition (4 unit
-  files, 85 cases plus shared Wave 1a contract suite: contract, configuration, graph and
-  handlers; 6 graph cases preserved in `tests/integration/job_target_acquisition/`; 113/113
-  job-package lines and 24/24 branches covered).
+  branches individually explained in the host-local report);   job_target_acquisition (4 unit files, 85 cases plus shared Wave 1a contract suite: contract,
+  configuration, graph and handlers; 6 graph cases preserved in
+  `tests/integration/job_target_acquisition/`; 113/113 job-package lines and 24/24 branches
+  covered); job_target_catalog (8 unit files, 123 cases plus shared Wave 5 contract suite:
+  contract, languages, descriptor bounds, discovery, documents, graph, helpers and indexes;
+  3 graph files preserved in `tests/integration/job_target_catalog/`; 496/496 job-package lines
+  and 150/150 branches covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
-  The remaining 29-job inventory is paused for approved bounded repair waves. Wave 1a
-  (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
+  Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
+  remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
+  consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
   Wave 1c (`4b875e0ea`) aligns image-repair proposal validation and its JSON schema on
