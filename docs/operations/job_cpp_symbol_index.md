@@ -79,9 +79,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py` |
 | live | None declared |
-| unit | `tests/test_cpp_index_jobs.py::test_symbol_index_publishes_accepted_symbols_with_complete_coverage` |
+| unit | `tests/unit/job_cpp_symbol_index/test_contract.py`<br>`tests/unit/job_cpp_symbol_index/test_clangd_yaml.py`<br>`tests/unit/job_cpp_symbol_index/test_handlers.py`<br>`tests/unit/job_cpp_symbol_index/test_symbol_budget.py` |
 
 ### Dagster placement
 

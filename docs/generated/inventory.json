@@ -13390,10 +13390,15 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py"
+        ],
         "live": [],
         "unit": [
-          "tests/test_cpp_index_jobs.py::test_symbol_index_publishes_accepted_symbols_with_complete_coverage"
+          "tests/unit/job_cpp_symbol_index/test_contract.py",
+          "tests/unit/job_cpp_symbol_index/test_clangd_yaml.py",
+          "tests/unit/job_cpp_symbol_index/test_handlers.py",
+          "tests/unit/job_cpp_symbol_index/test_symbol_budget.py"
         ]
       },
       "workers": 2
@@ -44785,7 +44790,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "b59c9017d83160ba8fc9bb102d58d1b90b91e40a1f92d0311ca724ca70c7618f"
+    "tests/job-test-map.json": "3e87070b5ecc4bc2fe985337ca23b8b552e9ba73a7bf6eaf75a2928cecad447f"
   },
   "tool_policy": {
     "disable_grype": true,

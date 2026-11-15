@@ -169,8 +169,15 @@
       ]
     },
     "job_cpp_symbol_index": {
-      "unit": ["tests/test_cpp_index_jobs.py::test_symbol_index_publishes_accepted_symbols_with_complete_coverage"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_cpp_symbol_index/test_contract.py",
+        "tests/unit/job_cpp_symbol_index/test_clangd_yaml.py",
+        "tests/unit/job_cpp_symbol_index/test_handlers.py",
+        "tests/unit/job_cpp_symbol_index/test_symbol_budget.py"
+      ],
+      "integration": [
+        "tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },

@@ -3113,6 +3113,14 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   build-unit outcomes, image/timeout/manifest-bound failure isolation, and handoff publication;
   `GraphRunner` suite relocated to `tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py`;
   421/422 job-package lines [99.76%] and 133/134 branches [99.25%] covered across all 5 modules).
+  job_cpp_symbol_index (27/47; 4 unit files, 30 cases: pinned 21-input / 4-dataset contract and
+  3-unit DAG topology, strict clangd YAML subset parser with multi-line scalar folding and
+  truncation/cap/malformed-structure rejection, first-party symbol-budget prioritization,
+  accepted-source URI mapping and post-acceptance tamper detection, aggregated CALLS/REFERENCES
+  edge normalization, timeout/OOM/truncation/missing-TU failure isolation, scope checkpoint reuse,
+  and handoff publication; `GraphRunner` suite relocated to
+  `tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py`; 348/348 job-package
+  lines [100.0%] and 134/134 branches [100.0%] covered across all 4 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
