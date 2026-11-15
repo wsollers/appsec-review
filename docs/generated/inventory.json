@@ -10188,13 +10188,19 @@
       "tests": {
         "acceptance": [],
         "integration": [
+          "tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py",
           "tests/integration/test_code_graph_integration.py"
         ],
         "live": [
           "tests/live/test_code_graph_live.py"
         ],
         "unit": [
-          "tests/test_code_graph_index_job.py"
+          "tests/unit/job_code_graph_index/test_contract.py",
+          "tests/unit/job_code_graph_index/test_datasets.py",
+          "tests/unit/job_code_graph_index/test_handlers.py",
+          "tests/unit/job_code_graph_index/test_producers.py",
+          "tests/unit/job_code_graph_index/test_scopes.py",
+          "tests/unit/job_code_graph_index/test_secondary_assignment.py"
         ]
       },
       "workers": 2
@@ -26543,16 +26549,28 @@
           "tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"
         ],
         "integration": [
-          "tests/integration/job_owasp_control_assessment/test_subject_selection.py"
+          "tests/integration/job_owasp_control_assessment/test_subject_selection.py",
+          "tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py"
         ],
         "live": [],
         "unit": [
-          "tests/test_owasp_assessment_job.py",
-          "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
-          "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+          "tests/unit/job_owasp_control_assessment/test_contract.py",
           "tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py",
+          "tests/unit/job_owasp_control_assessment/test_package_projection.py",
+          "tests/unit/job_owasp_control_assessment/test_subject_acceptance.py",
+          "tests/unit/job_owasp_control_assessment/test_subject_selection.py",
           "tests/unit/job_owasp_control_assessment/test_subject_settings.py",
-          "tests/unit/job_owasp_control_assessment/test_package_projection.py"
+          "tests/unit/job_owasp_control_assessment/test_target_class.py",
+          "tests/unit/job_owasp_control_assessment/test_target_class_job.py",
+          "tests/test_owasp_assessment_job.py",
+          "tests/test_owasp_catalog_integrity.py",
+          "tests/test_owasp_downstream.py",
+          "tests/test_owasp_evidence_binding.py",
+          "tests/test_owasp_indexes.py",
+          "tests/test_owasp_proof_procedures.py",
+          "tests/test_owasp_telemetry.py",
+          "tests/test_owasp_workbench.py",
+          "tests/orchestration/dagster/test_owasp_workbench.py"
         ]
       },
       "workers": 8
@@ -28498,12 +28516,20 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
-        "live": [],
+        "integration": [
+          "tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py"
+        ],
+        "live": [
+          "tests/live/test_post_build_security_live.py"
+        ],
         "unit": [
-          "tests/test_post_build_security_assessment.py::test_redaction_normalization_and_malicious_inputs_do_not_escape",
-          "tests/test_post_build_security_assessment.py::test_compiler_linker_and_post_link_classification",
-          "tests/test_post_build_security_assessment.py::test_action_provenance_keeps_exact_identity_but_indexes_only_redacted_values"
+          "tests/unit/job_post_build_security_assessment/test_contract.py",
+          "tests/unit/job_post_build_security_assessment/test_hardening.py",
+          "tests/unit/job_post_build_security_assessment/test_assessment.py",
+          "tests/unit/job_post_build_security_assessment/test_binary_inspection.py",
+          "tests/unit/job_post_build_security_assessment/test_handlers.py",
+          "tests/test_family_binary_assessment.py",
+          "tests/orchestration/dagster/test_post_build_security.py"
         ]
       },
       "workers": 8
@@ -38097,18 +38123,21 @@
           "tests/acceptance/job_security_tagging/test_behavioral_tags.py"
         ],
         "integration": [
-          "tests/integration/job_security_tagging/test_behavioral_tags.py"
+          "tests/integration/job_security_tagging/test_behavioral_tags.py",
+          "tests/integration/job_security_tagging/test_security_tagging_jobrunner.py"
         ],
         "live": [],
         "unit": [
           "tests/unit/job_security_tagging/test_behavioral_tags.py",
+          "tests/unit/job_security_tagging/test_collation.py",
+          "tests/unit/job_security_tagging/test_contract.py",
           "tests/unit/job_security_tagging/test_handler.py",
+          "tests/unit/job_security_tagging/test_model_pass.py",
+          "tests/unit/job_security_tagging/test_native_language_aliases.py",
           "tests/unit/job_security_tagging/test_reader.py",
           "tests/unit/job_security_tagging/test_rules_and_roles.py",
-          "tests/unit/job_security_tagging/test_native_language_aliases.py",
-          "tests/test_security_tagging.py::test_grammar_and_identifier_normalization",
-          "tests/test_security_tagging.py::test_namespace_basis_table_is_enforced",
-          "tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity"
+          "tests/orchestration/dagster/test_security_tagging.py",
+          "tests/test_security_tagging.py"
         ]
       },
       "workers": 4
@@ -44820,7 +44849,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "1ac0496bb6f0ee09660a5f9e8f26dbf512e335bb8f76a3f8e5912de6eaf760bc"
+    "tests/job-test-map.json": "95bf85ba3d0e42a6345460aa2ab13d6d5cece5c6d49aecf04f932b24551db0f9"
   },
   "tool_policy": {
     "disable_grype": true,

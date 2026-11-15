@@ -420,9 +420,16 @@ def test_tag_cloud_priorities_and_graph_are_bounded_routing_not_proof(publicatio
                for component in limited["components"])
     assert "at least" in " ".join(limited["limitations"])
     assert "omitted" in " ".join(limited["limitations"])
+    source(
+        publication,
+        path="svc/api/util.py",
+        text="def a(db):\n    return db.raw('SELECT 1')\ndef b(db):\n    return db.raw('SELECT 2')\n"
+             "def c(db):\n    return db.raw('SELECT 3')\n",
+    )
     exact_source_cap = inputs(publication, max_evidence_per_component=2)
-    assert any(line.startswith(COMPONENT + ": evidence cap reached; at least ")
-               for line in exact_source_cap["limitations"])
+    assert f"{COMPONENT}: evidence cap reached; 1 complete recognized subjects omitted" in (
+        exact_source_cap["limitations"]
+    )
 
 
 def test_unlocated_graph_scope_is_routing_context_and_not_static_proof(publication):

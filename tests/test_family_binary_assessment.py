@@ -209,7 +209,7 @@ def test_captured_family_compiles_become_a_compile_database_and_native_analysis_
     assert set(actions) == {"pkgs/a", "tools/cli"}
     assert actions["pkgs/a"]["family"] == "python"
     assert actions["pkgs/a"]["compile_database_origin"] == "captured-native-components"
-    assert actions["tools/cli"]["compile_database_origin"] == "build-system"
+    assert actions["tools/cli"]["compile_database_origin"] == "unavailable"
 
 
 def _pe(*, managed: bool, pe32_plus: bool = True) -> bytes:

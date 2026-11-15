@@ -199,9 +199,9 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | `tests/acceptance/job_security_tagging/test_behavioral_tags.py` |
-| integration | `tests/integration/job_security_tagging/test_behavioral_tags.py` |
+| integration | `tests/integration/job_security_tagging/test_behavioral_tags.py`<br>`tests/integration/job_security_tagging/test_security_tagging_jobrunner.py` |
 | live | None declared |
-| unit | `tests/unit/job_security_tagging/test_behavioral_tags.py`<br>`tests/unit/job_security_tagging/test_handler.py`<br>`tests/unit/job_security_tagging/test_reader.py`<br>`tests/unit/job_security_tagging/test_rules_and_roles.py`<br>`tests/unit/job_security_tagging/test_native_language_aliases.py`<br>`tests/test_security_tagging.py::test_grammar_and_identifier_normalization`<br>`tests/test_security_tagging.py::test_namespace_basis_table_is_enforced`<br>`tests/test_security_tagging.py::test_assignments_require_evidence_and_content_identity` |
+| unit | `tests/unit/job_security_tagging/test_behavioral_tags.py`<br>`tests/unit/job_security_tagging/test_collation.py`<br>`tests/unit/job_security_tagging/test_contract.py`<br>`tests/unit/job_security_tagging/test_handler.py`<br>`tests/unit/job_security_tagging/test_model_pass.py`<br>`tests/unit/job_security_tagging/test_native_language_aliases.py`<br>`tests/unit/job_security_tagging/test_reader.py`<br>`tests/unit/job_security_tagging/test_rules_and_roles.py`<br>`tests/orchestration/dagster/test_security_tagging.py`<br>`tests/test_security_tagging.py` |
 
 ### Dagster placement
 

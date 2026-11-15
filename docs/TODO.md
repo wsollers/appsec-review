@@ -3188,6 +3188,48 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_codeql_analysis/test_codeql_jobrunner.py`; 1393/1433 job-package lines
   [97.21%] and 493/526 branches [93.73%] covered, with all 5 modules >=96.2% lines and >=91.4%
   branches).
+  job_code_graph_index (31/47; 6 unit files, 28 cases: pinned 11-input / 5-dataset contract and
+  5-unit DAG topology, operator catalog-pin verification and mid-attempt drift guard, accepted
+  CodeQL input loading with legacy `export.scopes` fallback and 12 `IntegrityError` custody/schema/
+  plan guards, graph-export and accepted-source verification, native secondary and analyzer shard
+  restoration and assignment, producer neighborhood CFG/diagnostic/CPG/symbol/link builders with
+  truncation and seeded gap accounting, scope checkpoint reuse and invalid-leftover cleanup,
+  cross-check/analyzer/SVF/SARIF correlation handlers, `RetrievalCore.query_code_graph` modes,
+  `code_graph_scorecard` schema/inventory ownership, and consumed-shard publication guard;
+  `JobRunner`/Dagster suite relocated to
+  `tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py`; 851/859 job-package
+  lines [99.07%] and 275/284 branches [96.83%] covered, with all 5 modules >=97.2% lines and
+  >=93.7% branches).
+  job_post_build_security_assessment (32/47; 7 unit files, 55 cases: pinned 23-input / 2-dataset
+  contract and 7-unit DAG topology, family binary hardening expectations across Go/Rust/.NET/
+  Python/Node/Zig, compiler/linker/archiver/post-link classification and secret/path redaction,
+  ELF64/32, PE64/32, COFF, Mach-O, static-archive, LLVM bitcode and link-map binary inspection,
+  deterministic MSVC/GNU/ELF/PE mismatch and cross-TU checks, bounded inference validation and
+  retry handling, managed .NET PE filtering and wheel extension member extraction, immutable
+  `build_security` SQLite shard publication and reuse, and `RetrievalCore.query_build_security`
+  scopes; `JobRunner` suite relocated to
+  `tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py` and live
+  Dagster acceptance check relocated to `tests/live/test_post_build_security_live.py`; 1176/1201
+  job-package lines [97.92%] and 464/506 branches [91.70%] covered, with all 5 modules >=97.8%
+  lines and >=91.1% branches).
+  job_owasp_control_assessment (33/47; 17 unit files, 472 cases: pinned 4-input / 6-dataset
+  contract and 11-unit DAG topology, input/output validator custody and exactly-once accounting
+  enforcement, grammatical target-class applicability gating, subject selection/acceptance/
+  discovery boundaries, ASVS/MASVS catalog integrity, proof procedures and evidence binding,
+  4-cell parallel batch execution with `max_batches` cap and retry/backoff telemetry, blinded
+  independent reviewer verification, SQLite index publication, and downstream triage/review-role
+  projection; Dagster `.execute_in_process()` and 4-job role-delivery suite relocated to
+  `tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py`; 227/227
+  job-package lines [100.0%] and 44/44 branches [100.0%] covered across all 3 modules);
+  job_security_tagging (34/47; 10 unit files, 210 cases: pinned 13-input / 2-dataset contract,
+  12-unit DAG topology and Dagster `wave1_review` ordering parity without `importorskip`,
+  vocabulary/capability-rules/crosswalk hash-pinned loading and conflict rejection, scope/custody/
+  manifest-drift fail-closed validators, behavioral source/graph/observation/coverage-gap
+  collectors, first-party facet collation and target-class derivation, optional recorded model-pass
+  proposal validation and bounds, crosswalk derivation, SQLite shard publication with `attest_existing`
+  reuse, and tag-cloud rollup; two `JobRunner` whole-graph tests relocated to
+  `tests/integration/job_security_tagging/test_security_tagging_jobrunner.py`; 1,641/1,674
+  job-package lines [98.0%] and 632/672 branches [94.0%] covered across all 9 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

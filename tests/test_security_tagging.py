@@ -162,7 +162,7 @@ def _run_fixture(tmp_path: Path):
     shutil.copytree(ROOT / "data" / "reference" / "taxonomy", tmp_path / "data" / "reference" / "taxonomy")
     config = load_config(tmp_path / "appsec-review.toml")
     run_root = config.runtime.runs_dir / RUN_ID
-    attempt = run_root / "data" / "jobs" / "fixture" / "attempts" / "attempt_0001"
+    attempt = run_root / "data" / "jobs" / "job_target_catalog" / "attempts" / "attempt_0001"
     attempt.mkdir(parents=True)
     target = tmp_path / "target"
     files = {
@@ -240,18 +240,14 @@ def _run_fixture(tmp_path: Path):
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
     handoff = attempt / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
-    write_fixture_handoff(run_root, handoff, {"source_fingerprint": SNAPSHOT, "status": "ACCEPTED", "job_id": "fixture",
+    write_fixture_handoff(run_root, handoff, {"source_fingerprint": SNAPSHOT, "status": "ACCEPTED",
+                          "job_id": "job_target_catalog",
                           "attempt_id": "attempt_0001", "artifacts": [manifest], "outputs": {}})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
         "handoff_path": handoff.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff),
         "manifest_path": manifest["path"], "manifest_sha256": manifest["sha256"]})
     return config, run_root, target
-
-
-def _assignments(run_root: Path, outcome) -> list[dict]:
-    artifact = outcome["result"]["outputs"]["integrity.validate_assignments"]["artifact"]
-    return json.loads((run_root / artifact["path"]).read_text(encoding="utf-8"))["assignments"]
 
 
 def test_job_topology_matches_central_configuration() -> None:
@@ -267,82 +263,6 @@ def test_job_topology_matches_central_configuration() -> None:
     assert collation.node_id in crosswalk.dependencies
     config = load_config(ROOT / "appsec-review.toml").job("job_security_tagging")
     assert tuple(config.steps) == tuple(TOPOLOGY)
-
-
-def test_job_tags_accepted_indexes_and_publishes_queryable_shards(tmp_path: Path) -> None:
-    config, run_root, target = _run_fixture(tmp_path)
-    outcome = JobRunner(config).run(build_job(), run_id=RUN_ID, target_root=target, source_fingerprint=SNAPSHOT)
-    assert outcome["status"]["status"] == "COMPLETED_WITH_GAPS"
-    records = _assignments(run_root, outcome)
-    by_tag: dict[str, list[dict]] = {}
-    for record in records:
-        by_tag.setdefault(record["tag"], []).append(record)
-
-    assert by_tag["lang:python"][0]["basis"] == "declared"
-    assert {"infra:container:image-build", "platform:docker", "infra:ci:workflow", "platform:github-actions",
-            "infra:supply:dependency-manifest"} <= set(by_tag)
-    sql = by_tag["cwe:89"][0]
-    assert sql["basis"] == "reported" and sql["evidence"][0]["span"] == {"start_line": 1, "end_line": 1}
-    capec = by_tag["capec:66"][0]
-    assert capec["basis"] == "derived" and capec["derived_from"] == [sql["assignment_id"]]
-    assert by_tag["cwe:798"][0]["producer"]["name"] == "tool-gitleaks"
-    assert by_tag["vuln:severity:high"][0]["basis"] == "reported"
-    jwt = by_tag["func:authn:jwt"][0]
-    assert jwt["basis"] == "declared" and jwt["producer"]["mapping_rule"] == "pkg-jwt"
-    applicable = [record for record in by_tag["asvs5:v9"] if record["crosswalk_rule"] == "jwt-signature-applicability"]
-    assert applicable and applicable[0]["subject"]["kind"] == "component"
-    # A derived weakness is a review hypothesis, never a finding.
-    assert {record["basis"] for record in by_tag["cwe:347"]} == {"derived"}
-    boundary = by_tag["surface:boundary:ci-trust"][0]
-    assert boundary["basis"] == "derived" and boundary["subject"]["native_address"] == \
-        "ci_job:.github/workflows/ci.yml#build"
-    unmapped = by_tag["gap:crosswalk-unmapped"]
-    assert [record["producer"]["name"] for record in unmapped] == ["tool-semgrep"]
-    assert "gap:no-sast:tool-semgrep" in by_tag and "gap:catalog-fixture" in by_tag
-    assert not any(tag.startswith(("nist53r5:", "ssdf:", "cicd-top10:")) for tag in by_tag)
-    assert "clean" not in json.dumps([record["tag"] for record in records])
-
-    scope = json.loads((run_root / outcome["result"]["outputs"]["scope.resolve_inputs"]["artifact"]["path"])
-                       .read_text(encoding="utf-8"))
-    assert scope["schema"] == SCOPE_SCHEMA and scope["ownership_rules"] == ownership_rules()
-    assert scope["component_topology_sha256"] == component_topology_sha256(scope["components"], ownership_rules())
-    assert {record["subject"]["component_ownership"] for record in records} >= {"owned", "not_applicable"}
-
-    pointer = json.loads((run_root / "data" / "indices" / "accepted.json").read_text(encoding="utf-8"))
-    assert pointer["manifest_path"].endswith("tags-attempt_0001.json")
-    core = RetrievalCore(config.runtime.runs_dir, RUN_ID)
-    hits = core.search(query="cwe", indexes=("tags",), kinds=("tag_assignment",), limit=100)
-    assert any(hit["name"] == "cwe:89" for hit in hits["results"])
-    assert {item["shard_id"] for item in core.manifest["indexes"] if item["name"] == "tags"} == {
-        "code-facts", "controls", "facets", "gap", "threat", "weakness"}
-    # Collation (T-5008): the Python file importing jwt is an auth role; the component class rests on
-    # the absence of any entry mechanism and says so.
-    auth = by_tag["role:auth"]
-    assert {record["basis"] for record in auth} == {"declared", "derived"}
-    assert any(record["evidence"][0]["rule"] == "lex-py-auth-import" for record in auth)
-    library = by_tag["target:library"][0]
-    assert library["basis"] == "derived" and library["evidence"][0]["rests_on_absence"] is True
-
-    handoff = outcome["result"]["outputs"]["publication.publish_handoff"]
-    assert handoff["security_findings"] == [] and handoff["gaps"]
-    cloud = json.loads((run_root / outcome["result"]["outputs"]["publication.publish_tag_cloud"]["artifact"]["path"])
-                       .read_text(encoding="utf-8"))
-    nodes = {node["node"]: node for node in cloud["nodes"]}
-    assert nodes["func:authn"]["fill"] == "outline" and nodes["cwe:89"]["fill"] == "strong-tint"
-    assert nodes["gap:no-sast"]["fill"] == "hatched"
-    assert nodes["lang:python"]["component_count"] == 1
-    assert "capec:66" in cloud["views"]["red"]
-
-
-def test_rerun_is_deterministic_and_replaces_earlier_tag_shards(tmp_path: Path) -> None:
-    config, run_root, target = _run_fixture(tmp_path)
-    runner = JobRunner(config)
-    first = runner.run(build_job(), run_id=RUN_ID, target_root=target, source_fingerprint=SNAPSHOT)
-    second = runner.run(build_job(), run_id=RUN_ID, target_root=target, source_fingerprint=SNAPSHOT)
-    assert _assignments(run_root, first) == _assignments(run_root, second)
-    core = RetrievalCore(config.runtime.runs_dir, RUN_ID)
-    tags = [item for item in core.manifest["indexes"] if item["name"] == "tags"]
-    assert len(tags) == len({item["shard_id"] for item in tags}) == 6
 
 
 def test_missing_required_index_is_a_named_gap(tmp_path: Path) -> None:

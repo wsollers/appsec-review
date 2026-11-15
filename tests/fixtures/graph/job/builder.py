@@ -276,13 +276,46 @@ def stage_run(tmp_path: Path, *, with_priority: bool = True, legacy_codeql: bool
             artifacts.append(record["export_manifest"])
             artifacts.extend({key: value for key, value in item.items() if key != "query_id"}
                              for item in record["export_files"])
-    # The real producer declares its datasets in its claim; the graph job's typed contract reads them.
     from appsec_review.jobs.job_codeql_analysis.datasets import DATASETS as CODEQL_DATASETS
+    from appsec_review.jobs.job_cpp_symbol_index.datasets import DATASETS as CLANGD_DATASETS
+    from appsec_review.jobs.job_review_prioritization.datasets import DATASETS as PRIORITY_DATASETS
     from appsec_review.runtime.datasets import dataset_contract
+    from tests.handoff_fixture import write_fixture_handoff
+
+    def _publish_aux_handoff(aux_job: str, aux_datasets: Sequence[Any], shard_ids: set[str]) -> None:
+        aux_attempt = run_root / "data" / "jobs" / aux_job / "attempts" / "attempt_0001"
+        aux_manifest_path = run_root / "data" / "indices" / "manifests" / f"{aux_job}-{aux_attempt.name}.json"
+        aux_indexes = [item for item in identities if item.shard_id in shard_ids]
+        write_manifest(aux_manifest_path, run_id=run_id, target_snapshot=SNAPSHOT, target_root=target,
+                       indexes=aux_indexes)
+        aux_manifest = _artifact(run_root, aux_manifest_path)
+        aux_result_path = aux_attempt / "result.json"
+        aux_outputs = {"acceptance.publish_handoff": {"index_manifest": aux_manifest, "gaps": []}}
+        atomic_json(aux_result_path, {"schema": "appsec-review/unit-execution/2", "status": "SUCCEEDED",
+                                      "outputs": aux_outputs})
+        atomic_json(aux_attempt / "claim.json", {"dataset_contract": dataset_contract(
+            aux_job, list(config.job(aux_job).steps), aux_datasets)})
+        aux_handoff_path = aux_attempt / "handoff.json"
+        aux_artifacts = [_artifact(run_root, aux_result_path), aux_manifest, *[
+            _artifact(run_root, run_root / item.relative_path) for item in aux_indexes]]
+        write_fixture_handoff(run_root, aux_handoff_path, {
+            "job_id": aux_job, "attempt_id": aux_attempt.name, "status": "ACCEPTED",
+            "completion_status": "SUCCEEDED", "source_fingerprint": SNAPSHOT,
+            "outputs": aux_outputs, "artifacts": aux_artifacts,
+            "resolving_paths": {"attempt": aux_attempt.relative_to(run_root).as_posix(),
+                                "result": aux_result_path.relative_to(run_root).as_posix()}})
+        aux_handoff = _artifact(run_root, aux_handoff_path)
+        atomic_json(run_root / "data" / "jobs" / aux_job / "latest.json", {
+            "schema": "appsec-review/latest-handoff/1", "attempt_id": aux_attempt.name,
+            "handoff_path": aux_handoff["path"], "handoff_sha256": aux_handoff["sha256"]})
+
+    _publish_aux_handoff("job_cpp_symbol_index", CLANGD_DATASETS, {"clangd-cpp-scope-synthetic"})
+    if with_priority:
+        _publish_aux_handoff("job_review_prioritization", PRIORITY_DATASETS, {"review-priority"})
+
     atomic_json(attempt / "claim.json", {"dataset_contract": dataset_contract(
         CODEQL, ["plan", "execution", "acceptance"], CODEQL_DATASETS)})
     handoff_path = attempt / "handoff.json"
-    from tests.handoff_fixture import write_fixture_handoff
     write_fixture_handoff(run_root, handoff_path, {
         "job_id": CODEQL, "attempt_id": attempt.name, "status": "ACCEPTED",
         "completion_status": "SUCCEEDED", "source_fingerprint": SNAPSHOT,
