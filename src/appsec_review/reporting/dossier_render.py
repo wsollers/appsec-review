@@ -14,7 +14,7 @@ from appsec_review.container_runtime.executor import ContainerExecutor, Executio
 from appsec_review.jobs.bound_artifacts import artifact_ref
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.secret_redaction import redact_message
-from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256, platform_file_sha256
+from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, platform_file_sha256
 from .dossiers import dossier_document
 from .latex import render_latex
 

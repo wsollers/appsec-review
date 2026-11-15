@@ -27,7 +27,7 @@ from appsec_review.config.telemetry_report import TelemetryReportSettings
 from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.container_runtime.executor import ContainerExecutor, ExecutionRequest, Mount
 from appsec_review.review.secret_redaction import redact_message
-from appsec_review.storage import atomic_bytes, canonical_json, file_sha256, platform_file_sha256
+from appsec_review.storage import atomic_bytes, canonical_json, platform_file_sha256
 from .dossier_render import TOOL_ID, template_identity
 from .latex import render_latex
 from .telemetry import build_document, load_inputs
