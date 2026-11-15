@@ -47,10 +47,16 @@
     },
     "job_build_environment_analysis": {
       "unit": [
-        "tests/test_build_environment_analysis.py",
+        "tests/unit/job_build_environment_analysis/test_analysis.py",
+        "tests/unit/job_build_environment_analysis/test_contract.py",
+        "tests/unit/job_build_environment_analysis/test_handlers.py",
         "tests/unit/runtime/test_wave4_contracts.py"
       ],
-      "integration": ["tests/integration/test_build_topology_environment_lifecycle.py"],
+      "integration": [
+        "tests/integration/test_build_topology_environment_lifecycle.py",
+        "tests/integration/job_build_environment_analysis/test_build_environment_graph.py",
+        "tests/integration/job_build_environment_analysis/test_build_environment_job_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },

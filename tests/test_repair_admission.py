@@ -114,7 +114,7 @@ def _published_planning_context(tmp_path, orchestration):
     from appsec_review.jobs.job_review_intake import build_job as intake_job
     from appsec_review.jobs.job_target_analysis_plan import build_job as planning_job
     from appsec_review.jobs.job_target_catalog import build_job as catalog_job
-    from tests.test_build_environment_analysis import _published
+    from tests.integration.job_build_environment_analysis.support import _published
 
     ids = ("job_review_intake", "job_target_catalog", "job_build_environment_analysis",
            "job_target_analysis_plan", "job_cpp_compiled_analysis")
