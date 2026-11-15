@@ -115,9 +115,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
-| live | `tests/test_ci_configuration_analysis.py::test_live_target_acceptance_is_static_offline_resumable_and_queryable` |
-| unit | `tests/test_ci_configuration_analysis.py::test_discovery_is_exact_bounded_and_prompt_text_is_inert`<br>`tests/test_ci_configuration_analysis.py::test_spans_hierarchy_redaction_and_exact_only_correlation`<br>`tests/test_ci_configuration_analysis.py::test_dag_exposes_parallel_provider_branches_and_deterministic_join` |
+| integration | `tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py` |
+| live | `tests/live/test_ci_configuration_analysis_multivuln.py` |
+| unit | `tests/unit/job_ci_configuration_analysis/test_contract.py`<br>`tests/unit/job_ci_configuration_analysis/test_discovery_and_static_rules.py`<br>`tests/unit/job_ci_configuration_analysis/test_checkov_locations.py`<br>`tests/unit/job_ci_configuration_analysis/test_zizmor_output.py`<br>`tests/unit/job_ci_configuration_analysis/test_job_graph.py` |
 
 ### Dagster placement
 

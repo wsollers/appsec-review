@@ -363,8 +363,8 @@ def test_malformed_outputs_stop_before_gap_conversion(tmp_path, surface):
                 module_name, name = {
                     "artifact": ("tests.unit.job_artifact_security_analysis.test_job_graph",
                         "test_scan_one_isolates_scanner_failure_and_retains_stopped_diagnostics"),
-                    "ci": ("tests.test_ci_configuration_analysis",
-                        "test_failed_linter_is_a_gap_and_sibling_results_survive"),
+                    "ci": ("tests.unit.job_ci_configuration_analysis.test_job_graph",
+                        "test_scan_isolates_linter_failure_and_stops_active_guardian"),
                     "evidence": ("tests.unit.job_evidence_collection.test_job_graph",
                         "test_execute_tool_isolates_scanner_failure_and_stops_active_guardian"),
                     "symbols": ("tests.test_cpp_index_jobs",

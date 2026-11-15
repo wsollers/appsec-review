@@ -3076,6 +3076,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_dependency_intelligence/test_native_sbom_job.py`; 4452/4606 job-package
   lines [96.66%] and 1938/2094 branches [92.55%] covered, with all 17 modules >=95.2% lines and
   >=90.2% branches).
+  job_ci_configuration_analysis (22/47; 5 unit files, 120 cases: pinned 1-input / 7-dataset
+  contract and 49-unit DAG topology, exact CI definition discovery across all 8 providers, all 10
+  static CI rules, pipeline/stage/job/step hierarchy extraction, native Checkov and Zizmor output
+  decoders, generic JSONL/Checkov diagnostics, secret redaction, exact-only duplicate correlation,
+  linter failure isolation with execution-safety guardian latch, and SQLite observation/evidence
+  shard publication; whole-graph `GraphRunner` suite relocated to
+  `tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py` and
+  multivuln target suite relocated to `tests/live/test_ci_configuration_analysis_multivuln.py`;
+  560/560 job-package lines [100.0%] and 188/188 branches [100.0%] covered across all 5 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
