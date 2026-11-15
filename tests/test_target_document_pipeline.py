@@ -192,7 +192,7 @@ def test_catalog_publishes_northwind_documents_with_queryable_provenance_and_int
                    "steps" / "retrieval_indexes" / "tasks" / "build_target_documents" / "result.json")
     result = json.loads(result_path.read_text(encoding="utf-8"))
     assert result["item_count"] > 0 and result["link_count"] > 0
-    assert not any("no accepted target document" in gap for gap in result["gaps"])
+    assert not any("no accepted target document" in gap["reason"] for gap in result["gaps"])
     manifest = run_root / "data" / "indices" / "manifests" / f"catalog-{attempt}.json"
     document, _ = load_verified_manifest(run_root, manifest)
     assert "documents" in {item["name"] for item in document["indexes"]}
@@ -225,7 +225,7 @@ def test_unmaterialized_openapi_is_a_named_gap_in_accepted_catalog(tmp_path: Pat
     result_path = (run_root / "data" / "jobs" / "job_target_catalog" / "attempts" / attempt /
                    "steps" / "retrieval_indexes" / "tasks" / "build_target_documents" / "result.json")
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    assert any("backend/openapi.ts: unsupported_format" in gap for gap in result["gaps"])
+    assert any("backend/openapi.ts: unsupported_format" in gap["reason"] for gap in result["gaps"])
     core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
     response = core.find(kind="document_record", indexes=("documents",), limit=10)
     assert any("unsupported_format" in gap for gap in response["coverage_gaps"])

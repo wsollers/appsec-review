@@ -144,8 +144,11 @@ def test_catalog_path_index_accepts_structured_inventory_gaps(tmp_path: Path) ->
     result_path = (run_root / "data/jobs/job_target_catalog/attempts" / attempt_id /
                    "steps/retrieval_indexes/tasks/build_path_index/result.json")
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    assert result["gaps"] == [".hg: excluded_directory"]
-    assert result["index_identity"]["gaps"] == result["gaps"]
+    [gap] = result["gaps"]
+    assert gap["schema"] == "appsec-review/producer-gap/1"
+    assert gap["scope_id"] == ".hg"
+    assert gap["reason"] == ".hg: excluded_directory"
+    assert result["index_identity"]["gaps"] == [".hg: excluded_directory"]
 
 
 def test_graph_publishes_bidirectional_orchestration_receipt(tmp_path: Path) -> None:
