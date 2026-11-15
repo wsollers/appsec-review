@@ -2981,6 +2981,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   admission across `job_build_iteration`, `job_change_context_analysis`, `job_test_coverage`
   and `job_profile_data`, adds graceful disabled-producer gap publication and verified manifest
   lineage, and records the read-only eight-job optional-handoff audit.
+  Wave 4 (`1a4d3f67f`) wires `optional_prior_handoffs` admission, isolated `first_party_managed`
+  verification, repair-context reproduction, downstream plan-consumer propagation, and observed
+  `handoff` plus `build_environment` read receipts across `job_build_environment_analysis` and
+  `job_target_analysis_plan`.
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:
