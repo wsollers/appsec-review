@@ -117,8 +117,9 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
          "--output", "/scratch/output.json"), target_root, scratch,
         working_directory="/scratch", measurement=measurement))
     if execution.exit_code != 0 or execution.timed_out or execution.oom_killed:
-        return {"scope_id": scope.scope_id, "language": scope.language, "fingerprint": fingerprint,
-                "terminal_status": "FAILED", "gaps": [f"container parser failed with exit {execution.exit_code}"],
+        return {"schema": SCHEMA, "scope_id": scope.scope_id, "language": scope.language,
+                "fingerprint": fingerprint, "terminal_status": "FAILED",
+                "gaps": [f"container parser failed with exit {execution.exit_code}"],
                 "execution": asdict(execution), "index_reused": False}
     output_path = scratch / "output.json"
     if not output_path.is_file():

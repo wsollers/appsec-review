@@ -90,6 +90,8 @@ CONTRACT = JobContract(
         InputRequirement("job_tree_sitter_ast", "tree_sitter_coverage",
                          "appsec-review/tree-sitter-ast/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "tree_sitter_node_shards",
+                         "appsec-review/tree-sitter-normalizer/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_tree_sitter_ast", "tree_sitter_acceptance",
                          "appsec-review/tree-sitter-ast/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "generated_source_backing",
                          "appsec-review/generated-source-backing/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),

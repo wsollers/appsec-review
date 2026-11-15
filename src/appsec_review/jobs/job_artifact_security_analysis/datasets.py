@@ -18,9 +18,14 @@ DATASETS = (
             route="query_artifacts scanner/tool; query_precomputed query_set=dependency_advisories"),
     artifact_only("artifact_security_results", "analyze", "sbom", "appsec-review/artifact-security-observation/1",
                   "Per-artifact scanner results with explicit parser bounds and immutable native output references.",
-                  artifacts=("data/artifact-security/shards/**", _A + "/artifacts/artifact-security/*.json"),
+                  artifacts=("data/artifact-security/shards/*/*/result.json",),
                   reason="complete scanner documents exceed payload bounds; bounded observations are indexed and "
                          "package/advisory pairs are published as precomputed facts"),
+    artifact_only("artifact_security_acceptance", "acceptance", "sbom", "appsec-review/artifact-security-analysis/1",
+                  "Accepted artifact-security summary, disposition, and shard inventory.",
+                  artifacts=(_A + "/artifacts/artifact-security/accepted-analysis.json",),
+                  reason="acceptance summary governs job disposition and shard inventory; findings are queried "
+                         "through the artifact-security index"),
     protected("artifact_scanner_io", "analyze", "scanner_findings", "appsec-review/container-execution/1",
               "Scanner streams, container scratch and copied feed databases.",
               artifacts=(_A + "/artifacts/asa/**", _A + "/steps/analyze/tasks/*/containers/**"), reason=RAW),
