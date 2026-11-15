@@ -3137,6 +3137,17 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   detection, bounded `cpg_function` SQLite shard publication, and dataset ownership scan;
   `GraphRunner` suite relocated to `tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py`;
   421/421 job-package lines [100.0%] and 136/136 branches [100.0%] covered across all 5 modules).
+  job_codeql_analysis (30/47; 18 unit files, 394 cases: pinned 7-input / 6-dataset contract and
+  3-unit DAG topology, Wave-1 and `INPUT_SOURCES` parity, SARIF 2.1.0 normalization with URI/root/
+  suffix/ambiguous mapping and multi-file flow-span extraction, `build_codeql_plan` across manual
+  and source scopes including Node native C++ addons, Rust prerequisites, GitHub Actions, Swift,
+  unsupported .NET/PHP/Wasm and graph-export lock validation, materialized workspace symlink and
+  file-bound custody, runtime environment preflight and predecessor database import, seeded C/C++
+  and Java graph-export execution, database and query checkpoint reuse, execution-safety failure
+  isolation, and immutable handoff publication; `JobRunner.run` cases relocated to
+  `tests/integration/job_codeql_analysis/test_codeql_jobrunner.py`; 1393/1433 job-package lines
+  [97.21%] and 493/526 branches [93.73%] covered, with all 5 modules >=96.2% lines and >=91.4%
+  branches).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

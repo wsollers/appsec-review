@@ -1,6 +1,5 @@
 """Explicit installed runtimes are declarations, never synthetic build/cache receipts."""
 from dataclasses import FrozenInstanceError, asdict, replace
-import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -9,22 +8,12 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.codeql import runtime
-from appsec_review.config import load_config
 from appsec_review.config.assurance import ComponentReleases, ResourceBudget
 from appsec_review.config.codeql import parse_codeql_settings
 from appsec_review.container_runtime.identity import application_runtime_user
-from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.jobs.job_codeql_analysis import job as codeql
-from appsec_review.jobs.job_codeql_analysis.datasets import DATASETS
-from appsec_review.jobs.job_codeql_analysis.planning import CodeQLScope, SCOPE_SCHEMA
-from appsec_review.observability import PipelineLog
-from appsec_review.runtime import Job, JobRunner, Unit
 from appsec_review.runtime import resources
-from appsec_review.storage import atomic_json, canonical_json, file_sha256
-from tests.capture_fakes import build_capture_toml
+from appsec_review.storage import atomic_json
 from tests.test_codeql_analysis import _settings_value
-from tests.test_codeql_predecessor import _table
-from tests.host_pins_support import write_host_pins
 
 
 SOURCE = "sha256:" + "1" * 64
@@ -463,114 +452,3 @@ def test_no_declaration_keeps_required_bounded_preparation(tmp_path, monkeypatch
             resolver(tmp_path, value=value, docker=docker).resolve(
                 build_image_tag="source:fixture", build_image_id=SOURCE, runtime_user=USER)
     assert all(call[:3] == ("docker", "image", "inspect") for call in docker.calls)
-
-
-@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
-@pytest.mark.parametrize("compiled", [False, True])
-@pytest.mark.parametrize("runner_source", ["image", "application"])
-def test_jobrunner_inventory_database_and_query_use_real_executor_with_fake_engine(
-        tmp_path, monkeypatch, mode, compiled, runner_source):
-    wrapper_path = tmp_path / "platform/containers/tools/codeql/codeql_runner.py"
-    wrapper_path.parent.mkdir(parents=True)
-    wrapper_path.write_text("fixture application runner\n")
-    def asset(name):
-        assert name == "containers/tools/codeql/codeql_runner.py"
-        return wrapper_path
-    monkeypatch.setattr(runtime, "application_asset", asset)
-    bound_paths = []
-    def bind(path, runner):
-        bound_paths.append(path)
-        return str(path)
-    docker = FakeDocker(wrapper_path if runner_source == "application" else None)
-    monkeypatch.setattr(runtime, "_run", docker)
-    monkeypatch.setattr(runtime, "resolve_host_bind_path", bind)
-    monkeypatch.setattr(codeql, "load_asset_lock", lambda _: {})
-    target = tmp_path / "target"
-    target.mkdir()
-    name = "main.c" if compiled else "main.py"
-    (target / name).write_text("int application_state;\n" if compiled else "application_state = 1\n")
-    snapshot = source_fingerprint(target)
-    settings = settings_value()
-    settings["runtime_user"] = NOMINAL_USER
-    entries = settings.pop("preinstalled_runtimes")
-    for entry in entries:
-        entry["runner_source"] = runner_source
-    policy = {"mode": mode, "project_id": "fixture",
-              "approved_first_party_projects": ["fixture"], "target_root": str(target),
-              "custody": "application_private_v1",
-              "releases": {**{name: "fixture-1" for name in (
-                  "platform", "validation", "build_toolchain", "extractor_cpp", "extractor_python",
-                  "query_cpp_default", "query_python_default")}, **RELEASES}}
-    config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text(
-        '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n' + build_capture_toml()
-        + _table("review_policy", policy)
-        + '\n[jobs.job_codeql_analysis]\nname = "fixture"\nworkers = 1\n'
-        # The fixture runs a subset of units; DATASETS also declares the acceptance step.
-        + '\n[jobs.job_codeql_analysis.steps.acceptance]\n'
-        + _table("jobs.job_codeql_analysis.settings", settings))
-    host = write_host_pins(tmp_path / "host-pins.toml",
-                           images={"source:fixture": SOURCE}, runtimes=entries)
-    config = load_config(config_path, host_pins=host)
-
-    def produce(unit):
-        image = codeql._resolve_image(unit, build_image_tag="source:fixture",
-                                      build_image_id=SOURCE, runtime_user=NOMINAL_USER)[0]
-        result = runtime.CodeQLExecutor(image=image, run_root=unit.job.run_root,
-                                       settings=unit.job.config.typed_settings).execute(
-            "inventory", ("--output", "extractor-inventory.json"),
-            scratch_root=unit.unit_root / "inventory")
-        assert result.exit_code == 0 and image.image_id == INSTALLED_SOURCE
-        receipts = {}
-        if compiled:
-            argv = ["cc", "-c", "main.c", "-o", "main.o"]
-            protected = codeql._json_artifact(unit.job.run_root, unit.unit_root / "command.json",
-                {"schema": "appsec-review/protected-build-command/2", "argv": argv,
-                 "environment": {"LANG": "C"}, "working_directory": "/workspace"})
-            receipts["build-unit-fixture"] = {
-                "recipe": {"configure_commands": [], "build_commands": [argv]},
-                "recipe_identity": "fixture-recipe",
-                "image": {"image_id": BASE, "image_tag": "build:fixture", "user": NOMINAL_USER,
-                          "dependency_hashes": {"target-dependency": "a" * 64}},
-                "commands": [{"role": "build", "protected_argv": protected, "image_id": BASE,
-                              "argv_sha256": hashlib.sha256(canonical_json(argv)).hexdigest(),
-                              "working_directory": "/workspace"}]}
-        language = "cpp" if compiled else "python"
-        scope = CodeQLScope(SCOPE_SCHEMA, "codeql-unit-" + "1" * 24, language,
-                            ("C",) if compiled else ("Python",), "manual" if compiled else "none", ".",
-                            ({"path": name, "sha256": file_sha256(target / name),
-                              "size_bytes": (target / name).stat().st_size},),
-                            "build-unit-fixture" if compiled else None, None,
-                            "fixture-environment", compiled)
-        database = codeql._database_one(unit, scope, receipts)
-        query = codeql._query_one(unit, database, codeql._query_profiles(
-            unit.job.config.typed_settings.languages[language])[0])
-        assert database["terminal_status"] == query["terminal_status"] == "SUCCEEDED"
-        assert not database["database_reused"] and not query["query_reused"]
-        assert codeql._database_one(unit, scope, receipts)["database_reused"]
-        assert codeql._query_one(unit, database, query["query_profile"])["query_reused"]
-        return {"databases": [database], "queries": [query]}
-
-    definition = Job("job_codeql_analysis", "fixture", produce,
-                     units=(Unit("execution.scopes", produce),), datasets=DATASETS)
-    outcome = JobRunner(config).run(definition, target_root=target, source_fingerprint=snapshot)
-    assert outcome["handoff"]["status"] == "ACCEPTED"
-    run_root = config.runtime.runs_dir / outcome["status"]["run_id"]
-    assert (run_root / "data/configuration/resolved.json").read_bytes() == config.resolved_json
-    assert json.loads(config.resolved_json)["jobs"]["job_codeql_analysis"]["settings"][
-        "preinstalled_runtimes"] == entries
-    assert docker.actions == ["inventory", "database", "query"]
-    assert bound_paths.count(wrapper_path) == (3 if runner_source == "application" else 0)
-    events, _ = PipelineLog(run_root).read()
-    resolved = [row["details"] for row in events if row["event_type"] == "CODEQL_RUNTIME_RESOLVED"]
-    assert len(resolved) == 3
-    assert all(row["preparation_kind"] == "preinstalled" and row["image_build_performed"] is False
-               and row["checkpoint_reused"] is False for row in resolved)
-    assert all(row["runner_source"] == runner_source and row["runtime_user"] == USER
-               and row["requested_runtime_user"] == NOMINAL_USER for row in resolved)
-    spans = [row["details"] for row in events if row["event_type"] == "OPERATION_COMPLETED"
-             and row["details"].get("operation_id") == "codeql.runtime_resolution"]
-    assert len(spans) == 3 and all(row["work"]["preinstalled_runtimes"] == 1
-                                  and row["work"]["builder_launches"] == 0 for row in spans)
-    assert not any(call[:3] in {("docker", "image", "tag"), ("docker", "buildx", "build")}
-                   for call in docker.calls)

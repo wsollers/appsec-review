@@ -17,6 +17,7 @@ from appsec_review.jobs.job_codeql_analysis.planning import CodeQLPlan, CodeQLSc
 from appsec_review.runtime import Job, JobRunner, Unit, UnitContext
 from appsec_review.storage import atomic_json, file_sha256
 from tests.capture_fakes import build_capture_toml
+from tests.host_pins_support import fixture_bindings, write_host_pins
 from tests.test_codeql_analysis import _settings_value
 
 
@@ -94,7 +95,11 @@ def fixture(tmp_path, monkeypatch, request):
             + '\n[jobs.job_codeql_analysis.steps.acceptance]\n'
             + _table("jobs.job_codeql_analysis.settings", settings)
             + _table("review_policy", policy))
-        return load_config(path)
+        host = write_host_pins(
+            tmp_path / "host-pins.toml",
+            images={**fixture_bindings(), settings["source_image_tag"]: settings["source_image_id"]},
+        )
+        return load_config(path, host_pins=host)
 
     def produce(unit):
         value = codeql._database_one(unit, scope, {})

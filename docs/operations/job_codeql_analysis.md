@@ -151,9 +151,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
-| live | `tests/live/test_codeql_analysis_wave1_live.py` |
-| unit | `tests/test_codeql_analysis.py::test_materialized_workspace_staging_omits_manifest_backed_npm_symlink`<br>`tests/test_codeql_analysis.py::test_materialized_workspace_staging_omits_container_owned_node_modules_symlink`<br>`tests/test_codeql_analysis.py::test_materialized_workspace_staging_rejects_unsafe_directory_links` |
+| integration | `tests/integration/job_codeql_analysis/test_codeql_jobrunner.py` |
+| live | `tests/live/test_codeql_analysis_wave1_live.py`<br>`tests/integration/test_codeql_derived_images.py` |
+| unit | `tests/unit/job_codeql_analysis/test_contract.py`<br>`tests/unit/job_codeql_analysis/test_datasets.py`<br>`tests/unit/job_codeql_analysis/test_first_party_results.py`<br>`tests/unit/job_codeql_analysis/test_handlers.py`<br>`tests/unit/job_codeql_analysis/test_planning.py`<br>`tests/unit/job_codeql_analysis/test_sarif.py`<br>`tests/test_codeql_analysis.py`<br>`tests/test_codeql_derived_csharp.py`<br>`tests/test_codeql_derived_go.py`<br>`tests/test_codeql_derived_java.py`<br>`tests/test_codeql_derived_jspy.py`<br>`tests/test_codeql_derived_native.py`<br>`tests/test_codeql_execution_metrics.py`<br>`tests/test_codeql_export_step.py`<br>`tests/test_codeql_predecessor.py`<br>`tests/test_codeql_runtime_preflight.py`<br>`tests/test_codeql_seeded_export.py`<br>`tests/test_codeql_shipped_config_coverage.py` |
 
 ### Dagster placement
 

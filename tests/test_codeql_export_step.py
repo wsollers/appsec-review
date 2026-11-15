@@ -178,9 +178,16 @@ class FakeExecutor:
         assert not (scratch_root / values["--output-dir"]).exists()
         code, timed_out = self.outcome.get(scratch_root.name, (0, False))
         if code == 0 and not timed_out:
-            shutil.copytree(NATIVE, scratch_root / values["--output-dir"])
+            output_dir = scratch_root / values["--output-dir"]
+            shutil.copytree(NATIVE, output_dir)
+            manifest_path = output_dir / "export-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            locked_pack = lock["export_query_packs"][values["--language"]]
+            manifest["pack"] = {key: locked_pack[key] for key in manifest["pack"]}
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+                                     encoding="utf-8")
             if self.tamper:
-                path = scratch_root / values["--output-dir"] / "call_sites.json"
+                path = output_dir / "call_sites.json"
                 path.write_bytes(path.read_bytes().replace(b"3", b"4", 1))
         receipt = scratch_root / "executions" / action / "receipt.json"
         atomic_json(receipt, {"schema": "appsec-review/codeql-execution/2", "action": action})
@@ -213,8 +220,8 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
     assert exported["export_status"] == "SUCCEEDED" and exported["export_reused"] is False
     assert exported["export_manifest"] == {
         "path": f"data/codeql/scopes/{cpp.scope_id}/exports/export-manifest.json",
-        "sha256": file_sha256(NATIVE / "export-manifest.json"),
-        "size_bytes": (NATIVE / "export-manifest.json").stat().st_size}
+        "sha256": file_sha256(exports_root / "export-manifest.json"),
+        "size_bytes": (exports_root / "export-manifest.json").stat().st_size}
     assert {item["query_id"]: item["sha256"] for item in exported["export_files"]} == {
         path.stem: file_sha256(path) for path in NATIVE.glob("*.json") if path.name != "export-manifest.json"}
     assert exported["export_count"] == 12 and exported["truncated_queries"] == []
@@ -338,7 +345,9 @@ def test_current_coordinator_preserves_export_status_and_retry_dispositions(
     unit.output = outputs.__getitem__
     unit.unit_id = "execution.scopes"
     monkeypatch.setattr(codeql_job, "_plan_from", lambda _: plan)
-    monkeypatch.setattr(codeql_job, "_receipt_map", lambda _: {})
+    monkeypatch.setattr(codeql_job, "_receipt_map", lambda _: {
+        scope.build_unit_id: {"image": {"image_tag": "build:local", "image_id": IMAGE, "user": "1000:1000"}}
+        for scope in (selected, sibling)})
     monkeypatch.setattr(codeql_job, "_database_isolated",
                         lambda _, scope, receipts: next(value for value in databases
                                                        if value["scope"]["scope_id"] == scope.scope_id))
@@ -463,7 +472,7 @@ def test_planning_compares_the_toml_export_block_with_the_lock_entry() -> None:
 
 def _raw_settings() -> dict[str, Any]:
     raw = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
-    return raw["jobs"][JOB]["settings"]
+    return {**raw["jobs"][JOB]["settings"], "source_image_id": IMAGE}
 
 
 def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() -> None:
