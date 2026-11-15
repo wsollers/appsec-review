@@ -105,6 +105,7 @@
           "build_security_documents",
           "build_units",
           "build_workspaces",
+          "codeql_cache_initialization",
           "cpp_blocked_branches",
           "cpp_build_graph",
           "cpp_case_material",
@@ -146,8 +147,22 @@
         "gaps": [
           "T-157"
         ],
-        "state": "gap",
-        "values": []
+        "state": "partial",
+        "values": [
+          "C",
+          "C#",
+          "C++",
+          "C/C++",
+          "GitHub Actions",
+          "Go",
+          "Java",
+          "JavaScript",
+          "Kotlin",
+          "Python",
+          "Ruby",
+          "Rust",
+          "TypeScript"
+        ]
       },
       "producers": {
         "basis": "typed dataset publication declarations",
@@ -156,6 +171,7 @@
         "values": [
           "job_build_environment_analysis",
           "job_build_iteration",
+          "job_codeql_analysis",
           "job_cpp_compiled_analysis",
           "job_image_pin_verification",
           "job_language_build",
@@ -1817,6 +1833,66 @@
       "sensitivity": "sensitive",
       "source": "docs/generated/inventory.json: jobs.job_build_iteration.datasets",
       "stage": "protected",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "build_and_deployment",
+      "dataset": "codeql_cache_initialization",
+      "description": "The run's record of initialising the shared CodeQL compile-cache volume (identity, creation time, runtime user) and its initialisation lock; written once per run by the executor.",
+      "family": "codeql",
+      "gap": [],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_codeql_analysis",
+      "producer_languages": {
+        "basis": "appsec-review.toml: jobs.job_codeql_analysis.settings.languages.*.source_languages; producer selectors, not per-dataset or observed coverage",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "C",
+          "C#",
+          "C++",
+          "C/C++",
+          "GitHub Actions",
+          "Go",
+          "Java",
+          "JavaScript",
+          "Kotlin",
+          "Python",
+          "Ruby",
+          "Rust",
+          "TypeScript"
+        ]
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/codeql-cache-initialization/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_codeql_analysis.datasets",
+      "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -11492,6 +11568,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -11515,6 +11592,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -11590,6 +11668,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -11613,6 +11692,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -11688,6 +11768,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -11711,6 +11792,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -11786,6 +11868,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -11809,6 +11892,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -11884,6 +11968,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -11907,6 +11992,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -11982,6 +12068,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12005,6 +12092,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -12080,6 +12168,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12103,6 +12192,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -12178,6 +12268,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12201,6 +12292,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -12276,6 +12368,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12299,6 +12392,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -12570,6 +12664,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12593,6 +12688,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -12668,6 +12764,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12691,6 +12788,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -12766,6 +12864,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -12789,6 +12888,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },
@@ -13060,6 +13160,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_image_pin_verification/image_pin_verification"
         ]
       },
@@ -13083,6 +13184,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis",
           "job_image_pin_verification"
         ]
       },

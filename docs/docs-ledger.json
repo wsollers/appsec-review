@@ -2414,6 +2414,22 @@
       "decision_record": true,
       "disposition": "keep",
       "kind": "review",
+      "path": "docs/reviews/owasp-process-review-2026-11-14.md",
+      "reason": "Keep the dated OWASP control-assessment process review record, run-evidence caveats, and source-backed findings.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
+      "path": "docs/reviews/owasp-value-review-2026-11-14.md",
+      "reason": "Keep the dated OWASP control-assessment value review record, run observations, and T-5008..T-5014 change-list rationale.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "review",
       "path": "docs/reviews/profile-data-and-dependency-exposure-implementation.md",
       "reason": "Preserve Profile data and dependency exposure implementation as review history and retain its original decisions and verification limits.",
       "subsystem": "scanners and evidence collection"
@@ -3064,6 +3080,14 @@
       "kind": "schema",
       "path": "docs/schemas/review-package-manifest.schema.json",
       "reason": "Keep review-package-manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/review-package-unit-context.schema.json",
+      "reason": "Keep review-package-unit-context.schema.json as the closed machine-readable contract for per-unit review package context.",
       "subsystem": "review inference and guidance"
     },
     {

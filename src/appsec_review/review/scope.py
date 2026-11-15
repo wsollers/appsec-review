@@ -300,22 +300,25 @@ class AcceptedScope:
         languages: dict[str, int] = {}
         for item in self.source_files:
             languages[item.language or "unknown"] = languages.get(item.language or "unknown", 0) + 1
+        ordered_producers = sorted(self.producers, key=lambda item: item.producer)
+        ordered_components = sorted(self.components, key=lambda item: (item.component_id, item.identity))
+        ordered_units = sorted(self.build_units, key=lambda item: (item.build_unit_id, item.identity))
         return {
             "schema": "appsec-review/review-evidence-map/1", "rule": SCOPE_RULE, "run_id": self.run_id,
             "manifest_sha256": self.manifest_sha256, "target_snapshot": self.target_snapshot,
-            "producers": [item.record() for item in self.producers],
-            "available": sorted(item.producer for item in self.producers if item.state != "missing"),
-            "missing": sorted(item.producer for item in self.producers if item.state == "missing"),
+            "producers": [item.record() for item in ordered_producers],
+            "available": sorted(item.producer for item in ordered_producers if item.state != "missing"),
+            "missing": sorted(item.producer for item in ordered_producers if item.state == "missing"),
             "components": [{"component_id": item.component_id, "root": item.root, "identity": item.identity,
-                            "trust_boundary_id": None} for item in self.components],
+                            "trust_boundary_id": None} for item in ordered_components],
             "build_units": [{"build_unit_id": item.build_unit_id, "root": item.root, "identity": item.identity,
-                             "languages": list(item.languages)} for item in self.build_units],
+                             "languages": list(item.languages)} for item in ordered_units],
             "languages": dict(sorted(languages.items())),
             "source_dispositions": {"rule": DISPOSITION_RULE, "files": self.disposition_counts(),
                                     "patterns": self.dispositions.record()},
             "reference_freshness": dict(sorted(self.freshness.items())),
             "indexes": list(self.index_names), "query_sets": list(self.query_sets),
-            "gaps": [gap.record() for gap in self.gaps],
+            "gaps": [gap.record() for gap in sorted_gaps(self.gaps)],
         }
 
 

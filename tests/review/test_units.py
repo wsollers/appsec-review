@@ -23,7 +23,8 @@ SVC = "unit:component:0001:-:py-svc:r0000"
 
 @pytest.fixture(scope="module")
 def scope(tmp_path_factory):
-    return accept_manifest(build_accepted_index_set(tmp_path_factory.mktemp("units")).run_root)
+    return accept_manifest(build_accepted_index_set(tmp_path_factory.mktemp("units"),
+                                                    publish_v1_packages=False).run_root)
 
 
 def _signals(unit) -> dict:
@@ -69,7 +70,8 @@ def test_rank_is_deterministic_and_records_its_basis(scope) -> None:
 
 
 def test_missing_signal_producers_are_unknown_not_zero(tmp_path: Path) -> None:
-    scope = accept_manifest(build_accepted_index_set(tmp_path, omit=("priority", "history", "tags")).run_root)
+    scope = accept_manifest(build_accepted_index_set(tmp_path, omit=("priority", "history", "tags"),
+                                                     publish_v1_packages=False).run_root)
     units = build_units(scope, collect_leads(scope), unit_max_files=200)
     for unit in units:
         signals = _signals(unit)
@@ -104,27 +106,32 @@ def test_units_below_cutoff_become_named_gaps(scope) -> None:
 
 
 def test_advisory_rank_signals_are_unknown_when_feeds_are_missing_not_zero(tmp_path: Path) -> None:
-    scope = accept_manifest(build_accepted_index_set(tmp_path / "a", omit_feeds=("kev", "epss")).run_root)
-    svc = _signals(next(unit for unit in build_units(scope, collect_leads(scope), unit_max_files=200)
+    missing_feeds = accept_manifest(build_accepted_index_set(tmp_path, omit_feeds=("kev", "epss"),
+                                                             publish_v1_packages=False).run_root)
+    svc = _signals(next(unit for unit in build_units(missing_feeds, collect_leads(missing_feeds), unit_max_files=200)
                         if unit.key == SVC))
     assert (svc["advisory_kev"].value, svc["advisory_kev"].reason) == (None, "feed_unavailable")
     assert (svc["advisory_epss"].value, svc["advisory_epss"].reason) == (None, "feed_unavailable")
 
-    scope = accept_manifest(build_accepted_index_set(tmp_path / "b", omit=("dependency_advisories",)).run_root)
-    for unit in build_units(scope, collect_leads(scope), unit_max_files=200):
+
+def test_advisory_rank_signals_are_unknown_when_advisory_producer_is_missing(tmp_path: Path) -> None:
+    missing_producer = accept_manifest(build_accepted_index_set(tmp_path, omit=("dependency_advisories",),
+                                                                publish_v1_packages=False).run_root)
+    for unit in build_units(missing_producer, collect_leads(missing_producer), unit_max_files=200):
         signals = _signals(unit)
         assert signals["advisory_kev"].reason == signals["advisory_epss"].reason == "producer_unavailable"
 
 
-def test_kev_and_epss_signals_raise_a_unit_rank(tmp_path: Path) -> None:
-    listed = accept_manifest(build_accepted_index_set(tmp_path / "listed").run_root)
-    unlisted = accept_manifest(build_accepted_index_set(tmp_path / "unlisted", kev_cves=("CVE-2026-9999",)).run_root)
+def test_kev_and_epss_signals_raise_a_unit_rank(tmp_path: Path, scope) -> None:
+    unlisted = accept_manifest(build_accepted_index_set(tmp_path / "unlisted", kev_cves=("CVE-2026-9999",),
+                                                        publish_v1_packages=False).run_root)
 
-    def svc(scope):
-        return next(item.unit for item in rank_units(build_units(scope, collect_leads(scope), unit_max_files=200))
+    def svc(current_scope):
+        return next(item.unit for item in rank_units(build_units(current_scope, collect_leads(current_scope),
+                                                                 unit_max_files=200))
                     if item.unit.key == SVC)
     assert _signals(svc(unlisted))["advisory_kev"].value == 0
-    assert svc(listed).score - svc(unlisted).score == KEV_POINTS
+    assert svc(scope).score - svc(unlisted).score == KEV_POINTS
 
 
 # ------------------------------------------------------------------------------------------------ rank weights
@@ -204,24 +211,22 @@ def test_invalid_rank_weights_are_rejected(value, message) -> None:
         PackageSettings.from_mapping({"rank_weights": value})
 
 
-def test_exposure_and_trust_facets_weight_a_unit_and_their_absence_is_zero_not_unknown(tmp_path) -> None:
+def test_exposure_and_trust_facets_weight_a_unit_and_their_absence_is_zero_not_unknown(tmp_path, scope) -> None:
     """T-5008: a client-facing, user-tainted unit is hunted first; collation is exhaustive so no facet is 0."""
     from appsec_review.review.ranking import RankWeights
-    fixture = build_accepted_index_set(tmp_path, facets=True)
-    scope = accept_manifest(fixture.run_root)
-    units = {unit.key: unit for unit in build_units(scope, collect_leads(scope), unit_max_files=200)}
+    fixture = build_accepted_index_set(tmp_path, facets=True, publish_v1_packages=False)
+    faceted_scope = accept_manifest(fixture.run_root)
+    units = {unit.key: unit for unit in build_units(faceted_scope, collect_leads(faceted_scope), unit_max_files=200)}
     by_signal = {key: {signal.signal: signal for signal in unit.signals} for key, unit in units.items()}
     svc = next(value for key, value in by_signal.items() if "component:0001" in key)
     native = next(value for key, value in by_signal.items() if "component:0002" in key)
     assert (svc["facets"].value, svc["facets"].state) == (100, "available")      # exposure + trust
     assert (native["facets"].value, native["facets"].state) == (50, "available")  # trust only
-    heavier = build_units(scope, collect_leads(scope), unit_max_files=200,
+    heavier = build_units(faceted_scope, collect_leads(faceted_scope), unit_max_files=200,
                           weights=RankWeights(facet_exposure=400, facet_trust=600))
     svc_unit = next(unit for unit in heavier if "component:0001" in unit.key)
     assert next(signal for signal in svc_unit.signals if signal.signal == "facets").value == 1000
-    plain = build_accepted_index_set(tmp_path / "plain")
-    plain_scope = accept_manifest(plain.run_root)
-    for unit in build_units(plain_scope, collect_leads(plain_scope), unit_max_files=200):
+    for unit in build_units(scope, collect_leads(scope), unit_max_files=200):
         facets = next(signal for signal in unit.signals if signal.signal == "facets")
         assert (facets.value, facets.reason) == (0, None)
     with pytest.raises(ValueError, match="facet_trust"):
