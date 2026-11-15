@@ -82,6 +82,11 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 | `review-recover.sh` / `.ps1` | Recover one failed application run: the existing steps in order (dispatches terminal, reconcile the submission, verify worker stop, `plan-repair`, one confirmation, `admit-repair`, resume), stopping at the first refusal. Adds no authority; `--dry-run` prints the commands and runs none. |
 | `render-report.sh` / `.ps1` | Render a finished run's review report to PDF or single-page HTML (`--format pdf\|html`), or with `--kind telemetry` (`-Kind telemetry`) its end-of-run telemetry report (`--format pdf\|tex`; a PDF goes to `runs/<id>/data/telemetry/report/`); other output goes to `runs/reports/` by default. Details: [`docs/operations/report-rendering.md`](../docs/operations/report-rendering.md), [`docs/operations/telemetry-report.md`](../docs/operations/telemetry-report.md). |
 
+`scripts/smoke-score.py --run runs/<run-id> [--answer-key <path>]` scores a completed smoke run
+offline: structural checks over the published records, and per-planted-item scoring when the
+user supplies the answer key. It writes `data/verification/smoke-score.json` and `.txt` under the
+run and changes nothing else ([test targets](../docs/operations/test-targets.md#scoring-a-smoke-run-t-5019)).
+
 ## CodeQL
 
 | Script | Purpose |

@@ -176,3 +176,53 @@ those smokes), as [review startup](review-startup.md#before-the-first-launch) de
 refuses or warns before submission when they are missing. The first three cpp smoke runs
 (`2026-11-13-0001` to `2026-11-14-0003`) ran without them and recorded `TOOLCHAIN_UNAVAILABLE`, an
 empty code graph and no CodeQL leads.
+
+### Scoring a smoke run (T-5019)
+
+`scripts/smoke-score.py` answers, for one completed run, "did it do the right thing and produce the right
+things". It reads only the run's published records under `runs/<run-id>/data/` (the accepted index set,
+each job's `latest.json` handoff and the attempt artifacts it binds, the review package assembly, the claim
+projection, the finding packages, the gate and report documents, the graph scorecard, the model-execution
+receipts and the review budget ledger), writes `data/verification/smoke-score.json`
+(schema id appsec-review/smoke-score/1, closed JSON schema `docs/schemas/smoke-score.schema.json`) and the one-screen
+`smoke-score.txt` beside it, and prints that summary. It changes nothing else in the run, never opens the
+target and never runs a tool or a model. The module is `appsec_review.reporting.smoke_score`.
+
+```bash
+.venv/bin/python scripts/smoke-score.py --run runs/2026-11-14-0005
+.venv/bin/python scripts/smoke-score.py --run runs/2026-11-14-0005 --answer-key ~/smoke-work/cpp/answer-key.json
+```
+
+Without `--answer-key` only the structural checks run; the key stays where the user keeps it (never under
+`targets/`, never in the repository) and is read only when the user names it on the command line. Each
+structural check is `pass`, `fail` or `not_applicable` (the dataset it needs was not published) and lists
+the evidence paths it read; `not_applicable` is a named coverage gap of the run, not a pass.
+
+| Check | What passes |
+| --- | --- |
+| `units_cover_first_party_once` | every first-party source file with a language is in exactly one review unit of the review job's package manifest |
+| `first_party_files_have_facets` | every such file carries at least one facet tag in the `facets` tags shard (T-5008) |
+| `no_lead_outside_first_party` | no admitted lead, package scope or claim entity resolves to a `vendored`, `sdk`, `generated` or `test` path under the run's resolved `source_dispositions` (T-165) |
+| `classified_sink_paths_eligible` | every `dataflow_path` fact whose sink is classified is `direct_eligible` (T-5017); unclassified sinks are counted, not failed |
+| `scorecard_lists_first_party_functions_once` | `job_code_graph_index` published `graph-quality-scorecard.json` (T-5016), each first-party function appears once and the totals agree |
+| `jobs_terminal_status_tabulated` | every job directory has a readable handoff and every unit `terminal_status` is a `ProducerStatus` word; the table lists each job's completion status, duration, step and task times and declared gaps by code |
+
+With the key, every planted item (true-positive code, true-positive dependency, fixed code, fixed
+dependency, false positive) is matched by target-relative path plus line span, by the function's range from
+the prioritization syntax facts when the key gives a function and no span, or by exact package, version and
+advisory identifiers for dependency items; titles are never matched. The per-item record says whether the
+file was in the accepted scope and its disposition, its facet tags, which leads hit it (family, scanner,
+rule, admission or exclusion), which packages carried it (lane, package id, through its lead or through its
+unit), the claims raised on it, the judge verdicts, the finding packages and their gate bucket, whether a
+matching finding reached the report, and the citing source lines resolved from the claim's entities. The
+outcome compares that with the key's `expected_disposition`: a `reported` item is a hit when a matching
+finding is in the report; a `reported-as-fixed` or `squelched` item is a hit when none is (the squelch
+reason names the refuting claims). Items are `not_evaluable` while the run has no final report. The metrics
+give recall per true-positive class, the squelch and fixed rates, and precision as the share of reported
+findings that match a planted true positive, with the unmatched remainder counted separately; the
+`complexity` block compares the key's high-complexity function with the prioritization ranking. Time per
+job comes from the handoffs, the step `lifecycle.json` records and the task-receipt `status.json` records, model calls and
+tokens from the `data/inference-executions/` receipts, and budget use from the review job's `budget.json`.
+
+The unit tests (`tests/unit/reporting/test_smoke_score.py`) build a synthetic run tree and a synthetic key;
+the real key is never read by a test or an agent.

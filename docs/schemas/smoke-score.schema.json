@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/smoke-score.schema.json",
+  "title": "appsec-review/smoke-score/1",
+  "description": "Smoke-run verification document written by appsec_review.reporting.smoke_score (T-5019) under runs/<run-id>/data/verification/. A measurement of the run's published records, never evidence about the target. Closed: every object names its properties.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "authority", "answer_key", "structural_checks", "check_counts", "jobs", "model_calls", "keyed", "evidence_paths", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/smoke-score/1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "authority": {"type": "string"},
+    "answer_key": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["schema", "sha256", "language", "tag", "commit", "planted", "path"],
+          "properties": {
+            "schema": {"const": "appsec-review/smoke-answer-key/1"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "language": {"type": ["string", "null"]},
+            "tag": {"type": ["string", "null"]},
+            "commit": {"type": ["string", "null"]},
+            "planted": {"type": "integer", "minimum": 0},
+            "path": {"type": ["string", "null"]}
+          }
+        }
+      ]
+    },
+    "structural_checks": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["check_id", "status", "summary", "counts", "offenders", "evidence"],
+        "properties": {
+          "check_id": {"enum": ["units_cover_first_party_once", "first_party_files_have_facets", "no_lead_outside_first_party", "classified_sink_paths_eligible", "scorecard_lists_first_party_functions_once", "jobs_terminal_status_tabulated"]},
+          "status": {"enum": ["pass", "fail", "not_applicable"]},
+          "summary": {"type": "string"},
+          "counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+          "offenders": {"type": "array", "maxItems": 200, "items": {"type": "string"}},
+          "evidence": {"type": "array", "maxItems": 500, "items": {"type": "string"}}
+        }
+      }
+    },
+    "check_counts": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["job_id", "attempt_id", "status", "completion_status", "execution_status", "duration_seconds", "gap_count", "gaps_by_code", "units", "steps", "task_seconds", "published"],
+        "properties": {
+          "job_id": {"type": "string"},
+          "attempt_id": {"type": ["string", "null"]},
+          "status": {"type": ["string", "null"]},
+          "completion_status": {"type": ["string", "null"]},
+          "execution_status": {"type": ["string", "null"]},
+          "duration_seconds": {"type": ["number", "null"]},
+          "gap_count": {"type": "integer", "minimum": 0},
+          "gaps_by_code": {"type": "object", "additionalProperties": {"type": "integer"}},
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["unit_id", "terminal_status", "known"],
+              "properties": {
+                "unit_id": {"type": "string"},
+                "terminal_status": {"type": ["string", "null"]},
+                "known": {"type": "boolean"}
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["step_id", "status", "duration_ms"],
+              "properties": {
+                "step_id": {"type": "string"},
+                "status": {"type": ["string", "null"]},
+                "duration_ms": {"type": "integer", "minimum": 0}
+              }
+            }
+          },
+          "task_seconds": {"type": ["number", "null"]},
+          "published": {"type": "boolean"}
+        }
+      }
+    },
+    "model_calls": {
+      "type": "object", "additionalProperties": false,
+      "required": ["receipts", "by_job", "review_budget"],
+      "properties": {
+        "receipts": {"type": "integer", "minimum": 0},
+        "by_job": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false,
+            "required": ["calls", "succeeded", "failed", "elapsed_ms", "input_tokens", "output_tokens", "usage_unavailable"],
+            "properties": {
+              "calls": {"type": "integer", "minimum": 0},
+              "succeeded": {"type": "integer", "minimum": 0},
+              "failed": {"type": "integer", "minimum": 0},
+              "elapsed_ms": {"type": "integer", "minimum": 0},
+              "input_tokens": {"type": "integer", "minimum": 0},
+              "output_tokens": {"type": "integer", "minimum": 0},
+              "usage_unavailable": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "review_budget": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["path", "exhausted", "usage", "limits", "team_packages"],
+              "properties": {
+                "path": {"type": "string"},
+                "exhausted": {"type": ["string", "null"]},
+                "usage": {"type": "object", "additionalProperties": {"type": "integer"}},
+                "limits": {"type": "object", "additionalProperties": {"type": "integer"}},
+                "team_packages": {"type": "object", "additionalProperties": {"type": "integer"}}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "keyed": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["items", "metrics", "complexity", "publication_available"],
+          "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+            "metrics": {"$ref": "#/$defs/metrics"},
+            "complexity": {
+              "oneOf": [
+                {"type": "null"},
+                {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["file", "function", "expected_cyclomatic", "expected_top_rank", "observed_cyclomatic", "function_rank", "file_rank", "ranked_functions", "ranked_files", "share_above_threshold_positive", "available", "top_rank"],
+                  "properties": {
+                    "file": {"type": ["string", "null"]},
+                    "function": {"type": ["string", "null"]},
+                    "expected_cyclomatic": {"type": ["integer", "number", "null"]},
+                    "expected_top_rank": {"type": ["boolean", "null"]},
+                    "observed_cyclomatic": {"type": ["integer", "number", "null"]},
+                    "function_rank": {"type": ["integer", "null"]},
+                    "file_rank": {"type": ["integer", "null"]},
+                    "ranked_functions": {"type": "integer", "minimum": 0},
+                    "ranked_files": {"type": "integer", "minimum": 0},
+                    "share_above_threshold_positive": {"type": ["boolean", "null"]},
+                    "available": {"type": "boolean"},
+                    "top_rank": {"type": ["boolean", "null"]}
+                  }
+                }
+              ]
+            },
+            "publication_available": {
+              "type": "object", "additionalProperties": false,
+              "required": ["review_assembly", "claim_projection", "finding_packages", "gate", "report", "facets"],
+              "properties": {
+                "review_assembly": {"type": "boolean"},
+                "claim_projection": {"type": "boolean"},
+                "finding_packages": {"type": "boolean"},
+                "gate": {"type": "boolean"},
+                "report": {"type": "boolean"},
+                "facets": {"type": "boolean"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "evidence_paths": {"type": "array", "items": {"type": "string"}},
+    "gaps": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "span": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["start_line", "end_line"],
+          "properties": {"start_line": {"type": ["integer", "null"]}, "end_line": {"type": ["integer", "null"]}}
+        }
+      ]
+    },
+    "item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "class", "expected_disposition", "file", "function", "span", "match_basis", "package", "version", "identifiers", "location", "in_accepted_scope", "disposition", "facets", "facets_available", "dependency_rows", "leads", "packages", "claims", "judge_verdicts", "finding_packages", "reported", "citing_lines", "observed_disposition", "outcome", "outcome_reason"],
+      "properties": {
+        "id": {"type": "string"},
+        "class": {"enum": ["true_positive_code", "true_positive_dependency", "fixed_code", "fixed_dependency", "false_positive"]},
+        "expected_disposition": {"type": "string"},
+        "file": {"type": ["string", "null"]},
+        "function": {"type": ["string", "null"]},
+        "span": {"$ref": "#/$defs/span"},
+        "match_basis": {"enum": ["span", "function", "path", "identifier"]},
+        "package": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]},
+        "identifiers": {"type": "array", "items": {"type": "string"}},
+        "location": {"type": ["string", "null"]},
+        "in_accepted_scope": {"type": ["boolean", "null"]},
+        "disposition": {"type": ["string", "null"]},
+        "facets": {"type": "array", "items": {"type": "string"}},
+        "facets_available": {"type": "boolean"},
+        "dependency_rows": {"type": "array", "maxItems": 64, "items": {"type": "string"}},
+        "leads": {
+          "type": "array", "maxItems": 64,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["lead_id", "family", "scanner", "rule_id", "start_line", "admission", "exclusion"],
+            "properties": {
+              "lead_id": {"type": "string"},
+              "family": {"type": ["string", "null"]},
+              "scanner": {"type": "string"},
+              "rule_id": {"type": ["string", "null"]},
+              "start_line": {"type": ["integer", "null"]},
+              "admission": {"type": "string"},
+              "exclusion": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["package_id", "lane", "kind", "via"],
+            "properties": {
+              "package_id": {"type": "string"},
+              "lane": {"type": "string"},
+              "kind": {"type": "string"},
+              "via": {"enum": ["lead", "unit"]}
+            }
+          }
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["claim_id", "state", "lane", "package_id"],
+            "properties": {
+              "claim_id": {"type": "string"},
+              "state": {"type": ["string", "null"]},
+              "lane": {"type": ["string", "null"]},
+              "package_id": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "judge_verdicts": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["claim_id", "verdict", "cell_id"],
+            "properties": {
+              "claim_id": {"type": "string"},
+              "verdict": {"type": ["string", "null"]},
+              "cell_id": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "finding_packages": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["finding_package_id", "claim_id", "state", "bucket"],
+            "properties": {
+              "finding_package_id": {"type": "string"},
+              "claim_id": {"type": "string"},
+              "state": {"type": ["string", "null"]},
+              "bucket": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "reported": {"type": "boolean"},
+        "citing_lines": {
+          "type": "array", "maxItems": 64,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "start_line", "end_line", "entity_id"],
+            "properties": {
+              "path": {"type": "string"},
+              "start_line": {"type": "integer"},
+              "end_line": {"type": "integer"},
+              "entity_id": {"type": "string"}
+            }
+          }
+        },
+        "observed_disposition": {"enum": ["reported", "verification_backlog", "withheld", "finding_not_reported", "claimed_not_published", "packaged", "admitted_not_packaged", "lead_not_admitted", "in_hunt_unit_only", "not_observed"]},
+        "outcome": {"enum": ["hit", "miss", "not_evaluable"]},
+        "outcome_reason": {"type": "string"}
+      }
+    },
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["by_class", "report_available", "reported_findings", "reported_findings_matching_planted_true_positives", "reported_findings_matching_planted_fixed_or_false_positive", "reported_findings_unmatched", "precision", "recall"],
+      "properties": {
+        "by_class": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object", "additionalProperties": false,
+            "required": ["planted", "hit", "miss", "not_evaluable", "recall", "squelch_rate", "fixed_rate"],
+            "properties": {
+              "planted": {"type": "integer", "minimum": 0},
+              "hit": {"type": "integer", "minimum": 0},
+              "miss": {"type": "integer", "minimum": 0},
+              "not_evaluable": {"type": "integer", "minimum": 0},
+              "recall": {"type": ["number", "null"]},
+              "squelch_rate": {"type": ["number", "null"]},
+              "fixed_rate": {"type": ["number", "null"]}
+            }
+          }
+        },
+        "report_available": {"type": "boolean"},
+        "reported_findings": {"type": "integer", "minimum": 0},
+        "reported_findings_matching_planted_true_positives": {"type": "integer", "minimum": 0},
+        "reported_findings_matching_planted_fixed_or_false_positive": {"type": "integer", "minimum": 0},
+        "reported_findings_unmatched": {"type": "integer", "minimum": 0},
+        "precision": {"type": ["number", "null"]},
+        "recall": {"type": ["number", "null"]}
+      }
+    }
+  }
+}

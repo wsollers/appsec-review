@@ -3142,6 +3142,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/smoke-score.schema.json",
+      "reason": "Keep smoke-score.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/target-analysis-plan.schema.json",
       "reason": "Keep target-analysis-plan.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "target acquisition and build"
