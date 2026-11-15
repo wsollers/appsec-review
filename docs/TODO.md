@@ -3026,6 +3026,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   cases: admission, contract, Dagster iteration definition/invocation, controller, capture and
   workspace resume), with all prior unit and integration cases preserved; 99/99 job-package lines
   (100.0%) and 14/14 branches (100.0%) covered.
+  Debug-symbol-indexing re-gate: 15 unit files, 195 cases plus shared Wave 1a contract suite (221
+  mapped cases: contract, decision, probe/privacy, sources/bounds, extraction, normalization,
+  accepted loader, publication, workflow and metrics), with all prior unit, integration and
+  acceptance cases preserved; 503/518 job-package lines (97.10%) and 206/218 branches (94.50%)
+  covered.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
