@@ -3018,6 +3018,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   Project-build re-gate: 8 unit files, 187 cases (contract, family-recipe helpers, repair,
   enforcement, recovery and step handlers), with all prior unit and integration cases preserved;
   1265/1317 job-package lines (96.05%) and 481/524 branches (91.79%) covered.
+  Language-build re-gate: 30 unit files, 769 cases (pinned 23-input / 5-dataset contract, Python,
+  .NET, native/capture, Rust, PHP, Go, JVM, Node, checkpoint reuse/tamper enforcement and
+  iterative production lanes), with all prior unit, integration and acceptance cases preserved;
+  6436/7039 job-package lines (91.43%) and 2710/3216 branches (84.27%) covered.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

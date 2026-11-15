@@ -315,7 +315,9 @@
         "tests/unit/job_language_build/test_python.py",
         "tests/unit/job_language_build/test_rust.py",
         "tests/unit/job_language_build/test_wasm.py",
-        "tests/unit/job_language_build/test_upstream_gap_contract.py"
+        "tests/unit/job_language_build/test_upstream_gap_contract.py",
+        "tests/unit/job_language_build/test_adapters_and_capture.py",
+        "tests/unit/job_language_build/test_execution_lanes.py"
       ],
       "integration": [
         "tests/integration/job_language_build/test_language_build_graph.py",
