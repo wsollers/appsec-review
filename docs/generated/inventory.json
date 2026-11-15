@@ -1174,6 +1174,7 @@
       "job_spans",
       "job_status",
       "job_steps",
+      "job_table",
       "job_value"
     ],
     "gaps": [
@@ -1939,6 +1940,8 @@
       "appsec-review/shared-named/1",
       "appsec-review/shared-receipt/1",
       "appsec-review/shared-request/1",
+      "appsec-review/smoke-answer-key/1",
+      "appsec-review/smoke-score/1",
       "appsec-review/source-counting/1",
       "appsec-review/source-disposition/1",
       "appsec-review/source-history-analysis/2",
@@ -2806,6 +2809,8 @@
       "shared-receipt/1",
       "shared-request/1",
       "ship-block-policy/1",
+      "smoke-answer-key/1",
+      "smoke-score/1",
       "source-counting/1",
       "source-disposition/1",
       "source-history-analysis/2",
@@ -44493,6 +44498,7 @@
     "src/appsec_review/reporting/latex.py": "a4e2d9782194b15f97241882d6a10143f6e4867a78e4d4d4fe8437c86be018db",
     "src/appsec_review/reporting/loader.py": "a4f9657785d10538a173caa5b4ffa5520dab66a21eaddc60cae6958108a3b0e6",
     "src/appsec_review/reporting/model.py": "9a958b43b9021087822cbee3f4ecfa16899830d35165801243deef9757e936fe",
+    "src/appsec_review/reporting/smoke_score.py": "b34791b0e325c749c8f4030abb3f4118e3b776855136c7bff82ba485fde636f3",
     "src/appsec_review/reporting/sources.py": "2d638068708635b928748766f1c2adea0c058d683f7a8f88f9ed9694378d9bce",
     "src/appsec_review/reporting/telemetry/__init__.py": "798d86c76a1996ff5d762ac5b6f1df1faa699a3be18ad53a209d6934595aacce",
     "src/appsec_review/reporting/telemetry/format.py": "6eebe80223d8bae1776389483c2141da54cedb0e212ed7c497874b6caa6d0c1d",
