@@ -229,9 +229,9 @@ These are source-derived case analyses, not executed fixture or customer-review 
 
 The following tests provide **intended contract evidence**, not new pass results:
 
-- [dependency tests](../../tests/test_dependency_intelligence.py): repository dedup/cache,
+- [dependency tests](../../tests/unit/job_dependency_intelligence/test_dependency_intelligence.py): repository dedup/cache,
   exposure conflicts/defaults, nonexact model proposals and accepted publication.
-- [native SBOM job tests](../../tests/test_native_sbom_job.py): buildless catalog, source-Syft
+- [native SBOM job tests](../../tests/integration/job_dependency_intelligence/test_native_sbom_job.py): buildless catalog, source-Syft
   publication membership, tampering, conversion failures, detached workspace selectors,
   zero-with-coverage and task reuse.
 - [OSV tests](../../tests/test_osv_matching.py): strict SemVer, unsupported orderings,

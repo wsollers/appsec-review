@@ -187,11 +187,24 @@
     },
     "job_dependency_intelligence": {
       "unit": [
-        "tests/test_dependency_intelligence.py::test_native_detection_covers_link_loader_and_metadata_and_deduplicates",
-        "tests/test_dependency_intelligence.py::test_native_detection_records_command_bounds",
-        "tests/test_dependency_intelligence.py::test_normalization_prefers_package_repository_metadata_and_deduplicates"
+        "tests/unit/job_dependency_intelligence/test_contract.py",
+        "tests/unit/job_dependency_intelligence/test_datasets.py",
+        "tests/unit/job_dependency_intelligence/test_dependency_intelligence.py",
+        "tests/unit/job_dependency_intelligence/test_edge_branches.py",
+        "tests/unit/job_dependency_intelligence/test_job_graph.py",
+        "tests/unit/job_dependency_intelligence/test_native_component_curation.py",
+        "tests/unit/job_dependency_intelligence/test_native_discovery.py",
+        "tests/unit/job_dependency_intelligence/test_native_inference_runtime.py",
+        "tests/unit/job_dependency_intelligence/test_native_inference_wiring.py",
+        "tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py",
+        "tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py",
+        "tests/unit/job_dependency_intelligence/test_native_spdx.py",
+        "tests/unit/job_dependency_intelligence/test_unity_inventory.py"
       ],
-      "integration": ["tests/integration/test_dependency_job_acceptance.py"],
+      "integration": [
+        "tests/integration/job_dependency_intelligence/test_native_sbom_job.py",
+        "tests/integration/test_dependency_job_acceptance.py"
+      ],
       "acceptance": [],
       "live": []
     },

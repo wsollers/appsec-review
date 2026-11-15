@@ -142,9 +142,9 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | `tests/integration/test_dependency_job_acceptance.py` |
+| integration | `tests/integration/job_dependency_intelligence/test_native_sbom_job.py`<br>`tests/integration/test_dependency_job_acceptance.py` |
 | live | None declared |
-| unit | `tests/test_dependency_intelligence.py::test_native_detection_covers_link_loader_and_metadata_and_deduplicates`<br>`tests/test_dependency_intelligence.py::test_native_detection_records_command_bounds`<br>`tests/test_dependency_intelligence.py::test_normalization_prefers_package_repository_metadata_and_deduplicates` |
+| unit | `tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
 
 ### Dagster placement
 

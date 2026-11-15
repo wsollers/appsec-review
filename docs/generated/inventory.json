@@ -14912,13 +14912,24 @@
       "tests": {
         "acceptance": [],
         "integration": [
+          "tests/integration/job_dependency_intelligence/test_native_sbom_job.py",
           "tests/integration/test_dependency_job_acceptance.py"
         ],
         "live": [],
         "unit": [
-          "tests/test_dependency_intelligence.py::test_native_detection_covers_link_loader_and_metadata_and_deduplicates",
-          "tests/test_dependency_intelligence.py::test_native_detection_records_command_bounds",
-          "tests/test_dependency_intelligence.py::test_normalization_prefers_package_repository_metadata_and_deduplicates"
+          "tests/unit/job_dependency_intelligence/test_contract.py",
+          "tests/unit/job_dependency_intelligence/test_datasets.py",
+          "tests/unit/job_dependency_intelligence/test_dependency_intelligence.py",
+          "tests/unit/job_dependency_intelligence/test_edge_branches.py",
+          "tests/unit/job_dependency_intelligence/test_job_graph.py",
+          "tests/unit/job_dependency_intelligence/test_native_component_curation.py",
+          "tests/unit/job_dependency_intelligence/test_native_discovery.py",
+          "tests/unit/job_dependency_intelligence/test_native_inference_runtime.py",
+          "tests/unit/job_dependency_intelligence/test_native_inference_wiring.py",
+          "tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py",
+          "tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py",
+          "tests/unit/job_dependency_intelligence/test_native_spdx.py",
+          "tests/unit/job_dependency_intelligence/test_unity_inventory.py"
         ]
       },
       "workers": 4
@@ -44756,7 +44767,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "4101a6a9bf43d710af0a603c34857df4361e9acd77b633111b96e6155f08e43b"
+    "tests/job-test-map.json": "6836ce02be0e11ff2243b23494558af66cc00a9ec2644af8e366a17c71b66e0d"
   },
   "tool_policy": {
     "disable_grype": true,

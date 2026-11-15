@@ -22,7 +22,7 @@ from appsec_review.storage import atomic_json
 from appsec_review.storage.shared import reference
 
 
-FIXTURE = Path(__file__).parent / "fixtures" / "unity_inventory"
+FIXTURE = Path(__file__).parents[2] / "fixtures" / "unity_inventory"
 SNAPSHOT = "a" * 64
 BOUNDS = SbomBounds(1_000_000, 10_000, 2_000_000, 8192)
 NATIVE_BOUNDS = NativeBounds(100, 100, 100, 262144, 1048576, 100, 100, 100, 8192, 1024)

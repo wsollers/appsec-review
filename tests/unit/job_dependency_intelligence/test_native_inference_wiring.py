@@ -24,7 +24,7 @@ from appsec_review.storage import atomic_json
 from appsec_review.storage.shared import reference
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[3]
 SNAPSHOT = "a" * 64
 
 
