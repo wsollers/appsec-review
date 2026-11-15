@@ -226,9 +226,9 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 {
   "budgets": {
     "budget_team_packages": 200,
-    "max_input_tokens": 60000000,
+    "max_input_tokens": 480000000,
     "max_model_turns": 12000,
-    "max_output_tokens": 6000000,
+    "max_output_tokens": 48000000,
     "max_retrieval_queries": 40000,
     "timeout_seconds": 28800
   },

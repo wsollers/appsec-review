@@ -21586,9 +21586,9 @@
       "model_configuration": {
         "budgets": {
           "budget_team_packages": 200,
-          "max_input_tokens": 60000000,
+          "max_input_tokens": 480000000,
           "max_model_turns": 12000,
-          "max_output_tokens": 6000000,
+          "max_output_tokens": 48000000,
           "max_retrieval_queries": 40000,
           "timeout_seconds": 28800
         },
@@ -21929,9 +21929,9 @@
         },
         "budgets": {
           "budget_team_packages": 200,
-          "max_input_tokens": 60000000,
+          "max_input_tokens": 480000000,
           "max_model_turns": 12000,
-          "max_output_tokens": 6000000,
+          "max_output_tokens": 48000000,
           "max_retrieval_queries": 40000,
           "timeout_seconds": 28800
         },
@@ -43953,7 +43953,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "2774b61e710062c28c063b0f068854fcee3e2cccec6c5b7b6b6ac3d98ee6c2c0",
+    "appsec-review.toml": "ef9b79f1100a1be3e119629e483d039cb859a57ea1a9eb82ee59e408259fcac5",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
     "docs/intelligence-buckets.json": "29e398870efeb2e8d8947281156a39f8654739f4710a63192474722f852e067a",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",
