@@ -276,11 +276,16 @@ def stage_run(tmp_path: Path, *, with_priority: bool = True, legacy_codeql: bool
             artifacts.append(record["export_manifest"])
             artifacts.extend({key: value for key, value in item.items() if key != "query_id"}
                              for item in record["export_files"])
+    # The real producer declares its datasets in its claim; the graph job's typed contract reads them.
+    from appsec_review.jobs.job_codeql_analysis.datasets import DATASETS as CODEQL_DATASETS
+    from appsec_review.runtime.datasets import dataset_contract
+    atomic_json(attempt / "claim.json", {"dataset_contract": dataset_contract(
+        CODEQL, ["plan", "execution", "acceptance"], CODEQL_DATASETS)})
     handoff_path = attempt / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
     write_fixture_handoff(run_root, handoff_path, {
         "job_id": CODEQL, "attempt_id": attempt.name, "status": "ACCEPTED",
-        "completion_status": "COMPLETED_WITH_GAPS", "source_fingerprint": SNAPSHOT,
+        "completion_status": "SUCCEEDED", "source_fingerprint": SNAPSHOT,
         "outputs": {export_unit: export_output,
                     "acceptance.publish_handoff": {"index_manifest": manifest, "gaps": []}},
         "artifacts": artifacts,

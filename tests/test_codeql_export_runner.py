@@ -636,7 +636,7 @@ def test_synthetic_recording_covers_every_c1_case() -> None:
 
     sinks = exports["sink_sites"]
     classes = {row["api"] or row["model"]: _classify("sinks", row) for row in sinks}
-    assert classes["send"] == "unclassified" and classes["memcpy"] == "memory_write"
+    assert classes["send"] == "network_output" and classes["memcpy"] == "memory_write"  # T-5017
     assert classes["printf"] == "format_string" and classes["ArrayExprWrite"] == "memory_write"
     sources = {row["api"] or row["source_type"]: _classify("sources", row) for row in exports["source_sites"]}
     assert sources == {"getenv": "environment", "a command-line argument": "argv"}

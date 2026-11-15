@@ -598,7 +598,9 @@
         "url_redirect",
         "header_injection",
         "regex_injection",
-        "unsafe_reflection"
+        "unsafe_reflection",
+        "network_output",
+        "file_write"
       ]
     },
     "source_class": {

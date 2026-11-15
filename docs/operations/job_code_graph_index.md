@@ -30,11 +30,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L360) |
-| `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L287) |
-| `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L211) |
-| `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L133) |
-| `normalize` | `normalize.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L185) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L377) |
+| `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L294) |
+| `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L217) |
+| `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L136) |
+| `normalize` | `normalize.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L190) |
 
 ### Accepted input declarations
 
@@ -99,6 +99,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | --- | --- | --- | --- | --- | --- |
 | `code_graph_checkpoints` | `correlate` | `appsec-review/code-graph-checkpoint/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `code_graph_facts` | `correlate` | `appsec-review/graph-fact/1` | indexed | `graph` | `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_observations` |
+| `code_graph_scorecard` | `acceptance` | `appsec-review/graph-quality-scorecard/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `code_graph_stages` | `normalize` | `appsec-review/code-graph-stage/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `code_graph_summary` | `acceptance` | `appsec-review/code-graph-index/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
@@ -396,14 +397,18 @@ flowchart LR
   output_schema1["appsec-review/graph-fact/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["code_graph_stages"]
-  output_schema2["appsec-review/code-graph-stage/1"]
+  output2["code_graph_scorecard"]
+  output_schema2["appsec-review/graph-quality-scorecard/1"]
   job --> output2
   output2 -. schema .-> output_schema2
-  output3["code_graph_summary"]
-  output_schema3["appsec-review/code-graph-index/1"]
+  output3["code_graph_stages"]
+  output_schema3["appsec-review/code-graph-stage/1"]
   job --> output3
   output3 -. schema .-> output_schema3
+  output4["code_graph_summary"]
+  output_schema4["appsec-review/code-graph-index/1"]
+  job --> output4
+  output4 -. schema .-> output_schema4
 ```
 
 <!-- generated:end -->

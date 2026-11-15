@@ -23,6 +23,8 @@ from .inference_review import (
 
 from .image_pin_verification import ImagePinVerificationSettings, parse_image_pin_verification_settings
 
+from .cppcheck import CppcheckProfile, parse_cppcheck_profile
+
 from .signing import SigningConfig, parse_signing
 
 from .loader import (
@@ -51,4 +53,5 @@ __all__ = [
     "WarrantPolicySettings", "overlay_capacity_keys", "parse_inference_review_settings", "semantic_settings_sha256",
     "semantic_settings_view", "ImagePinVerificationSettings", "parse_image_pin_verification_settings",
     "SigningConfig", "parse_signing",
+    "CppcheckProfile", "parse_cppcheck_profile",
 ]

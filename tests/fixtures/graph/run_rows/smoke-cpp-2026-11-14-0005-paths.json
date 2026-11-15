@@ -1,0 +1,846 @@
+{
+ "paths": [
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:1100e10a49a80e1116e9e8a74ffdeddc7d1f588ffdb41c060be14f6230d3dc3c",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "fread output argument -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:1c969325366799f60415ea8aa46f196d1f9c7e5ab424c0a0ccd26dc78fccdcf8",
+   "source_class": "file"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:168411ce4764ffb0545d90894cf2fabaac1edecd3458838fa61219d4de856f98",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> popen [command_execution]",
+   "sink_class": "command_execution",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:1c971afea52f02be5d62406a0913692f64e89ea42739162f38d3763f0343c812",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> printf [format_string]",
+   "sink_class": "format_string",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:231aaf36818374008405ffd058a2b7951431daf00d8961be007354b4028deb25",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:2cd9a80e0e892c94731719e0f812f1e07c579a84ab86267e70a13b82788f3673",
+   "ineligibility_reasons": [],
+   "name": "fread output argument -> snprintf [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:8c220bfa22d7c735587b05f55d5f587a0b388566bdb1d92b7e14e0e4a344f4d4",
+   "source_class": "file"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:3d390c2e6f4d9770f788edabeb38946b8257eb5121eca0ca1f355075f5ec0fa7",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:55c5062cc209eed6e89163cc6dcf768543e48eb944c7951ae54f0f6614f5d538",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> popen [command_execution]",
+   "sink_class": "command_execution",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:5ebcc3afafa3d7225ee2d90cc68aefea4a7e0342ed6cf86eacdfaed496987986",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> fopen [path_access]",
+   "sink_class": "path_access",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:60e2ec4519b5a9996ef9a39886ac1136bb46c9f7b5a7862e6ccf42f7aefd06cc",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "fgets output argument -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:eb9ef33c486b7da716f3977c6fc9220738ee57a327942b1f15bbc9883be45bf7",
+   "source_class": "file"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:66fa26284a9bb3b2fadcb96b13db1ef5de03ceb0135bc1d5e70230089d7230f2",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> fopen [path_access]",
+   "sink_class": "path_access",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:675cb1677ecec5ceebc0b5f7919ae0c940ed5280b3f8ebef22412ca38c5da8e7",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "fread output argument -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:0e06a4be8405e8cf5744c69d099084f671dd3d4129b84a609225fdcde5e57c5e",
+   "source_class": "file"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:68be074a013f4c16f784e6430929691459d47a2b4ea854b0fdc77224bdbb3724",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:75678bb3f5c1b155e85e3a40226d399b0744314ddb8153166d9b4003da323902",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:7868edfb0a4f819a6d09909adfede31cacf69640d989071336229e1fd976fb8d",
+   "ineligibility_reasons": [],
+   "name": "**argv -> memcpy [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:471051a1770ec973f2dae1fedf29bb9799e5388f69ee824eb962907d930f2665",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:7e9759d2df88099bed0e677a596147a3317d8029263a644388640333eeb724b8",
+   "ineligibility_reasons": [],
+   "name": "call to getenv -> memcpy [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:a27995016cd892021ed4f4c5714613c9f98245973d79210183a30c037ef0eaeb",
+   "source_class": "environment"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:7fe082de3c82b9c46101cfba5bcdb8ceed32dec3e93fd2d56b2b864a30780794",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:8a37829a2b6afd7f971c4a8d40fb09a0cbdcbcfe12f93d774edfdb97356dcca1",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:8ee057792e29cd119fba268d388e310f5034d194dc538e8755b41aabde62b34d",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> fopen [path_access]",
+   "sink_class": "path_access",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:8fe397441e5569002ae8f1e9a88cd0c8c9fe381f6066834372acfe27793e1e36",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> printf [format_string]",
+   "sink_class": "format_string",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:938dbe96551c8ea84ee929881593acf783d6ee542222e58736ef3b1136d4c65f",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> printf [format_string]",
+   "sink_class": "format_string",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:945500511dcd20965cd8d90b4862ee7b5ae1a04ea4853afbac95b04f86027145",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> printf [format_string]",
+   "sink_class": "format_string",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:983d37a5f3809c44e8d2fe522dc1887a4f6a06599d9bce4f2bf0e73435b3ab85",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:98cde18c8e385adbb1bfb0b62c953a0aaa81bda54d2d3223a3b2253e6030cb19",
+   "ineligibility_reasons": [],
+   "name": "**argv -> access to array [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:cecb23070417f0fe6453674ce9e670304902ae00e98e5bc8d308b28975299b51",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:9fcd5c41097f9c8abc27aa58e9e7401ef508cb8d7ea79063c2265e6a4fd09e47",
+   "ineligibility_reasons": [],
+   "name": "**argv -> memcpy [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:a27995016cd892021ed4f4c5714613c9f98245973d79210183a30c037ef0eaeb",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:a713befa79bb0b10729046d772f1fb9146905927464b013c87e92b004b45ed7c",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> fopen [path_access]",
+   "sink_class": "path_access",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:ab0c12c0a13c46a55c156f8bb4eaf6353e201cdd59da3fa55002249815ae645f",
+   "ineligibility_reasons": [],
+   "name": "fread output argument -> snprintf [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:8c220bfa22d7c735587b05f55d5f587a0b388566bdb1d92b7e14e0e4a344f4d4",
+   "source_class": "file"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:ab2aa030f74aa073baf033558391233cf9be36411c018d26854e258e6e4144fd",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:b15947dbf5816708772ee73f8d1b5faf15c3670f08a3ed18c6b9dc50dc84f70e",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> popen [command_execution]",
+   "sink_class": "command_execution",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:b70540deebb791cd089e686b2ca18e52e3572e5b739bcce1fc8403b15d180bf3",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:ba5ac0d249bed00abd449d832cce03eee2aa4cb59e9378faa87f447a19904480",
+   "ineligibility_reasons": [],
+   "name": "**argv -> strcpy [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:65548d9fa2b6fd6098e8b08f14117343a2521c3e1f70de0b6ab412881f0b7f6e",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:ba6fcfc449d27093c6f6dd6587fe1f4bc9afb9ef1419d42db8263fc3afe174f4",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> popen [command_execution]",
+   "sink_class": "command_execution",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:bc76f9a427be95088c4c866661db77e15d43b5b8bcfb6e4757eab94a4d189c5d",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> fopen [path_access]",
+   "sink_class": "path_access",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:cde6bccdb1a2775ac6add3fab123606b37419458158d9e943568c7ac8f8ac415",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> printf [format_string]",
+   "sink_class": "format_string",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:d3f0635ca1e12a0392f72084c6a38c78751ac8f8f000a166587cb1f9027155e4",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:d49035de161599f408a59196f5d2dba694c0472d9a0b1c61fe8a12181b6b7e92",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:db6d3b6026e8c61e046e2ff3432012d231e322a6df7cd8be766e4efadbccd6fe",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:e3bdd221e91e4212bddfec782c1bbffeda98e034b16f921a5e1d1aa23666f37a",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:e4593917832f0aa0ad87b3e081fa0f665011077e04890ae05a07c6545fc9a8e8",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> fopen [path_access]",
+   "sink_class": "path_access",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:f03e92b90b935356e324f0a70ccf1a8dba5d440b64a74da9cb5154dbfd647836",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> malloc [allocation_size]",
+   "sink_class": "allocation_size",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:f055eee0b946cbdfe0a91f505d818045761e531aee994163b5d6d4bd28ef73b1",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> printf [format_string]",
+   "sink_class": "format_string",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:f471838fe3039c31858a6657c4b5b7689d6391f07e0ab4b8092e06d4b4439340",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> popen [command_execution]",
+   "sink_class": "command_execution",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3",
+   "source_class": "remote"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:faa6f7050d206ed069dcddf9e9084ce1cbd50592cc0d981b3ca5d2ab151a2b27",
+   "ineligibility_reasons": [],
+   "name": "fgets output argument -> snprintf [memory_write]",
+   "sink_class": "memory_write",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:8c220bfa22d7c735587b05f55d5f587a0b388566bdb1d92b7e14e0e4a344f4d4",
+   "source_class": "file"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:fbf87f04b9be09bd01ab849082d7274ee30a3471755955e78552e571dfbb9ccb",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "name": "**argv -> send [unclassified]",
+   "sink_class": "unclassified",
+   "sink_path": "src/synthetic.cpp",
+   "sink_site": "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325",
+   "source_class": "argv"
+  },
+  {
+   "coverage_status": "complete",
+   "cross_check_state": "not_covered",
+   "exact": true,
+   "identity": "asr:dataflow_path:fe8ebbb734744cfe7fbdfc6df161fe64746661c6eecf50f98a724b0539ee9acc",
+   "ineligibility_reasons": [],
+   "name": "recv output argument -> popen [command_execution]",
+   "sink_class": "command_execution",
+   "sink_path": "src/request.cpp",
+   "sink_site": "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3",
+   "source_class": "remote"
+  }
+ ],
+ "run_id": "2026-11-14-0005",
+ "schema": "appsec-review/test-fixture/graph-run-rows/1",
+ "scope_id": "codeql-unit-5991e47ff8fd0c7b6c705817",
+ "sink_sites": {
+  "asr:sink_site:011a212daa9107d6160d96a46d53cdba1ce8be66650b362e6159fe8e9dd291d0": {
+   "api": "malloc",
+   "argument_index": 0,
+   "catalog_rule": "cpp.sink.model.allocationfunction",
+   "declared_in": "stdlib.h",
+   "enclosing_function": "decode_image",
+   "ineligibility_reasons": [],
+   "model": "AllocationFunction",
+   "models": [
+    "AllocationFunction"
+   ],
+   "name": "malloc [allocation_size]",
+   "path": "src/request.cpp",
+   "sink_class": "allocation_size"
+  },
+  "asr:sink_site:04de9a948614fcec0f0d95acf019b4dbabb79266e64c55820c56faadcb3fc39b": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/request.cpp",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:0e06a4be8405e8cf5744c69d099084f671dd3d4129b84a609225fdcde5e57c5e": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/request.cpp",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:1c7dbccf50d29cf903da78eaec2a7433bb5d6220efd0725c4123db4d4fd99c62": {
+   "api": "write",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "unistd.h",
+   "enclosing_function": "gz_comp",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "write [unclassified]",
+   "path": "third_party/zlib/gzwrite.c",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:1c969325366799f60415ea8aa46f196d1f9c7e5ab424c0a0ccd26dc78fccdcf8": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/request.cpp",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:471051a1770ec973f2dae1fedf29bb9799e5388f69ee824eb962907d930f2665": {
+   "api": "memcpy",
+   "argument_index": 2,
+   "catalog_rule": "cpp.sink.api.memcpy",
+   "declared_in": "string.h",
+   "enclosing_function": "copy_checked",
+   "ineligibility_reasons": [],
+   "model": "api",
+   "models": [
+    "api"
+   ],
+   "name": "memcpy [memory_write]",
+   "path": "src/synthetic.cpp",
+   "sink_class": "memory_write"
+  },
+  "asr:sink_site:4ebedd96848e7fd4e2f63629937e1cd048dd3efa834e3c56ad30d5a86e02f27f": {
+   "api": "write",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "unistd.h",
+   "enclosing_function": "gz_comp",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "write [unclassified]",
+   "path": "third_party/zlib/gzwrite.c",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:6445e362d4661e1c0daf7911656e00d89b976a9234bf651727ae0e654d346ee2": {
+   "api": "fopen",
+   "argument_index": 0,
+   "catalog_rule": "cpp.sink.api.fopen",
+   "declared_in": "stdio.h",
+   "enclosing_function": "serve_file",
+   "ineligibility_reasons": [],
+   "model": "api",
+   "models": [
+    "api"
+   ],
+   "name": "fopen [path_access]",
+   "path": "src/request.cpp",
+   "sink_class": "path_access"
+  },
+  "asr:sink_site:65548d9fa2b6fd6098e8b08f14117343a2521c3e1f70de0b6ab412881f0b7f6e": {
+   "api": "strcpy",
+   "argument_index": 1,
+   "catalog_rule": "cpp.sink.api.strcpy",
+   "declared_in": "string.h",
+   "enclosing_function": "CopyHandler::handle",
+   "ineligibility_reasons": [],
+   "model": "api",
+   "models": [
+    "api"
+   ],
+   "name": "strcpy [memory_write]",
+   "path": "src/synthetic.cpp",
+   "sink_class": "memory_write"
+  },
+  "asr:sink_site:8c220bfa22d7c735587b05f55d5f587a0b388566bdb1d92b7e14e0e4a344f4d4": {
+   "api": "snprintf",
+   "argument_index": 0,
+   "catalog_rule": "cpp.sink.model.arrayfunction.output",
+   "declared_in": "stdio.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [],
+   "model": "ArrayFunction.output",
+   "models": [
+    "ArrayFunction.output"
+   ],
+   "name": "snprintf [memory_write]",
+   "path": "src/request.cpp",
+   "sink_class": "memory_write"
+  },
+  "asr:sink_site:970c20608e60b533477d182fe8e55182c72961fc22371c12b9fc3e40d1c8d325": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "forward",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/synthetic.cpp",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:a27995016cd892021ed4f4c5714613c9f98245973d79210183a30c037ef0eaeb": {
+   "api": "memcpy",
+   "argument_index": 2,
+   "catalog_rule": "cpp.sink.api.memcpy",
+   "declared_in": "string.h",
+   "enclosing_function": "copy_unchecked",
+   "ineligibility_reasons": [],
+   "model": "api",
+   "models": [
+    "api"
+   ],
+   "name": "memcpy [memory_write]",
+   "path": "src/synthetic.cpp",
+   "sink_class": "memory_write"
+  },
+  "asr:sink_site:ad80bb598b15df4f73c99de74e0c18c337aad0004842a02fddea89f454d37a1d": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/request.cpp",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:c37296b0f352690586a83e656c4ec4e504790eec609b1743627074164fd398ec": {
+   "api": "printf",
+   "argument_index": 0,
+   "catalog_rule": "cpp.sink.model.formattingfunction",
+   "declared_in": "stdio.h",
+   "enclosing_function": "log_message",
+   "ineligibility_reasons": [],
+   "model": "FormattingFunction",
+   "models": [
+    "FormattingFunction"
+   ],
+   "name": "printf [format_string]",
+   "path": "src/request.cpp",
+   "sink_class": "format_string"
+  },
+  "asr:sink_site:cecb23070417f0fe6453674ce9e670304902ae00e98e5bc8d308b28975299b51": {
+   "api": "access to array",
+   "argument_index": -1,
+   "catalog_rule": "cpp.sink.model.arrayexprwrite",
+   "declared_in": null,
+   "enclosing_function": "copy_checked",
+   "ineligibility_reasons": [],
+   "model": "ArrayExprWrite",
+   "models": [
+    "ArrayExprWrite"
+   ],
+   "name": "access to array [memory_write]",
+   "path": "src/synthetic.cpp",
+   "sink_class": "memory_write"
+  },
+  "asr:sink_site:d890ad2697e5fd3ced84db1e6701244ffb5a80a74dd23f99ff400755caa70566": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/request.cpp",
+   "sink_class": "unclassified"
+  },
+  "asr:sink_site:dc56c97b5e1378db9c9e61eae7716d2db2e4df8000f5a7ffbf705c049ec441f3": {
+   "api": "popen",
+   "argument_index": 0,
+   "catalog_rule": "cpp.sink.api.popen",
+   "declared_in": "stdio.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [],
+   "model": "api",
+   "models": [
+    "api"
+   ],
+   "name": "popen [command_execution]",
+   "path": "src/request.cpp",
+   "sink_class": "command_execution"
+  },
+  "asr:sink_site:eb9ef33c486b7da716f3977c6fc9220738ee57a327942b1f15bbc9883be45bf7": {
+   "api": "send",
+   "argument_index": 1,
+   "catalog_rule": null,
+   "declared_in": "socket.h",
+   "enclosing_function": "handle_request",
+   "ineligibility_reasons": [
+    "unclassified_sink"
+   ],
+   "model": "RemoteFlowSinkFunction",
+   "models": [
+    "RemoteFlowSinkFunction"
+   ],
+   "name": "send [unclassified]",
+   "path": "src/request.cpp",
+   "sink_class": "unclassified"
+  }
+ },
+ "source": "data/indices/graph/*-dataflow_path and *-sink_site entity payloads, reduced to the classification fields"
+}

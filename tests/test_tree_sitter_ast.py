@@ -281,3 +281,57 @@ def test_both_callers_share_metrics_and_ast_reuse_is_not_an_invocation(tmp_path:
     assert summary["counts"]["files_parsed"] == {"value": 2, "complete": True}
     assert summary["measurements"]["memory_peak_bytes"]["value"] is None
     assert summary["incomplete_accounting"], "mocked counters must not be reported as measured zeros"
+
+
+# --------------------------------------------------------------------------- first-party scoping (T-5016)
+
+
+def test_scope_files_are_ordered_first_party_first_and_chunked_in_that_order() -> None:
+    from appsec_review.review.dispositions import SourceDispositions
+    files = [{"path": f"native/{name}", "sha256": f"{index:064x}", "language": "C", "generated": False, "size_bytes": 10}
+             for index, name in enumerate(["third_party/bzip2/a.c", "third_party/bzip2/b.c", "util.c", "zz.c"])]
+    catalog = {"files": files, "components": [{"component_id": "native", "root": "native"}]}
+    dispositions = SourceDispositions(vendored=("**/third_party/**",))
+    scopes = plan_scopes(catalog, max_files_per_scope=2, dispositions=dispositions)
+    assert [[item["path"] for item in scope.files] for scope in scopes] == [
+        ["native/util.c", "native/zz.c"], ["native/third_party/bzip2/a.c", "native/third_party/bzip2/b.c"]]
+    assert {item["disposition"] for item in scopes[0].files} == {"first_party"}
+    assert {item["disposition"] for item in scopes[1].files} == {"vendored"}
+    # Without dispositions every file is first-party and the order is by path, as before.
+    plain = plan_scopes(catalog, max_files_per_scope=2)
+    assert [item["path"] for scope in plain for item in scope.files] == sorted(item["path"] for item in files)
+    assert {item["disposition"] for scope in plain for item in scope.files} == {"first_party"}
+
+
+def test_vendored_budget_exclusion_is_a_count_and_first_party_truncation_stays_a_gap(tmp_path: Path) -> None:
+    scope = Scope("scope-c", "component:0001", "native", "native-build", "native", "C", (
+        {"path": "native/util.c", "sha256": "c" * 64, "size_bytes": 10, "language": "C", "disposition": "first_party"},
+        {"path": "native/third_party/z.c", "sha256": "d" * 64, "size_bytes": 10, "language": "C",
+         "disposition": "vendored"},
+        {"path": "native/third_party/y.c", "sha256": "e" * 64, "size_bytes": 10, "language": "C",
+         "disposition": "vendored"}))
+    grammar = _lock("C", "c")
+    output = {"schema": "appsec-review/tree-sitter-container-output/1", "scope_id": scope.scope_id,
+              "language": "C", "records": [
+                  {"kind": "file", "path": "native/util.c", "status": "SUCCEEDED", "sha256": "c" * 64, "bytes": 10,
+                   "grammar": "c", "root_has_error": False, "truncated": False, "nodes": [_node(kind="translation_unit")]},
+                  {"kind": "file", "path": "native/third_party/z.c", "status": "PARTIAL", "sha256": "d" * 64,
+                   "bytes": 10, "grammar": "c", "root_has_error": False, "truncated": True,
+                   "nodes": [_node(kind="translation_unit")]},
+                  {"kind": "file", "path": "native/third_party/y.c", "status": "TRUNCATED", "reason": "scope_node_limit",
+                   "sha256": "e" * 64, "bytes": 10}]}
+    _artifact, identity, counts = normalize_scope(run_root=tmp_path, target_snapshot="snapshot", scope=scope,
+        grammar=grammar, fingerprint="f" * 64, container_output=output, producer={"job": "fixture"},
+        artifact_path=tmp_path / "ast.jsonl", index_path=tmp_path / "ast.sqlite")
+    assert counts["dispositions"] == {"files": {"first_party": 1, "vendored": 2}, "nodes": {"first_party": 1, "vendored": 1},
+                                      "excluded_files": {"vendored": 2}}
+    assert not [gap for gap in identity.gaps if "third_party" in gap]
+    # The same truncation of a first-party file is a gap.
+    output["records"][1]["path"] = "native/util.c"
+    output["records"][0]["path"] = "native/third_party/z.c"
+    output["records"][0]["sha256"], output["records"][1]["sha256"] = "d" * 64, "c" * 64
+    _artifact, identity, counts = normalize_scope(run_root=tmp_path, target_snapshot="snapshot", scope=scope,
+        grammar=grammar, fingerprint="f" * 64, container_output=output, producer={"job": "fixture"},
+        artifact_path=tmp_path / "ast2.jsonl", index_path=tmp_path / "ast2.sqlite")
+    assert "native/util.c: node limit reached" in identity.gaps
+    assert counts["dispositions"]["excluded_files"] == {"vendored": 1}

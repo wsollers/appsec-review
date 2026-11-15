@@ -354,3 +354,27 @@ def test_verified_language_defaults_remain_required_and_codeql_capable() -> None
     assert {name: codeql.languages[name].mode for name in ("cpp", "csharp", "go")} == {
         name: CodeQLExecutionMode.BUILD for name in ("cpp", "csharp", "go")}
     assert codeql.languages["rust"].mode is CodeQLExecutionMode.SOURCE
+
+
+# --------------------------------------------------------------------------- first-party scoping (T-5016)
+
+
+def test_graph_producers_freeze_the_review_source_dispositions() -> None:
+    from appsec_review.config.first_party import FIRST_PARTY_SCOPED_JOBS
+    from appsec_review.review.dispositions import SourceDispositions
+    config = load_config(ROOT / "appsec-review.toml")
+    review = SourceDispositions.from_mapping(
+        config.job("job_inference_security_review").settings["source_dispositions"])
+    assert review.configured
+    for job_id in FIRST_PARTY_SCOPED_JOBS:
+        table = config.job(job_id).settings["source_dispositions"]
+        assert set(table) == {"vendored", "sdk", "generated", "test"}
+        assert SourceDispositions.from_mapping(table) == review, job_id
+    assert config.job("job_codeql_analysis").typed_settings.source_dispositions == review
+
+
+def test_a_graph_producer_table_that_differs_from_the_review_fails_loading(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="jobs.job_tree_sitter_ast.settings.source_dispositions must equal"):
+        _variant(tmp_path, ("[jobs.job_tree_sitter_ast.settings]\nworkers = 8",
+                            "[jobs.job_tree_sitter_ast.settings]\nworkers = 8\n"
+                            "source_dispositions = { vendored = [\"**/ext/**\"] }"))

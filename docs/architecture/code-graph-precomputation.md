@@ -277,13 +277,13 @@ definition byte span is equal, otherwise `ambiguous` with the method `name-and-f
 | `FAMILIES` | `call_site`, `sink_site`, `entry_point`, `flow_summary`, `dataflow_path`, `guard_fact`, `range_fact` |
 | `MODES` | `callers`, `callees`, `sinks`, `entry_points`, `paths`, `guards`, `ranges`, `summary`, `sarif_path` |
 | `DISPATCH` | `direct`, `virtual_resolved`, `function_pointer_resolved`, `template_instantiation`, `unresolved_indirect`, `external_undefined`, `secondary_only` |
-| `SINK_CLASSES` | `memory_write`, `memory_read`, `allocation_size`, `format_string`, `command_execution`, `path_access`, `sql_query`, `code_injection`, `deserialization`, `integer_conversion`, `crypto_misuse`, `log_output` |
+| `SINK_CLASSES` | `memory_write`, `memory_read`, `allocation_size`, `format_string`, `command_execution`, `path_access`, `sql_query`, `code_injection`, `deserialization`, `integer_conversion`, `crypto_misuse`, `log_output`, `network_output`, `file_write` (T-5017), plus the managed-language classes `graph/contract.py` lists |
 | `SOURCE_CLASSES` | `remote`, `local_user`, `argv`, `environment`, `file`, `ipc`, `database`, `internal` |
 | `GUARD_STATES` | `dominating`, `non_dominating`, `post_dominating_only`, `none` |
 | `GUARD_POLARITY` | `true_branch`, `false_branch`, `unknown` |
 | `CROSS_CHECK_STATES` | `agree`, `disagree`, `not_covered`, `partial` |
 | `COVERAGE` | `complete`, `partial`, `unavailable` (shared with every other index) |
-| `PRODUCERS` | `codeql-export`, `clangd`, `llvm-ir`, `clang-ast`, `svf` (opt-in points-to cross-check; [`svf-alias-producer.md`](svf-alias-producer.md)) |
+| `PRODUCERS` | `codeql-export`, `clangd`, `llvm-ir`, `clang-ast`, `tree-sitter` (syntax call expressions by exact span, T-5016), `svf` (opt-in points-to cross-check; [`svf-alias-producer.md`](svf-alias-producer.md)) |
 
 Sink and source classes are assigned by the versioned catalog `rules/codeql-graph-export/catalog.json`
 (`appsec-review/graph-catalog/1`), which maps CodeQL model identities (for C/C++: the
@@ -542,7 +542,7 @@ this export", which the response states verbatim in its gap text.
    "mode": {"type": "string", "enum": ["callers", "callees", "sinks", "entry_points", "paths", "guards", "ranges", "summary", "sarif_path"]},
    "subject": {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"},
    "depth": {"type": "integer", "minimum": 1, "maximum": 4},
-   "sink_class": {"type": "string", "enum": ["memory_write", "memory_read", "allocation_size", "format_string", "command_execution", "path_access", "sql_query", "code_injection", "deserialization", "integer_conversion", "crypto_misuse", "log_output", "unclassified"]},
+   "sink_class": {"type": "string", "enum": ["memory_write", "memory_read", "allocation_size", "format_string", "command_execution", "path_access", "sql_query", "code_injection", "deserialization", "integer_conversion", "crypto_misuse", "log_output", "network_output", "file_write", "...managed-language classes...", "unclassified"]},
    "source_class": {"type": "string", "enum": ["remote", "local_user", "argv", "environment", "file", "ipc", "database", "internal", "unclassified"]},
    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
    "cursor": {"type": "string", "maxLength": 4096}}}}
@@ -802,7 +802,7 @@ on the pinned CodeQL 2.27.0 image built on a Linux (WSL 2) Docker host.
 
 | Language | Pack | Live export | `range_fact` | Named gaps and limits |
 |---|---|---|---|---|
-| C/C++ | pinned | passes; native recording copied from the live export | `codeql-simple-range-analysis` | the only language with clangd/LLVM IR/Clang AST and SVF cross-check inputs (`job_code_graph_index/scopes.py` `_native_scope`); `RemoteFlowSinkFunction` sinks are unclassified |
+| C/C++ | pinned | passes; native recording copied from the live export | `codeql-simple-range-analysis` | the only language with clangd/LLVM IR/Clang AST and SVF cross-check inputs (`job_code_graph_index/scopes.py` `_native_scope`); `send`/`sendto`/`sendmsg`/`write`/`writev` classify as `network_output` and `fwrite` as `file_write` (T-5017); other `RemoteFlowSinkFunction` sinks are unclassified |
 | Java/Kotlin | pinned | passes | `codeql-range-analysis` (intraprocedural) | no cross-check producer, so facts are `not_covered` |
 | JavaScript/TypeScript | pinned | needs the `node` build profile; no live result recorded | `not_applicable` (`not-performed`) | no cross-check producer |
 | Python | pinned | QL fixed from the live run | `not_applicable` (`not-performed`) | `NoSqlExecution` sinks are unclassified |

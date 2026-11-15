@@ -55,8 +55,16 @@ def _json_artifact(unit: UnitContext, path: Path, value: Any) -> dict[str, Any]:
     return _artifact(unit.job.run_root, path)
 
 
+# A language build that completed with named gaps (build-output classification heuristics, an unrecognised
+# compiler probe) still materialised a workspace and an exact command set; its gaps travel with the case. On
+# smoke-cpp run 2026-11-14-0005 a single low-confidence build-output heuristic gap made the only build unit
+# BLOCKED_BY_COMPILE, so clangd, the Clang AST/IR producers and SVF indexed nothing (T-5016). The CodeQL
+# planner applies the same rule (planning.py _USABLE_BUILD_STATUSES).
+_USABLE_BUILD_STATUSES = frozenset({"SUCCEEDED", "NOT_APPLICABLE", "COMPLETED_WITH_GAPS"})
+
+
 def _terminal_gap(output: Mapping[str, Any]) -> str | None:
-    if output.get("terminal_status") in {"SUCCEEDED", "NOT_APPLICABLE"}:
+    if output.get("terminal_status") in _USABLE_BUILD_STATUSES:
         receipt = output.get("build_receipt", output)
         database = receipt.get("native_compile_database")
         if receipt.get("family") == "native" and isinstance(database, Mapping) and database.get("entry_count") == 0:

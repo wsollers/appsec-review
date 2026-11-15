@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/graph-quality-scorecard-1.json",
+  "title": "appsec-review/graph-quality-scorecard/1",
+  "description": "Per-run code-graph quality scorecard published by job_code_graph_index (T-5016): per first-party function the call edges by cross-check verdict and agreeing producer, every dataflow path with endpoints, eligibility and SARIF correlation state, sink classification coverage and the first-party exclusion counts. A measurement of the published graph, never evidence about the target.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "target_snapshot", "catalog", "dispositions", "authority", "totals", "scopes"],
+  "properties": {
+    "schema": {"const": "appsec-review/graph-quality-scorecard/1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "target_snapshot": {"type": "string", "minLength": 1},
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "revision", "release_id"],
+      "properties": {
+        "version": {"type": "string"},
+        "revision": {"type": "integer", "minimum": 0},
+        "release_id": {"type": "string"}
+      }
+    },
+    "dispositions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "configured"],
+      "properties": {
+        "rule": {"const": "appsec-review/source-disposition/1"},
+        "configured": {"type": "boolean"}
+      }
+    },
+    "authority": {"type": "string"},
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopes", "first_party_functions", "call_sites", "call_sites_agreed", "call_sites_codeql_only", "paths", "paths_eligible", "sinks_unclassified", "excluded_facts"],
+      "properties": {
+        "scopes": {"$ref": "#/$defs/count"},
+        "first_party_functions": {"$ref": "#/$defs/count"},
+        "call_sites": {"$ref": "#/$defs/count"},
+        "call_sites_agreed": {"$ref": "#/$defs/count"},
+        "call_sites_codeql_only": {"$ref": "#/$defs/count"},
+        "paths": {"$ref": "#/$defs/count"},
+        "paths_eligible": {"$ref": "#/$defs/count"},
+        "sinks_unclassified": {"$ref": "#/$defs/count"},
+        "excluded_facts": {"$ref": "#/$defs/count"}
+      }
+    },
+    "scopes": {"type": "array", "items": {"$ref": "#/$defs/scope"}}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "counts": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+    "nullable_string": {"type": ["string", "null"]},
+    "nullable_count": {"type": ["integer", "null"], "minimum": 0},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_id", "language", "build_unit_id", "export_status", "functions", "functions_omitted", "call_sites", "paths", "paths_omitted", "correlation", "sinks", "cross_check_producers", "exclusions", "coverage"],
+      "properties": {
+        "scope_id": {"type": "string", "minLength": 1},
+        "language": {"type": "string"},
+        "build_unit_id": {"$ref": "#/$defs/nullable_string"},
+        "export_status": {"type": "string"},
+        "functions": {"type": "array", "items": {"$ref": "#/$defs/function"}},
+        "functions_omitted": {"$ref": "#/$defs/count"},
+        "call_sites": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "agree", "disagree", "not_covered", "partial", "secondary_only", "unattributed"],
+          "properties": {
+            "total": {"$ref": "#/$defs/count"},
+            "agree": {"$ref": "#/$defs/count"},
+            "disagree": {"$ref": "#/$defs/count"},
+            "not_covered": {"$ref": "#/$defs/count"},
+            "partial": {"$ref": "#/$defs/count"},
+            "secondary_only": {"$ref": "#/$defs/count"},
+            "unattributed": {"$ref": "#/$defs/counts"}
+          }
+        },
+        "paths": {"type": "array", "items": {"$ref": "#/$defs/path"}},
+        "paths_omitted": {"$ref": "#/$defs/count"},
+        "correlation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bridged", "partial", "broken", "uncorrelated"],
+          "properties": {
+            "bridged": {"$ref": "#/$defs/count"},
+            "partial": {"$ref": "#/$defs/count"},
+            "broken": {"$ref": "#/$defs/count"},
+            "uncorrelated": {"$ref": "#/$defs/count"}
+          }
+        },
+        "sinks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "classified", "unclassified", "by_class", "unclassified_apis"],
+          "properties": {
+            "total": {"$ref": "#/$defs/count"},
+            "classified": {"$ref": "#/$defs/count"},
+            "unclassified": {"$ref": "#/$defs/count"},
+            "by_class": {"$ref": "#/$defs/counts"},
+            "unclassified_apis": {"$ref": "#/$defs/counts"}
+          }
+        },
+        "cross_check_producers": {"type": "array", "items": {"type": "string"}},
+        "exclusions": {"type": "object", "additionalProperties": {"$ref": "#/$defs/counts"}},
+        "coverage": {"type": "object", "additionalProperties": {"enum": ["complete", "partial", "unavailable"]}}
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "name", "path", "line", "calls", "producers"],
+      "properties": {
+        "symbol": {"type": "string", "pattern": "^asr:symbol:[0-9a-f]{64}$"},
+        "name": {"type": "string"},
+        "path": {"$ref": "#/$defs/nullable_string"},
+        "line": {"$ref": "#/$defs/nullable_count"},
+        "calls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "agree", "disagree", "not_covered", "partial", "secondary_only"],
+          "properties": {
+            "total": {"$ref": "#/$defs/count"},
+            "agree": {"$ref": "#/$defs/count"},
+            "disagree": {"$ref": "#/$defs/count"},
+            "not_covered": {"$ref": "#/$defs/count"},
+            "partial": {"$ref": "#/$defs/count"},
+            "secondary_only": {"$ref": "#/$defs/count"}
+          }
+        },
+        "producers": {"$ref": "#/$defs/counts"}
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display", "path", "line"],
+      "properties": {
+        "display": {"type": "string"},
+        "source_class": {"type": "string"},
+        "sink_class": {"type": "string"},
+        "path": {"$ref": "#/$defs/nullable_string"},
+        "line": {"$ref": "#/$defs/nullable_count"}
+      }
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "name", "source", "sink", "hop_count", "producers", "direct_eligible", "ineligibility_reasons", "correlation"],
+      "properties": {
+        "identity": {"type": "string", "pattern": "^asr:dataflow_path:[0-9a-f]{64}$"},
+        "name": {"type": "string"},
+        "source": {"$ref": "#/$defs/endpoint"},
+        "sink": {"$ref": "#/$defs/endpoint"},
+        "hop_count": {"$ref": "#/$defs/count"},
+        "producers": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "direct_eligible": {"type": "boolean"},
+        "ineligibility_reasons": {"type": "array", "items": {"type": "string"}},
+        "correlation": {"enum": ["bridged", "partial", "broken", "uncorrelated"]}
+      }
+    }
+  }
+}

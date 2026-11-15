@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/graph-catalog/1",
-  "revision": 1,
+  "revision": 2,
   "attacker_reachable_sources": [
     "argv",
     "environment",
@@ -265,6 +265,81 @@
           },
           "sink_class": "crypto_misuse",
           "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "cpp.sink.api.send",
+          "match": {
+            "api": "send",
+            "declared_in": [
+              "socket.h",
+              "winsock2.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "network_output",
+          "cwe_family": "CWE-200"
+        },
+        {
+          "rule_id": "cpp.sink.api.sendto",
+          "match": {
+            "api": "sendto",
+            "declared_in": [
+              "socket.h",
+              "winsock2.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "network_output",
+          "cwe_family": "CWE-200"
+        },
+        {
+          "rule_id": "cpp.sink.api.sendmsg",
+          "match": {
+            "api": "sendmsg",
+            "declared_in": [
+              "socket.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "network_output",
+          "cwe_family": "CWE-200"
+        },
+        {
+          "rule_id": "cpp.sink.api.write",
+          "match": {
+            "api": "write",
+            "declared_in": [
+              "unistd.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "network_output",
+          "cwe_family": "CWE-200"
+        },
+        {
+          "rule_id": "cpp.sink.api.writev",
+          "match": {
+            "api": "writev",
+            "declared_in": [
+              "uio.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "network_output",
+          "cwe_family": "CWE-200"
+        },
+        {
+          "rule_id": "cpp.sink.api.fwrite",
+          "match": {
+            "api": "fwrite",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "file_write",
+          "cwe_family": "CWE-200"
         },
         {
           "rule_id": "cpp.sink.model.formattingfunction",

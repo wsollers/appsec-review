@@ -15,6 +15,13 @@ Producers and what each may conclude:
   location, so they match by caller/callee name within the same translation unit and can only
   confirm (``agree``) or not cover a fact; their absence is never a contradiction. An IR edge whose
   caller CodeQL covers but whose callee CodeQL never reports becomes a ``secondary_only`` fact.
+* ``tree-sitter`` call expressions (T-5016): ``ast_node`` rows whose syntax projection has category
+  ``call_expression``, with exact byte spans and a *written* callee name. A CodeQL ``call_site`` whose
+  exact span equals a syntax call expression ``agree``s when the written name matches the callee's
+  name, and is ``partial`` when the written text differs (a macro, a function pointer, an overload:
+  syntax never resolves a callee, so it can never contradict one). A syntax call expression in a
+  parsed file that CodeQL covers but at a span CodeQL reports no call for becomes a bounded
+  ``secondary_only`` fact; a file CodeQL exported no call for is not judged.
 
 Missing secondary shards leave every fact ``not_covered``; cross-check is a second opinion, never a
 prerequisite. Disagreement is published, never merged or dropped.
@@ -38,6 +45,9 @@ from appsec_review.retrieval.model import (
 METHOD_CLANGD_SPAN = "clangd-reference-in-span"
 METHOD_IR_NAME = "ir-name-same-tu"
 METHOD_AST_NAME = "ast-name-same-tu"
+METHOD_TREE_SITTER_SPAN = "tree-sitter-call-span"
+# Syntax-only facts per scope beyond which further unmatched call expressions are counted, not published.
+MAX_SYNTAX_ONLY_FACTS = 2000
 METHOD_SYMBOL_SPAN = "definition-span-equal"
 METHOD_SYMBOL_NAME = "name-and-file"
 
@@ -45,6 +55,7 @@ SECONDARY_KINDS: Mapping[Producer, str] = {
     Producer.CLANGD: EntityKind.SYMBOL.value,
     Producer.LLVM_IR: EntityKind.IR_ENTITY.value,
     Producer.CLANG_AST: EntityKind.AST_NODE.value,
+    Producer.TREE_SITTER: EntityKind.AST_NODE.value,
 }
 _DYNAMIC = frozenset({Dispatch.VIRTUAL_RESOLVED.value, Dispatch.FUNCTION_POINTER_RESOLVED.value,
                       Dispatch.TEMPLATE_INSTANTIATION.value})
@@ -136,10 +147,11 @@ class CrossCheckInputs:
     clangd: tuple[SecondaryShard, ...] = ()
     llvm_ir: tuple[SecondaryShard, ...] = ()
     clang_ast: tuple[SecondaryShard, ...] = ()
+    tree_sitter: tuple[SecondaryShard, ...] = ()
 
     def __post_init__(self) -> None:
         for producer, shards in ((Producer.CLANGD, self.clangd), (Producer.LLVM_IR, self.llvm_ir),
-                                 (Producer.CLANG_AST, self.clang_ast)):
+                                 (Producer.CLANG_AST, self.clang_ast), (Producer.TREE_SITTER, self.tree_sitter)):
             if any(shard.producer is not producer for shard in shards):
                 raise ValueError(f"{producer.value} inputs must hold only {producer.value} shards")
 
@@ -572,6 +584,120 @@ def cross_check(facts: Sequence[GraphFact], inputs: CrossCheckInputs, *, target_
                 "Clang AST CallExpr matched by referenced callee name within the same translation unit",
                 {"rule": CROSS_CHECK_RULE, "producer": Producer.CLANG_AST.value, "method": METHOD_AST_NAME}))
 
+    # Tree-sitter: syntax call expressions at the exact CodeQL call span; written names, never resolution.
+    if inputs.tree_sitter:
+        syntax_calls: dict[str, dict[tuple[int, int], list[dict[str, Any]]]] = {}
+        parsed_paths: set[str] = set()
+        for shard in inputs.tree_sitter:
+            for row in shard.entities:
+                location = row.get("location") or {}
+                path = str(location.get("path") or "")
+                if not path or path not in sources:
+                    continue
+                parsed_paths.add(path)
+                syntax = (row.get("payload") or {}).get("syntax")
+                if not isinstance(syntax, Mapping) or syntax.get("category") != "call_expression":
+                    continue
+                start, end = location.get("start_byte"), location.get("end_byte")
+                if not isinstance(start, int) or not isinstance(end, int) or location.get("ambiguous"):
+                    continue
+                enclosing = syntax.get("enclosing_definition")
+                syntax_calls.setdefault(path, {}).setdefault((start, end), []).append({
+                    "identity": str(row["identity"]), "written": str(syntax.get("written_name") or ""),
+                    "enclosing": str(enclosing) if enclosing else None, "shard": shard,
+                    "line": int(location.get("start_line") or 0), "end_line": int(location.get("end_line") or 0),
+                    "column": int(location.get("start_column") or 0),
+                    "end_column": int(location.get("end_column") or 0)})
+        for path in syntax_calls:
+            for members in syntax_calls[path].values():
+                members.sort(key=lambda item: (item["written"], item["identity"]))
+        codeql_spans: dict[str, set[tuple[int, int]]] = {}
+        for fact in calls:
+            location = _exact_location(fact)
+            if location is None:
+                verdicts[fact.identity.value][Producer.TREE_SITTER] = _Verdict(
+                    CrossCheckState.NOT_COVERED, METHOD_TREE_SITTER_SPAN, "the fact has no exact call span")
+                continue
+            span = (location.start_byte, location.end_byte)
+            codeql_spans.setdefault(location.path, set()).add(span)
+            if location.path not in parsed_paths:
+                verdicts[fact.identity.value][Producer.TREE_SITTER] = _Verdict(
+                    CrossCheckState.NOT_COVERED, METHOD_TREE_SITTER_SPAN, "no tree-sitter shard parsed this path")
+                continue
+            nodes = syntax_calls.get(location.path, {}).get(span, [])
+            if not nodes:
+                verdicts[fact.identity.value][Producer.TREE_SITTER] = _Verdict(
+                    CrossCheckState.NOT_COVERED, METHOD_TREE_SITTER_SPAN, "no syntax call expression at this span")
+                continue
+            _, callee = _call_parts(fact)
+            names = _names(callee.get("display"))
+            match = next((node for node in nodes if _names(node["written"]) & names), None)
+            node = match or nodes[0]
+            consulted[fact.identity.value].append(node["shard"].upstream)
+            if match is not None:
+                verdicts[fact.identity.value][Producer.TREE_SITTER] = _Verdict(
+                    CrossCheckState.AGREE, METHOD_TREE_SITTER_SPAN)
+                out_relations.append(RelationRecord(
+                    RelationKind.DERIVED_FROM, fact.identity.value, node["identity"], True, 1.0, None,
+                    {"rule": CROSS_CHECK_RULE, "producer": Producer.TREE_SITTER.value,
+                     "method": METHOD_TREE_SITTER_SPAN, "written_name": node["written"][:256]}))
+            else:
+                detail = (f"syntax writes {node['written'][:120]!r} where CodeQL resolves "
+                          f"{str(callee.get('display') or 'an unresolved callee')[:120]!r}; written names do not "
+                          "resolve callees")
+                verdicts[fact.identity.value][Producer.TREE_SITTER] = _Verdict(
+                    CrossCheckState.PARTIAL, METHOD_TREE_SITTER_SPAN, detail)
+                out_relations.append(RelationRecord(
+                    RelationKind.DERIVED_FROM, fact.identity.value, node["identity"], False, 0.5, detail[:1024],
+                    {"rule": CROSS_CHECK_RULE, "producer": Producer.TREE_SITTER.value,
+                     "method": METHOD_TREE_SITTER_SPAN, "written_name": node["written"][:256]}))
+        # Syntax calls in files CodeQL covers, at spans CodeQL reports no call for: bounded secondary_only facts.
+        orphans: list[tuple[str, tuple[int, int], dict[str, Any]]] = []
+        for path in sorted(syntax_calls):
+            spans = codeql_spans.get(path)
+            if not spans:
+                continue  # CodeQL exported no call in this file; whole-file absence is a coverage question, not a fact
+            for span in sorted(syntax_calls[path]):
+                if span in spans:
+                    continue
+                orphans.extend((path, span, node) for node in syntax_calls[path][span])
+        if len(orphans) > MAX_SYNTAX_ONLY_FACTS:
+            summary_gaps.append(f"{len(orphans) - MAX_SYNTAX_ONLY_FACTS} tree-sitter call expressions without a "
+                                f"CodeQL call site beyond the {MAX_SYNTAX_ONLY_FACTS} bound were not published")
+        for path, (start, end), node in orphans[:MAX_SYNTAX_ONLY_FACTS]:
+            source = sources[path]
+            caller = node["enclosing"] or f"tree-sitter:{path}"
+            written = node["written"] or "<unnamed call>"
+            identity = fact_identity(Family.CALL_SITE, target_snapshot, {
+                "scope_id": scope["scope_id"], "caller_symbol": caller, "path": path, "start_byte": start,
+                "end_byte": end, "callee_name": written})
+            if identity.value in seen:
+                continue
+            seen.add(identity.value)
+            location = SourceLocation(
+                target_snapshot, path, source.sha256, start, end, node["line"], node["end_line"] or node["line"],
+                node["column"], node["end_column"] or node["column"],
+                {"producer": Producer.TREE_SITTER.value, "ast_node": node["identity"]},
+                "tree-sitter-call-expression", 1.0, False)
+            payload = _secondary_payload(
+                family=Family.CALL_SITE, producer=node["shard"], scope=scope,
+                result={"caller": {"symbol": node["enclosing"], "display": None},
+                        "callee": {"symbol": None, "display": written, "dispatch": Dispatch.SECONDARY_ONLY.value,
+                                   "candidate_count": 0},
+                        "argument_count": None, "in_loop": "unknown",
+                        "secondary": {"producer": Producer.TREE_SITTER.value, "ast_node": node["identity"],
+                                      "written_name": written[:256]}},
+                gaps=["secondary_only: no CodeQL call_site covers this syntax call expression; this is missing "
+                      "CodeQL coverage, not a CodeQL negative",
+                      "the callee is a written name from syntax; it is not resolved"],
+                producers=[{"name": Producer.TREE_SITTER.value, "state": CrossCheckState.AGREE.value,
+                            "method": METHOD_TREE_SITTER_SPAN}])
+            new_facts.append(GraphFact(identity, f"{written} (syntax call)"[:256], payload, location))
+            if node["enclosing"]:
+                out_relations.append(RelationRecord(RelationKind.CONTAINS, node["enclosing"], identity.value, True,
+                                                    1.0, None, {"rule": CROSS_CHECK_RULE,
+                                                                "producer": Producer.TREE_SITTER.value}))
+
     updated: list[GraphFact] = []
     states: dict[str, int] = {state.value: 0 for state in CrossCheckState}
     for fact in facts:
@@ -607,7 +733,8 @@ def cross_check(facts: Sequence[GraphFact], inputs: CrossCheckInputs, *, target_
         "secondary_only": dict(sorted(secondary_counts.items())),
         "producers": {producer.value: [shard.upstream for shard in shards]
                       for producer, shards in ((Producer.CLANGD, inputs.clangd), (Producer.LLVM_IR, inputs.llvm_ir),
-                                               (Producer.CLANG_AST, inputs.clang_ast)) if shards},
+                                               (Producer.CLANG_AST, inputs.clang_ast),
+                                               (Producer.TREE_SITTER, inputs.tree_sitter)) if shards},
         "symbol_links": sum(1 for relation in relations if relation.kind is RelationKind.SAME_AS),
         "gaps": list(dict.fromkeys(summary_gaps)),
     }

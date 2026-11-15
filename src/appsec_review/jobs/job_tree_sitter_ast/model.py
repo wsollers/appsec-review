@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping
 from appsec_review.retrieval.model import canonical_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
 from appsec_review.retrieval.source_resolution import IDENTITY as SOURCE_IDENTITY, source_native
+from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 
 
 SUPPORTED_LANGUAGES = frozenset({
@@ -50,8 +51,15 @@ def _slug(value: str) -> str:
 
 
 def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
-                max_source_bytes_per_scope: int = 16 * 1024 * 1024) -> tuple[Scope, ...]:
-    """Route only accepted inventory files into stable project/language source scopes."""
+                max_source_bytes_per_scope: int = 16 * 1024 * 1024,
+                dispositions: SourceDispositions | None = None) -> tuple[Scope, ...]:
+    """Route only accepted inventory files into stable project/language source scopes.
+
+    Within a scope the files are ordered first-party first (T-5016), then by path, so the container's
+    per-scope node budget and the chunking are spent on first-party code before vendored, SDK,
+    generated or test code; each file carries its ``disposition`` for the normalizer's counts.
+    """
+    classify = (dispositions or SourceDispositions()).classify
     files = tuple(item for item in catalog.get("files", ()) if isinstance(item, Mapping))
     components = tuple(item for item in catalog.get("components", ()) if isinstance(item, Mapping))
     if not components:
@@ -79,7 +87,7 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
             translation_root = str(item.get("build_root", project_root))
         routed_language = "TSX" if path.lower().endswith(".tsx") else str(language)
         key = (project_id, translation_id, routed_language)
-        buckets.setdefault(key, []).append({**item, **scope_fields(item)})
+        buckets.setdefault(key, []).append({**item, **scope_fields(item), "disposition": classify(ownership_path)})
         metadata[key] = (project_root, translation_root)
     exclusions = tuple(item for item in catalog.get("gaps", ()) if isinstance(item, Mapping) and
                        item.get("reason") in {"excluded_directory", "generated_file_excluded", "file_too_large"})
@@ -93,7 +101,8 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
         chunks: list[list[Mapping[str, Any]]] = []
         current: list[Mapping[str, Any]] = []
         current_bytes = 0
-        for item in buckets[key]:
+        ordered = sorted(buckets[key], key=lambda item: (item["disposition"] != FIRST_PARTY, str(item["path"])))
+        for item in ordered:
             size = int(item.get("size_bytes", 0))
             if current and (len(current) >= max_files_per_scope or
                             current_bytes + size > max_source_bytes_per_scope):

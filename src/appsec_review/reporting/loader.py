@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 from .digest import (STATE_WORDS, abbrev, bullets, counts_text, digest_mapping, field, id_list, scalar, state_field,
                      table, val)
 from .evidence import package_boxes, package_title
+from .graph_quality import scorecard_box
 from .interchange import (ROLE_ORDER, RED_ROLES, Call, Chain, build_chains, cell_provenance_box, make_call,
                           request_box, role_title, timeline)
 from .model import (Block, Box, Document, Field, Fields, Heading, Item, Legend, Note, Para, Stat, Stats)
@@ -145,6 +146,9 @@ def _summary(reader: RunReader, report: Mapping[str, Any], report_pair: Any, led
     if by_class:
         items.append(table(("gap class", "count"), sorted(by_class.items(), key=lambda p: (-p[1], p[0])), limits, widths=(0.6, 0.3), max_rows=14))
     blocks.append(Box(BoxKind.PROVENANCE, "Accounting", items=tuple(items)))
+    quality = scorecard_box(reader, limits)
+    if quality is not None:
+        blocks.append(quality)
     # findings, backlog, withheld
     blocks.append(Heading(2, "Findings", anchor("findings")))
     for name, key, empty in (("Confirmed findings", "findings", "No confirmed finding package is publishable."),

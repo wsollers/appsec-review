@@ -299,6 +299,12 @@ shipped default names cppcheck `style`, `performance`, `portability` and `inform
 `appsec-review.review-signal.sink.*` Semgrep rules are sink nominations, kept as `info` hunt hints and
 not stylistic; Semgrep rule metadata is not indexed, so a Semgrep class names rule ids.
 
+The filter is the second line of defence for cppcheck. Since T-5018 the scanner's own profile,
+`[jobs.job_evidence_collection.steps.source_sast.tasks.cppcheck_scan.settings]`, enables `warning` only,
+so the style families are not scanned, normalised, indexed or counted in the first place
+([evidence collection](job_evidence_collection.md#source_sast)); the stylistic class still applies when an
+operator widens that profile in the recipe.
+
 ```toml
 [[jobs.job_inference_security_review.settings.lead_filters.stylistic]]
 scanner = "tool-cppcheck"

@@ -146,6 +146,30 @@ shows the file and lead counts per disposition; compare them with the answer key
 which all live in first-party code. The first smoke run under these settings decides whether the `dev`
 budget now carries `inference_security_review` to completion (T-165 "Done when").
 
+Reading the graph scorecard. `job_code_graph_index` publishes
+`data/jobs/job_code_graph_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/graph-quality-scorecard.txt`
+(and the JSON beside it; [code-graph index](code-graph-index.md#graph-quality-scorecard)); the report
+shows the same text under "Code-graph quality". Read it top down: the first lines count scopes,
+first-party functions, call sites agreed versus CodeQL-only, paths and how many are eligible, unclassified
+sinks and excluded non-first-party facts. Per scope, `producers` names the cross-check producers that were
+attached; `none attached` means every call site is CodeQL-only and the run has no second opinion, which
+is what run `2026-11-14-0005` showed. The `fn` lines are the first-party functions (every one appears once
+in the JSON), each with its call-site verdicts and the producers that agreed; a function with
+`no agreeing producer` is unverified, not wrong. The `path` lines are the dataflow paths with source and
+sink class, the sink location, `eligible` or the ineligibility reasons, the SARIF correlation state and
+the producers. On a cpp smoke the paths in `src/request.cpp` into `send` must read `network_output ...
+eligible` since T-5017; compare the path list against the answer key's planted flows, which all live in
+first-party code, and treat `excluded:` counts as vendored code the graph deliberately left out.
+
+Run `2026-11-14-0003` also predates the typed cppcheck profile (T-5018). Its 553 cppcheck observations
+came from the former fixed `--enable=warning,style,performance,portability` argv, 330 of them
+`unusedStructMember`, 74 `variableScope`, 46 `constVariablePointer`, 19 `constParameterPointer` and 10
+`unreadVariable`. The shipped profile now enables `warning` only, so the next cpp smoke should show a
+cppcheck observation count without those families (on the order of tens, not hundreds); the
+container-execution receipt under the scan unit's scratch directory records the argv the run used, and
+the `stylistic` lead count should fall accordingly. A count near 553 means the run did not pick up the
+profile ([evidence collection](job_evidence_collection.md#source_sast)).
+
 CodeQL coverage of a smoke needs the host's preinstalled CodeQL runtimes declared for the source image
 and for the build profile the smoke compiles with (`native` for cpp; `java`, `go` and `dotnet` for
 those smokes), as [review startup](review-startup.md#before-the-first-launch) describes; `review-start`

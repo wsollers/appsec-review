@@ -14,6 +14,7 @@ from appsec_review.storage import atomic_bytes, file_sha256
 
 from .model import GrammarLock, Scope
 from .projection import DEFINITIONS, project
+from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 from appsec_review.retrieval.syntax_contract import SCHEMA as PROJECTION_SCHEMA
 
 
@@ -61,8 +62,15 @@ def node_identity(target_snapshot: str, scope: Scope, grammar: GrammarLock,
 def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, grammar: GrammarLock,
                     fingerprint: str, container_output: Mapping[str, Any], producer: Mapping[str, Any],
                     artifact_path: Path, index_path: Path,
-                    source_bytes: Mapping[str, bytes] | None = None
-                    ) -> tuple[Mapping[str, Any], IndexIdentity, Mapping[str, int]]:
+                    source_bytes: Mapping[str, bytes] | None = None,
+                    dispositions: SourceDispositions | None = None,
+                    ) -> tuple[Mapping[str, Any], IndexIdentity, Mapping[str, Any]]:
+    """Normalize one scope's container output into its ``analysis`` shard.
+
+    A file's disposition comes from the planned scope file (``plan_scopes``) or, failing that, from
+    ``dispositions``. A non-first-party file the node budget did not cover is a per-disposition count
+    (``excluded_files_by_disposition``), never a gap; its coverage row says why it is partial (T-5016).
+    """
     if container_output.get("schema") != "appsec-review/tree-sitter-container-output/1":
         raise ValueError("unsupported Tree-sitter container output schema")
     if container_output.get("scope_id") != scope.scope_id or container_output.get("language") != scope.language:
@@ -73,6 +81,16 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
     if any(not source_in_scope(item) for item in sources.values()):
         raise ValueError("out-of-scope source entered AST normalization")
     accepted = {path: str(item["sha256"]) for path, item in sources.items()}
+
+    def disposition_of(path: str) -> str:
+        value = sources[path].get("disposition")
+        if value:
+            return str(value)
+        return dispositions.classify(path) if dispositions is not None else FIRST_PARTY
+
+    files_by_disposition: dict[str, int] = {}
+    nodes_by_disposition: dict[str, int] = {}
+    excluded_by_disposition: dict[str, int] = {}
     lines: list[bytes] = []
     gaps = [f"{item.get('path')}: {item.get('reason')}" for item in scope.exclusions]
     diagnostics = files_parsed = bytes_parsed = nodes_parsed = 0
@@ -89,9 +107,17 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
         status = str(record.get("status"))
         if record.get("sha256") != accepted[path]:
             raise ValueError("container output source hash mismatch")
+        kind = disposition_of(path)
+        files_by_disposition[kind] = files_by_disposition.get(kind, 0) + 1
         if status == "TRUNCATED":
-            gaps.append(f"{path}: {record.get('reason', 'truncated')}")
-            builder.add_coverage(path, "partial", gaps[-1])
+            reason = str(record.get("reason", "truncated"))
+            if kind == FIRST_PARTY:
+                gaps.append(f"{path}: {reason}")
+                builder.add_coverage(path, "partial", gaps[-1])
+            else:
+                excluded_by_disposition[kind] = excluded_by_disposition.get(kind, 0) + 1
+                builder.add_coverage(path, "partial", f"{path}: {reason}; {kind} file, the budget is spent on "
+                                                      "first-party files first (counted, not a gap)")
             continue
         if sources[path].get("source_backing") and int(record.get("bytes", -1)) != sources[path]["size_bytes"]:
             raise ValueError("generated AST byte count differs from accepted source")
@@ -99,6 +125,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
         bytes_parsed += int(record.get("bytes", 0))
         nodes = tuple(record.get("nodes", ()))
         nodes_parsed += len(nodes)
+        nodes_by_disposition[kind] = nodes_by_disposition.get(kind, 0) + len(nodes)
         source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, target_snapshot,
                                            {"path": path, "sha256": accepted[path]})
         ids = {tuple(int(value) for value in node["ordinal_path"]):
@@ -174,10 +201,15 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                                                      payload={"syntax_relation": True}))
         if record.get("root_has_error"):
             gaps.append(f"{path}: parse diagnostics present")
+        file_gaps = [f"{path}: parse diagnostics present"] if record.get("root_has_error") else []
         if record.get("truncated"):
-            gaps.append(f"{path}: node limit reached")
-        file_gaps = ([f"{path}: parse diagnostics present"] if record.get("root_has_error") else []) + (
-            [f"{path}: node limit reached"] if record.get("truncated") else [])
+            if kind == FIRST_PARTY:
+                gaps.append(f"{path}: node limit reached")
+                file_gaps.append(f"{path}: node limit reached")
+            else:
+                excluded_by_disposition[kind] = excluded_by_disposition.get(kind, 0) + 1
+                file_gaps.append(f"{path}: node limit reached; {kind} file, the budget is spent on first-party "
+                                 "files first (counted, not a gap)")
         builder.add_coverage(path, "partial" if file_gaps else "complete", "; ".join(file_gaps) or None)
         if source_bytes is not None:
             builder.add_coverage("syntax-projection:" + source_id.value,
@@ -198,5 +230,8 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                 "sha256": file_sha256(artifact_path), "size_bytes": artifact_path.stat().st_size}
     counts = {"files_parsed": files_parsed, "bytes_parsed": bytes_parsed,
               "nodes_parsed": nodes_parsed, "diagnostic_count": diagnostics,
-              "gap_count": len(gaps)}
+              "gap_count": len(gaps),
+              "dispositions": {"files": dict(sorted(files_by_disposition.items())),
+                               "nodes": dict(sorted(nodes_by_disposition.items())),
+                               "excluded_files": dict(sorted(excluded_by_disposition.items()))}}
     return artifact, identity, counts

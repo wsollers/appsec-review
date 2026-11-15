@@ -84,6 +84,9 @@ class SinkClass(StrEnum):
     HEADER_INJECTION = "header_injection"
     REGEX_INJECTION = "regex_injection"
     UNSAFE_REFLECTION = "unsafe_reflection"
+    # Output sinks (T-5017): data leaving the process over a socket or into a file.
+    NETWORK_OUTPUT = "network_output"
+    FILE_WRITE = "file_write"
     UNCLASSIFIED = "unclassified"
 
 
@@ -148,6 +151,8 @@ class Producer(StrEnum):
     CLANG_STATIC = "clang-static"
     JOERN_CPG = "joern-cpg"
     SVF = "svf"
+    # Syntax-only call expressions from job_tree_sitter_ast (T-5016); written names, never resolution.
+    TREE_SITTER = "tree-sitter"
 
 
 FAMILY_KINDS: Mapping[Family, EntityKind] = {family: EntityKind(family.value) for family in Family}

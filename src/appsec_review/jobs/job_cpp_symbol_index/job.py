@@ -16,6 +16,8 @@ import re
 from typing import Any, Mapping
 from urllib.parse import unquote, urlparse
 
+from appsec_review.config.first_party import job_dispositions
+from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 from appsec_review.jobs.cpp_index_scopes import (
     IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
     publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
@@ -91,8 +93,14 @@ def _symbol_identity(scope: IndexScope, clangd_id: str) -> LogicalIdentity:
 
 
 def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str, Any],
-                    limits: Mapping[str, int], builder: IndexBuilder, shard: str) -> dict[str, Any]:
-    """Normalize one clangd YAML index into the builder; return counts and gaps."""
+                    limits: Mapping[str, int], builder: IndexBuilder, shard: str,
+                    dispositions: SourceDispositions | None = None) -> dict[str, Any]:
+    """Normalize one clangd YAML index into the builder; return counts and gaps.
+
+    Symbols are admitted first-party first (T-5016): when ``max_symbols_per_scope`` is reached, the
+    symbols left out are counted per disposition (``excluded_symbols_by_disposition``), and only a
+    first-party exclusion is a gap.
+    """
     from appsec_review.runtime import execution_safety as safety
     gaps: list[str] = []
     run_root = unit.job.run_root
@@ -134,19 +142,30 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     symbols: dict[str, LogicalIdentity] = {}
     sizes: dict[str, int] = {}
     external = 0
+    candidates: list[tuple[bool, int, str, Mapping[str, Any], Any, Any, Any, str]] = []
+    seen_ids: set[str] = set()
     for value in iter_tagged(documents, "Symbol"):
         clangd_id = str(value.get("ID", ""))
-        if not re.fullmatch(r"[0-9A-F]{16}", clangd_id) or clangd_id in symbols:
+        if not re.fullmatch(r"[0-9A-F]{16}", clangd_id) or clangd_id in seen_ids:
             continue
+        seen_ids.add(clangd_id)
         definition = _accepted_location(unit, scope, value.get("Definition"), sizes)
         declaration = _accepted_location(unit, scope, value.get("CanonicalDeclaration"), sizes)
         chosen = definition or declaration
         if chosen is None:
             external += 1  # declared only outside accepted sources (system or SDK headers)
             continue
+        kind = dispositions.classify(str(chosen[1]["path"])) if dispositions is not None else FIRST_PARTY
+        candidates.append((kind != FIRST_PARTY, len(candidates), clangd_id, value, definition, declaration, chosen,
+                           kind))
+    candidates.sort(key=lambda item: item[:2])
+    symbols_by_disposition: dict[str, int] = {}
+    excluded_by_disposition: dict[str, int] = {}
+    for _, _, clangd_id, value, definition, declaration, chosen, kind in candidates:
         if len(symbols) >= limits["max_symbols_per_scope"]:
-            gaps.append("clangd symbol limit reached")
-            break
+            excluded_by_disposition[kind] = excluded_by_disposition.get(kind, 0) + 1
+            continue
+        symbols_by_disposition[kind] = symbols_by_disposition.get(kind, 0) + 1
         info = value.get("SymInfo") if isinstance(value.get("SymInfo"), Mapping) else {}
         name = str(value.get("Name", ""))[:1024]
         qualified = (str(value.get("Scope", "")) + name)[:4096]
@@ -167,6 +186,8 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
              "project_id": scope.project_id, "shard_id": shard},
             chosen[0]))
 
+    if excluded_by_disposition.get(FIRST_PARTY):
+        gaps.append("clangd symbol limit reached")
     edges: dict[tuple[RelationKind, str, str], dict[str, Any]] = {}
     unresolved_refs = 0
     for value in iter_tagged(documents, "Refs"):
@@ -207,7 +228,9 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     return {"symbols": len(symbols), "external_symbols": external, "relations": len(edges),
             "unresolved_references": unresolved_refs, "translation_units": len(expected),
             "processed_translation_units": len(expected) - len(missing), "gaps": unique,
-            "coverage": status}
+            "coverage": status,
+            "symbols_by_disposition": dict(sorted(symbols_by_disposition.items())),
+            "excluded_symbols_by_disposition": dict(sorted(excluded_by_disposition.items()))}
 
 
 def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
@@ -219,12 +242,14 @@ def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
 
 def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
     limits = _settings(unit)
+    dispositions = job_dispositions(unit.job.config.settings)
     root = unit.job.run_root / "data" / "code-index" / "clangd" / scope.scope_id
     identity = checkpoint_identity({
         "schema": SCHEMA, "scope": scope.as_dict(), "normalizer": NORMALIZER,
         "tool": tool_identity(unit.job.repository_root, TOOL_ID) if executor_factory is None
         else {"tool_id": TOOL_ID, "injected_executor": True},
-        "limits": {key: value for key, value in limits.items() if key != "workers"}})
+        "limits": {key: value for key, value in limits.items() if key != "workers"},
+        "source_dispositions": dispositions.record()})
     reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope,
                               required=("execution.receipt", "execution.compile_database"))
     if reused is not None:
@@ -245,7 +270,7 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
             f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite")
     builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
-    counts = normalize_scope(unit, scope, execution, limits, builder, shard)
+    counts = normalize_scope(unit, scope, execution, limits, builder, shard, dispositions=dispositions)
     sha, _ = builder.build_or_reuse()
     index = IndexIdentity("analysis", "appsec-review/retrieval-index/2", sha, fingerprint,
                           path.relative_to(unit.job.run_root).as_posix(),

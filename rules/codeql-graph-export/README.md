@@ -198,9 +198,18 @@ rule when `api` and the index are equal and any comma-separated basename in the 
 3. model-only rules, matched on `model`.
 
 Within one tier, the first rule in file order wins, and the tests forbid two rules with the same
-match. A row that no rule matches is `unclassified` and is never `direct_eligible`. The catalog
-deliberately has no rule for `RemoteFlowSinkFunction` (data sent to the network), which is
-therefore the reference unclassified sink. When two `sink_sites` rows share a sink key, the one
+match. A row that no rule matches is `unclassified` and is never `direct_eligible`. The output
+sinks `send`, `sendto`, `sendmsg`, `write` and `writev` are API rules of class `network_output`
+and `fwrite` is `file_write` (catalog revision 2, T-5017); because an API match suppresses every
+model match on the same call, these rows export with `model = "api"` from the pack, and a recording
+made before revision 2 still classifies them through the API tier. The catalog deliberately has no
+rule for the `RemoteFlowSinkFunction` model itself, so a remote-flow sink outside those APIs
+(`sendfile`, for example) is the reference unclassified sink. C++ stream writes
+(`std::ostream::write`, `operator<<`) are member functions that `hasGlobalOrStdName` does not
+match; they are not exported as sinks and are a named limitation, not an unclassified row.
+A `dataflow_path` carries its sink site's class (`result.sink.sink_class`) and is `direct_eligible`
+exactly when the sink site is classified; the path never classifies its sink again. When two
+`sink_sites` rows share a sink key, the one
 whose winning rule comes first in the tier order is kept. `attacker_reachable_sources` must equal
 `contract.ATTACKER_REACHABLE_SOURCES`. Sanitizer rules list the APIs `SinkSites.ql` counts as
 dominating sanitizers and `Paths.ql` lists on paths. The API names in `GraphExport.qll`

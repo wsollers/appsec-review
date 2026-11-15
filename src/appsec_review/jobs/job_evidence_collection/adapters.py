@@ -11,6 +11,7 @@ from typing import Any, Callable, Iterable, Mapping
 import xml.etree.ElementTree as ET
 
 from appsec_review import blint_report
+from appsec_review.config.cppcheck import CppcheckProfile, parse_cppcheck_profile
 from appsec_review.provenance import json_selector, xml_selector
 from appsec_review.storage import canonical_json
 from appsec_review.tool_inputs import (
@@ -82,7 +83,9 @@ class Applicability:
 
 Parser = Callable[[bytes], list[dict[str, Any]]]
 Selector = Callable[[ScanCatalog], Applicability]
-ArgvBuilder = Callable[[str, Applicability], tuple[str, ...]]
+# ``(executable, applicability)`` or, for an adapter with a ``settings_parser``,
+# ``(executable, applicability, parsed_task_settings)``.
+ArgvBuilder = Callable[..., tuple[str, ...]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +103,9 @@ class ToolAdapter:
     collector: Callable[[Path], None] | None = None
     # Named degradations a tool reports only on stderr while still exiting successfully.
     stderr_gaps: Callable[[bytes], list[str]] | None = None
+    # Parses the scan task's frozen ``settings`` table into the typed value the argv builder takes as
+    # its third argument (cppcheck's profile, T-5018). ``None``: the argv does not depend on settings.
+    settings_parser: Callable[[Mapping[str, Any] | None], Any] | None = None
 
     @property
     def parser_identity(self) -> str:
@@ -112,8 +118,12 @@ class ToolAdapter:
     def applicability(self, catalog: ScanCatalog) -> Applicability:
         return self.selector(catalog)
 
-    def argv(self, executable: str, applicability: Applicability) -> tuple[str, ...]:
-        argv = self.argv_builder(executable, applicability)
+    def argv(self, executable: str, applicability: Applicability,
+             task_settings: Mapping[str, Any] | None = None) -> tuple[str, ...]:
+        if self.settings_parser is not None:
+            argv = self.argv_builder(executable, applicability, self.settings_parser(task_settings))
+        else:
+            argv = self.argv_builder(executable, applicability)
         if not argv or argv[0] != executable or any("\0" in item for item in argv):
             raise ValueError(f"adapter constructed unsafe argv: {self.tool_id}")
         return argv
@@ -244,9 +254,13 @@ def _cppcheck(catalog: ScanCatalog) -> Applicability:
                          coverage, tuple(gaps), MappingProxyType(families))
 
 
-def _cppcheck_args(executable: str, selection: Applicability) -> tuple[str, ...]:
-    common = (executable, "--enable=warning,style,performance,portability", "--check-level=normal",
-              "--inline-suppr", "--xml", "--xml-version=2", "--output-file=/scratch/output.xml")
+# Fixed after the configured profile: inline suppressions honoured, XML v2 report at the one path the
+# job reads. The profile (T-5018) never changes these.
+CPPCHECK_FIXED_ARGS = ("--inline-suppr", "--xml", "--xml-version=2", "--output-file=/scratch/output.xml")
+
+
+def _cppcheck_args(executable: str, selection: Applicability, profile: CppcheckProfile) -> tuple[str, ...]:
+    common = (executable, *profile.argv_fragment, *CPPCHECK_FIXED_ARGS)
     if selection.families.get("compile_database"):
         return (*common, "--project=/inputs/compile_commands.json")
     return (*common, *(_target(path) for path in selection.files))
@@ -812,7 +826,8 @@ def _registry() -> dict[str, ToolAdapter]:
                     lang("tool-mobsfscan", "Java, Kotlin, or Swift"), _args("--json", "-o", "/scratch/output.json"), _mobsfscan_parser),
         ToolAdapter("tool-cppcheck", "source_sast", frozenset({0}), "/scratch/output.xml", _cppcheck,
                     _cppcheck_args, _cppcheck_parser,
-                    ("source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",)),
+                    ("source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",),
+                    settings_parser=parse_cppcheck_profile),
         ToolAdapter("tool-pmd", "source_sast", frozenset({0, 4}), "/scratch/output.json", _pmd,
                     _pmd_args, _pmd_parser,
                     ("security-focused ruleset only; general PMD code-quality rules are excluded",)),

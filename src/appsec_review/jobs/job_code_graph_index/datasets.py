@@ -39,6 +39,14 @@ DATASETS = (
                   artifacts=(_A + "/load/tasks/accepted_inputs/code-graph-inputs.json",
                              _A + "/acceptance/tasks/publish_handoff/code-graph-summary.json"),
                   reason="counts and coverage are already published as graph coverage rows"),
+    artifact_only("code_graph_scorecard", "acceptance", "graph", "appsec-review/graph-quality-scorecard/1",
+                  "Per-run graph quality scorecard (T-5016): per first-party function the call edges by cross-check "
+                  "verdict and agreeing producer, every dataflow path with endpoints, eligibility and SARIF "
+                  "correlation state, sink classification coverage and first-party exclusion counts, with a "
+                  "one-screen text rendering for the report's coverage section.",
+                  artifacts=(_A + "/acceptance/tasks/publish_handoff/graph-quality-scorecard.json",
+                             _A + "/acceptance/tasks/publish_handoff/graph-quality-scorecard.txt"),
+                  reason="a measurement of the published graph shards, read by the report renderer; not evidence"),
 )
 
 from appsec_review.runtime.contracts import (

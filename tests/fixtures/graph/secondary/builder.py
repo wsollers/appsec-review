@@ -65,6 +65,10 @@ CLANGD_SYMBOLS = {"helper": ("0000000000000001", "src/net.c", "helper"),
 CLANGD_CALLS = {("process", "helper"): [(5, 13), (6, 13), (8, 12)]}
 IR_FUNCTIONS = ("helper", "other", "process")
 IR_CALLS = (("process", "helper"), ("process", "other"))
+# (enclosing function, written callee name, needle, nth) of tree-sitter call_expression nodes in src/net.c.
+TREE_SITTER_CALLS = (("process", "helper", "helper(n)", 0), ("process", "other", "other(a)", 0),
+                     ("process", "memcpy", "memcpy(dst, src, b)", 0), ("process", "helper", "helper(b)", 0))
+TREE_SITTER_SCOPE = "component-0001-native-main-C-fixture"
 
 
 def _clangd_id(name: str) -> str:
@@ -86,7 +90,8 @@ class SecondaryFixture:
     ids: dict[str, str] = field(default_factory=dict)
 
     def read(self, key: str) -> SecondaryShard:
-        producer = {"clangd": c.Producer.CLANGD, "ir": c.Producer.LLVM_IR, "ast": c.Producer.CLANG_AST}[key]
+        producer = {"clangd": c.Producer.CLANGD, "ir": c.Producer.LLVM_IR, "ast": c.Producer.CLANG_AST,
+                    "tree_sitter": c.Producer.TREE_SITTER}[key]
         return read_secondary(self.shard_set, self.shards[key], producer, tool_version="fixture")
 
     def rows(self, key: str, kinds: Sequence[str]) -> list[dict[str, Any]]:
@@ -201,6 +206,7 @@ def build_secondary(base: Path, *, clangd: Mapping[tuple[str, str], list[tuple[i
                     clangd_occurrence_extra: int = 0,
                     ir_calls: Iterable[tuple[str, str]] | None = IR_CALLS,
                     ast_calls: Iterable[tuple[str | None, int]] | None = (("helper", 5),),
+                    tree_sitter_calls: Iterable[tuple[str, str, str, int]] | None = TREE_SITTER_CALLS,
                     observations: Sequence[Mapping[str, Any]] = (),
                     priority: Sequence[Mapping[str, Any]] | None = None,
                     seed: int | None = None) -> SecondaryFixture:
@@ -288,6 +294,46 @@ def build_secondary(base: Path, *, clangd: Mapping[tuple[str, str], list[tuple[i
                                           "shard_id": "cpp-native-ast"},
                                          file_location("src/net.c", line, 1)))
         shard("ast", "analysis", "cpp-native-ast", {"job": "job_cpp_compiled_analysis", "branch": "ast"}, entities)
+    if tree_sitter_calls is not None:
+        # The shapes ``job_tree_sitter_ast/normalize.py`` publishes: ``ast_node`` rows with exact byte spans and a
+        # ``syntax`` projection (``appsec-review/syntax-projection/1``) naming written, unresolved callees.
+        entities = []
+        definitions: dict[str, str] = {}
+
+        def node(ordinal: int, kind: str, location: SourceLocation, syntax: dict[str, Any]) -> EntityRecord:
+            identity = LogicalIdentity.derive(EntityKind.AST_NODE, SNAPSHOT, {
+                "scope_id": TREE_SITTER_SCOPE, "grammar_sha256": "c" * 64, "path": location.path,
+                "file_sha256": location.file_sha256, "ordinal_path": [ordinal], "type": kind,
+                "start_byte": location.start_byte, "end_byte": location.end_byte})
+            payload = {"schema": "appsec-review/tree-sitter-normalizer/1", "grammar_native_type": kind,
+                       "field": None, "named": True, "error": False, "missing": False, "extra": False,
+                       "has_error": False, "scope_id": TREE_SITTER_SCOPE, "project_id": "component:0001",
+                       "translation_scope_id": "native-main", "language": "C", "syntax_only": True,
+                       "syntax": {"schema": "appsec-review/syntax-projection/1", "source_identity": "fixture",
+                                  "syntactic_qualifiers": [], "resolution": "unresolved", "syntax_only": True,
+                                  "name_span": {}, **syntax}}
+            return EntityRecord(identity, str(ordinal), kind, f"{kind} {syntax.get('written_name', '')}", payload,
+                                location)
+
+        ordinal = 0
+        for name, (_id, path, needle) in CLANGD_SYMBOLS.items():
+            location = span(sources, path, needle)
+            record = node(ordinal, "function_definition", location,
+                          {"category": "definition", "written_name": name, "enclosing_definition": None})
+            definitions[name] = record.identity.value
+            ids[f"ts:def:{name}"] = record.identity.value
+            entities.append(record)
+            ordinal += 1
+        for enclosing, written, needle, nth in tree_sitter_calls:
+            location = span(sources, "src/net.c", needle, nth)
+            record = node(ordinal, "call_expression", location,
+                          {"category": "call_expression", "written_name": written,
+                           "enclosing_definition": definitions.get(enclosing)})
+            ids[f"ts:call:{needle}#{nth}"] = record.identity.value
+            entities.append(record)
+            ordinal += 1
+        shard("tree_sitter", "analysis", TREE_SITTER_SCOPE,
+              {"job": "job_tree_sitter_ast", "scope_id": TREE_SITTER_SCOPE, "language": "C"}, entities)
     if observations:
         entities = []
         for item in observations:
