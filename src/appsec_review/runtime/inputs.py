@@ -116,11 +116,80 @@ def producer_contract(root: Path, handoff: Mapping[str, Any]) -> tuple[DatasetDe
     return read_dataset_contract(document, handoff["job_id"])[1]
 
 
+def resolve_job_inputs(
+    config: Any,
+    job: Any,
+    run_root: Path,
+    source_fingerprint: str,
+    orchestration: Mapping[str, Any] | None,
+    upstream_handoffs: Mapping[str, str] | None,
+    *,
+    enabled: set[str],
+) -> tuple[dict[str, str], dict[str, str], Mapping[str, Any] | None, dict[str, str]]:
+    """Resolve current-target ``upstream_handoffs`` separately from admitted ``optional_prior_handoffs``."""
+    from appsec_review.retrieval.core import _accepted_handoff
+    if job.job_id == "job_target_analysis_plan":
+        from appsec_review.jobs.job_build_environment_analysis.job import (
+            JOB_ID as ENV_JOB_ID,
+            environment_contract,
+            optional_prior_environment_handoffs,
+            planning_environment_inputs,
+        )
+        correlation = dict(orchestration or {})
+        if upstream_handoffs is not None:
+            unknown = sorted(set(upstream_handoffs) - set(job.consumes))
+            if unknown:
+                raise ValueError(f"undeclared supplied handoffs: {', '.join(unknown)}")
+            pre_contract = environment_contract(config, correlation, upstream_handoffs)
+            if pre_contract["mode"] == "OPTIONAL_PRIOR":
+                without_prior = {key: value for key, value in upstream_handoffs.items() if key != ENV_JOB_ID}
+                selected = selected_handoffs(job, run_root, without_prior, enabled=enabled)
+                candidate = {**selected, ENV_JOB_ID: str(pre_contract["reference"])}
+            else:
+                candidate = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled)
+        else:
+            candidate = selected_handoffs(job, run_root, None, enabled=enabled)
+        contract, required_upstream = planning_environment_inputs(
+            config, run_root, source_fingerprint, correlation, candidate)
+        optional_prior = optional_prior_environment_handoffs(contract)
+        return required_upstream, optional_prior, contract, candidate
+
+    selected = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled)
+    required_upstream = dict(selected)
+    optional_prior: dict[str, str] = {}
+    if "job_target_analysis_plan" in required_upstream and "job_build_environment_analysis" in job.consumes:
+        plan_handoff, _ = _accepted_handoff(
+            run_root, "job_target_analysis_plan", required_upstream["job_target_analysis_plan"])
+        artifact_ref = plan_handoff.get("outputs", {}).get("plan_acceptance.publish_handoff", {}).get("artifact")
+        if isinstance(artifact_ref, Mapping) and isinstance(artifact_ref.get("path"), str):
+            plan_path = safe_path(run_root, artifact_ref["path"])
+            if plan_path.is_file():
+                plan_doc = json.loads(plan_path.read_bytes())
+                bound_env = plan_doc.get("build_environment") if isinstance(plan_doc, Mapping) else None
+                if (isinstance(bound_env, Mapping)
+                        and bound_env.get("mode") == "OPTIONAL_PRIOR"
+                        and isinstance(bound_env.get("reference"), str)):
+                    if upstream_handoffs is None or "job_build_environment_analysis" not in upstream_handoffs:
+                        required_upstream.pop("job_build_environment_analysis", None)
+                    optional_prior["job_build_environment_analysis"] = bound_env["reference"]
+    overlap = sorted(set(required_upstream) & set(optional_prior))
+    if overlap:
+        raise ValueError(f"conflicting current and optional-prior input lineages: {', '.join(overlap)}")
+    return required_upstream, optional_prior, None, dict(required_upstream)
+
+
 def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
     """Pin supply, absence and coverage separately from subsequent observed reads."""
+    from appsec_review.config.assurance import AssuranceMode
     from appsec_review.retrieval.core import _accepted_handoff
     contract = context.contract
+    optional_prior = dict(getattr(context, "optional_prior_handoffs", None) or {})
+    overlap = sorted(set(context.upstream_handoffs) & set(optional_prior))
+    if overlap:
+        raise ValueError(f"conflicting current and optional-prior input lineages: {', '.join(overlap)}")
     if contract is None:
+        if optional_prior:
+            raise ValueError("optional-prior inputs require a typed contract")
         return {"schema": INPUT_ADMISSION_SCHEMA, "requirements": []}
     handoffs = {}
     declarations = {}
@@ -134,6 +203,47 @@ def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
             raise ValueError(f"foreign target input: {producer}")
         handoffs[producer] = handoff
         declarations[producer] = {item.output_kind: item for item in producer_contract(context.run_root, handoff)}
+    prior_rows = []
+    from appsec_review.storage.validation import isolated_validation_scope
+    for producer, digest in sorted(optional_prior.items()):
+        if producer not in contract.consumes:
+            raise ValueError(f"undeclared optional-prior producer: {producer}")
+        prior_handoff, _ = _accepted_handoff(context.run_root, producer, digest)
+        with isolated_validation_scope(context.run_root):
+            verify_handoff(context.run_root, prior_handoff)
+            if getattr(getattr(context, "review_policy", None), "mode", None) is AssuranceMode.FIRST_PARTY_MANAGED:
+                from appsec_review.storage.admission import verify_optional_prior_admission
+                verify_optional_prior_admission(context, prior_handoff)
+        prior_decls = {item.output_kind: item for item in producer_contract(context.run_root, prior_handoff)}
+        for requirement in contract.inputs:
+            if requirement.producer != producer or requirement.channel is not InputChannel.HANDOFF:
+                continue
+            if requirement.output_kind == "handoff":
+                if prior_handoff["schema"] != requirement.schema:
+                    raise ValueError(f"input envelope schema mismatch: {producer}")
+                prior_available = True
+            else:
+                declaration = prior_decls.get(requirement.output_kind)
+                if declaration is None or declaration.schema != requirement.schema:
+                    raise ValueError(f"producer output contract mismatch: {producer}/{requirement.output_kind}")
+                if declaration.authority is None or declaration.authority != requirement.authority:
+                    raise ValueError(f"producer evidence authority mismatch: {producer}/{requirement.output_kind}")
+                prior_available = _has_output(context.run_root, prior_handoff, declaration,
+                                              tuple(prior_decls.values()))
+            coverage = prior_handoff["coverage"]
+            if requirement.coverage is CoveragePolicy.REQUIRE_COMPLETE and coverage["disposition"] != "complete":
+                raise ValueError(f"input coverage is not complete: {producer}")
+            if requirement.coverage is CoveragePolicy.REQUIRE_NONRETRIABLE and coverage["retry_required"]:
+                raise ValueError(f"input coverage requires retry: {producer}")
+            prior_rows.append({
+                "channel": requirement.channel.value, "producer": producer,
+                "output_kind": requirement.output_kind, "schema": requirement.schema,
+                "authority": requirement.authority.value, "available": prior_available,
+                "supplied": prior_available, "read": False, "cited": None,
+                "handoff_sha256": digest, "attempt_id": prior_handoff["attempt_id"],
+                "target_snapshot": prior_handoff["target_snapshot"], "coverage": dict(coverage),
+                "status": "supplied" if prior_available else "gap",
+            })
     rows = []
     for requirement in contract.inputs:
         row: dict[str, Any] = {
@@ -192,8 +302,13 @@ def admit_inputs(context: Any, enabled: set[str]) -> dict[str, Any]:
         else:
             row["status"] = "supplied"
         rows.append(row)
-    return {"schema": INPUT_ADMISSION_SCHEMA, "contract_sha256": contract.document()["sha256"],
-            "requirements": rows}
+    document: dict[str, Any] = {
+        "schema": INPUT_ADMISSION_SCHEMA, "contract_sha256": contract.document()["sha256"],
+        "requirements": rows,
+    }
+    if prior_rows:
+        document["optional_priors"] = prior_rows
+    return document
 
 
 def _has_output(root: Path, handoff: Mapping[str, Any], declaration: DatasetDeclaration,
@@ -217,22 +332,29 @@ class InputReads:
     records: dict[str, Mapping[str, Any]] = field(default_factory=dict)
     lock: RLock = field(default_factory=RLock)
     producers: dict[str, tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]] = field(default_factory=dict)
+    prior_producers: dict[str, tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]] = field(default_factory=dict)
     violation: str | None = None
 
     def check(self) -> None:
         if self.violation is not None:
             raise ValueError(f"input contract violation: {self.violation}")
 
-    def producer(self, producer: str) -> tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]:
+    def producer(self, producer: str, *, prior: bool = False) -> tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]:
         from appsec_review.retrieval.core import _accepted_handoff
         with self.lock:
-            if producer not in self.producers:
-                digest = self.context.upstream_handoffs.get(producer)
+            prior_map = dict(getattr(self.context, "optional_prior_handoffs", None) or {})
+            if producer in self.context.upstream_handoffs and producer in prior_map:
+                raise ValueError(f"conflicting current and optional-prior input lineages: {producer}")
+            cache = self.prior_producers if prior else self.producers
+            source = prior_map if prior else self.context.upstream_handoffs
+            if producer not in cache:
+                digest = source.get(producer)
                 if digest is None:
-                    raise ValueError(f"undeclared or unsupplied shard producer: {producer}")
+                    label = "optional-prior shard producer" if prior else "shard producer"
+                    raise ValueError(f"undeclared or unsupplied {label}: {producer}")
                 handoff, _ = _accepted_handoff(self.context.run_root, producer, digest)
-                self.producers[producer] = handoff, producer_contract(self.context.run_root, handoff)
-            return self.producers[producer]
+                cache[producer] = handoff, producer_contract(self.context.run_root, handoff)
+            return cache[producer]
 
     def requirement(self, producer: str, output_kind: str, channel: InputChannel) -> InputRequirement:
         contract = self.context.contract
@@ -276,7 +398,8 @@ def input_read_scope(context: Any) -> Iterator[InputReads | None]:
     try:
         from appsec_review.runtime.consume import upstream_scope
         with upstream_scope(context.run_root, context.config.job_id, context.upstream_handoffs,
-                            contract=context.contract):
+                            contract=context.contract,
+                            optional_prior_handoffs=getattr(context, "optional_prior_handoffs", None)):
             yield reads
             reads.check()
     finally:
@@ -327,7 +450,7 @@ def input_shard_owner(root: Path, shard: Mapping[str, Any]) -> DatasetDeclaratio
 
 
 @_read_boundary
-def observe_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
+def observe_handoff(root: Path, handoff: Mapping[str, Any], *, prior: bool = False) -> None:
     reads = _READS.get()
     if reads is None or handoff["job_id"] == reads.context.config.job_id:
         return
@@ -335,8 +458,11 @@ def observe_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
     if Path(root).resolve() != context.run_root.resolve():
         raise ValueError("consumed handoff belongs to a foreign run")
     producer = handoff["job_id"]
+    prior_map = dict(getattr(context, "optional_prior_handoffs", None) or {})
+    if producer in context.upstream_handoffs and producer in prior_map:
+        raise ValueError(f"conflicting current and optional-prior input lineages: {producer}")
     requirement = reads.requirement(producer, "handoff", InputChannel.HANDOFF)
-    expected = context.upstream_handoffs.get(producer)
+    expected = prior_map.get(producer) if prior else context.upstream_handoffs.get(producer)
     path = safe_path(root, handoff["resolving_paths"]["attempt"] + "/handoff.json")
     if expected is None or file_sha256(path) != expected:
         raise ValueError(f"consumed handoff is not the supplied immutable input: {producer}")
@@ -399,14 +525,18 @@ def observe_external(root: Path, producer: str, output_kind: str, schema: str,
 
 
 @_read_boundary
-def observe_output(root: Path, producer: str, output_kind: str, reference: Mapping[str, Any]) -> None:
+def observe_output(root: Path, producer: str, output_kind: str, reference: Mapping[str, Any],
+                   *, prior: bool = False) -> None:
     reads = _READS.get()
     if reads is None:
         return
     if root.resolve() != reads.context.run_root.resolve():
         raise ValueError("consumed output belongs to a foreign run")
+    prior_map = dict(getattr(reads.context, "optional_prior_handoffs", None) or {})
+    if producer in reads.context.upstream_handoffs and producer in prior_map:
+        raise ValueError(f"conflicting current and optional-prior input lineages: {producer}")
     requirement = reads.requirement(producer, output_kind, InputChannel.HANDOFF)
-    handoff, declarations = reads.producer(producer)
+    handoff, declarations = reads.producer(producer, prior=prior)
     if not any(item.output_kind == output_kind and item.schema == requirement.schema
                and item.authority == requirement.authority for item in declarations):
         raise ValueError("consumed output schema differs from input contract")
@@ -415,8 +545,9 @@ def observe_output(root: Path, producer: str, output_kind: str, reference: Mappi
         raise ValueError("consumed output is not bound to supplied producer")
     if file_sha256(safe_path(root, path)) != sha:
         raise ValueError("consumed output bytes changed")
+    digest = prior_map[producer] if prior else reads.context.upstream_handoffs[producer]
     reads.record(requirement, {"path": path, "sha256": sha,
-                               "handoff_sha256": reads.context.upstream_handoffs[producer],
+                               "handoff_sha256": digest,
                                "attempt_id": handoff["attempt_id"], "target_snapshot": handoff["target_snapshot"]})
 
 

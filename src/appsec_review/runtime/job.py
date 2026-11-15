@@ -36,6 +36,7 @@ class JobContext:
     # Authenticated evidence identity, not permission to read a target checkout.
     evidence_target_snapshot: str | None = None
     upstream_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    optional_prior_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     contract: JobContract | None = None
     external_input_selection: Mapping[str, Any] | None = None
 
