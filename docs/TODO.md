@@ -2997,7 +2997,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   covered); job_target_catalog (8 unit files, 123 cases plus shared Wave 5 contract suite:
   contract, languages, descriptor bounds, discovery, documents, graph, helpers and indexes;
   3 graph files preserved in `tests/integration/job_target_catalog/`; 496/496 job-package lines
-  and 150/150 branches covered).
+  and 150/150 branches covered); job_change_context_analysis (5 unit files, 29 cases plus shared
+  Wave 2 and Wave 3 contract suites: contract, attribution, handlers, metrics and
+  settings/sources; 3 graph cases preserved in `tests/integration/job_change_context_analysis/`;
+  1349/1349 job-package lines and 476/476 branches covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the

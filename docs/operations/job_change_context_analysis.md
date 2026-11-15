@@ -84,9 +84,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_change_context_analysis/test_change_context_graph.py` |
 | live | None declared |
-| unit | `tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow`<br>`tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days`<br>`tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
+| unit | `tests/unit/job_change_context_analysis/test_attribution.py`<br>`tests/unit/job_change_context_analysis/test_contract.py`<br>`tests/unit/job_change_context_analysis/test_handlers.py`<br>`tests/unit/job_change_context_analysis/test_metrics.py`<br>`tests/unit/job_change_context_analysis/test_settings_and_sources.py`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
 
 ### Dagster placement
 

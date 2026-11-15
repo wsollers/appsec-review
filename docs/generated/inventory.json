@@ -7495,12 +7495,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_change_context_analysis/test_change_context_graph.py"
+        ],
         "live": [],
         "unit": [
-          "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
-          "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
-          "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push",
+          "tests/unit/job_change_context_analysis/test_attribution.py",
+          "tests/unit/job_change_context_analysis/test_contract.py",
+          "tests/unit/job_change_context_analysis/test_handlers.py",
+          "tests/unit/job_change_context_analysis/test_metrics.py",
+          "tests/unit/job_change_context_analysis/test_settings_and_sources.py",
           "tests/unit/runtime/test_wave2_consumers.py",
           "tests/unit/runtime/test_wave3_contracts.py"
         ]
@@ -44704,7 +44708,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "20454f76985188dbaee88f97435c1b1b51499c6d6ea94575550faa070cbb9a56"
+    "tests/job-test-map.json": "2131d6fc8ce3d2912431bfadaaf8b523c8afe2ce5d90d906fae29fe444560be5"
   },
   "tool_policy": {
     "disable_grype": true,
