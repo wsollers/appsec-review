@@ -281,7 +281,9 @@ def test_retry_consumer_stops_after_first_attempt(tmp_path, monkeypatch, consume
                 finally:
                     assert len(calls) == 1
             elif consumer == "target_plan":
-                from tests.test_target_analysis_plan import test_model_failure_uses_bounded_retries_and_safe_fallback
+                from tests.integration.job_target_analysis_plan.test_target_analysis_plan_graph import (
+                    test_model_failure_uses_bounded_retries_and_safe_fallback,
+                )
                 test_model_failure_uses_bounded_retries_and_safe_fallback(tmp_path)
             elif consumer == "dependency":
                 from appsec_review.jobs.job_dependency_intelligence.inference import resolve_with_inference

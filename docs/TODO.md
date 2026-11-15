@@ -3004,7 +3004,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   (3 unit files, 54 cases plus shared Wave 4 contract suite: contract, static script analysis,
   validators and handlers; 12 graph cases and `_published` helper preserved in
   `tests/integration/job_build_environment_analysis/`; 274/274 job-package lines and 121/122
-  branches covered, with one unreachable FIFO revisit branch documented in the host-local report).
+  branches covered, with one unreachable FIFO revisit branch documented in the host-local report);
+  job_target_analysis_plan (5 unit files, 143 cases plus shared Wave 4 contract suite: contract,
+  partitioning, planning, feedback and handlers; 16 whole-graph cases preserved in
+  `tests/integration/job_target_analysis_plan/`; 975/1002 job-package lines (97.31%) and 395/418
+  branches (94.50%) covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the

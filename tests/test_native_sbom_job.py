@@ -207,7 +207,7 @@ def _real_syft_publication(tmp_path):
     from appsec_review.jobs.job_evidence_collection.job import _assemble_manifest
     from appsec_review.runtime import Unit
     from tests.test_evidence_collection_job import FakeExecutor
-    from tests.test_target_analysis_plan import _fixture, _run
+    from tests.integration.job_target_analysis_plan.test_target_analysis_plan_graph import _fixture, _run
 
     config, target = _fixture(tmp_path, {
         "third_party/zlib/zlib.h": '#define ZLIB_VERSION "1.3.1"\n',

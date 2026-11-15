@@ -547,11 +547,16 @@
     },
     "job_target_analysis_plan": {
       "unit": [
-        "tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable",
-        "tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap",
+        "tests/unit/job_target_analysis_plan/test_contract.py",
+        "tests/unit/job_target_analysis_plan/test_partitioning.py",
+        "tests/unit/job_target_analysis_plan/test_planning.py",
+        "tests/unit/job_target_analysis_plan/test_feedback.py",
+        "tests/unit/job_target_analysis_plan/test_handlers.py",
         "tests/unit/runtime/test_wave4_contracts.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_target_analysis_plan/test_target_analysis_plan_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },

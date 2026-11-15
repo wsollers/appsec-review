@@ -39985,11 +39985,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_target_analysis_plan/test_target_analysis_plan_graph.py"
+        ],
         "live": [],
         "unit": [
-          "tests/test_target_analysis_plan.py::test_guidance_bundles_are_group_scoped_immutable_and_reusable",
-          "tests/test_target_analysis_plan.py::test_buildable_project_names_disabled_model_as_a_gap",
+          "tests/unit/job_target_analysis_plan/test_contract.py",
+          "tests/unit/job_target_analysis_plan/test_partitioning.py",
+          "tests/unit/job_target_analysis_plan/test_planning.py",
+          "tests/unit/job_target_analysis_plan/test_feedback.py",
+          "tests/unit/job_target_analysis_plan/test_handlers.py",
           "tests/unit/runtime/test_wave4_contracts.py"
         ]
       },
@@ -44712,7 +44717,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "6da617c559a52bb016994e37a6f561b01eede718afe7eff5f8b8706cdeb2bc44"
+    "tests/job-test-map.json": "198a757fc6aba3aceacbde239911c7e3ce7871f1f2bedb0b665a20abc5257f4e"
   },
   "tool_policy": {
     "disable_grype": true,
