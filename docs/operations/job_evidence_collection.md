@@ -136,9 +136,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | `tests/integration/test_signal_job_acceptance.py` |
-| live | None declared |
-| unit | `tests/test_evidence_collection_job.py` |
+| integration | `tests/integration/job_evidence_collection/test_evidence_collection_graph.py`<br>`tests/integration/test_signal_job_acceptance.py` |
+| live | `tests/live/test_evidence_collection_multivuln.py` |
+| unit | `tests/unit/job_evidence_collection/test_contract.py`<br>`tests/unit/job_evidence_collection/test_evidence.py`<br>`tests/unit/job_evidence_collection/test_adapters.py`<br>`tests/unit/job_evidence_collection/test_cppcheck_profile.py`<br>`tests/unit/job_evidence_collection/test_rulepacks_and_checkpoints.py`<br>`tests/unit/job_evidence_collection/test_job_graph.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
 
 ### Dagster placement
 

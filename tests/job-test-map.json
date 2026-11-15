@@ -215,10 +215,21 @@
       "live": ["tests/integration/test_dossier_live.py"]
     },
     "job_evidence_collection": {
-      "unit": ["tests/test_evidence_collection_job.py"],
-      "integration": ["tests/integration/test_signal_job_acceptance.py"],
+      "unit": [
+        "tests/unit/job_evidence_collection/test_contract.py",
+        "tests/unit/job_evidence_collection/test_evidence.py",
+        "tests/unit/job_evidence_collection/test_adapters.py",
+        "tests/unit/job_evidence_collection/test_cppcheck_profile.py",
+        "tests/unit/job_evidence_collection/test_rulepacks_and_checkpoints.py",
+        "tests/unit/job_evidence_collection/test_job_graph.py",
+        "tests/unit/runtime/test_wave5_contracts.py"
+      ],
+      "integration": [
+        "tests/integration/job_evidence_collection/test_evidence_collection_graph.py",
+        "tests/integration/test_signal_job_acceptance.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": ["tests/live/test_evidence_collection_multivuln.py"]
     },
     "job_final_publication_gate": {
       "unit": [

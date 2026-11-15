@@ -206,7 +206,7 @@ def _real_syft_publication(tmp_path):
     from appsec_review.jobs.job_evidence_collection import build_job as evidence_job
     from appsec_review.jobs.job_evidence_collection.job import _assemble_manifest
     from appsec_review.runtime import Unit
-    from tests.test_evidence_collection_job import FakeExecutor
+    from tests.unit.job_evidence_collection.support import FakeExecutor
     from tests.integration.job_target_analysis_plan.test_target_analysis_plan_graph import _fixture, _run
 
     config, target = _fixture(tmp_path, {

@@ -80,9 +80,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | `tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones` |
-| integration | `tests/integration/test_installer_record_scans.py`<br>`tests/integration/job_artifact_indexing/test_artifact_input_contracts.py` |
+| integration | `tests/integration/job_artifact_security_analysis/test_artifact_security_graph.py`<br>`tests/integration/test_installer_record_scans.py`<br>`tests/integration/job_artifact_indexing/test_artifact_input_contracts.py` |
 | live | None declared |
-| unit | `tests/test_artifact_security_analysis.py`<br>`tests/unit/runtime/test_wave2_contracts.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
+| unit | `tests/unit/job_artifact_security_analysis/test_contract.py`<br>`tests/unit/job_artifact_security_analysis/test_formats.py`<br>`tests/unit/job_artifact_security_analysis/test_findings.py`<br>`tests/unit/job_artifact_security_analysis/test_scanners.py`<br>`tests/unit/job_artifact_security_analysis/test_job_graph.py`<br>`tests/unit/runtime/test_wave2_contracts.py::test_artifact_security_declarations_and_real_publication_ownership`<br>`tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_consumers_declare_exact_results_and_no_unused_acceptance`<br>`tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_acceptance_loader_and_admission_enforce_observe_output` |
 
 ### Dagster placement
 

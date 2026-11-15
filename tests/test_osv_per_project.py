@@ -32,7 +32,7 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.osv_offline import offline_database_mounts
 from appsec_review.runtime import GraphRunner
 
-from tests import test_evidence_collection_job as evidence_tests
+from tests.unit.job_evidence_collection import support as evidence_tests
 from tests.test_tool_adapter_outputs import _osv_snapshot
 
 

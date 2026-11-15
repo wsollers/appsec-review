@@ -193,7 +193,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5018 | [Configurable cppcheck profile: turn style, performance and portability checks off by default](#t-5018-configurable-cppcheck-profile-turn-style-performance-and-portability-checks-off-by-default) | scanners | open |
 | T-5019 | [Smoke-run verification harness: did the run do the right thing and produce the right things](#t-5019-smoke-run-verification-harness-did-the-run-do-the-right-thing-and-produce-the-right-things) | testing | open |
 | T-5020 | [Repair the five review unit tests broken by merge debt on main](#t-5020-repair-the-five-review-unit-tests-broken-by-merge-debt-on-main) | testing | done (2026-11-14, `scope.py` `evidence_map` ordering + review test/fixture repairs) |
-| T-5021 | [Make the evidence-collection job unit test fast and green again](#t-5021-make-the-evidence-collection-job-unit-test-fast-and-green-again) | testing | open |
+| T-5021 | [Make the evidence-collection job unit test fast and green again](#t-5021-make-the-evidence-collection-job-unit-test-fast-and-green-again) | testing | done (2026-11-15, T-113 `job_evidence_collection` walk; 17 GB OSV host-feed copy eliminated, 98 unit cases in ~6–10 s) |
 | T-5022 | [Dependency intelligence: native resolution proposals fail the response contract and the recordings cannot say why](#t-5022-dependency-intelligence-native-resolution-proposals-fail-the-response-contract-and-the-recordings-cannot-say-why) | pipeline | open |
 | T-5023 | [Right-size red-team cell budgets: the lead lane spent its token cap on thinking and retrieval and raised no claim](#t-5023-right-size-red-team-cell-budgets-the-lead-lane-spent-its-token-cap-on-thinking-and-retrieval-and-raised-no-claim) | review | open |
 | T-5024 | [The expand retrieval tool raises KeyError inside red-team cells and the ledger keeps no traceback](#t-5024-the-expand-retrieval-tool-raises-keyerror-inside-red-team-cells-and-the-ledger-keeps-no-traceback) | review | open |
@@ -2891,12 +2891,12 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-5021 — Make the evidence-collection job unit test fast and green again
 
-- **State:** open
+- **State:** done (2026-11-15, T-113 `job_evidence_collection` walk; 17 GB `data/feeds/osv` host-feed copy replaced with `write_osv_feed`, 98 unit cases in ~6–10 s)
 - **Area:** testing
 - **Why:** `tests/test_evidence_collection_job.py::test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoints` runs the whole job graph twice and takes 103 s at `ba7d1fb8`, 126 s on `graph-quality` (`5d0586dd`) and 202 s on the merged main (`1c144707`), ten to twenty times the 10 s unit limit; under `-n 4` the file no longer finishes inside a 300 s window, which read as a hang during the 2026-11-15 integration. It also fails on every tree (`tool-shellcheck` terminal_status is not `FAILED`), as does `test_job_refuses_dispatch_without_graph_target`; both are in the baseline failure list, not merge regressions.
 - **Scope:** fix the two assertions against the behaviour that is now correct; split the long case so each unit test exercises one disposition or reuse path with the heavy job dispatch faked at the container boundary; find what each merged change added to the per-run cost (the T-5016 disposition resolution and the T-5018 profile parsing both run at config load).
 - **Done when:** the file passes alone and under `-n 4 --shuffle-seed=<seed>` with every case under 10 s on an idle host; the two failing cases are green with their assertions intact.
-- **Refs:** T-5020, T-5016, T-5018, `tests/test_evidence_collection_job.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`.
+- **Refs:** T-113, T-5020, T-5016, T-5018, `tests/unit/job_evidence_collection/`, `tests/integration/job_evidence_collection/test_evidence_collection_graph.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`. Root cause of the 103–202 s wall clock: `fixture()` copied `ROOT / "data/feeds/osv"` (17 GB host feed directory) per test into `tmp_path` before driving `GraphRunner` four times; replaced with a synthetic `write_osv_feed` zip snapshot and direct unit-handler tests under `tests/unit/job_evidence_collection/` (all 98 unit cases finish in 6–10 s total, 0 cases >10 s).
 
 ### T-5022 — Dependency intelligence: native resolution proposals fail the response contract and the recordings cannot say why
 
@@ -3058,6 +3058,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   pagination, XML/SQLite bounds and chain cycle checks), with whole-graph/live cases preserved in
   `tests/integration/job_third_party_data_sync/`; 1922/1978 job-package lines (97.17%; `job.py`,
   `datasets.py` and `publication.py` at 100%) and 634/692 branches (91.62%) covered.
+  job_evidence_collection (6 unit files, 98 cases plus shared Wave 5 contract suite [107 mapped
+  cases], closing T-5021: pinned 4-input / 5-dataset contract across all 62 graph units,
+  observation redaction/bounds/deduplication, all 20 scanner adapters, configurable `cppcheck`
+  profile validation, SEI CERT rulepack hash/lock verification, checkpoint reuse/retry-required
+  markers, OSV per-project chunking, Swift staging, execution-safety latch, producer shard cache,
+  manifest assembly and handoff publication; 17 GB `data/feeds/osv` host-feed copy eliminated;
+  whole-graph cases preserved in `tests/integration/job_evidence_collection/` and live container
+  case in `tests/live/test_evidence_collection_multivuln.py`; 1365/1398 job-package lines [97.64%]
+  and 453/490 branches [92.45%] covered, with every module >=96.7% lines and >=91.0% branches).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
