@@ -3229,7 +3229,29 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   proposal validation and bounds, crosswalk derivation, SQLite shard publication with `attest_existing`
   reuse, and tag-cloud rollup; two `JobRunner` whole-graph tests relocated to
   `tests/integration/job_security_tagging/test_security_tagging_jobrunner.py`; 1,641/1,674
-  job-package lines [98.0%] and 632/672 branches [94.0%] covered across all 9 modules).
+  job-package lines [98.0%] and 632/672 branches [94.0%] covered across all 9 modules);
+  job_review_prioritization (35/47; 5 unit files, 60 cases: pinned 9-input / 6-dataset contract,
+  7-unit DAG topology and registry parity, typed settings/validator fail-closed guards, accepted
+  input loading with detached generated-source backing and Swift known-gap filtering, streaming
+  syntax metrics with admission leases and shard bounds, conservative multi-language import graph
+  resolution, heuristic/Semgrep/CodeQL lead and flow extraction across all dispositions,
+  zero-anchored mid-rank percentile scoring with history hotspot tie-breaking, SQLite `priority`
+  shard publication/reuse and `RetrievalCore` verification, plus `_fast_intake_and_catalog`
+  optimization keeping `test_wave2_contracts.py` and `test_wave2_consumers.py` under 10 s under
+  coverage; 4 `GraphRunner` tests and optional `tree-sitter-language-pack` golden check relocated
+  to `tests/integration/job_review_prioritization/test_review_prioritization_graph.py`;
+  2,171/2,240 job-package lines [96.92%] and 956/1,060 branches [90.19%] covered across all 13
+  modules);
+  job_threat_model_generation (36/47; 15 unit files, 298 cases: pinned 13-envelope + 17-dataset
+  accepted-evidence contract, 8-unit DAG topology and disabled-by-default wave1/CLI refusal,
+  typed settings/limits/reservation fail-closed validation, `SinkClass` interaction-catalog
+  parity [`97a82c725`], structure and interaction lanes, deterministic DFD assembly and threat
+  enumeration, citation resolution and demotion, Mermaid/Markdown rendering with truncation and
+  redacted-name structured gaps, working-file path/digest/JSON/record custody guards, pure-function
+  and fresh-render publication checks, and review-admissibility indirectness; 10 whole-job
+  `JobRunner` cases relocated to
+  `tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py`; 234/234
+  job-package lines [100.0%] and 22/22 branches [100.0%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
