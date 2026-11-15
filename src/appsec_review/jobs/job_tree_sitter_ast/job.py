@@ -12,6 +12,7 @@ from pathlib import Path
 import time
 from typing import Any
 
+from appsec_review.config.first_party import job_dispositions
 from appsec_review.container_runtime import ContainerExecutor, load_catalog
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
 from appsec_review.retrieval.core import resolve_context_manifest
@@ -136,7 +137,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         loaded = unit.output("load.accepted_inputs")
         settings = unit.job.config.settings
         scopes = plan_scopes(loaded["accepted"], max_files_per_scope=int(settings["max_files_per_scope"]),
-                             max_source_bytes_per_scope=int(settings["max_source_bytes_per_scope"]))
+                             max_source_bytes_per_scope=int(settings["max_source_bytes_per_scope"]),
+                             dispositions=job_dispositions(settings))
         policy_gaps = ()
         if not unit.job.tools.enable_swift:
             swift_scopes = tuple(scope for scope in scopes if is_swift_language(scope.language))
@@ -246,6 +248,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                     "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
         counts = {key: sum(int(value.get("counts", {}).get(key, 0)) for value in successful)
                   for key in ("files_parsed", "bytes_parsed", "nodes_parsed", "diagnostic_count")}
+        dispositions: dict[str, dict[str, int]] = {"files": {}, "nodes": {}, "excluded_files": {}}
+        for value in successful:
+            for table, entries in (value.get("counts", {}).get("dispositions") or {}).items():
+                for name, count in entries.items():
+                    dispositions.setdefault(table, {})[name] = dispositions.get(table, {}).get(name, 0) + int(count)
         document = {"schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint,
                     "generated_sources": unit.output("load.accepted_inputs")["accepted"].get("generated_sources", []),
                     "language_build_handoff_sha256": unit.output("load.accepted_inputs")["accepted"].get(
@@ -253,13 +260,16 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                     "image_id": unit.output("load.accepted_inputs")["image_id"],
                     "asset_lock": unit.output("load.accepted_inputs")["asset_lock"],
                     "normalizer_schema": NORMALIZER_SCHEMA, "dispositions": parsed["dispositions"],
-                    "counts": counts, "gaps": parsed["gaps"], "index_manifest": manifest,
+                    "counts": counts, "source_dispositions": dispositions,
+                    "gaps": parsed["gaps"], "index_manifest": manifest,
                     "terminal_status": parsed["terminal_status"]}
         artifact_path = unit.unit_root / "accepted-tree-sitter-ast.json"
         atomic_json(artifact_path, document)
         artifact = {"path": artifact_path.relative_to(unit.job.run_root).as_posix(),
                     "sha256": file_sha256(artifact_path), "size_bytes": artifact_path.stat().st_size}
         unit.job.events.write("TREE_SITTER_AST_COMPLETED", **counts, gap_count=len(parsed["gaps"]),
+                              first_party_files=dispositions["files"].get("first_party", 0),
+                              excluded_files=sum(dispositions["excluded_files"].values()),
                               successful_scope_count=parsed["successful_scope_count"],
                               scope_count=parsed["scope_count"])
         return {"schema": SCHEMA, "artifact": artifact, "index_manifest": manifest,

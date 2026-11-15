@@ -39,6 +39,7 @@ def verify_runtime_assets() -> None:
     for relative in (
         "containers/catalog.toml",
         "docs/schemas/document-issue-ledger.schema.json",
+        "docs/schemas/graph-quality-scorecard.schema.json",
         "docs/schemas/review-package-manifest.schema.json",
         "docs/schemas/review-package-unit-context.schema.json",
         "docs/schemas/review-package-view.schema.json",

@@ -211,6 +211,7 @@
         "values": [
           "code_graph_checkpoints",
           "code_graph_facts",
+          "code_graph_scorecard",
           "code_graph_stages",
           "code_graph_summary",
           "codeql_graph_export",
@@ -816,6 +817,7 @@
           "clang_static_raw",
           "clang_static_scope_coverage",
           "clang_static_summary",
+          "codeql_cache_initialization",
           "codeql_observations",
           "codeql_plan_and_summary",
           "codeql_predecessor_import",
@@ -3071,6 +3073,56 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_code_graph_index.datasets",
       "stage": "indexed",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dataflow",
+      "dataset": "code_graph_scorecard",
+      "description": "Per-run graph quality scorecard (T-5016): per first-party function the call edges by cross-check verdict and agreeing producer, every dataflow path with endpoints, eligibility and SARIF correlation state, sink classification coverage and first-party exclusion counts, with a one-screen text rendering for the report's coverage section.",
+      "family": "graph",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_code_graph_index",
+      "producer_languages": {
+        "basis": "job_code_graph_index: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/graph-quality-scorecard/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_code_graph_index.datasets",
+      "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -8245,6 +8297,66 @@
       "target_access": "checkout"
     },
     {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "codeql_cache_initialization",
+      "description": "The run's record of initialising the shared CodeQL compile-cache volume (identity, creation time, runtime user) and its initialisation lock; written once per run by the executor.",
+      "family": "codeql",
+      "gap": [],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_codeql_analysis",
+      "producer_languages": {
+        "basis": "appsec-review.toml: jobs.job_codeql_analysis.settings.languages.*.source_languages; producer selectors, not per-dataset or observed coverage",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "C",
+          "C#",
+          "C++",
+          "C/C++",
+          "GitHub Actions",
+          "Go",
+          "Java",
+          "JavaScript",
+          "Kotlin",
+          "Python",
+          "Ruby",
+          "Rust",
+          "TypeScript"
+        ]
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/codeql-cache-initialization/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_codeql_analysis.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
       "access": "indexed_evidence",
       "authority": "producer_evidence",
       "bucket": "scanner_observations",
@@ -13098,6 +13210,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13176,6 +13289,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13254,6 +13368,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13332,6 +13447,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13410,6 +13526,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13488,6 +13605,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13566,6 +13684,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13644,6 +13763,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13722,6 +13842,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13797,6 +13918,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13872,6 +13994,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -13950,6 +14073,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -14028,6 +14152,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -14106,6 +14231,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -14181,6 +14307,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -14256,6 +14383,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -14334,6 +14462,7 @@
       "unbound_datasets": [
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
+        "job_code_graph_index/code_graph_scorecard",
         "job_code_graph_index/code_graph_stages",
         "job_code_graph_index/code_graph_summary",
         "job_cpg_analysis/cpg_binary",
@@ -21330,6 +21459,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21424,6 +21554,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21518,6 +21649,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21612,6 +21744,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21706,6 +21839,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21800,6 +21934,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21894,6 +22029,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -21988,6 +22124,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22082,6 +22219,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22336,6 +22474,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22430,6 +22569,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22524,6 +22664,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",
@@ -22778,6 +22919,7 @@
         ],
         "state": "partial",
         "values": [
+          "job_codeql_analysis/codeql_cache_initialization",
           "job_codeql_analysis/codeql_observations",
           "job_codeql_analysis/codeql_plan_and_summary",
           "job_codeql_analysis/codeql_predecessor_import",

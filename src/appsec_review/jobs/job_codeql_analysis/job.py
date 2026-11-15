@@ -53,7 +53,8 @@ from .planning import (
     replay_commands,
 )
 from appsec_review import seeding
-from .sarif import NORMALIZER_IDENTITY, normalize_sarif
+from .sarif import NORMALIZER_IDENTITY, normalize_sarif, scope_first_party
+from appsec_review.review.dispositions import SourceDispositions
 from appsec_review.jobs.job_codeql_analysis.datasets import CONTRACT, DATASETS
 
 
@@ -1299,6 +1300,7 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
     gaps = list(query.get("gaps", ()))
     retained = None
     records: list[dict[str, Any]] = []
+    excluded_results: dict[str, int] = {}
     provenance_receipt = None
     if isinstance(query.get("sarif"), Mapping) and query.get("query_execution") is None:
         gaps.append("provenance_unavailable: CodeQL execution receipt is unavailable")
@@ -1316,6 +1318,10 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         records, normalization_gaps = normalize_sarif(sarif, files=scope.files, root=scope.root,
             query_identity=str(query["query_identity"]), result_limit=_settings(unit).result_limit)
         gaps.extend(normalization_gaps)
+        # First-party scoping (T-5016): results located in vendored, SDK, generated or test files are counted,
+        # never published and never a gap; the database itself covered the whole unit.
+        records, excluded_results = scope_first_party(
+            records, getattr(_settings(unit), "source_dispositions", None) or SourceDispositions())
     elif isinstance(query.get("sarif"), Mapping):
         pinned_sarif = artifact_reference(unit.job.run_root, query["sarif"])
         if pinned_sarif.size_bytes > _settings(unit).sarif_bytes_limit:
@@ -1423,7 +1429,7 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         provenance_receipt = validate_observation_provenance(
             unit.job.run_root, validated_payloads, parser_identity=NORMALIZER_IDENTITY,
             events=getattr(unit.job, "events", None), unit_id=unit.unit_id)
-        if observation_count == 0:
+        if observation_count == 0 and not excluded_results:
             gaps.append(f"CodeQL {query_id} query suite completed with zero observations; "
                         "this is not a clean classification")
     else:
@@ -1439,6 +1445,7 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         tuple(dict.fromkeys(gaps)), shard)
     return {**query, "index_identity": asdict(identity), "index": _artifact(unit.job.run_root, path),
             "observation_count": observation_count, "support_count": support_count,
+            "excluded_results": excluded_results,
             "gaps": list(dict.fromkeys(gaps)),
             "native_output": retained.as_dict() if retained else None,
             "provenance_receipt": provenance_receipt}

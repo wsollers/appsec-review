@@ -36,6 +36,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from appsec_review.config.first_party import job_dispositions
 from appsec_review.graph.analyzers import apply_analyzer_sinks
 from appsec_review.graph.catalog import Catalog, load_catalog
 from appsec_review.graph.contract import Coverage, Family, GraphSettings, Producer
@@ -43,6 +44,7 @@ from appsec_review.graph.correlate import correlate
 from appsec_review.graph.crosscheck import CrossCheckInputs, cross_check, read_secondary
 from appsec_review.graph.svf_crosscheck import read_svf, svf_cross_check
 from appsec_review.graph.normalize import COLUMNS_PATH, EXPORT_UPSTREAM_INDEX, normalize_scope
+from appsec_review.graph.scorecard import assemble_scorecard, render_scorecard, scope_scorecard
 from appsec_review.graph.settings import RunConfigurationError, run_configuration
 from appsec_review.indexing.store import ShardSet
 from appsec_review.retrieval import IndexIdentity, write_manifest
@@ -59,7 +61,7 @@ JOB_ID = s.JOB_ID
 SCHEMA = "appsec-review/code-graph-index/1"
 TOPOLOGY = (("load", "accepted_inputs"), ("normalize", "scopes"), ("crosscheck", "scopes"),
             ("correlate", "scopes"), ("acceptance", "publish_handoff"))
-_SETTING_KEYS = frozenset({"workers", "graph"})
+_SETTING_KEYS = frozenset({"workers", "graph", "source_dispositions"})
 
 
 def graph_settings(unit: UnitContext) -> GraphSettings:
@@ -95,6 +97,7 @@ def _validate(context, _result) -> None:
     if unknown:
         raise ValueError("jobs.job_code_graph_index.settings has unknown settings: " + ", ".join(sorted(unknown)))
     GraphSettings.from_mapping(context.config.settings.get("graph"))
+    job_dispositions(context.config.settings)
 
 
 def verify_catalog_pin(run_root: Path, current: Catalog, scopes: list[Mapping[str, Any]]) -> None:
@@ -147,9 +150,11 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         secondary = s.assign_secondary(run_root, [*shard_set.shards, *restored], codeql["scopes"])
         analyzers = s.assign_analyzers([*shard_set.shards, *restored], codeql["scopes"])
         priority = s.priority_shards(shard_set) or None
+        dispositions = job_dispositions(unit.job.config.settings)
         values: list[dict[str, Any]] = []
         for record in codeql["scopes"]:
             scope = dict(record)
+            scope["source_dispositions"] = dispositions.record()
             if scope["export_status"] == s.SUCCEEDED:
                 s.verify_exports(run_root, scope, settings)
                 s.scope_sources(unit.job.target_root, scope["files"])
@@ -195,7 +200,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 target_snapshot=unit.job.source_fingerprint, sources=sources, catalog=current, settings=settings,
                 tool_version=loaded["tool_version"], export_pack_sha256=str(scope["export_pack"]["tree_sha256"]),
                 upstream=[{"index": EXPORT_UPSTREAM_INDEX, "shard_id": f"{scope['scope_id']}:export-manifest",
-                           "sha256": scope["export_manifest"]["sha256"]}])
+                           "sha256": scope["export_manifest"]["sha256"]}],
+                dispositions=job_dispositions(unit.job.config.settings))
             stage = s.write_stage(run_root, scope["scope_id"], "normalized", s.encode_stage(
                 scope["scope_id"], result.facts, result.symbols, result.relations, result.coverage, {}))
             gaps = [f"{scope['scope_id']}: {row.family.value}: {row.status.value}"
@@ -224,7 +230,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
             svf = tuple(read_svf(shard_set, shard) for shard in scope["inputs"]["secondary"].get(Producer.SVF.value, ()))
             result = cross_check(facts, CrossCheckInputs(clangd=secondary[Producer.CLANGD],
                                                          llvm_ir=secondary[Producer.LLVM_IR],
-                                                         clang_ast=secondary[Producer.CLANG_AST]),
+                                                         clang_ast=secondary[Producer.CLANG_AST],
+                                                         tree_sitter=secondary[Producer.TREE_SITTER]),
                                  target_snapshot=unit.job.source_fingerprint, scope=_scope_block(scope),
                                  sources=sources, graph_symbols=symbols)
             summary = dict(result.summary)
@@ -292,10 +299,14 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         if stages:
             loaded_catalog(unit)
 
+        dispositions = job_dispositions(unit.job.config.settings)
+
         def one(scope: Mapping[str, Any]) -> dict[str, Any]:
             if scope["reused"] is not None:
                 return dict(scope["reused"])
+            attached = {name: shards for name, shards in scope["inputs"]["secondary"].items() if shards}
             if scope["export_status"] != s.SUCCEEDED:
+                facts, symbols, relations = (), (), ()
                 coverage = s.unavailable_coverage(scope)
                 card = s.database_card(scope, snapshot=unit.job.source_fingerprint, coverage=coverage)
                 neighborhood = s.producers.build(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
@@ -305,6 +316,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                          coverage=coverage, catalog_release=catalog_release, unit_id=unit.unit_id,
                                          card=card, neighborhood=neighborhood)
                 summary: dict[str, Any] = {}
+                all_relations: list[Any] = []
             else:
                 facts, symbols, relations, coverage = s.decode_stage(
                     s.read_artifact(run_root, stages[scope["scope_id"]]))
@@ -332,11 +344,15 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 card = s.database_card(scope, snapshot=unit.job.source_fingerprint, coverage=coverage)
                 neighborhood = s.producers.build(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
                                                  relations=[*relations, *result.relations])
+                all_relations = [*relations, *result.relations]
                 shards = s.publish_scope(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
                                          identity=scope["identity"], facts=facts, symbols=symbols,
-                                         relations=[*relations, *result.relations], coverage=coverage,
+                                         relations=all_relations, coverage=coverage,
                                          catalog_release=catalog_release, unit_id=unit.unit_id, card=card,
                                          neighborhood=neighborhood)
+            scorecard = scope_scorecard(scope=scope, facts=facts, symbols=symbols, relations=all_relations,
+                                        coverage=coverage, dispositions=dispositions,
+                                        cross_check={"producers": attached})
             gaps = [f"{row.area}: {row.status.value}" + (f": {row.gap}" if row.gap else "")
                     for row in coverage if row.status is not Coverage.COMPLETE]
             value = {"scope_id": scope["scope_id"], "language": scope["language"],
@@ -347,6 +363,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                      "counts": {"facts": sum(row.facts for row in coverage),
                                 "code_flows": int(summary.get("code_flows", 0) or 0),
                                 "correlation_states": dict(summary.get("states", {}))},
+                     "scorecard": scorecard,
                      "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
             checkpoint = s.save_checkpoint(run_root, scope["scope_id"], scope["identity"], value)
             return {**value, "checkpoint": checkpoint, "checkpoint_reused": False}
@@ -392,9 +409,20 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         for scope in published["scopes"]:
             for row in scope["coverage"]:
                 families[row["family"]][row["status"]] += 1
+        scorecard = assemble_scorecard(
+            run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+            scopes=[scope["scorecard"] for scope in published["scopes"] if isinstance(scope.get("scorecard"), Mapping)],
+            catalog=loaded["catalog"], dispositions=job_dispositions(unit.job.config.settings))
+        scorecard_path = unit.unit_root / "graph-quality-scorecard.json"
+        atomic_json(scorecard_path, scorecard)
+        rendering_path = unit.unit_root / "graph-quality-scorecard.txt"
+        rendering_path.write_text(render_scorecard(scorecard), encoding="utf-8", newline="\n")
         counts = {"scopes": len(published["scopes"]), "databases": len(published["scopes"]), "shards": len(indexes),
                   "reused_scopes": published["reused_count"],
-                  "facts": sum(int(scope["counts"]["facts"]) for scope in published["scopes"])}
+                  "facts": sum(int(scope["counts"]["facts"]) for scope in published["scopes"]),
+                  "first_party_functions": int(scorecard["totals"]["first_party_functions"]),
+                  "call_sites_agreed": int(scorecard["totals"]["call_sites_agreed"]),
+                  "paths_eligible": int(scorecard["totals"]["paths_eligible"])}
         summary_path = unit.unit_root / "code-graph-summary.json"
         atomic_json(summary_path, {"schema": SCHEMA, "codeql_handoff": loaded["codeql_handoff"],
                                    "catalog": loaded["catalog"], "counts": counts, "families": families,
@@ -405,6 +433,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         unit.job.events.write("CODE_GRAPH_INDEX_COMPLETED", **counts, gap_count=len(published["gaps"]))
         return {"schema": SCHEMA, "artifact": s.artifact(run_root, summary_path),
                 "index_manifest": s.artifact(run_root, manifest_path), "item_count": counts["facts"],
+                "scorecard": {"document": s.artifact(run_root, scorecard_path),
+                              "rendering": s.artifact(run_root, rendering_path), "totals": scorecard["totals"]},
                 "counts": counts, "families": families, "gaps": published["gaps"],
                 "terminal_status": published["terminal_status"]}
 

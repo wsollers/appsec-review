@@ -158,6 +158,7 @@ def _secondary_shard(run_root: Path, producer: Producer) -> dict:
         Producer.LLVM_IR: ("job_cpp_compiled_analysis", "ir", "ir-native"),
         Producer.CLANG_AST: ("job_cpp_compiled_analysis", "ast", "ast-native"),
         Producer.SVF: ("job_svf_alias_analysis", "", "svf-native"),
+        Producer.TREE_SITTER: ("job_tree_sitter_ast", "", "component-0001-native-C-fixture"),
     }[producer]
     return asdict(IndexIdentity(
         "analysis", INDEX_SCHEMA, builder.build(), "f" * 64, path.relative_to(run_root).as_posix(),

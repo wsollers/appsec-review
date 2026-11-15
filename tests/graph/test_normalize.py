@@ -746,3 +746,29 @@ def test_query_code_graph_reads_normalized_shards_end_to_end(tmp_path, synthetic
     from_entry = core.query_code_graph(mode="paths", subject=entry.identity.value, source_class="environment")
     assert len(from_entry["results"]) == 1
     assert asdict(sink.location)["path"] == TARGET_PATH
+
+
+# --------------------------------------------------------------------------- first-party scoping (T-5016)
+
+
+def test_non_first_party_facts_are_counted_not_published_and_symbols_stay_as_boundaries(synthetic) -> None:
+    from appsec_review.review.dispositions import SourceDispositions
+    scoped = normalize_scope(_exports(), scope=SCOPE, target_snapshot=SNAPSHOT, sources=SOURCES, catalog=CATALOG,
+                             settings=c.GraphSettings(), tool_version="2.27.0", export_pack_sha256="e" * 64,
+                             dispositions=SourceDispositions(vendored=("src/**",)))
+    assert scoped.facts == ()
+    before = {row.family: row for row in synthetic.coverage}
+    for row in scoped.coverage:
+        expected = len(_family(synthetic, row.family.value))
+        assert row.facts == 0 and row.counts.get("excluded_vendored", 0) == expected, row.family
+        # An exclusion is a count, never a gap: no new gap appears, and a gap about an excluded fact goes with it.
+        assert set(row.gaps) <= set(before[row.family].gaps)
+        assert not [gap for gap in row.gaps if "excluded" in gap or "vendored" in gap]
+        assert row.status is c.Coverage.COMPLETE or row.status is before[row.family].status
+    # The vendored functions stay as symbols: a first-party caller elsewhere could still resolve into them.
+    assert [item.identity.value for item in scoped.symbols] == [item.identity.value for item in synthetic.symbols]
+    assert scoped.relations == ()
+    unscoped = normalize_scope(_exports(), scope=SCOPE, target_snapshot=SNAPSHOT, sources=SOURCES, catalog=CATALOG,
+                               settings=c.GraphSettings(), tool_version="2.27.0", export_pack_sha256="e" * 64,
+                               dispositions=SourceDispositions(vendored=("**/third_party/**",)))
+    assert unscoped.to_json() == synthetic.to_json()

@@ -46,14 +46,15 @@ SCOPE_IDENTITY_SCHEMA = "appsec-review/code-graph-scope/1"
 SUCCEEDED = "SUCCEEDED"
 RULES = {"normalize": NORMALIZE_RULE, "cross_check": CROSS_CHECK_RULE, "correlation": CORRELATION_RULE,
          "admissibility": ADMISSIBILITY_RULE}
-SECONDARY_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST, Producer.SVF)
+SECONDARY_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST, Producer.TREE_SITTER, Producer.SVF)
 # Producers read through ``crosscheck.read_secondary``; SVF rows are read by ``svf_crosscheck.read_svf``.
-CALL_EDGE_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST)
+CALL_EDGE_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST, Producer.TREE_SITTER)
+TREE_SITTER_JOB = "job_tree_sitter_ast"
 SVF_JOB = "job_svf_alias_analysis"
 # Producers whose seeded output is observations, not graph shards: they reach the database card only.
 ANALYZER_JOBS = {"job_clang_static_analysis": Producer.CLANG_STATIC, "job_cpg_analysis": Producer.JOERN_CPG}
 CARD_PRODUCER_ORDER = (Producer.CODEQL_EXPORT, Producer.LLVM_IR, Producer.CLANG_AST, Producer.CLANG_STATIC,
-                       Producer.CLANGD, Producer.JOERN_CPG)
+                       Producer.CLANGD, Producer.TREE_SITTER, Producer.JOERN_CPG)
 MAX_PRODUCER_GAPS = 5
 # Bound on the coverage-gap lines naming individual broken SARIF correlations per scope.
 MAX_BROKEN_GAPS = 20
@@ -289,10 +290,14 @@ def secondary_producer(shard: Mapping[str, Any]) -> Producer | None:
         return Producer.CLANG_AST
     if producer.get("job") == SVF_JOB and shard_id.startswith("svf-") and not shard_id.startswith("svf-coverage-"):
         return Producer.SVF
+    # Tree-sitter publishes one ``analysis`` shard per (component, build unit, language) scope plus a
+    # coverage shard; the scope shards carry ``ast_node`` rows with exact byte spans and a syntax projection.
+    if producer.get("job") == TREE_SITTER_JOB and not shard_id.startswith("tree-sitter-coverage-"):
+        return Producer.TREE_SITTER
     return None
 
 
-SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis", SVF_JOB, *ANALYZER_JOBS)
+SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis", TREE_SITTER_JOB, SVF_JOB, *ANALYZER_JOBS)
 
 
 def analyzer_producer(shard: Mapping[str, Any]) -> Producer | None:
@@ -409,6 +414,7 @@ def scope_identity(scope: Mapping[str, Any], *, snapshot: str, catalog_release: 
         "export_manifest_sha256": (scope.get("export_manifest") or {}).get("sha256"),
         "files": scope["files"], "catalog_release": catalog_release,
         "columns_release": columns_release, "rules": RULES, "settings": asdict(settings),
+        "source_dispositions": scope.get("source_dispositions"),
         "tool_version": tool_version, "implementation": implementation,
         "secondary": {name: [shard_ref(item) for item in values]
                       for name, values in sorted(inputs["secondary"].items())},

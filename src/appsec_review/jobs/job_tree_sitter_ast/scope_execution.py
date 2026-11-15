@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from appsec_review.config.first_party import job_dispositions
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.container_runtime.measurement import TreeSitterInvocation, record_reuse
 from appsec_review.runtime import UnitContext
@@ -137,7 +138,8 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
             unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
             path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
             for item in scope.files if any(record.get("path") == item["path"]
-                and record.get("status") != "TRUNCATED" for record in container_output.get("records", ()))})
+                and record.get("status") != "TRUNCATED" for record in container_output.get("records", ()))},
+        dispositions=job_dispositions(settings))
     measurement.record_output(unit.job.run_root, container_output)
     result = {"schema": SCHEMA, "scope_id": scope.scope_id, "project_id": scope.project_id,
               "translation_scope_id": scope.translation_scope_id, "language": scope.language,

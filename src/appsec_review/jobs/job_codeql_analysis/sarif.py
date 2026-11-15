@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -86,6 +88,26 @@ def _message(value: object, fallback: str) -> str:
     if isinstance(value, Mapping):
         return str(value.get("text") or value.get("markdown") or fallback)[:8192]
     return fallback[:8192]
+
+
+def scope_first_party(records: Sequence[Mapping[str, Any]],
+                      dispositions: "SourceDispositions") -> tuple[list[Mapping[str, Any]], dict[str, int]]:
+    """Keep the normalized results whose primary location is first-party; count the rest (T-5016).
+
+    The CodeQL database still compiles the whole unit, so a first-party result that flows through vendored
+    code keeps its flow steps; only results located in a non-first-party file are left out, and each is a
+    per-disposition count, never a gap. A result without a resolved location is first-party.
+    """
+    kept: list[Mapping[str, Any]] = []
+    excluded: dict[str, int] = {}
+    for record in records:
+        location = record.get("location") if isinstance(record.get("location"), Mapping) else None
+        kind = dispositions.classify(str(location.get("path")) if location and location.get("path") else None)
+        if kind == FIRST_PARTY:
+            kept.append(record)
+        else:
+            excluded[kind] = excluded.get(kind, 0) + 1
+    return kept, dict(sorted(excluded.items()))
 
 
 def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str, Any]],

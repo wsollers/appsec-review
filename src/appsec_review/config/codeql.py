@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Any
 
 from .assurance import ComponentReleases
+from appsec_review.review.dispositions import SourceDispositions
 
 
 _SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -296,6 +297,9 @@ class CodeQLAnalysisSettings:
     languages: Mapping[str, CodeQLLanguageSettings]
     export_queries: CodeQLExportSettings = field(default_factory=CodeQLExportSettings)
     preinstalled_runtimes: tuple[CodeQLPreinstalledRuntime, ...] = ()
+    # T-5016: the review's source dispositions, frozen with the run; query results located in a
+    # non-first-party file are counted, not published (the database still compiles the whole unit).
+    source_dispositions: SourceDispositions = field(default_factory=SourceDispositions)
     # "fail": an environment without a declaration is an error once any declaration exists.
     # "derive": a wholly undeclared environment uses the bounded derived-image path.
     preinstalled_undeclared: str = "fail"
@@ -385,7 +389,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         "concurrency", "inventory_timeout_seconds", "database_timeout_seconds",
         "query_timeout_seconds", "output_bytes", "database_file_limit", "database_bytes_limit",
         "sarif_bytes_limit", "result_limit", "threads", "ram_mb", "max_paths", "languages",
-        "export_queries", "preinstalled_runtimes", "preinstalled_undeclared",
+        "export_queries", "preinstalled_runtimes", "preinstalled_undeclared", "source_dispositions",
     }
     unknown = set(value) - allowed
     if unknown:
@@ -468,6 +472,8 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         commit=str(value.get("commit", "")), cli_sha256=str(value.get("cli_sha256", "")),
         license_sha256=str(value.get("license_sha256", "")),
         asset_lock_sha256=str(value.get("asset_lock_sha256", "")),
+        source_dispositions=SourceDispositions.from_mapping(
+            value.get("source_dispositions"), "jobs.job_codeql_analysis.settings.source_dispositions"),
         runtime_user=str(value.get("runtime_user", "")), retention=str(value.get("retention", "")),
         concurrency=int(value.get("concurrency", 0)),
         inventory_timeout_seconds=int(value.get("inventory_timeout_seconds", 0)),

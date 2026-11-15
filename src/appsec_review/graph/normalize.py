@@ -104,6 +104,7 @@ from appsec_review.retrieval.model import (
     SourceLocation,
     canonical_json,
 )
+from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 from appsec_review.review.models import IntegrityError
 
 COLUMNS_PATH = RULES_ROOT / "columns.json"
@@ -418,7 +419,9 @@ def _sha(value: Any) -> str:
 class _Normalizer:
     def __init__(self, exports: Mapping[str, Mapping[str, Any]], *, scope: Mapping[str, Any], target_snapshot: str,
                  sources: Mapping[str, SourceFile], catalog: Catalog, settings: GraphSettings, tool_version: str,
-                 export_pack_sha256: str, upstream: Sequence[Mapping[str, Any]]):
+                 export_pack_sha256: str, upstream: Sequence[Mapping[str, Any]],
+                 dispositions: SourceDispositions | None = None):
+        self.dispositions = dispositions
         self.scope_id = str(scope.get("scope_id") or "")
         if not self.scope_id:
             raise ValueError("graph normalization requires a scope_id")
@@ -1115,6 +1118,47 @@ class _Normalizer:
                          exact=exact and (entry is None or entry.payload["exact"]), gaps=gaps, complete=complete)
 
     # -- run ----------------------------------------------------------------------------------
+    def apply_dispositions(self) -> None:
+        """First-party scoping (T-5016): facts located in a non-first-party file are counted, not published.
+
+        The CodeQL database still compiles the whole unit, so a first-party call into vendored code keeps its
+        vendored callee ``symbol`` as a boundary; the vendored function's own facts are excluded. A path is kept
+        when its source or its sink is first-party, and the sink site a kept path reaches stays published as
+        its boundary. Each exclusion is a per-family ``excluded_<disposition>`` count, never a gap.
+        """
+        dispositions = self.dispositions
+        if dispositions is None or not dispositions.configured:
+            return
+
+        def disposition(location: SourceLocation | None) -> str:
+            return dispositions.classify(location.path if location is not None else None)
+
+        boundary_sinks: set[str] = set()
+        excluded: dict[Family, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+        for identity, fact in self.facts[Family.DATAFLOW_PATH].items():
+            result = fact.payload.get("result") or {}
+            steps = result.get("steps") or []
+            first = steps[0].get("location") if steps and isinstance(steps[0], Mapping) else None
+            source_path = first.get("path") if isinstance(first, Mapping) else None
+            sink_kind = disposition(fact.location)
+            if sink_kind == FIRST_PARTY or dispositions.classify(source_path) == FIRST_PARTY:
+                boundary_sinks.add(str((result.get("sink") or {}).get("sink_site") or ""))
+            else:
+                excluded[Family.DATAFLOW_PATH][sink_kind].append(identity)
+        for family in Family:
+            if family is Family.DATAFLOW_PATH:
+                continue
+            for identity, fact in self.facts[family].items():
+                kind = disposition(fact.location)
+                if kind == FIRST_PARTY or (family is Family.SINK_SITE and identity in boundary_sinks):
+                    continue
+                excluded[family][kind].append(identity)
+        for family, groups in excluded.items():
+            for kind, identities in groups.items():
+                for identity in identities:
+                    del self.facts[family][identity]
+                self.counts[family][f"excluded_{kind}"] += len(identities)
+
     def run(self) -> NormalizedScope:
         builders = (
             (Family.SINK_SITE, self.build_sinks), (Family.ENTRY_POINT, self.build_entries),
@@ -1131,6 +1175,7 @@ class _Normalizer:
                 continue
             self.truncated_exports(family)
             build()
+        self.apply_dispositions()
         # Bound each family deterministically by identity.
         cap = self.settings.max_facts_per_family_per_scope
         for family in Family:
@@ -1172,11 +1217,16 @@ class _Normalizer:
 def normalize_scope(exports: Mapping[str, Mapping[str, Any]], *, scope: Mapping[str, Any], target_snapshot: str,
                     sources: Mapping[str, SourceFile], catalog: Catalog, settings: GraphSettings | None = None,
                     tool_version: str, export_pack_sha256: str,
-                    upstream: Sequence[Mapping[str, Any]] = ()) -> NormalizedScope:
-    """Normalize one CodeQL scope's verified graph exports (see the module docstring)."""
+                    upstream: Sequence[Mapping[str, Any]] = (),
+                    dispositions: SourceDispositions | None = None) -> NormalizedScope:
+    """Normalize one CodeQL scope's verified graph exports (see the module docstring).
+
+    ``dispositions`` (T-5016) restricts the published facts to first-party locations; see
+    :meth:`_Normalizer.apply_dispositions`. ``None`` or an empty table publishes every located fact.
+    """
     return _Normalizer(exports, scope=scope, target_snapshot=target_snapshot, sources=sources, catalog=catalog,
                        settings=settings or GraphSettings(), tool_version=tool_version,
-                       export_pack_sha256=export_pack_sha256, upstream=upstream).run()
+                       export_pack_sha256=export_pack_sha256, upstream=upstream, dispositions=dispositions).run()
 
 
 __all__ = [

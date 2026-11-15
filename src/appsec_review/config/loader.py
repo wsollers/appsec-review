@@ -1473,6 +1473,25 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         tagging_settings["collation"] = collation_table
         jobs["job_security_tagging"] = _replace(tagging_job, settings=MappingProxyType(tagging_settings),
                                                 typed_settings=typed_collation)
+    # First-party scoping (T-5016): the graph producers freeze the review's T-165 disposition table.
+    from dataclasses import replace as _replace_scoped
+    from .first_party import FIRST_PARTY_SCOPED_JOBS, resolve_job_dispositions
+    review_for_scoping = jobs.get("job_inference_security_review")
+    inherited_scoping = (review_for_scoping.settings.get("source_dispositions")
+                         if review_for_scoping is not None else None)
+    for scoped_job_id in FIRST_PARTY_SCOPED_JOBS:
+        scoped_job = jobs.get(scoped_job_id)
+        if scoped_job is None:
+            continue
+        scoped_settings = dict(scoped_job.settings)
+        scoped_settings["source_dispositions"] = resolve_job_dispositions(
+            scoped_job_id, scoped_settings.get("source_dispositions"), inherited_scoping)
+        scoped_typed = scoped_job.typed_settings
+        if scoped_job_id == "job_codeql_analysis":
+            from .codeql import parse_codeql_settings as _parse_codeql_scoped
+            scoped_typed = _parse_codeql_scoped(scoped_settings)
+        jobs[scoped_job_id] = _replace_scoped(scoped_job, settings=MappingProxyType(scoped_settings),
+                                              typed_settings=scoped_typed)
     openvex_job = jobs.get("job_openvex_export")
     if openvex_job is not None and openvex_job.settings["enabled"]:
         for prerequisite in ("job_final_publication_gate", "job_inference_security_review"):

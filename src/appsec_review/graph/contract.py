@@ -151,6 +151,8 @@ class Producer(StrEnum):
     CLANG_STATIC = "clang-static"
     JOERN_CPG = "joern-cpg"
     SVF = "svf"
+    # Syntax-only call expressions from job_tree_sitter_ast (T-5016); written names, never resolution.
+    TREE_SITTER = "tree-sitter"
 
 
 FAMILY_KINDS: Mapping[Family, EntityKind] = {family: EntityKind(family.value) for family in Family}

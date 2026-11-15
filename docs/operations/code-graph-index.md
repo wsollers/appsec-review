@@ -23,14 +23,54 @@ accepted CodeQL plan names, each verified against its accepted SHA-256.
 | Per-scope export records | `outputs["execution.scopes"].graph_export_artifact` in the accepted `job_codeql_analysis` result (`appsec-review/codeql-graph-exports/1`), not the compact handoff output projection | The artifact, the result and the plan must be bound to the accepted handoff by path and SHA-256 |
 | Raw exports | `data/codeql/scopes/<scope>/exports/` | `export-manifest.json` must equal the manifest identity bound to the accepted handoff, then `codeql.runtime.load_graph_exports` checks every file. The CodeQL job's own `export-checkpoint.json` is never read |
 | Scope files | The accepted CodeQL plan (`plan.inventory`) | Bytes are read from the target root and must match the planned SHA-256 |
-| clangd, LLVM IR and Clang AST shards | `analysis` shards of `job_cpp_symbol_index` (`clangd-*`) and `job_cpp_compiled_analysis` (`branch` `ir` and `ast`), from the accepted manifest or, when the `job_codeql_analysis` manifest rewrite dropped them, from those jobs' own accepted handoffs (`restored_secondary` in the load output) | Accepted manifest verification; a restored shard's handoff manifest is re-verified and the shard must be produced by that handoff's job |
+| clangd, LLVM IR, Clang AST and tree-sitter shards | `analysis` shards of `job_cpp_symbol_index` (`clangd-*`), `job_cpp_compiled_analysis` (`branch` `ir` and `ast`) and `job_tree_sitter_ast` (one per component, build unit and language; the `tree-sitter-coverage-*` shard is not a producer), from the accepted manifest or, when the `job_codeql_analysis` manifest rewrite dropped them, from those jobs' own accepted handoffs (`restored_secondary` in the load output) | Accepted manifest verification; a restored shard's handoff manifest is re-verified and the shard must be produced by that handoff's job |
+| Source dispositions | `settings.source_dispositions`, the review's T-165 table frozen into this job by the loader (`config/first_party.py`) | A table that differs from `jobs.job_inference_security_review.settings.source_dispositions` fails loading |
 | CodeQL observations | Accepted `observations` shards `codeql-<language>-<scope>-*` | Accepted manifest verification |
 | Prioritization flow steps | Accepted `priority` shards of `job_review_prioritization`, when present | Accepted manifest verification |
 | Catalog and columns | Supplied `rules/codeql-graph-export/catalog.json` and `columns.json` | Catalog shape and export contracts are checked; the catalog release must match frozen `review_policy.releases.graph_catalog`. Missing bound configuration or a contradictory release fails. Reuse requires declared graph catalog, columns, normalizer and validation releases, not fresh customer-evidence hashes of supplied files. |
 
-Each clangd, IR and AST shard serves exactly one CodeQL scope: the scope whose planned files hold
-most of the shard's located paths, with ties broken by scope id. A shard is never shared between two
-scopes, and a scope without one of its own is cross-checked as `not_covered`.
+Each clangd, IR, AST and tree-sitter shard serves exactly one CodeQL scope: the scope whose planned
+files hold most of the shard's located paths, with ties broken by scope id. A shard is never shared
+between two scopes, and a scope without one of its own is cross-checked as `not_covered`.
+
+On smoke-cpp run `2026-11-14-0005` no shard was assigned at all: the clangd job had indexed nothing
+because `job_cpp_compiled_analysis` marked the only build unit `BLOCKED_BY_COMPILE` on a single
+low-confidence build-output heuristic gap (a build that completed with named gaps is usable since
+T-5016, as the CodeQL planner already treated it), the Clang AST and IR shards were empty for the same
+reason, and the three populated tree-sitter shards were not a producer. Tree-sitter now is one
+(`graph-cross-check/1`, producer `tree-sitter`): a CodeQL `call_site` whose exact span equals a syntax
+`call_expression` agrees when the written callee name matches, is `partial` when the written text
+differs (syntax resolves nothing, so it never contradicts), and a syntax call in a file CodeQL covers but
+at a span CodeQL reports no call for becomes a bounded `secondary_only` fact.
+
+## First-party scoping
+
+The graph producers spend their budgets on first-party code first and keep every exclusion as a count
+(T-5016). `job_tree_sitter_ast` orders each scope's files first-party first before chunking and the
+container's per-scope node budget; a vendored file the budget did not reach is counted in
+`counts.dispositions.excluded_files`, never a gap. `job_cpp_symbol_index` admits symbols first-party first
+under `max_symbols_per_scope` (`symbols_by_disposition`, `excluded_symbols_by_disposition`; only a
+first-party exclusion is the `clangd symbol limit reached` gap). `job_codeql_analysis` still builds the
+database over the whole unit, so calls into vendored code resolve, but query results located in a
+non-first-party file are counted per query (`excluded_results`) and not published. This job's
+`normalize.scopes` drops facts located in non-first-party files with per-family `excluded_<disposition>`
+counts on the coverage row: a path survives when its source or its sink is first-party and keeps that
+sink site as its boundary, and every function `symbol` stays so a first-party call into vendored code
+keeps its callee. The disposition table is part of each scope's checkpoint identity.
+
+## Graph quality scorecard
+
+`acceptance.publish_handoff` writes `graph-quality-scorecard.json`
+(`appsec-review/graph-quality-scorecard/1`, closed schema
+`docs/schemas/graph-quality-scorecard.schema.json`, dataset `code_graph_scorecard`) and a one-screen
+`graph-quality-scorecard.txt` beside `code-graph-summary.json`. Per scope it lists every first-party
+function once with its call edges by cross-check verdict (`agree`, `disagree`, `partial`, `not_covered`
+= CodeQL only, `secondary_only`) and the producers that agreed; every dataflow path with its endpoints,
+classes, direct eligibility and SARIF correlation state (`bridged`, `partial`, `broken`,
+`uncorrelated`); sink classification coverage with the unclassified APIs; the cross-check producers
+attached; and the first-party exclusion counts. The report renders the text in its coverage section
+(`reporting/graph_quality.py`). It is a measurement of the published graph, never evidence about the
+target. [Smoke runs](test-targets.md#smoke-runs) says how to read it.
 
 ## Units
 
@@ -116,7 +156,9 @@ matches but its shards no longer verify, the job deletes it and rebuilds the sco
 
 `[jobs.job_code_graph_index]` declares the five steps, `settings.workers` (the number of scopes
 processed at once in each unit) and `settings.graph`, which holds the `GraphSettings` bounds from
-`graph/contract.py`. The same `settings.graph` table, read from the run-bound resolved configuration
+`graph/contract.py`. `settings.source_dispositions` is not written in the TOML: the loader copies the
+review's table into this job, `job_tree_sitter_ast`, `job_cpp_symbol_index` and `job_codeql_analysis`
+(`config/first_party.py`), and refuses a producer table that differs. The same `settings.graph` table, read from the run-bound resolved configuration
 (`graph/settings.py::run_graph_settings`), sets the caps `query_code_graph` enforces for review
 cells, scoring and MCP sessions; contract defaults apply only when a run binds no such table.
 

@@ -283,7 +283,7 @@ definition byte span is equal, otherwise `ambiguous` with the method `name-and-f
 | `GUARD_POLARITY` | `true_branch`, `false_branch`, `unknown` |
 | `CROSS_CHECK_STATES` | `agree`, `disagree`, `not_covered`, `partial` |
 | `COVERAGE` | `complete`, `partial`, `unavailable` (shared with every other index) |
-| `PRODUCERS` | `codeql-export`, `clangd`, `llvm-ir`, `clang-ast`, `svf` (opt-in points-to cross-check; [`svf-alias-producer.md`](svf-alias-producer.md)) |
+| `PRODUCERS` | `codeql-export`, `clangd`, `llvm-ir`, `clang-ast`, `tree-sitter` (syntax call expressions by exact span, T-5016), `svf` (opt-in points-to cross-check; [`svf-alias-producer.md`](svf-alias-producer.md)) |
 
 Sink and source classes are assigned by the versioned catalog `rules/codeql-graph-export/catalog.json`
 (`appsec-review/graph-catalog/1`), which maps CodeQL model identities (for C/C++: the

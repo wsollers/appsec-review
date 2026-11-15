@@ -4,7 +4,8 @@ import pytest
 
 from appsec_review.graph import contract as c
 from appsec_review.graph.crosscheck import (
-    METHOD_AST_NAME, METHOD_CLANGD_SPAN, METHOD_IR_NAME, CrossCheckInputs, SourceFile, cross_check, link_symbols,
+    METHOD_AST_NAME, METHOD_CLANGD_SPAN, METHOD_IR_NAME, METHOD_TREE_SITTER_SPAN, CrossCheckInputs, SourceFile,
+    cross_check, link_symbols,
 )
 from appsec_review.retrieval import IndexBuilder
 from appsec_review.retrieval.model import RelationKind
@@ -260,3 +261,86 @@ def test_source_file_rejects_changed_bytes_and_maps_utf16_columns() -> None:
         SourceFile("0" * 64, b"x")
     with pytest.raises(ValueError):
         cross_check([], CrossCheckInputs(), target_snapshot=SNAPSHOT, scope={}, sources={})
+
+
+# --------------------------------------------------------------------------- tree-sitter (T-5016)
+
+
+def test_tree_sitter_agrees_at_the_exact_call_span_with_the_written_callee_name(tmp_path) -> None:
+    fixture = build_secondary(tmp_path)
+    facts = _facts(fixture)
+    result = _run(fixture, facts, tree_sitter=(fixture.read("tree_sitter"),))
+    by_id = _by_identity(result)
+    agree = by_id[facts["agree"].identity.value]
+    assert agree.payload["cross_check"]["state"] == "agree"
+    assert _producer(agree, "tree-sitter") == {"name": "tree-sitter", "state": "agree", "method": METHOD_TREE_SITTER_SPAN}
+    assert agree.payload["admissibility"]["direct_eligible"] is True
+    derived = [r for r in result.relations if r.kind is RelationKind.DERIVED_FROM and r.source_id == agree.identity.value]
+    assert [(r.target_id, r.exact) for r in derived] == [(fixture.ids["ts:call:helper(n)#0"], True)]
+    # An external callee CodeQL cannot resolve is still a call expression syntax saw: agree, not not_covered.
+    external = by_id[facts["external"].identity.value]
+    assert external.payload["cross_check"]["state"] == "agree"
+    assert result.summary["producers"] == {"tree-sitter": [fixture.read("tree_sitter").upstream]}
+    agree.to_entity()
+
+
+def test_tree_sitter_written_name_that_differs_is_partial_never_a_contradiction(tmp_path) -> None:
+    fixture = build_secondary(tmp_path, tree_sitter_calls=(("process", "OTHER_MACRO", "other(a)", 0),))
+    facts = _facts(fixture)
+    result = _run(fixture, facts, tree_sitter=(fixture.read("tree_sitter"),))
+    fact = _by_identity(result)[facts["disagree"].identity.value]
+    assert fact.payload["cross_check"]["state"] == "partial"
+    producer = _producer(fact, "tree-sitter")
+    assert producer["state"] == "partial" and "OTHER_MACRO" in producer["detail"] and "do not resolve" in producer["detail"]
+    assert not [r for r in result.relations if r.kind is RelationKind.CONTRADICTS]
+    assert "cross_check_partial" in fact.payload["admissibility"]["ineligibility_reasons"]
+    # A span syntax never saw is not covered, with the reason named.
+    other = _by_identity(result)[facts["agree"].identity.value]
+    assert _producer(other, "tree-sitter")["detail"] == "no syntax call expression at this span"
+
+
+def test_tree_sitter_call_without_a_codeql_call_site_is_a_bounded_secondary_only_fact(tmp_path) -> None:
+    fixture = build_secondary(tmp_path)
+    facts = _facts(fixture)
+    result = _run(fixture, facts, tree_sitter=(fixture.read("tree_sitter"),))
+    secondary = [f for f in result.facts if f.payload["result"]["callee"]["dispatch"] == "secondary_only"]
+    assert len(secondary) == 1  # ``return helper(b)`` on line 8 has no CodeQL call_site in the fixture facts
+    fact = secondary[0]
+    assert fact.payload["producer"]["name"] == "tree-sitter"
+    assert fact.payload["result"]["secondary"]["written_name"] == "helper"
+    assert fact.payload["result"]["caller"]["symbol"] == fixture.ids["ts:def:process"]
+    assert fact.payload["admissibility"]["direct_eligible"] is False and fact.payload["exact"] is False
+    assert fact.location.start_line == 8 and not fact.location.ambiguous
+    assert any("not a CodeQL negative" in gap for gap in fact.payload["gaps"])
+    assert result.summary["secondary_only"] == {"tree-sitter": 1}
+    kinds = {(r.kind, r.source_id, r.target_id) for r in result.relations}
+    assert (RelationKind.CONTAINS, fixture.ids["ts:def:process"], fact.identity.value) in kinds
+    fact.to_entity()
+
+
+def test_a_scope_covered_by_its_tree_sitter_and_clangd_shards_has_no_not_covered_call_site(tmp_path) -> None:
+    fixture = build_secondary(tmp_path)
+    facts = _facts(fixture)
+    result = _run(fixture, facts, clangd=(fixture.read("clangd"),), tree_sitter=(fixture.read("tree_sitter"),))
+    checked = [fact for fact in result.facts if fact.identity.value in {f.identity.value for f in facts.values()}]
+    assert len(checked) == 3
+    assert result.summary["states"]["not_covered"] == 0
+    for fact in checked:
+        assert fact.payload["cross_check"]["state"] in {"agree", "disagree", "partial"}
+        assert {item["name"] for item in fact.payload["cross_check"]["producers"]} == {"clangd", "tree-sitter"}
+    by_id = _by_identity(result)
+    assert by_id[facts["agree"].identity.value].payload["cross_check"]["state"] == "agree"
+    assert by_id[facts["disagree"].identity.value].payload["cross_check"]["state"] == "disagree"  # clangd contradicts
+    assert by_id[facts["external"].identity.value].payload["cross_check"]["state"] == "agree"     # syntax saw memcpy
+    assert set(result.summary["producers"]) == {"clangd", "tree-sitter"}
+
+
+def test_tree_sitter_shard_for_other_files_leaves_every_fact_not_covered_with_the_reason(tmp_path) -> None:
+    fixture = build_secondary(tmp_path, tree_sitter_calls=())
+    facts = _facts(fixture)
+    result = _run(fixture, facts, tree_sitter=(fixture.read("tree_sitter"),))
+    for fact in _by_identity(result).values():
+        if fact.identity.value in {f.identity.value for f in facts.values()}:
+            assert fact.payload["cross_check"]["state"] == "not_covered"
+            assert _producer(fact, "tree-sitter")["detail"] == "no syntax call expression at this span"
+    assert result.summary["secondary_only"] == {}
