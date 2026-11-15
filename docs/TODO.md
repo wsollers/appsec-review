@@ -3148,6 +3148,18 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_codeql_analysis/test_codeql_jobrunner.py`; 1393/1433 job-package lines
   [97.21%] and 493/526 branches [93.73%] covered, with all 5 modules >=96.2% lines and >=91.4%
   branches).
+  job_code_graph_index (31/47; 6 unit files, 28 cases: pinned 11-input / 5-dataset contract and
+  5-unit DAG topology, operator catalog-pin verification and mid-attempt drift guard, accepted
+  CodeQL input loading with legacy `export.scopes` fallback and 12 `IntegrityError` custody/schema/
+  plan guards, graph-export and accepted-source verification, native secondary and analyzer shard
+  restoration and assignment, producer neighborhood CFG/diagnostic/CPG/symbol/link builders with
+  truncation and seeded gap accounting, scope checkpoint reuse and invalid-leftover cleanup,
+  cross-check/analyzer/SVF/SARIF correlation handlers, `RetrievalCore.query_code_graph` modes,
+  `code_graph_scorecard` schema/inventory ownership, and consumed-shard publication guard;
+  `JobRunner`/Dagster suite relocated to
+  `tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py`; 851/859 job-package
+  lines [99.07%] and 275/284 branches [96.83%] covered, with all 5 modules >=97.2% lines and
+  >=93.7% branches).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

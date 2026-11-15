@@ -114,9 +114,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | `tests/integration/test_code_graph_integration.py` |
+| integration | `tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py`<br>`tests/integration/test_code_graph_integration.py` |
 | live | `tests/live/test_code_graph_live.py` |
-| unit | `tests/test_code_graph_index_job.py` |
+| unit | `tests/unit/job_code_graph_index/test_contract.py`<br>`tests/unit/job_code_graph_index/test_datasets.py`<br>`tests/unit/job_code_graph_index/test_handlers.py`<br>`tests/unit/job_code_graph_index/test_producers.py`<br>`tests/unit/job_code_graph_index/test_scopes.py`<br>`tests/unit/job_code_graph_index/test_secondary_assignment.py` |
 
 ### Dagster placement
 

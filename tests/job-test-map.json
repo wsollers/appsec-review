@@ -131,8 +131,18 @@
       "live": ["tests/live/test_seeded_clang_live.py"]
     },
     "job_code_graph_index": {
-      "unit": ["tests/test_code_graph_index_job.py"],
-      "integration": ["tests/integration/test_code_graph_integration.py"],
+      "unit": [
+        "tests/unit/job_code_graph_index/test_contract.py",
+        "tests/unit/job_code_graph_index/test_datasets.py",
+        "tests/unit/job_code_graph_index/test_handlers.py",
+        "tests/unit/job_code_graph_index/test_producers.py",
+        "tests/unit/job_code_graph_index/test_scopes.py",
+        "tests/unit/job_code_graph_index/test_secondary_assignment.py"
+      ],
+      "integration": [
+        "tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py",
+        "tests/integration/test_code_graph_integration.py"
+      ],
       "acceptance": [],
       "live": ["tests/live/test_code_graph_live.py"]
     },
