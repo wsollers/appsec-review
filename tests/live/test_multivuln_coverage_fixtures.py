@@ -1,3 +1,5 @@
+"""Pre-walk target-backed coverage fixture suite moved from tests/test_multivuln_coverage_fixtures.py."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,7 +11,7 @@ import pytest
 from appsec_review.jobs.job_test_coverage import bind_coverage_paths, parse_coverage
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 TARGET = ROOT / "targets" / "appsec-multi-vuln"
 
 

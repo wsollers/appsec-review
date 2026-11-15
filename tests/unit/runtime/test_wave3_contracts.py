@@ -19,8 +19,6 @@ from appsec_review.jobs.job_artifact_security_analysis.scanners import ADAPTERS
 from appsec_review.jobs.job_build_iteration import build_job as build_iteration
 from appsec_review.jobs.job_change_context_analysis import build_job as build_change_context
 from appsec_review.jobs.job_profile_data import build_job as build_profile_data, load_accepted_profile_data
-from appsec_review.jobs.job_review_intake import build_job as build_intake
-from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_test_coverage import build_job as build_test_coverage, load_accepted_test_coverage
 from appsec_review.retrieval import write_manifest
 from appsec_review.retrieval.index import load_verified_manifest
@@ -67,24 +65,6 @@ def _wave3_runner(tmp_path: Path, job_ids: tuple[str, ...], *,
     return JobRunner(config)
 
 
-def _seed_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
-                      disabled_jobs: tuple[str, ...] = ()):
-    job_ids = ("job_review_intake", "job_target_catalog", *extra_job_ids)
-    runner = _wave3_runner(tmp_path, job_ids, disabled_jobs=disabled_jobs)
-    target = tmp_path / "target"
-    (target / "src").mkdir(parents=True)
-    (target / "src" / "main.c").write_text("int hot(void) { return 1; }\nint main(void) { return hot(); }\n",
-                                           encoding="utf-8")
-    snapshot = source_fingerprint(target)
-    run_id, run_root = RunStore(runner.config.runtime.runs_dir).create(datetime.now(timezone.utc))
-    intake_out = runner.run(build_intake(), run_id=run_id, target_root=target, source_fingerprint=snapshot)
-    catalog_out = runner.run(
-        build_catalog(), run_id=run_id, target_root=target, source_fingerprint=snapshot,
-        upstream_handoffs={"job_review_intake": intake_out["handoff_sha256"]},
-    )
-    return runner, run_id, run_root, target, snapshot, catalog_out
-
-
 def _recorded_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
                           disabled_jobs: tuple[str, ...] = ()):
     job_ids = ("job_target_catalog", *extra_job_ids)
@@ -101,21 +81,27 @@ def _recorded_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
         cat_dir = unit.job.attempt_root / "artifacts" / "catalog"
         partition_path = cat_dir / "partition.json"
         atomic_json(partition_path, {"files": [{"path": "src/main.c", "sha256": file_sha256(main_c)}]})
+        components_path = cat_dir / "components.json"
+        atomic_json(components_path, {"components": [{"component_id": "comp:root", "root": "."}]})
         manifest_path = run_root / "data" / "indices" / "manifests" / "catalog-fixture.json"
         write_manifest(manifest_path, run_id=run_id, target_snapshot=snapshot, target_root=target, indexes=[])
+        part_ref = artifact_ref(run_root, partition_path)
+        comp_ref = artifact_ref(run_root, components_path)
         catalog_path = cat_dir / "target-catalog.json"
         atomic_json(catalog_path, {
             "schema": "appsec-review/target-catalog/1",
             "source_fingerprint": snapshot,
-            "artifacts": {"repository_discovery.partition_repository": artifact_ref(run_root, partition_path)},
+            "artifacts": {
+                "repository_discovery.partition_repository": part_ref,
+                "component_discovery.catalog_components": comp_ref,
+            },
         })
         cat_ref = artifact_ref(run_root, catalog_path)
-        part_ref = artifact_ref(run_root, partition_path)
         mf_ref = artifact_ref(run_root, manifest_path)
         return {
             "artifact": cat_ref,
             "index_manifest": mf_ref,
-            "artifacts": [cat_ref, part_ref, mf_ref],
+            "artifacts": [cat_ref, part_ref, comp_ref, mf_ref],
             "gaps": [],
             "terminal_status": "SUCCEEDED",
         }
@@ -128,7 +114,7 @@ def _recorded_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
         schema_identity=builtin_cat.schema_identity, input_identity=lambda _: snapshot,
     )
     catalog_out = runner.run(cat_job, run_id=run_id, target_root=target, source_fingerprint=snapshot)
-    return runner, run_id, run_root, target, snapshot, catalog_out
+    return runner, run_id, run_root, target, snapshot, catalog_out, cat_job
 
 
 def test_wave3_contract_input_policies_match_confirmed_decisions() -> None:
@@ -177,7 +163,7 @@ def test_wave3_contract_input_policies_match_confirmed_decisions() -> None:
 
 
 def test_wave3_admission_rejects_missing_required_and_enabled_conditional_handoffs(tmp_path: Path) -> None:
-    runner, run_id, _run_root, target, snapshot, catalog_out = _recorded_catalog_run(
+    runner, run_id, _run_root, target, snapshot, catalog_out, _cat_job = _recorded_catalog_run(
         tmp_path / "all_enabled",
         (
             "job_project_build", "job_build_iteration",
@@ -214,7 +200,7 @@ def test_wave3_admission_rejects_missing_required_and_enabled_conditional_handof
 
 
 def test_wave3_admission_rejects_missing_artifact_indexing_when_language_build_disabled(tmp_path: Path) -> None:
-    ai_only_runner, ai_run_id, _ai_root, ai_target, ai_snap, ai_catalog = _recorded_catalog_run(
+    ai_only_runner, ai_run_id, _ai_root, ai_target, ai_snap, ai_catalog, _cat_job = _recorded_catalog_run(
         tmp_path / "artifact_enabled",
         ("job_artifact_indexing", "job_test_coverage", "job_profile_data"),
         disabled_jobs=("job_language_build",),
@@ -230,7 +216,7 @@ def test_wave3_admission_rejects_missing_artifact_indexing_when_language_build_d
 def test_change_context_analysis_publishes_unavailable_handoff_when_source_history_disabled(
     tmp_path: Path,
 ) -> None:
-    runner, run_id, run_root, target, snapshot, catalog_out = _seed_catalog_run(
+    runner, run_id, run_root, target, snapshot, catalog_out, cat_job = _recorded_catalog_run(
         tmp_path, ("job_change_context_analysis",),
         disabled_jobs=("job_source_history_analysis",),
     )
@@ -259,7 +245,7 @@ def test_change_context_analysis_publishes_unavailable_handoff_when_source_histo
     manifest, _ = load_verified_manifest(run_root, run_root / manifest_ref["path"], manifest_ref["sha256"])
     assert any(item["producer"]["job"] == "job_change_context_analysis" for item in manifest["indexes"])
 
-    all_jobs = (build_intake(), build_catalog(), cc_job)
+    all_jobs = (cat_job, cc_job)
     accepted_by_job = {item.job_id: accepted_handoff(run_root, item.job_id) for item in all_jobs}
     shards_by_key = {
         shard_key(shard): shard
@@ -269,7 +255,6 @@ def test_change_context_analysis_publishes_unavailable_handoff_when_source_histo
         for shard in mf["document"].get("indexes", ())
     }
     statuses = {
-        "job_review_intake": {},
         "job_target_catalog": {
             key: val.get("terminal_status", "SUCCEEDED")
             if isinstance(val, dict) else "SUCCEEDED"
@@ -296,7 +281,7 @@ def test_coverage_and_profile_publish_unavailable_gaps_when_build_and_artifact_i
 ) -> None:
     job = build_test_coverage() if consumer == "coverage" else build_profile_data()
     loader = load_accepted_test_coverage if consumer == "coverage" else load_accepted_profile_data
-    runner, run_id, run_root, target, snapshot, catalog_out = _recorded_catalog_run(
+    runner, run_id, run_root, target, snapshot, catalog_out, _cat_job = _recorded_catalog_run(
         tmp_path, (job.job_id,),
         disabled_jobs=("job_language_build", "job_artifact_indexing"),
     )
@@ -325,7 +310,7 @@ def test_coverage_and_profile_ingest_language_receipts_when_only_artifact_indexi
     tmp_path: Path, consumer: str,
 ) -> None:
     job = build_test_coverage() if consumer == "coverage" else build_profile_data()
-    runner, run_id, run_root, target, snapshot, catalog_out = _recorded_catalog_run(
+    runner, run_id, run_root, target, snapshot, catalog_out, _cat_job = _recorded_catalog_run(
         tmp_path, ("job_language_build", job.job_id),
         disabled_jobs=("job_artifact_indexing",),
     )

@@ -587,12 +587,19 @@
     },
     "job_test_coverage": {
       "unit": [
-        "tests/test_test_coverage.py",
+        "tests/unit/job_test_coverage/test_contract.py",
+        "tests/unit/job_test_coverage/test_parsers.py",
+        "tests/unit/job_test_coverage/test_ingestion.py",
+        "tests/unit/job_test_coverage/test_job_graph.py",
         "tests/unit/runtime/test_wave3_contracts.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/test_signal_job_acceptance.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": [
+        "tests/live/test_multivuln_coverage_fixtures.py"
+      ]
     },
     "job_third_party_data_sync": {
       "unit": [
