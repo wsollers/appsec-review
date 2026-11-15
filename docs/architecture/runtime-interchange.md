@@ -93,10 +93,14 @@ records their exact scope. No worker/MCP authority is added.
 - [T-159](../TODO.md) owns SVF module-level partial reasons that do not reach the root canonical
   outcome projection. The module rows remain present; this is an accounting boundary gap,
   not evidence that all SVF coverage was lost.
-- [T-152, T-153 and T-156](../TODO.md) retain the unimplemented warrant, semantic-resolution and
-  execution-coverage boundaries beyond T-150's implemented audit.
-- [T-164](../TODO.md) owns content-addressed artifact references throughout handoff bodies in place
-  of interim attempt-path `@` normalization and `artifact_content` pairs.
+- [T-153 and T-156](../TODO.md) retain the paired warrant-policy evaluation, semantic-resolution
+  and execution-coverage boundaries beyond T-150's implemented audit and T-152's opt-in warrant
+  enforcement.
+- [T-164](../TODO.md) owns construction-time validation of `IndexIdentity.producer["job"]` across
+  synthetic test fixtures.
+- [T-5001, T-5004 and T-5015](../TODO.md) own bounding `pipeline.jsonl` with streaming reporting
+  consumers, narrowing OWASP declared inputs/reads, and revalidating unchanged descendants when a
+  producer's dataset contract widens on repair.
 
 ## Jobs and pages
 

@@ -66,6 +66,8 @@ Shared-host checkout/environment and serialized integration custody remain gover
   expectations. The detailed table in `testing.md` identifies each source boundary.
 - [T-148](../TODO.md) records the exact unavailable archive-link coverage; that named skip is not
   a successful historical-document check.
+- [T-5019](../TODO.md) owns the smoke-run verification harness checking end-to-end run behavior and
+  artifact production.
 
 No integration, acceptance, live review or deployment result is claimed by this documentation
 program's offline checks.

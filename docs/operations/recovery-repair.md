@@ -139,10 +139,12 @@ artifacts, which stay in the run, so `latest.json` of a producer may name a newe
 one a revalidated consumer cites; that is expected, and `revalidation.json` beside the reused attempt
 (`appsec-review/attempt-revalidation/1`: dispatch, pinned and current handoff hash per producer, the
 shared `content_sha256`, `decided_at`) and the `REVALIDATED` pipeline event record why. A changed job dataset contract refuses
-the whole plan (`unsupported dataset compatibility change for <job>`) unless the change only
+the whole plan (`unsupported dataset compatibility change for <job>`) unless the canonicalized JSON
+comparison (`compatible_dataset_change`) shows the change only
 *adds* datasets or typed input requirements and leaves every other field of the contract
 identical; such a compatible widening forces that job to `RUN` and the plan stays admissible,
-while a plan that would reuse an accepted attempt of the widened job is refused. A removed or
+while a plan that would reuse an accepted attempt of the widened job is refused ([T-5015](../TODO.md)
+tracks forcing a widened job to `RUN` while revalidating unchanged descendants). A removed or
 edited dataset, a removed input, a contract schema change or a changed dispatch flag is still an
 incompatible wire-contract change that no source-code repair can approve. `admit-repair` rederives it while
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command

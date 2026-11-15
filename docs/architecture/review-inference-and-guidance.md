@@ -11,10 +11,13 @@ last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
 ## As built today
 
 This view reflects the current source tree, including T-150's
-model-free protected audit producer and opted-in application readers, T-165's first-party
-`source_dispositions` scope classification, and T-167's deterministic stylistic/readability
-lead filter (`lead_filters.stylistic`). Later warrant, obligation,
-allocation and efficacy proposals remain separate from these implemented boundaries.
+model-free protected audit producer and opted-in application readers, T-152's opt-in predicate
+warrant enforcement (`warrant_policy.enabled = false`), T-165's first-party `source_dispositions`
+scope classification, T-167's deterministic stylistic/readability lead filter
+(`lead_filters.stylistic`), T-5000's shared per-unit context documents
+(`appsec-review/review-package/7`, `package-unit-context/2`), and T-5008's facet collation pass
+([collation pass](collation-pass.md)). Later paired warrant evaluation, obligation, allocation and
+efficacy tasks remain separate from these implemented boundaries.
 
 ### Context is not proof
 
@@ -28,8 +31,12 @@ Several producers help decide where to look without deciding what is vulnerable:
 
 - Prioritization ranks files/functions from available metrics and signals. Missing dimensions
   lower feature coverage; high rank is not a finding.
-- Security tags retain declared, invoked, reported and derived bases. An invoked graph-backed
-  capability describes an operation; a derived crosswalk tag is applicability context.
+- Security tags retain declared, invoked, reported and derived bases. Before crosswalk derivation,
+  the [collation pass](collation-pass.md) (`collation.collate_facets` plus default-off
+  `collation.model_pass`) publishes closed `role`, `exposure`, `trust`, `mechanism`, `asset`,
+  `state` and per-component `target:*` facets (`facets` shard, `collation-pass/1`). An invoked
+  graph-backed capability describes an operation; collated facets and derived crosswalk tags are
+  routing and applicability context.
 - The deterministic generated DFD/threat model retains original citations and unknowns. The
   current [behavior loader](../../src/appsec_review/review/behavior.py) verifies an optional
   admitted model and attaches bounded context to matching operation packages. It does not turn
@@ -39,20 +46,31 @@ Several producers help decide where to look without deciding what is vulnerable:
   The separate document-issue job maps bounded route subjects but publishes only private,
   unadjudicated candidates. The inference job builds its own lead/hunt package manifests; a
   scheduling edge after document analysis is not proof that its candidates became findings.
-- OWASP assessment investigates supported, named source-subject obligations. Its deterministic
-  citation checks and fresh independent reviewer can support scoped analyst assessments.
-  Catalog completeness, routing tags and a satisfied subject do not establish whole-component
-  control coverage or compliance. Qualification-mode results are not target assessments.
+- OWASP assessment investigates supported, named source-subject obligations after gating ASVS
+  (`target:web-api`) and MASVS (`target:mobile`) on accepted `target:*` and facet tags
+  (`component-classification/2`, `applicability-rules/2`, `target-class-ledger/1`); when neither
+  class applies, it finishes `SUCCEEDED` with zero worker batches and zero `control_evidence` rows.
+  Its deterministic citation checks and fresh independent reviewer can support scoped analyst
+  assessments. Catalog completeness, routing tags and a satisfied subject do not establish
+  whole-component control coverage or compliance. Qualification-mode results are not target
+  assessments.
 
 The [behavior-oriented package assembler](../../src/appsec_review/review/packages.py) prefers
 accepted operation anchors while retaining bounded path fallback and below-cutoff accounting.
 Manifest acceptance classifies every cataloged source file under configured `source_dispositions`
 (`test`, `vendored`, `generated`, `example` or `first_party`, evaluated in precedence order via
-shared POSIX `path_globs`). Deep hunt unit assembly restricts candidate units to `first_party`
-sources, and lead scoping excludes observations on non-`first_party` files or configured
-`lead_filters.stylistic` rules (`outside_review_scope` with explicit `exclusion` provenance,
-`source_dispositions` and `counts.dispositions` in the package manifest) without deleting
-upstream scanner records; see
+shared POSIX `path_globs`). Operation discovery (`graph_operations`) excludes `entry_point` and
+`sink_site` facts in non-`first_party` sources (`vendored`, `sdk`, `generated`, `test`) with one
+`skipped` behavior gap per disposition rather than modeling non-first-party operations without a
+fallback unit. Deep hunt unit assembly restricts candidate units to `first_party` sources, ranks
+units with exposure/trust facet weights (`review-unit-rank/4`), writes unit-wide context,
+`unit-facets/2` and `hunt-facet-obligations/1` once per hunted unit under
+`unit-context/<sha256>.json` (`package-unit-context/2`), and references that shared document by
+SHA-256 from each hunt partition (`appsec-review/review-package/7`, `package-view/5`;
+[bounded slices](dataflow-bounded-slices.md)). Lead scoping excludes observations on
+non-`first_party` files or configured `lead_filters.stylistic` rules (`outside_review_scope` with
+explicit `exclusion` provenance, `source_dispositions` and `counts.dispositions` in the package
+manifest) without deleting upstream scanner records; see
 [review scope](../operations/inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations).
 Operation-only investigation is not whole-file coverage. Generated questions and evidence requests
 remain questions until original evidence is retrieved and admitted for the relevant predicate.
@@ -65,9 +83,11 @@ reference context and tags remain indirect. The
 [obligation policy](../../src/appsec_review/review/obligations.py) chooses required predicates by
 claim family; it does not demand a source-to-sink path for every secret, configuration or
 dependency claim. [Predicate warrants](../../src/appsec_review/review/warrants.py)
-(`predicate-warrant/1`, [T-152](../TODO.md)) check that re-resolved evidence binds to the claim's
-scoped subject, sink, operand and build configuration across both guard polarities before wiring
-into adjudication.
+(`predicate-warrant/1`, `docs/schemas/predicate-warrant.schema.json`) check that re-resolved
+evidence binds to the claim's scoped subject, sink, operand and build configuration across both
+guard polarities; `warrant_policy` (`enabled = false` by default) wires warrant enforcement
+through `resolve_warranted_relation`, R5 `adjudicate()`, `scoring`, symmetric lane warrants and
+`decision_audit` warrant continuations ([warrant contract](triage-verifier-enhancement.md)).
 
 ### Guidance is selected data, not authority
 
@@ -199,6 +219,13 @@ owns the detailed origin, budget, continuation and compatibility rules.
   `generated`, `example`) and configured stylistic/readability rules (`lead_filters.stylistic`) out
   of deep red/blue/verifier cells while recording every exclusion under `outside_review_scope` and
   `counts.dispositions` ([review scope](../operations/inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
+- **2026-11-14 — Opt-in predicate warrants, shared unit context, and facet collation:**
+  [T-152](../TODO.md) wires `predicate-warrant/1` opt-in behind `warrant_policy.enabled = false`
+  ([warrant contract](triage-verifier-enhancement.md)); [T-5000](../TODO.md) shares per-unit
+  context across hunt partitions (`appsec-review/review-package/7`, `package-unit-context/2`,
+  [bounded slices](dataflow-bounded-slices.md)); and [T-5008](../TODO.md) introduces the
+  [collation pass](collation-pass.md) (`collate_facets`, `unit-facets/2`, `hunt-facet-obligations/1`,
+  `target-class-ledger/1`).
 
 ## Named gaps
 
@@ -211,9 +238,11 @@ These are pointers into the [single TODO registry](../TODO.md), not a second bac
 | T-026, T-108 | Separately authorized dynamic evidence and the missing deployment-inventory producer. |
 | T-074, T-076, T-077 | Live fix re-check wiring, complete actionability fields and lead-stage attribution. |
 | T-149 | Scoped dependency-decision consumption beyond current inventory/context. |
-| T-151, T-152, T-153 | Operation coverage obligations, scoped proposition/polarity binding and verified evidence-request resolution. |
+| T-151, T-153 | Operation coverage obligations, paired warrant-policy evaluation and verified evidence-request resolution. |
 | T-154, T-155, T-156 | Labelled stage-loss audit, fair bounded hunt allocation and execution-bound investigation/omission receipts. |
 | T-165, T-166, T-167 | Catalog-fact disposition derivation and `smoke-cpp` live measurement (`T-165`, `T-167`), plus index-backed first-party reachability (`used` / `not_used` / `unknown`) for vendored CVEs and findings (`T-166`). |
+| T-5000, T-5008 | Live `smoke-cpp` size and routing verification for shared per-unit hunt contexts and facet collation. |
+| T-5002–T-5007, T-5009–T-5014 | OWASP obligation-bound packages, narrow contract/reporting projection, `control_gap` hunt obligations and cell partitioning. |
 
 T-150's implemented audit preserves unavailable and incomplete populations; it is not live
 efficacy proof or closure of the remaining evidence/coverage tasks. Raw recordings are still a
@@ -223,7 +252,7 @@ separate optional, bounded facility.
 
 | Responsibility | Current job pages |
 | --- | --- |
-| Routing and opportunity context | [Prioritization](../operations/job_review_prioritization.md), [security tagging](../operations/job_security_tagging.md), [generated threat model](../operations/job_threat_model_generation.md) |
+| Routing and opportunity context | [Prioritization](../operations/job_review_prioritization.md), [security tagging](../operations/job_security_tagging.md) ([collation pass](collation-pass.md)), [generated threat model](../operations/job_threat_model_generation.md) |
 | Indexed and packaged inputs | [Review-data indexing](../operations/job_review_data_indexing.md), [package assembly](../operations/job_review_package_assembly.md), [private document candidates](../operations/job_document_issue_analysis.md) |
 | Subject-scoped control assessment | [OWASP assessment](../operations/job_owasp_control_assessment.md) |
 | Investigation and deterministic decisions | [Inference review](../operations/job_inference_security_review.md) |

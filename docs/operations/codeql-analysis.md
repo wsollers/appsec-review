@@ -32,7 +32,9 @@ The job-level typed default is `auto`, with fixed per-language overrides in the 
 preserve the behavior above. Valid configuration values are `build`, `source`, `auto`, and
 `disabled`. Legacy `manual` and `none` input values normalize one way to `build` and `source`, so
 the immutable resolved configuration uses only the canonical vocabulary. The deterministic
-evaluator selects `build` only when the accepted descriptor and materialized build receipt declare
+evaluator selects `build` only when the accepted descriptor and materialized build receipt
+(`SUCCEEDED` or `COMPLETED_WITH_GAPS` with a retained workspace and replayable command set, carrying
+any upstream build gaps into the planned scope) declare
 the build capability; it selects `source` only for a declared source/no-build capability.
 `disabled` records `SKIPPED_POLICY`, unsupported languages with positive accepted evidence record
 `SKIPPED_NA`, and missing extractors, replayable commands, toolchains, databases, SARIF, or required
@@ -377,7 +379,9 @@ project, the database and the scope.
   (CodeQL's cache is content addressed by query and library bytes).
   Native mode keeps its cache directory under the run. Missing component declarations disable
   cache use explicitly.
-  Initialization is single-flight under a process-safe per-volume lock. Only the volume root
+  Initialization is single-flight under a process-safe per-volume lock, recording
+  `data/codeql/cache-initialization/<volume>.json` and `.lock` (`codeql_cache_initialization`,
+  `appsec-review/codeql-cache-initialization/1`). Only the volume root
   is chowned; existing cache contents are not recursively traversed. A Docker volume creation
   timestamp binds the initialization record so a recreated volume is initialized again.
   Initialization helpers are named, CPU/memory/PID bounded and tracked by the action's resource

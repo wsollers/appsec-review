@@ -227,6 +227,8 @@ expected-gaps authorization.
   and [T-147](../TODO.md#t-147-declare-exact-task-and-dataset-publication-bindings-for-documentation)
   own verification/declaration completeness. Source presence, generated declarations and this
   documentation check do not establish runtime validation.
+- [T-5010](../TODO.md#t-5010-publish-per-component-languages-and-frameworks-from-the-target-catalog)
+  owns per-component language and framework publication from `job_target_catalog`.
 
 Use the [walk's four checks](../processes/walk-charter.md#5-accepting-a-job-the-four-checks)
 to compare actual inputs, independent quantities, canonical gaps and saved baselines.

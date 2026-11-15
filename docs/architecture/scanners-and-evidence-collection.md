@@ -193,6 +193,8 @@ expected in a particular walk or authorize live validation.
   successful scanner invocation alone are not sufficient acceptance.
 - **T-147, T-157:** exact task/dataset publication and language/applicability metadata. Generated
   inventories describe available declarations, not actual scanner execution or evidence consumption.
+- **T-5018:** configurable `cppcheck` profile turning style, performance and portability checks off
+  by default.
 
 ## Jobs and pages
 

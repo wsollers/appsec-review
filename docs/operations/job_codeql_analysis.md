@@ -658,8 +658,10 @@ Source: [handler graph](../../src/appsec_review/jobs/job_codeql_analysis/job.py)
 2. Resolve the configured runtime and invoke bounded extractor inventory. A runtime operational
    failure can produce an empty inventory with a reason; invalid capability/asset identity is a
    framework-integrity failure, not a successful empty inventory.
-3. Build scopes from accepted source, materialized build environments and exact replayable
-   commands according to language processing modes. Preserve unsuccessful sibling builds,
+3. Build scopes from accepted source, materialized build environments (`SUCCEEDED` or
+   `COMPLETED_WITH_GAPS` accepted build receipts that carry a workspace and replayable command set,
+   propagating build gaps into the planned scope) and exact replayable
+   commands according to language processing modes. Preserve failed or non-applicable sibling builds,
    unsupported inputs, missing prerequisites/extractors and policy-disabled languages as decisions
    or reasons. Do not silently substitute autobuild for a missing manual replay contract.
 4. Verify configured query/export assets against the lock. Plan per-scope exports separately from
@@ -689,7 +691,10 @@ Source: [handler graph](../../src/appsec_review/jobs/job_codeql_analysis/job.py)
 5. Independently evaluate graph export: disabled or no pack is a not-applicable export with a
    reason; failed database skips it; seeded mode with no seeds runs nothing and records the ledger.
    Otherwise verify a matching export checkpoint or stage the pinned export pack/database/seeds,
-   compile the custom pack through the bounded path and execute exports with row/byte bounds.
+   initialize the shared compile-cache volume under a per-volume lock
+   (`data/codeql/cache-initialization/`, `codeql_cache_initialization`,
+   `appsec-review/codeql-cache-initialization/1`), compile the custom pack through the bounded
+   path and execute exports with row/byte bounds.
 6. Require export schema/columns/source identities and seeded reports; retain truncation and
    unresolved seeds. Failed compile/export/output validation yields failed export coverage.
    Save only successful database/query/export checkpoints, then publish `graph-exports.json`.
@@ -729,7 +734,7 @@ The job emits legacy reasons and typed processing/export dispositions. Legacy te
 `producer_reported_gap` by [interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope),
 normally non-retryable; this is not advisory classification.
 
-- Input absent/unsupported: failed accepted build, no materialized environment, absent exact
+- Input absent/unsupported: failed or non-applicable accepted build, no materialized environment, absent exact
   replay command set, Rust manifest/lock prerequisites, missing extractor, unsupported source
   languages and Swift policy/coverage limitations. Processing reason codes are not canonical
   producer-gap codes.
