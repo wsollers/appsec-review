@@ -27,7 +27,7 @@ from appsec_review.config.telemetry_report import TelemetryReportSettings
 from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.container_runtime.executor import ContainerExecutor, ExecutionRequest, Mount
 from appsec_review.review.secret_redaction import redact_message
-from appsec_review.storage import atomic_bytes, canonical_json, file_sha256
+from appsec_review.storage import atomic_bytes, canonical_json, file_sha256, platform_file_sha256
 from .dossier_render import TOOL_ID, template_identity
 from .latex import render_latex
 from .telemetry import build_document, load_inputs
@@ -80,7 +80,7 @@ def _render_pdf(run_dir: Path, staging: Path, tex: bytes, epoch: int, settings: 
         tool = replace(catalog.tool(TOOL_ID), tag=settings.image_tag, expected_image_id=settings.image_id,
                        timeout_seconds=settings.timeout_seconds)
         catalog = replace(catalog, tools=MappingProxyType({**catalog.tools, TOOL_ID: tool}))
-        tool_identity.update(version=tool.version, manifest_sha256=file_sha256(tool.manifest_path))
+        tool_identity.update(version=tool.version, manifest_sha256=platform_file_sha256(tool.manifest_path))
         result = executor_factory(catalog, run_dir).execute(ExecutionRequest(
             tool_id=TOOL_ID, argv=(tool.executable,), target_root=inputs, scratch_root=scratch,
             extra_mounts=(Mount(template, "/template"), Mount(inputs, "/input")),
