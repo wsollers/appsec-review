@@ -20,8 +20,8 @@ from appsec_review.jobs.build_iterations import REQUEST_SCHEMA, retain
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_build_iteration import job as job_module
 from appsec_review.jobs.job_build_iteration.job import (
-    _invoke, build_job, invoke_registered_iteration, iteration_inputs, load_iteration_configuration,
-    registered_definition,
+    _invoke, build_job, invoke_iteration, invoke_registered_iteration, iteration_definition,
+    iteration_inputs, load_iteration_configuration, registered_definition,
 )
 from appsec_review.jobs.job_language_build import job as language_job
 from appsec_review.runtime import inputs as runtime_inputs
@@ -101,6 +101,35 @@ def test_invoke_registered_iteration_resolves_the_frozen_configuration_and_launc
     result = invoke_registered_iteration(tmp_path, {"path": "r"}, "build_cpp2")
     assert result == ("definition", {"path": "r"}, "build_cpp2")
     assert seen["root"] == tmp_path and seen["config"] == tmp_path and seen["factory"] is JobRunner
+
+
+def test_iteration_definition_and_invoke_iteration_wire_the_dagster_op_and_worker(monkeypatch) -> None:
+    from dagster import build_op_context
+    calls: list[tuple[dict, str | None]] = []
+
+    def worker(request, run_id):
+        calls.append((dict(request), run_id))
+        return (("terminal_status", "SUCCEEDED"), ("node_id", request["node_id"]))
+
+    definition = iteration_definition(worker)
+    assert definition.name == "build_iteration"
+    op_def = definition.graph.node_Named("execute_build_node").definition if hasattr(
+        definition.graph, "node_Named") else definition.graph.node_named("execute_build_node").definition
+    assert op_def.name == "execute_build_node"
+    assert op_def.tags.get("appsec/pool") == "cpp_build"
+    with build_op_context(op_config={"request": {"node_id": "u1"}}) as ctx:
+        expected_run_id = ctx.run_id
+        out = op_def(ctx)
+    assert out == {"terminal_status": "SUCCEEDED", "node_id": "u1"}
+    assert calls == [({"node_id": "u1"}, expected_run_id)]
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        job_module, "_invoke",
+        lambda job_def, req, lbl: captured.update(name=job_def.name, req=req, lbl=lbl) or {"terminal_status": "SUCCEEDED"},
+    )
+    assert invoke_iteration({"node_id": "u2"}, "build_rust", worker) == {"terminal_status": "SUCCEEDED"}
+    assert captured == {"name": "build_iteration", "req": {"node_id": "u2"}, "lbl": "build_rust"}
 
 
 # --- the frozen run configuration ---------------------------------------------------------------------

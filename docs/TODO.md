@@ -3022,6 +3022,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   .NET, native/capture, Rust, PHP, Go, JVM, Node, checkpoint reuse/tamper enforcement and
   iterative production lanes), with all prior unit, integration and acceptance cases preserved;
   6436/7039 job-package lines (91.43%) and 2710/3216 branches (84.27%) covered.
+  Build-iteration re-gate: 6 unit files, 51 cases plus shared Wave 3 contract suite (60 mapped
+  cases: admission, contract, Dagster iteration definition/invocation, controller, capture and
+  workspace resume), with all prior unit and integration cases preserved; 99/99 job-package lines
+  (100.0%) and 14/14 branches (100.0%) covered.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

@@ -1,17 +1,21 @@
 """Wave 3 contract admission and disabled-producer unavailable paths."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.indexing.inventory import InventoryInputs, build_inventory
 from appsec_review.indexing.store import accepted_handoff, handoff_manifests, shard_key
-from appsec_review.jobs.build_iterations import REQUEST_SCHEMA, retain
+from appsec_review.jobs.bound_artifacts import artifact_ref
 from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.jobs.job_artifact_security_analysis.scanners import ADAPTERS
 from appsec_review.jobs.job_build_iteration import build_job as build_iteration
 from appsec_review.jobs.job_change_context_analysis import build_job as build_change_context
 from appsec_review.jobs.job_profile_data import build_job as build_profile_data, load_accepted_profile_data
@@ -20,18 +24,53 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_test_coverage import build_job as build_test_coverage, load_accepted_test_coverage
 from appsec_review.retrieval import write_manifest
 from appsec_review.retrieval.index import load_verified_manifest
-from appsec_review.runtime.contracts import Availability, InputChannel, MissingPolicy
+from appsec_review.runtime import Job, JobRunner, Unit
+from appsec_review.runtime.contracts import Availability, InputChannel, JobContract, MissingPolicy
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.storage import RunStore, atomic_json, file_sha256
 from appsec_review.storage.validation import validation_scope
 from tests.artifact_input_support import recorded_job
-from tests.unit.runtime.test_wave2_contracts import configured_runner
+from tests.release_support import declare_releases, write_release
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _wave3_runner(tmp_path: Path, job_ids: tuple[str, ...], *,
+                  disabled_jobs: tuple[str, ...] = ()) -> JobRunner:
+    root = tmp_path / "repo"
+    root.mkdir(parents=True, exist_ok=True)
+    if not (root / "containers").exists():
+        (root / "containers").symlink_to(ROOT / "containers")
+    if not (root / "rules").exists():
+        (root / "rules").mkdir(parents=True, exist_ok=True)
+        (root / "rules" / "semgrep").symlink_to(ROOT / "rules" / "semgrep")
+    components = ("platform", "validation", *(adapter.tool_id for adapter in ADAPTERS.values()))
+    text = declare_releases((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+                            **{key: "fixture/1" for key in components})
+    for disabled_id in disabled_jobs:
+        header = f"[jobs.{disabled_id}.settings]\n"
+        if header not in text:
+            raise AssertionError(f"missing settings header for {disabled_id}")
+        text = text.replace(header, f"{header}enabled = false\n", 1)
+    config_path = root / "appsec-review.toml"
+    config_path.write_text(text, encoding="utf-8")
+    write_release(root, tuple(dict.fromkeys(job_ids)))
+    base = load_config(config_path)
+    config = replace(
+        base,
+        runtime=replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
+                        metadata_dir=tmp_path / "metadata"),
+        review_policy=replace(base.review_policy, releases=ComponentReleases({
+            **base.review_policy.releases.values, "platform": "fixture/1", "validation": "fixture/1",
+        })),
+    )
+    return JobRunner(config)
 
 
 def _seed_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
                       disabled_jobs: tuple[str, ...] = ()):
     job_ids = ("job_review_intake", "job_target_catalog", *extra_job_ids)
-    runner = configured_runner(tmp_path, job_ids, disabled_jobs=disabled_jobs)
+    runner = _wave3_runner(tmp_path, job_ids, disabled_jobs=disabled_jobs)
     target = tmp_path / "target"
     (target / "src").mkdir(parents=True)
     (target / "src" / "main.c").write_text("int hot(void) { return 1; }\nint main(void) { return hot(); }\n",
@@ -43,6 +82,52 @@ def _seed_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
         build_catalog(), run_id=run_id, target_root=target, source_fingerprint=snapshot,
         upstream_handoffs={"job_review_intake": intake_out["handoff_sha256"]},
     )
+    return runner, run_id, run_root, target, snapshot, catalog_out
+
+
+def _recorded_catalog_run(tmp_path: Path, extra_job_ids: tuple[str, ...], *,
+                          disabled_jobs: tuple[str, ...] = ()):
+    job_ids = ("job_target_catalog", *extra_job_ids)
+    runner = _wave3_runner(tmp_path, job_ids, disabled_jobs=disabled_jobs)
+    target = tmp_path / "target"
+    (target / "src").mkdir(parents=True)
+    main_c = target / "src" / "main.c"
+    main_c.write_text("int hot(void) { return 1; }\nint main(void) { return hot(); }\n", encoding="utf-8")
+    snapshot = source_fingerprint(target)
+    run_id, run_root = RunStore(runner.config.runtime.runs_dir).create(datetime.now(timezone.utc))
+    builtin_cat = builtin_registry().build("job_target_catalog")
+
+    def publish_catalog(unit) -> dict[str, Any]:
+        cat_dir = unit.job.attempt_root / "artifacts" / "catalog"
+        partition_path = cat_dir / "partition.json"
+        atomic_json(partition_path, {"files": [{"path": "src/main.c", "sha256": file_sha256(main_c)}]})
+        manifest_path = run_root / "data" / "indices" / "manifests" / "catalog-fixture.json"
+        write_manifest(manifest_path, run_id=run_id, target_snapshot=snapshot, target_root=target, indexes=[])
+        catalog_path = cat_dir / "target-catalog.json"
+        atomic_json(catalog_path, {
+            "schema": "appsec-review/target-catalog/1",
+            "source_fingerprint": snapshot,
+            "artifacts": {"repository_discovery.partition_repository": artifact_ref(run_root, partition_path)},
+        })
+        cat_ref = artifact_ref(run_root, catalog_path)
+        part_ref = artifact_ref(run_root, partition_path)
+        mf_ref = artifact_ref(run_root, manifest_path)
+        return {
+            "artifact": cat_ref,
+            "index_manifest": mf_ref,
+            "artifacts": [cat_ref, part_ref, mf_ref],
+            "gaps": [],
+            "terminal_status": "SUCCEEDED",
+        }
+
+    cat_job = Job(
+        "job_target_catalog", builtin_cat.name, lambda _: {},
+        units=(Unit("publish_catalog.publish_handoff", publish_catalog),),
+        datasets=tuple(replace(d, required=False) for d in builtin_cat.datasets),
+        contract=JobContract(inputs=()),
+        schema_identity=builtin_cat.schema_identity, input_identity=lambda _: snapshot,
+    )
+    catalog_out = runner.run(cat_job, run_id=run_id, target_root=target, source_fingerprint=snapshot)
     return runner, run_id, run_root, target, snapshot, catalog_out
 
 
@@ -92,7 +177,7 @@ def test_wave3_contract_input_policies_match_confirmed_decisions() -> None:
 
 
 def test_wave3_admission_rejects_missing_required_and_enabled_conditional_handoffs(tmp_path: Path) -> None:
-    runner, run_id, run_root, target, snapshot, catalog_out = _seed_catalog_run(
+    runner, run_id, _run_root, target, snapshot, catalog_out = _recorded_catalog_run(
         tmp_path / "all_enabled",
         (
             "job_project_build", "job_build_iteration",
@@ -127,7 +212,9 @@ def test_wave3_admission_rejects_missing_required_and_enabled_conditional_handof
                 upstream_handoffs={"job_target_catalog": catalog_sha},
             )
 
-    ai_only_runner, ai_run_id, _ai_root, ai_target, ai_snap, ai_catalog = _seed_catalog_run(
+
+def test_wave3_admission_rejects_missing_artifact_indexing_when_language_build_disabled(tmp_path: Path) -> None:
+    ai_only_runner, ai_run_id, _ai_root, ai_target, ai_snap, ai_catalog = _recorded_catalog_run(
         tmp_path / "artifact_enabled",
         ("job_artifact_indexing", "job_test_coverage", "job_profile_data"),
         disabled_jobs=("job_language_build",),
@@ -203,48 +290,43 @@ def test_change_context_analysis_publishes_unavailable_handoff_when_source_histo
     assert inventory["audit"]["status"] == "PASSED", inventory["audit"]["violations"]
 
 
+@pytest.mark.parametrize("consumer", ("coverage", "profile"))
 def test_coverage_and_profile_publish_unavailable_gaps_when_build_and_artifact_indexing_disabled(
-    tmp_path: Path,
+    tmp_path: Path, consumer: str,
 ) -> None:
-    runner, run_id, run_root, target, snapshot, catalog_out = _seed_catalog_run(
-        tmp_path, ("job_test_coverage", "job_profile_data"),
+    job = build_test_coverage() if consumer == "coverage" else build_profile_data()
+    loader = load_accepted_test_coverage if consumer == "coverage" else load_accepted_profile_data
+    runner, run_id, run_root, target, snapshot, catalog_out = _recorded_catalog_run(
+        tmp_path, (job.job_id,),
         disabled_jobs=("job_language_build", "job_artifact_indexing"),
     )
     catalog_sha = catalog_out["handoff_sha256"]
 
-    cov_out = runner.run(
-        build_test_coverage(), run_id=run_id, target_root=target, source_fingerprint=snapshot,
+    out = runner.run(
+        job, run_id=run_id, target_root=target, source_fingerprint=snapshot,
         upstream_handoffs={"job_target_catalog": catalog_sha},
     )
-    prof_out = runner.run(
-        build_profile_data(), run_id=run_id, target_root=target, source_fingerprint=snapshot,
-        upstream_handoffs={"job_target_catalog": catalog_sha},
-    )
-
-    assert cov_out["result"]["outputs"]["acceptance.publish_handoff"]["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert prof_out["result"]["outputs"]["acceptance.publish_handoff"]["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert out["result"]["outputs"]["acceptance.publish_handoff"]["terminal_status"] == "COMPLETED_WITH_GAPS"
 
     with validation_scope(run_root):
-        cov_doc = load_accepted_test_coverage(run_root)
-        prof_doc = load_accepted_profile_data(run_root)
+        doc = loader(run_root)
 
     expected_gaps = [
         "language_build_unavailable: job_language_build producer disabled",
         "artifact_indexing_unavailable: job_artifact_indexing producer disabled",
     ]
-    assert cov_doc["gaps"] == expected_gaps
-    assert prof_doc["gaps"] == expected_gaps
-    assert cov_doc["upstream_handoff_sha256"] == {"job_target_catalog": catalog_sha}
-    assert prof_doc["upstream_handoff_sha256"] == {"job_target_catalog": catalog_sha}
-    assert cov_doc["build_units"] == []
-    assert prof_doc["build_units"] == []
+    assert doc["gaps"] == expected_gaps
+    assert doc["upstream_handoff_sha256"] == {"job_target_catalog": catalog_sha}
+    assert doc["build_units"] == []
 
 
+@pytest.mark.parametrize("consumer", ("coverage", "profile"))
 def test_coverage_and_profile_ingest_language_receipts_when_only_artifact_indexing_disabled(
-    tmp_path: Path,
+    tmp_path: Path, consumer: str,
 ) -> None:
-    runner, run_id, run_root, target, snapshot, catalog_out = _seed_catalog_run(
-        tmp_path, ("job_language_build", "job_test_coverage", "job_profile_data"),
+    job = build_test_coverage() if consumer == "coverage" else build_profile_data()
+    runner, run_id, run_root, target, snapshot, catalog_out = _recorded_catalog_run(
+        tmp_path, ("job_language_build", job.job_id),
         disabled_jobs=("job_artifact_indexing",),
     )
     catalog_sha = catalog_out["handoff_sha256"]
@@ -300,26 +382,24 @@ def test_coverage_and_profile_ingest_language_receipts_when_only_artifact_indexi
                           target_root=target, source_fingerprint=snapshot)
     supplied = {"job_target_catalog": catalog_sha, "job_language_build": lang_out["handoff_sha256"]}
 
-    runner.run(build_test_coverage(), run_id=run_id, target_root=target, source_fingerprint=snapshot,
-               upstream_handoffs=supplied)
-    runner.run(build_profile_data(), run_id=run_id, target_root=target, source_fingerprint=snapshot,
+    runner.run(job, run_id=run_id, target_root=target, source_fingerprint=snapshot,
                upstream_handoffs=supplied)
 
     with validation_scope(run_root):
-        cov_doc = load_accepted_test_coverage(run_root)
-        prof_doc = load_accepted_profile_data(run_root)
-
-    assert cov_doc["totals"]["lines_total"] == 2 and cov_doc["totals"]["lines_covered"] == 1
-    assert "artifact_indexing_unavailable: job_artifact_indexing producer disabled" in cov_doc["gaps"]
-    assert not any("language_build_unavailable" in gap for gap in cov_doc["gaps"])
-
-    assert len(prof_doc["build_units"]) == 1 and len(prof_doc["build_units"][0]["rows"]) == 3
-    assert "artifact_indexing_unavailable: job_artifact_indexing producer disabled" in prof_doc["gaps"]
-    assert not any("language_build_unavailable" in gap for gap in prof_doc["gaps"])
+        if consumer == "coverage":
+            cov_doc = load_accepted_test_coverage(run_root)
+            assert cov_doc["totals"]["lines_total"] == 2 and cov_doc["totals"]["lines_covered"] == 1
+            assert "artifact_indexing_unavailable: job_artifact_indexing producer disabled" in cov_doc["gaps"]
+            assert not any("language_build_unavailable" in gap for gap in cov_doc["gaps"])
+        else:
+            prof_doc = load_accepted_profile_data(run_root)
+            assert len(prof_doc["build_units"]) == 1 and len(prof_doc["build_units"][0]["rows"]) == 3
+            assert "artifact_indexing_unavailable: job_artifact_indexing producer disabled" in prof_doc["gaps"]
+            assert not any("language_build_unavailable" in gap for gap in prof_doc["gaps"])
 
 
 def test_language_build_enabled_setting_rejects_non_boolean(tmp_path: Path) -> None:
-    runner = configured_runner(tmp_path, ("job_language_build",), disabled_jobs=("job_language_build",))
+    runner = _wave3_runner(tmp_path, ("job_language_build",), disabled_jobs=("job_language_build",))
     assert runner.config.job("job_language_build").settings["enabled"] is False
     bad_toml = tmp_path / "repo" / "appsec-review.toml"
     bad_toml.write_text(
