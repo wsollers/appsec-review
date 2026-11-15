@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_artifact_indexing", "job_code_graph_index", "job_cpp_compiled_analysis", "job_dependency_intelligence", "job_language_build", "job_owasp_control_assessment", "job_review_data_indexing", "job_review_prioritization", "job_security_tagging", "job_target_catalog", "job_threat_model_generation", "job_tree_sitter_ast"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Generated DFD and threat model
 

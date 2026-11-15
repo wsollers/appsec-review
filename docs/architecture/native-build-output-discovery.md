@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "target acquisition and build"
 status: "current"
 jobs: ["job_artifact_indexing", "job_codeql_analysis", "job_dependency_intelligence", "job_language_build", "job_poc_generation", "job_project_build", "job_remediation_validation", "job_review_intake", "job_sanitizer_build", "job_source_history_analysis", "job_target_catalog"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Native build-output discovery and named build-output exclusions
 
