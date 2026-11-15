@@ -46,8 +46,14 @@
       "live": []
     },
     "job_binary_evidence_indexing": {
-      "unit": ["tests/test_binary_evidence_indexing.py"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_binary_evidence_indexing/test_contract.py",
+        "tests/unit/job_binary_evidence_indexing/test_handlers.py",
+        "tests/test_binary_evidence_indexing.py"
+      ],
+      "integration": [
+        "tests/integration/job_binary_evidence_indexing/test_binary_evidence_indexing_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },

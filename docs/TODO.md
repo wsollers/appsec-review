@@ -3121,6 +3121,14 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and handoff publication; `GraphRunner` suite relocated to
   `tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py`; 348/348 job-package
   lines [100.0%] and 134/134 branches [100.0%] covered across all 4 modules).
+  job_binary_evidence_indexing (28/47; 3 unit files, 31 cases: pinned 5-input / 3-dataset
+  contract and 3-unit DAG topology, accepted binary-evidence upstream loading with lineage/hash
+  pin verification, frozen publication verification and post-intake tamper refusal, managed-code
+  routing without located pseudo-C grants, bounded function/call/string/import SQLite shard
+  builders with thunk/truncation/gap accounting, `RetrievalCore` excerpt lookup, and dataset
+  ownership scan; `GraphRunner`/`JobRunner` suite relocated to
+  `tests/integration/job_binary_evidence_indexing/test_binary_evidence_indexing_graph.py`;
+  288/288 job-package lines [100.0%] and 88/88 branches [100.0%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
