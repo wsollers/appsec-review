@@ -62,7 +62,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-052 | [Decide the home of Docker-engine-touching unit tests](#t-052-decide-the-home-of-docker-engine-touching-unit-tests) | testing | done (2026-11-12, branch t052-docker-engine-tests; moved to tests/integration and tests/live, see Refs) |
 | T-053 | [Decide whether review_intake keeps its own model gate](#t-053-decide-whether-review_intake-keeps-its-own-model-gate) | pipeline | done (2026-11-08, docs/tasks/2026-11-08-job-pass-04-review-intake.md) |
 | T-054 | [Declare the inputs binary_evidence_indexing and artifact_indexing actually read](#t-054-declare-the-inputs-binary_evidence_indexing-and-artifact_indexing-actually-read) | pipeline | done (2026-11-11, 962ed773) |
-| T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | open |
+| T-055 | [Catalog gaps as records so job_target_catalog can be strict](#t-055-catalog-gaps-as-records-so-job_target_catalog-can-be-strict) | topology | done (2026-11-15, 4ea6146a7) |
 | T-056 | [Build discovery test program: build points, total assignment, case matrix](#t-056-build-discovery-test-program-build-points-total-assignment-case-matrix) | topology | open |
 | T-060 | [Track findings across revisions with a stable identity](#t-060-track-findings-across-revisions-with-a-stable-identity) | review | done (2026-11-11, docs/architecture/finding-metrics.md section 12) |
 | T-061 | [Verify a fix by re-checking the prior finding](#t-061-verify-a-fix-by-re-checking-the-prior-finding) | review | in-progress |
@@ -848,7 +848,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-055 — Catalog gaps as records so job_target_catalog can be strict
 
-- **State:** open
+- **State:** done (2026-11-15, 4ea6146a7)
 - **Area:** topology
 - **Why:** `job_target_catalog` emits free-text and `{path, reason}` gaps from the inventory,
   engine discovery, unsupported-build detection and the four retrieval-index builders
@@ -3015,6 +3015,11 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   verification, repair-context reproduction, downstream plan-consumer propagation, and observed
   `handoff` plus `build_environment` read receipts across `job_build_environment_analysis` and
   `job_target_analysis_plan`.
+  Wave 5 (`4ea6146a7`) migrates `job_target_catalog` to `strict_gaps=True` with `producer-gap/1`
+  records, resolving `gap_id` SQLite coverage rows, and typed `CatalogError` classes (`T-055`
+  done), and establishes that unit-tier gap assertions follow each job's registered
+  `strict_gaps` contract (`producer-gap/1` when strict, normalized `legacy` publication while
+  explicitly listed on `LEGACY_FREE_TEXT_GAPS` pending `T-089`).
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:
