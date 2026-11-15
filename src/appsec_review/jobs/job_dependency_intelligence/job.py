@@ -26,7 +26,7 @@ from appsec_review.storage.shared import safe_path, verify_reference
 from appsec_review.observability.spans import operation_span
 
 from .datasets import CONTRACT, DATASETS
-from .inference import resolve_with_inference
+from .inference import ResolutionBudget, resolve_with_inference
 from .native_inference_integration import inference_bounds, run_native_inference
 from .integration import (
     Converter, collect_inputs, native_bounds, publish_sbom, read_native_file, sbom_bounds,
@@ -197,7 +197,8 @@ def _validate_config(context, _result) -> None:
             raise ValueError(f"dependency-intelligence task order mismatch: {step}")
     settings = context.config.settings
     integers = ("dependency_limit", "repository_limit", "native_candidate_limit", "command_token_limit",
-                "metadata_file_limit", "metadata_bytes_per_file", "inference_candidate_bytes")
+                "metadata_file_limit", "metadata_bytes_per_file", "inference_candidate_bytes",
+                "inference_failure_limit")
     if any(type(settings.get(key)) is not int or int(settings[key]) < 1 for key in integers):
         raise ValueError("dependency-intelligence deterministic bounds are invalid")
     native_bounds(settings)
@@ -300,11 +301,12 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             supported_hosts=tuple(settings["repository_hosts"]),
             max_dependencies=int(settings["dependency_limit"]))
         gaps.extend(normalization_gaps)
+        budget = ResolutionBudget(int(settings["inference_failure_limit"]))
         for dependency in normalized:
             resolved, gap = resolve_with_inference(
                 dependency, repository_root=unit.job.repository_root, run_root=unit.job.run_root,
                 model=settings["model"], supported_hosts=tuple(settings["repository_hosts"]), infer=infer,
-                max_candidate_bytes=int(settings["inference_candidate_bytes"]))
+                max_candidate_bytes=int(settings["inference_candidate_bytes"]), budget=budget)
             dependencies.append(resolved)
             if gap:
                 gaps.append(gap)

@@ -160,6 +160,16 @@ diagnostics. No replay path imports an exception class named by a recording or e
 recorded command. Legacy v1 successful responses remain readable; legacy v1 errors are explicitly
 rejected because their lost semantics cannot be recovered safely.
 
+A `schema` envelope keeps what a successful result keeps: the reply text (`raw_response`, bounded
+by the request's typed output budget at eight bytes a token and capped at 2 MiB, with
+`raw_response_truncated` recording a clip), the extracted `rejected_output`, the provider's
+`stop_reason` and `usage`, and a closed `failure_class` (`empty_reply`, `no_json_object`,
+`schema_mismatch`, `several_objects`, `truncated_output`, `refusal`). Envelopes written before
+these fields existed stay readable with the diagnostics unknown. The Claude CLI parser accepts,
+besides a schema-bearing object, the exact complete field set of a native dependency resolution
+proposal without its `schema` field; the request fixes the schema and the job's validators still
+authorize every value (T-5022).
+
 Recordings use `<job>/<request-key>.<sequence>.json`; repeated identical calls reserve their
 ordinal at admission, not completion. On an in-place repair re-run in `record` mode, an existing
 same-run recording with a `result` is replayed instead of calling the live provider again, while an

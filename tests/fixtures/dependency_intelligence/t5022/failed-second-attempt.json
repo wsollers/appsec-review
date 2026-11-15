@@ -1,0 +1,375 @@
+{
+ "error_message": "expected exactly one appsec-review/native-dependency-resolution-proposal/1 JSON object, found 0",
+ "note": "Reduced from the recorded request and reply: candidate, allowlist, budget, repair state, the reply text, stop reason and usage. Session, cost and host identities are omitted.",
+ "rejected_output": "{\"candidate_id\": \"native-dependency-f46db18e6137dda1dc6947a6d8ecd21a\", \"repository\": {\"host\": \"github.com\", \"owner\": \"lz4\", \"name\": \"lz4\", \"url\": \"https://github.com/lz4/lz4\"}, \"confidence\": 0.6, \"evidence_refs\": [\"native-evidence-3cc0c7b7d2b257e258c5ebe1353eacfe23da68d79f62874ea59ec6948823b42f\", \"native-evidence-64647102abca8474a10943696426726e7c22f09ccd87e9109559ff2b0cd30f8d\", \"native-evidence-b031257cac62e27d4ca0319c26bd7d66722f3582c81b6d49f95498780051b7f9\", \"native-evidence-4522fd4cee67ed7f3b765f68dad2efffac20fe8656e3e34e682235b5a256be8d\", \"native-evidence-f5d38a09513f165a24bed3da7a3eae1e99856aef90514d8e215057959aa787e8\"], \"rationale\": \"Vendored tree at third_party/lz4/lib contains the lz4, lz4hc, lz4frame, and xxhash headers plus a LICENSE, matching the layout of the upstream lz4 project. No accepted package metadata (pkg-config, CMake, SBOM, or package-manager) supplies a repository URL, and release and upstream are unknown. The mapping is therefore a model inference, not an exact identity. The vendored copy may be a fork or modified version, so confidence is capped at 0.6.\"}",
+ "reply": {
+  "is_error": false,
+  "result": "{\"candidate_id\": \"native-dependency-f46db18e6137dda1dc6947a6d8ecd21a\", \"repository\": {\"host\": \"github.com\", \"owner\": \"lz4\", \"name\": \"lz4\", \"url\": \"https://github.com/lz4/lz4\"}, \"confidence\": 0.6, \"evidence_refs\": [\"native-evidence-3cc0c7b7d2b257e258c5ebe1353eacfe23da68d79f62874ea59ec6948823b42f\", \"native-evidence-64647102abca8474a10943696426726e7c22f09ccd87e9109559ff2b0cd30f8d\", \"native-evidence-b031257cac62e27d4ca0319c26bd7d66722f3582c81b6d49f95498780051b7f9\", \"native-evidence-4522fd4cee67ed7f3b765f68dad2efffac20fe8656e3e34e682235b5a256be8d\", \"native-evidence-f5d38a09513f165a24bed3da7a3eae1e99856aef90514d8e215057959aa787e8\"], \"rationale\": \"Vendored tree at third_party/lz4/lib contains the lz4, lz4hc, lz4frame, and xxhash headers plus a LICENSE, matching the layout of the upstream lz4 project. No accepted package metadata (pkg-config, CMake, SBOM, or package-manager) supplies a repository URL, and release and upstream are unknown. The mapping is therefore a model inference, not an exact identity. The vendored copy may be a fork or modified version, so confidence is capped at 0.6.\"}",
+  "stop_reason": "end_turn",
+  "subtype": "success",
+  "usage": {
+   "cache_read_input_tokens": 2234,
+   "input_tokens": 2,
+   "output_tokens": 1346
+  }
+ },
+ "request": {
+  "max_input_tokens": 32000,
+  "max_output_tokens": 4000,
+  "model": "claude-haiku-5-5",
+  "persona": "dependency_repository_investigator",
+  "reasoning": "medium",
+  "repair_errors": [
+   "ModelOutputError: expected exactly one appsec-review/native-dependency-resolution-proposal/1 JSON object, found 0"
+  ],
+  "role": "native_dependency_resolver",
+  "schema": "appsec-review/native-dependency-resolution-proposal/1",
+  "summary": {
+   "allowed_evidence_refs": [
+    "None",
+    "native-dependency-f46db18e6137dda1dc6947a6d8ecd21a"
+   ],
+   "candidate": {
+    "candidate_id": "native-dependency-f46db18e6137dda1dc6947a6d8ecd21a",
+    "evidence_ids": [
+     "native-evidence-15cd872153c04f3c83342ec27ac780847d9667b8693ed771ed9e13217956468d",
+     "native-evidence-1764c1c6852766bbb3467b2817cdad63763c9f0bc7839a5e36aceeced53be90e",
+     "native-evidence-21267d9789bb7f744f5a835f8bc8235ed3aebf0874d6f9a4dbb4177c211af541",
+     "native-evidence-229616f29878a560dba7302a2a0fe25bc97195e104c8ea16835f139aa389ecf3",
+     "native-evidence-2341de0a986b18ad539c6dca85f6c0c02e9b6de1577d69d13041f6f28938ff1d",
+     "native-evidence-2791df027d7dfbdf7f1dde2011737da03bf88f8aa5fa0abf3b6ae063a3bfa7e9",
+     "native-evidence-340e067c54f6df5fba75c4d020827d7d823b9dd85fa7f9c8a7f266f85359cde9",
+     "native-evidence-3cc0c7b7d2b257e258c5ebe1353eacfe23da68d79f62874ea59ec6948823b42f",
+     "native-evidence-4522fd4cee67ed7f3b765f68dad2efffac20fe8656e3e34e682235b5a256be8d",
+     "native-evidence-57f1672768defa6a9457754847fe0a3397f17df17a09304e238d69402cade100",
+     "native-evidence-583361feb7351cbdfcf78f5e3f21fef609fa913ff07faff27f6fe8e14b79390c",
+     "native-evidence-5b1a77d6aebc0731750ed2774f739cdb29e4b8be08a80565fa202e1705836e7d",
+     "native-evidence-64647102abca8474a10943696426726e7c22f09ccd87e9109559ff2b0cd30f8d",
+     "native-evidence-699dafd6a93d4861f63b2f8e97f07b377644ad1ca652ce1bcd81708740c3594f",
+     "native-evidence-79158430bae1b0867bfd4d7d290249e9234fc1e8fc5274e3317c630e45198428",
+     "native-evidence-831ef636574308bce46e38d0138b642f0a4b909458fa86ea36dd8f484f908c33",
+     "native-evidence-8392cef402e5daeec2a1680dbce7fa61017995faa228c7f4b977a5bcdde5f0be",
+     "native-evidence-96b8089416c2b7dd2e0a3e8c4e8ef4341eb61f8c608bb6e5273b6c45ff5ab12f",
+     "native-evidence-a83b45834ceb685e66de4adaad7dd1052d7931c9bf53c88b898305a884712682",
+     "native-evidence-b031257cac62e27d4ca0319c26bd7d66722f3582c81b6d49f95498780051b7f9",
+     "native-evidence-b065c11cfa7c98c2c096d2b412a756ec15e6b6131477fe4db041821510bee0fb",
+     "native-evidence-b962731aabb508108451b9922b4a233a95ad3050dd1a9f45a45addc80125a796",
+     "native-evidence-c1acac1100edc09b661bde8e1b0b5687f273dd2866de8dfa68ae84a4123d9a24",
+     "native-evidence-c3a88d28660b843462ba8caf1b28dd27e796366da3bd70218e80208311adb3d3",
+     "native-evidence-c8ceddd752c782e17a49e2a2e0e9b4f41be42dbb7932644867d759aa0c592859",
+     "native-evidence-dfd33969fc833fe1c608f1ef0d3cbbf66c19b12a0012d7d0803aa3d84d08aedb",
+     "native-evidence-f5d38a09513f165a24bed3da7a3eae1e99856aef90514d8e215057959aa787e8",
+     "native-evidence-f95728d34a98a04155a82d701940a93a38a792312e33f89e4d826f8e807e9369"
+    ],
+    "identity": {
+     "alternatives": [],
+     "evidence_ids": [
+      "native-evidence-15cd872153c04f3c83342ec27ac780847d9667b8693ed771ed9e13217956468d",
+      "native-evidence-1764c1c6852766bbb3467b2817cdad63763c9f0bc7839a5e36aceeced53be90e",
+      "native-evidence-21267d9789bb7f744f5a835f8bc8235ed3aebf0874d6f9a4dbb4177c211af541",
+      "native-evidence-229616f29878a560dba7302a2a0fe25bc97195e104c8ea16835f139aa389ecf3",
+      "native-evidence-2341de0a986b18ad539c6dca85f6c0c02e9b6de1577d69d13041f6f28938ff1d",
+      "native-evidence-2791df027d7dfbdf7f1dde2011737da03bf88f8aa5fa0abf3b6ae063a3bfa7e9",
+      "native-evidence-340e067c54f6df5fba75c4d020827d7d823b9dd85fa7f9c8a7f266f85359cde9",
+      "native-evidence-3cc0c7b7d2b257e258c5ebe1353eacfe23da68d79f62874ea59ec6948823b42f",
+      "native-evidence-4522fd4cee67ed7f3b765f68dad2efffac20fe8656e3e34e682235b5a256be8d",
+      "native-evidence-57f1672768defa6a9457754847fe0a3397f17df17a09304e238d69402cade100",
+      "native-evidence-583361feb7351cbdfcf78f5e3f21fef609fa913ff07faff27f6fe8e14b79390c",
+      "native-evidence-5b1a77d6aebc0731750ed2774f739cdb29e4b8be08a80565fa202e1705836e7d",
+      "native-evidence-64647102abca8474a10943696426726e7c22f09ccd87e9109559ff2b0cd30f8d",
+      "native-evidence-699dafd6a93d4861f63b2f8e97f07b377644ad1ca652ce1bcd81708740c3594f",
+      "native-evidence-79158430bae1b0867bfd4d7d290249e9234fc1e8fc5274e3317c630e45198428",
+      "native-evidence-831ef636574308bce46e38d0138b642f0a4b909458fa86ea36dd8f484f908c33",
+      "native-evidence-8392cef402e5daeec2a1680dbce7fa61017995faa228c7f4b977a5bcdde5f0be",
+      "native-evidence-96b8089416c2b7dd2e0a3e8c4e8ef4341eb61f8c608bb6e5273b6c45ff5ab12f",
+      "native-evidence-b031257cac62e27d4ca0319c26bd7d66722f3582c81b6d49f95498780051b7f9",
+      "native-evidence-b065c11cfa7c98c2c096d2b412a756ec15e6b6131477fe4db041821510bee0fb",
+      "native-evidence-b962731aabb508108451b9922b4a233a95ad3050dd1a9f45a45addc80125a796",
+      "native-evidence-c1acac1100edc09b661bde8e1b0b5687f273dd2866de8dfa68ae84a4123d9a24",
+      "native-evidence-c3a88d28660b843462ba8caf1b28dd27e796366da3bd70218e80208311adb3d3",
+      "native-evidence-c8ceddd752c782e17a49e2a2e0e9b4f41be42dbb7932644867d759aa0c592859",
+      "native-evidence-dfd33969fc833fe1c608f1ef0d3cbbf66c19b12a0012d7d0803aa3d84d08aedb",
+      "native-evidence-f5d38a09513f165a24bed3da7a3eae1e99856aef90514d8e215057959aa787e8",
+      "native-evidence-f95728d34a98a04155a82d701940a93a38a792312e33f89e4d826f8e807e9369"
+     ],
+     "status": "inferred",
+     "value": "lz4"
+    },
+    "metadata": {
+     "curation": {
+      "basis": "Conservative original: proposal failed (bounds): ExecutionLimit: model_token_cap",
+      "component_id": "native-component-e8000d3d8d1c98eb6a97c39f2b15cedd",
+      "conservative": true,
+      "domain": "workspace",
+      "schema": "appsec-review/native-component-curation/1",
+      "sdk_group_ids": [],
+      "source_candidate_ids": [
+       "native-dependency-6d2ec49916b4f29564996598ffab1c8a"
+      ],
+      "status": "inferred",
+      "supporting_paths": []
+     }
+    },
+    "native_name": "lz4",
+    "observations": [
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-15cd872153c04f3c83342ec27ac780847d9667b8693ed771ed9e13217956468d",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-1764c1c6852766bbb3467b2817cdad63763c9f0bc7839a5e36aceeced53be90e",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-21267d9789bb7f744f5a835f8bc8235ed3aebf0874d6f9a4dbb4177c211af541",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-2341de0a986b18ad539c6dca85f6c0c02e9b6de1577d69d13041f6f28938ff1d",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-2791df027d7dfbdf7f1dde2011737da03bf88f8aa5fa0abf3b6ae063a3bfa7e9",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-340e067c54f6df5fba75c4d020827d7d823b9dd85fa7f9c8a7f266f85359cde9",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-583361feb7351cbdfcf78f5e3f21fef609fa913ff07faff27f6fe8e14b79390c",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-5b1a77d6aebc0731750ed2774f739cdb29e4b8be08a80565fa202e1705836e7d",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-699dafd6a93d4861f63b2f8e97f07b377644ad1ca652ce1bcd81708740c3594f",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-79158430bae1b0867bfd4d7d290249e9234fc1e8fc5274e3317c630e45198428",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-831ef636574308bce46e38d0138b642f0a4b909458fa86ea36dd8f484f908c33",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-8392cef402e5daeec2a1680dbce7fa61017995faa228c7f4b977a5bcdde5f0be",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-b065c11cfa7c98c2c096d2b412a756ec15e6b6131477fe4db041821510bee0fb",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-b962731aabb508108451b9922b4a233a95ad3050dd1a9f45a45addc80125a796",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-c8ceddd752c782e17a49e2a2e0e9b4f41be42dbb7932644867d759aa0c592859",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "configuration": "debug",
+      "evidence_id": "native-evidence-f95728d34a98a04155a82d701940a93a38a792312e33f89e4d826f8e807e9369",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-15cd872153c04f3c83342ec27ac780847d9667b8693ed771ed9e13217956468d",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-1764c1c6852766bbb3467b2817cdad63763c9f0bc7839a5e36aceeced53be90e",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-21267d9789bb7f744f5a835f8bc8235ed3aebf0874d6f9a4dbb4177c211af541",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-229616f29878a560dba7302a2a0fe25bc97195e104c8ea16835f139aa389ecf3",
+      "kind": "header_path",
+      "value": "third_party/lz4/lib/lz4hc.h"
+     },
+     {
+      "evidence_id": "native-evidence-2341de0a986b18ad539c6dca85f6c0c02e9b6de1577d69d13041f6f28938ff1d",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-2791df027d7dfbdf7f1dde2011737da03bf88f8aa5fa0abf3b6ae063a3bfa7e9",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-340e067c54f6df5fba75c4d020827d7d823b9dd85fa7f9c8a7f266f85359cde9",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-3cc0c7b7d2b257e258c5ebe1353eacfe23da68d79f62874ea59ec6948823b42f",
+      "kind": "vendored_path",
+      "value": "third_party/lz4/lib/lz4.h"
+     },
+     {
+      "evidence_id": "native-evidence-4522fd4cee67ed7f3b765f68dad2efffac20fe8656e3e34e682235b5a256be8d",
+      "kind": "vendored_path",
+      "value": "third_party/lz4/lib/xxhash.h"
+     },
+     {
+      "evidence_id": "native-evidence-57f1672768defa6a9457754847fe0a3397f17df17a09304e238d69402cade100",
+      "kind": "header_path",
+      "value": "third_party/lz4/lib/lz4.h"
+     },
+     {
+      "evidence_id": "native-evidence-583361feb7351cbdfcf78f5e3f21fef609fa913ff07faff27f6fe8e14b79390c",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-5b1a77d6aebc0731750ed2774f739cdb29e4b8be08a80565fa202e1705836e7d",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-64647102abca8474a10943696426726e7c22f09ccd87e9109559ff2b0cd30f8d",
+      "kind": "vendored_path",
+      "value": "third_party/lz4/lib/lz4hc.h"
+     },
+     {
+      "evidence_id": "native-evidence-699dafd6a93d4861f63b2f8e97f07b377644ad1ca652ce1bcd81708740c3594f",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-79158430bae1b0867bfd4d7d290249e9234fc1e8fc5274e3317c630e45198428",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-831ef636574308bce46e38d0138b642f0a4b909458fa86ea36dd8f484f908c33",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-8392cef402e5daeec2a1680dbce7fa61017995faa228c7f4b977a5bcdde5f0be",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-96b8089416c2b7dd2e0a3e8c4e8ef4341eb61f8c608bb6e5273b6c45ff5ab12f",
+      "kind": "header_path",
+      "value": "third_party/lz4/lib/lz4frame.h"
+     },
+     {
+      "evidence_id": "native-evidence-a83b45834ceb685e66de4adaad7dd1052d7931c9bf53c88b898305a884712682",
+      "kind": "license_observation",
+      "value": "third_party/lz4/lib/LICENSE"
+     },
+     {
+      "evidence_id": "native-evidence-b031257cac62e27d4ca0319c26bd7d66722f3582c81b6d49f95498780051b7f9",
+      "kind": "vendored_path",
+      "value": "third_party/lz4/lib/lz4frame.h"
+     },
+     {
+      "evidence_id": "native-evidence-b065c11cfa7c98c2c096d2b412a756ec15e6b6131477fe4db041821510bee0fb",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-b962731aabb508108451b9922b4a233a95ad3050dd1a9f45a45addc80125a796",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-c1acac1100edc09b661bde8e1b0b5687f273dd2866de8dfa68ae84a4123d9a24",
+      "kind": "header_path",
+      "value": "third_party/lz4/lib/xxhash.h"
+     },
+     {
+      "evidence_id": "native-evidence-c3a88d28660b843462ba8caf1b28dd27e796366da3bd70218e80208311adb3d3",
+      "kind": "vendored_path",
+      "value": "third_party/lz4/lib/lz4frame_static.h"
+     },
+     {
+      "evidence_id": "native-evidence-c8ceddd752c782e17a49e2a2e0e9b4f41be42dbb7932644867d759aa0c592859",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     },
+     {
+      "evidence_id": "native-evidence-dfd33969fc833fe1c608f1ef0d3cbbf66c19b12a0012d7d0803aa3d84d08aedb",
+      "kind": "header_path",
+      "value": "third_party/lz4/lib/lz4frame_static.h"
+     },
+     {
+      "evidence_id": "native-evidence-f5d38a09513f165a24bed3da7a3eae1e99856aef90514d8e215057959aa787e8",
+      "kind": "vendored_path",
+      "value": "third_party/lz4/lib/LICENSE"
+     },
+     {
+      "evidence_id": "native-evidence-f95728d34a98a04155a82d701940a93a38a792312e33f89e4d826f8e807e9369",
+      "kind": "path_hint",
+      "value": "/workspace/third_party/lz4/lib"
+     }
+    ],
+    "package_root": "third_party/lz4",
+    "release": {
+     "alternatives": [],
+     "evidence_ids": [],
+     "status": "unknown",
+     "value": null
+    },
+    "repository": null,
+    "root_id": "build-unit-b9c931fa551e02bd12b2",
+    "upstream": {
+     "alternatives": [],
+     "evidence_ids": [],
+     "status": "unknown",
+     "value": null
+    }
+   },
+   "supported_repository_hosts": [
+    "github.com",
+    "gitlab.com"
+   ]
+  }
+ },
+ "source": "runs/2026-11-14-0005/data/inference-recordings/job_dependency_intelligence/590db5c229e194a41fc54c91f7dd629ef3814bb26a27234f1e3ad03940c43e03.0000.json"
+}

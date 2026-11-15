@@ -1,0 +1,99 @@
+{
+ "note": "Reduced from the recorded request and reply: candidate, allowlist, budget, repair state, the reply text, stop reason and usage. Session, cost and host identities are omitted.",
+ "proposal": {
+  "candidate_id": "native-dependency-13190d1937d2ac00c02ff69aafba9747",
+  "confidence": 0,
+  "evidence_refs": [
+   "native-dependency-13190d1937d2ac00c02ff69aafba9747"
+  ],
+  "rationale": "The only supplied observation is an archive path (libsmoke_bz2.a). It gives no package metadata, pkg-config, CMake, SBOM, or upstream URL, so no repository can be tied to this library. The name smoke-bz2 is too generic to map to a project, and a name resemblance alone does not establish identity. Returning null.",
+  "repository": null,
+  "schema": "appsec-review/native-dependency-resolution-proposal/1"
+ },
+ "reply": {
+  "is_error": false,
+  "result": "{\"schema\":\"appsec-review/native-dependency-resolution-proposal/1\",\"candidate_id\":\"native-dependency-13190d1937d2ac00c02ff69aafba9747\",\"repository\":null,\"confidence\":0,\"evidence_refs\":[\"native-dependency-13190d1937d2ac00c02ff69aafba9747\"],\"rationale\":\"The only supplied observation is an archive path (libsmoke_bz2.a). It gives no package metadata, pkg-config, CMake, SBOM, or upstream URL, so no repository can be tied to this library. The name smoke-bz2 is too generic to map to a project, and a name resemblance alone does not establish identity. Returning null.\"}",
+  "stop_reason": "end_turn",
+  "subtype": "success",
+  "usage": {
+   "cache_read_input_tokens": 2234,
+   "input_tokens": 2,
+   "output_tokens": 819
+  }
+ },
+ "request": {
+  "max_input_tokens": 32000,
+  "max_output_tokens": 4000,
+  "model": "claude-haiku-5-5",
+  "persona": "dependency_repository_investigator",
+  "reasoning": "medium",
+  "repair_errors": [
+   "ModelOutputError: expected exactly one appsec-review/native-dependency-resolution-proposal/1 JSON object, found 0"
+  ],
+  "role": "native_dependency_resolver",
+  "schema": "appsec-review/native-dependency-resolution-proposal/1",
+  "summary": {
+   "allowed_evidence_refs": [
+    "None",
+    "native-dependency-13190d1937d2ac00c02ff69aafba9747"
+   ],
+   "candidate": {
+    "candidate_id": "native-dependency-13190d1937d2ac00c02ff69aafba9747",
+    "evidence_ids": [
+     "native-evidence-46202e5a5fe7c045797df688b3d080474106bc4b9c9fe59fd88dfefbd543980f"
+    ],
+    "identity": {
+     "alternatives": [],
+     "evidence_ids": [
+      "native-evidence-46202e5a5fe7c045797df688b3d080474106bc4b9c9fe59fd88dfefbd543980f"
+     ],
+     "status": "inferred",
+     "value": "smoke-bz2"
+    },
+    "metadata": {
+     "curation": {
+      "basis": "Conservative original: proposal failed (bounds): ExecutionLimit: model_token_cap",
+      "component_id": "native-component-3b84544b7a2d3fb89bec3bf91daa81d1",
+      "conservative": true,
+      "domain": "workspace",
+      "schema": "appsec-review/native-component-curation/1",
+      "sdk_group_ids": [],
+      "source_candidate_ids": [
+       "native-dependency-84387d3c7f8618386df090f280f9c81c"
+      ],
+      "status": "inferred",
+      "supporting_paths": []
+     }
+    },
+    "native_name": "smoke-bz2",
+    "observations": [
+     {
+      "evidence_id": "native-evidence-46202e5a5fe7c045797df688b3d080474106bc4b9c9fe59fd88dfefbd543980f",
+      "kind": "archive_path",
+      "value": "libsmoke_bz2.a"
+     }
+    ],
+    "package_root": "@command/e37b9679ab12d5e0a6a5ddff",
+    "release": {
+     "alternatives": [],
+     "evidence_ids": [],
+     "status": "unknown",
+     "value": null
+    },
+    "repository": null,
+    "root_id": "build-unit-b9c931fa551e02bd12b2",
+    "upstream": {
+     "alternatives": [],
+     "evidence_ids": [],
+     "status": "unknown",
+     "value": null
+    }
+   },
+   "supported_repository_hosts": [
+    "github.com",
+    "gitlab.com"
+   ]
+  }
+ },
+ "source": "runs/2026-11-14-0005/data/inference-recordings/job_dependency_intelligence/01c80705aa7a88e1def807f064919e8fe738690407c56712c519052558ef2275.0000.json"
+}

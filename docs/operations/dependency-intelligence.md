@@ -27,7 +27,10 @@ declarations and exact stage acceptance checks; curation and metadata investigat
 repository resolution and do not turn inferred upstreams into confirmed package releases.
 
 Configure positive deterministic bounds for dependency and unique-repository counts, native candidate count, command
-tokens, metadata file count/bytes, and inference candidate bytes. Configure a repository-host
+tokens, metadata file count/bytes, inference candidate bytes, and the inference failure limit
+(`inference_failure_limit`: once that many native candidate sets have ended in a model failure within
+one unit, the remaining unresolved candidates are recorded as `model_failure_bound` gaps instead of
+further calls). Configure a repository-host
 allowlist; model provider/name/reasoning/token/timeout/retry settings; and Scorecard HTTPS base URL,
 host allowlist, request count, response bytes, timeout, retry, repository-relative cache root,
 cache-lock timeout, and maximum cache age. The default maximum age is seven days, matching the
@@ -54,7 +57,14 @@ Operational triage should group gaps by `dependency_id`:
   fresh remote response, but the cache failure remains an explicit operational gap;
 - repository bound: review the deduplicated repository count before increasing the central bound;
 - model unavailable/failure: the deterministic candidate remains usable, but repository coverage
-  is incomplete;
+  is incomplete. A `model_failure` gap carries `failure_class` (`empty_reply`, `no_json_object`,
+  `schema_mismatch`, `several_objects`, `truncated_output`, `refusal`, or the transport category
+  for timeouts, provider and budget failures) and the matching inference recording keeps the
+  bounded reply text, stop reason and usage, so the cause is read from the run, never guessed.
+  An identical candidate set (candidate, evidence allowlist, host allowlist) is asked once per
+  unit and its outcome, including a failure, is reused for every dependency that carries it;
+- model failure bound: the unit reached `inference_failure_limit`; the remaining candidates were
+  not asked. Read the preceding `model_failure` gaps' classes before raising the limit;
 - bounds: increase the specific central limit only after reviewing target scale and retained data.
 
 Exposure triage should start with `maximal_exposure`, then inspect `exposure_evidence` before using

@@ -281,6 +281,26 @@ def normalize_dependencies(
     return values, list(dict.fromkeys(gaps))
 
 
+def allowed_evidence_refs(dependency: Mapping[str, Any], candidate: Mapping[str, Any]) -> set[str]:
+    """The evidence a proposal may cite: the dependency's observation ids and the candidate's own.
+
+    Only identities that exist are offered. On run 2026-11-14-0005 the allowlist held the string
+    ``"None"`` because candidate observations carry ``evidence_id`` rather than a command or artifact
+    identity, and workers duly cited ``"None"`` (T-5022).
+    """
+    refs: set[str] = set()
+    for item in dependency.get("observations", ()):
+        if isinstance(item, Mapping) and item.get("evidence_id") is not None:
+            refs.add(str(item["evidence_id"]))
+    for item in candidate.get("observations", ()):
+        if not isinstance(item, Mapping):
+            continue
+        for key in ("evidence_id", "command_id", "artifact_sha256"):
+            if item.get(key) is not None:
+                refs.add(str(item[key]))
+    return refs
+
+
 def apply_model_resolution(dependency: Mapping[str, Any], proposal: Mapping[str, Any], *,
                            supported_hosts: Sequence[str]) -> dict[str, Any]:
     candidate = dependency.get("native_candidate")
@@ -298,9 +318,7 @@ def apply_model_resolution(dependency: Mapping[str, Any], proposal: Mapping[str,
     if any(str(repository_value.get(key, "")) != repository[key] for key in ("host", "owner", "name", "url")):
         raise ValueError("model repository fields are inconsistent")
     evidence = proposal.get("evidence_refs")
-    allowed = {str(item.get("evidence_id")) for item in dependency.get("observations", ())}
-    allowed.update(str(item.get("command_id") or item.get("artifact_sha256"))
-                   for item in candidate.get("observations", ()) if isinstance(item, Mapping))
+    allowed = allowed_evidence_refs(dependency, candidate)
     if not isinstance(evidence, list) or not evidence or any(str(item) not in allowed for item in evidence):
         raise ValueError("model proposal cites evidence outside the candidate")
     confidence = proposal.get("confidence")
@@ -313,5 +331,5 @@ def apply_model_resolution(dependency: Mapping[str, Any], proposal: Mapping[str,
             "resolution_rationale": str(proposal.get("rationale", ""))[:4096]}
 
 
-__all__ = ["apply_model_resolution", "deduplicate_repositories", "infer_maximal_exposure",
-           "normalize_dependencies", "repository_identity"]
+__all__ = ["allowed_evidence_refs", "apply_model_resolution", "deduplicate_repositories",
+           "infer_maximal_exposure", "normalize_dependencies", "repository_identity"]

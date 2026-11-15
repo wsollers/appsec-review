@@ -1,0 +1,89 @@
+{
+ "error_message": "expected exactly one appsec-review/native-dependency-resolution-proposal/1 JSON object, found 0",
+ "note": "Reduced from the recorded request and reply: candidate, allowlist, budget, repair state, the reply text, stop reason and usage. Session, cost and host identities are omitted.",
+ "rejected_output": "```json\n{\"candidate_id\":\"native-dependency-3f5a6aac5994fb1fcf94c7153ced20cd\",\"repository\":null,\"confidence\":0,\"evidence_refs\":[\"None\"],\"rationale\":\"The only observation is a linker flag (-lm) with an inferred native name 'm'. Short linker names are ambiguous and the cited observation evidence is not in the allowed evidence references. No accepted package metadata, pkg-config, CMake, or SBOM repository URL was supplied, so no exact repository identity can be established.\"}\n```",
+ "reply": {
+  "is_error": false,
+  "result": "```json\n{\"candidate_id\":\"native-dependency-3f5a6aac5994fb1fcf94c7153ced20cd\",\"repository\":null,\"confidence\":0,\"evidence_refs\":[\"None\"],\"rationale\":\"The only observation is a linker flag (-lm) with an inferred native name 'm'. Short linker names are ambiguous and the cited observation evidence is not in the allowed evidence references. No accepted package metadata, pkg-config, CMake, or SBOM repository URL was supplied, so no exact repository identity can be established.\"}\n```",
+  "stop_reason": "end_turn",
+  "subtype": "success",
+  "usage": {
+   "cache_read_input_tokens": 2234,
+   "input_tokens": 2,
+   "output_tokens": 910
+  }
+ },
+ "request": {
+  "max_input_tokens": 32000,
+  "max_output_tokens": 4000,
+  "model": "claude-haiku-5-5",
+  "persona": "dependency_repository_investigator",
+  "reasoning": "medium",
+  "repair_errors": [],
+  "role": "native_dependency_resolver",
+  "schema": "appsec-review/native-dependency-resolution-proposal/1",
+  "summary": {
+   "allowed_evidence_refs": [
+    "None",
+    "native-dependency-3f5a6aac5994fb1fcf94c7153ced20cd"
+   ],
+   "candidate": {
+    "candidate_id": "native-dependency-3f5a6aac5994fb1fcf94c7153ced20cd",
+    "evidence_ids": [
+     "native-evidence-c5064e97194de1c6ee386cd3faa03391fd76ff947c0e58af7076eb280609b449"
+    ],
+    "identity": {
+     "alternatives": [],
+     "evidence_ids": [
+      "native-evidence-c5064e97194de1c6ee386cd3faa03391fd76ff947c0e58af7076eb280609b449"
+     ],
+     "status": "inferred",
+     "value": "m"
+    },
+    "metadata": {
+     "curation": {
+      "basis": "Conservative original: proposal failed (bounds): ExecutionLimit: model_token_cap",
+      "component_id": "native-component-038f822f6e666f320dc9aeac171fd97e",
+      "conservative": true,
+      "domain": "workspace",
+      "schema": "appsec-review/native-component-curation/1",
+      "sdk_group_ids": [],
+      "source_candidate_ids": [
+       "native-dependency-49a9d1325d6909894f613e3e5d66b757"
+      ],
+      "status": "inferred",
+      "supporting_paths": []
+     }
+    },
+    "native_name": "m",
+    "observations": [
+     {
+      "evidence_id": "native-evidence-c5064e97194de1c6ee386cd3faa03391fd76ff947c0e58af7076eb280609b449",
+      "kind": "link_flag",
+      "value": "-lm"
+     }
+    ],
+    "package_root": "@command/a20b838002ff0feb3d6b0cf0",
+    "release": {
+     "alternatives": [],
+     "evidence_ids": [],
+     "status": "unknown",
+     "value": null
+    },
+    "repository": null,
+    "root_id": "build-unit-b9c931fa551e02bd12b2",
+    "upstream": {
+     "alternatives": [],
+     "evidence_ids": [],
+     "status": "unknown",
+     "value": null
+    }
+   },
+   "supported_repository_hosts": [
+    "github.com",
+    "gitlab.com"
+   ]
+  }
+ },
+ "source": "runs/2026-11-14-0005/data/inference-recordings/job_dependency_intelligence/070071664549636f41251e1d76be1dd990487ab5a9ba30fc4c977e50e883da5e.0000.json"
+}

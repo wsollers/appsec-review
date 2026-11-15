@@ -10,8 +10,9 @@ Given one unresolved native dependency candidate, determine whether its cited li
 pkg-config, or CMake evidence supports a plausible repository on the supplied host allowlist.
 
 ## Expected result
-Return only `appsec-review/native-dependency-resolution-proposal/1` JSON. Include the exact supplied
-`candidate_id`, a `repository` object with `host`, `owner`, `name`, and canonical HTTPS `url`, a
-numeric `confidence` from 0 through 0.95, one or more `evidence_refs` drawn exactly from the supplied
-allowlist, and a short `rationale`. If the evidence is insufficient, return a null repository with
-confidence zero; never invent an exact identity.
+Return exactly one JSON object and nothing else: no prose and no code fence. Its fields are
+`schema`, whose value is exactly `appsec-review/native-dependency-resolution-proposal/1`; the exact
+supplied `candidate_id`; a `repository` object with `host`, `owner`, `name`, and canonical HTTPS
+`url`, or null; a numeric `confidence` from 0 through 0.95; one or more `evidence_refs` drawn exactly
+from the supplied allowlist; and a short `rationale`. If the evidence is insufficient, return a null
+repository with confidence zero; never invent an exact identity.

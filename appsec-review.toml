@@ -2613,6 +2613,7 @@ command_token_limit = 4096
 metadata_file_limit = 10000
 metadata_bytes_per_file = 1048576
 inference_candidate_bytes = 32768
+inference_failure_limit = 8
 native_source_bytes_limit = 67108864
 native_root_limit = 2048
 native_evidence_limit = 50000

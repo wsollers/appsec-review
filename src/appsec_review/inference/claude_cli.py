@@ -15,7 +15,7 @@ from .request import ModelRequest, ModelResult, ReviewModelRequest, review_promp
 from .errors import (
     ExecutionContractError, FailureCategory, ModelOutputError, ModelTimeout, ProviderError, failure_category,
 )
-from .usage import Usage
+from .usage import Usage, token_count
 
 
 def _text_from_envelope(value: Any) -> str:
@@ -35,11 +35,24 @@ def _text_from_envelope(value: Any) -> str:
 
 
 _WORKER_TURN_SCHEMA = "appsec-review/worker-turn/1"
+_NATIVE_RESOLUTION_SCHEMA = "appsec-review/native-dependency-resolution-proposal/1"
+# The proposal's complete field set. On run 2026-11-14-0005 every one of the 79 failed native
+# resolution replies was exactly this object without a `schema` field (T-5022); the authenticated
+# request fixes the schema and apply_model_resolution still authorizes every value.
+_NATIVE_RESOLUTION_FIELDS = frozenset({"candidate_id", "repository", "confidence", "evidence_refs", "rationale"})
+_RESPONSE_BYTES = 2 * 1024 * 1024
+_REJECTED_BYTES = 131072
 
 
 def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
-    """Accept a CLI envelope or prose/fence wrapper, but exactly one schema-bearing JSON object."""
-    if not isinstance(raw, str) or not raw.strip() or len(raw.encode("utf-8")) > 2 * 1024 * 1024:
+    """Accept a CLI envelope or prose/fence wrapper, but exactly one schema-bearing JSON object.
+
+    A rejection carries a closed ``failure_class`` so the recording and the job's gap can say why.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        raise ModelOutputError("model response is empty or exceeds the response bound",
+                               failure_class="empty_reply")
+    if len(raw.encode("utf-8")) > _RESPONSE_BYTES:
         raise ModelOutputError("model response is empty or exceeds the response bound")
     text = raw.strip()
     try:
@@ -59,6 +72,7 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
         text = fenced.group(1).strip()
     decoder = json.JSONDecoder()
     candidates: list[Mapping[str, Any]] = []
+    objects = 0
     for index, character in enumerate(text):
         if character != "{":
             continue
@@ -66,8 +80,12 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
             value, _ = decoder.raw_decode(text[index:])
         except json.JSONDecodeError:
             continue
+        objects += 1
         if isinstance(value, Mapping) and value.get("schema") == schema:
             candidates.append(value)
+        elif (schema == _NATIVE_RESOLUTION_SCHEMA and isinstance(value, Mapping) and
+              set(value) == _NATIVE_RESOLUTION_FIELDS):
+            candidates.append({"schema": schema, **value})
         elif (schema == "appsec-review/target-analysis-proposal/2" and
               isinstance(value, Mapping) and "schema" not in value and
               set(value) == {"component_proposals", "build_recipes"}):
@@ -82,8 +100,70 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
             candidates.append({"schema": schema, **value})
     unique = {json.dumps(value, sort_keys=True, separators=(",", ":")): value for value in candidates}
     if len(unique) != 1:
-        raise ModelOutputError(f"expected exactly one {schema} JSON object, found {len(unique)}")
+        failure_class = ("several_objects" if len(unique) > 1 else "empty_reply" if not text
+                         else "schema_mismatch" if objects else "no_json_object")
+        raise ModelOutputError(f"expected exactly one {schema} JSON object, found {len(unique)}",
+                               failure_class=failure_class)
     return next(iter(unique.values()))
+
+
+def _envelope(raw: str) -> Mapping[str, Any] | None:
+    try:
+        envelope = json.loads(raw)
+    except (json.JSONDecodeError, RecursionError):
+        return None
+    return envelope if isinstance(envelope, Mapping) else None
+
+
+def _usage(envelope: Mapping[str, Any] | None) -> dict[str, int | None]:
+    usage = envelope.get("usage") if envelope is not None else None
+    usage = usage if isinstance(usage, Mapping) else {}
+    return {"input_tokens": token_count(usage.get("input_tokens")),
+            "output_tokens": token_count(usage.get("output_tokens")),
+            "cache_tokens": token_count(usage.get("cache_read_input_tokens"))}
+
+
+def _stop_reason(envelope: Mapping[str, Any] | None) -> str | None:
+    value = envelope.get("stop_reason") if envelope is not None else None
+    return value[:256] if isinstance(value, str) and value else None
+
+
+def _refused(envelope: Mapping[str, Any] | None) -> bool:
+    if envelope is None:
+        return False
+    subtype = envelope.get("subtype")
+    return (envelope.get("is_error") is True or _stop_reason(envelope) == "refusal"
+            or (isinstance(subtype, str) and subtype.startswith("error")))
+
+
+def contract_failure(exc: ModelOutputError, raw: str, *, retained_bytes: int) -> ModelOutputError:
+    """The failed path keeps what the success path keeps: bounded reply text, stop reason and usage.
+
+    ``retained_bytes`` is derived from the request's typed output budget, the same derivation the
+    execution engine applies to an accepted reply; the truncation is recorded, never silent.
+    """
+    encoded = raw.encode("utf-8")
+    truncated = len(encoded) > retained_bytes
+    retained = encoded[:retained_bytes].decode("utf-8", "ignore")
+    envelope = _envelope(raw)
+    try:
+        rejected = _text_from_envelope(envelope if envelope is not None else raw)
+    except ModelOutputError:
+        rejected = raw
+    stop_reason = _stop_reason(envelope)
+    failure_class = ("truncated_output" if stop_reason == "max_tokens" else
+                     "refusal" if _refused(envelope) else exc.failure_class)
+    return ModelOutputError(str(exc), raw_response=retained,
+                            rejected_output=rejected.encode("utf-8")[:_REJECTED_BYTES].decode("utf-8", "ignore"),
+                            failure_class=failure_class, stop_reason=stop_reason, usage=_usage(envelope),
+                            raw_response_truncated=truncated)
+
+
+def retained_reply_bytes(max_output_tokens: int) -> int:
+    """Bytes of a rejected reply a recording keeps: the typed output budget, eight bytes a token."""
+    if type(max_output_tokens) is not int or max_output_tokens < 1:
+        raise ExecutionContractError("max_output_tokens must be a positive integer")
+    return min(_RESPONSE_BYTES, max_output_tokens * 8)
 
 
 def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int, binary: str = "claude",
@@ -95,7 +175,8 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int, bi
     prompt = (review_prompt(request, include_guidance=True)
               if isinstance(request, ReviewModelRequest) else _plan_prompt(request))
     return _run(executable, prompt, request.schema, model=request.model, reasoning=request.reasoning,
-                timeout_seconds=timeout_seconds, auth_mode=auth_mode)
+                timeout_seconds=timeout_seconds, auth_mode=auth_mode,
+                retained_bytes=retained_reply_bytes(request.max_output_tokens))
 
 
 def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
@@ -116,7 +197,7 @@ def _worker_environment(auth_mode: str) -> dict[str, str]:
 
 
 def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str, reasoning: str,
-         timeout_seconds: int, auth_mode: str) -> ModelResult:
+         timeout_seconds: int, auth_mode: str, retained_bytes: int = _RESPONSE_BYTES) -> ModelResult:
     environment = _worker_environment(auth_mode)
     argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
             "--safe-mode", "--tools", "", "--allowedTools", "",
@@ -128,13 +209,7 @@ def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str,
     try:
         proposal = parse_model_payload(completed.stdout, schema)
     except ModelOutputError as exc:
-        raw = completed.stdout.encode("utf-8")[:2 * 1024 * 1024].decode("utf-8", "ignore")
-        try:
-            rejected = _text_from_envelope(json.loads(raw))
-        except (json.JSONDecodeError, ModelOutputError):
-            rejected = raw
-        raise ModelOutputError(str(exc), raw_response=raw,
-                               rejected_output=rejected.encode("utf-8")[:131072].decode("utf-8", "ignore")) from exc
+        raise contract_failure(exc, completed.stdout, retained_bytes=retained_bytes) from exc
     usage = {}
     served_model = None
     try:

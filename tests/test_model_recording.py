@@ -588,3 +588,62 @@ def test_closed_secondary_error_evidence(tmp_path, monkeypatch, mutate):
     path.write_text(json.dumps(doc))
     with pytest.raises(ExecutionContractError):
         _replay_one(tmp_path, source, monkeypatch)
+
+
+# ----------------------------------------------------------------------------------------- T-5022
+T5022 = Path(__file__).parent / "fixtures" / "dependency_intelligence" / "t5022"
+
+
+def _contract_failure() -> ModelOutputError:
+    fixture = json.loads((T5022 / "failed-first-attempt.json").read_text(encoding="utf-8"))
+    return ModelOutputError(fixture["error_message"], raw_response=json.dumps(fixture["reply"]),
+                            rejected_output=fixture["rejected_output"], failure_class="schema_mismatch",
+                            stop_reason=fixture["reply"]["stop_reason"],
+                            usage={"input_tokens": 2, "output_tokens": 910, "cache_tokens": 2234},
+                            raw_response_truncated=False)
+
+
+def test_a_schema_failure_records_its_class_stop_reason_usage_and_truncation_and_replays_them(tmp_path, monkeypatch):
+    error = _contract_failure()
+    source, path = _record_one(tmp_path, monkeypatch, error=error)
+    recorded_error = json.loads(path.read_text())["error"]
+    assert recorded_error["category"] == "schema"
+    assert recorded_error["failure_class"] == "schema_mismatch"
+    assert recorded_error["stop_reason"] == "end_turn"
+    assert recorded_error["usage"] == {"input_tokens": 2, "output_tokens": 910, "cache_tokens": 2234}
+    assert recorded_error["raw_response_truncated"] is False
+    assert recorded_error["rejected_output"].lstrip().startswith("```json")
+    with pytest.raises(ModelOutputError) as replayed:
+        _replay_one(tmp_path, source, monkeypatch)
+    for name in ("failure_class", "stop_reason", "usage", "raw_response_truncated", "raw_response", "rejected_output"):
+        assert getattr(replayed.value, name) == getattr(error, name)
+
+
+def test_a_schema_failure_recorded_before_the_diagnostics_existed_still_replays(tmp_path, monkeypatch):
+    """Run 2026-11-14-0005 wrote schema envelopes with only raw_response and rejected_output."""
+    source, path = _record_one(tmp_path, monkeypatch, error=_contract_failure())
+    doc = json.loads(path.read_text())
+    doc["error"] = {key: value for key, value in doc["error"].items()
+                    if key in {"category", "message", "raw_response", "rejected_output", "notes", "cause"}}
+    path.write_text(json.dumps(doc))
+    with pytest.raises(ModelOutputError) as replayed:
+        _replay_one(tmp_path, source, monkeypatch)
+    assert replayed.value.failure_class is None and replayed.value.stop_reason is None
+    assert replayed.value.usage is None and replayed.value.raw_response_truncated is False
+
+
+@pytest.mark.parametrize("mutation", [
+    {"failure_class": "surprise"},
+    {"usage": {"input_tokens": 1}},
+    {"usage": {"input_tokens": -1, "output_tokens": None, "cache_tokens": None}},
+    {"raw_response_truncated": "yes"},
+    {"stop_reason": 7},
+    {"diagnostic": "extra"},
+])
+def test_schema_failure_diagnostics_are_closed(tmp_path, monkeypatch, mutation):
+    source, path = _record_one(tmp_path, monkeypatch, error=_contract_failure())
+    doc = json.loads(path.read_text())
+    doc["error"].update(mutation)
+    path.write_text(json.dumps(doc))
+    with pytest.raises(ExecutionContractError):
+        _replay_one(tmp_path, source, monkeypatch)

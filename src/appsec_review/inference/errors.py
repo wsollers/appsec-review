@@ -17,12 +17,32 @@ class FailureCategory(str, Enum):
     CONTRACT = "contract"
 
 
+# Closed classes of a reply that failed its response contract; the recording and the job's gap
+# carry one of these so a failed call is diagnosable from the run without the reply text.
+SCHEMA_FAILURE_CLASSES = frozenset({
+    "empty_reply",        # the transport delivered no text
+    "no_json_object",     # text without any decodable JSON object
+    "schema_mismatch",    # JSON object(s), none carrying the declared schema
+    "several_objects",    # more than one distinct object carries the declared schema
+    "truncated_output",   # the provider stopped at its output budget
+    "refusal",            # the provider declined to answer
+})
+
+
 class ModelOutputError(ValueError):
     def __init__(self, message: str, *, raw_response: str | None = None,
-                 rejected_output: str | None = None) -> None:
+                 rejected_output: str | None = None, failure_class: str | None = None,
+                 stop_reason: str | None = None, usage: dict[str, int | None] | None = None,
+                 raw_response_truncated: bool = False) -> None:
         super().__init__(message)
+        if failure_class is not None and failure_class not in SCHEMA_FAILURE_CLASSES:
+            raise ValueError(f"unknown model output failure class: {failure_class!r}")
         self.raw_response = raw_response
         self.rejected_output = rejected_output
+        self.failure_class = failure_class
+        self.stop_reason = stop_reason
+        self.usage = dict(usage) if usage is not None else None
+        self.raw_response_truncated = bool(raw_response_truncated)
 
 
 class ProviderError(RuntimeError):

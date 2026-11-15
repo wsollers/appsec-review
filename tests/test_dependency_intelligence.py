@@ -16,8 +16,9 @@ from appsec_review.jobs.job_dependency_intelligence import (
     apply_model_resolution, build_job, deduplicate_repositories, infer_maximal_exposure,
     load_accepted_dependency_intelligence, normalize_dependencies, parse_native_candidates,
 )
-from appsec_review.jobs.job_dependency_intelligence.inference import resolve_with_inference
-from appsec_review.inference import ModelResult
+from appsec_review.jobs.job_dependency_intelligence.inference import ResolutionBudget, resolve_with_inference
+from appsec_review.jobs.job_dependency_intelligence.resolution import allowed_evidence_refs
+from appsec_review.inference import ModelOutputError, ModelResult, parse_model_payload
 from appsec_review.retrieval import EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity
 from appsec_review.retrieval.index import write_manifest
 from appsec_review.storage import atomic_json, file_sha256
@@ -366,3 +367,164 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
     index_path.write_bytes(b"changed")
     with pytest.raises(ValueError, match="(?:index|target evidence) integrity mismatch"):
         load_accepted_dependency_intelligence(run_root)
+
+
+# ----------------------------------------------------------------------------------------- T-5022
+T5022 = Path(__file__).parent / "fixtures" / "dependency_intelligence" / "t5022"
+PROPOSAL = "appsec-review/native-dependency-resolution-proposal/1"
+MODEL = {"enabled": True, "provider": "fake", "model": "fake", "reasoning": "low",
+         "max_input_tokens": 32000, "max_output_tokens": 4000, "timeout_seconds": 7, "retries": 1}
+
+
+def _fixture(name: str) -> dict:
+    return json.loads((T5022 / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def _dependency(fixture: dict, dependency_id: str = "dependency-a") -> dict:
+    candidate = fixture["request"]["summary"]["candidate"]
+    return {"dependency_id": dependency_id, "name": candidate["native_name"], "repository": None,
+            "observations": [{"source": "native", "evidence_id": candidate["candidate_id"],
+                              "candidate_id": candidate["candidate_id"]}],
+            "native_candidate": candidate}
+
+
+def _resolve(dependency, infer, *, budget=None, tmp_path, model=MODEL):
+    return resolve_with_inference(dependency, repository_root=Path(__file__).parents[1], run_root=tmp_path,
+                                  model=model, supported_hosts=("github.com", "gitlab.com"), infer=infer,
+                                  max_candidate_bytes=32768, budget=budget)
+
+
+def test_the_evidence_allowlist_offers_only_identities_that_exist() -> None:
+    fixture = _fixture("failed-first-attempt")
+    dependency = _dependency(fixture)
+    candidate = dependency["native_candidate"]
+    assert "None" in fixture["request"]["summary"]["allowed_evidence_refs"]      # what 0005 sent
+    allowed = allowed_evidence_refs(dependency, candidate)
+    assert "None" not in allowed
+    assert allowed == {candidate["candidate_id"], *(item["evidence_id"] for item in candidate["observations"])}
+    with_command = {**candidate, "observations": [{"command_id": "cmd-1", "kind": "link_flag", "value": "-lm"}]}
+    assert allowed_evidence_refs(dependency, with_command) == {candidate["candidate_id"], "cmd-1"}
+
+
+def test_a_replayed_0005_request_yields_exactly_one_valid_proposal(tmp_path: Path) -> None:
+    """The recorded failed reply, parsed by the repaired transport parser, resolves without a gap."""
+    fixture = _fixture("failed-first-attempt")
+    dependency = _dependency(fixture)
+    requests = []
+
+    def replay(request, *, timeout_seconds: int) -> ModelResult:
+        requests.append(request)
+        reply = fixture["reply"]
+        return ModelResult(parse_model_payload(reply["result"], PROPOSAL), input_tokens=reply["usage"]["input_tokens"],
+                           output_tokens=reply["usage"]["output_tokens"], raw_response=reply["result"])
+
+    resolved, gap = _resolve(dependency, replay, tmp_path=tmp_path)
+    assert gap is None and len(requests) == 1 and not requests[0].repair_errors
+    assert resolved["repository"] is None                       # a null proposal with confidence zero
+    assert "None" not in requests[0].summary["allowed_evidence_refs"]
+    assert requests[0].max_output_tokens == 4000 == fixture["request"]["max_output_tokens"]
+
+
+def test_a_repaired_0005_reply_with_a_repository_is_admitted_with_its_evidence(tmp_path: Path) -> None:
+    fixture = _fixture("failed-second-attempt")
+    dependency = _dependency(fixture)
+    proposal = parse_model_payload(fixture["reply"]["result"], PROPOSAL)
+    assert proposal["repository"]["url"] == "https://github.com/lz4/lz4"
+    assert set(proposal["evidence_refs"]) <= allowed_evidence_refs(dependency, dependency["native_candidate"])
+    resolved, gap = _resolve(dependency, lambda request, *, timeout_seconds: ModelResult(proposal), tmp_path=tmp_path)
+    assert gap is None and resolved["resolution_basis"] == "model_inference"
+    assert resolved["exact_repository_identity"] is False and resolved["resolution_confidence"] == 0.6
+
+
+def test_the_rendered_task_names_the_schema_field(tmp_path: Path) -> None:
+    seen = []
+
+    def capture(request, *, timeout_seconds: int) -> ModelResult:
+        seen.append(request)
+        return ModelResult({"schema": PROPOSAL, "candidate_id": "native-dependency-3f5a6aac5994fb1fcf94c7153ced20cd",
+                            "repository": None, "confidence": 0, "evidence_refs": [], "rationale": ""})
+
+    _resolve(_dependency(_fixture("failed-first-attempt")), capture, tmp_path=tmp_path)
+    task = seen[0].guidance.split("<<<task id=native_repository_resolution")[1].split("<<<end task>>>")[0]
+    assert "`schema`, whose value is exactly `" + PROPOSAL + "`" in task
+    assert "exactly one JSON object and nothing else" in task
+
+
+def _failing(failure_class: str = "schema_mismatch"):
+    calls = []
+
+    def infer(request, *, timeout_seconds: int) -> ModelResult:
+        calls.append(request)
+        raise ModelOutputError(f"expected exactly one {PROPOSAL} JSON object, found 0",
+                               raw_response="{}", rejected_output="{}", failure_class=failure_class,
+                               stop_reason="end_turn", usage={"input_tokens": 2, "output_tokens": 9, "cache_tokens": None})
+    return infer, calls
+
+
+def test_a_contract_failure_becomes_one_gap_naming_its_class_after_the_typed_retries(tmp_path: Path) -> None:
+    infer, calls = _failing()
+    budget = ResolutionBudget(8)
+    resolved, gap = _resolve(_dependency(_fixture("failed-first-attempt")), infer, budget=budget, tmp_path=tmp_path)
+    assert len(calls) == MODEL["retries"] + 1 == 2
+    assert calls[1].repair_errors and calls[1].repair_errors[0].startswith("schema_mismatch: ModelOutputError")
+    assert gap["kind"] == "model_failure" and gap["failure_class"] == "schema_mismatch"
+    assert gap["detail"].startswith("schema_mismatch: ModelOutputError: expected exactly one")
+    assert resolved["repository"] is None and budget.failures == 1
+
+
+def test_an_identical_candidate_set_is_asked_once_per_unit_and_its_failure_reused(tmp_path: Path) -> None:
+    infer, calls = _failing()
+    budget = ResolutionBudget(8)
+    fixture = _fixture("failed-first-attempt")
+    first, first_gap = _resolve(_dependency(fixture, "dependency-a"), infer, budget=budget, tmp_path=tmp_path)
+    second, second_gap = _resolve(_dependency(fixture, "dependency-b"), infer, budget=budget, tmp_path=tmp_path)
+    assert len(calls) == 2 and budget.failures == 1                     # no third or fourth call
+    assert second_gap["dependency_id"] == "dependency-b" and second_gap["kind"] == "model_failure"
+    assert second_gap["failure_class"] == "schema_mismatch" and "not re-asked" in second_gap["detail"]
+    # A successful outcome is reused the same way, re-validated against the dependency that carries it.
+    proposal = parse_model_payload(_fixture("failed-second-attempt")["reply"]["result"], PROPOSAL)
+    seen = []
+    def succeed(request, *, timeout_seconds: int) -> ModelResult:
+        seen.append(request)
+        return ModelResult(proposal)
+    other = _fixture("failed-second-attempt")
+    resolved_a, _ = _resolve(_dependency(other, "dependency-c"), succeed, budget=budget, tmp_path=tmp_path)
+    resolved_b, gap_b = _resolve(_dependency(other, "dependency-d"), succeed, budget=budget, tmp_path=tmp_path)
+    assert len(seen) == 1 and gap_b is None
+    assert resolved_b["dependency_id"] == "dependency-d" and resolved_b["repository"] == resolved_a["repository"]
+
+
+def test_the_typed_failure_limit_stops_asking_a_worker_that_keeps_failing(tmp_path: Path) -> None:
+    infer, calls = _failing("no_json_object")
+    budget = ResolutionBudget(2)
+    first = _fixture("failed-first-attempt")
+    second = _fixture("failed-second-attempt")
+    third_candidate = {**first["request"]["summary"]["candidate"], "candidate_id": "native-dependency-third",
+                       "native_name": "third"}
+    third = {"request": {"summary": {"candidate": third_candidate}}}
+    for name, fixture in (("a", first), ("b", second)):
+        _, gap = _resolve(_dependency(fixture, f"dependency-{name}"), infer, budget=budget, tmp_path=tmp_path)
+        assert gap["kind"] == "model_failure" and gap["failure_class"] == "no_json_object"
+    assert len(calls) == 4 and budget.exhausted
+    resolved, gap = _resolve(_dependency(third, "dependency-c"), infer, budget=budget, tmp_path=tmp_path)
+    assert len(calls) == 4                                              # no call for the third candidate
+    assert gap == {"dependency_id": "dependency-c", "kind": "model_failure_bound",
+                   "detail": "native repository inference stopped after 2 candidate sets failed the "
+                             "response contract (inference_failure_limit=2)"}
+    assert resolved["repository"] is None
+    # A candidate already answered is still served from the unit's memo after the limit.
+    _, reused = _resolve(_dependency(first, "dependency-e"), infer, budget=budget, tmp_path=tmp_path)
+    assert len(calls) == 4 and reused["kind"] == "model_failure"
+
+
+@pytest.mark.parametrize("limit", [0, -1, "8", 2.0, True])
+def test_the_failure_limit_is_a_positive_integer(limit) -> None:
+    with pytest.raises(ValueError):
+        ResolutionBudget(limit)
+
+
+def test_the_central_configuration_declares_the_failure_limit() -> None:
+    import tomllib
+    settings = tomllib.loads((Path(__file__).parents[1] / "appsec-review.toml").read_text(encoding="utf-8"))[
+        "jobs"]["job_dependency_intelligence"]["settings"]
+    assert type(settings["inference_failure_limit"]) is int and settings["inference_failure_limit"] >= 1

@@ -36,8 +36,8 @@ from typing import Any
 from uuid import uuid4
 
 from .errors import (
-    ExecutionContractError, ExecutionLimit, FailureCategory, ModelCancelled, ModelOutputError,
-    ModelTimeout, ProviderError, failure_category,
+    SCHEMA_FAILURE_CLASSES, ExecutionContractError, ExecutionLimit, FailureCategory, ModelCancelled,
+    ModelOutputError, ModelTimeout, ProviderError, failure_category,
 )
 from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
 from .usage import Usage, token_count
@@ -306,7 +306,13 @@ def _error_envelope(error: BaseException, *, depth: int = 0) -> dict[str, Any]:
     elif category is FailureCategory.PROVIDER:
         value.update(code=error.code, retryable=error.retryable)
     elif category is FailureCategory.SCHEMA:
-        value.update(raw_response=error.raw_response, rejected_output=error.rejected_output)
+        # What the success path keeps (T-5022): the bounded reply, the provider's stop reason and
+        # usage, the closed failure class and whether the transport clipped the reply.
+        value.update(raw_response=error.raw_response, rejected_output=error.rejected_output,
+                     failure_class=getattr(error, "failure_class", None),
+                     stop_reason=getattr(error, "stop_reason", None),
+                     usage=getattr(error, "usage", None),
+                     raw_response_truncated=bool(getattr(error, "raw_response_truncated", False)))
     elif category is FailureCategory.BUDGET:
         value["code"] = error.code
     else:
@@ -340,8 +346,12 @@ def _primary_error(error: Any) -> BaseException:
         "schema": {"raw_response", "rejected_output"}, "budget": {"code"},
         "contract": {"code", "exception_type"},
     }
-    if type(category) is not str or category not in fields or set(error) != {
-            "category", "message", *fields[category]}:
+    # Schema envelopes written before T-5022 lack the diagnostic fields; they stay readable.
+    optional = {"schema": _SCHEMA_DIAGNOSTICS}
+    if type(category) is not str or category not in fields:
+        raise ExecutionContractError("unsupported model recording error semantics")
+    present = set(error) - {"category", "message"}
+    if not fields[category] <= present or present - fields[category] - optional.get(category, set()):
         raise ExecutionContractError("unsupported model recording error semantics")
     _text(error["message"], _MESSAGE_BYTES)
     message = error["message"]
@@ -362,7 +372,7 @@ def _primary_error(error: Any) -> BaseException:
         _text(error["raw_response"], _RESPONSE_BYTES, optional=True)
         _text(error["rejected_output"], _REJECTED_BYTES, optional=True)
         return ModelOutputError(message, raw_response=error["raw_response"],
-                                rejected_output=error["rejected_output"])
+                                rejected_output=error["rejected_output"], **_schema_diagnostics(error))
     if category == "budget":
         if message != error["code"]:
             raise ExecutionContractError("inconsistent recorded execution limit")
@@ -371,6 +381,29 @@ def _primary_error(error: Any) -> BaseException:
     if error["code"] != "application_contract_failure":
         raise ExecutionContractError("unsupported recorded contract error")
     return ExecutionContractError(f"recorded {error['exception_type']}: {message}")
+
+
+_SCHEMA_DIAGNOSTICS = frozenset({"failure_class", "stop_reason", "usage", "raw_response_truncated"})
+_USAGE_FIELDS = frozenset({"input_tokens", "output_tokens", "cache_tokens"})
+
+
+def _schema_diagnostics(error: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the closed diagnostic fields of a schema failure; absent fields are unknown."""
+    failure_class = error.get("failure_class")
+    if failure_class is not None and (type(failure_class) is not str
+                                      or failure_class not in SCHEMA_FAILURE_CLASSES):
+        raise ExecutionContractError("unsupported recorded model output failure class")
+    stop_reason = error.get("stop_reason")
+    _text(stop_reason, 256, optional=True)
+    usage = error.get("usage")
+    if usage is not None and (type(usage) is not dict or set(usage) != _USAGE_FIELDS or any(
+            value is not None and token_count(value) is None for value in usage.values())):
+        raise ExecutionContractError("invalid recorded failure usage")
+    truncated = error.get("raw_response_truncated", False)
+    if type(truncated) is not bool:
+        raise ExecutionContractError("invalid recorded reply truncation flag")
+    return {"failure_class": failure_class, "stop_reason": stop_reason,
+            "usage": dict(usage) if usage is not None else None, "raw_response_truncated": truncated}
 
 
 def _result(value: Any, *, legacy: bool = False) -> ModelResult:
