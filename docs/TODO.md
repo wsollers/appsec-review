@@ -2991,9 +2991,10 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   433 cases: contract, acquisition, parsing, configuration, signals, indexes and publication;
   31 graph cases preserved in `tests/integration/job_source_history_analysis/`, 12 old claims
   replaced by named code-level tests; one unreachable line and six defensive/unreachable
-  branches individually explained in the host-local report). The unit manager resumed in
-  registry order; job_target_acquisition is blocked on its published `/2` versus declared `/1`
-  schema mismatch, and job_target_catalog is blocked on the typed-gap migration in T-055.
+  branches individually explained in the host-local report); job_target_acquisition (4 unit
+  files, 85 cases plus shared Wave 1a contract suite: contract, configuration, graph and
+  handlers; 6 graph cases preserved in `tests/integration/job_target_acquisition/`; 113/113
+  job-package lines and 24/24 branches covered).
   Artifact-indexing re-gate: 10 unit files, 190 cases, with all 171 prior cases preserved;
   655/655 job-package lines and 258/258 branches covered, no integration changes.
   The remaining 29-job inventory is paused for approved bounded repair waves. Wave 1a
