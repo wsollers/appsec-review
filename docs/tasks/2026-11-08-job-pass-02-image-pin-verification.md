@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "images and deployment"
 status: "historical"
 jobs: ["job_image_pin_verification", "job_review_intake", "job_target_acquisition"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Job pass 02 — `job_image_pin_verification`
 

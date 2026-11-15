@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_security_tagging"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 
 # security_tagging
@@ -169,7 +169,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -831,7 +831,7 @@ flowchart LR
   input122 -. schema .-> input_schema122
   producer123["job_tree_sitter_ast"]
   input123["tree_sitter_node_shards"]
-  input_schema123["appsec-review/tree-sitter-ast/1"]
+  input_schema123["appsec-review/tree-sitter-normalizer/1"]
   producer123 --> input123 --> job
   input123 -. schema .-> input_schema123
   producer124["job_tree_sitter_ast"]

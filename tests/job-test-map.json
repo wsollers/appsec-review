@@ -27,7 +27,11 @@
       "live": []
     },
     "job_artifact_security_analysis": {
-      "unit": ["tests/test_artifact_security_analysis.py"],
+      "unit": [
+        "tests/test_artifact_security_analysis.py",
+        "tests/unit/runtime/test_wave2_contracts.py",
+        "tests/unit/runtime/test_wave2_consumers.py"
+      ],
       "integration": [
         "tests/integration/test_installer_record_scans.py",
         "tests/integration/job_artifact_indexing/test_artifact_input_contracts.py"
@@ -68,7 +72,8 @@
       "unit": [
         "tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow",
         "tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days",
-        "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push"
+        "tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push",
+        "tests/unit/runtime/test_wave2_consumers.py"
       ],
       "integration": [],
       "acceptance": [],
@@ -442,7 +447,8 @@
       "unit": [
         "tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches",
         "tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output",
-        "tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion"
+        "tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion",
+        "tests/unit/runtime/test_wave2_consumers.py"
       ],
       "integration": [],
       "acceptance": [],
@@ -578,7 +584,9 @@
       "unit": [
         "tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific",
         "tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically",
-        "tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation"
+        "tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation",
+        "tests/unit/runtime/test_wave2_contracts.py",
+        "tests/unit/runtime/test_wave2_consumers.py"
       ],
       "integration": [],
       "acceptance": [],

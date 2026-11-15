@@ -4,13 +4,13 @@ kind: "architecture"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_openvex_export", "job_poc_generation", "job_remediation_planning", "job_remediation_validation"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Reporting and metrics
 
 ## As built today
 
-This view is reconciled to `d622f50750ae0c1583d6dac5a0acb0643ea18bcc`, including T-150's
+This view reflects the current repository state, including T-150's
 protected decision-audit readers and dossier projection. Public gate/report schemas and finding
 decisions are unchanged; traceability is not a new finding state or quality label.
 
@@ -139,7 +139,11 @@ provider efficacy and findings precision.
 ### Rendering a diagnostic view is not accepting a review
 
 The [reporting CLI](../../src/appsec_review/reporting/__main__.py) can render existing report,
-ledger, package and recording material as HTML/LaTeX into an explicit output directory.
+ledger, package and recording material as HTML/LaTeX into an explicit output directory, including
+a bounded code-graph quality coverage box rendered by
+[`reporting/graph_quality.py`](../../src/appsec_review/reporting/graph_quality.py) when
+`job_code_graph_index` published a valid `graph-quality-scorecard.json`
+([schema](../schemas/graph-quality-scorecard.schema.json), [T-5016](../TODO.md)).
 [Its reader](../../src/appsec_review/reporting/sources.py) records missing/unreadable artifacts
 as presentation gaps and can select matching attempt files rather than an accepted snapshot.
 Treat diagnostic renderings of model recordings as private, not as the sanitized public report.

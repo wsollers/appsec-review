@@ -574,6 +574,7 @@ def _validate_config(context, _result) -> None:
 
 def load_accepted_artifact_security_analysis(run_root: Path) -> Mapping[str, Any]:
     from appsec_review.runtime.consume import accepted_upstream
+    from appsec_review.runtime.inputs import observe_output
     accepted = accepted_upstream(run_root, "job_artifact_security_analysis")
     handoff = accepted.handoff
     pointer = {"handoff_sha256": accepted.sha256}
@@ -582,6 +583,7 @@ def load_accepted_artifact_security_analysis(run_root: Path) -> Mapping[str, Any
     if not any(item.get("path") == identity.get("path") and item.get("sha256") == identity.get("sha256")
                for item in handoff.get("artifacts", ())):
         raise FrameworkIntegrityError("artifact-security publication is not bound to its handoff")
+    observe_output(run_root, "job_artifact_security_analysis", "artifact_security_acceptance", identity)
     document = json.loads(_safe_file(run_root, identity).read_text(encoding="utf-8"))
     if document.get("schema") != SCHEMA: raise ValueError("artifact-security publication schema is unsupported")
     return {**document, "handoff_sha256": pointer["handoff_sha256"]}

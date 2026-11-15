@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_review_prioritization"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 
 # review_prioritization
@@ -29,13 +29,13 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `extract` | `extract.dependency_graph` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L440) |
-| `extract` | `extract.semantic_evidence` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L464) |
-| `extract` | `extract.syntax_metrics` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L257) |
-| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L232) |
-| `prioritize` | `prioritize.score` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L556) |
-| `publish` | `publish.index_priority` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L675) |
-| `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L904) |
+| `extract` | `extract.dependency_graph` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L446) |
+| `extract` | `extract.semantic_evidence` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L470) |
+| `extract` | `extract.syntax_metrics` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L260) |
+| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L235) |
+| `prioritize` | `prioritize.score` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L562) |
+| `publish` | `publish.index_priority` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L681) |
+| `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_prioritization/job.py#L910) |
 
 ### Accepted input declarations
 
@@ -71,7 +71,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_acceptance` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -95,7 +96,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches`<br>`tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output`<br>`tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion` |
+| unit | `tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches`<br>`tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output`<br>`tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion`<br>`tests/unit/runtime/test_wave2_consumers.py` |
 
 ### Dagster placement
 
@@ -260,19 +261,24 @@ flowchart LR
   input29 -. schema .-> input_schema29
   producer30["job_tree_sitter_ast"]
   input30["tree_sitter_node_shards"]
-  input_schema30["appsec-review/tree-sitter-ast/1"]
+  input_schema30["appsec-review/tree-sitter-normalizer/1"]
   producer30 --> input30 --> job
   input30 -. schema .-> input_schema30
   producer31["job_tree_sitter_ast"]
-  input31["generated_source_backing"]
-  input_schema31["appsec-review/generated-source-backing/1"]
+  input31["tree_sitter_acceptance"]
+  input_schema31["appsec-review/tree-sitter-ast/1"]
   producer31 --> input31 --> job
   input31 -. schema .-> input_schema31
   producer32["job_tree_sitter_ast"]
-  input32["tree_sitter_tool_io"]
-  input_schema32["appsec-review/container-execution/1"]
+  input32["generated_source_backing"]
+  input_schema32["appsec-review/generated-source-backing/1"]
   producer32 --> input32 --> job
   input32 -. schema .-> input_schema32
+  producer33["job_tree_sitter_ast"]
+  input33["tree_sitter_tool_io"]
+  input_schema33["appsec-review/container-execution/1"]
+  producer33 --> input33 --> job
+  input33 -. schema .-> input_schema33
   output0["prioritization_documents"]
   output_schema0["appsec-review/review-prioritization/1"]
   job --> output0
@@ -293,8 +299,9 @@ and source custody; it does not dispatch an LLM despite the score's historical n
 
 ### `load`
 
-1. In `load.accepted_inputs`, verify accepted intake, catalog and Tree-sitter results and require
-   their source snapshots to agree with the job fingerprint.
+1. In `load.accepted_inputs`, verify accepted intake, catalog and Tree-sitter results
+   (`tree_sitter_acceptance` and streamed `tree_sitter_node_shards` via `observe_output` read
+   receipts) and require their source snapshots to agree with the job fingerprint.
 2. Verify source backing and collect optional scanner, CodeQL and history handoff identities.
    Retain policy exclusions, including disabled-language coverage, rather than inventing syntax.
 

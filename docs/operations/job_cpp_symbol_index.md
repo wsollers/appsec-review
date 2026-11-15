@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_cpp_symbol_index"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 
 # cpp_symbol_index
@@ -232,8 +232,10 @@ the executed tool is resolved in the handler, not inferred from that table.
 
 1. Read the accepted compiled-analysis result and manifest through the
    [input contract](../architecture/job-input-contracts.md). Require this snapshot.
-2. Verify each successful catalog's compile database and materialized source mapping. Retain
-   unsuccessful catalogs or catalogs without commands as unavailable cases, not empty scopes.
+2. Verify each usable catalog's compile database and materialized source mapping (`SUCCEEDED` or
+   `COMPLETED_WITH_GAPS` builds under `_USABLE_BUILD_STATUSES`, [T-5016](../TODO.md)). Retain
+   failed/blocked catalogs without usable compile outputs or catalogs without commands as
+   unavailable cases, not empty scopes.
 
 ### `index`
 
@@ -248,7 +250,9 @@ the executed tool is resolved in the handler, not inferred from that table.
    malformed document and document-cap reasons.
 4. Accept unique clangd IDs with an accepted definition or canonical declaration, preferring the
    definition. Convert zero-based positions to accepted source locations. Count external-only
-   symbols separately; enforce symbol bounds.
+   symbols separately; admit symbols `first_party` first under `max_symbols_per_scope` using the
+   frozen disposition table (`config/first_party.py`), recording `symbols_by_disposition` and
+   `excluded_symbols_by_disposition` where only a first-party exclusion emits the symbol-limit gap.
 5. Link retained reference containers and targets: call-bit references become `CALLS`, others
    `REFERENCES`. Aggregate repeated edges with occurrence counts and bounded locations; count
    unresolved references without inventing edges. Enforce relation bounds.

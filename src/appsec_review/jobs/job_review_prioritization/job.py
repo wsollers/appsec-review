@@ -164,12 +164,15 @@ def _component(path: str, roots: list[tuple[str, str]]) -> str | None:
 
 
 def _load_inputs(run_root: Path) -> dict[str, Any]:
+    from appsec_review.runtime.inputs import observe_output
     intake_handoff, _ = accepted_handoff(run_root, "job_review_intake")
     catalog_handoff, catalog_sha = accepted_handoff(run_root, "job_target_catalog")
     tree_handoff, tree_sha = accepted_handoff(run_root, "job_tree_sitter_ast")
     intake = read_json(run_root, intake_handoff["outputs"]["publish_intake.publish_handoff"]["artifact"])
     catalog = read_json(run_root, catalog_handoff["outputs"]["publish_catalog.publish_handoff"]["artifact"])
-    tree = read_json(run_root, tree_handoff["outputs"]["acceptance.publish_handoff"]["artifact"])
+    tree_artifact = tree_handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    observe_output(run_root, "job_tree_sitter_ast", "tree_sitter_acceptance", tree_artifact)
+    tree = read_json(run_root, tree_artifact)
     if intake.get("schema") != "appsec-review/review-intake/1" or catalog.get("schema") != "appsec-review/target-catalog/1" \
             or tree.get("schema") != "appsec-review/tree-sitter-ast/1":
         raise ValueError("review prioritization inputs use unsupported schemas")
@@ -267,9 +270,12 @@ def build_job() -> Job:
             return extract_syntax(unit, settings)
 
     def extract_syntax(unit: UnitContext, settings: Mapping[str, Any]) -> Mapping[str, Any]:
+        from appsec_review.runtime.inputs import observe_output
         loaded = unit.output("load.accepted_inputs")
         files = catalog_files(unit)
-        tree = read_json(unit.job.run_root, loaded["inputs"]["tree_sitter_artifact"])
+        tree_artifact = loaded["inputs"]["tree_sitter_artifact"]
+        observe_output(unit.job.run_root, "job_tree_sitter_ast", "tree_sitter_acceptance", tree_artifact)
+        tree = read_json(unit.job.run_root, tree_artifact)
         reasons: dict[str, list[str]] = defaultdict(list)
         shard_rows: list[Mapping[str, Any]] = []
         for disposition in tree.get("dispositions", ()):

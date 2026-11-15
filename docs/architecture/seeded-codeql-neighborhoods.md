@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_code_graph_index", "job_codeql_analysis", "job_evidence_collection"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Seeded CodeQL neighborhoods
 

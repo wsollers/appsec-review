@@ -360,13 +360,18 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             gaps.append("function_spans_unavailable:tree_sitter_not_accepted")
             unreliable = {path: "function_spans_unavailable" for path in selected}
         elif selected:
-            accepted_tree = _read(run_root, tree[0]["outputs"]["acceptance.publish_handoff"]["artifact"])
+            from appsec_review.runtime.inputs import observe_output
+            tree_artifact = tree[0]["outputs"]["acceptance.publish_handoff"]["artifact"]
+            observe_output(run_root, "job_tree_sitter_ast", "tree_sitter_acceptance", tree_artifact)
+            accepted_tree = _read(run_root, tree_artifact)
             if accepted_tree.get("target_snapshot") != unit.job.source_fingerprint:
                 raise ValueError("Tree-sitter snapshot does not match the change context target")
             lines: list[bytes] = []
             for value in accepted_tree.get("dispositions", ()):
                 if isinstance(value, Mapping) and isinstance(value.get("artifact"), Mapping):
-                    lines.extend(_read_bytes(run_root, value["artifact"]).splitlines())
+                    shard_artifact = value["artifact"]
+                    observe_output(run_root, "job_tree_sitter_ast", "tree_sitter_node_shards", shard_artifact)
+                    lines.extend(_read_bytes(run_root, shard_artifact).splitlines())
             spans, unreliable = function_spans(lines, {path: eligible[path]["sha256"] for path in selected},
                                                unit.job.target_root or Path())
             if unreliable:

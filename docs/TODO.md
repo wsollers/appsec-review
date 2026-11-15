@@ -4,7 +4,7 @@ kind: "process"
 subsystem: "testing and operations"
 status: "current"
 jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_image_pin_verification", "job_language_build", "job_model_connectivity", "job_post_build_security_assessment", "job_project_build", "job_remediation_validation", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_third_party_data_sync", "job_threat_model_generation"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # TODO registry
 
@@ -137,7 +137,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-130 | [Author job operations pages around the generated contracts](#t-130-author-job-operations-pages-around-the-generated-contracts) | pipeline | done (2026-11-14, docs/docs-sync.json) |
 | T-131 | [Document the forward testing contract and its enforcement](#t-131-document-the-forward-testing-contract-and-its-enforcement) | testing | done (2026-11-14, docs/architecture/testing.md) |
 | T-132 | [Write current-state subsystem architecture dives](#t-132-write-current-state-subsystem-architecture-dives) | pipeline | done (2026-11-14, docs/architecture/README.md) |
-| T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | blocked |
+| T-133 | [Apply approved documentation merges and retirements](#t-133-apply-approved-documentation-merges-and-retirements) | pipeline | done (2026-11-14, Stage 7: merged ci-configuration-analysis and cross-language-codeql into operations pages with one-release pointers; docs/docs-ledger.json) |
 | T-134 | [Smoke targets: one minimal buildable repository per language, plus the guide](#t-134-smoke-targets-one-minimal-buildable-repository-per-language-plus-the-guide) | testing | done (2026-11-13, nine repositories and the guide published at v1.0.0; see T-135 to T-145 and docs/operations/test-targets.md) |
 | T-135 | [Create the C and C++ smoke target appsec-review-smoke-cpp](#t-135-create-the-c-and-c-smoke-target-appsec-review-smoke-cpp) | testing | done (2026-11-13, appsec-review-smoke-cpp v1.0.0 = bededb650d0c; Syft gap recorded in the guide) |
 | T-136 | [Create the Java smoke target appsec-review-smoke-java](#t-136-create-the-java-smoke-target-appsec-review-smoke-java) | testing | done (2026-11-13, appsec-review-smoke-java v1.0.0 = 3219d1700d69; mvn -o fails offline in the image, recorded as a gap) |
@@ -2135,7 +2135,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-133 — Apply approved documentation merges and retirements
 
-- **State:** blocked
+- **State:** done (2026-11-14, Stage 7: merged ci-configuration-analysis and cross-language-codeql into operations pages with one-release pointers; docs/docs-ledger.json)
 - **Area:** pipeline
 - **Blocked by:** T-132
 - **Why:** duplicate and obsolete non-decision documents remain after current pages exist;
@@ -2308,12 +2308,13 @@ until each is rewritten into the entry format when it is next touched.
   parallel documentation mapping. Until then, the user-approved inventory names each missing
   binding as this gap and links the handler; a missing binding never means no tool or model runs.
   Do not modify frozen configuration, guidance registry or `DATASETS` as part of the docs program.
-  Observed source mismatch: `job_artifact_security_analysis/datasets.py` declares
-  `artifact_security_results` at `analyze` with `appsec-review/artifact-security-observation/1`;
-  its artifact glob also claims `accepted-analysis.json`, which `acceptance.publish_handoff`
-  writes with `appsec-review/artifact-security-analysis/1`. Separate or narrow the declarations
-  and reconcile affected typed consumers in the implementation repair, preserving actual
-  payload formats; the documentation generator retains the current declarations unchanged.
+  Observed source mismatch (resolved in Wave 2 `eb8a70717`): `job_artifact_security_analysis/datasets.py`
+  previously declared `artifact_security_results` at `analyze` with
+  `appsec-review/artifact-security-observation/1` over both shard results and `accepted-analysis.json`;
+  `artifact_security_results` is now narrowed to shard observation JSON and
+  `artifact_security_acceptance` owns `accepted-analysis.json` at `acceptance` with
+  `appsec-review/artifact-security-analysis/1` and `observe_output` enforcement in
+  `load_accepted_artifact_security_analysis`. Unit-level tool/model task-binding declarations remain open.
 - **Done when:** every registered unit's binding is covered by a focused test of the real
   dispatch definition, and generated task rows distinguish exact, conditional and no-launch
   bindings with no unknown binding silently converted to an empty success; a focused publisher
@@ -2969,8 +2970,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
-  Wave 1c aligns image-repair proposal validation and its JSON schema on current-only `/3`,
-  preserving bounded repairs, explicit refusal and normalized identities.
+  Wave 1c (`4b875e0ea`) aligns image-repair proposal validation and its JSON schema on
+  current-only `/3`, preserving bounded repairs, explicit refusal and normalized identities.
+  Wave 2 (`eb8a70717`) splits `job_artifact_security_analysis` and `job_tree_sitter_ast` dataset
+  declarations, adds `schema` to `FAILED` Tree-sitter scope dispositions, aligns all ten
+  downstream Tree-sitter consumers on `tree-sitter-normalizer/1` shards, and wires
+  `observe_output` in `load_accepted_artifact_security_analysis`, `job_change_context_analysis`
+  and `job_review_prioritization`.
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:

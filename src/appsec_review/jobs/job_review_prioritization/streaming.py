@@ -55,6 +55,8 @@ class ShardRowIndex:
             raise
 
     def _scan(self, run_root: Path, identity: Mapping[str, Any], wanted: frozenset[str]) -> None:
+        from appsec_review.runtime.inputs import observe_output
+        observe_output(run_root, "job_tree_sitter_ast", "tree_sitter_node_shards", identity)
         path = _verified_path(run_root, identity)
         shard = len(self._paths)
         digest = hashlib.sha256()

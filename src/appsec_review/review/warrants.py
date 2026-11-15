@@ -926,6 +926,33 @@ def _check_build_configuration_fact(
 # Public warrant evaluator
 # ---------------------------------------------------------------------------
 
+def bind_claim_subject(
+    core: RetrievalCore | None,
+    claim: Claim,
+    scope: WarrantScope | None = None,
+) -> SubjectBinding:
+    """Derive the deterministic ``SubjectBinding`` for ``claim`` within ``scope``."""
+    affected_ids = tuple(sorted(set(claim.affected_entities)))
+    if core is None:
+        return SubjectBinding(
+            affected_entity_ids=affected_ids,
+            operation_id=scope.operation_id if scope is not None else None,
+            sink_id=None,
+            build_scope_id=scope.build_scope_id if scope is not None else None,
+        )
+    claim_entities = _resolve_claim_entities(core, claim)
+    expected_build_scope = _infer_expected_build_scope(claim_entities, scope)
+    operation_id = _claim_operation_id(claim_entities, scope)
+    candidate_sinks, _ = _candidate_sinks_for_claim(core, claim, claim_entities)
+    bound_sink_id = next(iter(candidate_sinks)) if len(candidate_sinks) == 1 else None
+    return SubjectBinding(
+        affected_entity_ids=affected_ids,
+        operation_id=operation_id,
+        sink_id=bound_sink_id,
+        build_scope_id=expected_build_scope,
+    )
+
+
 def evaluate_warrant(
     core: RetrievalCore,
     *,

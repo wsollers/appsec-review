@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_codeql_analysis"]
-last reconciled: "16201c1537bc7559aafcf86c17d02d8fb8fa291e"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 
 # codeql_analysis
@@ -125,7 +125,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -603,7 +603,7 @@ flowchart LR
   input86 -. schema .-> input_schema86
   producer87["job_tree_sitter_ast"]
   input87["tree_sitter_node_shards"]
-  input_schema87["appsec-review/tree-sitter-ast/1"]
+  input_schema87["appsec-review/tree-sitter-normalizer/1"]
   producer87 --> input87 --> job
   input87 -. schema .-> input_schema87
   producer88["job_tree_sitter_ast"]
@@ -685,7 +685,10 @@ Source: [handler graph](../../src/appsec_review/jobs/job_codeql_analysis/job.py)
    pack/suite, and retain execution plus bounded SARIF. Invalid/missing/oversized SARIF is failure;
    failed bounded SARIF may be retained as incomplete native output, never successful observations.
 4. Normalize successful SARIF into observations, exact native-result selectors, source entities and
-   located supporting flow spans. Preserve unresolved locations and normalization gaps. Retain
+   located supporting flow spans. The database builds the whole unit so calls into vendored code
+   resolve, while query results located in non-`first_party` files under the frozen disposition
+   table (`config/first_party.py`, [T-5016](../TODO.md)) are counted per query (`excluded_results`)
+   instead of published. Preserve unresolved locations and normalization gaps. Retain
    execution/native provenance; zero normalized observations gets an explicit not-clean reason.
    Publish a scope/profile observations shard, including unavailable coverage for failed queries.
 5. Independently evaluate graph export: disabled or no pack is a not-applicable export with a
