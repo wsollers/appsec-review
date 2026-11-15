@@ -371,17 +371,26 @@ class _Projector:
         if lead_set is None:
             return c.CoverageCount(c.Population.LEADS, None, 0, 0, None, c.CoverageReason.INPUT_UNAVAILABLE)
         admission = lead_set.value["admission"]
-        known = {lead.observation_id: lead for lead in self.i.collection.leads} if self.i.collection is not None else {}
+        collection = self.i.collection
+        known = {lead.observation_id: lead for lead in collection.leads} if collection is not None else {}
+        # Scope-excluded leads (T-165 dispositions, T-167 stylistic classes) sit in the admission table with an
+        # ``exclusion`` and in ``LeadCollection.excluded``; they are never in ``LeadCollection.leads``.
+        excluded = {item.lead.observation_id: item for item in collection.excluded} if collection is not None else {}
         admitted_ids = [row["lead_id"] for row in admission]
         if len(set(admitted_ids)) != len(admitted_ids):
             raise IntegrityError("duplicate lead in accepted admission")
-        if self.i.collection is not None:
-            if len(known) != len(self.i.collection.leads) or set(known) != set(admitted_ids):
+        if collection is not None:
+            reviewed_ids = {row["lead_id"] for row in admission if "exclusion" not in row}
+            excluded_ids = {row["lead_id"] for row in admission if "exclusion" in row}
+            if len(known) != len(collection.leads) or set(known) != reviewed_ids:
                 raise IntegrityError("collected lead population differs from accepted admission")
+            if len(excluded) != len(collection.excluded) or set(excluded) != excluded_ids:
+                raise IntegrityError("scope-excluded lead population differs from accepted admission")
         triage = {row["lead_id"]: row for row in self.i.triage.value.get("leads", ())}
         for entry in admission:
             identity = entry["lead_id"]
-            lead = known.get(identity)
+            exclusion = excluded.get(identity)
+            lead = known.get(identity) if exclusion is None else exclusion.lead
             source = self.i.lead_sources.get(identity)
             if lead is not None and source is None:
                 raise IntegrityError("collected lead lacks its original accepted shard")
@@ -392,11 +401,15 @@ class _Projector:
                 text = (f"family {lead.family}; scanner {lead.scanner}; rule {lead.rule_id}; "
                         f"reported_severity {lead.reported_severity}; severity_basis {lead.severity_basis}; "
                         f"suppression_status {lead.suppression_status}; duplicate_of {lead.duplicate_of}")
+                if exclusion is not None:
+                    text += f"; excluded from review scope as {exclusion.reason} because {exclusion.detail}"
                 gaps = ()
             self.decision(subject, c.Stage.COLLECTION, "collected", sources=(source,) if source else (lead_set.ref(identity),),
                           text=text, gaps=gaps, original=link())
             self.decision(subject, c.Stage.ADMISSION, entry["status"], sources=(lead_set.ref(identity),),
-                          text="; ".join([*entry["reasons"], entry["residual_coverage"]]),
+                          text="; ".join([*entry["reasons"], entry["residual_coverage"],
+                                          *(["excluded as " + entry["exclusion"] + " because " + str(entry.get("exclusion_detail", ""))]
+                                            if "exclusion" in entry else [])]),
                           reason=c.ReasonCode.ADMISSION_POLICY)
             assessed = triage.get(identity)
             if assessed is not None:

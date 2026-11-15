@@ -304,7 +304,8 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
     lead_sources = {}
     shards = {(row["name"], row.get("shard_id", "default"), row["sha256"]): row for row in scope.shards}
     if collection is not None:
-        for lead in collection.leads:
+        # Scope-excluded leads keep their accepted-shard provenance too; the audit records their exclusion.
+        for lead in (*collection.leads, *(item.lead for item in collection.excluded)):
             shard = shards.get((lead.shard_name, lead.shard_id, lead.shard_sha256))
             if shard is None:
                 raise IntegrityError("lead provenance names an unaccepted shard")

@@ -86,8 +86,8 @@ def test_publication_passes_actual_collection_triage_pins_and_chain_cells_withou
     collection = LeadCollection(() if population == "empty" else (lead,), (), {}, None)
     collector_calls = []
 
-    def collect(scope, assessments):
-        collector_calls.append((scope, assessments))
+    def collect(scope, assessments, *, filters):
+        collector_calls.append((scope, assessments, filters))
         return collection
 
     monkeypatch.setattr(job, "collect_leads", collect)
@@ -104,7 +104,7 @@ def test_publication_passes_actual_collection_triage_pins_and_chain_cells_withou
     monkeypatch.setattr(audit, "publish_decision_audit", publish)
     result = f.handler(f.unit)
     expected_assessments = assessments_from_document(f.triage) if triage_enabled else None
-    assert collector_calls == [(f.scope, expected_assessments)]
+    assert collector_calls == [(f.scope, expected_assessments, f.unit.job.config.typed_settings.lead_filters)]
     assert len(calls) == 1
     called = calls[0]
     assert called["collection"] is collection
@@ -148,7 +148,7 @@ def test_only_named_unavailability_publishes_descriptor_and_honest_status(
     f = publication_fixture(tmp_path, monkeypatch, enabled=detail != "disabled", status=status, incomplete=incomplete)
     collection = LeadCollection((), (), {}, None)
     collector_calls = []
-    monkeypatch.setattr(job, "collect_leads", lambda *args: collector_calls.append(args) or collection)
+    monkeypatch.setattr(job, "collect_leads", lambda *args, **kwargs: collector_calls.append(args) or collection)
 
     def unavailable(**kwargs):
         assert (f.root / kwargs["inputs"].handoff["path"]).read_bytes() == f.handoff_bytes
@@ -176,7 +176,7 @@ def test_only_named_unavailability_publishes_descriptor_and_honest_status(
                                        RuntimeError("unexpected failure")], ids=["integrity", "value", "unexpected"])
 def test_integrity_or_unexpected_failures_do_not_become_successful_descriptors(tmp_path, monkeypatch, exception):
     f = publication_fixture(tmp_path, monkeypatch, triage_enabled=False)
-    monkeypatch.setattr(job, "collect_leads", lambda *args: LeadCollection((), (), {}, None))
+    monkeypatch.setattr(job, "collect_leads", lambda *args, **kwargs: LeadCollection((), (), {}, None))
 
     def fail(**kwargs):
         raise exception

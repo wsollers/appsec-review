@@ -237,3 +237,59 @@ def test_original_bidirectional_lead_membership_is_required(tmp_path, kind):
     f.inputs = replace(f.inputs, receipts={**f.inputs.receipts, RED: replace(receipt, value=body)})
     with pytest.raises(IntegrityError):
         f.project()
+
+
+def _with_scope_excluded_lead(f, *, in_collection=True, in_admission=True):
+    """Add a vendored lead that the package manifest lists as not admitted with an ``exclusion`` (T-165)."""
+    from appsec_review.review.lead_families import ExcludedLead
+    collection = f.inputs.collection
+    detail = "third_party/lz4/lib/lz4.c matches source_dispositions.vendored pattern **/third_party/**"
+    excluded = ExcludedLead(replace(collection.leads[0], observation_id="lead-4", path="third_party/lz4/lib/lz4.c"),
+                            "vendored", detail)
+    lead_set = f.inputs.package_sets[0]
+    body = deepcopy(lead_set.value)
+    if in_admission:
+        body["admission"] = sorted([*body["admission"], {
+            "lead_id": "lead-4", "effective_severity": "high", "status": "not_admitted", "reasons": [],
+            "residual_coverage": "outside_review_scope", "exclusion": "vendored", "exclusion_detail": detail}],
+            key=lambda entry: entry["lead_id"])
+    # Publication re-reads the lane package set from its pinned path, so the on-disk document changes too.
+    on_disk = document(f.root, lead_set.source.path, body)
+    f.refs = replace(f.refs, package_sets=(reference(on_disk), *f.refs.package_sets[1:]))
+    f.inputs = replace(f.inputs, collection=replace(collection, excluded=(excluded,) if in_collection else ()),
+                       package_sets=(on_disk, *f.inputs.package_sets[1:]),
+                       lead_sources={**f.inputs.lead_sources, "lead-4": f.inputs.lead_sources["lead-1"]})
+    return f
+
+
+def test_scope_excluded_leads_are_audited_as_not_admitted_without_a_provenance_gap(tmp_path):
+    f = _with_scope_excluded_lead(fixture(tmp_path))
+    result = f.project()
+    population = next(row for row in result.coverage if row.population == c.Population.LEADS)
+    assert (population.expected, population.emitted, population.unavailable, population.reason) == (4, 4, 0, None)
+    rows = [row for row in result.records if isinstance(row, c.DecisionRecord)
+            and row.context.subject.lead_id.value == "lead-4"]
+    collected = next(row for row in rows if row.stage == c.Stage.COLLECTION)
+    assert collected.outcome == "collected" and collected.context.gap_ids == ()
+    assert "excluded from review scope as vendored because" in collected.context.explanation.text
+    assert collected.context.sources[0].path == f.inputs.lead_sources["lead-4"].path
+    admission = next(row for row in rows if row.stage == c.Stage.ADMISSION)
+    assert admission.outcome == "not_admitted"
+    assert "outside_review_scope; excluded as vendored because" in admission.context.explanation.text
+    # The reviewed population is unchanged: the excluded lead never counts as a collected review lead.
+    assert len([row for row in result.records if isinstance(row, c.DecisionRecord)
+                and row.stage == c.Stage.COLLECTION]) == 4
+
+
+@pytest.mark.parametrize("missing", ["collection", "admission"])
+def test_scope_excluded_population_must_match_between_collection_and_admission(tmp_path, missing):
+    f = _with_scope_excluded_lead(fixture(tmp_path), in_collection=missing != "collection",
+                                  in_admission=missing != "admission")
+    with pytest.raises(IntegrityError, match="excluded lead population"):
+        f.project()
+
+
+def test_publication_reads_the_accepted_shard_of_a_scope_excluded_lead(tmp_path):
+    f = _with_scope_excluded_lead(fixture(tmp_path))
+    manifest = f.publish()
+    assert manifest is not None
