@@ -147,13 +147,21 @@
     },
     "job_cpp_compiled_analysis": {
       "unit": [
-        "tests/test_cpp_compiled_analysis.py::test_compile_database_normalization_preserves_only_reviewed_build_semantics",
-        "tests/test_cpp_compiled_analysis.py::test_infer_compile_database_uses_stable_read_only_container_paths",
-        "tests/test_cpp_compiled_analysis.py::test_clang_ast_loader_accepts_bounded_concatenated_declarations"
+        "tests/unit/job_cpp_compiled_analysis/test_clang_cfg.py",
+        "tests/unit/job_cpp_compiled_analysis/test_compile_and_replay.py",
+        "tests/unit/job_cpp_compiled_analysis/test_contract.py",
+        "tests/unit/job_cpp_compiled_analysis/test_job_pipeline.py",
+        "tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py",
+        "tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py",
+        "tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py"
+      ],
       "acceptance": [],
-      "live": []
+      "live": [
+        "tests/live/test_seeded_clang_live.py"
+      ]
     },
     "job_cpp_symbol_index": {
       "unit": ["tests/test_cpp_index_jobs.py::test_symbol_index_publishes_accepted_symbols_with_complete_coverage"],

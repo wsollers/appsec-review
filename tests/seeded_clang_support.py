@@ -14,6 +14,7 @@ import shutil
 from types import SimpleNamespace
 from typing import Any, Mapping
 
+from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, write_manifest,
@@ -100,10 +101,16 @@ class Staged(SimpleNamespace):
         unit_root = self.run_root / "data" / "units" / unit_id
         unit_root.mkdir(parents=True, exist_ok=True)
         values = dict(outputs or {})
+        policy = ReviewPolicy(releases=ComponentReleases({
+            "platform": "fixture/1", "validation": "fixture/1",
+            "tool-native-cpp": "fixture/1", "tool-clang-static-analysis": "fixture/1",
+            "tool-joern": "fixture/1",
+        }))
         return SimpleNamespace(
             job=SimpleNamespace(run_root=self.run_root, target_root=self.target, repository_root=self.repository,
                                 source_fingerprint=SNAPSHOT, events=Events(), attempt_id="attempt_0001", run_id="run",
                                 input_manifest_path=self.manifest_path, input_manifest_sha256=self.manifest_sha,
+                                review_policy=policy,
                                 config=SimpleNamespace(settings=settings)),
             unit_id=unit_id, unit_root=unit_root, output=lambda key: values[key])
 

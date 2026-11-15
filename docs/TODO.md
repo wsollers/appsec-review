@@ -3085,6 +3085,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py` and
   multivuln target suite relocated to `tests/live/test_ci_configuration_analysis_multivuln.py`;
   560/560 job-package lines [100.0%] and 188/188 branches [100.0%] covered across all 5 modules).
+  job_cpp_compiled_analysis (23/47; 7 unit files, 71 cases: pinned 22-input / 8-dataset contract
+  and 9-unit DAG topology, Clang CFG parser/renderer/bounds, LLVM IR demangler/dominator/def-use
+  parser, seeded IR+AST neighborhood replay and resume identity, compile/link database
+  normalization, workspace custody verification, whole-program AST/IR/Infer/binary branch handlers,
+  checkpoint release gating, and handoff publication; `JobRunner`/`GraphRunner` cases relocated to
+  `tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py` with live
+  seeded Clang mapped at `tests/live/test_seeded_clang_live.py`; 1763/1786 job-package lines
+  [98.71%] and 690/728 branches [94.78%] covered, with all 6 modules >=97.1% lines and >=92.6%
+  branches).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
