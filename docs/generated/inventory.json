@@ -44669,7 +44669,7 @@
     "src/appsec_review/review/budget.py": "05dbce1ab760c97270d8609cf2645703e08c96d199f1108e86c34942ce3c735a",
     "src/appsec_review/review/capability.py": "09299561ea89b895644f6d675c63608392ba9b6c57e47dbb98f4df7074fd2125",
     "src/appsec_review/review/cell_retrieval.py": "0e2d2e025d66e0ec03fe354d581b5b4aaab0b795f45df3fe4409dab7c5ef291e",
-    "src/appsec_review/review/cells.py": "5ef2d919400ddf58cf1206f0feb89b9d81ee237f7a6e99d34440ccd470834dc8",
+    "src/appsec_review/review/cells.py": "a6e37745b5c8714b507f2fd0a7d285da927d6fcde535437fa8411ff87b779643",
     "src/appsec_review/review/claims.py": "6c083b68cc154577604ade234cc5f47676194be2ea0215528b3230c116646cae",
     "src/appsec_review/review/compact.py": "c47263d1081d8ac76430cb9d82d5fd6a19e117c503ccd874b4c833adb6478603",
     "src/appsec_review/review/competence.py": "b4ad68ddc6d65c5a96d8cf5eab2cd07f36e5960b901da7d17147cf7c336c6824",

@@ -25,6 +25,7 @@ import re
 import sqlite3
 import subprocess
 import time
+import traceback
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
@@ -570,9 +571,13 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
     except RetrievalIntegrityError as exc:
         raise IntegrityError(f"retrieval core integrity failure: {type(exc).__name__}") from exc
     except (RetrievalGap, ValueError, LookupError, OSError, RuntimeError, sqlite3.Error) as exc:
-        call.update(status="tool_error", error_class=type(exc).__name__)
-        attempt.gaps.append(_gap(cell_id, spec, attempt.number, f"{turn}/{index}",
-                                 GapClass.COVERAGE_GAP, f"tool_error:{decision.tool}:{type(exc).__name__}"))
+        # The receipt keeps what the next reader needs to reproduce the failure: the normalized request and
+        # the frames that raised; the gap reason names the site so the ledger alone locates it.
+        site, frames = _failure_site(exc)
+        call.update(status="tool_error", error_class=type(exc).__name__,
+                    request=_bounded_parameters(decision.parameters), traceback=frames)
+        attempt.gaps.append(_gap(cell_id, spec, attempt.number, f"{turn}/{index}", GapClass.COVERAGE_GAP,
+                                 f"tool_error:{decision.tool}:{type(exc).__name__} at {site}"))
         if not isinstance(exc, RetrievalGap):
             from appsec_review.runtime import execution_safety as safety
             safety.fail(f"retrieval failed: {type(exc).__name__}", action=f"review.{decision.tool}")
@@ -604,6 +609,24 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
     return {"index": index, "status": "ok", **extra, **bounded}
 
 
+def _failure_site(exc: BaseException, frames: int = 4) -> tuple[str, str]:
+    """``(file:line of the innermost frame, the last frames as text)``, both bounded, for a tool error."""
+    summary = traceback.extract_tb(exc.__traceback__)
+    if not summary:
+        return "unknown", ""
+    last = summary[-1]
+    site = f"{Path(last.filename).name}:{last.lineno}"
+    text = "".join(traceback.format_list(summary[-frames:])) + f"{type(exc).__name__}: {str(exc)[:120]}"
+    return site, text[-1200:]
+
+
+def _bounded_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    return {str(key)[:64]: (value if isinstance(value, (int, float, bool)) or value is None
+                            else value[:200] if isinstance(value, str)
+                            else json.dumps(value, sort_keys=True, default=str)[:200])
+            for key, value in sorted(dict(parameters).items())[:16]}
+
+
 def _covers_line(row: Any, line: int) -> bool:
     location = row.get("location") if isinstance(row, Mapping) else None
     if not isinstance(location, Mapping):
@@ -633,6 +656,7 @@ def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core:
     truncated = False
     manifest: Mapping[str, Any] = {}
     queue = expand_plan(ref, max_depth=capability.max_depth)
+    planned = {params["identity"] for tool, params in queue if tool == "find"}
     done: set[str] = set()
     while queue:
         tool, params = queue.pop(0)
@@ -660,8 +684,10 @@ def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core:
         results.extend(rows)
         if tool == "find" and params.get("identity") == ref:
             for row in rows[:1]:
-                queue.extend(("find", {"identity": item}) for item in related_identities(row)
-                             if item not in {params["identity"] for _t, params in queue})
+                for item in related_identities(row):
+                    if item not in planned:
+                        planned.add(item)
+                        queue.append(("find", {"identity": item}))
     unique: dict[str, dict[str, Any]] = {}
     for row in results:
         unique.setdefault(str(row.get("identity", id(row))), row)

@@ -218,6 +218,57 @@ def test_expand_answers_a_label_with_labelled_rows_and_counts_one_query(tmp_path
     assert outcome.counts["queries"] == 3
 
 
+SINK_SITE = "asr:sink_site:" + "d" * 64
+SYMBOL = "asr:symbol:" + "e" * 64
+
+
+class SinkCore(FakeCore):
+    """``find`` answers a sink-site fact that names its enclosing function, and the function itself."""
+
+    def find(self, **parameters):
+        self.calls.append(("find", parameters))
+        rows = {SINK_SITE: {"identity": SINK_SITE, "kind": "sink_site", "name": "memcpy", "index": "code-graph",
+                            "shard_id": "default", "location": {"path": "src/a.c", "start_line": 16, "end_line": 16},
+                            "payload": {"result": {"enclosing_function": {"symbol": SYMBOL}}}},
+                SYMBOL: {"identity": SYMBOL, "kind": "symbol", "name": "parse_header", "index": "code-graph",
+                         "shard_id": "default", "location": {"path": "src/a.c", "start_line": 10, "end_line": 30},
+                         "payload": {}}}
+        return self._envelope("find", [rows[parameters["identity"]]] if parameters.get("identity") in rows else [])
+
+
+def test_expand_follows_the_identities_a_sink_fact_names_while_graph_requests_are_queued(tmp_path: Path) -> None:
+    """Run 2026-11-15-0005 lost 566 cell turns to ``tool_error:expand:KeyError``: expand_plan queues graph
+    sub-requests (``subject``) behind the first ``find`` for sink, entry-point and symbol references, and the
+    follow-up planner read ``identity`` from every queued request."""
+    cap = capability(tools=("find", "expand"), entities=(SINK_SITE, SYMBOL, LEAD))
+    infer = ScriptedInfer(retrieve({"tool": "expand", "parameters": {"label": "K1"}}), final(SINK_SITE))
+    core = SinkCore()
+    view = view_for(labels={"L1": LEAD, "K1": SINK_SITE}, packaged_refs=frozenset({LEAD, SINK_SITE, SYMBOL}))
+    outcome = run(tmp_path, infer, cell_spec=spec(view=view), cap=cap, core=core)
+    assert outcome.record.status is CellStatus.SUCCEEDED and outcome.gaps == ()
+    response = infer.requests[1].transcript[-1]["responses"][0]
+    assert response["status"] == "ok"
+    assert [row["identity"] for row in response["results"]] == [SINK_SITE, SYMBOL]
+    assert [params["identity"] for name, params in core.calls if name == "find"] == [SINK_SITE, SYMBOL]
+    # The graph sub-requests the plan queued were not granted to this cell and are reported, not executed.
+    assert {item["tool"] for item in response.get("skipped", ())} == {"query_code_graph"}
+
+
+def test_tool_errors_record_the_request_and_the_failure_site(tmp_path: Path) -> None:
+    infer = ScriptedInfer(retrieve({"tool": "find", "parameters": {"kind": "not_a_kind"}}), final())
+    outcome = run(tmp_path, infer)
+    assert outcome.record.status is CellStatus.SUCCEEDED
+    gap, = outcome.gaps
+    assert gap.gap_class is GapClass.COVERAGE_GAP
+    assert gap.reason.startswith("tool_error:find:ValueError at test_cells.py:")
+    receipt = json.loads(next((tmp_path / "cells").rglob("attempt-1.json")).read_text())
+    call = receipt["turns"][0]["retrievals"][0]
+    assert call["status"] == "tool_error" and call["error_class"] == "ValueError"
+    assert call["request"]["kind"] == "not_a_kind"
+    assert "invalid logical identifier" in call["traceback"] and "test_cells.py" in call["traceback"]
+    assert len(call["traceback"]) <= 1200
+
+
 def test_retrieved_rows_get_q_labels_that_the_final_answer_can_cite(tmp_path: Path) -> None:
     infer = ScriptedInfer(retrieve({"tool": "search", "parameters": {"query": "memcpy"}}), final(SPAN))
     run(tmp_path, infer, core=RowCore())
