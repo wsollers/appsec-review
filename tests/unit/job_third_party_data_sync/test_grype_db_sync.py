@@ -297,6 +297,83 @@ def test_grype_is_an_independent_maintenance_branch_and_scanning_stays_disabled(
     assert frozen == GrypeSettings.from_mapping(tmp_path, {}).view(tmp_path)
 
 
+def test_grype_feed_helpers_cover_remaining_validation_and_consumer_settings_branches(tmp_path: Path):
+    assert feed._now().tzinfo is not None
+    with pytest.raises(ValueError, match="timestamp is missing"):
+        feed._time(None)
+
+    arr_json = tmp_path / "arr.json"
+    arr_json.write_text("[1, 2]", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        feed._json(arr_json, 64)
+    with pytest.raises(ValueError, match="missing, unsafe or exceeds"):
+        feed._json(tmp_path / "missing.json", 64)
+
+    cfg = settings(tmp_path)
+    src_file = tmp_path / "src.bin"
+    src_file.write_bytes(b"abc")
+    with pytest.raises(ValueError, match="do not match their bounded source receipt"):
+        feed._source(src_file, {"url": "https://wrong", "size_bytes": 3, "sha256": file_sha256(src_file)}, "https://ok", 16)
+
+    # _cache_files validation errors
+    with pytest.raises(ValueError, match="missing or unsafe"):
+        feed._cache_files(cfg, tmp_path / "no-cache")
+    bad_cache = tmp_path / "bad_cache"
+    (bad_cache / "unexpected").mkdir(parents=True)
+    with pytest.raises(ValueError, match="unexpected entry"):
+        feed._cache_files(cfg, bad_cache)
+    bad_cache2 = tmp_path / "bad_cache2"
+    (bad_cache2 / "6").mkdir(parents=True)
+    (bad_cache2 / "6" / "extra.txt").write_bytes(b"x")
+    with pytest.raises(ValueError, match="unsafe or oversized file"):
+        feed._cache_files(cfg, bad_cache2)
+    inc_cache = tmp_path / "inc_cache"
+    (inc_cache / "6").mkdir(parents=True)
+    (inc_cache / "6" / "vulnerability.db").write_bytes(b"db")
+    with pytest.raises(ValueError, match="incomplete"):
+        feed._cache_files(cfg, inc_cache)
+
+    # Catalog version mismatch & bad tool identity in publish & provenance / content identity in verify
+    _, fetched, imported = prepared(tmp_path / "prep")
+    bad_cfg = replace(cfg, tool_version="9.9.9")
+    with pytest.raises(ValueError, match="catalog version differs"):
+        feed.import_database(bad_cfg, fetched, tmp_path / "imp_bad", executor(tmp_path / "prep"), now=NOW)
+    with pytest.raises(ValueError, match="no immutable tool identity"):
+        feed.publish(cfg, fetched, {**imported, "tool": {"tool_version": "0.0.0"}}, now=NOW)
+
+    pointer = feed.publish(cfg, fetched, imported, now=NOW)
+    snap_dir = cfg.feed_root / "snapshots" / pointer["snapshot_id"]
+    manifest_path = snap_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Tamper source provenance while recomputing snapshot_id + pointer hash
+    from appsec_review.storage import canonical_json
+    bad_prov = {**manifest, "sources": {**manifest["sources"], "listing": {**manifest["sources"]["listing"], "url": "https://wrong"}}}
+    unsigned = {k: v for k, v in bad_prov.items() if k != "snapshot_id"}
+    new_snap_id = "sha256-" + hashlib.sha256(canonical_json(unsigned)).hexdigest()[:24]
+    new_dir = cfg.feed_root / "snapshots" / new_snap_id
+    snap_dir.rename(new_dir)
+    bad_prov["snapshot_id"] = new_snap_id
+    (new_dir / "manifest.json").write_text(json.dumps(bad_prov), encoding="utf-8")
+    (cfg.feed_root / "current.json").write_text(
+        json.dumps({**pointer, "snapshot_id": new_snap_id, "manifest_sha256": file_sha256(new_dir / "manifest.json")}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="source provenance is incomplete"):
+        feed.verify(cfg, now=NOW)
+
+    # consumer_settings loads resolved.json
+    run_root = tmp_path / "run_cs"
+    resolved_file = run_root / "data/configuration/resolved.json"
+    resolved_file.parent.mkdir(parents=True)
+    resolved_file.write_text(
+        json.dumps({"jobs": {"job_third_party_data_sync": {"steps": {"grype_db_sync": {"settings": {}}}}}}),
+        encoding="utf-8",
+    )
+    loaded = feed.consumer_settings(tmp_path, run_root)
+    assert isinstance(loaded, GrypeSettings)
+
+
 @pytest.mark.parametrize("valid", [True, False], ids=["fresh", "stale"])
 def test_scanner_consumers_use_the_validated_offline_cache_or_a_named_gap(tmp_path, monkeypatch, valid):
     from appsec_review.jobs.job_artifact_security_analysis import scanners

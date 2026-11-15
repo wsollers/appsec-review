@@ -129,3 +129,77 @@ def test_verify_snapshot_directory_needs_an_identity_and_a_file_table(tmp_path: 
         verify_snapshot_directory(tmp_path, {"snapshot_id": "s", "files": []})
     assert verify_snapshot_directory(tmp_path, {"snapshot_id": "s", "files": {}}) == {"snapshot_id": "s",
                                                                                       "verified_files": 0}
+
+
+def test_http_downloader_covers_allowlist_redirects_and_status_errors(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import urllib.request
+
+    dl = publication.HttpDownloader(timeout_seconds=5, allow_redirects=True)
+    for bad_url in (
+        "http://allowed.example/x",
+        "https://other.example/x",
+        "https://user:pass@allowed.example/x",
+    ):
+        with pytest.raises(ValueError, match="outside the configured HTTPS host allowlist"):
+            dl.download(bad_url, tmp_path / "out", max_bytes=16, allowed_hosts=("allowed.example",))
+
+    class Resp(io.BytesIO):
+        def __init__(self, body: bytes, status: int = 200, headers: dict[str, str] | None = None):
+            super().__init__(body)
+            self.status = status
+            self.headers = headers or {}
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout, context: Resp(b"hello", 200, {"ETag": '"1"'}))
+    rec = dl.download("https://allowed.example/ok", tmp_path / "ok.bin", max_bytes=16, allowed_hosts=("allowed.example",))
+    assert rec["size_bytes"] == 5 and rec["etag"] == '"1"' and (tmp_path / "ok.bin").read_bytes() == b"hello"
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout, context: Resp(b"nope", 503))
+    with pytest.raises(RuntimeError, match="download returned HTTP 503"):
+        dl.download("https://allowed.example/err", tmp_path / "err.bin", max_bytes=16, allowed_hosts=("allowed.example",))
+
+
+def test_publish_snapshot_covers_provenance_collision_stage_cleanup_and_manifest_bounds(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from appsec_review.storage import feed_provenance, shared
+
+    root = tmp_path / "feed"
+    source = _source(tmp_path, "item.bin", b"abc")
+
+    monkeypatch.setattr(feed_provenance, "check_root", lambda *a, **k: None)
+    monkeypatch.setattr(feed_provenance, "record_snapshot", lambda *a, **k: {"receipt": "r1"})
+    monkeypatch.setattr(feed_provenance, "observe_snapshot", lambda *a, **k: None)
+    monkeypatch.setattr(shared, "current", lambda: object())
+    pointer = publish_snapshot(root, feed_id="fixture", schema="fixture/1", files={"a.bin": source}, manifest_fields={})
+    snap_dir = root / "snapshots" / pointer["snapshot_id"]
+    manifest = json.loads((snap_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["publication_provenance"] == "required-v1"
+
+    verified = verify_current(root, "fixture")
+    assert verified["provenance"] == {"receipt": "r1"}
+
+    # Snapshot collision when existing manifest bytes differ despite equal snapshot_id
+    existing_manifest = snap_dir / "manifest.json"
+    original_bytes = existing_manifest.read_bytes()
+    existing_manifest.write_bytes(original_bytes + b" ")
+    with pytest.raises(ValueError, match="snapshot identity collision"):
+        publish_snapshot(root, feed_id="fixture", schema="fixture/1", files={"a.bin": source}, manifest_fields={})
+    assert not list((root / "staging").iterdir())
+    existing_manifest.write_bytes(original_bytes)
+
+    # verify_current manifest byte bound & snapshot_id mismatch
+    pointer_size = (root / "current.json").stat().st_size
+    (snap_dir / "manifest.json").write_text(
+        json.dumps({**manifest, "extra": "x" * 512}), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="fixture manifest exceeds its byte bound"):
+        verify_current(root, "fixture", max_manifest_bytes=pointer_size + 10)
+
+    bad_manifest = json.dumps({**manifest, "feed_id": "wrong"}).encode("utf-8")
+    (snap_dir / "manifest.json").write_bytes(bad_manifest)
+    pointer_doc = json.loads((root / "current.json").read_text(encoding="utf-8"))
+    pointer_doc["manifest_sha256"] = file_sha256(snap_dir / "manifest.json")
+    (root / "current.json").write_text(json.dumps(pointer_doc), encoding="utf-8")
+    with pytest.raises(ValueError, match="fixture snapshot identity mismatch"):
+        verify_current(root, "fixture")

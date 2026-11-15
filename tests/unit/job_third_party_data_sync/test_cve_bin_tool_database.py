@@ -194,3 +194,213 @@ def test_publish_then_verify_pins_the_database_to_the_nvd_snapshot_it_was_built_
     assert verified["nvd_snapshot_id"] == pointer["snapshot_id"]
     with pytest.raises(ValueError, match="was not built from this execution's NVD snapshot"):
         cve_db.verify(settings, {**resolved, "snapshot_id": "sha256-other"})
+
+
+def test_settings_resolve_and_check_cover_remaining_validation_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ValueError, match="cve-bin-tool image, version, and positive timeouts are required"):
+        _settings(tmp_path, run_timeout_seconds=0)
+
+    root, pointer = _nvd_root(tmp_path)
+    manifest_path = root / "snapshots" / pointer["snapshot_id"] / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Bound manifest hash mismatch
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="NVD bound manifest hash mismatch"):
+        cve_db.resolve_nvd_snapshot(root, pointer)
+
+    # Snapshot manifest identity mismatch
+    bad_id = {**manifest, "snapshot_id": "sha256-wrong"}
+    manifest_path.write_text(json.dumps(bad_id), encoding="utf-8")
+    with pytest.raises(ValueError, match="NVD snapshot manifest identity mismatch"):
+        cve_db.resolve_nvd_snapshot(root, pointer)
+
+    # Empty layers
+    no_layers = {**manifest, "layers": [], "parent_snapshot_id": None}
+    manifest_path.write_text(json.dumps(no_layers), encoding="utf-8")
+    pointer_no_layers = {**pointer, "manifest_sha256": file_sha256(manifest_path)}
+    (root / "current.json").write_text(json.dumps(pointer_no_layers), encoding="utf-8")
+    with pytest.raises(ValueError, match="NVD snapshot has no replayable layers"):
+        cve_db.resolve_nvd_snapshot(root, pointer_no_layers)
+
+    # Cycle detection
+    cyclic = {**manifest, "parent_snapshot_id": pointer["snapshot_id"]}
+    manifest_path.write_text(json.dumps(cyclic), encoding="utf-8")
+    pointer_cycle = {**pointer, "manifest_sha256": file_sha256(manifest_path)}
+    (root / "current.json").write_text(json.dumps(pointer_cycle), encoding="utf-8")
+    with pytest.raises(ValueError, match="NVD snapshot chain contains a cycle"):
+        cve_db.resolve_nvd_snapshot(root, pointer_cycle)
+
+
+def test_docker_and_native_builders_and_bind_source_preserve_pinned_image_isolation(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    from appsec_review.config import native_dagster
+    from appsec_review.container_runtime import native_client
+    from appsec_review.runtime import resources
+    from appsec_review.signing.core import SignatureVerificationError
+
+    pinned_id = "sha256:" + "a" * 64
+    other_id = "sha256:" + "b" * 64
+    pinned_settings = _settings(tmp_path, image_id=pinned_id)
+    unpinned_settings = _settings(tmp_path)
+
+    class Verifier:
+        def __init__(self, fail: bool = False):
+            self.fail = fail
+            self.calls: list[tuple[str, str | None]] = []
+
+        def verify(self, image_id: str, *, reference: str | None = None):
+            self.calls.append((image_id, reference))
+            if self.fail:
+                raise SignatureVerificationError("bad signature")
+
+    with pytest.raises(SignatureVerificationError, match="not the pinned"):
+        cve_db._verify_pinned_image(other_id, pinned_settings, Verifier())
+    with pytest.raises(SignatureVerificationError, match="bad signature"):
+        cve_db._verify_pinned_image(pinned_id, pinned_settings, Verifier(fail=True))
+
+    monkeypatch.setattr(native_dagster, "native_execution_requested", lambda: False)
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    out_dir.mkdir()
+
+    # Refuses building when image_id is pinned and inspect fails
+    monkeypatch.setattr(
+        cve_db.subprocess,
+        "run",
+        lambda argv, **kw: SimpleNamespace(returncode=1, stdout="", stderr="not found"),
+    )
+    with pytest.raises(SignatureVerificationError, match="refusing to build cve-bin-tool image"):
+        cve_db._docker_builder(pinned_settings, in_dir, out_dir, image_verifier=Verifier())
+
+    # Unpinned build failure
+    def build_fail(argv, **kw):
+        if argv[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+        return SimpleNamespace(returncode=2, stdout="", stderr="dockerfile boom")
+
+    monkeypatch.setattr(cve_db.subprocess, "run", build_fail)
+    with pytest.raises(RuntimeError, match="cve-bin-tool image build failed: dockerfile boom"):
+        cve_db._docker_builder(unpinned_settings, in_dir, out_dir, image_verifier=Verifier())
+
+    # Unpinned build + inspect + run success
+    def build_and_run_ok(argv, **kw):
+        if argv[:3] == ["docker", "image", "inspect"]:
+            if not getattr(build_and_run_ok, "built", False):
+                return SimpleNamespace(returncode=1, stdout="", stderr="")
+            return SimpleNamespace(returncode=0, stdout=pinned_id + "\n", stderr="")
+        if argv[:2] == ["docker", "build"]:
+            build_and_run_ok.built = True
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="ok stderr")
+
+    monkeypatch.setattr(cve_db.subprocess, "run", build_and_run_ok)
+    res = cve_db._docker_builder(unpinned_settings, in_dir, out_dir, image_verifier=Verifier(fail=True))
+    assert res == {"image": unpinned_settings.image, "image_id": pinned_id, "tool_version": "3.4"}
+    assert (out_dir / "builder.stderr.txt").read_text(encoding="utf-8") == "ok stderr"
+
+    # Pre-existing image verified + TimeoutExpired removes container + nonzero run raises
+    rm_calls: list[list[str]] = []
+    verifier = Verifier()
+
+    def timeout_run(argv, **kw):
+        if argv[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=pinned_id + "\n", stderr="")
+        if argv[:2] == ["docker", "rm"]:
+            rm_calls.append(argv)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        raise subprocess.TimeoutExpired(argv, 5)
+
+    monkeypatch.setattr(cve_db.subprocess, "run", timeout_run)
+    with pytest.raises(subprocess.TimeoutExpired):
+        cve_db._docker_builder(pinned_settings, in_dir, out_dir, image_verifier=verifier)
+    assert verifier.calls == [(pinned_id, pinned_settings.image)]
+    assert len(rm_calls) == 1 and rm_calls[0][:3] == ["docker", "rm", "--force"]
+
+    monkeypatch.setattr(
+        cve_db.subprocess,
+        "run",
+        lambda argv, **kw: SimpleNamespace(returncode=0, stdout=pinned_id + "\n", stderr="")
+        if argv[:3] == ["docker", "image", "inspect"]
+        else SimpleNamespace(returncode=7, stdout="", stderr="builder failed"),
+    )
+    with pytest.raises(RuntimeError, match="cve-bin-tool database build failed with exit 7"):
+        cve_db._docker_builder(pinned_settings, in_dir, out_dir, image_verifier=Verifier())
+
+    # Native builder paths
+    @contextmanager
+    def dummy_ctx(*a, **k):
+        yield
+
+    monkeypatch.setattr(resources, "reserve_execution", dummy_ctx)
+    monkeypatch.setattr(resources, "tracked_container", dummy_ctx)
+    monkeypatch.setattr(native_dagster, "native_execution_requested", lambda: True)
+
+    monkeypatch.setattr(native_client, "native_run", lambda argv, timeout: None)
+    with pytest.raises(RuntimeError, match="requires an approved preinstalled image"):
+        cve_db._docker_builder(pinned_settings, in_dir, out_dir, image_verifier=Verifier())
+
+    monkeypatch.setattr(
+        native_client,
+        "native_run",
+        lambda argv, timeout: (0, (pinned_id + "\n").encode(), b"", False)
+        if argv[:3] == ("docker", "image", "inspect")
+        else None,
+    )
+    with pytest.raises(RuntimeError, match="lost its engine scope"):
+        cve_db._native_builder(pinned_settings, in_dir, out_dir, image_verifier=Verifier())
+
+    monkeypatch.setattr(
+        native_client,
+        "native_run",
+        lambda argv, timeout: (0, (pinned_id + "\n").encode(), b"", False)
+        if argv[:3] == ("docker", "image", "inspect")
+        else (1, b"", b"native err", False),
+    )
+    with pytest.raises(RuntimeError, match="native cve-bin-tool database execution failed"):
+        cve_db._native_builder(pinned_settings, in_dir, out_dir, image_verifier=Verifier())
+
+    monkeypatch.setattr(
+        native_client,
+        "native_run",
+        lambda argv, timeout: (0, (pinned_id + "\n").encode(), b"", False)
+        if argv[:3] == ("docker", "image", "inspect")
+        else (0, b"", b"native ok", False),
+    )
+    assert cve_db._native_builder(pinned_settings, in_dir, out_dir, image_verifier=Verifier()) == {
+        "image": pinned_settings.image,
+        "image_id": pinned_id,
+        "tool_version": "3.4",
+    }
+
+    # _docker_bind_source inside & outside container
+    monkeypatch.delenv("HOSTNAME", raising=False)
+    assert cve_db._docker_bind_source(in_dir) == in_dir
+    monkeypatch.setenv("HOSTNAME", "dagster-ctr")
+    orig_exists = Path.exists
+    monkeypatch.setattr(Path, "exists", lambda self: True if str(self) == "/.dockerenv" else orig_exists(self))
+    monkeypatch.setattr(
+        cve_db.subprocess,
+        "run",
+        lambda argv, **kw: SimpleNamespace(returncode=1, stdout="", stderr="inspect err"),
+    )
+    with pytest.raises(RuntimeError, match="could not inspect Dagster container mounts"):
+        cve_db._docker_bind_source(Path("/workspace/runs/r1"))
+
+    mounts = [
+        {"Destination": "/workspace", "Source": "/host/ws"},
+        {"Destination": "/workspace/runs", "Source": "/host/runs"},
+        {"Destination": "/other", "Source": "/host/other"},
+    ]
+    monkeypatch.setattr(
+        cve_db.subprocess,
+        "run",
+        lambda argv, **kw: SimpleNamespace(returncode=0, stdout=json.dumps(mounts), stderr=""),
+    )
+    assert cve_db._docker_bind_source(Path("/workspace/runs/r1/work")) == Path("/host/runs/r1/work")
+    with pytest.raises(RuntimeError, match="not backed by a host mount"):
+        cve_db._docker_bind_source(Path("/unmounted/path"))

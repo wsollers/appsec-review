@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -286,3 +287,115 @@ def test_cve_bin_tool_units_bind_the_published_nvd_identity_and_the_injected_run
     assert published["schema"] == "appsec-review/cve-bin-tool-publication/1"
     assert published["identity"]["cve_count"] == 1
     assert json.loads(Path(published["metadata_path"]).read_text(encoding="utf-8"))["feed_id"] == "cve-bin-tool"
+
+
+def test_publisher_forwards_optional_clock_and_pause_and_nvd_publish_writes_metadata(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[tuple[Any, dict[str, Any]]] = []
+    monkeypatch.setattr(sync_job, "_nvd", lambda context: "nvd-settings")
+    monkeypatch.setattr(sync_job, "NvdPublisher", lambda s, **kw: captured.append((s, kw)) or SimpleNamespace())
+    ctx = _job_context(tmp_path)
+    sync_job._publisher(ctx, client="cli", clock=None, pause=None)
+    clock_fn = lambda: None
+    pause_fn = lambda _: None
+    sync_job._publisher(ctx, client="cli2", clock=clock_fn, pause=pause_fn)
+    assert captured == [
+        ("nvd-settings", {"client": "cli"}),
+        ("nvd-settings", {"client": "cli2", "clock": clock_fn, "pause": pause_fn}),
+    ]
+
+    processed = {"schema": "appsec-review/nvd-process/1", "snapshot_id": "nvd-snap", "manifest_sha256": "a" * 64}
+    published = _units()["nvd_sync.publish"].handler(
+        _unit_context(tmp_path, "nvd_sync.publish", {"nvd_sync.process": processed})
+    )
+    assert published["schema"] == "appsec-review/nvd-publication/1"
+    assert published["identity"] == processed
+    meta = json.loads(Path(published["metadata_path"]).read_text(encoding="utf-8"))
+    assert meta["feed_id"] == "nvd" and meta["identity"] == processed
+
+
+def test_osv_and_mitre_unit_handlers_wire_steps_and_publish_metadata(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    osv_settings = object()
+    mitre_settings = object()
+    monkeypatch.setattr(sync_job, "_osv", lambda context: osv_settings)
+    monkeypatch.setattr(sync_job, "_mitre", lambda context: mitre_settings)
+    calls: list[tuple] = []
+
+    monkeypatch.setattr(sync_job.osv_feed, "fetch", lambda s, work, dl: calls.append(("osv.fetch", s, work, dl)) or {"f": 1})
+    monkeypatch.setattr(sync_job.osv_feed, "index", lambda s, f, work: calls.append(("osv.index", s, f, work)) or {"i": 1})
+    monkeypatch.setattr(sync_job.osv_feed, "publish", lambda s, f, i: calls.append(("osv.publish", s, f, i)) or {"snapshot_id": "osv-1"})
+    monkeypatch.setattr(sync_job.osv_feed, "verify", lambda s: calls.append(("osv.verify", s)) or {"snapshot_id": "osv-1"})
+
+    monkeypatch.setattr(sync_job.mitre_feed, "fetch", lambda s, work, dl: calls.append(("mitre.fetch", s, work, dl)) or {"mf": 1})
+    monkeypatch.setattr(sync_job.mitre_feed, "normalize", lambda s, f, work: calls.append(("mitre.norm", s, f, work)) or {"mn": 1})
+    monkeypatch.setattr(sync_job.mitre_feed, "publish", lambda s, f, n: calls.append(("mitre.pub", s, f, n)) or {"snapshot_id": "m-1"})
+    monkeypatch.setattr(sync_job.mitre_feed, "verify", lambda s: calls.append(("mitre.verify", s)) or {"snapshot_id": "m-1"})
+
+    osv_dl, mitre_dl = object(), object()
+    units = _units(osv_downloader=osv_dl, mitre_downloader=mitre_dl)
+
+    of = units["osv_sync.fetch"].handler(_unit_context(tmp_path, "osv_sync.fetch"))
+    oi = units["osv_sync.index"].handler(_unit_context(tmp_path, "osv_sync.index", {"osv_sync.fetch": of}))
+    op = units["osv_sync.publish"].handler(
+        _unit_context(tmp_path, "osv_sync.publish", {"osv_sync.fetch": of, "osv_sync.index": oi})
+    )
+    assert op["schema"] == "appsec-review/osv-publication/1"
+    assert json.loads(Path(op["metadata_path"]).read_text(encoding="utf-8"))["feed_id"] == "osv"
+
+    mf = units["mitre_sync.fetch"].handler(_unit_context(tmp_path, "mitre_sync.fetch"))
+    mn = units["mitre_sync.normalize"].handler(_unit_context(tmp_path, "mitre_sync.normalize", {"mitre_sync.fetch": mf}))
+    mp = units["mitre_sync.publish"].handler(
+        _unit_context(tmp_path, "mitre_sync.publish", {"mitre_sync.fetch": mf, "mitre_sync.normalize": mn})
+    )
+    assert mp["schema"] == "appsec-review/mitre-publication/1"
+    assert json.loads(Path(mp["metadata_path"]).read_text(encoding="utf-8"))["feed_id"] == "mitre"
+    assert [c[0] for c in calls] == [
+        "osv.fetch", "osv.index", "osv.publish", "osv.verify",
+        "mitre.fetch", "mitre.norm", "mitre.pub", "mitre.verify",
+    ]
+
+
+def test_grype_fetch_and_import_handlers_support_injected_and_resolved_executors(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    grype_settings = object()
+    monkeypatch.setattr(sync_job, "_grype", lambda context: grype_settings)
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        sync_job.grype_feed,
+        "fetch",
+        lambda s, work, dl, now=None: calls.append(("fetch", s, work, dl, now)) or {"fetched": True},
+    )
+    monkeypatch.setattr(
+        sync_job.grype_feed,
+        "import_database",
+        lambda s, fetched, work, ex, now=None: calls.append(("import", s, fetched, work, ex, now)) or {"imported": True},
+    )
+    dl = object()
+    injected_ex = object()
+    units_injected = _units(
+        clock=lambda: "2026-11-12T00:00:00Z",
+        grype_downloader=dl,
+        grype_executor_factory=lambda u: injected_ex,
+    )
+    gf = units_injected["grype_db_sync.fetch"].handler(_unit_context(tmp_path, "grype_db_sync.fetch"))
+    gi = units_injected["grype_db_sync.import"].handler(
+        _unit_context(tmp_path, "grype_db_sync.import", {"grype_db_sync.fetch": gf})
+    )
+    assert gf == {"fetched": True} and gi == {"imported": True}
+    assert calls[0][3:] == (dl, "2026-11-12T00:00:00Z")
+    assert calls[1][4:] == (injected_ex, "2026-11-12T00:00:00Z")
+
+    resolved_path = tmp_path / "runs" / "2026-11-12-0001" / "data" / "configuration" / "resolved.json"
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_path.write_text('{"profile": "fixture"}', encoding="utf-8")
+    monkeypatch.setattr(sync_job, "load_catalog", lambda repo, resolved_config=None: ("cat", repo, resolved_config))
+    monkeypatch.setattr(sync_job, "ContainerExecutor", lambda catalog, run_root: ("exec", catalog, run_root))
+    units_default = _units()
+    units_default["grype_db_sync.fetch"].handler(_unit_context(tmp_path, "grype_db_sync.fetch"))
+    units_default["grype_db_sync.import"].handler(
+        _unit_context(tmp_path, "grype_db_sync.import", {"grype_db_sync.fetch": gf})
+    )
+    assert calls[2][4] is None
+    assert calls[3][4] == ("exec", ("cat", tmp_path, {"profile": "fixture"}), tmp_path / "runs" / "2026-11-12-0001")
+    assert calls[3][5] is None

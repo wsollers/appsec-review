@@ -183,3 +183,14 @@ def test_verify_and_lookup_refuse_a_tampered_published_index(tmp_path: Path) -> 
         osv.verify(settings)
     with pytest.raises(ValueError, match="integrity mismatch"):
         osv.lookup_package(settings, "PyPI", "fixture", limit=1)
+
+
+def test_index_skips_non_string_aliases_and_non_object_affected_entries(tmp_path: Path) -> None:
+    settings = _settings(tmp_path, ecosystems=["PyPI"])
+    rec = _record("PYSEC-EDGE", ("PyPI", "pkg"))
+    rec["aliases"] = ["CVE-2026-0001", 123]
+    rec["affected"].append("not-a-dict")
+    fetched = _fetched(tmp_path, {"PyPI": {"edge.json": rec}})
+    indexed = osv.index(settings, fetched, tmp_path / "idx")
+    assert indexed["record_count"] == 1
+

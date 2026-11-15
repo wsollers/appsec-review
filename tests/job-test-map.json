@@ -614,6 +614,7 @@
     },
     "job_third_party_data_sync": {
       "unit": [
+        "tests/unit/job_third_party_data_sync/test_contract.py",
         "tests/unit/job_third_party_data_sync/test_job_graph.py",
         "tests/unit/job_third_party_data_sync/test_publication.py",
         "tests/unit/job_third_party_data_sync/test_cve_bin_tool_database.py",

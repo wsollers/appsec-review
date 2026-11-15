@@ -3051,6 +3051,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   enforcement, shard reuse and accepted loader; 12 whole-graph cases preserved in
   `tests/integration/job_artifact_security_analysis/`; 1207/1213 job-package lines [99.51%] and
   515/520 branches [99.04%] covered).
+  Third-party-data-sync re-gate: 9 unit files, 198 cases (pinned maintenance contract and
+  `feed_sync_work` artifact-glob ownership across all 21 `TOPOLOGY` tasks, `job.py` validator and
+  step-handler wiring, atomic publication/HttpDownloader/snapshot provenance, `cve-bin-tool`
+  Docker/native builder and NVD snapshot verification, OSV/KEV/EPSS/MITRE/Grype/NVD feed sync,
+  pagination, XML/SQLite bounds and chain cycle checks), with whole-graph/live cases preserved in
+  `tests/integration/job_third_party_data_sync/`; 1922/1978 job-package lines (97.17%; `job.py`,
+  `datasets.py` and `publication.py` at 100%) and 634/692 branches (91.62%) covered.
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
