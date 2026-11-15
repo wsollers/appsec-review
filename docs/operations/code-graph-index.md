@@ -77,6 +77,21 @@ and unlocated diagnostics are counted in `analyzer_checks_unmapped` and `analyze
 gaps on the `sink_site` coverage row; the per-scope summary is under `cross_check.analyzer_sinks`. See
 `docs/architecture/seeded-neighborhoods.md` section 9.
 
+## Sink classification
+
+`normalize.scopes` classifies every `sink_site` once, through the catalog
+(`rules/codeql-graph-export/catalog.json`, `appsec-review/graph-catalog/1` revision 2): API rules first,
+then CodeQL model rules. A `dataflow_path` copies its sink site's `sink_class` and `cwe_family` into
+`result.sink` and is `direct_eligible` exactly when that sink site is classified; the path does not
+classify again, so the two can never disagree. Since T-5017 the network and file output sinks `send`,
+`sendto`, `sendmsg`, `write`, `writev` (`network_output`) and `fwrite` (`file_write`) are classified; on
+smoke-cpp run `2026-11-14-0005` they were the only unclassified sinks (`send` 7, `write` 2) and the 10
+`src/request.cpp` paths into `send` were the only ineligible paths. A remote-flow sink outside those APIs
+stays `unclassified` and is published ineligible with an `unclassified_sink` gap; C++ stream writes are
+not exported as sinks (member functions), which is a named limitation of the pack. A catalog change
+re-pins every language's `export_query_packs` entry and `asset_lock_sha256`, and the changed packs must be
+recompiled with `scripts/compile-codeql-queries.sh --language cpp` before the next review run.
+
 ## Resume and invalidation
 
 A scope's checkpoint (`data/code-graph/scopes/<scope>/checkpoint.json`) binds:

@@ -26,7 +26,7 @@
      "where": {"sink_start_line": 34, "argument_index": 2, "kind": "sign_change", "from_type": "int", "to_type": "size_t"}},
     {"case": "sign_changing_conversion", "query_id": "range_conversions",
      "where": {"sink_start_line": 45, "argument_index": 2, "kind": "sign_change", "from_type": "int", "to_type": "size_t"}},
-    {"case": "unclassified_sink", "query_id": "sink_sites",
+    {"case": "network_output_sink", "query_id": "sink_sites",
      "where": {"sink_start_line": 49, "argument_index": 1, "api": "send", "model": "RemoteFlowSinkFunction"}},
     {"case": "macro_mapped_condition", "query_id": "guards",
      "where": {"sink_start_line": 37, "guard_state": "dominating", "condition_start_line": 36, "in_macro": "true"}}

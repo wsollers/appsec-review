@@ -254,12 +254,26 @@ def test_in_loop_string_booleans_become_booleans() -> None:
     assert fact.payload["result"]["in_loop"] is True
 
 
-def test_unclassified_sink_is_published_and_ineligible(synthetic) -> None:
-    [fact] = [fact for fact in _family(synthetic, "sink_site") if fact.payload["result"]["sink_class"] == "unclassified"]
+def test_network_output_sink_is_classified_and_an_unknown_remote_sink_stays_ineligible(synthetic) -> None:
+    # T-5017: the send API classifies as network_output through the API tier even though the hand-authored
+    # recording still labels the row with the RemoteFlowSinkFunction model the pack emitted before the rule.
+    [send] = [fact for fact in _family(synthetic, "sink_site") if fact.name.startswith("send")]
+    assert send.payload["result"]["sink_class"] == "network_output"
+    assert send.payload["result"]["catalog_rule"] == "cpp.sink.api.send"
+    assert send.payload["result"]["cwe_family"] == "CWE-200"
+    assert send.payload["result"]["model"] == "RemoteFlowSinkFunction"
+    assert send.payload["admissibility"]["direct_eligible"] is True
+    assert not [fact for fact in _family(synthetic, "sink_site") if fact.payload["result"]["sink_class"] == "unclassified"]
+    # A remote-flow sink the catalog does not know stays published, unclassified and ineligible.
+    exports = _exports()
+    _set_rows(exports["sink_sites"], [{**row, "api": "sendfile"} if row["api"] == "send" else row
+                                      for row in _rows(exports["sink_sites"])])
+    result = _normalize(exports)
+    [fact] = [fact for fact in _family(result, "sink_site") if fact.payload["result"]["sink_class"] == "unclassified"]
     assert fact.payload["result"]["model"] == "RemoteFlowSinkFunction" and fact.payload["result"]["catalog_rule"] is None
     assert fact.payload["admissibility"]["direct_eligible"] is False
     assert fact.payload["admissibility"]["ineligibility_reasons"] == ["unclassified_sink"]
-    assert synthetic.coverage_for("sink_site").status is c.Coverage.PARTIAL
+    assert result.coverage_for("sink_site").status is c.Coverage.PARTIAL
     memcpy = [fact for fact in _family(synthetic, "sink_site") if fact.payload["result"]["catalog_rule"]
               == "cpp.sink.api.memcpy"]
     assert len(memcpy) == 2 and all(item.payload["admissibility"]["direct_eligible"] for item in memcpy)
@@ -268,17 +282,18 @@ def test_unclassified_sink_is_published_and_ineligible(synthetic) -> None:
 
 def test_several_sink_rows_for_one_key_keep_the_best_ranked_rule() -> None:
     exports = _exports()
-    rows = _rows(exports["sink_sites"])
+    # ``sendfile`` stands in for a remote-flow sink without an API rule (``send`` has one since T-5017).
+    rows = [{**row, "api": "sendfile"} if row["api"] == "send" else row for row in _rows(exports["sink_sites"])]
     extra = []
     for row in rows:
         if row["api"] == "memcpy":  # a model row competing with the API rule
             extra.append({**row, "model": "ArrayFunction.output"})
-        if row["api"] == "send":    # a classified model row beats the unclassified one
+        if row["api"] == "sendfile":    # a classified model row beats the unclassified one
             extra.append({**row, "model": "CommandExecutionFunction"})
     _set_rows(exports["sink_sites"], rows + extra)
     sinks = _family(_normalize(exports), "sink_site")
     assert {fact.payload["result"]["catalog_rule"] for fact in sinks if "memcpy" in fact.name} == {"cpp.sink.api.memcpy"}
-    [send] = [fact for fact in sinks if fact.name.startswith("send")]
+    [send] = [fact for fact in sinks if fact.name.startswith("sendfile")]
     assert send.payload["result"]["sink_class"] == "command_execution"
     assert send.payload["result"]["models"] == ["CommandExecutionFunction", "RemoteFlowSinkFunction"]
     assert len(sinks) == 7
@@ -574,6 +589,11 @@ def test_catalog_loads_validates_and_rejects_contract_drift() -> None:
     ({"api": "printf", "declared_in": "stdio.h", "argument_index": 0, "model": "FormattingFunction"},
      ("format_string", 3)),
     ({"api": "send", "declared_in": "socket.h", "argument_index": 1, "model": "RemoteFlowSinkFunction"},
+     ("network_output", 1)),
+    ({"api": "write", "declared_in": "unistd.h", "argument_index": 1, "model": "RemoteFlowSinkFunction"},
+     ("network_output", 1)),
+    ({"api": "fwrite", "declared_in": "stdio.h", "argument_index": 0, "model": "api"}, ("file_write", 1)),
+    ({"api": "sendfile", "declared_in": "sendfile.h", "argument_index": 2, "model": "RemoteFlowSinkFunction"},
      ("unclassified", 4)),
 ])
 def test_sink_classification_tiers(row, expected) -> None:

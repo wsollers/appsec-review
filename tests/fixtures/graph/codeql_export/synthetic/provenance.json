@@ -14,7 +14,7 @@
     "non_dominating_guard": "guards: len > 0 (line 42) does not control memcpy at line 45, which also has a none row",
     "unknown_range": "ranges: memcpy len at line 45 has lower and upper unknown",
     "sign_changing_conversion": "range_conversions: int -> size_t sign_change for memcpy len at lines 34 and 45",
-    "unclassified_sink": "sink_sites: send argument 1 at line 49, model RemoteFlowSinkFunction, which catalog.json does not classify",
+    "network_output_sink": "sink_sites: send argument 1 at line 49, model RemoteFlowSinkFunction; catalog.json classifies the send API as network_output (T-5017), so the row is direct-eligible",
     "macro_mapped_condition": "guards: CHECK_LEN(len) at line 36, in_macro true, reported at the expansion site"
   },
   "raw_bqrs": {

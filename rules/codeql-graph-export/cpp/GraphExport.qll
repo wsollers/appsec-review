@@ -225,6 +225,18 @@ module GraphExport {
     name = "syslog" and arg = 1
     or
     name = "rand" and arg = -1
+    or
+    name = "send" and arg = 1
+    or
+    name = "sendto" and arg = 1
+    or
+    name = "sendmsg" and arg = 1
+    or
+    name = "write" and arg = 1
+    or
+    name = "writev" and arg = 1
+    or
+    name = "fwrite" and arg = 0
   }
 
   /** Catalog memory-write APIs whose argument 0 is the destination object. */

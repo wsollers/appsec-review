@@ -84,6 +84,9 @@ class SinkClass(StrEnum):
     HEADER_INJECTION = "header_injection"
     REGEX_INJECTION = "regex_injection"
     UNSAFE_REFLECTION = "unsafe_reflection"
+    # Output sinks (T-5017): data leaving the process over a socket or into a file.
+    NETWORK_OUTPUT = "network_output"
+    FILE_WRITE = "file_write"
     UNCLASSIFIED = "unclassified"
 
 
