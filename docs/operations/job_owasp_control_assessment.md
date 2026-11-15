@@ -187,7 +187,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_third_party_data_sync` | `feed_snapshot` | `appsec-review/public-feed-use/1` | external | optional | gap |
@@ -941,7 +941,7 @@ flowchart LR
   input136 -. schema .-> input_schema136
   producer137["job_tree_sitter_ast"]
   input137["tree_sitter_node_shards"]
-  input_schema137["appsec-review/tree-sitter-ast/1"]
+  input_schema137["appsec-review/tree-sitter-normalizer/1"]
   producer137 --> input137 --> job
   input137 -. schema .-> input_schema137
   producer138["job_tree_sitter_ast"]

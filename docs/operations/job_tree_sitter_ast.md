@@ -62,9 +62,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
 | `generated_source_backing` | `load` | `appsec-review/generated-source-backing/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `tree_sitter_acceptance` | `acceptance` | `appsec-review/tree-sitter-ast/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `tree_sitter_ast` | `parse` | `appsec-review/tree-sitter-normalizer/1` | indexed | `analysis` | `find`, `query_syntax`, `search`, `trace` |
 | `tree_sitter_coverage` | `acceptance` | `appsec-review/tree-sitter-ast/1` | indexed | `analysis` | `coverage` |
-| `tree_sitter_node_shards` | `parse` | `appsec-review/tree-sitter-ast/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `tree_sitter_node_shards` | `parse` | `appsec-review/tree-sitter-normalizer/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `tree_sitter_scope_results` | `parse` | `appsec-review/tree-sitter-ast/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `tree_sitter_tool_io` | `parse` | `appsec-review/container-execution/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -80,7 +82,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific`<br>`tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically`<br>`tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation` |
+| unit | `tests/test_tree_sitter_ast.py::test_scope_routing_is_project_translation_and_language_specific`<br>`tests/test_tree_sitter_ast.py::test_scope_routing_chunks_large_partitions_deterministically`<br>`tests/test_tree_sitter_ast.py::test_normalization_preserves_spans_fields_malformed_flags_and_truncation`<br>`tests/unit/runtime/test_wave2_contracts.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
 
 ### Dagster placement
 
@@ -187,22 +189,30 @@ flowchart LR
   output_schema0["appsec-review/generated-source-backing/1"]
   job --> output0
   output0 -. schema .-> output_schema0
-  output1["tree_sitter_ast"]
-  output_schema1["appsec-review/tree-sitter-normalizer/1"]
+  output1["tree_sitter_acceptance"]
+  output_schema1["appsec-review/tree-sitter-ast/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["tree_sitter_coverage"]
-  output_schema2["appsec-review/tree-sitter-ast/1"]
+  output2["tree_sitter_ast"]
+  output_schema2["appsec-review/tree-sitter-normalizer/1"]
   job --> output2
   output2 -. schema .-> output_schema2
-  output3["tree_sitter_node_shards"]
+  output3["tree_sitter_coverage"]
   output_schema3["appsec-review/tree-sitter-ast/1"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["tree_sitter_tool_io"]
-  output_schema4["appsec-review/container-execution/1"]
+  output4["tree_sitter_node_shards"]
+  output_schema4["appsec-review/tree-sitter-normalizer/1"]
   job --> output4
   output4 -. schema .-> output_schema4
+  output5["tree_sitter_scope_results"]
+  output_schema5["appsec-review/tree-sitter-ast/1"]
+  job --> output5
+  output5 -. schema .-> output_schema5
+  output6["tree_sitter_tool_io"]
+  output_schema6["appsec-review/container-execution/1"]
+  job --> output6
+  output6 -. schema .-> output_schema6
 ```
 
 <!-- generated:end -->

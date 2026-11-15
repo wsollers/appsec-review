@@ -89,7 +89,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -376,7 +376,7 @@ flowchart LR
   input48 -. schema .-> input_schema48
   producer49["job_tree_sitter_ast"]
   input49["tree_sitter_node_shards"]
-  input_schema49["appsec-review/tree-sitter-ast/1"]
+  input_schema49["appsec-review/tree-sitter-normalizer/1"]
   producer49 --> input49 --> job
   input49 -. schema .-> input_schema49
   producer50["job_tree_sitter_ast"]

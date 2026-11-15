@@ -170,7 +170,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -883,7 +883,7 @@ flowchart LR
   input134 -. schema .-> input_schema134
   producer135["job_tree_sitter_ast"]
   input135["tree_sitter_node_shards"]
-  input_schema135["appsec-review/tree-sitter-ast/1"]
+  input_schema135["appsec-review/tree-sitter-normalizer/1"]
   producer135 --> input135 --> job
   input135 -. schema .-> input_schema135
   producer136["job_tree_sitter_ast"]

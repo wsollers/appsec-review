@@ -2308,12 +2308,13 @@ until each is rewritten into the entry format when it is next touched.
   parallel documentation mapping. Until then, the user-approved inventory names each missing
   binding as this gap and links the handler; a missing binding never means no tool or model runs.
   Do not modify frozen configuration, guidance registry or `DATASETS` as part of the docs program.
-  Observed source mismatch: `job_artifact_security_analysis/datasets.py` declares
-  `artifact_security_results` at `analyze` with `appsec-review/artifact-security-observation/1`;
-  its artifact glob also claims `accepted-analysis.json`, which `acceptance.publish_handoff`
-  writes with `appsec-review/artifact-security-analysis/1`. Separate or narrow the declarations
-  and reconcile affected typed consumers in the implementation repair, preserving actual
-  payload formats; the documentation generator retains the current declarations unchanged.
+  Observed source mismatch (resolved in Wave 2 `eb8a70717`): `job_artifact_security_analysis/datasets.py`
+  previously declared `artifact_security_results` at `analyze` with
+  `appsec-review/artifact-security-observation/1` over both shard results and `accepted-analysis.json`;
+  `artifact_security_results` is now narrowed to shard observation JSON and
+  `artifact_security_acceptance` owns `accepted-analysis.json` at `acceptance` with
+  `appsec-review/artifact-security-analysis/1` and `observe_output` enforcement in
+  `load_accepted_artifact_security_analysis`. Unit-level tool/model task-binding declarations remain open.
 - **Done when:** every registered unit's binding is covered by a focused test of the real
   dispatch definition, and generated task rows distinguish exact, conditional and no-launch
   bindings with no unknown binding silently converted to an empty success; a focused publisher
@@ -2969,8 +2970,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   (`9c41d5e45`) corrected acquisition/debug-symbol declarations and consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
-  Wave 1c aligns image-repair proposal validation and its JSON schema on current-only `/3`,
-  preserving bounded repairs, explicit refusal and normalized identities.
+  Wave 1c (`4b875e0ea`) aligns image-repair proposal validation and its JSON schema on
+  current-only `/3`, preserving bounded repairs, explicit refusal and normalized identities.
+  Wave 2 (`eb8a70717`) splits `job_artifact_security_analysis` and `job_tree_sitter_ast` dataset
+  declarations, adds `schema` to `FAILED` Tree-sitter scope dispositions, aligns all ten
+  downstream Tree-sitter consumers on `tree-sitter-normalizer/1` shards, and wires
+  `observe_output` in `load_accepted_artifact_security_analysis`, `job_change_context_analysis`
+  and `job_review_prioritization`.
   These are production-repair gates, not completed T-113 recertifications: original stashes
   remain retained for fresh per-job classification, coverage and mutation gates.
   Integration follow-up:

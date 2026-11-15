@@ -59,7 +59,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
-| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_acceptance` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -85,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow`<br>`tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days`<br>`tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push` |
+| unit | `tests/test_change_context_analysis.py::test_lifetime_normalization_uses_all_walked_commits_without_calendar_underflow`<br>`tests/test_change_context_analysis.py::test_rolling_window_requires_more_than_three_fixes_within_sixty_days`<br>`tests/test_change_context_analysis.py::test_review_speed_distinguishes_final_head_approval_stale_approval_and_direct_push`<br>`tests/unit/runtime/test_wave2_consumers.py` |
 
 ### Dagster placement
 
@@ -180,19 +181,24 @@ flowchart LR
   input15 -. schema .-> input_schema15
   producer16["job_tree_sitter_ast"]
   input16["tree_sitter_node_shards"]
-  input_schema16["appsec-review/tree-sitter-ast/1"]
+  input_schema16["appsec-review/tree-sitter-normalizer/1"]
   producer16 --> input16 --> job
   input16 -. schema .-> input_schema16
   producer17["job_tree_sitter_ast"]
-  input17["generated_source_backing"]
-  input_schema17["appsec-review/generated-source-backing/1"]
+  input17["tree_sitter_acceptance"]
+  input_schema17["appsec-review/tree-sitter-ast/1"]
   producer17 --> input17 --> job
   input17 -. schema .-> input_schema17
   producer18["job_tree_sitter_ast"]
-  input18["tree_sitter_tool_io"]
-  input_schema18["appsec-review/container-execution/1"]
+  input18["generated_source_backing"]
+  input_schema18["appsec-review/generated-source-backing/1"]
   producer18 --> input18 --> job
   input18 -. schema .-> input_schema18
+  producer19["job_tree_sitter_ast"]
+  input19["tree_sitter_tool_io"]
+  input_schema19["appsec-review/container-execution/1"]
+  producer19 --> input19 --> job
+  input19 -. schema .-> input_schema19
   output0["change_context"]
   output_schema0["appsec-review/retrieval-index/2"]
   job --> output0

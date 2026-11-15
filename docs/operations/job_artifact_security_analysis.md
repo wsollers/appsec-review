@@ -30,19 +30,19 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L799) |
-| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L598) |
-| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L712) |
-| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L591) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L801) |
+| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L600) |
+| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L714) |
+| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L593) |
 
 ### Accepted input declarations
 
@@ -65,6 +65,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
 | `artifact_scanner_io` | `analyze` | `appsec-review/container-execution/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `artifact_security_acceptance` | `acceptance` | `appsec-review/artifact-security-analysis/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `artifact_security_observations` | `index` | `appsec-review/retrieval-index/2` | indexed | `observations` | `query_artifacts`, `query_precomputed` |
 | `artifact_security_results` | `analyze` | `appsec-review/artifact-security-observation/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
@@ -81,7 +82,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones` |
 | integration | `tests/integration/test_installer_record_scans.py`<br>`tests/integration/job_artifact_indexing/test_artifact_input_contracts.py` |
 | live | None declared |
-| unit | `tests/test_artifact_security_analysis.py` |
+| unit | `tests/test_artifact_security_analysis.py`<br>`tests/unit/runtime/test_wave2_contracts.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
 
 ### Dagster placement
 
@@ -153,14 +154,18 @@ flowchart LR
   output_schema0["appsec-review/container-execution/1"]
   job --> output0
   output0 -. schema .-> output_schema0
-  output1["artifact_security_observations"]
-  output_schema1["appsec-review/retrieval-index/2"]
+  output1["artifact_security_acceptance"]
+  output_schema1["appsec-review/artifact-security-analysis/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["artifact_security_results"]
-  output_schema2["appsec-review/artifact-security-observation/1"]
+  output2["artifact_security_observations"]
+  output_schema2["appsec-review/retrieval-index/2"]
   job --> output2
   output2 -. schema .-> output_schema2
+  output3["artifact_security_results"]
+  output_schema3["appsec-review/artifact-security-observation/1"]
+  job --> output3
+  output3 -. schema .-> output_schema3
 ```
 
 <!-- generated:end -->

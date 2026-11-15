@@ -823,6 +823,7 @@
         "state": "declared",
         "values": [
           "artifact_scanner_io",
+          "artifact_security_acceptance",
           "artifact_security_observations",
           "artifact_security_results",
           "ci_documents",
@@ -1126,9 +1127,11 @@
         "values": [
           "clang_ast",
           "generated_source_backing",
+          "tree_sitter_acceptance",
           "tree_sitter_ast",
           "tree_sitter_coverage",
           "tree_sitter_node_shards",
+          "tree_sitter_scope_results",
           "tree_sitter_tool_io"
         ]
       },
@@ -7851,6 +7854,56 @@
       "target_access": "checkout"
     },
     {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "artifact_security_acceptance",
+      "description": "Accepted artifact-security summary, disposition, and shard inventory.",
+      "family": "sbom",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_artifact_security_analysis",
+      "producer_languages": {
+        "basis": "job_artifact_security_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/artifact-security-analysis/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_artifact_security_analysis.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
       "access": "indexed_evidence",
       "authority": "producer_evidence",
       "bucket": "scanner_observations",
@@ -10043,6 +10096,56 @@
       "target_access": "checkout"
     },
     {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "syntax",
+      "dataset": "tree_sitter_acceptance",
+      "description": "Accepted Tree-sitter summary, file dispositions, and shard manifest.",
+      "family": "syntax",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_tree_sitter_ast",
+      "producer_languages": {
+        "basis": "job_tree_sitter_ast: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/tree-sitter-ast/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_tree_sitter_ast.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
       "access": "indexed_evidence",
       "authority": "producer_evidence",
       "bucket": "syntax",
@@ -10160,7 +10263,57 @@
       "authority": "producer_evidence",
       "bucket": "syntax",
       "dataset": "tree_sitter_node_shards",
-      "description": "JSONL node records and per-scope results backing the AST shards.",
+      "description": "Normalized Tree-sitter syntax node JSONL shards.",
+      "family": "syntax",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_tree_sitter_ast",
+      "producer_languages": {
+        "basis": "job_tree_sitter_ast: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/tree-sitter-normalizer/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_tree_sitter_ast.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "syntax",
+      "dataset": "tree_sitter_scope_results",
+      "description": "Per-scope Tree-sitter parse metadata and dynamic scope outcomes.",
       "family": "syntax",
       "gap": [
         "T-157"
@@ -21562,6 +21715,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -21656,6 +21810,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -21750,6 +21905,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -21844,6 +22000,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -21938,6 +22095,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22032,6 +22190,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22126,6 +22285,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22220,6 +22380,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22314,6 +22475,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22394,6 +22556,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22474,6 +22637,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22568,6 +22732,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22662,6 +22827,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22756,6 +22922,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22836,6 +23003,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -22916,6 +23084,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -23010,6 +23179,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_artifact_security_analysis/artifact_scanner_io",
+        "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
         "job_ci_configuration_analysis/ci_documents",
@@ -25658,9 +25828,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -25726,9 +25898,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -25794,9 +25968,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -25862,9 +26038,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -25930,9 +26108,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -25998,9 +26178,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26066,9 +26248,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26134,9 +26318,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26202,9 +26388,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26270,9 +26458,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26338,9 +26528,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26406,9 +26598,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26474,9 +26668,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26542,9 +26738,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26610,9 +26808,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26678,9 +26878,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
@@ -26746,9 +26948,11 @@
       "unbound_datasets": [
         "job_cpp_compiled_analysis/clang_ast",
         "job_tree_sitter_ast/generated_source_backing",
+        "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
+        "job_tree_sitter_ast/tree_sitter_scope_results",
         "job_tree_sitter_ast/tree_sitter_tool_io"
       ],
       "unbound_producers": [
