@@ -102,7 +102,7 @@ def test_native_fixture_basis_resolves_in_actual_packaged_view(tmp_path):
     scope = accept_manifest(fixture.run_root)
     assembly = assemble_packages(scope)
     [package] = [item.document() for item in assembly.packages
-                 if item.kind == "finding_lead" and item.lead_ids == (fixture.ids["sast_critical"],)]
+                 if item.kind == "finding_lead" and fixture.ids["sast_critical"] in item.lead_ids]
     core = RetrievalCore(fixture.runs_dir, fixture.run_id)
     view = build_view(package, core, ViewLimits())
     assert view.document["neighborhood"]["function"]["name"] == "p"

@@ -185,7 +185,7 @@ def graph_assembly(graph_fixture):
 
 def _lead(assembly, fixture: FixtureRun, key: str) -> dict:
     [document] = [item.document() for item in assembly.packages
-                  if item.kind == "finding_lead" and item.lead_ids == (fixture.ids[key],)]
+                  if item.kind == "finding_lead" and fixture.ids[key] in item.lead_ids]
     return document
 
 

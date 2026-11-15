@@ -85,7 +85,7 @@ def test_accepted_facts_select_the_assembled_stack(tmp_path, monkeypatch, langua
     fixture = builder.build_accepted_index_set(tmp_path)
     scope = accept_manifest(fixture.run_root)
     assembly = assemble_packages(scope)
-    package = next(item for item in assembly.packages if item.lead_ids == (fixture.ids["sast_critical"],))
+    package = next(item for item in assembly.packages if fixture.ids["sast_critical"] in item.lead_ids)
     doc = package.document()
     assert fixture.ids["tag:2"] in doc["retrieval"]["entity_ids"]
     core = RetrievalCore(fixture.runs_dir, fixture.run_id, manifest_sha256=scope.manifest_sha256)

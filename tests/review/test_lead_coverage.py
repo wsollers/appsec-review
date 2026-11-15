@@ -47,7 +47,7 @@ def leaky_run(tmp_path_factory):
 
 def _secret_package(assembly, fixture) -> dict:
     [document] = [item.document() for item in assembly.packages
-                  if item.kind == "finding_lead" and item.lead_ids == (fixture.ids["secret_key"],)]
+                  if item.kind == "finding_lead" and fixture.ids["secret_key"] in item.lead_ids]
     return document
 
 

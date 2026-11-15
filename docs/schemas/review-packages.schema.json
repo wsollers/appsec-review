@@ -2365,7 +2365,6 @@
             },
             "lead_menu": {
               "minItems": 1,
-              "maxItems": 1,
               "items": {
                 "required": [
                   "admission_reasons",
