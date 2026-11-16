@@ -62,7 +62,7 @@ SPECIALIZED_WORKERS = {
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
 REVIEW_DISPATCHED = frozenset({
     "hypothesis_hunter", "red_team_analyst", "blue_team_refuter", "independent_verifier",
-    "adjudication_judge", "attack_chain_analyst", "lead_triager",
+    "adjudication_judge", "attack_chain_analyst", "lead_triager", "hunt_planner",
 })
 WORKBENCH_DISPATCHED = frozenset({"control_assessor", "independent_reviewer"})
 DETERMINISTIC_ROLES = frozenset({

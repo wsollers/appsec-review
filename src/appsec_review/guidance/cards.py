@@ -25,6 +25,8 @@ CITATIONS = {
     "review": "Use cell-local labels such as S1/K1, or already admitted asr:<kind>:<sha256> identities. "
               "Never invent a label, path citation, or another cell's reference.",
     "allowed_evidence_ref": "evidence_refs contains exact strings from allowed_evidence_refs.",
+    "brief_id": "Reference files, functions and entry points only by the F, N and E ids of the supplied brief; "
+                "an id the brief does not list is refused. A plan orders hunting and establishes nothing.",
     "inventory_path_sha256": "need_evidence requests contain exactly path, sha256 and reason; copy the "
                              "path/hash pair from evidence_inventory. Recipes name admitted build-unit IDs.",
     "supplied_build_context": "No citation field is accepted. Explain the supplied diagnostics in reason; "
@@ -211,7 +213,7 @@ def request_card(request: Any) -> dict[str, Any]:
 
     if is_review:
         from .workers import REVIEW_DISPATCHED, WORKBENCH_DISPATCHED
-        if request.role in REVIEW_DISPATCHED and request.role != "lead_triager":
+        if request.role in REVIEW_DISPATCHED and request.role not in {"lead_triager", "hunt_planner"}:
             from appsec_review.review.capability import IN_PROCESS_TOOLS
             granted = set(capability.get("tools", ()))
             expected = {item["name"]: item for item in review_tool_catalog(sorted(granted))}
@@ -237,6 +239,14 @@ def request_card(request: Any) -> dict[str, Any]:
             gaps = int(admission.get("material_gap_count", 0))
             omissions += sum(value for value in admission.get("view_omitted", {}).values()
                              if type(value) is int and value >= 0)
+        elif request.role == "hunt_planner":
+            # The planner reads one bounded attack-surface brief (review/hunt_plan.py): paths, names, lines and
+            # counts from accepted indices under short ids. It cites those ids; it retrieves nothing.
+            citation = "brief_id"
+            brief = task.get("brief", {}) if isinstance(task.get("brief"), Mapping) else {}
+            scope_ids("paths", [row.get("path") for row in brief.get("files", ()) if isinstance(row, Mapping)])
+            rows = [dataset("attack_surface_brief", available=bool(brief.get("files")), authority="context")]
+            gaps = len(brief.get("gaps", ()))
         elif request.role == "lead_triager":
             citation = "lead_fact"
             scope_ids("lead_ids", [row.get("lead_id") for row in task.get("findings", ())])

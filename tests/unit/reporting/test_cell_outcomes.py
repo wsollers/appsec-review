@@ -115,3 +115,44 @@ def test_an_empty_run_reports_nothing_rather_than_failing(tmp_path: Path) -> Non
                                     "without_success": 0}
     assert document["model_calls"] == {"by_status": {}, "failure_codes": {}, "served": {}}
     assert "packages 0" in render(document)
+
+
+def _plan_document(status: str, **summary: int) -> dict:
+    base = {"areas": 0, "reached": 0, "not_reached": 0, "agents": 0, "unassigned": 0, "functions_assigned": 0,
+            "entry_points_assigned": 0}
+    attempts = [{"turn": 1, "errors": ["N9 is not an id of the brief"], "usage": {"output_tokens": 900}},
+                {"turn": 2, "valid": status == "planned", "usage": {"output_tokens": 1100}}]
+    return {"schema": "appsec-review/hunt-plan/1", "status": status,
+            "plan_id": "plan-" + "a" * 64 if status == "planned" else None,
+            "gap": None if status == "planned" else "hunt_plan_unavailable:empty_plan",
+            "attempts": attempts if status != "disabled" else [], "summary": {**base, **summary}}
+
+
+def test_hunt_planner_is_reported_under_its_own_role_from_the_plan_artifact(tmp_path: Path) -> None:
+    """The planner (T-5030) runs outside the lane ledgers: its attempts, tokens and outcome come from hunt-plan.json."""
+    run = _build_run(tmp_path)
+    plan = (run / "data" / "jobs" / REVIEW_JOB / "attempts" / ATTEMPT / "steps" / "packages" / "tasks"
+            / "plan_hunt_campaign" / "hunt-plan.json")
+    plan.parent.mkdir(parents=True)
+    plan.write_text(json.dumps(_plan_document("planned", areas=3, reached=2, not_reached=1, agents=4, unassigned=2)))
+    document = summarize(run)
+    planner = document["roles"]["hunt_planner"]
+    assert (planner["attempts"], planner["cells"], planner["outcomes"], planner["reasons"]) == (1, 1, {"succeeded": 1}, {})
+    assert planner["output_tokens"] == 2000 and planner["turns"]["max"] == 2 and planner["queries"]["max"] == 0
+    assert document["hunt_plan"] == {"plan_id": "plan-" + "a" * 64, "status": "planned", "gap": None, "areas": 3,
+                                     "reached": 2, "not_reached": 1, "agents": 4, "unassigned": 2,
+                                     "functions_assigned": 0, "entry_points_assigned": 0}
+    text = render(document)
+    assert "hunt_planner: 1 attempts over 1 cells; succeeded 1; output tokens 2000" in text
+    assert f"hunt plan plan-{'a' * 64}: planned; areas 3 (reached 2, not reached 1); agents 4; unassigned 2" in text
+    # A fallen-back plan is a failed planner attempt whose reason is the named gap.
+    plan.write_text(json.dumps(_plan_document("fallback")))
+    document = summarize(run)
+    assert document["roles"]["hunt_planner"]["outcomes"] == {"failed": 1}
+    assert document["roles"]["hunt_planner"]["reasons"] == {"hunt_plan_unavailable:empty_plan": 1}
+    assert "gap hunt_plan_unavailable:empty_plan" in render(document)
+    # A disabled planner is absent, not a zero row.
+    plan.write_text(json.dumps(_plan_document("disabled")))
+    document = summarize(run)
+    assert "hunt_planner" not in document["roles"] and document["hunt_plan"] is None
+    assert "hunt plan" not in render(document)

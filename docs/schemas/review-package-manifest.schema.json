@@ -156,7 +156,9 @@
           "coverage_scope": {"enum": ["operation", "files"]},
           "operation": {"type": ["object", "null"]},
           "lead_count": {"$ref": "#/$defs/count"},
-          "package_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+          "package_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "hunt_area": {"type": ["string", "null"], "description": "The hunting campaign plan area that hunts the unit (T-5030); null under the rank or when not hunted."},
+          "hunt_gap": {"type": ["string", "null"], "description": "Why an unhunted unit received no hunt package: below_hunt_cutoff (rank), not_reached:<area>, unassigned, not_in_plan or beyond_hunt_max_units:<area> (plan)."}
         }
       }
     },

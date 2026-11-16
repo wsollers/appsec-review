@@ -91,6 +91,20 @@ partition, the budget, the receipts, the coverage computation, dedupe and redact
 the agent's judgment. Unit menus and per-item accounting remain the analyst's package shape in Intake A
 (section 3) and are not used for hunting.
 
+**Implemented: the planner (2026-11-16, T-5030 first piece).** `review/hunt_plan.py` and the `hunt_planner` role
+put the plan in front of today's hunt lane: the `packages.plan_hunt_campaign` task builds one bounded,
+deterministic attack-surface brief from accepted data (components and stack, first-party files with complexity
+points, lead density and facets, the function inventory, entry points, the units the rank would hunt), a
+frontier-model planner answers `hunting-campaign-plan/1` (areas with mission, weakness classes, priority, agents
+and assigned files, functions and entry points; the rest unassigned with a reason), and the application validates
+it (every function and entry point in exactly one area or unassigned, unknown ids refused then dropped, agents
+clamped to `hunting.agents`, areas beyond the budget kept as `not_reached`, fallback to the rank with the gap
+`hunt_plan_unavailable:<code>`). Hunt units are selected and ordered by the plan, `lanes.hunt_max_units` caps the
+packages after it, each hunt package carries its area as `campaign_area`, and unreached areas are named coverage
+gaps with their function lists. The campaign cell runtime of 4.1 to 4.3 (wall deadline and token budget instead of
+the turn cap, incremental filing, the receipt-derived coverage ledger) is the follow-on and is not implemented:
+coverage is still derived from hunt cells and their receipts, never from the plan.
+
 ### 4.1 The campaign
 
 A producer job, `job_model_hunting` (working name), runs a **campaign** over one accepted snapshot: `N` agents,

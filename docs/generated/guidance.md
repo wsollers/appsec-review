@@ -337,6 +337,32 @@ Jobs: No dispatched job declaration.
 }
 ```
 
+## roles hunt_planner
+
+Jobs: `job_inference_security_review`.
+
+```json
+{
+  "lens": "generative",
+  "output_schema": "hunting-campaign-plan",
+  "outputs": [],
+  "path": "pipeline/prompt-fragments/roles/hunt_planner.md",
+  "prohibited": [
+    "accept_claim",
+    "assign_severity",
+    "execute_code",
+    "propose_claim",
+    "read_target_guidance",
+    "refute_claim",
+    "request_unlisted_tool",
+    "set_claim_state",
+    "widen_scope"
+  ],
+  "responsibility": "Partition one program's attack surface into hunting areas and divide the hunters' work and agent budget between them from a bounded brief; never a finding.",
+  "tools": []
+}
+```
+
 ## roles hypothesis_hunter
 
 Jobs: `job_inference_security_review`.

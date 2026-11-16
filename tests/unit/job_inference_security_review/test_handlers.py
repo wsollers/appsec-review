@@ -39,6 +39,7 @@ EARLY_UNITS = (
     "scope.accept_manifest",
     "scope.assemble_scope",
     "triage.lead_severity",
+    "packages.plan_hunt_campaign",
     "packages.assemble_lead_packages",
     "packages.assemble_hunt_packages",
     "lead_review.teams",
@@ -93,7 +94,7 @@ def _fast_settings(base_settings, *, triage_enabled: bool = False, budget_packag
         teams=replace(base_settings.teams, review_teams=1, red_per_team=1, blue_per_team=1, verifier_per_team=1),
         lanes=replace(
             base_settings.lanes,
-            lead_admission=("high", "unknown"),
+            lead_admission=("critical", "high", "unknown"),
             lead_admission_kev=False,
             hunt_max_units=1,
         ),
@@ -242,14 +243,14 @@ def _packages_template(tmp_path_factory, _index_template):
                 settings = _fast_settings(base_s, triage_enabled=False, budget_packages=1)
                 settings = replace(
                     settings,
-                    lanes=replace(settings.lanes, lead_admission=("unknown",), lead_admission_kev=False, hunt_max_units=0),
+                    lanes=replace(settings.lanes, lead_admission=("critical", "high", "unknown"), lead_admission_kev=False, hunt_max_units=0),
                     packages=replace(settings.packages, slice_strategies=("lexical_identifiers",)),
                 )
                 infer = _fast_infer(ScriptedInfer({"ids": _index_template.ids}), zero_claims=True)
                 job = build_job(infer=infer, repository_root=ROOT)
                 job_ctx = _make_job_ctx(run_root, config_path, _index_template.run_id, job, typed_settings=settings)
                 outputs: dict[str, dict] = {}
-                for uid in EARLY_UNITS[:5]:
+                for uid in EARLY_UNITS[:6]:
                     outputs[uid] = _run_unit(job, job_ctx, uid, outputs)
                 ready.write_text(
                     json.dumps({"run_id": _index_template.run_id, "ids": _index_template.ids, "outputs": outputs}),
@@ -284,7 +285,7 @@ def _early_units_template(tmp_path_factory, _packages_template):
                 settings = _fast_settings(base_s, triage_enabled=False, budget_packages=1)
                 settings = replace(
                     settings,
-                    lanes=replace(settings.lanes, lead_admission=("unknown",), lead_admission_kev=False, hunt_max_units=0),
+                    lanes=replace(settings.lanes, lead_admission=("critical", "high", "unknown"), lead_admission_kev=False, hunt_max_units=0),
                     packages=replace(settings.packages, slice_strategies=("lexical_identifiers",)),
                 )
                 infer = _fast_infer(ScriptedInfer({"ids": _packages_template.ids}), zero_claims=True)
@@ -293,7 +294,7 @@ def _early_units_template(tmp_path_factory, _packages_template):
                     run_root, config_path, _packages_template.run_id, job, typed_settings=settings
                 )
                 outputs: dict[str, dict] = dict(_packages_template.outputs)
-                for uid in EARLY_UNITS[5:]:
+                for uid in EARLY_UNITS[6:]:
                     outputs[uid] = _run_unit(job, job_ctx, uid, outputs)
                 ready.write_text(
                     json.dumps({"run_id": _packages_template.run_id, "ids": _packages_template.ids, "outputs": outputs}),
@@ -325,7 +326,7 @@ def test_scope_and_package_units_execute_directly_and_reject_manifest_drift(_ind
     job_ctx = _make_job_ctx(run_root, config_path, _index_template.run_id, job, typed_settings=fast_settings)
 
     outputs: dict[str, dict] = {}
-    for uid in EARLY_UNITS[:5]:
+    for uid in EARLY_UNITS[:6]:
         outputs[uid] = _run_unit(job, job_ctx, uid, outputs)
         assert outputs[uid]["terminal_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
 
@@ -342,7 +343,7 @@ def test_lane_units_execute_directly(_packages_template, tmp_path) -> None:
     base_settings = load_config(config_path).job(JOB_ID).typed_settings
     fast_settings = replace(
         _fast_settings(base_settings, triage_enabled=False, budget_packages=1),
-        lanes=replace(base_settings.lanes, lead_admission=("high", "unknown"), lead_admission_kev=False, hunt_max_units=0),
+        lanes=replace(base_settings.lanes, lead_admission=("critical", "high", "unknown"), lead_admission_kev=False, hunt_max_units=0),
         decision_audit=replace(base_settings.decision_audit, enabled=False),
     )
     infer = _fast_infer(ScriptedInfer({"ids": _packages_template.ids}), zero_claims=True)
@@ -352,7 +353,7 @@ def test_lane_units_execute_directly(_packages_template, tmp_path) -> None:
     )
 
     outputs: dict[str, dict] = dict(_packages_template.outputs)
-    for uid in EARLY_UNITS[5:7]:
+    for uid in EARLY_UNITS[6:8]:
         outputs[uid] = _run_unit(job, job_ctx, uid, outputs)
         assert outputs[uid]["terminal_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
 
@@ -414,6 +415,7 @@ def test_triage_enabled_and_lane_exception_records_lane_failure(_index_template,
         "scope.accept_manifest",
         "scope.assemble_scope",
         "triage.lead_severity",
+        "packages.plan_hunt_campaign",
         "packages.assemble_lead_packages",
     ):
         outputs[uid] = _run_unit(job, job_ctx, uid, outputs)

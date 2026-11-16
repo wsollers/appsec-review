@@ -616,8 +616,10 @@ def test_ship_block_and_verification_default_to_the_recorded_decisions(tmp_path:
     assert settings.ship_block.kev_dependency_blocks is True
     assert settings.ship_block.dependency_lead_families == ("dependency_advisory", "artifact_scanner")
     assert settings.verification.require_distinct_model_for_ship_blocking is True
-    # Every checked-in profile is claude-haiku-5-5, so the verifier is not distinct and a warning is recorded.
-    assert {profile.model for profile in settings.models.values()} == {"claude-haiku-5-5"}
+    # Every checked-in review-cell profile is claude-haiku-5-5, so the verifier is not distinct and a warning is
+    # recorded; the hunt planner profile (settings.hunting, no claims) is the one frontier-model exception.
+    assert {name: profile.model for name, profile in settings.models.items() if name != "planner"} == {
+        "default": "claude-haiku-5-5", "triage": "claude-haiku-5-5"}
     record = settings.verifier_distinctness()
     assert record["distinct"] is False and "ship_blocking_pending_distinct_verification" in record["warning"]
     # Omitting both tables keeps the same defaults.
@@ -765,3 +767,31 @@ def test_lead_admission_basis_is_closed_and_defaults_to_either(tmp_path: Path) -
     assert _settings(omitted).lanes.lead_admission_basis == "either"
     with pytest.raises(ValueError, match="lead_admission_basis must be one of"):
         _variant(tmp_path / "bad", ('lead_admission_basis = "either"', "lead_admission_basis = true"))
+
+
+def test_hunting_settings_are_typed_semantic_and_bound_to_a_tool_free_planner_profile(tmp_path: Path) -> None:
+    """settings.hunting (T-5030 first piece): the planner's budget, area cap, profile and brief bounds."""
+    from appsec_review.review.hunt_plan_settings import HuntingSettings
+    settings = _settings(load_config(ROOT / "appsec-review.toml"))
+    assert settings.hunting == HuntingSettings(enabled=True, agents=4, max_areas=8, planner_profile="planner")
+    assert (settings.hunting.brief_bounds.max_functions, settings.hunting.brief_bounds.max_files,
+            settings.hunting.brief_bounds.max_leads) == (400, 120, 60)
+    planner = settings.models["planner"]
+    assert (planner.model, planner.max_queries, planner.max_turns) == ("claude-sonnet-5-5", 0, 2)
+    assert settings.as_document()["hunting"]["brief_bounds"]["max_files"] == 120
+    fewer = _settings(_variant(tmp_path / "fewer", ("agents = 4\nmax_areas = 8", "agents = 2\nmax_areas = 8")))
+    assert fewer.hunting.agents == 2
+    assert semantic_settings_sha256(fewer) != semantic_settings_sha256(settings)
+    omitted = _settings(_variant(tmp_path / "omitted", (
+        "[jobs.job_inference_security_review.settings.hunting]\nenabled = true", "[jobs.job_inference_security_review.settings.hunting]\nenabled = false")))
+    assert omitted.hunting.enabled is False
+    with pytest.raises(ValueError, match="hunting.planner_profile names an unconfigured model profile"):
+        _variant(tmp_path / "missing", ('planner_profile = "planner"', 'planner_profile = "nowhere"'))
+    with pytest.raises(ValueError, match="models.planner.max_queries must be 0"):
+        _variant(tmp_path / "queries", ("max_queries = 0\nmax_turns = 2\ntimeout_seconds = 900",
+                                        "max_queries = 4\nmax_turns = 2\ntimeout_seconds = 900"))
+    with pytest.raises(ValueError, match="hunting has unknown settings: deadline_minutes"):
+        _variant(tmp_path / "unknown", ("agents = 4\nmax_areas = 8", "agents = 4\nmax_areas = 8\ndeadline_minutes = 30"))
+    prod = load_config(ROOT / "appsec-review.toml", profile="prod")
+    assert _settings(prod).models["planner"].model == "claude-fable-5-2"
+    assert _settings(prod).models["planner"].max_queries == 0

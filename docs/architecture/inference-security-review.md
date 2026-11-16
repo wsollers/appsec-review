@@ -663,8 +663,14 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   stays `review-unit-rank/4`, which adds the `facets` signal (`facet_exposure`, `facet_trust`;
   [collation pass](collation-pass.md)).
 
-  The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
-  is a `coverage_gap` with reason `below_hunt_cutoff`.
+  With `settings.hunting` disabled, the top `hunt_max_units` units, by rank then `package_id`, receive hunt
+  packages and every other unit is a `coverage_gap` with reason `below_hunt_cutoff`. With it enabled (the
+  default), the hunting campaign plan (`review/hunt_plan.py`, `packages.plan_hunt_campaign`; review protocol
+  v3 section 4, T-5030) selects and orders the hunted units by its areas, `hunt_max_units` caps the packages
+  after the plan, each hunt package carries its area's mission as `campaign_area`, and an unhunted unit's
+  gap names the plan's reason (`not_reached:<area>`, `unassigned`, `not_in_plan`,
+  `beyond_hunt_max_units:<area>`); a plan that is empty or fails validation twice falls back to the rank with
+  the gap `hunt_plan_unavailable:<code>`.
 - **Panel.** Each hunt package's three red cells use distinct (strategy, persona) pairs. They are
   chosen by `hunt-panel/1` from the unit's tag cloud and from the data sources available.
 - **Strategies.** Strategies are task prompts, not roles; the red role is always

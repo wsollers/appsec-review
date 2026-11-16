@@ -440,6 +440,23 @@ def _gap_text(gap: Mapping[str, Any]) -> str:
     return f"{gap.get('producer')}: {gap.get('state')}: {gap.get('reason')}"[:300]
 
 
+def campaign_view(campaign: Any) -> dict[str, Any] | None:
+    """The bounded view of a package's ``campaign_area``: names, paths and lines, never identities or prose beyond
+    the planner's mission."""
+    if not isinstance(campaign, Mapping):
+        return None
+    return {"rule": str(campaign.get("rule", "")), "authority": "routing_context",
+            "plan_id": str(campaign.get("plan_id", "")), "area_id": str(campaign.get("area_id", "")),
+            "title": str(campaign.get("title", ""))[:120], "mission": str(campaign.get("mission", ""))[:1000],
+            "weakness_classes": [str(item) for item in campaign.get("weakness_classes", ())][:8],
+            "priority": int(campaign.get("priority", 0)), "agents": int(campaign.get("agents", 0)),
+            "functions": [{"name": str(item.get("name", ""))[:160], "path": str(item.get("path", "")),
+                           "line": item.get("line")} for item in campaign.get("functions", ())][:400],
+            "entry_points": [{"path": item.get("path"), "line": item.get("line"),
+                              "display": str(item.get("display", ""))[:120]}
+                             for item in campaign.get("entry_points", ())][:400]}
+
+
 def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> PackageView:
     """Build the labelled, budgeted view of ``package`` (routing fields are set by the caller per cell)."""
     builder = _Builder(package, core, limits)
@@ -601,6 +618,10 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
                         "obligations": [{"obligation": item["obligation"], "basis_tags": list(item["basis_tags"])}
                                         for item in unit_facets.get("obligations", ())]}
                        if unit_facets else None),
+            # The hunting campaign plan's area record of a hunt package (hunting-campaign/1, review/hunt_plan.py):
+            # the mission and weakness classes the planner set and the functions and entry points of this unit it
+            # assigned. Routing context, never evidence; null on a finding-lead view or a rank-selected unit.
+            "campaign_area": campaign_view(package.get("campaign_area")),
         }
         operation = scope.get("operation")
         if operation is not None:

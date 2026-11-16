@@ -69,6 +69,17 @@ max_queries = 0
 max_turns = 1
 timeout_seconds = 600
 
+# The hunting campaign planner (settings.hunting) decides where the hunters go: a frontier model, tool-free and
+# bounded (one turn plus one repair turn).
+[jobs.job_inference_security_review.settings.models.planner]
+model = "claude-fable-5-2"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+max_queries = 0
+max_turns = 2
+timeout_seconds = 1200
+
 # The independent verifier uses a different model from every red cell, which is what
 # verification.require_distinct_model_for_ship_blocking checks. The adjudication judge uses "strong" as well,
 # so it differs from the red cells' model too.
