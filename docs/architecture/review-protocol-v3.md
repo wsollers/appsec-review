@@ -84,14 +84,39 @@ Unchanged in shape; two policies decided on 2026-11-15 already apply (T-5029, T-
 
 ## 4. Intake B: model hunting as a producer
 
-### 4.1 Where it runs
+### 4.1 Where it runs, and how much
 
 A producer job, `job_model_hunting` (working name), runs after review data indexing and package-scope
-acceptance and before `job_review_package_assembly`'s successor, the inference review. It consumes the
-accepted indices through the same `RetrievalCore` and capability grants as review cells, selects **units by
-reach**: units that contain an admitted lead, lie within one call hop of an admitted lead's enclosing function
-in the accepted graph, carry an unassessed unknown lead, or rank in the top `hunt_max_units` by facets. Every
-unit left out records `below_hunt_cutoff` with the reason (`no_admitted_lead_in_reach`, `rank`).
+acceptance and before the inference review. It consumes the accepted indices through the same `RetrievalCore`
+and capability grants as review cells.
+
+The grain of one hunter **cell** is one function with its neighborhood: that is what fits a cell's token cap
+and four turns, and the scale at which the menu accounting (section 4.3) is exact. The grain must never set
+the **count**: a game has hundreds of thousands of functions, and even a one-hop reach from a few thousand
+admitted leads is tens of thousands of units. The count comes from a budget and a ranking:
+
+- **Budget.** `hunting.max_cells` per run, set per profile, replaces `hunt_max_units` as the outer bound.
+  Selection takes ranked units until the budget is spent; every unit below the line is recorded as
+  `below_hunt_cutoff` with its rank and the reason it was a candidate. A run always finishes, and the artifact
+  says what was not looked at.
+- **Ranking, attack surface first.** Units are ordered by (1) distance from an attack-surface entry point in
+  the accepted graph (network message handlers, file and save parsers, asset and mod loaders, scripting
+  bindings; the threat model's interaction catalog and the `trust:user-tainted` and `exposure:client-facing`
+  tags identify them), (2) containing or lying within one call hop of an admitted lead, (3) carrying an
+  unassessed unknown lead, (4) facet score. The hunter's cost then grows with the attack surface, not with
+  lines of code.
+- **Areas, a coarse tier above the function.** Before per-function hunting, one bounded cell per component or
+  subsystem (hundreds on a game, not hundreds of thousands) reads the threat model, the tags and the
+  entry-point summary and nominates *areas* such as "the packet dispatcher and its handlers" or "the save-game
+  deserializer". An area is a selection input that raises its functions in the ranking, never a finding. This
+  is where a model's judgment about architecture is paid for, bounded by the component count.
+- **Incremental.** On a later run against the same codebase, only functions whose source hash or neighborhood
+  changed since the last reviewed snapshot are candidates; unchanged functions reuse the previous run's
+  verified results through cell memoization. This is the M6 cache; for a game it is a requirement, not an
+  option.
+
+The honest consequence: one run never covers a whole game. It covers the attack surface to a budget, records
+what it skipped, and the next run continues from there.
 
 ### 4.2 What it publishes
 
@@ -127,11 +152,12 @@ the verifier.
 
 All in the central TOML, all reported per run by `scripts/cell-outcomes.py`:
 
-- units hunted (`hunt_max_units`, the outer cap) and the reach rule;
-- hunter cells per unit and turns per cell (one cell, four turns by default);
-- hypotheses per cell (`hunt_max_claims_per_package` today);
-- **yield**: verified findings per hundred hypotheses, reported every run. A producer whose yield falls under a
-  configured floor on a target is disabled for that target's later runs by configuration, never silently.
+- `hunting.max_cells` (the budget) and the ranking rule of section 4.1;
+- area cells per component (one) and hunter cells per unit (one, a second only for a unit with both sinks and
+  entry points, where sink-up and entry-down look at different things);
+- turns per cell (four) and hypotheses per cell (`hunt_max_claims_per_package` today);
+- **yield**: verified findings per hundred hypotheses, reported every run. A target whose yield falls under a
+  configured floor (5 to start) has hunting disabled for its later runs by configuration, never silently.
 
 ## 5. The review: analyse, verify, decide
 
@@ -184,18 +210,42 @@ at a time, findings and cost side by side. Passing unit tests do not establish r
 M2 needs no code and runs right after M1. M3 is the first real build and goes through the job-contract
 checklist. M4 follows M3 in the same release so that no run ever has both a hunt lane and a hunting producer.
 
-## 8. Open questions for the user
+## 8. Decisions (2026-11-16)
 
-1. **Hunter model.** The hunter is the open-ended generator. Should it run on the same model as the analyst,
-   or a stronger model with a smaller unit budget, with the verifier on the cheaper one?
-2. **Yield floor.** What verified-findings-per-hundred-hypotheses rate disables hunting for a target: 1, 5, 10?
-3. **Second analyst pass.** Keep the bounded second pass for fulfilled evidence requests, or none at all until
-   M2 shows it is needed?
-4. **Escalation threshold.** Judge only for disputed high and critical, or for every disputed finding?
-5. **Reports.** Should a `model_hypothesis` lead be marked as such in the final report and dossiers, or appear
-   as any other lead with its producer in the evidence trail only?
+Decided with the user from the evidence above and the recommendations put to them.
 
-## 9. References
+| # | Decision | Why |
+|---|---|---|
+| D1 | A hunter cell is one function with its neighborhood. | Fits the cell caps; the menu accounting is exact at that scale; cross-function context is one `expand` away. |
+| D2 | The number of hunter cells is a per-run budget with attack-surface-first ranking, an area tier and incremental selection (section 4.1), never the function count. | A game has hundreds of thousands of functions; cost must scale with the attack surface and with what changed. |
+| D3 | Reach from admitted leads plus a separate, small facet-ranked allowance. | Hunting matters most where scanners are silent; run 0005's one novel confirmed finding came from such a unit. |
+| D4 | One strategy per unit by default; a second only for a unit with both sinks and entry points. | Each strategy is a full cell. |
+| D5 | The hunter nominates a consequence, never a severity; triage assesses, the scorer rates after verification. | Admission must not follow the model's confidence. |
+| D6 | Hunter model: the analyst's model for the first measurement run, then one stronger-model comparison. | One change per run keeps results attributable; the hunter is where a stronger model is most likely to pay. |
+| D7 | Yield floor 5 verified per 100 hypotheses, measured on the smoke targets first. | Near what the run 0005 hunt lane achieved; stops a target where hunting is noise. |
+| D8 | The blue refuter is off by default and opt-in per target after M2 confirms it. | In run 0005 its answers were mostly "qualifies" or "unresolved" and did not move states; the verifier refutes with its own retrieval. |
+| D9 | The judge is an escalation for disputed findings at or above high. | 33 of 45 judge attempts were invalid; agreement needs no judge, and a disputed low finding is itself the right record. |
+| D10 | One bounded second analyst pass, only when a requested fact exists in the accepted indices and was not in the package. | Evidence requests were fulfilled only by later rounds in run 0005; removing rounds entirely would waste them. |
+| D11 | Cell caps: final by the fourth turn, one retry at a reduced setting, a token cap sized for a bounded answer. | Cells that ran six turns and 78,000 tokens produced nothing. |
+| D12 | Unknown-severity leads: triage assesses; admitted only on an assessed high or critical; otherwise a hunter menu item and an `excluded-leads.json` row, never a blind review and never a silent drop. | Unknown is most of what scanners emit on native code; reviewing all of it is the cost explosion. |
+| D13 | Cluster window: the whole enclosing function when graph facts place both leads, eight lines otherwise. | A function is the natural unit of a defect; the window is the fallback for unplaced code. |
+| D14 | A model hypothesis may cluster with a scanner observation on the same site and becomes corroboration. | The best evidence a scanner lead is real, at no extra cost. |
+| D15 | Model-originated findings are marked as such in reports and dossiers. | A reader deciding what to fix should know the provenance; hiding it is the drift being corrected. |
+| D16 | Excluded leads: a counts table in the final report, the JSON artifact for detail. | Rows belong in the artifact, the summary in the report. |
+| D17 | M2 runs as the next review after the clean run, same target and overlay, configuration only. | One change against one baseline. |
+| D18 | The cpp smoke target stays the baseline through M5; a larger target joins at M3. | Small enough to read every finding; the hunter is the component whose cost scales with code size. |
+| D19 | Scale work (M6) is designed after M3 lands. | The cache and the shared queue must fit the job graph M3 produces. |
+
+## 9. Open questions for the user
+
+1. **Area tier model.** The area-nomination pass is few cells with wide context. Same model as the hunter,
+   or the stronger one from the start?
+2. **Attack-surface catalog.** Which entry-point classes count as attack surface for the first large target
+   (network, file, scripting, asset loading, IPC)? The threat model's interaction catalog is the default list.
+3. **Incremental baseline.** For the first run against a game there is no previous snapshot: run the budgeted
+   attack-surface pass alone, or also a one-time wider pass over a configured allowance?
+
+## 10. References
 
 - [Review protocol v2](review-protocol-v2.md), [review package contract](review-package-contract.md),
   [inference security review](inference-security-review.md) (the code as it runs today).

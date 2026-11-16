@@ -205,6 +205,9 @@ until each is rewritten into the entry format when it is next touched.
 | T-5030 | [Gate the hunt lane on admitted leads and bound its share of the review](#t-5030-gate-the-hunt-lane-on-admitted-leads-and-bound-its-share-of-the-review) | review | open |
 | T-5031 | [Design triage-first, incremental and distributed review for million-line targets](#t-5031-design-triage-first-incremental-and-distributed-review-for-million-line-targets) | review | in-progress |
 | T-5032 | [Repair the lead-coverage audit tests: the secret fixture yields no secret lead and job_dependency_intelligence lacks a lead decision](#t-5032-repair-the-lead-coverage-audit-tests-the-secret-fixture-yields-no-secret-lead-and-job_dependency_intelligence-lacks-a-lead-decision) | testing | open |
+| T-5033 | [Run the analyse-then-verify measurement review on the cpp smoke target with the roles reduced by configuration](#t-5033-run-the-analyse-then-verify-measurement-review-on-the-cpp-smoke-target-with-the-roles-reduced-by-configuration) | review | open |
+| T-5034 | [Remove lane B from the inference review once the hunting producer exists](#t-5034-remove-lane-b-from-the-inference-review-once-the-hunting-producer-exists) | review | open |
+| T-5035 | [Make the judge an escalation for disputed high and critical findings and the blue refuter opt-in](#t-5035-make-the-judge-an-escalation-for-disputed-high-and-critical-findings-and-the-blue-refuter-opt-in) | review | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2938,7 +2941,7 @@ until each is rewritten into the entry format when it is next touched.
 - **State:** in-progress
 - **Area:** review
 - **Why:** On run `2026-11-15-0004` the use-after-free write in `session_touch` (session.cpp:33-34) arrived as four lead packages and the `popen` command injection in `handle_request` (request.cpp:136-137) as four more, one per tool observation (CodeQL, clang analyzer, cppcheck, sanitizer) of the same sink. Each package ran up to `red_per_team` × `max_rounds` red cells and up to `lead_max_claims_per_package` claims, so one defect spent up to 36 red cells and produced 16 claims; the identity fold (`claim/3`) merges the claims afterwards but the cells are already spent, and no cell saw the four tools agreeing.
-- **Scope:** in `packages.assemble_packages` (`src/appsec_review/review/packages.py`), group admitted lead observations by (path, enclosing symbol) and then merge observations whose resolved sinks lie within a short configured line window of each other or share a `sink_site` identity into one package whose `lead_menu` carries every observation and every tool's CWE hypothesis and whose basis fingerprints all of them; apply the same grouping to hunt units so lane B gets one package per enclosing symbol (or per file for symbol-less units), never one per tool observation; keep per-observation lead accounting (`lead_entries`, `lead_accounting`) so every tool observation still records an outcome; leave ungroupable observations as packages of their own. Package identity, cell reuse basis and the package manifest change, so this is a job-boundary change under `.claude/skills/add-a-job-contract/SKILL.md`.
+- **Scope:** (decision D13 of `docs/architecture/review-protocol-v3.md`, 2026-11-16: the whole enclosing function when graph facts place both leads, the line window otherwise) in `packages.assemble_packages` (`src/appsec_review/review/packages.py`), group admitted lead observations by (path, enclosing symbol) and then merge observations whose resolved sinks lie within a short configured line window of each other or share a `sink_site` identity into one package whose `lead_menu` carries every observation and every tool's CWE hypothesis and whose basis fingerprints all of them; apply the same grouping to hunt units so lane B gets one package per enclosing symbol (or per file for symbol-less units), never one per tool observation; keep per-observation lead accounting (`lead_entries`, `lead_accounting`) so every tool observation still records an outcome; leave ungroupable observations as packages of their own. Package identity, cell reuse basis and the package manifest change, so this is a job-boundary change under `.claude/skills/add-a-job-contract/SKILL.md`.
 - **Done when:** a unit test assembles two observations from different tools on one sink into one package with both leads in its menu, two observations a few lines apart in one function into one package, and sinks in different functions into separate packages; lead accounting still names every observation; the next cpp smoke shows at most one lead package per (symbol, line window) and at most one hunt package per symbol (run `2026-11-15-0005` declared 24 lead and 52 hunt packages for five source files), and the red cells per distinct defect fall accordingly.
 - **Refs:** `src/appsec_review/review/packages.py` (`assemble_packages`, `enclosing_functions`), `src/appsec_review/review/claims.py` (`FOLDED_KINDS`, `claim/3`), `docs/architecture/inference-security-review.md` (lane A packages, R7), run `2026-11-15-0004` `steps/packages/tasks/assemble_lead_packages/lead-packages.json` (host-local), T-5023, T-5024.
 
@@ -3004,6 +3007,36 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** decide and record the lead decision for the dependency-intelligence observations (a lead family or a non-lead reason with the gap it records), and find why the gitleaks fixture row no longer becomes a `secret` lead (the fixture builder, the `secret_scanner` producer selector or the family rule) and fix the owning side; keep the secret-redaction tests green.
 - **Done when:** `tests/review/test_lead_coverage.py` passes alone and under `-n 4 --shuffle-seed`, and the lead-coverage audit document still names every observation producer.
 - **Refs:** `tests/review/test_lead_coverage.py`, `src/appsec_review/review/lead_families.py` (`OBSERVATION_PRODUCERS`, `collect_leads`), `src/appsec_review/jobs/job_dependency_intelligence/job.py`, `tests/fixtures/inference_review/builder.py` (`secrets=True`), `docs/reviews/lead-coverage-audit.md`, T-5022.
+
+### T-5033 — Run the analyse-then-verify measurement review on the cpp smoke target with the roles reduced by configuration
+
+- **State:** open
+- **Area:** review
+- **Blocked by:** the clean run of the 2026-11-15 repairs (review protocol v3, step M1)
+- **Why:** Review protocol v3 (`docs/architecture/review-protocol-v3.md`, decisions D8 to D11) replaces the red, blue, verifier and judge teams with analyse, verify, decide. Before any code moves, one review run with the roles reduced by configuration measures what the adversarial layer was buying: findings and cost side by side with the clean run on the same target and overlay (D17).
+- **Scope:** a profile or overlay-independent configuration change for one run only: `teams.red_per_team = 1`, `teams.blue_per_team = 0`, the adjudication judge disabled through its role setting, `rounds.max_rounds = 1`; same target, overlay and model as the clean run; landed between runs (a configuration commit kills an active run). Compare with `scripts/cell-outcomes.py`, `scripts/smoke-score.py` (structural) and the adjudicated claim lists; record the comparison in a task doc under `docs/tasks/` that names this id.
+- **Done when:** the comparison table exists (claims by state, confirmed findings matched by site, cell attempts, model-hours, output tokens, wall time per lane), and D8 to D10 are each confirmed or revised in the design document from it.
+- **Refs:** `docs/architecture/review-protocol-v3.md` (sections 5 to 8), `appsec-review.toml` (`[jobs.job_inference_security_review.settings.teams]`, `.rounds`, `.roles`), `scripts/cell-outcomes.py`, T-5028, T-5031.
+
+### T-5034 — Remove lane B from the inference review once the hunting producer exists
+
+- **State:** open
+- **Area:** review
+- **Blocked by:** T-5030
+- **Why:** Review protocol v3 step M4: with hunting a producer of `model_hypothesis` observations (T-5030), the hunt lane, its allocation and its cross-lane seed path duplicate what intake A already does for every lead. No run may have both a hunt lane and a hunting producer, so M3 and M4 land in one release.
+- **Scope:** remove `hunt_review.teams`, `packages.assemble_hunt_packages`, `lane_allocation`, `lanes.lead_budget_share`, `lanes.hunt_max_units`, `lanes.hunt_max_claims_per_package`, the `cross_lane_seeds` supply and the `cross_package_and_cross_lane_variant_seeds_unavailable` gap; hunt packages become ordinary clustered packages of `model_hypothesis` leads; the lane document, ledger streams, adjudication inputs, reports and the operations docs follow; the topology, unit dependencies and `TOPOLOGY` tests change under the job-contract checklist.
+- **Done when:** the review job has one lane, every reference to lane B in `src`, `pipeline`, `docs` and `tests` is gone or historical, and the cpp smoke completes with the hypotheses of the producer reviewed as leads.
+- **Refs:** `docs/architecture/review-protocol-v3.md` (sections 4, 5, 7), `src/appsec_review/jobs/job_inference_security_review/{job,teams}.py`, `src/appsec_review/review/units.py`, `docs/architecture/inference-security-review.md`, T-5030, T-5031.
+
+### T-5035 — Make the judge an escalation for disputed high and critical findings and the blue refuter opt-in
+
+- **State:** open
+- **Area:** review
+- **Blocked by:** T-5033
+- **Why:** Decisions D8 and D9 of review protocol v3, pending the measurement run: in run `2026-11-15-0005` 33 of 45 judge attempts were invalid and the blue refuters' answers did not move states, while agreement between analyst and verifier needs no judge.
+- **Scope:** a typed routing setting that launches the judge only when the analyst's and the verifier's per-predicate positions conflict on a finding whose effective severity is at or above a configured level, with the blue refuter launched only when a target's profile enables it; the role records, ledger events and adjudication policy inputs are unchanged, and a finding that is not escalated records why.
+- **Done when:** unit tests show the judge launched for a disputed high finding and not for an agreed or low one, the blue role absent unless enabled, and the next measured review's cell counts fall accordingly with no change in confirmed findings matched by site.
+- **Refs:** `docs/architecture/review-protocol-v3.md` (D8, D9, step M5), `src/appsec_review/jobs/job_inference_security_review/teams.py` (`_team_body`, `route`), `src/appsec_review/config/inference_review.py` (`roles`, `teams`), T-5033.
 
 ## Legacy backlog
 
