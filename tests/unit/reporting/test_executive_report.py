@@ -176,3 +176,19 @@ def test_consequence_classes_are_explained_in_business_terms_and_locations_dedup
                            {"path": "src/a.cpp", "start_line": 9, "end_line": 9}]}
     assert "operating-system commands" in E._attacker_gain(dossier, {})
     assert E._locations(dossier) == ["src/a.cpp, lines 3-5", "src/a.cpp, line 9"]
+
+
+def test_connected_line_ranges_of_one_file_collapse_to_their_union() -> None:
+    """Owner's rule: references to connected code collapse; [5,10] and [6,12] read as [5,12]."""
+    from appsec_review.reporting import executive_report as E
+    assert E.merge_spans([(5, 10), (6, 12)]) == [(5, 12)]
+    assert E.merge_spans([(6, 12), (5, 10), (11, 12), (20, 22), (23, 23)]) == [(5, 12), (20, 23)]   # touching joins
+    assert E.merge_spans([(5, 10), (12, 14)]) == [(5, 10), (12, 14)]                                # a gap stays
+    assert E.merge_spans([(10, 5)]) == [(5, 10)]                                                    # order-insensitive
+    dossier = {"sources": [{"path": "src/request.cpp", "start_line": 77, "end_line": 81},
+                           {"path": "src/request.cpp", "start_line": 74, "end_line": 78},
+                           {"path": "src/request.cpp", "start_line": 26, "end_line": 30},
+                           {"path": "src/request.cpp", "start_line": 65, "end_line": 83},
+                           {"path": "src/other.cpp", "start_line": 4, "end_line": None}]}
+    assert E._locations(dossier) == ["src/request.cpp, lines 26-30", "src/request.cpp, lines 65-83",
+                                     "src/other.cpp, line range not recorded"]

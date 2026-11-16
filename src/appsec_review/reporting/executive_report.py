@@ -135,19 +135,37 @@ def _verification(item: Mapping[str, Any]) -> str:
     return text
 
 
+def merge_spans(spans: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Union of line spans that overlap or touch: [5,10] and [6,12] become [5,12], [5,10] and [11,12] become [5,12]."""
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted((min(a, b), max(a, b)) for a, b in spans):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
 def _locations(dossier: Mapping[str, Any] | None) -> list[str]:
-    """Path and line range only; the excerpt is protected developer content and never leaves the dossier."""
-    rows: list[str] = []
+    """Path and merged line ranges only; the excerpt is protected developer content and never leaves the dossier.
+
+    Several evidence rows of one finding usually resolve to connected lines of the same function; the reader gets
+    one span per connected region, in file order, instead of one row per evidence relation.
+    """
+    by_path: dict[str, list[tuple[int, int]]] = {}
+    unranged: list[str] = []
     for source in (dossier or {}).get("sources") or ():
         path = clean(source.get("path")) or "path not recorded"
         start, end = source.get("start_line"), source.get("end_line")
-        if start is not None and end is not None:
-            row = f"{path}, lines {start}-{end}" if start != end else f"{path}, line {start}"
-        else:
-            row = f"{path}, line range not recorded"
-        if row not in rows:                     # several evidence rows resolve to the same lines
-            rows.append(row)
-    return rows
+        if isinstance(start, int) and isinstance(end, int):
+            by_path.setdefault(path, []).append((start, end))
+        elif f"{path}, line range not recorded" not in unranged:
+            unranged.append(f"{path}, line range not recorded")
+    rows: list[str] = []
+    for path in sorted(by_path):
+        for start, end in merge_spans(by_path[path]):
+            rows.append(f"{path}, lines {start}-{end}" if start != end else f"{path}, line {start}")
+    return rows + unranged
 
 
 #: What each accepted consequence class lets an attacker do, for a reader who does not know the CWE. Keyed by the
