@@ -24,7 +24,7 @@ from tests.fixtures.inference_review import builder
 from tests.fixtures.inference_review.acceptance import JOB, ROOT
 # ``prepared`` builds on the session-scoped ``_prepared_template``; both must be imported for the
 # fixture chain to resolve in this module.
-from tests.review.test_team_handler import Recording, _prepared_template, prepared  # noqa: F401
+from tests.review.test_team_handler import Recording, _full_protocol, _prepared_template, prepared  # noqa: F401
 from tests.test_inference_review_config import _variant
 
 
@@ -165,7 +165,8 @@ def test_package_settings_bound_exploration_for_all_and_finite_budgets(budget, r
 
 @pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
 def test_production_rounds_use_actual_models_and_confirmed_local_variant_seeds(prepared, profile):
-    settings = load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings
+    settings = _full_protocol(load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings)
+    # the full protocol (rounds, lenses, judge), not the right-sized repository defaults (v3, T-5033)
 
     def infer(request, *, timeout_seconds):
         if request.role == "hypothesis_hunter":
@@ -226,7 +227,8 @@ def test_production_rounds_use_actual_models_and_confirmed_local_variant_seeds(p
 
 @pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
 def test_production_exploration_is_scheduled_with_follow_up_rounds(prepared, profile):
-    settings = load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings
+    settings = _full_protocol(load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings)
+    # the full protocol (rounds, lenses, judge), not the right-sized repository defaults (v3, T-5033)
     ctx = prepared.context(prepared.infer, **{item.name: getattr(settings, item.name) for item in fields(settings)})
     scope = accept_manifest(prepared.fixture.run_root)
     assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings))

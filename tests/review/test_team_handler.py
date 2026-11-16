@@ -32,6 +32,18 @@ from tests.fixtures.inference_review.builder import build_accepted_index_set
 from tests.fixtures.inference_review.fake_infer import NARRATIVES, ScriptedInfer
 from tests.final_report_support import job_tables
 
+
+def _full_protocol(settings):
+    """The behaviour tests exercise the whole team protocol: three red lenses, two blue refuters, the judge,
+    three rounds and twelve turns. The repository's defaults are right-sized by review protocol v3 (one red, no
+    blue, judge off, one round, four turns; T-5033); the mechanics under test do not depend on that policy."""
+    judge = replace(settings.roles[Role.ADJUDICATION_JUDGE], enabled=True)
+    roles = MappingProxyType({**settings.roles, Role.ADJUDICATION_JUDGE: judge})
+    models = MappingProxyType({**settings.models, "default": replace(settings.models["default"], max_turns=12)})
+    return replace(settings, teams=replace(settings.teams, red_per_team=3, blue_per_team=2),
+                   rounds=replace(settings.rounds, max_rounds=3), roles=roles, models=models,
+                   lanes=replace(settings.lanes, hunt_max_units=50))
+
 SCHEMAS = ROOT / "docs" / "schemas" / "inference-security-review"
 
 
@@ -84,7 +96,7 @@ def _prepared_template(tmp_path_factory):
                 base.mkdir(parents=True, exist_ok=True)
                 config = write_config(base, base / "runs", overrides={"backoff_seconds": [0]},
                                       extra=job_tables("job_third_party_data_sync"))
-                settings = load_config(config).job(JOB).typed_settings
+                settings = _full_protocol(load_config(config).job(JOB).typed_settings)
                 built = build_accepted_index_set(base, config=config, publish_v1_packages=False)
                 scope = accept_manifest(built.run_root)
                 evidence_map = scope.evidence_map()
@@ -187,7 +199,7 @@ def _prepared_template(tmp_path_factory):
                 )
         ready = json.loads(ready_path.read_text(encoding="utf-8"))
         config = base / "appsec-review.toml"
-        settings = load_config(config).job(JOB).typed_settings
+        settings = _full_protocol(load_config(config).job(JOB).typed_settings)
         fixture = SimpleNamespace(
             run_id=ready["run_id"],
             runs_dir=Path(ready["runs_dir"]),
@@ -540,13 +552,19 @@ def test_an_entire_lane_failing_never_raises(prepared) -> None:
         raise ProviderError("provider down", retryable=True)
 
     ctx = prepared.context(outage, lane="hunt")
-    document = run_lane(ctx, Lane.HUNT, package_works(prepared.fixture.run_root, prepared.documents("hunt")),
+    works = package_works(prepared.fixture.run_root, prepared.documents("hunt"))
+    document = run_lane(ctx, Lane.HUNT, works,
                         other_lane_count=9, ledger_path=prepared.tmp / "hunt.jsonl", stream="hunt_review.teams",
                         signal_dir=prepared.tmp / "lanes")
     projection = project(merge_shards([prepared.tmp / "hunt.jsonl"]).events)
     statuses = sorted(records[0].status.value for records in projection.cells.values())
-    assert statuses == ["failed"] * 3 + ["not_launched"] * 3 and not projection.claims
-    assert document["counts"]["cells"] == 6
+    # Every launched package's three red cells fail on the outage; the packages beyond the lane's allocation are
+    # never launched. The fixture's hunt package count follows the assembler, so the expectation is derived.
+    launched = document["allocation"]["hunt"]
+    reds = ctx.settings.teams.red_per_team
+    assert statuses == ["failed"] * (reds * launched) + ["not_launched"] * (reds * (len(works) - launched))
+    assert not projection.claims
+    assert document["counts"]["cells"] == reds * len(works)
     failed = lane_failure(Lane.HUNT, package_works(prepared.fixture.run_root, prepared.documents("hunt")),
                           "RuntimeError", prepared.tmp / "failed.jsonl", "hunt_review.teams")
     gaps = project(merge_shards([prepared.tmp / "failed.jsonl"]).events).gaps

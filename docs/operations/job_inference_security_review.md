@@ -31,21 +31,21 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `adjudicate` | `adjudicate.apply_policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L537) |
-| `attack_chains` | `attack_chains.compose_candidates` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L594) |
-| `attack_chains` | `attack_chains.refute_edges` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L629) |
-| `attack_chains` | `attack_chains.verify_weakest_links` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L629) |
-| `completeness` | `completeness.audit` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L669) |
+| `adjudicate` | `adjudicate.apply_policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L536) |
+| `attack_chains` | `attack_chains.compose_candidates` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L593) |
+| `attack_chains` | `attack_chains.refute_edges` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L628) |
+| `attack_chains` | `attack_chains.verify_weakest_links` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L628) |
+| `completeness` | `completeness.audit` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L668) |
 | `hunt_review` | `hunt_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L440) |
 | `lead_review` | `lead_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L440) |
-| `merge` | `merge.claims` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L525) |
+| `merge` | `merge.claims` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L524) |
 | `packages` | `packages.assemble_hunt_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L348) |
 | `packages` | `packages.assemble_lead_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L348) |
-| `publication` | `publication.publish_claim_ledger` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L704) |
-| `publication` | `publication.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L727) |
+| `publication` | `publication.publish_claim_ledger` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L703) |
+| `publication` | `publication.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L726) |
 | `scope` | `scope.accept_manifest` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L276) |
 | `scope` | `scope.assemble_scope` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L289) |
-| `scoring` | `scoring.score_claims` | 1 | `inference_score` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L558) |
+| `scoring` | `scoring.score_claims` | 1 | `inference_score` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L557) |
 | `triage` | `triage.lead_severity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L302) |
 
 ### Accepted input declarations
@@ -237,7 +237,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
       "max_input_tokens": 128000,
       "max_output_tokens": 32000,
       "max_queries": 40,
-      "max_turns": 12,
+      "max_turns": 4,
       "model": "claude-haiku-5-5",
       "provider": "claude-cli",
       "reasoning": "high",
@@ -266,7 +266,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
   },
   "roles": {
     "adjudication_judge": {
-      "enabled": true,
+      "enabled": false,
       "judges_per_claim": 1,
       "max_cited_row_chars": 400,
       "max_cited_rows_per_side": 12,
@@ -291,8 +291,8 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
     }
   },
   "teams": {
-    "blue_per_team": 2,
-    "red_per_team": 3,
+    "blue_per_team": 0,
+    "red_per_team": 1,
     "review_teams": 3,
     "verifier_per_team": 1
   },

@@ -57,7 +57,7 @@ def test_seeded_work_knows_every_lead_claim_and_only_the_seeds_touching_the_unit
 
 def test_hunt_review_unit_depends_on_the_sealed_lead_lane() -> None:
     units = {unit.unit_id: unit for unit in build_job(infer=lambda *a, **k: None).units}
-    assert units["hunt_review.teams"].dependencies == ("packages.assemble_hunt_packages", "lead_review.teams")
+    assert units["hunt_review.teams"].dependencies == ("packages.assemble_hunt_packages",)   # lanes run in parallel (v3)
     assert units["lead_review.teams"].dependencies == ("packages.assemble_lead_packages",)
     assert units["merge.claims"].dependencies == ("lead_review.teams", "hunt_review.teams")
 

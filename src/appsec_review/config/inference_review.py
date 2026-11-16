@@ -775,7 +775,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     teams = TeamSettings(
         review_teams=_int(teams_value["review_teams"], f"{field}.review_teams", 1, 64),
         red_per_team=_int(teams_value["red_per_team"], f"{field}.red_per_team", 1, 16),
-        blue_per_team=_int(teams_value["blue_per_team"], f"{field}.blue_per_team", 1, 16),
+        blue_per_team=_int(teams_value["blue_per_team"], f"{field}.blue_per_team", 0, 16),   # 0: refuter opt-in (v3 D8)
         verifier_per_team=_int(teams_value["verifier_per_team"], f"{field}.verifier_per_team", 1, 16),
     )
 

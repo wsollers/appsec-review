@@ -51,16 +51,16 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     settings = _settings(config)
     assert (settings.teams.review_teams, settings.teams.red_per_team, settings.teams.blue_per_team,
-            settings.teams.verifier_per_team) == (3, 3, 2, 1)
+            settings.teams.verifier_per_team) == (3, 1, 0, 1)
     assert settings.lanes.lead_budget_share == 0.5 and settings.lanes.hunt_budget_share == 0.5
     assert settings.lanes.lead_admission == ("critical", "high")
     assert (settings.lanes.lead_max_claims_per_package, settings.lanes.hunt_max_units,
-            settings.lanes.hunt_max_claims_per_package) == (3, 50, 5)
+            settings.lanes.hunt_max_claims_per_package) == (3, 10, 5)
     assert settings.budgets.budget_team_packages == 200
     assert settings.budgets.max_model_turns == 12000
     assert (settings.budgets.max_input_tokens, settings.budgets.max_output_tokens) == (480_000_000, 48_000_000)
     assert settings.retry.backoff_seconds == (2, 10)
-    assert settings.rounds.max_rounds == 3
+    assert settings.rounds.max_rounds == 1
     assert settings.models["default"].max_queries == 40
     # T-5023: the shipped first-pass worker limits; 32000/8000 exhausted every red-team cell on run 2026-11-15-0002.
     assert (settings.models["default"].max_input_tokens, settings.models["default"].max_output_tokens) == (128000, 32000)
@@ -97,7 +97,7 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
     from appsec_review.review.packages import PackageSettings
     packages = PackageSettings.from_review_settings(_settings(config))
     assert packages.admit_severities == ("critical", "high")
-    assert (packages.hunt_max_units, packages.hunt_menu_partition_size, packages.max_package_bytes) == (50, 25, 65536)
+    assert (packages.hunt_max_units, packages.hunt_menu_partition_size, packages.max_package_bytes) == (10, 25, 65536)
 
 
 def test_all_package_budget_is_typed_serialized_and_semantic(tmp_path: Path) -> None:
@@ -134,7 +134,7 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
     ("lead_budget_share = 0.5", "lead_budget_share = 1.5", "lead_budget_share must be a number between 0 and 1"),
     ("incomplete_gap_ratio = 0.25", "incomplete_gap_ratio = -0.1", "incomplete_gap_ratio must be"),
     ("review_teams = 3", "review_teams = 0", "review_teams must be an integer"),
-    ("red_per_team = 3", "red_per_team = 0", "red_per_team must be an integer"),
+    ("red_per_team = 1", "red_per_team = 0", "red_per_team must be an integer"),
     ("budget_team_packages = 200", "budget_team_packages = 0", "budget_team_packages must be an integer"),
     ("max_model_turns = 12000", "max_model_turns = true", "max_model_turns must be an integer"),
     ('lead_admission = ["critical", "high"]', 'lead_admission = ["critical"]',
@@ -355,7 +355,7 @@ def test_capacity_keys_are_excluded_from_the_semantic_view(tmp_path: Path) -> No
                                                              "budget_team_packages = 300")))
     other_share = _settings(_variant(tmp_path / "share", ("lead_budget_share = 0.5", "lead_budget_share = 0.6")))
     assert "review_teams" not in semantic_settings_view(base)["settings"]["teams"]
-    assert semantic_settings_view(base)["settings"]["teams"]["red_per_team"] == 3
+    assert semantic_settings_view(base)["settings"]["teams"]["red_per_team"] == 1
     assert semantic_settings_sha256(fewer_teams) == semantic_settings_sha256(base)
     assert semantic_settings_sha256(larger_budget) != semantic_settings_sha256(base)
     assert semantic_settings_sha256(other_share) != semantic_settings_sha256(base)
@@ -668,13 +668,15 @@ def test_ship_block_and_verification_settings_are_validated(tmp_path: Path, old:
 # ---------------------------------------------------------------- the judge and PoC candidates
 
 
-def test_the_judge_is_enabled_by_default_for_every_affirmed_claim_and_the_poc_gate_is_typed(tmp_path: Path) -> None:
+def test_the_judge_is_off_by_default_until_it_is_an_escalation_and_the_poc_gate_is_typed(tmp_path: Path) -> None:
+    """Review protocol v3 D9 (T-5035): the judge is disabled in the repository configuration; its record stays
+    typed with when = "all" so enabling it needs no other change."""
     from appsec_review.config import JudgeSettings, PocCandidateSettings
 
     settings = _settings(load_config(ROOT / "appsec-review.toml"))
     judge = settings.roles[Role.ADJUDICATION_JUDGE]
-    assert isinstance(judge, JudgeSettings) and settings.judge is judge
-    assert (judge.when, judge.judges_per_claim, judge.enabled, judge.model_profile) == ("all", 1, True, "default")
+    assert isinstance(judge, JudgeSettings) and settings.judge is None          # disabled: no judge step runs
+    assert (judge.when, judge.judges_per_claim, judge.enabled, judge.model_profile) == ("all", 1, False, "default")
     assert (judge.max_why_chars, judge.max_cited_rows_per_side, judge.max_cited_row_chars) == (600, 12, 400)
     assert judge.require_distinct_from_roles == (Role.HYPOTHESIS_HUNTER, Role.RED_TEAM_ANALYST,
                                                  Role.BLUE_TEAM_REFUTER)
@@ -687,13 +689,13 @@ def test_the_judge_is_enabled_by_default_for_every_affirmed_claim_and_the_poc_ga
 def test_judge_and_poc_candidate_settings_are_validated_and_semantic(tmp_path: Path) -> None:
     base = _settings(_variant(tmp_path / "base"))
     judge = f"{SECTION}.roles.adjudication_judge]"
-    disagreement = _settings(_variant(tmp_path / "a", (f'{judge}\nenabled = true\nwhen = "all"',
+    disagreement = _settings(_variant(tmp_path / "a", (f'{judge}\nenabled = false\nwhen = "all"',
                                                        f'{judge}\nenabled = true\nwhen = "disagreement"')))
     assert disagreement.judge.when == "disagreement"
     assert semantic_settings_sha256(disagreement) != semantic_settings_sha256(base)
-    off = _settings(_variant(tmp_path / "b", (f'{judge}\nenabled = true', f'{judge}\nenabled = false')))
-    assert off.judge is None and off.roles[Role.ADJUDICATION_JUDGE].enabled is False
-    assert semantic_settings_sha256(off) != semantic_settings_sha256(base)
+    on = _settings(_variant(tmp_path / "b", (f'{judge}\nenabled = false', f'{judge}\nenabled = true')))
+    assert on.judge is not None and on.roles[Role.ADJUDICATION_JUDGE].enabled is True
+    assert semantic_settings_sha256(on) != semantic_settings_sha256(base)
     partly = _settings(_variant(tmp_path / "c", ("accept_partly = false", "accept_partly = true")))
     assert partly.poc_candidates.accept_partly is True
     assert semantic_settings_sha256(partly) != semantic_settings_sha256(base)
@@ -704,9 +706,9 @@ def test_judge_and_poc_candidate_settings_are_validated_and_semantic(tmp_path: P
     extra = f'\n{SECTION}.models.judge]\nprovider = "claude-cli"\nmodel = "claude-judge"\nreasoning = "high"\n' \
             'max_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries = 40\nmax_turns = 12\n' \
             'timeout_seconds = 600\n'
-    distinct = _settings(_variant(tmp_path / "e", (f'{judge}\nenabled = true\nwhen = "all"\njudges_per_claim = 1\n'
+    distinct = _settings(_variant(tmp_path / "e", (f'{judge}\nenabled = false\nwhen = "all"\njudges_per_claim = 1\n'
                                                    'workers = 4\nmodel_profile = "default"',
-                                                   f'{judge}\nenabled = true\nwhen = "all"\njudges_per_claim = 1\n'
+                                                   f'{judge}\nenabled = false\nwhen = "all"\njudges_per_claim = 1\n'
                                                    'workers = 4\nmodel_profile = "judge"'), suffix=extra))
     assert distinct.profile_for(Role.ADJUDICATION_JUDGE).model == "claude-judge"
     assert distinct.profile_for(Role.INDEPENDENT_VERIFIER).model == base.profile_for(Role.INDEPENDENT_VERIFIER).model
@@ -718,7 +720,7 @@ def test_judge_and_poc_candidate_settings_are_validated_and_semantic(tmp_path: P
     ("judges_per_claim = 1", "judges_per_claim = 6", "judges_per_claim"),
     ("max_why_chars = 600", "max_why_chars = 0", "max_why_chars"),
     ("max_cited_rows_per_side = 12", "max_cited_rows_per_side = 33", "max_cited_rows_per_side"),
-    ("enabled = true\nwhen", "enabled = 1\nwhen", "enabled must be a Boolean"),
+    ("enabled = false\nwhen", "enabled = 1\nwhen", "enabled must be a Boolean"),
     ("accept_partly = false", "accept_partly = 1", "accept_partly must be a Boolean"),
     ('risk_ratings = ["medium", "high", "critical"]', 'risk_ratings = ["severe"]', "risk_ratings has unknown values"),
     ('risk_ratings = ["medium", "high", "critical"]', 'risk_ratings = ["high", "high"]', "distinct strings"),

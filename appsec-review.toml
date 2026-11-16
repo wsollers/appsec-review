@@ -2912,15 +2912,18 @@ max_page_size = 200
 enabled = false
 
 [jobs.job_inference_security_review.settings.rounds]
-max_rounds = 3
+# Review protocol v3 (D10, D11; T-5033): one round; a bounded second pass for fulfilled evidence requests is M2 work.
+max_rounds = 1
 stable_rounds_required = 1
 max_active_claims = 500
 max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
 review_teams = 3
-red_per_team = 3
-blue_per_team = 2
+# Review protocol v3: analyse (one red), verify (one verifier), decide (policy). The blue refuter is opt-in (D8):
+# in run 2026-11-15-0005 its answers did not move states and in run 0006 two thirds of its attempts were lost.
+red_per_team = 1
+blue_per_team = 0
 verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
@@ -2936,7 +2939,9 @@ exploration_enabled = false
 exploration_reserve = 1
 lead_budget_share = 0.5
 lead_max_claims_per_package = 3
-hunt_max_units = 50
+# Interim hunt budget until the hunting campaign producer (T-5030): run 0005 hunted 50 of 53 units for 45% of the
+# tokens. Ten covers the smoke target's attack surface.
+hunt_max_units = 10
 hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25
@@ -3061,7 +3066,7 @@ reasoning = "high"
 max_input_tokens = 128000
 max_output_tokens = 32000
 max_queries = 40
-max_turns = 12
+max_turns = 4                 # review protocol v3 D11: a cell goes final by its fourth turn
 timeout_seconds = 600
 
 # Lead severity triage (settings.triage): one short, tool-free turn per batch of 20 leads. The same provider and
@@ -3089,8 +3094,10 @@ require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_te
 # (red affirmed and blue contradicts, qualifies, leaves a predicate unresolved, or the blue cells disagree).
 # `require_distinct_from_roles` records judge_model_distinct and is never required. Set enabled = false to
 # switch the judge off; changing anything here changes the judge cells' fingerprints and the configuration hash.
+# Review protocol v3 D9: the judge becomes an escalation for disputed high and critical findings (T-5035); until
+# that routing exists it is off. Run 2026-11-15-0005: 33 of 45 judge attempts invalid.
 [jobs.job_inference_security_review.settings.roles.adjudication_judge]
-enabled = true
+enabled = false
 when = "all"
 judges_per_claim = 1
 workers = 4

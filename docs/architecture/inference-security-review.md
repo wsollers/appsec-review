@@ -679,8 +679,10 @@ back to `persona_sweep` with the next-ranked persona.
   carries attaches to that claim as relations, and accounting counts it per lane as
   `duplicate_proposals`. The `duplicate` claim state is reserved for distinct claim ids judged
   equivalent; in slice 1 such near-duplicates stay separate claims nominated as
-  `possible_duplicates` (R7). Lane B runs after lane A and receives its sealed claim set
-  (`teams.lead_seeds`): every lane A claim id is a prior claim for every hunt unit, and the accepted
+  `possible_duplicates` (R7). Lane B runs in parallel with lane A (review protocol v3); the sealed lane A
+  claim set is not supplied to it and same-defect proposals fold at merge through `claim/3`. When a consumer
+  runs after both lanes, `teams.lead_seeds` reads a sealed lane document so that every lane A claim id is a
+  prior claim for every hunt unit, and the accepted
   R5/R6 seeds whose evidence touches a unit's entities are that unit's known claims, so hunters do
   not re-report them and the `variant` strategy can hunt variants of confirmed lead claims from the
   first follow-up round. A hunt team that ran without that supply records the coverage gap

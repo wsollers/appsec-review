@@ -205,7 +205,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5030 | [Gate the hunt lane on admitted leads and bound its share of the review](#t-5030-gate-the-hunt-lane-on-admitted-leads-and-bound-its-share-of-the-review) | review | open |
 | T-5031 | [Design triage-first, incremental and distributed review for million-line targets](#t-5031-design-triage-first-incremental-and-distributed-review-for-million-line-targets) | review | in-progress |
 | T-5032 | [Repair the lead-coverage audit tests: the secret fixture yields no secret lead and job_dependency_intelligence lacks a lead decision](#t-5032-repair-the-lead-coverage-audit-tests-the-secret-fixture-yields-no-secret-lead-and-job_dependency_intelligence-lacks-a-lead-decision) | testing | open |
-| T-5033 | [Run the analyse-then-verify measurement review on the cpp smoke target with the roles reduced by configuration](#t-5033-run-the-analyse-then-verify-measurement-review-on-the-cpp-smoke-target-with-the-roles-reduced-by-configuration) | review | open |
+| T-5033 | [Run the analyse-then-verify measurement review on the cpp smoke target with the roles reduced by configuration](#t-5033-run-the-analyse-then-verify-measurement-review-on-the-cpp-smoke-target-with-the-roles-reduced-by-configuration) | review | in-progress |
 | T-5034 | [Remove lane B from the inference review once the hunting producer exists](#t-5034-remove-lane-b-from-the-inference-review-once-the-hunting-producer-exists) | review | open |
 | T-5035 | [Make the judge an escalation for disputed high and critical findings and the blue refuter opt-in](#t-5035-make-the-judge-an-escalation-for-disputed-high-and-critical-findings-and-the-blue-refuter-opt-in) | review | open |
 | T-5036 | [Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them](#t-5036-retain-a-bounded-redacted-copy-of-an-unparseable-model-reply-and-find-why-blue-cells-produce-them) | review | open |
@@ -3012,10 +3012,10 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-5033 — Run the analyse-then-verify measurement review on the cpp smoke target with the roles reduced by configuration
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Blocked by:** T-5024, T-5025, T-5027, T-5029
-- **Why:** Review protocol v3 (`docs/architecture/review-protocol-v3.md`, decisions D8 to D11) replaces the red, blue, verifier and judge teams with analyse, verify, decide. Before any code moves, one review run with the roles reduced by configuration measures what the adversarial layer was buying: findings and cost side by side with the clean run on the same target and overlay (D17).
+- **Why:** Review protocol v3 (`docs/architecture/review-protocol-v3.md`, decisions D8 to D11) replaces the red, blue, verifier and judge teams with analyse, verify, decide. Before any code moves, one review run with the roles reduced by configuration measures what the adversarial layer was buying: findings and cost side by side with the clean run on the same target and overlay (D17). Brought forward on 2026-11-16 by the user: run 0006 (the old shape with the first repairs) was stopped after 445 minutes of lanes, and the reduced configuration is applied to run 0007 together with the code repairs, trading attribution of the two for a run of the right size; the lanes run in parallel again.
 - **Scope:** a profile or overlay-independent configuration change for one run only: `teams.red_per_team = 1`, `teams.blue_per_team = 0`, the adjudication judge disabled through its role setting, `rounds.max_rounds = 1`; same target, overlay and model as the clean run; landed between runs (a configuration commit kills an active run). Compare with `scripts/cell-outcomes.py`, `scripts/smoke-score.py` (structural) and the adjudicated claim lists; record the comparison in a task doc under `docs/tasks/` that names this id.
 - **Done when:** the comparison table exists (claims by state, confirmed findings matched by site, cell attempts, model-hours, output tokens, wall time per lane), and D8 to D10 are each confirmed or revised in the design document from it.
 - **Refs:** `docs/architecture/review-protocol-v3.md` (sections 5 to 8), `appsec-review.toml` (`[jobs.job_inference_security_review.settings.teams]`, `.rounds`, `.roles`), `scripts/cell-outcomes.py`, T-5028, T-5031.
