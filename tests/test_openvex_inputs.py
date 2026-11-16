@@ -322,8 +322,17 @@ def test_chain_preflight_bounds_proposals_decisions_and_original_actor_receipts(
                         {"synthetic": "composer"})
     disk.chain_manifest["items"] = [{"artifact": artifact}]
     disk.review["attack_chain_manifest"] = disk.put(disk.chain_manifest_ref["path"], disk.chain_manifest)
+    # Derived continuity cites accepted build products: the link database is a JSON array, the compile
+    # database an object outside the review job. Both are hash-bound, neither is parsed as review JSON.
+    link_database = disk.put("data/build/probes/units/build-unit-1/attempts/attempt_0001/link-commands.json",
+                             [{"output_path": "build/app", "input_paths": ["build/a.o"]}])
+    compile_database = disk.put("data/build/probes/units/build-unit-1/attempts/attempt_0001/compile-database.json",
+                                {"schema": "synthetic", "rows": []})
     disk.projection["attack_chains"] = {"synthetic": {
-        "proposal": {"composer": {"conversation_id": cell_id}}, "proposal_artifact": proposal,
+        "proposal": {"composer": {"conversation_id": cell_id},
+                     "edges": [{"obligations": [{"evidence": [{"derivation": {"bound_files": {
+                         "link_database": link_database, "compile_database": compile_database}}}]}]}]},
+        "proposal_artifact": proposal,
         "challenges": [{"actor": {"conversation_id": "cell-synthetic-challenge"}, "receipt": challenge}],
         "decision": {"artifact": artifact},
     }}
@@ -340,7 +349,7 @@ def test_chain_preflight_bounds_proposals_decisions_and_original_actor_receipts(
         disk.review_ref["path"], disk.review)
     reader = inputs.BoundedInputReader(disk.root, disk.settings)
     inputs._preflight_review(reader, disk.review_handoff)
-    assert {ref["path"] for ref in (artifact, proposal, challenge, composer)} <= {
+    assert {ref["path"] for ref in (artifact, proposal, challenge, composer, link_database, compile_database)} <= {
         ref.path for ref in reader.inventory}
     assert not disk.calls  # Synthetic chain references exercise preflight only, not ledger authority.
     (disk.root / composer["path"]).write_bytes(b"changed")

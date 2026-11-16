@@ -31297,7 +31297,7 @@
         "enabled": true,
         "writer": {
           "max_input_tokens": 64000,
-          "max_output_tokens": 16000,
+          "max_output_tokens": 32000,
           "max_queries": 4,
           "max_turns": 6,
           "model": "claude-haiku-5-5",
@@ -44426,7 +44426,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "c1074ac0dad5c5b63aca112b0549768320b1e19348d3bcf906d5d6478e158d02",
+    "appsec-review.toml": "9debe0abec76150e8bc1cfd34c4c159beb03e795ddf0ca35197d79a32a808aab",
     "containers/catalog.toml": "995c0e1f684a69913f3175450c28b27b97726a1f977cbc1ce77e6c98ed10af2c",
     "docs/intelligence-buckets.json": "cec74cb02f073d0e91bcbad28246ab34ab7bef5262a7c8b1cb8c7e8d2f65c725",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",
@@ -44759,7 +44759,7 @@
     "src/appsec_review/jobs/job_openvex_export/__init__.py": "4eb58c91190a6857182f2e68a019cd400c5f4a9edae0f99234386518af17e7b3",
     "src/appsec_review/jobs/job_openvex_export/contracts.py": "bc6c54ad45fb48550f5e7bbf40d59d2523f1d45b1783f5ef7045aaaf8ad82f48",
     "src/appsec_review/jobs/job_openvex_export/datasets.py": "546070e7a09eb20d6bba4b237fd01c5da6e9f746a8d9252449538e0e91882353",
-    "src/appsec_review/jobs/job_openvex_export/inputs.py": "53e10e2caf88271754f1a847dc4358ef140e8c91ab782e066a5a6ab7643862f3",
+    "src/appsec_review/jobs/job_openvex_export/inputs.py": "6c4f056076f7ea61b46210e55f84d7c8a6fca5edcee37994aeb3632866de4b5f",
     "src/appsec_review/jobs/job_openvex_export/job.py": "38fcd4de3398d81cfefe71d389c91dc6b01916b8f4bb162ab70d3623b91bdba5",
     "src/appsec_review/jobs/job_openvex_export/metrics.py": "d3de558031c724e2cb52c24e89d15f466139f3699cefe5c784d3f857d4cd8aef",
     "src/appsec_review/jobs/job_openvex_export/projection.py": "80ee9aa9d010d4643d0beaa4e3302e5d9ba3df5210ccc833ea489c0cb2c355bb",

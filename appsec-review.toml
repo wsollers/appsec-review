@@ -3640,12 +3640,14 @@ max_text_chars = 4000
 max_workspace_files = 100000
 max_workspace_bytes = 1073741824
 
+# Run 2026-11-16-0005: both proposals ended on model_token_cap at 16000 output tokens with one 200-line source
+# file in context; thinking counts against output (T-5023), so the writer gets the review cells' budget.
 [jobs.job_remediation_planning.settings.writer]
 provider = "claude-cli"
 model = "claude-haiku-5-5"
 reasoning = "high"
 max_input_tokens = 64000
-max_output_tokens = 16000
+max_output_tokens = 32000
 max_turns = 6
 max_queries = 4
 timeout_seconds = 600

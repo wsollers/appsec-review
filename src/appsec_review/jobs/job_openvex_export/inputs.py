@@ -363,7 +363,13 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
         reader.json(_ref(item["artifact"]))
     chains = projection.get("attack_chains", {})
     for reference in _references(chains):
-        reader.json(reference)
+        # Run 2026-11-16-0005: derived continuity (attack-chain-continuity/2) cites the accepted build's link
+        # database and compile database as bound files; the link database is a JSON array and neither is a
+        # review-owned object. Every cited file is still hash-bound; only the review's own JSON is parsed.
+        if reference.path.startswith(f"data/jobs/{REVIEW_JOB}/") and reference.path.endswith(".json"):
+            reader.json(reference)
+        else:
+            reader.read(reference)
     for view in chains.values():
         actors = [view["proposal"]["composer"], *(item["actor"] for item in view["challenges"])]
         for actor in actors:

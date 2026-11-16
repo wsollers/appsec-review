@@ -216,6 +216,20 @@ until each is rewritten into the entry format when it is next touched.
 | T-5041 | [Attribute attack-chain cell telemetry to its own step](#t-5041-attribute-attack-chain-cell-telemetry-to-its-own-step) | review | open |
 | T-5042 | [Cover the attack-chain analyst in the guidance vocabulary parity tests](#t-5042-cover-the-attack-chain-analyst-in-the-guidance-vocabulary-parity-tests) | testing | open |
 | T-5043 | [Repair the pre-existing tests/test_final_report.py failures and its over-budget module fixture](#t-5043-repair-the-pre-existing-teststest_final_reportpy-failures-and-its-over-budget-module-fixture) | testing | open |
+| T-5044 | [Capture native build outputs as accepted artifacts when target enforcement is unproven](#t-5044-capture-native-build-outputs-as-accepted-artifacts-when-target-enforcement-is-unproven) | build | open |
+| T-5045 | [Bind lead admission accounting through the final publication gate for the executive dimension chart](#t-5045-bind-lead-admission-accounting-through-the-final-publication-gate-for-the-executive-dimension-chart) | pipeline | open |
+| T-5046 | [Report cve-bin-tool checker coverage gaps and scan static-library members](#t-5046-report-cve-bin-tool-checker-coverage-gaps-and-scan-static-library-members) | scanners | open |
+| T-5047 | [Curate native advisory vendor confidence and populate purl2cpe](#t-5047-curate-native-advisory-vendor-confidence-and-populate-purl2cpe) | data | open |
+| T-5048 | [Join CPE-range advisory facts to NVD first instead of requiring an OSV identity](#t-5048-join-cpe-range-advisory-facts-to-nvd-first-instead-of-requiring-an-osv-identity) | pipeline | open |
+| T-5049 | [Index cve_range by product in the cve-bin-tool database build](#t-5049-index-cve_range-by-product-in-the-cve-bin-tool-database-build) | data | open |
+| T-5050 | [Corroborate header version macros and derive generic PURLs without a model plan](#t-5050-corroborate-header-version-macros-and-derive-generic-purls-without-a-model-plan) | pipeline | open |
+| T-5051 | [Tag the review-signal sink rules with CWEs and rank the CodeQL and clang format-string rows by impact](#t-5051-tag-the-review-signal-sink-rules-with-cwes-and-rank-the-codeql-and-clang-format-string-rows-by-impact) | scanners | open |
+| T-5052 | [Carry claim re-homing on the finding package and list unit symbols as package entities](#t-5052-carry-claim-re-homing-on-the-finding-package-and-list-unit-symbols-as-package-entities) | review | open |
+| T-5053 | [Investigate the budget clock regression flake in the team-handler dispatch tests](#t-5053-investigate-the-budget-clock-regression-flake-in-the-team-handler-dispatch-tests) | testing | open |
+| T-5054 | [Smoke scorecard follow-ups: chains, unmatched reports, key spans, table widths](#t-5054-smoke-scorecard-follow-ups-chains-unmatched-reports-key-spans-table-widths) | testing | open |
+| T-5055 | [Decide a distinct model for independent verification so ship-block and chain verification can complete](#t-5055-decide-a-distinct-model-for-independent-verification-so-ship-block-and-chain-verification-can-complete) | review | open |
+| T-5056 | [Attribute the remaining pre-existing unit failures outside T-5043](#t-5056-attribute-the-remaining-pre-existing-unit-failures-outside-t-5043) | testing | open |
+| T-5057 | [Make hunters give a usable proof-of-trigger basis on claims they affirm](#t-5057-make-hunters-give-a-usable-proof-of-trigger-basis-on-claims-they-affirm) | review | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3118,6 +3132,132 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** attribute each failure (stale fixture, runtime regression, environment), fix or re-pin, and split the scripted-review flow into an integration case with a declared time budget so the unit cases stay under 10 s.
 - **Done when:** the file passes shuffled with `-n 4` and no unit case exceeds 10 s, or the heavyweight cases are declared integration with a budget.
 - **Refs:** `tests/test_final_report.py`, `tests/test_openvex_inputs.py::test_rehashed_review_settings_cannot_disagree_with_semantic_review_hash` (same class of stale expectation), T-5032, T-5026.
+
+### T-5044 — Capture native build outputs as accepted artifacts when target enforcement is unproven
+
+- **State:** open
+- **Area:** build
+- **Why:** Run 2026-11-16-0004's language-build receipt has zero artifacts although `build/smoke_server`, `lib*.a` and every `*.o` exist in the workspace: `unknown_compiler_in_capture` (CMake's compiler-identification probes) moves them all to `rejected_artifacts`, so no artifact scanner (blint, syft, cve-bin-tool) sees them and the artifact index is empty, which also blocks `artifact_deployment` continuity.
+- **Scope:** attribute the CMake probe invocations as bookkeeping (they are already excluded from outputs), prove the real compiler from the image profile, and keep rejection for genuinely unknown compilers; record the outcome as a provenance gap, never widen enforcement.
+- **Done when:** the smoke_server executable and its objects appear in the accepted receipt of a cpp smoke run and `analyze.cve_bin_tool` reports the zlib match.
+- **Refs:** `src/appsec_review/jobs/job_project_build/enforcement.py`, `src/appsec_review/jobs/job_language_build/job.py` (`apply_target_enforcement`), T-5039, T-5046.
+
+### T-5045 — Bind lead admission accounting through the final publication gate for the executive dimension chart
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** the executive PDF's "Review coverage by security dimension" chart shows `not bound` for the scanner-leads series: the gate binds finding and lead packages but not `excluded-leads.json` or the lead-package manifest, and the report job reads nothing the gate does not bind.
+- **Scope:** bind the review's admission accounting (excluded leads plus admitted lead packages) through the gate and map `rule_cwe` through `SECURITY_PREDICATE_CWE_ROLLUP` into the dimension axes; render admitted / observed per axis in the PDF and the Markdown table.
+- **Done when:** the chart draws the third series on a cpp smoke run and the Markdown table shows the same counts.
+- **Refs:** `src/appsec_review/reporting/executive_report.py` (`_dimension_blocks`), `src/appsec_review/jobs/job_final_publication_gate/`, `src/appsec_review/reporting/dimensions.py`.
+
+### T-5046 — Report cve-bin-tool checker coverage gaps and scan static-library members
+
+- **State:** open
+- **Area:** scanners
+- **Why:** a hand-run scan of the cpp smoke build products matched zlib 1.2.11 only: cve-bin-tool 3.4's checkers do not recognise the trimmed vendored bzip2 1.0.6 or lz4 1.9.1 copies, `.a` archives are rejected by its binary detection, and the linked executable drops the version strings; today that silence is indistinguishable from a clean scan.
+- **Scope:** when the native SBOM lists a vendored library that no checker matched, record a named gap tying the inventory row to `no version-string checker match`; scan static-library member objects explicitly.
+- **Done when:** a cpp smoke run shows one gap per unmatched vendored library and the object-level zlib match.
+- **Refs:** `src/appsec_review/jobs/job_artifact_security_analysis/scanners.py`, `containers/tools/cve-bin-tool/`, T-5044.
+
+### T-5047 — Curate native advisory vendor confidence and populate purl2cpe
+
+- **State:** open
+- **Area:** data
+- **Why:** `native_advisories.py` rates a CPE vendor `canonical` when it equals the product, `<product>_project` or the product stripped of trailing digits, else `alternate_vendor`; under that rule `davegamble/cjson` (the upstream author) is alternate and `bzip2_project/bzip2` (a Rust crate) is canonical, and the snapshot's `purl2cpe` table is empty because the builder disables that source.
+- **Scope:** a small curated CPE vendor alias table for the vendored-library population, or a populated `purl2cpe`, replacing the heuristic; keep every vendor/product on the record.
+- **Done when:** the four cpp smoke libraries resolve to their upstream vendors with `canonical` confidence and the heuristic is gone or secondary.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/native_advisories.py`, `tools/cve-bin-tool/build_db.py`.
+
+### T-5048 — Join CPE-range advisory facts to NVD first instead of requiring an OSV identity
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `dependency_advisories` still reports `identity_mismatch: advisory is not present in the pinned OSV snapshot` for CVE ids OSV has no record of (every NVD-only vendored-library CVE), although the NVD, KEV and EPSS joins by CVE id succeed; the lead is complete but carries a spurious OSV gap.
+- **Scope:** for facts with `match_basis: cpe-range`, resolve identity against the NVD snapshot first and treat OSV as supplementary.
+- **Done when:** a cpp smoke run's zlib, bzip2 and lz4 leads carry no OSV identity gap.
+- **Refs:** `src/appsec_review/indexing/products.py`, `src/appsec_review/review/advisories.py`.
+
+### T-5049 — Index cve_range by product in the cve-bin-tool database build
+
+- **State:** open
+- **Area:** data
+- **Why:** the native advisory lookup scans the 2.67 million `cve_range` rows per run (1.5 to 5 s) because the builder creates no product index.
+- **Scope:** add `CREATE INDEX` on `cve_range(product)` (and `cve_severity(cve_number)`) in `build_db.py`; re-pin nothing else.
+- **Done when:** the lookup's query time on the real snapshot is under 100 ms.
+- **Refs:** `tools/cve-bin-tool/build_db.py`, `src/appsec_review/jobs/job_dependency_intelligence/native_advisories.py`.
+
+### T-5050 — Corroborate header version macros and derive generic PURLs without a model plan
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** the header-literal rule fires only for roots the investigation plan reached, and the generic PURL is derived only in `apply()`: a candidate corroborated at discovery whose root is never investigated (no plan, model absent) gets no release and no PURL.
+- **Scope:** a bounded deterministic selection of `*.h` under each native root when no plan exists, and PURL derivation in `run()` or `sbom.py` from `release` + `identity` with the same evidence rule.
+- **Done when:** with `propose=None` the four cpp smoke libraries still publish versions and generic PURLs.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/investigation.py`, `sbom.py`.
+
+### T-5051 — Tag the review-signal sink rules with CWEs and rank the CodeQL and clang format-string rows by impact
+
+- **State:** open
+- **Area:** scanners
+- **Why:** `cpp-copy-length-not-bounded` and `cpp-banned-function-review` carry no CWE in the byte-pinned rule pack, so their admission rests on per-scanner rule-table rows added for the cpp smoke; `codeql/cpp/non-constant-format` and `clang-diagnostic-format-security` rule-table rows rank `medium` (a confidence judgement) while the catalog ranks CWE-134 high, so the site is admitted only through the semgrep/opengrep leads.
+- **Scope:** add CWE tags to the rule pack (re-pin), drop the redundant rule-table rows, and decide whether the two format-string rows rank by impact.
+- **Done when:** the two copy-length triage rows are redundant and a CodeQL-only CWE-134 lead is admitted on assessed severity.
+- **Refs:** `rules/semgrep/`, `appsec-review.toml` (`triage.rules`), `docs/operations/lead-severity-triage.md`.
+
+### T-5052 — Carry claim re-homing on the finding package and list unit symbols as package entities
+
+- **State:** open
+- **Area:** review
+- **Why:** `rehomed_from`/`rehomed_to` live on the adjudication record, `merge.json` and the decision-audit text, not on the closed `finding-package` schema; and package entity lists hold file and observation ids while claim identities fold to `asr:symbol:` ids, so scope containment depends on resolving each symbol's path at merge time.
+- **Scope:** add the re-homing fields to the finding package (re-pin the final-report schemas) and list the unit's symbols as package entities or fold claims to the file.
+- **Done when:** a re-homed claim is visible in the final report and scope containment needs no path lookup.
+- **Refs:** `src/appsec_review/jobs/job_inference_security_review/stages.py`, `src/appsec_review/review/adjudication.py`, `docs/schemas/inference-security-review/finding-package.schema.json`.
+
+### T-5053 — Investigate the budget clock regression flake in the team-handler dispatch tests
+
+- **State:** open
+- **Area:** testing
+- **Why:** `tests/review/test_team_handler.py::test_lane_dispatch_and_shared_reservations_follow_profile` fails intermittently under host load with `ExecutionContractError: budget clock regressed`; it passes alone and on an idle host.
+- **Scope:** find the monotonic-clock assumption in `JobBudget` that a loaded host violates, and fix the budget or the fixture.
+- **Done when:** the test passes with `-n 4` while a review run loads the host.
+- **Refs:** `src/appsec_review/inference/budget.py`, `tests/review/test_team_handler.py`.
+
+### T-5054 — Smoke scorecard follow-ups: chains, unmatched reports, key spans, table widths
+
+- **State:** open
+- **Area:** testing
+- **Why:** the scorecard records only the count of planted `chains`; reported findings outside the planted items are not scored against precision per axis; fixed-code items carry their introducing commit's span (FX-C2 lines 19-29 overlap TP-C3's line 28 in the tagged head); and the funnel and key tables leave 18 overfull boxes under 8 pt per PDF.
+- **Scope:** score planted chains against `final-report.json` attack chains; assign unmatched reported findings an axis from their predicate; prefer the function range over `introduced_span` for fixed items or fix the key; shorten table headers.
+- **Done when:** a v1.1.0-keyed run scores its chain pair and the PDF renders without overfull boxes.
+- **Refs:** `src/appsec_review/reporting/smoke_score.py`, `smoke_scorecard.py`, `~/smoke-work/cpp/answer-key.json` (host-local).
+
+### T-5055 — Decide a distinct model for independent verification so ship-block and chain verification can complete
+
+- **State:** open
+- **Area:** review
+- **Why:** every role resolves to `claude-cli/claude-haiku-5-5`, so `verification.require_distinct_model_for_ship_blocking` publishes every ship-blocking finding as `ship_blocking_pending_distinct_verification`, and the attack-chain weakest-link verifier is never launched (`independence_not_established`), which leaves every chain `insufficient_evidence` (run 2026-11-16-0005: 3 chains composed, 3 refuters succeeded, 0 verifiers launched).
+- **Scope:** owner decision: a second model profile for `independent_verifier` (and the chain weakest-link verifier), or relax the distinct-model requirement for this target class; then one run to confirm the labels change.
+- **Done when:** a cpp smoke run publishes a confirmed finding as `ship_blocking` and a chain as `qualified_supported` or better.
+- **Refs:** `appsec-review.toml` (`models`, `roles.independent_verifier`, `verification`), `src/appsec_review/review/attack_chains.py` (`independent`), `src/appsec_review/jobs/job_inference_security_review/chains.py`.
+
+### T-5056 — Attribute the remaining pre-existing unit failures outside T-5043
+
+- **State:** open
+- **Area:** testing
+- **Why:** failing on main before today's changes: `tests/test_scanner_normalization.py::test_parser_identities_are_bumped_and_distinct_per_scanner` (all five adapter parser identities are `undeclared`), `tests/unit/job_inference_security_review/test_handlers.py` (fixture sets `lead_admission=("high","unknown")`, refused by the validator: 2 failed, 4 errors), three secret-lead tests in `tests/review/test_lead_coverage.py` (`not enough values to unpack`), and `tests/test_media_asset_inputs.py::test_job_never_launches_catalogers_on_media_and_records_each_artifact`.
+- **Scope:** attribute each (stale fixture, runtime regression, environment), fix or re-pin, and keep each under 10 s.
+- **Done when:** the named node ids pass shuffled with `-n 4`.
+- **Refs:** the files above, T-5043, T-5032.
+
+### T-5057 — Make hunters give a usable proof-of-trigger basis on claims they affirm
+
+- **State:** open
+- **Area:** review
+- **Why:** run 2026-11-16-0005: the hunt lane produced 8 PoC briefs, but the two confirmed claims (command injection, path traversal) carry a `poc_basis` with empty `entry` and `path`, so `poc_candidates` listed nothing although the judge said `red_correct` and the severity was critical; the briefs with entries belonged to claims that were not confirmed.
+- **Scope:** state in the hunter guidance that `entry` and `path` must cite the package's entry point and call-site labels for any claim the hunter believes exploitable, and validate at expansion that a `poc_basis` without both is recorded as a named gap on the claim rather than silently unusable.
+- **Done when:** a cpp smoke run lists a PoC candidate for a confirmed hunt-lane claim.
+- **Refs:** `pipeline/prompt-fragments/roles/hypothesis_hunter.md`, `src/appsec_review/review/red_discovery.py`, `src/appsec_review/jobs/job_inference_security_review/stages.py` (`poc_candidates`).
 
 ## Legacy backlog
 
