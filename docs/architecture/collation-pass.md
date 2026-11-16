@@ -46,7 +46,7 @@ After the pass a worker knows, for every first-party unit it hunts:
 | `asset` | What is at stake? | `asset:credentials`, `asset:session-tokens` |
 | `state` | What does it keep between calls? | `state:session`, `state:stateful` |
 
-and, per component, a `target` class (`target:web-api`, `target:cli`, ...) that gates whether a
+and, per component, a `target` class (`target:web-api`, `target:cli`, `target:network-service`, ...) that gates whether a
 control standard applies at all.
 
 ## 2. Facet vocabulary
@@ -130,6 +130,7 @@ Done-when, which names `state:session` for the HTTP fixture.
 | `target:web-api` | The component serves HTTP or RPC to clients. | `mechanism:http` or `mechanism:rpc` on any first-party file of the component |
 | `target:mobile` | The component is an Android or iOS application. | `component:android-mobile`, `component:ios-mobile` or `func:mobile:*` on the component |
 | `target:cli` | The component is a program started from a command line. | `mechanism:cli` on a first-party file and no `web-api` class |
+| `target:network-service` | The component accepts network input that is not HTTP or RPC (a raw-socket listener). | `mechanism:networked-listener` on a first-party file and no `mechanism:http` or `mechanism:rpc` (rests on absence, confidence `medium`) |
 | `target:library` | The component is linked into other programs and has no entry mechanism of its own. | a build receipt that builds only libraries for the component, or no `mechanism:*` tag on any first-party file while the component has first-party code |
 | `target:build-tooling` | Every first-party file of the component is build glue. | all first-party files carry `role:build-glue` |
 | `target:test-only` | The component has no first-party file that is not test code. | dispositions and `role:test` leave no first-party product file |
@@ -138,9 +139,11 @@ A component may carry more than one class (a repository with a CLI and an HTTP s
 rule fires the component gets no `target:*` tag and the pass records the gap
 `collation:target_class_unresolved` for it; it never guesses `library`.
 
-A raw socket server that is not HTTP (the smoke-cpp request server) is `target:cli` with
-`exposure:client-facing` and `trust:user-tainted` on its request handler: ASVS and MASVS do not
-apply, the memory-safety and injection hunts still route on the facets.
+A raw socket server that is not HTTP (the smoke-cpp request server) is `target:cli` and
+`target:network-service` with `exposure:client-facing` and `trust:user-tainted` on its request
+handler: ASVS admits the transport-agnostic chapters only (V1, V2, V5, V7, V16; the OWASP workbench
+decides this per control), MASVS does not apply, and the memory-safety and injection hunts still
+route on the facets.
 
 ## 3. Derivation
 
@@ -323,7 +326,7 @@ gaps, and the rule identities.
 | Persona routing (`route_persona`, `rank_personas`) | facet namespaces join `LOCATION_NAMESPACES`, so a persona whose `covers` names `role:auth` or `asset:credentials` is ranked on them | personas may cover facets; the partition check stays over `cwe`/`func`/`infra`/`data` so no persona is forced to claim every facet |
 | Hunt panel (`hunt_panel`) | `trust:user-tainted`, `exposure:client-facing` | a tainted or client-facing unit tries `entry_down` before `sink_up`; the panel records the facets that decided it under `strategy_basis` |
 | Lead admission weighting (`review/units.py`, `RankWeights`) | `exposure:client-facing`, `trust:user-tainted` on the unit's files | the rank rule becomes `review-unit-rank/4`: a signal `facets` adds `ranking.facet_exposure` and `ranking.facet_trust` points (typed, default 50 each of 1000, `[jobs.job_inference_security_review.settings.ranking]`) so exposed, tainted units are hunted first; a unit with no facet record scores 0, not unknown, because collation is exhaustive over first-party files; an absent tagging producer is unknown |
-| OWASP target class and applicability (`owasp_workbench/engine.py`) | the component's `target:*`, facet and `component:*` tags from `routing_context` | `classify_components` is replaced by a tag reader that records the target classes, the legacy control roles derived from facets (`role:auth` → `authentication_identity`, `role:storage` → `storage`, `role:crypto` → `cryptography_data_protection`, `mechanism:http`/`rpc`/`networked-listener` → `application_api_server` and `network`, `target:mobile` → the mobile roles, `role:build-glue` → `build_supply_chain`, `role:test` → `test_development_only`) and the assignment ids as citations. `build_applicability` first applies the class gate: ASVS needs `target:web-api`, MASVS needs `target:mobile`; a component without the class gets one `not_applicable` row per selected control, each citing the target-class assignment, and a per-family ledger entry. Such a component produces no batch, no `OWASP_WORKER_STARTED` event and no `control_evidence` fact, and the job ends `SUCCEEDED`. `_deterministic_roles`, `_CAPABILITY_TAG_ROLES` and `characterize_components` are deleted; `classify_components` (`component-classification/2`) and `target_class_ledger` (`target-class-ledger/1`, published as `target-class-ledger.json` and in the handoff) replace them. A component with no `target:*` tag is `cannot_determine` for every control and is not dispatched; the job's terminal status counts gaps only (catalog and result gaps), not method limitations |
+| OWASP target class and applicability (`owasp_workbench/engine.py`) | the component's `target:*`, facet and `component:*` tags from `routing_context` | `classify_components` is replaced by a tag reader that records the target classes, the legacy control roles derived from facets (`role:auth` → `authentication_identity`, `role:storage` → `storage`, `role:crypto` → `cryptography_data_protection`, `mechanism:http`/`rpc`/`networked-listener` → `application_api_server` and `network`, `target:mobile` → the mobile roles, `role:build-glue` → `build_supply_chain`, `role:test` → `test_development_only`) and the assignment ids as citations. `build_applicability` first applies the class gate: ASVS needs `target:web-api` (or `target:network-service` for the transport-agnostic chapters V1, V2, V5, V7, V16), MASVS needs `target:mobile`; a component without the class gets one `not_applicable` row per selected control, each citing the target-class assignment, and a per-family ledger entry (`partially_applicable` for the network-service case). Such a component produces no batch, no `OWASP_WORKER_STARTED` event and no `control_evidence` fact, and the job ends `SUCCEEDED`. `_deterministic_roles`, `_CAPABILITY_TAG_ROLES` and `characterize_components` are deleted; `classify_components` (`component-classification/2`) and `target_class_ledger` (`target-class-ledger/1`, published as `target-class-ledger.json` and in the handoff) replace them. A component with no `target:*` tag is `cannot_determine` for every control and is not dispatched; the job's terminal status counts gaps only (catalog and result gaps), not method limitations |
 | Threat-model seeding (`job_threat_model_generation`) | `mechanism:*`, `exposure:*`, `trust:*` per component | external entities and trust boundaries of the DFD; documented here, not wired by T-5008 |
 | Report "what this code is" (`reporting`) | the component's `target` classes and facets, the model-pass purpose | one sentence per component in the developer report; documented here, not wired by T-5008 |
 | Operators | `find index=tags shard=facets kind=tag_assignment` and `trace` from a facet to its evidence | answering "what is this target" from the run |
@@ -449,10 +452,14 @@ the live run against this table (the live run is not part of this change).
 | `src/util.h` | none | declarations only |
 | `src/util.c` | none | `system("/bin/true")`, `memcpy`, `sprintf` are capability facts (`func:exec:process-spawn`, `func:exec:unmanaged-memory` from graph sinks), not facets |
 | `CMakeLists.txt` | `role:build-glue`, `exposure:build-time` | build-descriptor path rule |
-| component | facets above rolled up; `target:cli` | `mechanism:cli` on `main.cpp`, no `mechanism:http` or `mechanism:rpc` |
+| component | facets above rolled up; `target:cli`, `target:network-service` | `mechanism:cli` on `main.cpp`, `mechanism:networked-listener` on `request.cpp`, no `mechanism:http` or `mechanism:rpc` |
 
-The expected outcome for the OWASP job on that target is therefore: `target:cli`, ASVS and MASVS
-not applicable with the `target:cli` citation, no batch and no model call, and the hunt for
+The expected outcome for the OWASP job on that target is therefore: `target:cli` and
+`target:network-service`; ASVS `partially_applicable` (the transport-agnostic chapters V1, V2, V5,
+V7, V16 are `unsupported_missing_evidence` because no recogniser reads C/C++ until T-5011/T-5013,
+the other chapters `not_applicable` citing the class); MASVS not applicable with the class
+citation; no batch and no model call (run `2026-11-16-0005` instead read no tag at all because a
+graph shard exhausted the shared routing scan; tag discovery is now separate); and the hunt for
 `request.cpp` carrying `input_validation`, `session_lifecycle`, `path_and_file_handling` and
 `logging_hygiene` obligations beside the predicate obligations.
 

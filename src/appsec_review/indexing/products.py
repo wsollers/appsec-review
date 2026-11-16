@@ -1312,6 +1312,14 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
             results.append((shard, record))
     results = [pair for pair in results if control_evidence_candidate(pair[1])]
     results.sort(key=lambda pair: (str(pair[1].get("component_id")), str(pair[1].get("control_identity"))))
+    # T-5009 (reproduced on run 2026-11-16-0005): rows no assessor reached are still projected here as
+    # partial facts. Until T-5009 lands, the shard names that they are not control evidence.
+    unresolved_rows = sum(pair[1].get("applicability") in {"cannot_determine", "unsupported_missing_evidence"}
+                          for pair in results)
+    if unresolved_rows:
+        derived.gap(f"assessment_unavailable: {unresolved_rows} control-result rows are cannot_determine or "
+                    "unsupported_missing_evidence; they are projected as partial facts and are not control "
+                    "evidence (T-5009)")
     unresolved_total = 0
     for shard, record in results[:context.max_facts]:
         component = str(record.get("component_id"))

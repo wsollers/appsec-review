@@ -48,6 +48,15 @@ int main(int argc, char **argv) {
 }
 """
 VENDORED = "#include <sys/socket.h>\nint pull(int s, char *b) { return recv(s, b, 8, 0); }\n"
+SOCKET_SERVER = """#include <sys/socket.h>
+
+int serve(int s) {
+  char buffer[64];
+  listen(s, 4);
+  int c = accept(s, 0, 0);
+  return recv(c, buffer, sizeof buffer, 0);
+}
+"""
 LIMIT = 100
 
 
@@ -143,6 +152,26 @@ def test_cli_main_reading_argv_is_operator_only_and_user_tainted() -> None:
     assert "mechanism:http" in operator["evidence"][0]["condition"]["none_of"]
     assert component_tags(records) >= {"target:cli", "mechanism:cli"}
     assert document["components"][0]["target_classes"] == ["target:cli"]
+
+
+def test_non_http_socket_listener_is_a_network_service_class_beside_cli() -> None:
+    """Run 2026-11-16-0005: the smoke-cpp request server is a raw-socket listener, not a CLI alone."""
+    vocabulary, rules, _ = taxonomy()
+    records, gaps, document = collect_facets(
+        canned(("src/server.c", SOCKET_SERVER, "C"), ("tools/main.c", CLI_MAIN, "C")), scope(), vocabulary, rules,
+        settings(), [], LIMIT)
+    assert "mechanism:networked-listener" in file_tags(records, "src/server.c")
+    assert document["components"][0]["target_classes"] == ["target:cli", "target:network-service"]
+    service = next(item for item in by_tag(records)["target:network-service"]
+                   if item["producer"]["rule_id"] == "target-network-service")
+    assert service["basis"] == "derived" and service["confidence"] == "medium"
+    assert service["evidence"][0]["rests_on_absence"] is True
+    assert set(service["evidence"][0]["condition"]["none_of"]) == {"mechanism:http", "mechanism:rpc"}
+    assert not any(gap.startswith("collation:target_class_unresolved") for gap in gaps)
+    # An HTTP listener is a web API, never a network service as well.
+    _, _, http = collect_facets(canned(("app/login.py", HTTP_LOGIN, "Python")), scope(), vocabulary, rules,
+                                settings(), [], LIMIT)
+    assert http["components"][0]["target_classes"] == ["target:web-api"]
 
 
 # (b) -------------------------------------------------------------------------------------- scope, gaps, determinism

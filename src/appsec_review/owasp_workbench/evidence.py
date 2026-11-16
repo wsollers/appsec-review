@@ -29,6 +29,10 @@ _ASSIGNMENT = re.compile(
 _CREDENTIAL = re.compile(r"\b(?:sk_live_|gh[pousr]_|github_pat_|AKIA)[A-Za-z0-9_/-]+")
 _BASIC_AUTH = re.compile(r"(?P<head>https?://[^/\s:@]+:)(?P<value>[^@\s/]+)(?=@)")
 _ROUTING_INDEXES = frozenset({"tags", "priority", "graph"})
+# D1 (run 2026-11-16-0005): tag discovery reads the tags index alone; priority and graph rows are a
+# separately capped context list, so a large graph shard can no longer hide the target class.
+_CONTEXT_INDEXES = frozenset({"priority", "graph"})
+_CLASSIFYING_NAMESPACES = frozenset({"target", "role", "exposure", "trust", "mechanism", "asset", "state"})
 _TAG_NAME = re.compile(r"^[a-z][a-z0-9-]*(?::[a-z0-9][a-z0-9.-]*){1,3}$")
 _CONCLUSION_KINDS = frozenset({
     "precomputed_fact", "finding_package", "review_unit", "review_signal", "review_flow_step",
@@ -40,7 +44,7 @@ _AUTHORITATIVE_INDEX = {
     "build_action": "build", "tool_observation": "observations", "tag_assignment": "tags",
     "priority_item": "priority",
 }
-EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/2"
+EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/3"
 
 
 def redact(text: str) -> tuple[str, bool]:
@@ -379,13 +383,16 @@ class EvidenceResolver:
             raise
 
 
+def supported_source(source: Any) -> bool:
+    """The subject recognisers read Python only (T-5011/T-5013); every other language is a named gap."""
+    return source.path.endswith(".py") and (
+        not source.language or source.language.lower() in {"python", "python3"})
+
+
 def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any,
                        settings: OwaspSettings) -> tuple[list[dict[str, Any]], list[str]]:
     """Bound discovery reads per component; delivery independently re-verifies selected sources."""
-    def supported(source: Any) -> bool:
-        return source.path.endswith(".py") and (
-            not source.language or source.language.lower() in {"python", "python3"})
-
+    supported = supported_source
     hints: dict[str, list[Mapping[str, Any]]] = {}
     extras, gaps = [], []
     bound = settings.max_discovery_files * 8
@@ -488,6 +495,34 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
     return evidence, [f"{component_id}: {gap}" for gap in gaps]
 
 
+def _routing_record(row: Mapping[str, Any]) -> dict[str, Any]:
+    payload = row["payload"]
+    name = row.get("name")
+    return {
+        "identity": row["identity"], "kind": row["kind"], "index": row["index"],
+        # The entity name is the tag itself (closed vocabulary); the payload copy may be redacted.
+        "name": name if isinstance(name, str) and _TAG_NAME.match(name) else None,
+        "content_sha256": digest({"payload": payload, "location": row.get("location")}),
+        "usage": "routing_only", "tag": _redact_data(payload.get("tag")),
+        "basis": _redact_data(payload.get("basis")), "subject": _redact_data(payload.get("subject")),
+        # tag-assignment/1 keeps the assignment id beside the subject; citations name it when present.
+        "assignment_id": payload.get("assignment_id") if isinstance(payload.get("assignment_id"), str) else None,
+        "evidence": _redact_data(payload.get("evidence", [])),
+        "context": _redact_data({key: payload[key] for key in (
+            "rank", "score", "scope", "family", "classification", "result", "source", "target",
+            "guard", "sink", "entry_point", "frameworks", "language") if key in payload}),
+    }
+
+
+def _classifying(row: Mapping[str, Any]) -> bool:
+    """A component-subject ``target:*`` or facet assignment: the records classification reads (T-5008)."""
+    subject = row["payload"].get("subject")
+    name = row.get("name")
+    return (isinstance(subject, Mapping) and subject.get("kind") == "component"
+            and isinstance(name, str) and bool(_TAG_NAME.match(name))
+            and name.split(":", 1)[0] in _CLASSIFYING_NAMESPACES)
+
+
 def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_path: Path) -> dict[str, Any]:
     scope = accept_manifest(core.run_root, manifest_path=manifest_path,
                             manifest_sha256=core.manifest_sha256)
@@ -495,12 +530,18 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
     components, evidence, limitations = [], [], []
     for (index, shard_id), shard in sorted(resolver.shards.items()):
         limitations.extend(f"{index}/{shard_id}: {redact(str(gap))[0]}" for gap in shard.get("gaps", ()))
+    gaps: list[str] = []
     routes: dict[str, list[dict[str, Any]]] = {item.component_id: [] for item in scope.components}
-    routing_shards = tuple(item for key, item in resolver.shards.items() if key[0] in _ROUTING_INDEXES)
-    scan_limit = settings.max_evidence_per_component * max(1, len(scope.components)) * 4
-    for number, row in enumerate(scope.store.entities(routing_shards, limit=scan_limit + 1)):
-        if number == scan_limit:
-            limitations.append("routing index scan cap reached; further routing records may be omitted (count unknown)")
+    context: dict[str, list[dict[str, Any]]] = {item.component_id: [] for item in scope.components}
+    # D1: classification reads tag_assignment rows of the tags index under their own cap. A dropped
+    # component-level target/facet record is a gap (the class cannot be read), never a limitation.
+    tag_shards = tuple(item for key, item in resolver.shards.items() if key[0] == "tags")
+    tag_limit = settings.max_tag_records
+    tag_scan_complete = True
+    for number, row in enumerate(scope.store.entities(tag_shards, kinds=("tag_assignment",), limit=tag_limit + 1)):
+        if number == tag_limit:
+            tag_scan_complete = False
+            gaps.append("tag index scan cap reached; target class and facet records may be unread (count unknown)")
             break
         if not resolver._original(row):
             continue
@@ -509,24 +550,26 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         except ValueError:
             limitations.append("accepted routing record has ambiguous or conflicting ownership")
             continue
-        if owner not in routes:
+        if owner in routes:
+            routes[owner].append({**_routing_record(row), "classifies_component": _classifying(row)})
+    # Priority and graph rows are context for packages; their cap is a limitation, not a gap.
+    context_shards = tuple(item for key, item in resolver.shards.items() if key[0] in _CONTEXT_INDEXES)
+    scan_limit = settings.max_evidence_per_component * max(1, len(scope.components)) * 4
+    for number, row in enumerate(scope.store.entities(context_shards, limit=scan_limit + 1)):
+        if number == scan_limit:
+            limitations.append("routing index scan cap reached; further priority/graph context records "
+                               "may be omitted (count unknown)")
+            break
+        if not resolver._original(row):
             continue
-        if len(routes[owner]) > settings.max_evidence_per_component:
+        try:
+            owner = resolver._component(row)
+        except ValueError:
+            limitations.append("accepted routing record has ambiguous or conflicting ownership")
             continue
-        payload = row["payload"]
-        name = row.get("name")
-        routes[owner].append({
-            "identity": row["identity"], "kind": row["kind"], "index": row["index"],
-            # The entity name is the tag itself (closed vocabulary); the payload copy may be redacted.
-            "name": name if isinstance(name, str) and _TAG_NAME.match(name) else None,
-            "content_sha256": digest({"payload": payload, "location": row.get("location")}),
-            "usage": "routing_only", "tag": _redact_data(payload.get("tag")),
-            "basis": _redact_data(payload.get("basis")), "subject": _redact_data(payload.get("subject")),
-            "evidence": _redact_data(payload.get("evidence", [])),
-            "context": _redact_data({key: payload[key] for key in (
-                "rank", "score", "scope", "family", "classification", "result", "source", "target",
-                "guard", "sink", "entry_point", "frameworks", "language") if key in payload}),
-        })
+        if owner not in context or len(context[owner]) > settings.max_evidence_per_component:
+            continue
+        context[owner].append(_routing_record(row))
     # Inventory walks are over accepted indices, never the target tree, and stop at named bounds.
     for component in sorted(scope.components, key=lambda item: item.component_id):
         raw = resolver._entity(component.identity)
@@ -545,12 +588,30 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
                 continue
             if owner == component:
                 files.append(source)
-        routing = routes[component.component_id][:settings.max_evidence_per_component]
-        if len(routes[component.component_id]) > len(routing):
-            limitations.append(f"{component.component_id}: routing cap reached; at least 1 routing record omitted")
-        selected, gaps = component_evidence(resolver, component.component_id, files, settings)
+        cid = component.component_id
+        cap = settings.max_evidence_per_component
+        classifying = [item for item in routes[cid] if item["classifies_component"]]
+        routing = (classifying + [item for item in routes[cid] if not item["classifies_component"]])[:cap]
+        dropped_classifying = max(0, len(classifying) - cap)
+        if dropped_classifying:
+            gaps.append(f"{cid}: tag record cap omitted {dropped_classifying} target class or facet records; "
+                        "the component classification is unread")
+        elif len(routes[cid]) > len(routing):
+            limitations.append(f"{cid}: tag record cap reached; {len(routes[cid]) - len(routing)} "
+                               "file-level tag records omitted")
+        if not tag_scan_complete:
+            gaps.append(f"{cid}: tag index scan incomplete; target class and facet records may be unread")
+        graph_context = context[cid][:cap]
+        if len(context[cid]) > len(graph_context):
+            limitations.append(f"{cid}: routing cap reached; at least 1 priority/graph context record omitted")
+        selected, component_gaps = component_evidence(resolver, cid, files, settings)
         evidence.extend(selected)
-        limitations.extend(gaps)
+        limitations.extend(component_gaps)
+        # D2: a component whose accepted sources no recogniser reads has no subjects to assess; the
+        # applicability rows name that cause instead of an unresolved class (T-5011/T-5013).
+        supported_files = sum(1 for source in files if supported_source(source))
+        source_support = {"supported_files": supported_files, "unsupported_files": len(files) - supported_files,
+                          "evidence_count": len(selected), "recognisers": "python-only (T-5011/T-5013)"}
         tag_subjects: dict[str, set[str]] = {}
         for item in routing:
             if isinstance(item["tag"], str):
@@ -569,11 +630,17 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
             "tags": _redact_data(list(payload.get("tags") or ())),
             "evidence": refs, "run_id": scope.run_id, "root": component.root,
             "routing_context": routing,
+            "graph_context": graph_context,
             "tag_cloud": tag_cloud,
+            "source_support": source_support,
+            "tag_records_omitted": dropped_classifying,
+            "tag_scan_complete": tag_scan_complete,
+            "gaps": [item for item in gaps if item.startswith(cid + ":")],
             "evidence_fingerprint": digest({
                 "evidence": [_evidence_content(item) for item in evidence
                              if item["component_id"] == component.component_id],
-                "routing_context": routing, "tag_cloud": tag_cloud,
+                "routing_context": routing, "graph_context": graph_context, "tag_cloud": tag_cloud,
+                "source_support": source_support,
                 "discovery_inventory": sorted((source.path, source.identity) for source in files),
                 "coverage": [item for item in limitations if item.startswith(component.component_id + ":")],
                 "rules": {"binding": EVIDENCE_RULE, "selection": SELECTION_RULE, "redaction": REDACTION_RULE,
@@ -589,5 +656,5 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         "components": components, "evidence": evidence, "input_mode": "accepted_indexes",
         "retrieval_manifest": {"path": scope.manifest_path.relative_to(core.run_root).as_posix(),
                                "sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot},
-        "limitations": limitations, "retrieval_metrics": dict(resolver.metrics),
+        "limitations": limitations, "gaps": gaps, "retrieval_metrics": dict(resolver.metrics),
     }

@@ -180,7 +180,8 @@
       "bases": ["derived"], "rollup": "self",
       "note": "Collation target class per component, derived from facet tags; gates OWASP control-family applicability.",
       "terms": [
-        "target:web-api", "target:mobile", "target:cli", "target:library", "target:build-tooling", "target:test-only"
+        "target:web-api", "target:mobile", "target:cli", "target:network-service", "target:library",
+        "target:build-tooling", "target:test-only"
       ]
     },
     "gap": {

@@ -560,7 +560,9 @@
       {"id": "target-web-api", "any_of": ["mechanism:http", "mechanism:rpc"], "none_of": [], "emit": ["target:web-api"]},
       {"id": "target-mobile", "any_of": ["component:android-mobile", "component:ios-mobile", "func:mobile:*"], "none_of": [],
        "emit": ["target:mobile"]},
-      {"id": "target-cli", "any_of": ["mechanism:cli"], "none_of": ["mechanism:http", "mechanism:rpc"], "emit": ["target:cli"]}
+      {"id": "target-cli", "any_of": ["mechanism:cli"], "none_of": ["mechanism:http", "mechanism:rpc"], "emit": ["target:cli"]},
+      {"id": "target-network-service", "any_of": ["mechanism:networked-listener"], "none_of": ["mechanism:http", "mechanism:rpc"],
+       "emit": ["target:network-service"]}
     ]
   },
   "coverage_gaps": {

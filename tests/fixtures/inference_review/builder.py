@@ -447,6 +447,17 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             ("svc/api/handler.py", "component:0001", "derived", "exposure:operator-only"),
             (None, "component:0001", "derived", "target:cli"),
         ]
+        # facets="network-service": the svc handler is a raw-socket (non-HTTP) listener started from the
+        # command line (run 2026-11-16-0005): ASVS admits its transport-agnostic chapters only.
+        svc_network = [
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:cli"),
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:networked-listener"),
+            ("svc/api/handler.py", "component:0001", "declared", "role:session"),
+            ("svc/api/handler.py", "component:0001", "derived", "trust:user-tainted"),
+            ("svc/api/handler.py", "component:0001", "derived", "exposure:client-facing"),
+            (None, "component:0001", "derived", "target:cli"),
+            (None, "component:0001", "derived", "target:network-service"),
+        ]
         native_cli = [
             ("native/src/parse.c", "component:0002", "declared", "mechanism:cli"),
             ("native/src/parse.c", "component:0002", "derived", "trust:user-tainted"),
@@ -459,7 +470,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             (None, "component:0002", "derived", "target:mobile"),
         ]
         facet_specs = [
-            *(svc_cli if facets == "cli" else svc_web),
+            *(svc_cli if facets == "cli" else svc_network if facets == "network-service" else svc_web),
             *(native_android if facets == "android" else native_cli),
         ]
         for number, (path, component_id, basis, tag) in enumerate(facet_specs):

@@ -98,7 +98,7 @@ Complete short HTTP modules retain their policy context; a route function extrac
 oversized module cannot establish external middleware/authorization prerequisites. Evidence
 projection and obligation construction use the same configured evidence set, including settings
 above the former hard-coded 100-reference cut. The binding and acceptance identities are
-`owasp-evidence-binding/2` and `owasp-assessment-acceptance/3`; no additional control procedure or
+`owasp-evidence-binding/3` and `owasp-assessment-acceptance/3`; no additional control procedure or
 runtime adapter is implied. See the [design and unit record](../tasks/2026-11-13-behavior-oriented-review.md).
 
 The `MASVS-NETWORK-1` obligation records what runtime evidence would require, but **has no accepted
@@ -112,9 +112,24 @@ Component tag-cloud counts are distinct-subject lower bounds; missing tags are u
 proof of absence. Classification (`component-classification/2`) reads the component's `target:*`
 class and facet tags from the accepted `tags` index ([collation pass](collation-pass.md), T-5008);
 the workbench has no classifier of its own. It retains confidence, citations (tag identities and
-assignment ids) and coverage limitations. A control family applies only to a component whose class
-admits it (ASVS: `target:web-api`; MASVS: `target:mobile`); technical `not_applicable` cites the
-class assignment, and a component with no class is `cannot_determine`, not N/A, and is not dispatched.
+assignment ids) and coverage limitations. Tag discovery reads `tag_assignment` rows of the `tags`
+index alone under `max_tag_records` (`routing_context`); priority and graph rows are a second,
+separately capped context list (`graph_context`), so a large graph shard cannot hide the class
+(run `2026-11-16-0005` lost `target:cli` that way). A component-level target or facet record the
+cap drops is a **gap** ("target class not read: routing cap omitted tag records"), never a
+limitation. A control family applies only to a component whose class admits it
+(`applicability-rules/3`): ASVS fully for `target:web-api`, and for `target:network-service` (a
+non-HTTP listener) only the transport-agnostic ASVS 5.0 chapters V1, V2, V5, V7 and V16 (V1.4 holds
+the memory-safety controls); the web-only chapters stay `not_applicable` citing the class, and the
+ledger verdict is `partially_applicable` with `admitted_chapters`. MASVS needs `target:mobile`; any
+other class is a not-applicable ledger line, not a gap. A component whose accepted sources no
+recogniser reads (Python only until T-5011/T-5013) gets `unsupported_missing_evidence` with the
+reason "no supported source language for this component" on every admitted row. A component with
+no class is `cannot_determine`, not N/A, and is not dispatched. `select_profiles` records a
+`reasons` list per family, and `deterministic_join` and the handoff publish a typed
+`coverage_disposition` (`partial` while any row is unresolved) beside `terminal_status`. The TOML
+`parser_versions` must equal the versions the code implements (`owasp_workbench/versions.py`); the
+job refuses to start otherwise.
 
 Typed references bind run, target, component, build/environment, accepted producer/index membership,
 content/file hashes, span and custody. The application re-resolves citations and binds them to the
