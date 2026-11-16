@@ -1684,7 +1684,7 @@
             ]
           },
           "minItems": 1,
-          "maxItems": 2,
+          "maxItems": 3,
           "uniqueItems": true
         },
         "observation_id": {

@@ -39,6 +39,8 @@ SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 TeamPackageBudget = int | Literal["all"]
 
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
+# lanes.lead_admission_basis: which severity of a lead is weighed against lanes.lead_admission.
+LEAD_ADMISSION_BASES = ("reported", "assessed", "either")
 REASONING_LEVELS = ("low", "medium", "high", "xhigh", "max")
 SCORING_PROVIDERS = ("cvss_v4", "cvss_v31_compat", "application_risk_matrix", "ssvc_decision")
 RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/3")
@@ -142,6 +144,10 @@ class LaneSettings:
     # Lane A also admits every KEV-listed advisory lead, whatever its reported severity. EPSS is
     # context only and has no admission effect.
     lead_admission_kev: bool = True
+    # Which severity lead_admission is weighed against: "reported" (the earlier policy: the effective
+    # severity, reported when known, else assessed), "assessed" (the assessed severity when one exists, else the
+    # reported one) or "either" (admitted when either value qualifies; the default).
+    lead_admission_basis: str = "either"
     exploration_enabled: bool = False
     exploration_reserve: int = 1
 
@@ -151,6 +157,9 @@ class LaneSettings:
         # treated as low: an unassessed lead outside the policy is a named ``lead_admission`` gap.
         if not {"critical", "high"} <= set(self.lead_admission):
             raise ValueError(f"{_PREFIX}.lanes.lead_admission must admit critical and high severity")
+        if self.lead_admission_basis not in LEAD_ADMISSION_BASES:
+            raise ValueError(f"{_PREFIX}.lanes.lead_admission_basis must be one of: "
+                             f"{', '.join(LEAD_ADMISSION_BASES)}")
 
     @property
     def hunt_budget_share(self) -> float:
@@ -783,7 +792,10 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     lanes_value = _table(settings["lanes"], field, {
         "lead_admission", "lead_budget_share", "lead_max_claims_per_package", "hunt_max_units",
         "hunt_max_claims_per_package", "hunt_panel_rule", "incomplete_gap_ratio"},
-        {"lead_admission_kev", "exploration_enabled", "exploration_reserve"})
+        {"lead_admission_kev", "lead_admission_basis", "exploration_enabled", "exploration_reserve"})
+    basis = lanes_value.get("lead_admission_basis", "either")
+    if not isinstance(basis, str) or basis not in LEAD_ADMISSION_BASES:
+        raise ValueError(f"{field}.lead_admission_basis must be one of: {', '.join(LEAD_ADMISSION_BASES)}")
     lanes = LaneSettings(
         lead_admission=_choices(lanes_value["lead_admission"], f"{field}.lead_admission", REPORTED_SEVERITIES),
         lead_budget_share=_ratio(lanes_value["lead_budget_share"], f"{field}.lead_budget_share"),
@@ -795,6 +807,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         hunt_panel_rule=_str(lanes_value["hunt_panel_rule"], f"{field}.hunt_panel_rule", _RULE_ID),
         incomplete_gap_ratio=_ratio(lanes_value["incomplete_gap_ratio"], f"{field}.incomplete_gap_ratio"),
         lead_admission_kev=_bool(lanes_value.get("lead_admission_kev", True), f"{field}.lead_admission_kev"),
+        lead_admission_basis=basis,
         exploration_enabled=_bool(lanes_value.get("exploration_enabled", False), f"{field}.exploration_enabled"),
         exploration_reserve=_int(lanes_value.get("exploration_reserve", 1), f"{field}.exploration_reserve", 1, 100_000),
     )

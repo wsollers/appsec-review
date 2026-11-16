@@ -54,6 +54,7 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
             settings.teams.verifier_per_team) == (3, 1, 1, 1)
     assert settings.lanes.lead_budget_share == 0.5 and settings.lanes.hunt_budget_share == 0.5
     assert settings.lanes.lead_admission == ("critical", "high")
+    assert settings.lanes.lead_admission_basis == "either"
     assert (settings.lanes.lead_max_claims_per_package, settings.lanes.hunt_max_units,
             settings.lanes.hunt_max_claims_per_package) == (3, 10, 5)
     assert settings.budgets.budget_team_packages == 200
@@ -141,6 +142,8 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
      "must admit critical and high severity"),
     ('lead_admission = ["critical", "high"]', 'lead_admission = ["critical", "severe", "high"]',
      "lead_admission has unknown values: severe"),
+    ('lead_admission_basis = "either"', 'lead_admission_basis = "scanner"',
+     "lead_admission_basis must be one of: reported, assessed, either"),
     ("stable_rounds_required = 1", "stable_rounds_required = 9", "must not exceed max_rounds"),
     (f"{SECTION}.roles.independent_verifier]", f"{SECTION}.roles.chief_reviewer]", "unknown role: chief_reviewer"),
     ('model_profile = "default"\nrequire', 'model_profile = "deep"\nrequire', "unconfigured model profile: deep"),
@@ -750,3 +753,15 @@ def test_derived_continuity_is_typed_configured_and_part_of_the_semantic_setting
     assert settings.as_document()["attack_chains"]["derived_continuity"] == ["same_native_executable"]
     disabled = replace(settings, attack_chains=replace(settings.attack_chains, derived_continuity=()))
     assert semantic_settings_sha256(disabled) != semantic_settings_sha256(settings)
+
+
+def test_lead_admission_basis_is_closed_and_defaults_to_either(tmp_path: Path) -> None:
+    """lanes.lead_admission_basis selects which severity lead_admission weighs; the earlier policy stays selectable."""
+    from appsec_review.review.packages import PackageSettings
+    reported = _variant(tmp_path / "reported", ('lead_admission_basis = "either"', 'lead_admission_basis = "reported"'))
+    assert _settings(reported).lanes.lead_admission_basis == "reported"
+    assert PackageSettings.from_review_settings(_settings(reported)).admission_basis == "reported"
+    omitted = _variant(tmp_path / "omitted", ('lead_admission_basis = "either"\n', ""))
+    assert _settings(omitted).lanes.lead_admission_basis == "either"
+    with pytest.raises(ValueError, match="lead_admission_basis must be one of"):
+        _variant(tmp_path / "bad", ('lead_admission_basis = "either"', "lead_admission_basis = true"))

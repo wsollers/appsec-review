@@ -72,8 +72,9 @@ unchanged: the verifier and the policy already produce the records they consume.
 
 Unchanged in shape; two policies decided on 2026-11-15 already apply (T-5029, T-5025):
 
-- Lane A admits critical and high by *effective* severity: the scanner's reported value, or for a lead
-  reported unknown the assessed severity from lead triage. An unassessed unknown lead is recorded with
+- Lane A admits critical and high by the scanner's reported severity *or* the assessed severity from lead
+  triage (`lanes.lead_admission_basis = "either"`; triage assesses every lead with a rule-table row or a
+  catalogued rule CWE, and the model pass covers only leads reported unknown). An unassessed unknown lead is recorded with
   `residual_coverage: unassessed_unknown`, a `lead_admission` skipped gap, and reaches the hunter's unit
   selection (section 4.1) rather than being reviewed blind.
 - Leads of one defect site share one package: same path, within `packages.lead_cluster_lines` of a member and

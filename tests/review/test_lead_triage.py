@@ -112,9 +112,11 @@ def test_rule_table_runs_before_the_model_and_records_original_and_assessed_seve
 
     assert outcome.model_calls == 1 and len(calls) == 1
     assert outcome.document["counts"] == {
-        "unknown_leads": 2, "rule_table": 1, "cwe_catalog": 0, "model_triage": 1,
-        "unresolved": 0, "leads_total": 3, "reused_from_cache": 0, "batches": 1, "model_calls": 1,
+        "unknown_leads": 2, "assessed_leads": 2, "reported_known_assessed": 0, "rule_table": 1, "cwe_catalog": 0,
+        "model_triage": 1, "unresolved": 0, "leads_total": 3, "reused_from_cache": 0, "batches": 1, "model_calls": 1,
     }
+    # A known reported severity with no rule-table row and no rule CWE has no row: the scanner's value stands alone.
+    assert "lead-known" not in outcome.assessments and with_triage(known_lead, None).triage_state == "not_needed"
     triaged_table = with_triage(table_lead, outcome.assessments["lead-table"])
     table_record = triaged_table.severity_record()
     model_record = with_triage(model_lead, outcome.assessments["lead-model"]).severity_record()
@@ -349,3 +351,52 @@ def test_deterministic_steps_ignore_the_numeric_guardrail() -> None:
     assert row["assessed"]["reason"] == reason and row["gap"] is None
     assert "numeric_reasoning" not in row and "tool_fact" not in row["assessed"]
     assert outcome.document["numeric_reasoning"]["numeric_reasons"] == 0
+
+
+def test_deterministic_steps_assess_every_lead_and_the_model_sees_only_the_still_unknown() -> None:
+    """A scanner's medium on a format-string sink encodes rule confidence; the pinned catalog rates CWE-134's impact.
+    Every lead with a rule CWE or table row gets an assessed severity beside its reported one (reported_severity is
+    never rewritten); the model pass is bounded to leads reported unknown that no deterministic step decided."""
+    consequence = CweConsequence(1, ("Integrity", "Confidentiality"),
+                                 ("Modify Memory", "Execute Unauthorized Code or Commands"))
+    reference = CweReference(
+        "mitre_catalog", {"CWE-134": CweEntry("CWE-134", "Externally-Controlled Format String", "Base", (consequence,))},
+        snapshot_id="mitre-1", manifest_sha256="c" * 64, version="4.20", consequences_indexed=True)
+    medium_format = lead("lead-medium-134", scanner="tool-semgrep", rule="fio30-c.nonliteral-format",
+                         reported="medium", native="WARNING", cwes=("CWE-134",))
+    info_table = lead("lead-info-table", scanner="tool-cppcheck", rule="copy-length", reported="info", native="style")
+    known_plain = lead("lead-high-plain", reported="high", native="HIGH")
+    unknown_model = lead("lead-unknown-model")
+    calls = []
+
+    def infer(request, *, timeout_seconds):
+        calls.append([item["lead_id"] for item in request.task_input["findings"]])
+        return ModelResult({"schema": RESULT_SCHEMA, "items": [{
+            "lead_id": "lead-unknown-model", "severity": "low", "basis": "code_context",
+            "reason": "The excerpt shows a logging call on a constant string."}]}, 100, 30)
+
+    rule = TriageRule("cppcheck", "high", "rule_semantics", "Unbounded copy length (CWE-120): memory corruption.",
+                      rule="copy-length")
+    outcome = run_triage([known_plain, unknown_model, medium_format, info_table], settings=settings(rule),
+                         profile=PROFILE, infer=infer, read_excerpt=reader, reference=reference, guidance=GUIDANCE,
+                         schemas=SCHEMAS)
+    assert calls == [["lead-unknown-model"]] and outcome.model_calls == 1
+    rows = {row["lead_id"]: row for row in outcome.document["leads"]}
+    assert set(rows) == {"lead-medium-134", "lead-info-table", "lead-unknown-model"}
+    assert rows["lead-medium-134"]["reported_severity"] == "medium"
+    assert rows["lead-medium-134"]["assessed"]["source"] == "cwe_catalog"
+    assert rows["lead-medium-134"]["assessed"]["value"] == "high" and rows["lead-medium-134"]["origin"] == "deterministic"
+    assert rows["lead-info-table"]["assessed"] == {**rows["lead-info-table"]["assessed"], "source": "rule_table", "value": "high"}
+    assert rows["lead-unknown-model"]["assessed"]["source"] == "model_triage"
+    assert outcome.document["counts"] == {
+        "unknown_leads": 1, "assessed_leads": 3, "reported_known_assessed": 2, "rule_table": 1, "cwe_catalog": 1,
+        "model_triage": 1, "unresolved": 0, "leads_total": 4, "reused_from_cache": 0, "batches": 1, "model_calls": 1}
+    triaged = with_triage(medium_format, outcome.assessments["lead-medium-134"])
+    assert (triaged.reported_severity, triaged.assessed_value, triaged.effective_severity) == ("medium", "high", "medium")
+    record = triaged.severity_record()
+    assert record["original"]["reported_severity"] == "medium" and record["assessed"]["value"] == "high"
+    assert record["effective"] == {"value": "medium", "from": "reported"}
+    assert lead_triage.display_severity({"reported_severity": "medium", "severity_record": record}) == (
+        "medium (reported; assessed high by cwe_catalog)")
+    summary = lead_triage.handoff_summary(outcome.document, None)
+    assert (summary["assessed_leads"], summary["reported_known_assessed"], summary["unknown_leads"]) == (3, 2, 1)

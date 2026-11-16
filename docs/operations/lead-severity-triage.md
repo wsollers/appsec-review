@@ -9,15 +9,24 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 # Lead severity triage
 
 `job_inference_security_review` runs `triage.lead_severity` after accepting the review scope and
-before assembling lead packages. It handles only leads whose scanner-reported severity is
-`unknown`; a scanner rating that exists is never rewritten.
+before assembling lead packages. It gives every lead that has a deterministic basis an *assessed*
+severity beside the scanner's *reported* one, and sends only leads reported `unknown` that no
+deterministic step decided to the model. A scanner rating that exists is never rewritten: a scanner's
+`medium` on a format-string sink encodes the rule's confidence, the assessed `high` the impact of the
+weakness class, and lane admission weighs both (`lanes.lead_admission_basis`, below).
 
-The stage chooses an assessed priority in this order:
+The stage chooses an assessed severity in this order:
 
 1. `lead-severity-rules/1`, the typed rules in
-   `jobs.job_inference_security_review.settings.triage.rules`;
-2. `cwe-impact-derivation/1` over the run-pinned MITRE CWE catalog;
-3. one bounded `lead_triager` model turn per batch, using the configured `triage` model profile.
+   `jobs.job_inference_security_review.settings.triage.rules` (every lead);
+2. `cwe-impact-derivation/1` over the run-pinned MITRE CWE catalog (every lead with a rule CWE; a
+   catalog impact class of `critical` or `high` ranks the lead `high`, `medium` ranks it `medium`, a low
+   class decides nothing);
+3. one bounded `lead_triager` model turn per batch, using the configured `triage` model profile
+   (leads reported `unknown` only).
+
+A lead with a known reported severity and no table row or rule CWE gets no row: the scanner's value
+stands alone (`triage_state: not_needed`).
 
 The checked-in development configuration keeps that profile on Haiku. The model has no tools and
 receives only the scanner rule, bounded message and path, pinned reference context, a bounded
@@ -55,11 +64,25 @@ this check.
 ## What the result changes
 
 The assessed value controls lead ordering and admission only. It does not feed scoring, claim state,
-or ship-block policy. Each lead-menu record keeps both sides:
+or ship-block policy. Lane A admission (`lanes.lead_admission`) weighs the two severities under
+`lanes.lead_admission_basis` (`lead-admission-basis/1`, `review.packages.severity_admission`):
+
+- `either` (default): the lead is admitted when its reported **or** its assessed severity is in the
+  policy; the `admission_reasons` name the severity that admitted (`reported_severity`,
+  `assessed_severity`, or both). An assessment never demotes a reported `high`.
+- `reported`: the earlier policy, the *effective* severity (reported when known, else assessed).
+- `assessed`: the assessed severity when one exists, else the reported one.
+
+The package manifest's `admission` entries and `excluded-leads.json` carry `reported_severity` and
+`assessed_severity` (with its source) beside every lead and the basis in force, so "reported medium,
+assessed high, admitted" reads differently from "reported medium, assessed medium, excluded".
+
+Each lead-menu record keeps both sides:
 
 - `original`: the scanner's native and normalized values;
 - `assessed`: value, source, basis, reason, version, and triage identity, or `null`;
-- `effective`: the reported value when known, otherwise the assessment, otherwise `unknown`;
+- `effective`: the reported value when known, otherwise the assessment, otherwise `unknown` (it orders
+  the lane; admission weighs reported and assessed as above);
 - `gap`: why an unknown lead remained unresolved.
 
 The run-owned `lead-triage.json` artifact records every deterministic decision, bounded model batch,
@@ -70,7 +93,10 @@ its claim, and the inference-review handoff carries the triage artifact hash and
 ## Configuration and recovery
 
 The `[jobs.job_inference_security_review.settings.triage]` table in `appsec-review.toml` controls the
-switch, batch size, model profile, lead cap, excerpt and reason bounds, and deterministic rules.
+switch, batch size, model profile, lead cap (model pass only; the deterministic steps are uncapped),
+excerpt and reason bounds, and deterministic rules. The artifact's `counts` report `unknown_leads`
+(leads reported unknown), `assessed_leads` (rows with an assessment) and `reported_known_assessed`
+(leads with a known reported severity that a deterministic step assessed as well).
 Changing any semantic setting invalidates the affected triage fingerprints. Set `enabled = false`
 to restore unassessed `unknown` ordering while retaining an explicit disabled artifact.
 

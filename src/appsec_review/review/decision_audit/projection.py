@@ -706,10 +706,13 @@ class _Projector:
             subject = self.subject(claim=identity, package=view.claim.package_id, adjudication=row["adjudication_id"],
                                    round_index=row["round"])
             sources = (self.i.adjudications.ref(row["adjudication_id"]), self.i.projection_document.ref(identity))
+            text = f"Existing deciding row {row['deciding_row']}; policy={row['policy_sha256']}."
+            if row.get("rehomed_to"):          # claim-scope-resolution/1: adjudicated in the owning package
+                text += (f" Re-homed from {', '.join(row.get('rehomed_from') or ())} to {row['rehomed_to']}: "
+                         "its entities lie in that package's accepted scope, not in its proposers'.")
             self.decision(subject, c.Stage.ADJUDICATION, row["state"], sources=sources, relations=relations,
                           proposals=self.origins.get(identity, ()), gaps=row["gap_ids"], row=row["deciding_row"],
-                          required=required, missing=missing, reason=_ROWS[row["deciding_row"]],
-                          text=f"Existing deciding row {row['deciding_row']}; policy={row['policy_sha256']}.")
+                          required=required, missing=missing, reason=_ROWS[row["deciding_row"]], text=text)
             for judge in self.i.projection.judge_verdicts.get(identity, ()):
                 judge_cell = self.cells[judge.cell_id]
                 judged_subject = self.subject(claim=identity, cell=judge.cell_id, package=judge_cell.package_id,
