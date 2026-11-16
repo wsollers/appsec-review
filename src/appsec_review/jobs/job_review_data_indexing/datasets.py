@@ -217,6 +217,16 @@ CONTRACT = JobContract(
                          "appsec-review/native-sbom-provenance/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_dependency_intelligence", "native_sbom_metrics",
                          "appsec-review/native-sbom-metrics/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        # Native advisory lookup (NVD CPE ranges of corroborated native releases): the observations shard that the
+        # advisory join reads and the lookup's decision record. Declared when the producer declares them, so a
+        # run with the lookup disabled is not an unsupplied required input. Run 2026-11-16-0006 failed in
+        # job_security_tagging on "undeclared consumption ... native_advisory_observations" without these rows.
+        InputRequirement("job_dependency_intelligence", "native_advisory_observations",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.WHEN_DECLARED, missing=MissingPolicy.NOT_APPLICABLE),
+        InputRequirement("job_dependency_intelligence", "native_advisory_lookup",
+                         "appsec-review/native-advisory-lookup/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.WHEN_DECLARED, missing=MissingPolicy.NOT_APPLICABLE),
         InputRequirement("job_dependency_intelligence", "dependency_context",
                          "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_dependency_intelligence", "scorecard_responses",
