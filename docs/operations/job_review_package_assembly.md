@@ -193,7 +193,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/review/test_packages.py` |
+| unit | `tests/unit/job_review_package_assembly/test_contract.py`<br>`tests/unit/job_review_package_assembly/test_handlers.py`<br>`tests/review/test_packages.py` |
 
 ### Dagster placement
 

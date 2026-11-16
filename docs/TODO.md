@@ -3344,10 +3344,92 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   configuration-mismatch violation checks, downstream `T-150` topological completion order, and
   resume compatibility; 11 whole-job `JobRunner` cases relocated to
   `tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py`; 426/426
-  job-package lines [100.0%] and 107/110 branches [97.27%] covered across all 3 modules).
-  Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
-  remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
-  consumer parity (T-114 done).
+  job-package lines [100.0%] and 107/110 branches [97.27%] covered across all 3 modules);
+  job_review_package_assembly (38/47; 3 unit files, 20 cases: pinned 109-input / 1-dataset contract,
+  single-unit `publication.publish_packages` topology and registry parity, `max_page_size` boundary
+  and type validation, `_core` validation-scope caching and uncached construction, `UnitExecutor`
+  package publication across both `COMPLETED_WITH_GAPS` lineage manifests and zero-gap `SUCCEEDED`
+  runs, `_validate_output` receipt integrity checks, and target-snapshot/unbound-manifest/missing-handoff
+  refusal; 71/71 job-package lines [100.0%] and 20/20 branches [100.0%] covered across all 3 modules);
+  job_document_issue_analysis (39/47; 3 unit files, 22 cases: pinned `document_issue_ledger`
+  provisional artifact-only dataset and `job_review_package_assembly` required handoff contract,
+  `max_source_files`/`max_source_file_bytes` positive integer validation, `SharedArtifacts`
+  checkpoint computation and reuse across job-release, platform-fallback and missing-release modes,
+  `UNADJUDICATED_GAP`-first `COMPLETED_WITH_GAPS` publication, `_validate_output` receipt/count
+  verification, handoff/snapshot tamper refusal, and fast `document_issues` route mapping and
+  evidence-qualified adjudication gates; 91/91 job-package lines [100.0%] and 26/26 branches
+  [100.0%] covered across all 3 modules);
+  job_inference_security_review (40/47; 35 unit files, 918 cases: pinned 33-input / 16-dataset
+  contract, 16-unit DAG topology and registry parity, `ReviewContext._path_symbols` cache and
+  `validation_scope` around `run_team`/`run_lane`, closed model schema subsets across CWE/predicate/
+  precondition vocabularies, direct per-unit handler execution across scope, lead triage, package
+  assembly, lead/hunt lanes, claim merge, adjudication, scoring, attack-chain composition/refutation/
+  verification, completeness audit, claim/chain/poc/handoff publication and decision-audit
+  publication with manifest/shard/ledger/warrant/obligation tamper refusal; 2 whole-job 16-unit
+  `JobRunner` scenarios relocated to
+  `tests/integration/job_inference_security_review/test_inference_security_review_jobrunner.py`;
+  2,615/2,787 job-package lines [93.83%] and 857/996 branches [86.04%] covered across all 8
+  modules);
+  job_final_publication_gate (41/47; 7 unit files, 121 cases: pinned 3-unit `load.verify_review` ->
+  `gate.classify` -> `acceptance.publish_handoff` DAG topology, `publication_gate_decisions`
+  dataset and registry parity, `FinalPublicationGateSettings` `[1, 10000]` boundary and strict-bool
+  validation, exact upstream handoff pin enforcement across review and optional producers,
+  `decision_audit` sidecar summary wiring, publishable/verification-backlog/withheld bucketing and
+  all `LIMITATION_ORDER` gap/not-run/notice classifications, certified snapshot verification and
+  concurrent acceptance invalidation, and compile-only PoC/remediation/dossier/attack-chain
+  attachment verification; replaced the three `tests/test_final_report.py` unit nodeids whose
+  module fixture executed a 3-job `JobRunner` chain; 534/534 job-package lines [100.0%] and
+  173/174 branches [99.43%] covered across all 7 modules);
+  job_openvex_export (42/47; 8 unit files, 551 cases: pinned 3-unit `load.verify_inputs` ->
+  `export.assemble` -> `acceptance.publish_handoff` DAG topology, protected OpenVEX dataset and
+  registry parity, `OpenVexExportSettings` bounds/issuer/IRI validation, bounded private-file
+  input/output custody and hardlink/symlink/size tamper rejection, offline schema pin closure,
+  affected-only OpenVEX v0.2.0 statement/companion/result canonical projection, historical and
+  latest acceptance reproof, stale upstream/release/gate invalidation, and semantic metric
+  aggregation; 1,877/1,939 job-package lines [96.80%] and 623/678 branches [91.89%] covered
+  across all 10 modules);
+  job_poc_generation (43/47; 6 unit files, 189 cases: pinned 7-unit `load.verify_inputs` ->
+  `plan.briefs` -> `write.poc_writer` -> `validate.policy` -> `compile.build_check` ->
+  `record.candidates` -> `publish.publish_handoff` DAG topology, `PocGenerationSettings` bounds,
+  verified upstream review/finding/package/language-build input bindings, brief expectation and
+  source assembly, Clang AST reduction and policy/buildcheck compile-only enforcement, writer
+  decline/failure/answer normalization, and relocated multi-job `JobRunner` chain suite to
+  `tests/integration/job_poc_generation/test_poc_generation_job.py`; 2,261/2,360 job-package lines
+  [95.81%] and 741/826 branches [89.71%] covered across all 15 modules);
+  job_dossier_publication (44/47; 4 unit files, 66 cases: pinned 3-unit `load.verify_inputs` ->
+  `dossiers.create` -> `acceptance.publish_handoff` DAG topology, `DossierPublicationSettings`
+  bounds/image-pin validation, accepted review/PoC/remediation/attack-chain/decision-audit input
+  and snapshot verification, protected LaTeX/PDF container policy and non-execution assurance
+  labelling, and relocated `run_review_chain` test to
+  `tests/integration/job_dossier_publication/test_dossier_review_chain.py`; 404/406 job-package
+  lines [99.51%] and 167/172 branches [97.09%] covered across all 5 modules);
+  job_remediation_planning (45/47; 3 unit files, 66 cases: pinned 3-unit `load.verify_inputs` ->
+  `assess.propose` -> `acceptance.publish_handoff` DAG topology, confirmed-only candidate intake
+  and `max_candidates` cap accounting, bounded `SourceReader`/retrieval/model execution and
+  telemetry receipts, exact patch scope/custody/manual-validation gates, and publish-time plan
+  verification; 511/516 job-package lines [99.03%] and 168/170 branches [98.82%] covered across
+  all 7 modules);
+  job_remediation_validation (46/47; 4 unit files, 247 cases: pinned 3-unit `load.verify_inputs`
+  -> `assess.validate` -> `acceptance.publish_handoff` DAG topology, accepted planning handoff
+  and candidate-binding verification, bounded manifest-exact scratch materialization/cleanup,
+  nonexecuting native syntax-only compiler argv allowlist and baseline-first comparison,
+  independent semantic reviewer outcomes, and publish-time drift/integrity checks; 486/490
+  job-package lines [99.18%] and 180/184 branches [97.83%] covered across all 6 modules);
+  job_final_report_publication (47/47; 3 unit files, 7 cases: pinned 2-input / 1-dataset contract
+  and 4-unit `load.accepted_gate` -> `report.assemble` -> `report.render` ->
+  `acceptance.publish_handoff` DAG topology, `FinalReportSettings` bounds/identity validation,
+  schema-valid `build_report` assembly across complete/incomplete reviews, `decision_pending`
+  projection with and without severity bounds, confirmed/supported attack-chain filtering,
+  `poc_handoff` provenance, `withheld` accounting, deterministic CommonMark rendering with bounded/
+  zero ID truncation and hostile-markup neutralization, `FileClaims` custody, and publish-time
+  drift/provenance guards while preserving `tests/test_final_report.py` on the `review-chain`
+  acceptance lane; 284/284 job-package lines [100.0%] and 80/80 branches [100.0%] covered across
+  all 6 modules).
+  All 47 registered jobs in `builtin_registry` now have certified code-level `tests/unit/<job_id>/`
+  suites wired in `tests/job-test-map.json`; remaining T-113 work is migrating the non-job root
+  `tests/test_*.py` files and tightening `scripts/run-tests.sh fast` to `tests/unit`.
+  Bounded repair Waves 1a–5 are complete. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol
+  declarations and consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
   Wave 1c (`4b875e0ea`) aligns image-repair proposal validation and its JSON schema on

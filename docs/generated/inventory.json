@@ -16487,7 +16487,11 @@
           "tests/test_target_document_pipeline.py::test_document_issue_analysis_rejects_changed_source"
         ],
         "live": [],
-        "unit": []
+        "unit": [
+          "tests/unit/job_document_issue_analysis/test_contract.py",
+          "tests/unit/job_document_issue_analysis/test_document_issues.py",
+          "tests/unit/job_document_issue_analysis/test_handlers.py"
+        ]
       },
       "workers": 1
     },
@@ -17376,13 +17380,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_dossier_publication/test_dossier_review_chain.py"
+        ],
         "live": [
           "tests/integration/test_dossier_live.py"
         ],
         "unit": [
-          "tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer",
-          "tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier",
+          "tests/test_dossier_publication.py",
+          "tests/test_dossiers.py",
+          "tests/unit/job_dossier_publication/test_coverage_edges.py",
           "tests/unit/review_decision_audit_consumers/test_dossier.py"
         ]
       },
@@ -19490,9 +19497,11 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that",
-          "tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket",
-          "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps",
+          "tests/test_completion_publication.py",
+          "tests/test_gate_snapshot.py",
+          "tests/unit/job_final_publication_gate/test_classify_and_verify.py",
+          "tests/unit/job_final_publication_gate/test_contract_and_settings.py",
+          "tests/unit/job_final_publication_gate/test_job_and_attachments.py",
           "tests/unit/review_decision_audit_wiring/test_classification.py",
           "tests/unit/review_decision_audit_wiring/test_gate_handler.py"
         ]
@@ -19686,8 +19695,9 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_final_report.py::test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden",
-          "tests/test_final_report.py::test_decision_pending_without_bounds_names_the_unrated_severity_itself"
+          "tests/unit/job_final_report_publication/test_contract_and_settings.py",
+          "tests/unit/job_final_report_publication/test_job_units.py",
+          "tests/unit/job_final_report_publication/test_report_and_render.py"
         ]
       },
       "workers": 1
@@ -23038,24 +23048,35 @@
           "tests/acceptance/review_behavior/test_behavioral_review.py"
         ],
         "integration": [
-          "tests/integration/test_review_consumer_acceptance.py",
-          "tests/integration/review_behavior/test_package_join.py"
+          "tests/integration/job_inference_security_review/test_inference_security_review_jobrunner.py",
+          "tests/integration/review_behavior/test_package_join.py",
+          "tests/integration/test_review_consumer_acceptance.py"
         ],
         "live": [],
         "unit": [
+          "tests/review/test_attack_chain_job.py",
+          "tests/review/test_attack_chains.py",
+          "tests/review/test_bounded_cells.py",
+          "tests/review/test_discovery_competence.py",
+          "tests/review/test_execution_budget_wiring.py",
+          "tests/review/test_inference_review_schemas.py",
+          "tests/review/test_prompt_competence.py",
+          "tests/review/test_team_handler.py",
+          "tests/review/test_teams.py",
+          "tests/test_inference_fixture_contracts.py",
+          "tests/test_inference_review_config.py",
+          "tests/test_review_guidance_execution.py",
+          "tests/unit/job_inference_security_review/test_contract.py",
+          "tests/unit/job_inference_security_review/test_handlers.py",
+          "tests/unit/job_inference_security_review/test_stages_and_schemas.py",
+          "tests/unit/observability_findings/test_actionability_evidence.py",
+          "tests/unit/review/test_schema_set_messages.py",
           "tests/unit/review_behavior/test_contract_and_view.py",
-          "tests/unit/review_behavior/test_handler_wiring.py",
           "tests/unit/review_behavior/test_coverage.py",
+          "tests/unit/review_behavior/test_handler_wiring.py",
           "tests/unit/review_behavior/test_model_context.py",
           "tests/unit/review_behavior/test_operations.py",
           "tests/unit/review_behavior/test_publication_bindings.py",
-          "tests/unit/observability_findings/test_actionability_evidence.py",
-          "tests/review/test_discovery_competence.py",
-          "tests/review/test_prompt_competence.py",
-          "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
-          "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
-          "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema",
-          "tests/test_inference_fixture_contracts.py",
           "tests/unit/review_decision_audit_producer/test_adapter.py",
           "tests/unit/review_decision_audit_producer/test_bounds.py",
           "tests/unit/review_decision_audit_producer/test_capture.py",
@@ -23064,7 +23085,10 @@
           "tests/unit/review_decision_audit_producer/test_publication.py",
           "tests/unit/review_decision_audit_producer/test_review_fixes.py",
           "tests/unit/review_decision_audit_wiring/test_inference_handler.py",
-          "tests/unit/review_decision_audit_wiring/test_origin.py"
+          "tests/unit/review_decision_audit_wiring/test_origin.py",
+          "tests/unit/review_obligations/test_pipeline_reconciliation.py",
+          "tests/unit/review_warrants/test_optin_wiring.py",
+          "tests/unit/review_warrants/test_pipeline_audit_wiring.py"
         ]
       },
       "workers": 8
@@ -24535,7 +24559,14 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_openvex_job_units.py"
+          "tests/test_openvex_contracts.py",
+          "tests/test_openvex_inputs.py",
+          "tests/test_openvex_job_units.py",
+          "tests/test_openvex_metrics.py",
+          "tests/test_openvex_projection.py",
+          "tests/test_openvex_settings.py",
+          "tests/test_openvex_wiring.py",
+          "tests/unit/job_openvex_export/test_coverage_edges.py"
         ]
       },
       "workers": 1
@@ -27870,13 +27901,19 @@
       "tests": {
         "acceptance": [],
         "integration": [
+          "tests/integration/job_poc_generation/test_poc_generation_job.py",
           "tests/integration/test_authentic_poc_contract.py"
         ],
         "live": [
           "tests/integration/test_poc_live_compile.py"
         ],
         "unit": [
-          "tests/test_poc_generation_units.py"
+          "tests/test_poc_generation_contracts.py",
+          "tests/test_poc_generation_units.py",
+          "tests/test_poc_policy.py",
+          "tests/test_poc_writer.py",
+          "tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py",
+          "tests/unit/job_poc_generation/test_job_units.py"
         ]
       },
       "workers": 1
@@ -31082,7 +31119,9 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_remediation_models.py"
+          "tests/test_remediation_models.py",
+          "tests/test_remediation_patches.py",
+          "tests/unit/job_remediation_planning/test_coverage_edges.py"
         ]
       },
       "workers": 1
@@ -31466,7 +31505,10 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_remediation_patches.py"
+          "tests/test_remediation_compiler.py",
+          "tests/test_remediation_models.py",
+          "tests/test_remediation_patches.py",
+          "tests/unit/job_remediation_validation/test_coverage_edges.py"
         ]
       },
       "workers": 1
@@ -35523,6 +35565,8 @@
         "integration": [],
         "live": [],
         "unit": [
+          "tests/unit/job_review_package_assembly/test_contract.py",
+          "tests/unit/job_review_package_assembly/test_handlers.py",
           "tests/review/test_packages.py"
         ]
       },
@@ -44402,7 +44446,7 @@
     "src/appsec_review/jobs/job_inference_security_review/job.py": "a68b2ddf4dea6f797161e39546bbe067f8ea8eb56bbcf05f661e4538da33b127",
     "src/appsec_review/jobs/job_inference_security_review/schemas.py": "ae955a119971360de2a2d731830bd02ec7f6ff20f4f29b3f41eca7137e24c9d2",
     "src/appsec_review/jobs/job_inference_security_review/stages.py": "7052bb40a41b7d57a73e7fc02cda32644607f079abd195f48aee0155728ca085",
-    "src/appsec_review/jobs/job_inference_security_review/teams.py": "8baf168a2cb009dcd5477281831d69597999c849d0ce9e953abe37018b3cb7ad",
+    "src/appsec_review/jobs/job_inference_security_review/teams.py": "8f6b0f0d3a0f6b655b1f6e8a35db357e2c94cd4dbaaf109347f8015ac39af144",
     "src/appsec_review/jobs/job_language_build/__init__.py": "9cfa5d5894f7683b0425711e233917fa2d9f1c8d82d712433f1551093c06fd40",
     "src/appsec_review/jobs/job_language_build/capture.py": "dd71bef6015a152029d22d444a628349271fe33cbec75d16a89285c2b180b1af",
     "src/appsec_review/jobs/job_language_build/datasets.py": "9f3ef8ee5b7041153e2fedf871a37c7789ed70335170cc507894f24713c3baff",
@@ -44874,7 +44918,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "78e385a60dd66a2cee6fcacc1895d171e9271abea98396968b733d1c18baa271"
+    "tests/job-test-map.json": "953876917ad57e38d273390664a684d0e3cec19192cb52a50d6cb7c018e6df67"
   },
   "tool_policy": {
     "disable_grype": true,

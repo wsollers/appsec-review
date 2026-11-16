@@ -58,7 +58,12 @@ def test_real_normalizer_records_invalid_proposal_without_claim(tmp_path):
                            outcome=SimpleNamespace(result=result, receipt_paths=()),
                            spec=SimpleNamespace(persona="general"))
     team = TeamResult("package-1", Lane.LEAD, None)
-    assert _normalize(SimpleNamespace(accepted_cwe_ids=frozenset()), work, [cell], team) == []
+    assert _normalize(
+        SimpleNamespace(accepted_cwe_ids=frozenset(), enclosing_symbol=lambda _identity: None),
+        work,
+        [cell],
+        team,
+    ) == []
     assert team.claims == []
     assert team.audit_proposals[0]["claim_id"] is None
     assert team.audit_proposals[0]["reason"] == "closed_vocabulary"

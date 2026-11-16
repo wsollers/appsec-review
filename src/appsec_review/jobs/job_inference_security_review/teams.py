@@ -184,6 +184,7 @@ class ReviewContext:
     cross_lane_seeds: tuple[Mapping[str, Any], ...] | None = None
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
     _symbols: dict[str, str | None] = field(default_factory=dict)
+    _path_symbols: dict[str, tuple[tuple[int, int | None, str], ...]] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
     _views: dict[str, PackageView] = field(default_factory=dict)
     _resolves: dict[str, bool] = field(default_factory=dict)
@@ -282,39 +283,48 @@ class ReviewContext:
     def _symbol_at(self, path: Any, line: Any) -> str | None:
         if not isinstance(path, str) or not isinstance(line, int):
             return None
+        with self._lock:
+            spans = self._path_symbols.get(path)
+        if spans is None:
+            collected: list[tuple[int, int | None, str]] = []
+            cursor = None
+            for _page in range(16):
+                try:
+                    page = self.core.find(
+                        kind=EntityKind.SYMBOL.value, path=path, limit=self.max_page_size, cursor=cursor,
+                    )
+                except (ValueError, LookupError):
+                    return None
+                for row in page.get("results", ()):
+                    location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
+                    start, end = location.get("start_line"), location.get("end_line")
+                    if isinstance(start, int):
+                        collected.append((start, end if isinstance(end, int) else None, str(row["identity"])))
+                cursor = page.get("next_cursor") or page.get("cursor")
+                if not page.get("has_more") or not cursor:
+                    break
+            spans = tuple(collected)
+            with self._lock:
+                self._path_symbols[path] = spans
         enclosing: tuple[int, str] | None = None        # tightest extent containing the line
         preceding: tuple[int, str] | None = None        # nearest definition at or before the line
         extents = False                                 # does this path's index record function extents at all?
-        cursor = None
-        for _page in range(16):
-            try:
-                page = self.core.find(kind=EntityKind.SYMBOL.value, path=path, limit=self.max_page_size, cursor=cursor)
-            except (ValueError, LookupError):
-                return None
-            for row in page.get("results", ()):
-                location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
-                start, end = location.get("start_line"), location.get("end_line")
-                if not isinstance(start, int):
-                    continue
-                identity = str(row["identity"])
-                if isinstance(end, int) and end > start:
-                    extents = True
-                    if start <= line <= end:
-                        candidate = (end - start, identity)
-                        if enclosing is None or candidate < enclosing:
-                            enclosing = candidate
-                if start <= line:
-                    candidate = (-start, identity)
-                    if preceding is None or candidate < preceding:
-                        preceding = candidate
-            cursor = page.get("next_cursor") or page.get("cursor")
-            if not page.get("has_more") or not cursor:
-                break
+        for start, end, identity in spans:
+            if end is not None and end > start:
+                extents = True
+                if start <= line <= end:
+                    candidate = (end - start, identity)
+                    if enclosing is None or candidate < enclosing:
+                        enclosing = candidate
+            if start <= line:
+                candidate = (-start, identity)
+                if preceding is None or candidate < preceding:
+                    preceding = candidate
         if enclosing is not None:
             return enclosing[1]
         # With extents recorded, a line outside every function is file scope and stays unfolded; without them
         # (declaration lines only, as the accepted index carries today) the nearest preceding definition is the
-        # best evidence of the enclosing function.
+        # best evidence of the enclosing function (packages.GraphContext.function_at makes the same choice).
         return preceding[1] if preceding and not extents else None
 
     def entity_name(self, identity: str) -> str | None:
@@ -1009,6 +1019,17 @@ def _coverage_row(work: PackageWork, cell: _Cell) -> dict[str, Any]:
 
 def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launched_reason: str = "") -> TeamResult:
     """Run one package's team to terminal records. Only an :class:`IntegrityError` escapes."""
+    from contextlib import nullcontext
+    from appsec_review.storage.validation import validation_scope
+
+    run_root = getattr(ctx, "run_root", None)
+    scope_cm = validation_scope(run_root) if isinstance(run_root, Path) else nullcontext()
+    with scope_cm:
+        return _run_team_scoped(ctx, work, launch=launch, not_launched_reason=not_launched_reason)
+
+
+def _run_team_scoped(ctx: ReviewContext, work: PackageWork, *, launch: bool,
+                     not_launched_reason: str = "") -> TeamResult:
     result = TeamResult(work.package_id, work.lane, work.unit_key, leads=_lead_ids(work),
                         package_entities=frozenset(work.entities), warrant_scope=_warrant_scope(work))
     routing = route(ctx, work)
@@ -1744,6 +1765,20 @@ def _consume_check(path: Path) -> None:
 def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *, other_lane_count: int,
              ledger_path: Path, stream: str, signal_dir: Path) -> dict[str, Any]:
     """Run every package of ``lane`` and seal the lane's ledger shard; returns the lane document."""
+    from contextlib import nullcontext
+    from appsec_review.storage.validation import validation_scope
+
+    run_root = getattr(ctx, "run_root", None)
+    scope_cm = validation_scope(run_root) if isinstance(run_root, Path) else nullcontext()
+    with scope_cm:
+        return _run_lane_scoped(
+            ctx, lane, packages, other_lane_count=other_lane_count,
+            ledger_path=ledger_path, stream=stream, signal_dir=signal_dir,
+        )
+
+
+def _run_lane_scoped(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *, other_lane_count: int,
+                     ledger_path: Path, stream: str, signal_dir: Path) -> dict[str, Any]:
     ordered = _ordered_packages(packages)
     counts = {Lane.LEAD: len(ordered), Lane.HUNT: other_lane_count} if lane is Lane.LEAD else {
         Lane.LEAD: other_lane_count, Lane.HUNT: len(ordered)}

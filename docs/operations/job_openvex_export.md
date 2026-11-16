@@ -69,7 +69,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_openvex_job_units.py` |
+| unit | `tests/test_openvex_contracts.py`<br>`tests/test_openvex_inputs.py`<br>`tests/test_openvex_job_units.py`<br>`tests/test_openvex_metrics.py`<br>`tests/test_openvex_projection.py`<br>`tests/test_openvex_settings.py`<br>`tests/test_openvex_wiring.py`<br>`tests/unit/job_openvex_export/test_coverage_edges.py` |
 
 ### Dagster placement
 

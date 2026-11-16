@@ -79,7 +79,7 @@ def _context(rows):
     ctx = ReviewContext.__new__(ReviewContext)
     ctx.core = _Core(rows)
     ctx.max_page_size = 20
-    ctx._symbols, ctx._resolves, ctx._lock = {}, {}, threading.Lock()
+    ctx._symbols, ctx._resolves, ctx._path_symbols, ctx._lock = {}, {}, {}, threading.Lock()
     return ctx
 
 

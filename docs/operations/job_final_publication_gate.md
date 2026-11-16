@@ -100,7 +100,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that`<br>`tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket`<br>`tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps`<br>`tests/unit/review_decision_audit_wiring/test_classification.py`<br>`tests/unit/review_decision_audit_wiring/test_gate_handler.py` |
+| unit | `tests/test_completion_publication.py`<br>`tests/test_gate_snapshot.py`<br>`tests/unit/job_final_publication_gate/test_classify_and_verify.py`<br>`tests/unit/job_final_publication_gate/test_contract_and_settings.py`<br>`tests/unit/job_final_publication_gate/test_job_and_attachments.py`<br>`tests/unit/review_decision_audit_wiring/test_classification.py`<br>`tests/unit/review_decision_audit_wiring/test_gate_handler.py` |
 
 ### Dagster placement
 

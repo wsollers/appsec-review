@@ -364,11 +364,15 @@ def test_dossier_cap_exactly_accounts_for_omitted_confirmed_work(fixture):
 @pytest.mark.parametrize("admission", ["absent", "exact", "mismatched"])
 def test_disabled_poc_requires_exact_explicit_admission_and_emits_bounded_metrics(fixture, monkeypatch, admission):
     from appsec_review.jobs.job_final_publication_gate import job
+    from tests.unit.review_decision_audit_wiring.helpers import audit_fixture
     fixture.publish("poc_generation", fixture.poc())
     producer = fixture.accepted["job_poc_generation"]
     configuration = fixture.write("configuration/resolved.json", {"jobs": {}})
     monkeypatch.setattr(job, "resolved_configuration_identity", lambda _root: configuration["sha256"])
-    monkeypatch.setattr(job, "load_accepted_review", lambda *_args, **_kw: SimpleNamespace(document=deepcopy(fixture.review)))
+    audit = audit_fixture(reason="legacy_unrecorded",
+                          handoff_sha256=fixture.review["inputs"]["job_handoff"]["sha256"])
+    monkeypatch.setattr(job, "load_accepted_review",
+                        lambda *_args, **_kw: SimpleNamespace(document=deepcopy(fixture.review), decision_audit=audit))
     events = []
     settings = tomllib.loads((ROOT / "appsec-review.toml").read_text())["jobs"]["job_final_publication_gate"]["settings"]
     context = SimpleNamespace(

@@ -10,21 +10,17 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.inference import ModelResult
-from appsec_review.jobs.job_inference_security_review import build_job, chains, stages
+from appsec_review.inference.errors import ProviderError
+from appsec_review.jobs.job_inference_security_review import chains, stages
 from appsec_review.jobs.job_inference_security_review.job import _taxonomy
 from appsec_review.jobs.job_inference_security_review.teams import ReviewContext
 from appsec_review.guidance import load_registry
-from appsec_review.observability.events import PipelineLog
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.identity import make_id
 from appsec_review.review.ledger import LedgerWriter, merge_shards, project, verify_chain
 from appsec_review.review.models import CellStatus, IntegrityError, Role
 from appsec_review.review.teams import ReviewTeamSemaphore
-from appsec_review.runtime.runner import JobRunner
-from appsec_review.storage import file_sha256
-from tests.fixtures.inference_review.acceptance import JOB, ROOT, write_config
-from tests.fixtures.inference_review.builder import build_accepted_index_set
-from tests.fixtures.inference_review.fake_infer import ScriptedInfer
+from tests.fixtures.inference_review.acceptance import JOB, ROOT
 from tests.review.test_attack_chains import (
     PRODUCER, SCHEMAS, accepted_core, claims, ledger_claims,
 )
@@ -35,12 +31,13 @@ class ChainInfer:
         self.inner, self.mode, self.fail, self.requests = inner, candidates, fail, []
 
     def __call__(self, request, *, timeout_seconds):
-        task, payload = request.task_input["task"], request.task_input["input"]
+        task = request.task_input.get("task", "")
         if not task.startswith("chain_"):
             return self.inner(request, timeout_seconds=timeout_seconds)
+        payload = request.task_input["input"]
         self.requests.append(request)
         if task == self.fail:
-            raise RuntimeError("scripted independent challenge outage")
+            raise ProviderError("scripted independent challenge outage", retryable=False)
         if task == "chain_composer":
             components = {item["claim_id"]: item for item in payload["components"]}
             pair = next((item for item in payload["admitted_pairs"]
@@ -198,46 +195,3 @@ def test_chain_challenge_cell_cap_is_explicit_and_never_promoted_to_confirmation
     assert any("not_launched" in limitation for limitation in manifest["items"][0]["limitations"])
     assert [request.task_input["task"] for request in ctx.infer.requests] == ["chain_composer"]
 
-
-def test_real_inference_job_handoff_publishes_manifest_metrics_and_no_invented_connections(tmp_path_factory, monkeypatch):
-    monkeypatch.delenv("APPSEC_REVIEW_CONFIG_OVERLAY", raising=False)
-    directory = tmp_path_factory.mktemp("ac") / "r"
-    directory.mkdir()
-    config = write_config(directory, directory / "runs")
-    fixture = build_accepted_index_set(directory, config=config)
-    infer = ChainInfer(inner=ScriptedInfer({"ids": fixture.ids}))
-    job = build_job(infer=infer, repository_root=ROOT)
-    runner = JobRunner(load_config(config))
-    claim = runner.begin_attempt(job, run_id=fixture.run_id, upstream_handoffs=fixture.upstream_handoffs)
-    outputs = {}
-    for unit in job.units:
-        outputs[unit.unit_id] = runner.execute_or_reuse_unit(job, claim, unit.unit_id)
-    accepted = runner.finalize_attempt(job, claim)
-    assert accepted["handoff"]["status"] == "ACCEPTED"
-    handoff = chains.read_artifact(fixture.run_root, {
-        key: outputs["publication.publish_handoff"]["artifact"][key] for key in ("path", "sha256")})
-    assert handoff["schema"] == "appsec-review/inference-review-handoff/3"
-    manifest = chains.read_artifact(fixture.run_root, handoff["attack_chain_manifest"])
-    assert manifest["items"] and all(item["status"] == "insufficient_evidence" for item in manifest["items"])
-    assert any("no_commissioned_native_continuity_producer" in gap for gap in manifest["gaps"])
-    paths = [fixture.run_root / output["ledger_shard"]["path"] for output in outputs.values() if "ledger_shard" in output]
-    final = project(merge_shards(paths).events)
-    base = project(merge_shards([path for path in paths if "attack_chains" not in path.parts]).events)
-    assert final.claims == base.claims and final.relations == base.relations
-    assert all(not json.loads(path.read_text())["attack_chains"] for path in (
-        fixture.run_root / Path(outputs["publication.publish_handoff"]["artifact"]["path"]).parent / "findings"
-    ).glob("*.json"))
-    assert manifest["accounting"]["admitted"] == len(final.attack_chains)
-    events, errors = PipelineLog(fixture.run_root).read()
-    assert not errors
-    metrics = [item for item in events if item["event_type"].startswith("INFERENCE_REVIEW_ATTACK_CHAIN")]
-    assert [item["event_type"] for item in metrics] == [
-        "INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED",
-        "INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED",
-        "INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED",
-        "INFERENCE_REVIEW_ATTACK_CHAINS_PUBLISHED"]
-    for metric in metrics:
-        details = metric["details"]
-        assert details["duration_ms"] >= 0
-        assert not any(key in details for key in ("chain_id", "claim_id", "evidence", "prompt"))
-    assert file_sha256(fixture.run_root / handoff["attack_chain_manifest"]["path"]) == handoff["attack_chain_manifest"]["sha256"]

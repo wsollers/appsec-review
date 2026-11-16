@@ -406,15 +406,3 @@ def test_scheduler_reserves_exploration_without_expanding_package_budget(prepare
     assert len(lane["proposals"]) <= 1
     assert lane["exploration"]["exploratory"]["status"] == "explored"
 
-
-def test_bounded_rounds_publish_end_to_end_without_live_models(prepared):
-    job = build_job(infer=prepared.infer, repository_root=ROOT)
-    runner = JobRunner(load_config(prepared.tmp / "review" / "appsec-review.toml"))
-    attempt = runner.begin_attempt(job, run_id=prepared.fixture.run_id)
-    outputs = {}
-    for step, tasks in TOPOLOGY.items():
-        for task in tasks:
-            unit_id = f"{step}.{task}"
-            outputs[unit_id] = runner.execute_or_reuse_unit(job, attempt, unit_id)
-    assert outputs["publication.publish_claim_ledger"]["ledger_head_sha256"]
-    assert outputs["publication.publish_handoff"]["terminal_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}

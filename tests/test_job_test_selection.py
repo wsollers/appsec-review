@@ -413,33 +413,32 @@ def test_common_coverage_cannot_also_be_claimed_as_handler_coverage(checkout, ha
         select_tests(checkout, ["job_alpha"])
 
 
-def test_shipped_metadata_covers_registered_jobs_and_resolves_every_category():
+@pytest.mark.parametrize("kind", KINDS)
+def test_shipped_metadata_covers_registered_jobs_and_resolves_every_category(kind):
     document = json.loads((ROOT / "tests/job-test-map.json").read_text(encoding="utf-8"))
     registered = _registered_jobs(ROOT)
     assert set(document["jobs"]) == registered
-    for kind in KINDS:
-        result = select_tests(ROOT, sorted(registered), kind=kind)
-        handler = sorted({selector for mapping in document["jobs"].values() for selector in mapping[kind]})
-        common = [
-            {"contract_id": contract_id, "jobs": sorted(mapping["jobs"]), "selectors": sorted(mapping[kind])}
-            for contract_id, mapping in sorted(document["common_contracts"].items()) if mapping[kind]
-        ]
-        expected = sorted(set(handler).union(*(item["selectors"] for item in common)))
-        assert result["handler_selectors"] == handler
-        assert result["common_contracts"] == common
-        assert result["selectors"] == expected
-        assert {gap["job_id"] for gap in result["gaps"]} == {
-            job_id for job_id, mapping in document["jobs"].items() if not mapping[kind]
-        }
-        assert result["pytest_argv"][4:] == expected
-    document_gap = select_tests(ROOT, ["job_document_issue_analysis"])
-    assert document_gap["handler_selectors"] == []
-    assert document_gap["selectors"] == sorted({
-        selector for contract in document["common_contracts"].values()
-        if "job_document_issue_analysis" in contract["jobs"] for selector in contract["unit"]
-    })
-    assert document_gap["gaps"][0]["job_id"] == "job_document_issue_analysis"
-    assert document_gap["gaps"][0]["scope"] == "handler"
+    result = select_tests(ROOT, sorted(registered), kind=kind)
+    handler = sorted({selector for mapping in document["jobs"].values() for selector in mapping[kind]})
+    common = [
+        {"contract_id": contract_id, "jobs": sorted(mapping["jobs"]), "selectors": sorted(mapping[kind])}
+        for contract_id, mapping in sorted(document["common_contracts"].items()) if mapping[kind]
+    ]
+    expected = sorted(set(handler).union(*(item["selectors"] for item in common)))
+    assert result["handler_selectors"] == handler
+    assert result["common_contracts"] == common
+    assert result["selectors"] == expected
+    assert {gap["job_id"] for gap in result["gaps"]} == {
+        job_id for job_id, mapping in document["jobs"].items() if not mapping[kind]
+    }
+    assert result["pytest_argv"][4:] == expected
+    if kind == "unit":
+        assert result["gaps"] == []
+        document_unit = select_tests(ROOT, ["job_document_issue_analysis"])
+        assert document_unit["handler_selectors"] == sorted(
+            document["jobs"]["job_document_issue_analysis"]["unit"]
+        )
+        assert document_unit["gaps"] == []
 
 
 def test_shipped_recovery_maps_preserve_narrow_fixture_scopes_and_manual_categories():

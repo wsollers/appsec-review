@@ -127,7 +127,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/test_remediation_jobs.py::test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_remediation_models.py` |
+| unit | `tests/test_remediation_models.py`<br>`tests/test_remediation_patches.py`<br>`tests/unit/job_remediation_planning/test_coverage_edges.py` |
 
 ### Dagster placement
 
