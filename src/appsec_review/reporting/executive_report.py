@@ -2,7 +2,8 @@
 
 The readers are a project's tech lead and business owner. The document says, in plain words, what each
 confirmed weakness is, where it is, what an attacker gains, how severe it is, whether an independent
-verifier confirmed it and whether it blocks shipping; then the review's status, limits and provenance.
+verifier confirmed it and whether it blocks shipping; then the review's status, limits and provenance. After
+the summary, a radar chart and table show the review's coverage by security dimension (``dimensions.py``).
 
 It is a pure function of its inputs: the same report and the same bound dossier documents give an
 equal :class:`Document`, with no clock, locale, environment or file read. Every string that came from
@@ -17,7 +18,8 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
 from .digest import bullets, field, table
-from .model import Box, Document, Fields, Heading, Para, Stat, Stats
+from .dimensions import DIMENSIONS, dimension_counts
+from .model import Box, Document, Fields, Heading, Para, RadarAxis, RadarChart, RadarLegendRow, RadarSeries, Stat, Stats
 from .text import bound, clean
 from .tokens import BoxKind, Limits, STATUS_TONES
 
@@ -312,6 +314,66 @@ def _summary_blocks(report: Mapping[str, Any]) -> list[Any]:
     ]
 
 
+DIMENSION_SCALE_NOTE = (
+    "Each series is scaled to its own largest axis, which is drawn at the rim (1.0); the raw counts are in the key "
+    "and the table. A short spoke means little was found or examined in that dimension, never that the dimension "
+    "is clean. An axis with no claims is uncovered: the review has nothing to say about it. Scanner leads are not "
+    "bound to this report, so lead admission per dimension is not shown.")
+LEADS_NOT_BOUND = "not bound"
+
+
+def _dimension_reading(findings: int, claims: int) -> str:
+    if findings:
+        return f"{_plural(findings, 'confirmed finding')} of {_plural(claims, 'claim')} examined."
+    if claims:
+        return f"{_plural(claims, 'claim')} examined, none confirmed. Not a clearance."
+    return "Uncovered: no claim was examined here."
+
+
+def _dimension_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier]) -> list[Any]:
+    """Review coverage by security dimension: a radar chart over the predicate groups plus the per-axis table."""
+    by_claim = {row.finding["claim_id"]: row.document for row in dossiers
+                if row.kind == "confirmed_finding" and row.document}
+    rows, unclassified = dimension_counts(report, by_claim)
+    top_findings = max((row.findings for row in rows), default=0)
+    top_claims = max((row.claims for row in rows), default=0)
+
+    def scaled(values: Iterable[int], top: int) -> tuple[float, ...]:
+        return tuple(value / top if top else 0.0 for value in values)
+
+    chart = RadarChart(
+        "Confirmed findings and claims examined per dimension",
+        tuple(RadarAxis(row.label, row.key) for row in rows),
+        (RadarSeries("Confirmed findings", "confirmed", scaled((row.findings for row in rows), top_findings),
+                     tuple(str(row.findings) for row in rows)),
+         RadarSeries("Claims examined", "proposed", scaled((row.claims for row in rows), top_claims),
+                     tuple(str(row.claims) for row in rows))),
+        scale_note=DIMENSION_SCALE_NOTE,
+        legend=(RadarLegendRow("series", "Confirmed findings", "Confirmed findings",
+                               f"independently confirmed finding packages per dimension; the rim is {top_findings}"),
+                RadarLegendRow("series", "Claims examined", "Claims examined",
+                               "confirmed, verification-backlog and withheld packages per dimension; the rim is "
+                               f"{top_claims}"),
+                *(RadarLegendRow("axis", dimension.key, dimension.label, dimension.counts) for dimension in DIMENSIONS)))
+    table_rows = [(row.key, row.label, row.findings, row.claims, LEADS_NOT_BOUND,
+                   _dimension_reading(row.findings, row.claims)) for row in rows]
+    items: list[Any] = [
+        Para("Each dimension groups part of the review's closed security-consequence vocabulary. Findings are "
+             "independently confirmed packages; claims examined add the verification backlog and withheld packages. "
+             "Scanner leads admitted and observed per dimension would need the review's excluded-leads record, which "
+             "the gate does not bind to this report."),
+        table(("Key", "Dimension", "Findings", "Claims", "Scanner leads", "Reading"), table_rows, LIMITS,
+              widths=(.05, .22, .09, .09, .13, .38)),
+        Para(f"{_plural(unclassified, 'package')} named no member of the vocabulary and {'is' if unclassified == 1 else 'are'} "
+             "counted in no dimension." if unclassified else
+             "Every accepted package names a member of the vocabulary and is counted in exactly one dimension.", muted=True),
+        Para("A short row means little was found or examined there, never that the dimension is clean. " + NOT_CLEAN,
+             muted=True),
+    ]
+    return [Heading(1, "Review coverage by security dimension", "dimensions"), chart,
+            Box(BoxKind.EVIDENCE, "Coverage by dimension", items=tuple(items))]
+
+
 def _capability_line(report: Mapping[str, Any], name: str) -> str:
     record = (report.get("capabilities") or {}).get(name) or {}
     disposition = clean(record.get("disposition"))
@@ -476,6 +538,7 @@ def executive_document(report: Mapping[str, Any], dossiers: Sequence[BoundDossie
             raise ValueError(f"unsupported dossier model for {row.dossier_id}")
     by_claim = {row.finding["claim_id"]: row for row in dossiers if row.kind == "confirmed_finding"}
     blocks: list[Any] = _summary_blocks(report)
+    blocks += _dimension_blocks(report, dossiers)
     blocks.append(Heading(1, "Confirmed findings", "findings"))
     findings = report["findings"]
     if not findings:

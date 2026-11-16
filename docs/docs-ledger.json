@@ -1948,6 +1948,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "operations",
+      "path": "docs/operations/smoke-scorecard.md",
+      "reason": "Current documentation of the smoke scorecard: funnel stages and owners, axes, per-axis metrics, the radar series, the PDF receipt and the key's v1.1.0 fields.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
       "path": "docs/operations/source-history-analysis.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"

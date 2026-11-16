@@ -3,8 +3,8 @@
 The renderer writes only the *content* (escaped text inside the macros that
 ``containers/report/latex/template/appsec-report.cls`` defines); layout and colour live in the
 template. Every string is escaped by ``text.tex``/``text.tex_mono``; no run text can open a TeX
-command, and the engine runs without shell escape. Charts (``BarChart``, ``Timeline``) are laid out
-here in Python; the template receives only TikZ primitives with fixed-precision coordinates.
+command, and the engine runs without shell escape. Charts (``BarChart``, ``Timeline``,
+``RadarChart``) are laid out here in Python; the template receives only TikZ primitives with fixed-precision coordinates.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import re
 from typing import Iterable, Sequence
 
 from .model import (Bar, BarChart, Block, Box, Bullets, Code, Document, Fields, Field, Heading, IdList, Item, Lane, Legend,
-                    Note, PageBreak, Para, Segment, Stats, Table, Timeline, Truncation)
+                    Note, PageBreak, Para, RadarChart, Segment, Stats, Table, Timeline, Truncation)
 from .text import clean, tex, tex_code_line, tex_mono, token
 from .tokens import badge_text, BOX_STYLES, STYLE_BY_KIND, VERDICT_COLOR, VERDICTS, EXTRA_VERDICTS, BoxKind
 
@@ -316,6 +316,100 @@ def _timeline(block: Timeline) -> list[str]:
     return lines + _chart_close(block.caption, block.omitted)
 
 
+# Radar chart geometry: an isotropic millimetre frame centred on the origin; axis 0 points up and the
+# axes follow clockwise. Rings are polygons through the axes, not circles, so the grid reads as a web.
+RADAR_R = 30.0
+RADAR_KEY_R = RADAR_R + 4.0
+RADAR_MARGIN = 9.0
+RADAR_RINGS = (0.25, 0.5, 0.75, 1.0)
+RADAR_RING_LABELS = ((0.5, "0.5"), (1.0, "1.0"))
+RADAR_LINE_STYLES = ("solid", "dashed", "dotted", "densely dashdotted")   # one per series, so greyscale reads
+RADAR_MARKER_R = 0.7
+RADAR_KEY_CHARS = 4
+RADAR_LABEL_CHARS = 36
+RADAR_MEANING_CHARS = 160
+RADAR_DISPLAY_CHARS = 24
+
+
+def radar_point(index: int, count: int, radius: float) -> tuple[float, float]:
+    """Cartesian point of axis ``index`` of ``count`` at ``radius`` millimetres from the centre."""
+    angle = math.pi / 2 - 2 * math.pi * index / count
+    return radius * math.cos(angle), radius * math.sin(angle)
+
+
+def radar_ring_label_point(count: int, radius: float) -> tuple[float, float]:
+    """A point on the bisector between the last and the first axis (upper left), where no spoke runs."""
+    angle = math.pi / 2 + math.pi / count
+    return radius * math.cos(angle), radius * math.sin(angle)
+
+
+def _radar_polygon(points: Iterable[tuple[float, float]]) -> str:
+    return " -- ".join(_pt(x, y) for x, y in points) + " -- cycle"
+
+
+def radar_line_style(index: int) -> str:
+    return RADAR_LINE_STYLES[index % len(RADAR_LINE_STYLES)]
+
+
+def _radar_legend(block: RadarChart) -> list[str]:
+    series_index = {row.label: index for index, row in enumerate(block.series)}
+    axis_index = {axis.key: index for index, axis in enumerate(block.axes)}
+    lines: list[str] = []
+    for row in block.legend:
+        label = tex(_fit(row.label, RADAR_LABEL_CHARS))
+        meaning = tex(_fit(row.meaning, RADAR_MEANING_CHARS))
+        index = series_index.get(row.key) if row.kind == "series" else None
+        if index is not None:
+            lines.append(rf"\radarseriesrow{{{_tone_color(block.series[index].tone)}}}{{{radar_line_style(index)}}}"
+                         rf"{{{label}}}{{{meaning}}}")
+            continue
+        values = ""
+        position = axis_index.get(row.key) if row.kind == "axis" else None
+        if position is not None:
+            shown = [f"{_fit(series.label, RADAR_LABEL_CHARS)} {_fit(series.displays[position], RADAR_DISPLAY_CHARS)}"
+                     for series in block.series if series.displays and clean(series.displays[position])]
+            values = tex("; ".join(shown))
+        lines.append(rf"\radarkeyrow{{{tex(_fit(row.key, RADAR_KEY_CHARS))}}}{{{label}}}{{{meaning}}}{{{values}}}")
+    return lines
+
+
+def _radar_chart(block: RadarChart) -> list[str]:
+    lines = _chart_open(block.title, "")
+    count = len(block.axes)
+    if not any(value > 0 for row in block.series for value in row.values):
+        lines.append(r"\chartempty{No data}")
+        if clean(block.scale_note):
+            lines.append(rf"\chartcaption{{{tex(block.scale_note)}}}")
+        return lines + _chart_close(block.caption, None)
+    extent = RADAR_KEY_R + RADAR_MARGIN
+    lines += [r"\noindent\makebox[\linewidth]{\begin{tikzpicture}[x=1mm,y=1mm]",
+              rf"\useasboundingbox {_pt(-extent, -extent)} rectangle {_pt(extent, extent)};"]
+    for ring in RADAR_RINGS:
+        lines.append(rf"\draw[chartring] {_radar_polygon(radar_point(i, count, RADAR_R * ring) for i in range(count))};")
+    for index in range(count):
+        lines.append(rf"\draw[chartspoke] {_pt(0, 0)} -- {_pt(*radar_point(index, count, RADAR_R))};")
+    for ring, label in RADAR_RING_LABELS:
+        lines.append(rf"\node[chartnote,anchor=east] at {_pt(*radar_ring_label_point(count, RADAR_R * ring))} {{{label}}};")
+    for index, row in enumerate(block.series):
+        color = _tone_color(row.tone)
+        points = [radar_point(axis, count, RADAR_R * value) for axis, value in enumerate(row.values)]
+        polygon = _radar_polygon(points)
+        lines.append(rf"\fill[{color},radarfill] {polygon};")
+        lines.append(rf"\draw[{color},radarline,{radar_line_style(index)}] {polygon};")
+        lines += [rf"\fill[{color}] {_pt(x, y)} circle ({_n(RADAR_MARKER_R)});"
+                  for (x, y), value in zip(points, row.values) if value > 0]
+    for index, axis in enumerate(block.axes):
+        lines.append(rf"\node[chartkey] at {_pt(*radar_point(index, count, RADAR_KEY_R))} "
+                     rf"{{{tex(_fit(axis.key, RADAR_KEY_CHARS))}}};")
+    lines.append(r"\end{tikzpicture}}\par\vspace{4pt}")
+    lines += _radar_legend(block)
+    if clean(block.scale_note):
+        lines.append(rf"\chartcaption{{{tex(block.scale_note)}}}")
+    if block.clamped:
+        lines.append(rf"\chartcaption{{{block.clamped} value(s) fell outside 0 to 1 and were clamped to the rim or the centre.}}")
+    return lines + _chart_close(block.caption, None)
+
+
 def duration_label(total_ms: int) -> str:
     return f"total {tick_label(total_ms)}" if total_ms > 0 else ""
 
@@ -359,6 +453,8 @@ def _block(block: Block) -> list[str]:
         return _bar_chart(block)
     if isinstance(block, Timeline):
         return _timeline(block)
+    if isinstance(block, RadarChart):
+        return _radar_chart(block)
     raise TypeError(f"unknown block {type(block).__name__}")
 
 

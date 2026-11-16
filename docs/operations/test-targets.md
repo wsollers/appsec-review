@@ -214,7 +214,7 @@ advisory identifiers for dependency items; titles are never matched. The per-ite
 file was in the accepted scope and its disposition, its facet tags, which leads hit it (family, scanner,
 rule, admission or exclusion), which packages carried it (lane, package id, through its lead or through its
 unit), the claims raised on it, the judge verdicts, the finding packages and their gate bucket, whether a
-matching finding reached the report, and the citing source lines resolved from the claim's entities. The
+matching finding reached the report, and the citing source lines: a claim is on an item only when its primary site (the `affected_construct` evidence location, else the dossier source row with that predicate, else a locator in the finding title) falls inside the span; entry-point and other context citations never match. The
 outcome compares that with the key's `expected_disposition`: a `reported` item is a hit when a matching
 finding is in the report; a `reported-as-fixed` or `squelched` item is a hit when none is (the squelch
 reason names the refuting claims). Items are `not_evaluable` while the run has no final report. The metrics
@@ -226,3 +226,7 @@ tokens from the `data/inference-executions/` receipts, and budget use from the r
 
 The unit tests (`tests/unit/reporting/test_smoke_score.py`) build a synthetic run tree and a synthetic key;
 the real key is never read by a test or an agent.
+
+Each item also carries the one loss-funnel `stage` it reached and its `axis`; the per-axis metrics, the
+radar-chart PDF under `data/verification/smoke-scorecard.pdf` (on by default with the key, `--no-pdf` to
+skip) and the `--compare <other-run-id>` trend are described in [smoke-scorecard.md](smoke-scorecard.md).

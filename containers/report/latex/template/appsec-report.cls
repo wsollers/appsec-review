@@ -190,13 +190,26 @@
   chartvalue/.style={anchor=west,inner sep=0pt,font=\fontsize{7.2}{9}\selectfont\bfseries,text=ink},
   chartnote/.style={anchor=west,inner sep=0pt,font=\fontsize{7}{9}\selectfont,text=muted},
   charttick/.style={anchor=base,inner sep=0pt,font=\fontsize{6.4}{8}\selectfont,text=muted},
-  chartseg/.style={anchor=west,inner sep=0pt,font=\fontsize{6}{7}\selectfont\bfseries,text=white}}
+  chartseg/.style={anchor=west,inner sep=0pt,font=\fontsize{6}{7}\selectfont\bfseries,text=white},
+  chartring/.style={draw=rule,line width=0.5pt},
+  chartspoke/.style={draw=faint,line width=0.4pt},
+  chartkey/.style={anchor=center,inner sep=0pt,font=\fontsize{7.4}{9}\selectfont\bfseries,text=ink},
+  radarfill/.style={fill opacity=0.16},
+  radarline/.style={line width=0.9pt}}
 \newenvironment{reportchart}[2]{\par\vspace{6pt}\noindent\begin{minipage}{\linewidth}\setlength{\parskip}{0pt}%
   \noindent{\small\bfseries\color{brand}#1}\ifstrempty{#2}{}{\enspace{\scriptsize\color{muted}#2}}\par
   \vspace{2pt}{\color{rule}\rule{\linewidth}{0.5pt}}\par\vspace{4pt}}%
   {\end{minipage}\par\vspace{6pt}}
 \newcommand{\chartcaption}[1]{\par\vspace{4pt}\noindent{\scriptsize\color{muted}#1}\par}
 \newcommand{\chartempty}[1]{\par\noindent{\small\itshape\color{muted}#1}\par}
+%% Radar chart key: a swatch (fill plus the series' line style, so it reads in greyscale), the series
+%% label and its meaning; then one row per axis: key, dimension, what counts, and the raw values.
+\newcommand{\radarswatch}[2]{\tikz[baseline=-0.7ex]{\fill[#1,radarfill] (0,0) rectangle (5mm,2.4mm);%
+  \draw[#1,radarline,#2] (0,1.2mm) -- (5mm,1.2mm);}}
+\newcommand{\radarseriesrow}[4]{\par\noindent\hangindent=47mm\hangafter=1\makebox[9mm][l]{\radarswatch{#1}{#2}}%
+  \makebox[38mm][l]{\scriptsize\bfseries #3}{\scriptsize #4}\par\vspace{2pt}}
+\newcommand{\radarkeyrow}[4]{\par\noindent\hangindent=47mm\hangafter=1\makebox[9mm][l]{\scriptsize\bfseries\color{brand}#1}%
+  \makebox[38mm][l]{\scriptsize\bfseries #2}{\scriptsize #3\ifstrempty{#4}{}{\ {\color{muted}(#4)}}}\par\vspace{1pt}}
 
 %% Legend rows.
 \newcommand{\legendrow}[4]{\par\noindent\hangindent=40mm\hangafter=1\makebox[27mm][l]{\chip{#1}{#2}}%

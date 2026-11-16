@@ -7,6 +7,7 @@ its own language. Frozen dataclasses only, so the same run always yields an equa
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Union
 
 from .tokens import BoxKind
@@ -174,7 +175,77 @@ class Timeline:
     omitted: Truncation | None = None  # lanes not shown
 
 
-Block = Union[Heading, Box, Stats, Note, Legend, PageBreak, BarChart, Timeline]
+RADAR_MIN_AXES, RADAR_MAX_AXES = 3, 12
+RADAR_MAX_SERIES = 4
+
+
+@dataclass(frozen=True, slots=True)
+class RadarAxis:
+    label: str
+    key: str                           # short code shown at the rim; the legend maps it to the label
+
+
+@dataclass(frozen=True, slots=True)
+class RadarSeries:
+    label: str
+    tone: str                          # a verdict token or "neutral"
+    values: tuple[float, ...]          # one per axis, in [0, 1]; the chart clamps and counts anything outside
+    displays: tuple[str, ...] = ()     # optional preformatted value text per axis, shown in the key table
+
+
+@dataclass(frozen=True, slots=True)
+class RadarLegendRow:
+    kind: str                          # "series": key is the series label; "axis": key is the axis key
+    key: str
+    label: str
+    meaning: str
+
+
+@dataclass(frozen=True, slots=True)
+class RadarChart:
+    """A radar (spider) chart: one polygon per series over 3 to 12 axes, with a legend and key below.
+
+    Values are fractions of the rim. Construction clamps every value into [0, 1] (a non-finite value
+    becomes 0) and records how many were moved in ``clamped``, so a renderer can say so.
+    """
+
+    title: str
+    axes: tuple[RadarAxis, ...]
+    series: tuple[RadarSeries, ...]
+    scale_note: str = ""               # what 1.0 means on every spoke, and what a short spoke does not mean
+    caption: str = ""
+    legend: tuple[RadarLegendRow, ...] = ()
+    clamped: int = 0                   # set on construction; a passed value is ignored
+
+    def __post_init__(self) -> None:
+        if not RADAR_MIN_AXES <= len(self.axes) <= RADAR_MAX_AXES:
+            raise ValueError(f"radar chart needs {RADAR_MIN_AXES} to {RADAR_MAX_AXES} axes, got {len(self.axes)}")
+        if not 1 <= len(self.series) <= RADAR_MAX_SERIES:
+            raise ValueError(f"radar chart needs 1 to {RADAR_MAX_SERIES} series, got {len(self.series)}")
+        if len({axis.key for axis in self.axes}) != len(self.axes):
+            raise ValueError("radar axis keys must be distinct")
+        clamped = 0
+        series = []
+        for row in self.series:
+            if len(row.values) != len(self.axes):
+                raise ValueError(f"series {row.label!r} has {len(row.values)} values for {len(self.axes)} axes")
+            if row.displays and len(row.displays) != len(self.axes):
+                raise ValueError(f"series {row.label!r} has {len(row.displays)} displays for {len(self.axes)} axes")
+            values = []
+            for value in row.values:
+                number = float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else math.nan
+                safe = 0.0 if math.isnan(number) else min(max(number, 0.0), 1.0)
+                clamped += safe != number
+                values.append(safe)
+            series.append(RadarSeries(row.label, row.tone, tuple(values), tuple(row.displays)))
+        for row in self.legend:
+            if row.kind not in ("series", "axis"):
+                raise ValueError(f"radar legend row kind must be 'series' or 'axis', got {row.kind!r}")
+        object.__setattr__(self, "series", tuple(series))
+        object.__setattr__(self, "clamped", clamped)
+
+
+Block = Union[Heading, Box, Stats, Note, Legend, PageBreak, BarChart, Timeline, RadarChart]
 
 
 @dataclass(frozen=True, slots=True)

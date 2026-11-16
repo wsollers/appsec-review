@@ -82,10 +82,14 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 | `review-recover.sh` / `.ps1` | Recover one failed application run: the existing steps in order (dispatches terminal, reconcile the submission, verify worker stop, `plan-repair`, one confirmation, `admit-repair`, resume), stopping at the first refusal. Adds no authority; `--dry-run` prints the commands and runs none. |
 | `render-report.sh` / `.ps1` | Render a finished run's review report to PDF or single-page HTML (`--format pdf\|html`), or with `--kind telemetry` (`-Kind telemetry`) its end-of-run telemetry report (`--format pdf\|tex`; a PDF goes to `runs/<id>/data/telemetry/report/`); other output goes to `runs/reports/` by default. Details: [`docs/operations/report-rendering.md`](../docs/operations/report-rendering.md), [`docs/operations/telemetry-report.md`](../docs/operations/telemetry-report.md). |
 
-`scripts/smoke-score.py --run runs/<run-id> [--answer-key <path>]` scores a completed smoke run
-offline: structural checks over the published records, and per-planted-item scoring when the
-user supplies the answer key. It writes `data/verification/smoke-score.json` and `.txt` under the
-run and changes nothing else ([test targets](../docs/operations/test-targets.md#scoring-a-smoke-run-t-5019)).
+`scripts/smoke-score.py --run runs/<run-id> [--answer-key <path>] [--pdf|--no-pdf] [--compare <run>]`
+scores a completed smoke run offline: structural checks over the published records, and per-planted-item
+scoring (loss-funnel stage, axis, per-axis recall, precision and coverage) when the user supplies the
+answer key. It writes `data/verification/smoke-score.json` and `.txt` under the run and, with the key,
+the scorecard `smoke-scorecard.tex`, `.pdf` (through the pinned LaTeX image) and its receipt; `--compare`
+prints the per-axis trend from another scored run. It changes nothing else
+([test targets](../docs/operations/test-targets.md#scoring-a-smoke-run-t-5019),
+[smoke scorecard](../docs/operations/smoke-scorecard.md)).
 
 `scripts/cell-outcomes.py --run runs/<run-id> [--attempt attempt_0001] [--write]` reports where an inference
 review run spent its cells: per role, attempt outcomes and the reasons attempts ended, retrieval tool errors,

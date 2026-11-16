@@ -15,7 +15,7 @@
         {"type": "null"},
         {
           "type": "object", "additionalProperties": false,
-          "required": ["schema", "sha256", "language", "tag", "commit", "planted", "path"],
+          "required": ["schema", "sha256", "language", "tag", "commit", "planted", "path", "version", "chains"],
           "properties": {
             "schema": {"const": "appsec-review/smoke-answer-key/1"},
             "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -23,7 +23,9 @@
             "tag": {"type": ["string", "null"]},
             "commit": {"type": ["string", "null"]},
             "planted": {"type": "integer", "minimum": 0},
-            "path": {"type": ["string", "null"]}
+            "path": {"type": ["string", "null"]},
+            "version": {"type": ["string", "null"]},
+            "chains": {"type": "integer", "minimum": 0}
           }
         }
       ]
@@ -131,10 +133,12 @@
         {"type": "null"},
         {
           "type": "object", "additionalProperties": false,
-          "required": ["items", "metrics", "complexity", "publication_available"],
+          "required": ["items", "metrics", "by_axis", "funnel", "complexity", "publication_available"],
           "properties": {
             "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
             "metrics": {"$ref": "#/$defs/metrics"},
+            "by_axis": {"type": "array", "items": {"$ref": "#/$defs/axis"}},
+            "funnel": {"type": "object", "propertyNames": {"enum": ["not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]}, "additionalProperties": {"type": "integer", "minimum": 0}},
             "complexity": {
               "oneOf": [
                 {"type": "null"},
@@ -190,11 +194,15 @@
     },
     "item": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "class", "expected_disposition", "file", "function", "span", "match_basis", "package", "version", "identifiers", "location", "in_accepted_scope", "disposition", "facets", "facets_available", "dependency_rows", "leads", "packages", "claims", "judge_verdicts", "finding_packages", "reported", "citing_lines", "observed_disposition", "outcome", "outcome_reason"],
+      "required": ["id", "class", "expected_disposition", "cwe", "axis", "axis_basis", "real_severity", "file", "function", "span", "match_basis", "package", "version", "identifiers", "location", "in_accepted_scope", "disposition", "facets", "facets_available", "dependency_rows", "components", "leads", "packages", "claims", "judge_verdicts", "finding_packages", "reported", "citing_lines", "observed_disposition", "outcome", "outcome_reason", "stage", "stage_evidence"],
       "properties": {
         "id": {"type": "string"},
         "class": {"enum": ["true_positive_code", "true_positive_dependency", "fixed_code", "fixed_dependency", "false_positive"]},
         "expected_disposition": {"type": "string"},
+        "cwe": {"type": ["string", "null"]},
+        "axis": {"enum": ["memory_safety", "numeric_handling", "control_injection", "format_string", "concurrency", "parsing_data", "access_control", "secrets_crypto", "resource_exhaustion", "dead_code", "supply_chain", "unassigned"]},
+        "axis_basis": {"enum": ["key", "cwe", "cwe_rollup", "class", "none"]},
+        "real_severity": {"enum": ["critical", "high", "medium", "low", null]},
         "file": {"type": ["string", "null"]},
         "function": {"type": ["string", "null"]},
         "span": {"$ref": "#/$defs/span"},
@@ -208,11 +216,19 @@
         "facets": {"type": "array", "items": {"type": "string"}},
         "facets_available": {"type": "boolean"},
         "dependency_rows": {"type": "array", "maxItems": 64, "items": {"type": "string"}},
+        "components": {
+          "type": "array", "maxItems": 64,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["identity", "version"],
+            "properties": {"identity": {"type": "string"}, "version": {"type": ["string", "null"]}}
+          }
+        },
         "leads": {
           "type": "array", "maxItems": 64,
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["lead_id", "family", "scanner", "rule_id", "start_line", "admission", "exclusion"],
+            "required": ["lead_id", "family", "scanner", "rule_id", "start_line", "admission", "exclusion", "reported_severity", "effective_severity"],
             "properties": {
               "lead_id": {"type": "string"},
               "family": {"type": ["string", "null"]},
@@ -220,7 +236,9 @@
               "rule_id": {"type": ["string", "null"]},
               "start_line": {"type": ["integer", "null"]},
               "admission": {"type": "string"},
-              "exclusion": {"type": ["string", "null"]}
+              "exclusion": {"type": ["string", "null"]},
+              "reported_severity": {"type": ["string", "null"]},
+              "effective_severity": {"type": ["string", "null"]}
             }
           }
         },
@@ -241,12 +259,13 @@
           "type": "array",
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["claim_id", "state", "lane", "package_id"],
+            "required": ["claim_id", "state", "lane", "package_id", "site_source"],
             "properties": {
               "claim_id": {"type": "string"},
               "state": {"type": ["string", "null"]},
               "lane": {"type": ["string", "null"]},
-              "package_id": {"type": ["string", "null"]}
+              "package_id": {"type": ["string", "null"]},
+              "site_source": {"enum": ["relations", "dossier", "title", "none", "dependency"]}
             }
           }
         },
@@ -266,12 +285,13 @@
           "type": "array",
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["finding_package_id", "claim_id", "state", "bucket"],
+            "required": ["finding_package_id", "claim_id", "state", "bucket", "technical_severity"],
             "properties": {
               "finding_package_id": {"type": "string"},
               "claim_id": {"type": "string"},
               "state": {"type": ["string", "null"]},
-              "bucket": {"type": ["string", "null"]}
+              "bucket": {"type": ["string", "null"]},
+              "technical_severity": {"type": ["string", "null"]}
             }
           }
         },
@@ -291,7 +311,52 @@
         },
         "observed_disposition": {"enum": ["reported", "verification_backlog", "withheld", "finding_not_reported", "claimed_not_published", "packaged", "admitted_not_packaged", "lead_not_admitted", "in_hunt_unit_only", "not_observed"]},
         "outcome": {"enum": ["hit", "miss", "not_evaluable"]},
-        "outcome_reason": {"type": "string"}
+        "outcome_reason": {"type": "string"},
+        "stage": {"enum": ["not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]},
+        "stage_evidence": {"type": "string"}
+      }
+    },
+    "axis": {
+      "type": "object", "additionalProperties": false,
+      "required": ["axis", "label", "key", "planted", "confirmed", "recall", "covered", "coverage", "negatives", "correctly_passed", "false_reports", "precision", "stages", "low_confidence", "severity"],
+      "properties": {
+        "axis": {"enum": ["memory_safety", "numeric_handling", "control_injection", "format_string", "concurrency", "parsing_data", "access_control", "secrets_crypto", "resource_exhaustion", "dead_code", "supply_chain", "unassigned"]},
+        "label": {"type": "string"},
+        "key": {"type": "string"},
+        "planted": {"type": "integer", "minimum": 0},
+        "confirmed": {"type": "integer", "minimum": 0},
+        "recall": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "covered": {"type": "integer", "minimum": 0},
+        "coverage": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "negatives": {"type": "integer", "minimum": 0},
+        "correctly_passed": {"type": "integer", "minimum": 0},
+        "false_reports": {"type": "integer", "minimum": 0},
+        "precision": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "stages": {"type": "object", "propertyNames": {"enum": ["not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]}, "additionalProperties": {"type": "integer", "minimum": 0}},
+        "low_confidence": {"type": "boolean"},
+        "severity": {
+          "type": "object", "additionalProperties": false,
+          "required": ["keyed", "planted_high_admitted_below", "items"],
+          "properties": {
+            "keyed": {"type": "boolean"},
+            "planted_high_admitted_below": {"type": "integer", "minimum": 0},
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["id", "planted", "admitted_effective", "admitted_basis", "published_technical", "planted_high_admitted_below"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "planted": {"enum": ["critical", "high", "medium", "low"]},
+                  "admitted_effective": {"type": ["string", "null"]},
+                  "admitted_basis": {"enum": ["admitted_leads", "all_leads", "no_lead"]},
+                  "published_technical": {"type": ["string", "null"]},
+                  "planted_high_admitted_below": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        }
       }
     },
     "metrics": {

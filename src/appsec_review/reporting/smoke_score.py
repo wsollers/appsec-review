@@ -16,10 +16,19 @@ Two parts:
   (``appsec-review/smoke-answer-key/1``, ``~/smoke-work/tools/answer-key-schema.md``). Every planted item
   is matched by its target-relative path plus line range (or function range when the key gives a
   function and no span), or by exact package/version and advisory identifiers for dependency items.
-  Titles are never matched. Per item the document records whether the file was in the accepted scope and
+  Titles are never matched. A claim is on a code item only when the claim's *primary site* (the location of
+  its ``affected_construct`` evidence; else the dossier source rows with that predicate; else a locator in the
+  finding title) falls inside the item's span: entry-point, reachability, guard and impact citations are
+  context and never a match, and a lead matches by its own location only.
+  Per item the document records whether the file was in the accepted scope and
   its disposition, its facet tags, the leads that hit it (family, scanner, rule, admission), the packages
   that carried it (lane, package id), the claims raised on it, the judge verdicts, whether it reached the
-  report and the citing source lines, then the outcome against the key's ``expected_disposition``.
+  report and the citing source lines, then the outcome against the key's ``expected_disposition``, the one
+  funnel stage the item reached (``stage_of``) and its axis (``axis_of``: the key's ``axis`` when present,
+  else derived from the CWE through the predicate roll-up and the executive dimension map). Per axis the
+  document gives recall, precision, coverage, stage counts and, when the key carries ``real_severity``, the
+  severity the review admitted on and published (``axis_metrics``). The scorecard document and PDF are
+  built from this document by ``smoke_scorecard``.
 
 Everything here is a measurement of the run's published records. It is not evidence about the target: a
 planted item the run missed is a miss of the run, and a check the run could not support is a gap.
@@ -51,6 +60,7 @@ TEXT_NAME = "smoke-score.txt"
 REVIEW_JOB = "job_inference_security_review"
 GATE_JOB = "job_final_publication_gate"
 REPORT_JOB = "job_final_report_publication"
+DOSSIER_JOB = "job_dossier_publication"
 GRAPH_JOB = "job_code_graph_index"
 TAGGING_JOB = "job_security_tagging"
 PRIORITY_JOB = "job_review_prioritization"
@@ -71,9 +81,61 @@ MAX_OFFENDERS = 200
 MAX_CITING_LINES = 64
 MAX_ITEM_MATCHES = 64
 _SAFE_ATTEMPT = re.compile(r"^attempt_\d{4}$")
+# A relation locator: ``path:start-end#bytes@file_sha256``; a title locator is the same ``path:start[-end]`` form.
+_LOCATOR = re.compile(r"(?P<path>[A-Za-z0-9_./+-]+):(?P<start>\d+)(?:-(?P<end>\d+))?")
+# The evidence predicate whose location is a claim's primary site (the sink / affected construct). Citations with
+# any other predicate (attacker_input_control entry points, reachability, guards, impact) are context, never a match.
+PRIMARY_PREDICATE = "affected_construct"
+SITE_SOURCES = ("relations", "dossier", "title", "none", "dependency")
 _IDENTIFIER_SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,}$")
 # Entity kinds whose location is a whole file (or a file-level ranking row): they never cite a planted span.
 FILE_LEVEL_KINDS = frozenset({"source_file", "priority_item", "review_context_file", "component", "project"})
+
+# -- axes and funnel stages ------------------------------------------------------------------------------
+# The key's closed axis vocabulary (smoke-answer-key v1.1.0 ``axis``): id, label and the short rim key of
+# the radar chart (at most RADAR_KEY_CHARS characters).
+AXES: tuple[tuple[str, str, str], ...] = (
+    ("memory_safety", "Memory safety", "MEM"),
+    ("numeric_handling", "Numeric handling", "NUM"),
+    ("control_injection", "Control and injection", "INJ"),
+    ("format_string", "Format string", "FMT"),
+    ("concurrency", "Concurrency", "CONC"),
+    ("parsing_data", "Parsing and data", "PARS"),
+    ("access_control", "Access control", "ACC"),
+    ("secrets_crypto", "Secrets and crypto", "SEC"),
+    ("resource_exhaustion", "Resource exhaustion", "RES"),
+    ("dead_code", "Dead code", "DEAD"),
+    ("supply_chain", "Supply chain", "SUP"),
+)
+AXIS_IDS = tuple(axis for axis, _, _ in AXES)
+AXIS_LABEL = {axis: label for axis, label, _ in AXES}
+AXIS_KEY = {axis: key for axis, _, key in AXES}
+UNASSIGNED_AXIS = "unassigned"
+# The executive report's dimension keys (reporting.dimensions.DIMENSIONS) mapped onto the key's axes.
+AXIS_OF_DIMENSION = {"M": "memory_safety", "N": "numeric_handling", "C": "control_injection", "P": "parsing_data",
+                     "A": "access_control", "S": "secrets_crypto", "R": "concurrency", "X": "resource_exhaustion",
+                     "K": "supply_chain"}
+# CWE-134 rolls up to memory corruption in the predicate vocabulary; the key keeps a format-string axis.
+AXIS_OF_CWE = {"CWE-134": "format_string"}
+AXIS_BASES = ("key", "cwe", "cwe_rollup", "class", "none")
+# One stage per planted item: how far it travelled through the review before it was lost (or arrived).
+CODE_STAGES = ("not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed")
+DEPENDENCY_STAGES = ("not_identified", "no_version", "no_advisory", "reported")
+NEGATIVE_STAGES = ("correctly_passed", "false_report")
+STAGES = (*CODE_STAGES, *DEPENDENCY_STAGES, *NEGATIVE_STAGES)
+# Stages at or past ``no_claim``: the item was admitted or hunted, so the review looked at it.
+COVERED_STAGES = frozenset({"no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "reported"})
+CONFIRMED_STAGES = frozenset({"confirmed", "reported"})
+POSITIVE_CLASSES = frozenset({"true_positive_code", "true_positive_dependency"})
+NEGATIVE_CLASSES = frozenset({"fixed_code", "fixed_dependency", "false_positive"})
+REFUTING_STATES = frozenset({"contradicted", "not_reachable", "not_exploitable_in_observed_configuration"})
+PENDING_STATES = frozenset({"proposed", "supported", "insufficient_evidence", "confirmed"})
+UNDECIDED_BUCKETS = frozenset({"verification_backlog", "withheld"})
+SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
+SEVERITY_RANK = {name: index for index, name in enumerate(SEVERITIES)}   # lower is more severe
+REAL_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
+HIGH_SEVERITIES = frozenset({"critical", "high"})
+LOW_CONFIDENCE_PLANTED = 3
 
 
 class SmokeScoreError(ValueError):
@@ -119,6 +181,7 @@ class Observation:
     shard: str
     location: Location | None
     payload_text: str
+    reported_severity: str | None = None
 
 
 class RunData:
@@ -354,9 +417,12 @@ class RunData:
                 decision = producer_decision(shard["job"], scanner)
                 family = decision.family if decision is not None else CLASS_FAMILY.get(
                     str(common.get("observation_class") or ""))
+                reported = common.get("reported_severity")
+                severity = _string(reported.get("value")) if isinstance(reported, Mapping) else _string(reported)
                 found.append(Observation(row["identity"], scanner, shard["job"], family,
                                          _string(common.get("rule_id")) or _string(payload.get("rule_id")),
-                                         f"{shard['name']}/{shard['shard_id']}", row["location"], row["payload_text"]))
+                                         f"{shard['name']}/{shard['shard_id']}", row["location"], row["payload_text"],
+                                         severity.lower() if severity else None))
         self._observations = sorted(found, key=lambda item: item.identity)
         return self._observations
 
@@ -465,6 +531,17 @@ class RunData:
     def finding_packages(self) -> list[Mapping[str, Any]]:
         found = self.attempt_json(REVIEW_JOB, "steps/publication/tasks/*/findings/*.json", "finding package")
         return [value for _, value in found if isinstance(value, Mapping) and value.get("claim_id")]
+
+    def dossiers_by_claim(self) -> dict[str, Mapping[str, Any]]:
+        """Published dossier documents by claim id (``finding.claim_id``), from the dossier job's attempt."""
+        found = self.attempt_json(DOSSIER_JOB, "steps/dossiers/tasks/*/items/*/dossier.json", "dossier")
+        result: dict[str, Mapping[str, Any]] = {}
+        for _path, document in found:
+            finding = document.get("finding") if isinstance(document, Mapping) and isinstance(document.get("finding"), Mapping) else {}
+            claim_id = _string(finding.get("claim_id")) or _string(document.get("claim_id"))
+            if claim_id and isinstance(document.get("sources"), list):
+                result.setdefault(claim_id, document)
+        return result
 
     def gate_document(self) -> Mapping[str, Any] | None:
         found = self.attempt_json(GATE_JOB, "steps/*/tasks/*/final-publication-gate.json", "final publication gate")
@@ -818,6 +895,33 @@ class _Planted:
     version: str | None = None
     identifiers: tuple[str, ...] = ()
     location: str | None = None
+    cwe: str | None = None
+    axis: str = UNASSIGNED_AXIS
+    axis_basis: str = "none"
+    real_severity: str | None = None
+
+
+def axis_of(record: Mapping[str, Any]) -> tuple[str, str]:
+    """The key's ``axis`` when it names a member of the vocabulary; else the axis the CWE rolls up to
+    (``SECURITY_PREDICATE_CWE_ROLLUP`` then the executive dimension map); else ``supply_chain`` for a
+    dependency item; else ``unassigned``. Returns the axis and the basis it came from."""
+    axis = record.get("axis")
+    if isinstance(axis, str) and axis in AXIS_IDS:
+        return axis, "key"
+    cwe = record.get("cwe")
+    if isinstance(cwe, str) and cwe.strip():
+        cwe = cwe.strip().upper()
+        if cwe in AXIS_OF_CWE:
+            return AXIS_OF_CWE[cwe], "cwe"
+        from appsec_review.review.models import SECURITY_PREDICATE_CWE_ROLLUP
+        from .dimensions import DIMENSION_OF_PREDICATE
+        predicate = SECURITY_PREDICATE_CWE_ROLLUP.get(cwe)
+        dimension = DIMENSION_OF_PREDICATE.get(predicate.value) if predicate is not None else None
+        if dimension in AXIS_OF_DIMENSION:
+            return AXIS_OF_DIMENSION[dimension], "cwe_rollup"
+    if str(record.get("class")) in DEPENDENCY_CLASSES:
+        return "supply_chain", "class"
+    return UNASSIGNED_AXIS, "none"
 
 
 def _planted_items(key: Mapping[str, Any], run: RunData) -> list[_Planted]:
@@ -827,6 +931,10 @@ def _planted_items(key: Mapping[str, Any], run: RunData) -> list[_Planted]:
             continue
         klass = str(record.get("class"))
         item = _Planted(record, str(record.get("id")), klass, str(record.get("expected_disposition")))
+        item.cwe = _string(record.get("cwe"))
+        item.axis, item.axis_basis = axis_of(record)
+        severity = _string(record.get("real_severity"))
+        item.real_severity = severity.lower() if severity and severity.lower() in REAL_SEVERITIES else None
         if klass in CODE_CLASSES:
             item.path = _string(record.get("file"))
             item.function = _string(record.get("function"))
@@ -877,17 +985,81 @@ def _observation_matches(item: _Planted, observation: Observation) -> bool:
     return False
 
 
-def _dependency_rows(run: RunData, item: _Planted) -> list[str]:
-    """Inventory ``dependency_package`` rows whose name and version equal the planted package exactly."""
-    found = []
+def _dependency_components(run: RunData, item: _Planted) -> list[dict[str, Any]]:
+    """Inventory ``dependency_package`` rows whose name equals the planted package exactly, with their version."""
+    found: dict[str, dict[str, Any]] = {}
     if not item.package:
-        return found
+        return []
     for shard in run.shards("inventory"):
         for row in run.rows(shard, ("dependency_package",)):
-            payload = _payload(row)
-            if row["name"] == item.package and (item.version is None or payload.get("version") == item.version):
-                found.append(row["identity"])
-    return sorted(set(found))
+            if row["name"] == item.package:
+                payload = _payload(row)
+                found.setdefault(row["identity"], {"identity": row["identity"], "version": _string(payload.get("version"))})
+    return [found[identity] for identity in sorted(found)][:MAX_ITEM_MATCHES]
+
+
+def _dependency_rows(components: Sequence[Mapping[str, Any]], item: _Planted) -> list[str]:
+    """The component identities whose version equals the planted version exactly (every row when the key names none)."""
+    return sorted(row["identity"] for row in components if item.version is None or row["version"] == item.version)
+
+
+def _technical_severity(finding: Mapping[str, Any]) -> str | None:
+    """The technical severity rating the review published with a finding package (``ship_block.inputs``)."""
+    block = finding.get("ship_block") if isinstance(finding.get("ship_block"), Mapping) else {}
+    inputs = block.get("inputs") if isinstance(block.get("inputs"), Mapping) else {}
+    technical = inputs.get("technical_severity") if isinstance(inputs.get("technical_severity"), Mapping) else {}
+    rating = _string(technical.get("rating")) or _string(finding.get("technical_severity"))
+    return rating.lower() if rating else None
+
+
+def _locator_location(locator: Any, entity_id: Any, kind: Any) -> Location | None:
+    found = _LOCATOR.match(locator) if isinstance(locator, str) else None
+    if found is None:
+        return None
+    start = int(found.group("start"))
+    end = int(found.group("end") or start)
+    return Location(found.group("path"), start, max(start, end), str(entity_id or "locator"), _string(kind))
+
+
+def primary_sites(claim: Mapping[str, Any], relations: Mapping[str, Any], dossier: Mapping[str, Any] | None,
+                  titles: Iterable[str]) -> tuple[list[Location], str]:
+    """The claim's primary site(s) and where they came from.
+
+    In order: the locations of the claim's evidence relations with predicate ``affected_construct`` (whole-file
+    entities never count); else the dossier ``sources`` rows whose entity carries that predicate in the dossier's
+    evidence; else a ``path:line[-line]`` locator in a finding title. Entry points, reachability, guards and
+    impact citations are context and never a site.
+    """
+    sites: list[Location] = []
+    for relation in relations.get(str(claim.get("claim_id")), ()) or ():
+        if not isinstance(relation, Mapping) or relation.get("predicate") != PRIMARY_PREDICATE:
+            continue
+        if _string(relation.get("entity_kind")) in FILE_LEVEL_KINDS:
+            continue
+        location = _locator_location(relation.get("locator"), relation.get("entity_id"), relation.get("entity_kind"))
+        if location is not None and location not in sites:
+            sites.append(location)
+    if sites:
+        return sites, "relations"
+    if dossier is not None:
+        wanted = {str(row.get("entity_id")) for row in dossier.get("evidence", ()) if isinstance(row, Mapping)
+                  and row.get("predicate") == PRIMARY_PREDICATE and _string(row.get("entity_kind")) not in FILE_LEVEL_KINDS}
+        for row in dossier.get("sources", ()):
+            if not isinstance(row, Mapping) or str(row.get("entity_id")) not in wanted:
+                continue
+            try:
+                location = Location(str(row["path"]), int(row["start_line"]), int(row["end_line"]), str(row["entity_id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if location not in sites:
+                sites.append(location)
+        if sites:
+            return sites, "dossier"
+    for title in titles:
+        location = _locator_location(_LOCATOR.search(title).group(0) if _LOCATOR.search(title) else None, "title", None)
+        if location is not None and location not in sites:
+            sites.append(location)
+    return (sites, "title") if sites else ([], "none")
 
 
 def _claim_entities(claim: Mapping[str, Any], relations: Mapping[str, Any]) -> list[str]:
@@ -923,7 +1095,17 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
         for finding in report.get("findings", ()):
             if isinstance(finding, Mapping) and isinstance(finding.get("claim_id"), str):
                 reported_claims.add(finding["claim_id"])
-    located = run.locate(entity for claim in claims for entity in _claim_entities(claim, relations))
+    dossiers = run.dossiers_by_claim()
+    titles_by_claim: dict[str, list[str]] = defaultdict(list)
+    for finding in findings:
+        if _string(finding.get("title")):
+            titles_by_claim[str(finding["claim_id"])].append(str(finding["title"]))
+    for finding in (report or {}).get("findings", ()) if report is not None else ():
+        if isinstance(finding, Mapping) and _string(finding.get("title")) and isinstance(finding.get("claim_id"), str):
+            titles_by_claim[finding["claim_id"]].append(str(finding["title"]))
+    sites_by_claim = {str(claim.get("claim_id")): primary_sites(claim, relations, dossiers.get(str(claim.get("claim_id"))),
+                                                               titles_by_claim.get(str(claim.get("claim_id")), ()))
+                      for claim in claims}
     packages_by_lead: dict[str, list[dict[str, Any]]] = defaultdict(list)
     packages_by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for package in (assembly or {}).get("packages", ()):
@@ -940,14 +1122,18 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
         source = sources.get(item.path) if item.path else None
         hits = [obs for obs in observations if _observation_matches(item, obs)]
         hit_ids = {obs.identity for obs in hits}
-        dependency_rows = _dependency_rows(run, item) if item.klass in DEPENDENCY_CLASSES else []
+        components = _dependency_components(run, item) if item.klass in DEPENDENCY_CLASSES else []
+        dependency_rows = _dependency_rows(components, item) if item.klass in DEPENDENCY_CLASSES else []
         leads = []
         for obs in hits[:MAX_ITEM_MATCHES]:
             admission = (assembly or {}).get("admission", {}).get(obs.identity, {})
+            effective = _string(admission.get("effective_severity"))
             leads.append({"lead_id": obs.identity, "family": obs.family, "scanner": obs.scanner, "rule_id": obs.rule_id,
                           "start_line": obs.location.start_line if obs.location else None,
                           "admission": _string(admission.get("status")) or ("unknown" if assembly else "no_review"),
-                          "exclusion": _string(admission.get("exclusion"))})
+                          "exclusion": _string(admission.get("exclusion")),
+                          "reported_severity": obs.reported_severity,
+                          "effective_severity": effective.lower() if effective else None})
         packages: dict[str, dict[str, Any]] = {}
         for lead_id in hit_ids:
             for package in packages_by_lead.get(lead_id, ()):
@@ -961,39 +1147,46 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
         citing: list[Location] = []
         for claim in claims:
             claim_id = str(claim.get("claim_id"))
-            entities = _claim_entities(claim, relations)
             matched = False
-            for entity in entities:
-                if entity in hit_ids or entity in dependency_rows:
-                    matched = True
-                for location in located.get(entity, ()):
-                    # A whole-file citation (the source_file entity itself) names no planted span.
-                    if item.path and not location.file_level and location.overlaps(item.path, item.start, item.end):
+            site_source = "none"
+            if item.klass in DEPENDENCY_CLASSES:
+                # A dependency item has no span: the claim is on it when it names the advisory lead or the
+                # component row, or was raised from the finding-lead package that carries that lead.
+                entities = _claim_entities(claim, relations)
+                proposing = {str(x) for x in proposal_packages.get(claim_id, ())} | {str(claim.get("package_id"))}
+                matched = any(entity in hit_ids or entity in dependency_rows for entity in entities) or any(
+                    package_id in packages and packages[package_id]["via"] == "lead"
+                    and packages[package_id]["kind"] == "finding_lead" for package_id in proposing)
+                site_source = "dependency"
+            elif item.path:
+                # Only the claim's primary site (the affected construct) can fall inside the planted span; a
+                # citation of an entry point or a dataflow context inside the span is never a match.
+                sites, site_source = sites_by_claim[claim_id]
+                for location in sites:
+                    if location.overlaps(item.path, item.start, item.end):
                         matched = True
                         citing.append(location)
-            proposing = {str(x) for x in proposal_packages.get(claim_id, ())} | {str(claim.get("package_id"))}
-            # Only a finding-lead package names the one lead a claim was raised from; a hunt menu lists many.
-            if any(package_id in packages and packages[package_id]["via"] == "lead"
-                   and packages[package_id]["kind"] == "finding_lead" for package_id in proposing):
-                matched = True
             if matched:
                 matched_claims.append({"claim_id": claim_id, "state": _string(claim.get("state")),
-                                       "lane": _string(claim.get("lane")), "package_id": _string(claim.get("package_id"))})
+                                       "lane": _string(claim.get("lane")), "package_id": _string(claim.get("package_id")),
+                                       "site_source": site_source})
         matched_claim_ids = {claim["claim_id"] for claim in matched_claims}
         matched_claims_by_item[item.item_id] = matched_claim_ids
         verdicts = [{"claim_id": claim_id, "verdict": _string(verdict.get("verdict")), "cell_id": _string(verdict.get("cell_id"))}
                     for claim_id in sorted(matched_claim_ids)
                     for verdict in judge_verdicts.get(claim_id, ()) if isinstance(verdict, Mapping)]
         finding_rows = [{"finding_package_id": str(finding.get("finding_package_id")), "claim_id": claim_id,
-                         "state": _string(finding.get("state")), "bucket": buckets.get(str(finding.get("finding_package_id")))}
+                         "state": _string(finding.get("state")), "bucket": buckets.get(str(finding.get("finding_package_id"))),
+                         "technical_severity": _technical_severity(finding)}
                         for claim_id in sorted(matched_claim_ids) for finding in findings_by_claim.get(claim_id, ())]
         reported = any(claim_id in reported_claims for claim_id in matched_claim_ids)
         citing_lines = sorted({loc.record()["entity_id"]: loc for loc in citing}.values(),
                               key=lambda loc: (loc.path, loc.start_line, loc.entity_id))[:MAX_CITING_LINES]
         observed = _observed_disposition(leads, packages, matched_claims, finding_rows, reported)
         outcome, reason = _outcome(item, observed, reported, report is not None, matched_claims)
-        rows.append({
+        row = {
             "id": item.item_id, "class": item.klass, "expected_disposition": item.expected,
+            "cwe": item.cwe, "axis": item.axis, "axis_basis": item.axis_basis, "real_severity": item.real_severity,
             "file": item.path, "function": item.function,
             "span": {"start_line": item.start, "end_line": item.end} if item.start is not None else None,
             "match_basis": item.match_basis, "package": item.package, "version": item.version,
@@ -1003,7 +1196,7 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
                 run.dispositions().classify(item.path) if item.path else None),
             "facets": sorted(facets.get(item.path, ())) if facets is not None and item.path else [],
             "facets_available": facets is not None,
-            "dependency_rows": dependency_rows[:MAX_ITEM_MATCHES],
+            "dependency_rows": dependency_rows[:MAX_ITEM_MATCHES], "components": components,
             "leads": sorted(leads, key=lambda row: row["lead_id"]),
             "packages": sorted(packages.values(), key=lambda row: row["package_id"]),
             "claims": sorted(matched_claims, key=lambda row: row["claim_id"]),
@@ -1011,12 +1204,147 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
             "finding_packages": sorted(finding_rows, key=lambda row: row["finding_package_id"]),
             "reported": reported, "citing_lines": [loc.record() for loc in citing_lines],
             "observed_disposition": observed, "outcome": outcome, "outcome_reason": reason,
-        })
+        }
+        row["stage"], row["stage_evidence"] = stage_of(row)
+        rows.append(row)
     return {"items": rows, "metrics": _metrics(rows, reported_claims, report is not None),
+            "by_axis": axis_metrics(rows), "funnel": dict(sorted(Counter(row["stage"] for row in rows).items())),
             "complexity": _complexity(run, key.get("complexity")),
             "publication_available": {"review_assembly": assembly is not None, "claim_projection": projection is not None,
                                       "finding_packages": bool(findings), "gate": gate is not None, "report": report is not None,
                                       "facets": facets is not None}}
+
+
+def _most_severe(values: Iterable[Any]) -> str | None:
+    ranked = [str(value) for value in values if isinstance(value, str) and value in SEVERITY_RANK]
+    return min(ranked, key=SEVERITY_RANK.__getitem__) if ranked else None
+
+
+def _severity_list(leads: Sequence[Mapping[str, Any]], field_name: str) -> str:
+    values = sorted({str(row[field_name]) for row in leads if row.get(field_name)},
+                    key=lambda value: SEVERITY_RANK.get(value, len(SEVERITIES)))
+    return ",".join(values) or "none"
+
+
+def stage_of(row: Mapping[str, Any]) -> tuple[str, str]:
+    """The one funnel stage a scored item reached, with the evidence line for it.
+
+    Decided from the item's own record (leads and their admission, packages, claims and their states, finding
+    packages and their gate bucket, whether a finding reached the report, dependency components), so the same
+    record always yields the same stage. Positives travel ``not_observed`` -> ``not_admitted`` -> ``no_claim``
+    -> ``out_of_scope`` / ``refuted`` / ``unverified`` -> ``confirmed`` (dependencies: ``not_identified`` ->
+    ``no_version`` -> ``no_advisory`` -> the same middle -> ``reported``); the stage is the furthest point
+    reached. Negatives (fixed and false-positive items) are ``correctly_passed`` or ``false_report``.
+    """
+    klass, leads, packages = str(row["class"]), row["leads"], row["packages"]
+    claims, findings, reported = row["claims"], row["finding_packages"], bool(row["reported"])
+    admitted = [lead for lead in leads if lead.get("admission") == "admitted"]
+    hunted = any(package.get("via") == "unit" for package in packages)
+    lead_packages = sum(1 for package in packages if package.get("via") == "lead")
+    states = sorted({str(claim.get("state")) for claim in claims})
+    buckets = sorted({str(finding.get("bucket")) for finding in findings if finding.get("bucket")})
+    dependency = klass in DEPENDENCY_CLASSES
+    if klass in NEGATIVE_CLASSES:
+        if states:
+            detail = f"claim states {', '.join(states)}"
+        elif leads:
+            detail = f"{len(leads)} lead(s), {len(admitted)} admitted"
+        elif hunted:
+            detail = "in a hunt unit, no lead and no claim"
+        else:
+            detail = "no lead and no claim"
+        if reported:
+            return "false_report", f"a finding on this {klass.replace('_', ' ')} reached the report ({detail})"
+        return "correctly_passed", f"not reported; {detail}"
+    if dependency:
+        components = row.get("components") or []
+        versions = sorted({str(component["version"]) for component in components if component.get("version")})
+        if not components and not leads:
+            return "not_identified", f"no dependency_package row named {row.get('package')} and no advisory lead"
+        if components and not versions and not leads:
+            return "no_version", f"{len(components)} component row(s) named {row.get('package')} carry no version"
+        if not leads:
+            wanted = ", ".join(row.get("identifiers") or ()) or "the advisory"
+            return "no_advisory", (f"component {row.get('package')} {'/'.join(versions)} identified; "
+                                   f"no lead names {wanted}")
+    elif not leads and not hunted and not claims:
+        span = row.get("span") or {}
+        where = f"{row.get('file')}:{span.get('start_line')}-{span.get('end_line')}" if span else str(row.get("file"))
+        return "not_observed", f"no scanner lead at {where} and no claim"
+    arrived = "reported" if dependency else "confirmed"
+    if reported:
+        return arrived, f"a matching finding reached the report (claim states {', '.join(states) or 'none'})"
+    if any(finding.get("state") == "confirmed" and finding.get("bucket") == "publishable" for finding in findings):
+        return arrived, "finding package confirmed and publishable, not in the report"
+    if claims:
+        state_set = set(states)
+        if state_set & PENDING_STATES or set(buckets) & UNDECIDED_BUCKETS:
+            return "unverified", (f"claim states {', '.join(states)}; gate buckets {', '.join(buckets) or 'none'}; "
+                                  "decision pending or not independently confirmed")
+        if state_set & REFUTING_STATES:
+            return "refuted", f"claim states {', '.join(states)}"
+        return "out_of_scope", f"{len(claims)} claim(s) decided {', '.join(states)} only"
+    if admitted or hunted or lead_packages:
+        return "no_claim", (f"{len(admitted)} admitted lead(s) (effective severity {_severity_list(admitted, 'effective_severity')}); "
+                            f"packages via lead {lead_packages}, via unit {len(packages) - lead_packages}; no claim proposed")
+    exclusions = Counter(str(lead.get("exclusion") or "none") for lead in leads)
+    return "not_admitted", (f"{len(leads)} lead(s), none admitted: exclusion "
+                            + ", ".join(f"{name} x{count}" for name, count in sorted(exclusions.items()))
+                            + f"; reported severity {_severity_list(leads, 'reported_severity')}; "
+                            f"effective severity {_severity_list(leads, 'effective_severity')}")
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 4) if denominator else None
+
+
+def _severity_handling(members: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Planted severity against the effective severity the review admitted on and the one it published."""
+    items = []
+    flagged = 0
+    for row in members:
+        planted = row.get("real_severity")
+        if not planted:
+            continue
+        admitted = [lead for lead in row["leads"] if lead.get("admission") == "admitted"]
+        basis = admitted or list(row["leads"])
+        effective = _most_severe(lead.get("effective_severity") for lead in basis)
+        published = _most_severe(finding.get("technical_severity") for finding in row["finding_packages"])
+        below = bool(planted in HIGH_SEVERITIES and effective is not None
+                     and SEVERITY_RANK[effective] > SEVERITY_RANK[planted])
+        flagged += below
+        items.append({"id": row["id"], "planted": planted, "admitted_effective": effective,
+                      "admitted_basis": "admitted_leads" if admitted else ("all_leads" if basis else "no_lead"),
+                      "published_technical": published, "planted_high_admitted_below": below})
+    return {"keyed": bool(items), "planted_high_admitted_below": flagged, "items": items}
+
+
+def axis_metrics(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Per axis (in vocabulary order, ``unassigned`` last, axes without items omitted): planted true positives,
+    confirmed, recall, coverage, negatives, correctly passed, false reports, precision, stage counts, the
+    low-confidence mark (fewer than ``LOW_CONFIDENCE_PLANTED`` planted) and the severity-handling rows."""
+    members_by_axis: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in rows:
+        members_by_axis[str(row.get("axis") or UNASSIGNED_AXIS)].append(row)
+    result = []
+    for axis in (*AXIS_IDS, UNASSIGNED_AXIS):
+        members = members_by_axis.get(axis)
+        if not members:
+            continue
+        positives = [row for row in members if row["class"] in POSITIVE_CLASSES]
+        negatives = [row for row in members if row["class"] in NEGATIVE_CLASSES]
+        confirmed = sum(1 for row in positives if row["stage"] in CONFIRMED_STAGES)
+        covered = sum(1 for row in positives if row["stage"] in COVERED_STAGES)
+        false_reports = sum(1 for row in negatives if row["stage"] == "false_report")
+        result.append({"axis": axis, "label": AXIS_LABEL.get(axis, "Unassigned"), "key": AXIS_KEY.get(axis, "-"),
+                       "planted": len(positives), "confirmed": confirmed, "recall": _ratio(confirmed, len(positives)),
+                       "covered": covered, "coverage": _ratio(covered, len(positives)),
+                       "negatives": len(negatives), "correctly_passed": len(negatives) - false_reports,
+                       "false_reports": false_reports, "precision": _ratio(confirmed, confirmed + false_reports),
+                       "stages": dict(sorted(Counter(str(row["stage"]) for row in members).items())),
+                       "low_confidence": len(positives) < LOW_CONFIDENCE_PLANTED,
+                       "severity": _severity_handling(members)})
+    return result
 
 
 def _observed_disposition(leads: Sequence[Mapping[str, Any]], packages: Mapping[str, Any],
@@ -1169,6 +1497,8 @@ def score_run(run_dir: Path, answer_key: Mapping[str, Any] | None = None, *, key
         key_record = {"schema": KEY_SCHEMA, "sha256": hashlib.sha256(_canonical(answer_key)).hexdigest(),
                       "language": _string(answer_key.get("language")), "tag": _string(answer_key.get("tag")),
                       "commit": _string(answer_key.get("commit")), "planted": len(answer_key.get("planted", ())),
+                      "version": _string(answer_key.get("version")),
+                      "chains": len(answer_key["chains"]) if isinstance(answer_key.get("chains"), list) else 0,
                       "path": str(key_path) if key_path is not None else None}
     document = {
         "schema": SCHEMA, "run_id": run.run_id,
@@ -1231,7 +1561,8 @@ def render_summary(document: Mapping[str, Any]) -> str:
     else:
         for item in keyed["items"]:
             where = f"{item['file']}:{item['span']['start_line']}" if item["span"] else (item["file"] or item["package"] or "")
-            lines.append(f"  {item['id']:<8} {item['class']:<26} {item['outcome']:<14} {item['observed_disposition']:<22} "
+            lines.append(f"  {item['id']:<8} {item['class']:<26} {item['outcome']:<14} {item['stage']:<16} "
+                         f"{item['observed_disposition']:<22} "
                          f"leads={len(item['leads'])} pkgs={len(item['packages'])} claims={len(item['claims'])} "
                          f"judge={','.join(str(v['verdict']) for v in item['judge_verdicts']) or '-'} {where}")
         metrics = keyed["metrics"]
@@ -1243,6 +1574,11 @@ def render_summary(document: Mapping[str, Any]) -> str:
             if row["planted"]:
                 lines.append(f"  {klass:<26} planted={row['planted']} hit={row['hit']} miss={row['miss']} "
                              f"not_evaluable={row['not_evaluable']}")
+        for axis in keyed["by_axis"]:
+            lines.append(f"  axis {axis['axis']:<20} planted={axis['planted']} confirmed={axis['confirmed']} "
+                         f"recall={axis['recall']} precision={axis['precision']} coverage={axis['coverage']} "
+                         f"false_reports={axis['false_reports']}"
+                         + (" low_confidence" if axis["low_confidence"] else ""))
         complexity = keyed["complexity"]
         if complexity is not None:
             lines.append(f"complexity: {complexity['file']}:{complexity['function']} cyclomatic expected={complexity['expected_cyclomatic']} "
@@ -1270,21 +1606,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run", required=True, help="run directory, e.g. runs/2026-11-14-0005")
     parser.add_argument("--answer-key", default=None, help="the smoke answer key (appsec-review/smoke-answer-key/1); "
                                                            "without it only the structural checks run")
+    parser.add_argument("--pdf", dest="pdf", action=argparse.BooleanOptionalAction, default=None,
+                        help="also write data/verification/smoke-scorecard.tex and .pdf (through the pinned LaTeX image) "
+                             "with a receipt; on by default when the answer key is given, never fails the scoring")
+    parser.add_argument("--compare", default=None, metavar="RUN",
+                        help="another scored run (a run id beside this run, or a run directory): print the per-axis "
+                             "recall and precision deltas from it to this run, read from both smoke-score.json files")
     parser.add_argument("--quiet", action="store_true", help="do not print the summary")
     arguments = parser.parse_args(argv)
+    import sys
+    from . import smoke_scorecard
+    run_dir = Path(arguments.run)
     try:
         key = load_answer_key(Path(arguments.answer_key)) if arguments.answer_key else None
-        document = score_run(Path(arguments.run), key, key_path=Path(arguments.answer_key) if arguments.answer_key else None)
+        document = score_run(run_dir, key, key_path=Path(arguments.answer_key) if arguments.answer_key else None)
     except SmokeScoreError as exc:
-        print(f"smoke-score: {exc}", file=__import__("sys").stderr)
+        print(f"smoke-score: {exc}", file=sys.stderr)
         return 2
     summary = render_summary(document)
-    json_path, text_path = write_outputs(Path(arguments.run), document, summary)
+    json_path, text_path = write_outputs(run_dir, document, summary)
     if not arguments.quiet:
         print(summary, end="")
         print(f"written: {json_path.as_posix()} and {text_path.as_posix()}")
+    render = arguments.pdf if arguments.pdf is not None else key is not None
+    if render and key is None:
+        print("smoke-score: --pdf needs the answer key; no scorecard written", file=sys.stderr)
+    elif render:
+        receipt = smoke_scorecard.render_scorecard(run_dir, document)
+        if not arguments.quiet:
+            print(smoke_scorecard.receipt_line(receipt, run_dir))
+    if arguments.compare:
+        other = Path(arguments.compare) if Path(arguments.compare).is_dir() else run_dir.parent / arguments.compare
+        try:
+            print(smoke_scorecard.compare_text(smoke_scorecard.load_score(other), document), end="")
+        except SmokeScoreError as exc:
+            print(f"smoke-score: {exc}", file=sys.stderr)
+            return 2
     return 0
 
 
-__all__ = ["SCHEMA", "RunData", "SmokeScoreError", "keyed_scoring", "load_answer_key", "main", "render_summary",
-           "score_run", "validate_document", "write_outputs"]
+__all__ = ["AXES", "AXIS_IDS", "SCHEMA", "STAGES", "RunData", "SmokeScoreError", "axis_metrics", "axis_of",
+           "keyed_scoring", "load_answer_key", "main", "primary_sites", "render_summary", "score_run", "stage_of",
+           "validate_document", "write_outputs"]

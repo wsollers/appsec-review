@@ -14,7 +14,7 @@ import sqlite3
 
 import pytest
 
-from appsec_review.reporting import smoke_score
+from appsec_review.reporting import smoke_score, smoke_scorecard
 from appsec_review.reporting.smoke_score import (
     SCHEMA, SmokeScoreError, load_answer_key, main, render_summary, score_run, validate_document, write_outputs,
 )
@@ -273,10 +273,33 @@ def _review(run: Path, *, admit_vendored: bool, unit_overlap: bool, unknown_term
          "affected_entities": [ID["obs-dep"]], "state_history": []},
         {"claim_id": "claim-4", "lane": "hunt", "package_id": "hunt-1", "state": "supported", "weakness_cwe": "CWE-20",
          "affected_entities": [ID["obs-other"]], "state_history": []},
+        # Cites an entry point inside TP-C1's span but its sink (affected_construct) is inside FP-1's span.
+        {"claim_id": "claim-5", "lane": "hunt", "package_id": "hunt-1", "state": "supported", "weakness_cwe": "CWE-120",
+         "affected_entities": [], "state_history": []},
+        # No relations: the primary site comes from the finding title's locator (TP-C1's span).
+        {"claim_id": "claim-6", "lane": "hunt", "package_id": "hunt-1", "state": "out_of_scope", "weakness_cwe": "CWE-120",
+         "affected_entities": [], "state_history": []},
+        # No relations and no title locator: the primary site comes from the dossier's affected_construct source row.
+        {"claim_id": "claim-7", "lane": "hunt", "package_id": "hunt-1", "state": "out_of_scope", "weakness_cwe": "CWE-120",
+         "affected_entities": [], "state_history": []},
     ]
+
+    def relation(claim_id, number, entity_id, kind, predicate, locator):
+        return {"relation_id": f"evrel-{claim_id}-{number}", "claim_id": claim_id, "entity_id": entity_id, "entity_kind": kind,
+                "kind": "supports", "predicate": predicate, "locator": f"{locator}#b0-1@{SNAPSHOT}"}
+
+    relations = {
+        "claim-1": [relation("claim-1", 1, ID[REQUEST], "source_file", "source_to_sink_reachability", f"{REQUEST}:1-200"),
+                    relation("claim-1", 2, "asr:call_site:" + "c1" * 32, "call_site", "attacker_input_control", f"{REQUEST}:169-169"),
+                    relation("claim-1", 3, "asr:call_site:" + "c2" * 32, "call_site", "affected_construct", f"{REQUEST}:137-137")],
+        "claim-2": [relation("claim-2", 1, "asr:call_site:" + "c3" * 32, "call_site", "affected_construct", f"{UTIL}:20-20")],
+        "claim-4": [relation("claim-4", 1, "asr:call_site:" + "c4" * 32, "call_site", "affected_construct", f"{REQUEST}:80-80")],
+        "claim-5": [relation("claim-5", 1, "asr:dataflow_path:" + "c5" * 32, "dataflow_path", "attacker_input_control", f"{REQUEST}:137-137"),
+                    relation("claim-5", 2, "asr:call_site:" + "c6" * 32, "call_site", "affected_construct", f"{UTIL}:20-20")],
+    }
     _write(attempt / "steps" / "publication" / "tasks" / "publish_claim_ledger" / "projection.json", {
         "schema": "appsec-review/claim-projection/1", "ledger_head_sha256": "1" * 64, "claims": claims,
-        "relations": {"claim-1": [{"relation_id": "evrel-1", "claim_id": "claim-1", "entity_id": ID[REQUEST], "kind": "supports"}]},
+        "relations": relations,
         "cells": {}, "gaps": [], "evidence_requests": [],
         "judge_verdicts": {"claim-1": [{"verdict_id": "judge-1", "claim_id": "claim-1", "verdict": "red_correct", "cell_id": "cell-j1"}],
                            "claim-2": [{"verdict_id": "judge-2", "claim_id": "claim-2", "verdict": "blue_correct", "cell_id": "cell-j2"}]}})
@@ -286,19 +309,32 @@ def _review(run: Path, *, admit_vendored: bool, unit_overlap: bool, unknown_term
         _write(attempt / "steps" / "publication" / "tasks" / "publish_handoff" / "findings" / f"finding_package-{number}.json",
                {"schema": "appsec-review/finding-package/2", "finding_package_id": f"finding_package-{number}", "claim_id": claim,
                 "state": "confirmed" if number != "4" else "supported"})
+    _write(attempt / "steps" / "publication" / "tasks" / "publish_handoff" / "findings" / "finding_package-6.json",
+           {"schema": "appsec-review/finding-package/2", "finding_package_id": "finding_package-6", "claim_id": "claim-6",
+            "state": "out_of_scope", "title": f"memory_corruption (CWE-120) at {REQUEST}:137"})
+    _handoff(run, smoke_score.DOSSIER_JOB, {"dossiers.create": "SUCCEEDED"}, steps=("dossiers",))
+    _write(run / "data" / "jobs" / smoke_score.DOSSIER_JOB / "attempts" / ATTEMPT / "steps" / "dossiers" / "tasks" / "create"
+           / "items" / "d7" / "dossier.json",
+           {"schema": "appsec-review/dossier/1", "kind": "confirmed_finding", "finding": {"claim_id": "claim-7"},
+            "evidence": [{"entity_id": "asr:call_site:" + "c7" * 32, "entity_kind": "call_site", "predicate": "affected_construct"},
+                         {"entity_id": "asr:dataflow_path:" + "c8" * 32, "entity_kind": "dataflow_path", "predicate": "attacker_input_control"}],
+            "sources": [{"entity_id": "asr:call_site:" + "c7" * 32, "path": UTIL, "start_line": 20, "end_line": 20},
+                        {"entity_id": "asr:dataflow_path:" + "c8" * 32, "path": REQUEST, "start_line": 137, "end_line": 137}]})
 
 
-def answer_key(root: Path, *, tp_file: str = REQUEST) -> Path:
+def answer_key(root: Path, *, tp_file: str = REQUEST, axes: bool = False) -> Path:
+    v11 = {"version": "1.1.0", "chains": [{"id": "CH-1", "items": ["TP-C1"]}]} if axes else {}
     key = {
         "schema": "appsec-review/smoke-answer-key/1", "language": "cpp", "tag": "v1.0.0", "commit": "0" * 40,
-        "repository": "https://example.invalid/smoke", "planted": [
+        "repository": "https://example.invalid/smoke", **v11, "planted": [
             {"class": "true_positive_code", "id": "TP-C1", "cwe": "CWE-78", "title": "command injection through the EXEC verb",
              "file": tp_file, "function": "handle_request", "span": {"start_line": 137, "end_line": 137},
-             "expected_disposition": "reported"},
+             "expected_disposition": "reported", **({"axis": "dead_code", "real_severity": "critical"} if axes else {})},
             {"class": "fixed_code", "id": "FX-C1", "cwe": "CWE-78", "title": "command injection in run_tool", "file": REQUEST,
              "function": "run_tool", "introduced_span": {"start_line": 0, "end_line": 0}, "expected_disposition": "reported-as-fixed"},
             {"class": "false_positive", "id": "FP-1", "file": UTIL, "function": "frame_fill", "span": {"start_line": 20, "end_line": 20},
-             "flagged_by": ["appsec-review.review-signal.sink.cpp-copy-length-not-bounded"], "expected_disposition": "squelched"},
+             "flagged_by": ["appsec-review.review-signal.sink.cpp-copy-length-not-bounded"], "expected_disposition": "squelched",
+             **({"axis": "memory_safety"} if axes else {})},
             {"class": "true_positive_dependency", "id": "TP-D1", "package": "zlib", "version": "1.2.11", "ecosystem": "vendored-c",
              "osv": "GHSA-jc36-42cf-vqwj", "cve": "CVE-2018-25032", "location": "third_party/zlib", "expected_disposition": "reported"},
             {"class": "fixed_dependency", "id": "FX-D1", "package": "cjson", "ecosystem": "vendored-c", "vulnerable_version": "1.7.16",
@@ -329,10 +365,10 @@ def test_keyed_scoring_reports_every_planted_item_and_the_metrics(tmp_path) -> N
     assert tp["facets"] == ["exposure:network", "role:request-handler"]
     assert [(lead["family"], lead["scanner"], lead["admission"]) for lead in tp["leads"]] == [("source_sast", "tool-semgrep", "admitted")]
     assert [(p["package_id"], p["lane"], p["via"]) for p in tp["packages"]] == [("finding_lead-1", "lead", "lead"), ("hunt-1", "hunt", "unit")]
-    assert [c["claim_id"] for c in tp["claims"]] == ["claim-1"]
+    assert [c["claim_id"] for c in tp["claims"]] == ["claim-1", "claim-6"]
     assert [v["verdict"] for v in tp["judge_verdicts"]] == ["red_correct"]
     assert tp["finding_packages"][0]["bucket"] == "publishable"
-    assert [(line["path"], line["start_line"]) for line in tp["citing_lines"]] == [(REQUEST, 137)]  # never the whole file
+    assert {(line["path"], line["start_line"]) for line in tp["citing_lines"]} == {(REQUEST, 137)}  # never the whole file
     fixed = items["FX-C1"]
     assert fixed["match_basis"] == "function" and fixed["span"] == {"start_line": 40, "end_line": 60}
     assert fixed["outcome"] == "hit" and fixed["observed_disposition"] == "in_hunt_unit_only" and fixed["leads"] == []
@@ -350,6 +386,82 @@ def test_keyed_scoring_reports_every_planted_item_and_the_metrics(tmp_path) -> N
     assert complexity["observed_cyclomatic"] == 36 and complexity["function_rank"] == 1 and complexity["top_rank"] is True
     assert complexity["share_above_threshold_positive"] is True
     assert document["answer_key"]["planted"] == 5 and document["answer_key"]["language"] == "cpp"
+    assert document["answer_key"]["version"] is None and document["answer_key"]["chains"] == 0
+
+
+def test_items_carry_stage_axis_and_severities_derived_from_the_run(tmp_path) -> None:
+    document = score_run(build_run(tmp_path), load_answer_key(answer_key(tmp_path)))
+    items = _items(document)
+    assert {item_id: (row["stage"], row["axis"], row["axis_basis"]) for item_id, row in items.items()} == {
+        "TP-C1": ("confirmed", "control_injection", "cwe_rollup"), "FX-C1": ("correctly_passed", "control_injection", "cwe_rollup"),
+        "FP-1": ("correctly_passed", "unassigned", "none"), "TP-D1": ("reported", "supply_chain", "class"),
+        "FX-D1": ("correctly_passed", "supply_chain", "class")}
+    assert items["TP-C1"]["stage_evidence"] == "a matching finding reached the report (claim states confirmed, out_of_scope)"
+    assert items["TP-C1"]["leads"][0]["reported_severity"] == "high" and items["TP-C1"]["leads"][0]["effective_severity"] == "high"
+    assert items["TP-C1"]["finding_packages"][0]["technical_severity"] is None and items["TP-C1"]["real_severity"] is None
+    assert items["FP-1"]["stage_evidence"] == "not reported; claim states contradicted, out_of_scope, supported"
+    assert items["TP-D1"]["components"] == [{"identity": ID["dep-zlib"], "version": "1.2.11"}]
+    assert items["FX-D1"]["stage_evidence"] == "not reported; no lead and no claim" and items["FX-D1"]["components"] == []
+    keyed = document["keyed"]
+    assert keyed["funnel"] == {"confirmed": 1, "correctly_passed": 3, "reported": 1}
+    by_axis = {row["axis"]: row for row in keyed["by_axis"]}
+    assert list(by_axis) == ["control_injection", "supply_chain", "unassigned"]
+    assert by_axis["control_injection"]["planted"] == 1 and by_axis["control_injection"]["recall"] == 1.0
+    assert by_axis["control_injection"]["negatives"] == 1 and by_axis["control_injection"]["precision"] == 1.0
+    assert by_axis["control_injection"]["low_confidence"] is True and by_axis["control_injection"]["severity"]["keyed"] is False
+    assert by_axis["supply_chain"]["stages"] == {"correctly_passed": 1, "reported": 1} and by_axis["supply_chain"]["coverage"] == 1.0
+    assert by_axis["unassigned"]["planted"] == 0 and by_axis["unassigned"]["correctly_passed"] == 1
+    summary = render_summary(document)
+    assert "confirmed        reported" in summary and "axis control_injection    planted=1 confirmed=1 recall=1.0" in summary
+
+
+def test_key_axis_and_real_severity_override_the_derivation_and_key_the_severity_row(tmp_path) -> None:
+    document = score_run(build_run(tmp_path), load_answer_key(answer_key(tmp_path, axes=True)))
+    items = _items(document)
+    assert (items["TP-C1"]["axis"], items["TP-C1"]["axis_basis"], items["TP-C1"]["real_severity"]) == ("dead_code", "key", "critical")
+    assert (items["FP-1"]["axis"], items["FP-1"]["axis_basis"]) == ("memory_safety", "key")
+    assert document["answer_key"]["version"] == "1.1.0" and document["answer_key"]["chains"] == 1
+    by_axis = {row["axis"]: row for row in document["keyed"]["by_axis"]}
+    assert list(by_axis) == ["memory_safety", "control_injection", "dead_code", "supply_chain"]
+    severity = by_axis["dead_code"]["severity"]
+    assert severity == {"keyed": True, "planted_high_admitted_below": 1, "items": [
+        {"id": "TP-C1", "planted": "critical", "admitted_effective": "high", "admitted_basis": "admitted_leads",
+         "published_technical": None, "planted_high_admitted_below": True}]}
+    assert by_axis["memory_safety"] == {"axis": "memory_safety", "label": "Memory safety", "key": "MEM", "planted": 0, "confirmed": 0,
+                                        "recall": None, "covered": 0, "coverage": None, "negatives": 1, "correctly_passed": 1,
+                                        "false_reports": 0, "precision": None, "stages": {"correctly_passed": 1},
+                                        "low_confidence": True, "severity": {"keyed": False, "planted_high_admitted_below": 0, "items": []}}
+
+
+def test_claims_match_by_their_primary_site_never_by_an_entry_point_citation(tmp_path) -> None:
+    items = _items(score_run(build_run(tmp_path), load_answer_key(answer_key(tmp_path))))
+    tp, fp = items["TP-C1"], items["FP-1"]
+    # claim-5 cites an entry point at TP-C1's line 137 but its affected construct is FP-1's line 20: FP-1 only.
+    assert {c["claim_id"]: c["site_source"] for c in tp["claims"]} == {"claim-1": "relations", "claim-6": "title"}
+    assert {c["claim_id"]: c["site_source"] for c in fp["claims"]} == {"claim-2": "relations", "claim-5": "relations",
+                                                                       "claim-7": "dossier"}
+    assert {line["start_line"] for line in fp["citing_lines"]} == {20} and {line["path"] for line in fp["citing_lines"]} == {UTIL}
+    assert all(line["start_line"] == 137 for line in tp["citing_lines"])
+    assert items["TP-D1"]["claims"] == [{"claim_id": "claim-3", "state": "confirmed", "lane": "lead", "package_id": "finding_lead-2",
+                                         "site_source": "dependency"}]
+    assert items["FX-C1"]["claims"] == [] and items["FX-D1"]["claims"] == []
+
+
+def test_primary_sites_fall_back_from_relations_to_the_dossier_to_the_title() -> None:
+    from appsec_review.reporting.smoke_score import primary_sites
+    claim = {"claim_id": "c"}
+    relations = {"c": [{"predicate": "attacker_input_control", "entity_kind": "call_site", "entity_id": "e1", "locator": f"{REQUEST}:169-169#b0-1@x"},
+                       {"predicate": "affected_construct", "entity_kind": "source_file", "entity_id": "f", "locator": f"{REQUEST}:1-200#b0-1@x"},
+                       {"predicate": "affected_construct", "entity_kind": "call_site", "entity_id": "e2", "locator": f"{REQUEST}:137-137#b0-1@x"}]}
+    sites, source = primary_sites(claim, relations, None, ())
+    assert source == "relations" and [(s.path, s.start_line, s.end_line, s.entity_id) for s in sites] == [(REQUEST, 137, 137, "e2")]
+    dossier = {"evidence": [{"entity_id": "d1", "entity_kind": "call_site", "predicate": "affected_construct"}],
+               "sources": [{"entity_id": "d1", "path": UTIL, "start_line": 20, "end_line": 21}, {"entity_id": "other", "path": UTIL, "start_line": 1, "end_line": 1}]}
+    sites, source = primary_sites(claim, {}, dossier, (f"x (CWE-1) at {REQUEST}:5",))
+    assert source == "dossier" and [(s.path, s.start_line, s.end_line) for s in sites] == [(UTIL, 20, 21)]
+    sites, source = primary_sites(claim, {}, {"evidence": [], "sources": []}, (f"memory_corruption (CWE-120) at {REQUEST}:5-7",))
+    assert source == "title" and [(s.path, s.start_line, s.end_line) for s in sites] == [(REQUEST, 5, 7)]
+    assert primary_sites(claim, {}, None, ("memory_corruption (CWE-120)",)) == ([], "none")
 
 
 def test_items_match_by_path_and_span_never_by_title(tmp_path) -> None:
@@ -358,6 +470,7 @@ def test_items_match_by_path_and_span_never_by_title(tmp_path) -> None:
     moved = _items(document)["TP-C1"]
     assert moved["leads"] == [] and moved["claims"] == [] and moved["outcome"] == "miss"
     assert moved["in_accepted_scope"] is False and moved["observed_disposition"] == "not_observed"
+    assert moved["stage"] == "not_observed" and moved["stage_evidence"] == "no scanner lead at src/other.cpp:137-137 and no claim"
 
 
 def test_structural_checks_pass_on_the_synthetic_run(tmp_path) -> None:
@@ -425,6 +538,8 @@ def test_checks_are_not_applicable_when_their_dataset_was_not_published(tmp_path
     items = _items(document)
     assert {item["outcome"] for item in items.values()} == {"not_evaluable"}
     assert items["TP-C1"]["leads"][0]["admission"] == "no_review" and items["TP-C1"]["facets_available"] is False
+    assert items["TP-C1"]["stage"] == "not_admitted" and items["TP-C1"]["leads"][0]["effective_severity"] is None
+    assert "exclusion none x1; reported severity high; effective severity none" in items["TP-C1"]["stage_evidence"]
     assert document["keyed"]["publication_available"] == {"review_assembly": False, "claim_projection": False, "finding_packages": False,
                                                           "gate": False, "report": False, "facets": False}
     assert document["keyed"]["metrics"]["precision"] is None and document["keyed"]["metrics"]["recall"] is None
@@ -435,6 +550,8 @@ def test_without_a_report_planted_items_are_not_evaluable(tmp_path) -> None:
     items = _items(document)
     assert items["TP-C1"]["outcome"] == "not_evaluable"
     assert items["TP-C1"]["observed_disposition"] == "finding_not_reported"
+    assert items["TP-C1"]["stage"] == "confirmed"   # the stage reads the finding package, not the report
+    assert items["TP-C1"]["stage_evidence"] == "finding package confirmed and publishable, not in the report"
     assert items["TP-C1"]["finding_packages"][0]["bucket"] == "publishable"
     assert document["keyed"]["metrics"]["report_available"] is False
 
@@ -462,12 +579,40 @@ def test_output_is_deterministic_validates_and_touches_only_the_verification_dir
 
 def test_main_writes_the_documents_and_refuses_a_file_that_is_not_the_key(tmp_path, capsys) -> None:
     run = build_run(tmp_path)
-    assert main(["--run", str(run), "--answer-key", str(answer_key(tmp_path))]) == 0
+    assert main(["--run", str(run), "--answer-key", str(answer_key(tmp_path)), "--no-pdf"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith(f"Smoke score ({SCHEMA}) run {run.name}") and "written:" in out
+    assert out.startswith(f"Smoke score ({SCHEMA}) run {run.name}") and "written:" in out and "scorecard:" not in out
     assert (run / "data" / "verification" / "smoke-score.txt").is_file()
+    assert not (run / "data" / "verification" / "smoke-scorecard.tex").exists()
     not_a_key = tmp_path / "other.json"
     not_a_key.write_text("{}", encoding="utf-8")
     assert main(["--run", str(run), "--answer-key", str(not_a_key)]) == 2
     assert "is not appsec-review/smoke-answer-key/1" in capsys.readouterr().err
     assert main(["--run", str(tmp_path / "missing"), "--quiet"]) == 2
+
+
+def test_main_renders_the_scorecard_by_default_with_a_key_and_compares_two_scored_runs(tmp_path, capsys, monkeypatch) -> None:
+    rendered: list = []
+
+    def fake_render(run_dir, document, **_kwargs):
+        rendered.append(Path(run_dir))
+        return {"status": "latex_only", "named_gaps": ["smoke_scorecard_pdf_not_requested"], "pdf_sha256": None}
+
+    monkeypatch.setattr(smoke_scorecard, "render_scorecard", fake_render)
+    run = build_run(tmp_path)
+    key = answer_key(tmp_path)
+    assert main(["--run", str(run), "--quiet"]) == 0 and rendered == []            # no key: nothing to render
+    assert main(["--run", str(run), "--pdf", "--quiet"]) == 0 and rendered == []   # --pdf without a key is refused
+    assert "--pdf needs the answer key" in capsys.readouterr().err
+    assert main(["--run", str(run), "--answer-key", str(key)]) == 0 and rendered == [run]
+    assert "scorecard: latex_only -> " in capsys.readouterr().out
+    other = tmp_path / "runs" / "2026-11-14-0001"
+    assert main(["--run", str(run), "--answer-key", str(key), "--no-pdf", "--compare", "2026-11-14-0001"]) == 2
+    assert "not a readable smoke score" in capsys.readouterr().err
+    (other / "data" / "verification").mkdir(parents=True)
+    (other / "data" / "verification" / "smoke-score.json").write_text(
+        (run / "data" / "verification" / "smoke-score.json").read_text(encoding="utf-8").replace(run.name, other.name), encoding="utf-8")
+    assert main(["--run", str(run), "--answer-key", str(key), "--no-pdf", "--compare", str(other)]) == 0
+    out = capsys.readouterr().out
+    assert f"trend: {other.name} -> {run.name}" in out and "control_injection" in out and "(+0.0000)" in out
+    assert len(rendered) == 1
