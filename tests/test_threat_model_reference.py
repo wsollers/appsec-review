@@ -200,6 +200,8 @@ def test_every_graph_source_and_sink_class_is_mapped() -> None:
     assert reference.interaction_for_sink_class(SinkClass.MEMORY_WRITE) is None
     assert reference.interaction_for_sink_class(SinkClass.SQL_QUERY) is Interaction.DATASTORE_QUERY
     assert reference.interaction_for_sink_class(SinkClass.COMMAND_EXECUTION) is Interaction.PROCESS_SPAWN
+    assert reference.interaction_for_sink_class(SinkClass.FILE_WRITE) is Interaction.FILE_WRITE
+    assert reference.interaction_for_sink_class(SinkClass.NETWORK_OUTPUT) is None
     assert reference.interaction_for_sink_class("no_such_class") is None
 
 

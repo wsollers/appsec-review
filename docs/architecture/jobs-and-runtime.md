@@ -175,7 +175,8 @@ because `.git` is outside the ordinary source fingerprint.
 
 Every job and unit event is mirrored through one process-safe writer to
 `runs/<run-id>/data/logs/pipeline.jsonl`, while attempt-local event logs remain available. Sequence
-allocation and append occur under the same kernel lock. Records have bounded/redacted details, and a
+allocation and append occur under the same kernel lock; error, failure and stop records are fsynced as they
+are written and every other record at interpreter exit. Records have bounded/redacted details, and a
 torn final line is truncated under that lock before the next append, preserving a readable total
 order after a writer crash. `PipelineLog.iterate()` and `PipelineLog.contains()` stream complete
 sequence-valid lines so attempt startup and failure checks never load multi-gigabyte logs into

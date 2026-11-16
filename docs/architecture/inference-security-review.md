@@ -563,8 +563,12 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 
 ### Lane A: lead review
 
-- **Admission.** Lane A admits every accepted lead whose normalized *reported* severity is
-  `critical`, `high`, or `unknown`, from **every** lead family:
+- **Admission.** Lane A admits every accepted lead whose *effective* severity is `critical` or `high`
+  (`lanes.lead_admission`): the scanner's normalized reported severity, or for a lead reported `unknown`
+  the audited assessed severity from lead triage. An unknown lead without an assessment is not admitted:
+  the manifest records it with `residual_coverage: unassessed_unknown` and a `lead_admission` skipped gap,
+  and it reaches lane B through its unit. Adding `unknown` to the policy admits unassessed leads too.
+  Admission applies to **every** lead family:
   - source SAST;
   - CodeQL;
   - artifact scanners;
@@ -575,7 +579,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   - post-build hardening;
   - provisional, evidence-bound OWASP adverse hypotheses (not compliance failures or confirmed
     vulnerabilities);
-  - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
+  - secret-scanner findings (`secret`; reported severity `unknown`, admitted through their assessed severity);
   - Dockerfile and IaC misconfiguration (`config_scanner`).
 
   Each family has a versioned normalization rule (`lead-family/dependency_advisory/2` and
@@ -583,7 +587,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   producers). Every observation producer has an explicit lead-or-not decision
   ([`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md)); a credential literal is never shown to a
   model by the secret-lead view projection (`secret-redaction/1`); that rule alone is not a
-  guarantee over every retrieval route. Unknown severity is never treated as low.
+  guarantee over every retrieval route. Unknown severity is never treated as low: it is assessed, and an
+  unassessed lead is a named gap, never a silent drop.
   Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).

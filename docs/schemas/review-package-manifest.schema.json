@@ -42,7 +42,7 @@
           "status": {"enum": ["admitted", "not_admitted"]},
           "reasons": {"type": "array", "items": {"type": "string"}},
           "residual_coverage": {"enum": ["review_pending", "exploration_reserve_cutoff", "outside_admission_policy",
-                                         "outside_review_scope"]},
+                                         "unassessed_unknown", "outside_review_scope"]},
           "exclusion": {
             "description": "Only for a lead outside the review scope: its non-first-party disposition (T-165) or stylistic (T-167).",
             "enum": ["vendored", "sdk", "generated", "test", "stylistic"]

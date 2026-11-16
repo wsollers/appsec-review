@@ -35,6 +35,8 @@
     "header_injection": null,
     "regex_injection": null,
     "unsafe_reflection": "code_load",
+    "network_output": null,
+    "file_write": "file_write",
     "unclassified": null
   },
   "prioritization_signals": [

@@ -14,7 +14,7 @@ from appsec_review.container_runtime.executor import ContainerExecutor, Executio
 from appsec_review.jobs.bound_artifacts import artifact_ref
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.secret_redaction import redact_message
-from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, platform_file_sha256
 from .dossiers import dossier_document
 from .latex import render_latex
 
@@ -32,7 +32,7 @@ def template_identity(directory: Path) -> dict[str, Any]:
         path = directory / name
         if path.is_symlink() or not path.is_file():
             raise IntegrityError(f"dossier template is missing or symbolic: {name}")
-        files.append({"name": name, "sha256": file_sha256(path)})
+        files.append({"name": name, "sha256": platform_file_sha256(path)})
     return {"files": files, "sha256": hashlib.sha256(canonical_json(files)).hexdigest()}
 
 
@@ -71,8 +71,8 @@ def render_dossier(run_root: Path, output_dir: Path, dossier: Mapping[str, Any],
             tool = replace(catalog.tool(TOOL_ID), tag=settings.image_tag, expected_image_id=settings.image_id,
                            timeout_seconds=settings.render_timeout_seconds)
             catalog = replace(catalog, tools=MappingProxyType({**catalog.tools, TOOL_ID: tool}))
-            tool_identity.update(version=tool.version, manifest_sha256=file_sha256(tool.manifest_path),
-                                 runtime_policy_sha256=file_sha256(catalog.runtime_policy))
+            tool_identity.update(version=tool.version, manifest_sha256=platform_file_sha256(tool.manifest_path),
+                                 runtime_policy_sha256=platform_file_sha256(catalog.runtime_policy))
             executor = executor_factory(catalog, root)
             result = executor.execute(ExecutionRequest(
                 tool_id=TOOL_ID, argv=(tool.executable,), target_root=inputs, scratch_root=scratch,

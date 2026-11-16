@@ -89,6 +89,22 @@ def protected_json(path: Path, value: Any) -> None:
         pass
 
 
+def platform_file_sha256(path: Path) -> str:
+    """SHA-256 of a repository-owned file: a template, a tool manifest, a runtime policy.
+
+    This is platform identity, never target evidence, so the customer-review guard that
+    :func:`file_sha256` applies does not run; a symbolic link or a missing file is still an error.
+    """
+    candidate = Path(path)
+    if candidate.is_symlink() or not candidate.is_file():
+        raise ValueError(f"platform file is missing or symbolic: {candidate.name}")
+    digest = hashlib.sha256()
+    with candidate.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def file_sha256(path: Path) -> str:
     from appsec_review.runtime.scope import require_hashable_evidence
     require_hashable_evidence(Path(path))

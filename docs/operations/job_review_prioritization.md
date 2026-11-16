@@ -94,9 +94,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_review_prioritization/test_review_prioritization_graph.py` |
 | live | None declared |
-| unit | `tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches`<br>`tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output`<br>`tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion`<br>`tests/unit/runtime/test_wave2_consumers.py` |
+| unit | `tests/test_cpp_memory_safety_rules.py`<br>`tests/test_review_prioritization.py`<br>`tests/test_syntax_metrics_streaming.py`<br>`tests/unit/job_review_prioritization/test_contract.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
 
 ### Dagster placement
 

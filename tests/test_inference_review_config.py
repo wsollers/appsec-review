@@ -53,7 +53,7 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     assert (settings.teams.review_teams, settings.teams.red_per_team, settings.teams.blue_per_team,
             settings.teams.verifier_per_team) == (3, 3, 2, 1)
     assert settings.lanes.lead_budget_share == 0.5 and settings.lanes.hunt_budget_share == 0.5
-    assert settings.lanes.lead_admission == ("critical", "high", "unknown")
+    assert settings.lanes.lead_admission == ("critical", "high")
     assert (settings.lanes.lead_max_claims_per_package, settings.lanes.hunt_max_units,
             settings.lanes.hunt_max_claims_per_package) == (3, 50, 5)
     assert settings.budgets.budget_team_packages == 200
@@ -96,7 +96,7 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
                                             "adjudicate", "scoring", "attack_chains", "completeness", "publication")
     from appsec_review.review.packages import PackageSettings
     packages = PackageSettings.from_review_settings(_settings(config))
-    assert packages.admit_severities == ("critical", "high", "unknown")
+    assert packages.admit_severities == ("critical", "high")
     assert (packages.hunt_max_units, packages.hunt_menu_partition_size, packages.max_package_bytes) == (50, 25, 65536)
 
 
@@ -137,9 +137,9 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
     ("red_per_team = 3", "red_per_team = 0", "red_per_team must be an integer"),
     ("budget_team_packages = 200", "budget_team_packages = 0", "budget_team_packages must be an integer"),
     ("max_model_turns = 12000", "max_model_turns = true", "max_model_turns must be an integer"),
-    ('lead_admission = ["critical", "high", "unknown"]', 'lead_admission = ["critical", "high"]',
-     "must admit unknown severity"),
-    ('lead_admission = ["critical", "high", "unknown"]', 'lead_admission = ["critical", "severe", "unknown"]',
+    ('lead_admission = ["critical", "high"]', 'lead_admission = ["critical"]',
+     "must admit critical and high severity"),
+    ('lead_admission = ["critical", "high"]', 'lead_admission = ["critical", "severe", "high"]',
      "lead_admission has unknown values: severe"),
     ("stable_rounds_required = 1", "stable_rounds_required = 9", "must not exceed max_rounds"),
     (f"{SECTION}.roles.independent_verifier]", f"{SECTION}.roles.chief_reviewer]", "unknown role: chief_reviewer"),

@@ -229,9 +229,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py` |
 | live | None declared |
-| unit | `tests/test_review_data_indexing.py::test_scanner_menu_partition_fits_review_package_page` |
+| unit | `tests/unit/job_review_data_indexing/test_contract.py`<br>`tests/unit/job_review_data_indexing/test_handlers.py`<br>`tests/test_review_data_indexing.py`<br>`tests/test_inventory_resume.py` |
 
 ### Dagster placement
 

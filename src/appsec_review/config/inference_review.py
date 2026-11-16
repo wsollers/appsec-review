@@ -146,9 +146,11 @@ class LaneSettings:
     exploration_reserve: int = 1
 
     def __post_init__(self) -> None:
-        if "unknown" not in self.lead_admission:
-            raise ValueError(f"{_PREFIX}.lanes.lead_admission must admit unknown severity; "
-                             "unknown is never treated as low")
+        # Lane A always reviews critical and high. A lead reported ``unknown`` enters through its assessed
+        # severity (lead triage); listing "unknown" here admits unassessed leads as well. Unknown is never
+        # treated as low: an unassessed lead outside the policy is a named ``lead_admission`` gap.
+        if not {"critical", "high"} <= set(self.lead_admission):
+            raise ValueError(f"{_PREFIX}.lanes.lead_admission must admit critical and high severity")
 
     @property
     def hunt_budget_share(self) -> float:

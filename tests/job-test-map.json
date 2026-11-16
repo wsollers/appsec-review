@@ -559,8 +559,15 @@
       "live": []
     },
     "job_review_data_indexing": {
-      "unit": ["tests/test_review_data_indexing.py::test_scanner_menu_partition_fits_review_package_page"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_review_data_indexing/test_contract.py",
+        "tests/unit/job_review_data_indexing/test_handlers.py",
+        "tests/test_review_data_indexing.py",
+        "tests/test_inventory_resume.py"
+      ],
+      "integration": [
+        "tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -587,12 +594,15 @@
     },
     "job_review_prioritization": {
       "unit": [
-        "tests/test_review_prioritization.py::test_go_error_checks_are_error_propagation_branches",
-        "tests/test_review_prioritization.py::test_priority_index_shard_names_its_publication_unit_and_satisfies_required_output",
-        "tests/test_review_prioritization.py::test_rust_question_mark_closures_match_guards_and_recursion",
+        "tests/test_cpp_memory_safety_rules.py",
+        "tests/test_review_prioritization.py",
+        "tests/test_syntax_metrics_streaming.py",
+        "tests/unit/job_review_prioritization/test_contract.py",
         "tests/unit/runtime/test_wave2_consumers.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_review_prioritization/test_review_prioritization_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -755,8 +765,27 @@
       "live": []
     },
     "job_threat_model_generation": {
-      "unit": ["tests/test_threat_model_generation_job.py"],
-      "integration": ["tests/integration/test_threat_model_generation.py"],
+      "unit": [
+        "tests/unit/job_threat_model_generation/test_contract.py",
+        "tests/unit/job_threat_model_generation/test_handlers.py",
+        "tests/test_threat_model_assembly.py",
+        "tests/test_threat_model_codec.py",
+        "tests/test_threat_model_contract.py",
+        "tests/test_threat_model_documents.py",
+        "tests/test_threat_model_generation_job.py",
+        "tests/test_threat_model_index_view.py",
+        "tests/test_threat_model_lane_interactions.py",
+        "tests/test_threat_model_lane_structure.py",
+        "tests/test_threat_model_reference.py",
+        "tests/test_threat_model_render.py",
+        "tests/test_threat_model_schemas.py",
+        "tests/test_threat_model_threats.py",
+        "tests/test_threat_model_validation.py"
+      ],
+      "integration": [
+        "tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py",
+        "tests/integration/test_threat_model_generation.py"
+      ],
       "acceptance": ["tests/acceptance/test_threat_model_generation.py"],
       "live": []
     },

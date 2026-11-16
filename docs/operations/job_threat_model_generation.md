@@ -82,9 +82,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | `tests/acceptance/test_threat_model_generation.py` |
-| integration | `tests/integration/test_threat_model_generation.py` |
+| integration | `tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py`<br>`tests/integration/test_threat_model_generation.py` |
 | live | None declared |
-| unit | `tests/test_threat_model_generation_job.py` |
+| unit | `tests/unit/job_threat_model_generation/test_contract.py`<br>`tests/unit/job_threat_model_generation/test_handlers.py`<br>`tests/test_threat_model_assembly.py`<br>`tests/test_threat_model_codec.py`<br>`tests/test_threat_model_contract.py`<br>`tests/test_threat_model_documents.py`<br>`tests/test_threat_model_generation_job.py`<br>`tests/test_threat_model_index_view.py`<br>`tests/test_threat_model_lane_interactions.py`<br>`tests/test_threat_model_lane_structure.py`<br>`tests/test_threat_model_reference.py`<br>`tests/test_threat_model_render.py`<br>`tests/test_threat_model_schemas.py`<br>`tests/test_threat_model_threats.py`<br>`tests/test_threat_model_validation.py` |
 
 ### Dagster placement
 

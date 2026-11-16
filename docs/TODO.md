@@ -199,8 +199,12 @@ until each is rewritten into the entry format when it is next touched.
 | T-5024 | [The expand retrieval tool raises KeyError inside red-team cells and the ledger keeps no traceback](#t-5024-the-expand-retrieval-tool-raises-keyerror-inside-red-team-cells-and-the-ledger-keeps-no-traceback) | review | done (2026-11-15, claim-identity branch) |
 | T-5025 | [Cluster lead units by enclosing symbol and sink line so one defect becomes one review package](#t-5025-cluster-lead-units-by-enclosing-symbol-and-sink-line-so-one-defect-becomes-one-review-package) | review | in-progress |
 | T-5026 | [Repair the drifted end-to-end publish test in test_review_guidance_execution](#t-5026-repair-the-drifted-end-to-end-publish-test-in-test_review_guidance_execution) | testing | open |
-| T-5027 | [Coalesce telemetry event fsyncs so lane units stop spending a fifth of their wall time in fsync](#t-5027-coalesce-telemetry-event-fsyncs-so-lane-units-stop-spending-a-fifth-of-their-wall-time-in-fsync) | review | open |
+| T-5027 | [Coalesce telemetry event fsyncs so lane units stop spending a fifth of their wall time in fsync](#t-5027-coalesce-telemetry-event-fsyncs-so-lane-units-stop-spending-a-fifth-of-their-wall-time-in-fsync) | review | in-progress |
 | T-5028 | [Adjudicate each claim identity once and stop re-running timed-out red cells at full cost](#t-5028-adjudicate-each-claim-identity-once-and-stop-re-running-timed-out-red-cells-at-full-cost) | review | open |
+| T-5029 | [Admit only critical and high leads to lane A; unknown severity enters through an assessment or becomes a named gap](#t-5029-admit-only-critical-and-high-leads-to-lane-a-unknown-severity-enters-through-an-assessment-or-becomes-a-named-gap) | review | in-progress |
+| T-5030 | [Gate the hunt lane on admitted leads and bound its share of the review](#t-5030-gate-the-hunt-lane-on-admitted-leads-and-bound-its-share-of-the-review) | review | open |
+| T-5031 | [Design triage-first, incremental and distributed review for million-line targets](#t-5031-design-triage-first-incremental-and-distributed-review-for-million-line-targets) | review | open |
+| T-5032 | [Repair the lead-coverage audit tests: the secret fixture yields no secret lead and job_dependency_intelligence lacks a lead decision](#t-5032-repair-the-lead-coverage-audit-tests-the-secret-fixture-yields-no-secret-lead-and-job_dependency_intelligence-lacks-a-lead-decision) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2949,10 +2953,10 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-5027 — Coalesce telemetry event fsyncs so lane units stop spending a fifth of their wall time in fsync
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** `observability.events` (`src/appsec_review/observability/events.py`, `append`) opens the events log, writes one record and `os.fsync`s it under the telemetry lock for every event. On run `2026-11-15-0005` one lane unit's `OPERATION_PROGRESS` record counted 22,903 `telemetry.fsync` phases costing 1,303 s off-CPU (plus 361 s in `storage.fsync`) within a 109-minute window, about a fifth of the unit's wall time, and the lock serialises every team's cells behind each other's fsync.
-- **Scope:** keep one durable append per critical event but coalesce `OPERATION_PROGRESS` and other high-frequency records: buffer them per process and fsync once per bounded interval or byte count, or write them to a per-process shard that is merged at seal time; the recovery path (`_append_position`, `_valid_lines`) must still truncate an incomplete tail, and the record schema, sequence numbering and `event_id` derivation do not change. Measure the phase totals before and after on a lane unit.
+- **Scope:** decided 2026-11-15: records stay write-through under the existing kernel lock (other processes read `pipeline.jsonl` as control state: `RUN_STARTED`, completion receipts, error state; a per-process batch buffer failed 149 unit tests across the Dagster completion and definitions, worker-adapter and metrics files on that contract, so batching was rejected), and the per-record fsync goes: only error, failure and stop records fsync as they are written, and every log a process touched is fsynced once at exit (`events.sync_all`). The lock is held for a write and a flush only, so the `telemetry.lock_wait` phase shrinks with it. The record schema, sequence numbering, `event_id` derivation and the recovery path do not change. Measure the phase totals before and after on a lane unit.
 - **Done when:** a unit test appends many progress events and shows one fsync per flush interval with every record readable and sequence-ordered after a simulated crash mid-buffer; a cpp smoke lane unit's `telemetry.fsync` count falls by at least an order of magnitude with no change to the events the reports read.
 - **Refs:** `src/appsec_review/observability/events.py`, `src/appsec_review/observability/spans.py` (`telemetry.fsync`, `telemetry.lock_wait`), `src/appsec_review/storage/atomic.py` (`storage.fsync`), run `2026-11-15-0005` `attempts/attempt_0001/logs/events.jsonl` (host-local), T-5001.
 
@@ -2961,9 +2965,45 @@ until each is rewritten into the entry format when it is next touched.
 - **State:** open
 - **Area:** review
 - **Why:** Rounds already stop when a package's accepted state is stable (`rounds.stable_rounds_required`), but adjudication is per package: once `claim/3` folds the same defect's proposals from several packages to one id, each package still runs its own blue, verifier and judge cells for that id (run `2026-11-15-0005` lead lane: 8 CWE-416 claims, 12 judge verdicts, 40 blue and 21 verifier cells on 24 packages). Red cells that time out (35 of 165 lead red cells) are re-run under `retry.retry_on_timeout` at the same model, effort and timeout, so a package whose question the model cannot answer in time spends its whole retry budget producing nothing. Per-cell durations are not yet measured; the first step is a per-role duration distribution from `data/inference-executions/` of a finished smoke run.
-- **Scope:** first, a small read-only script under `scripts/` that reports per-role cell duration quantiles, timeout and invalid counts per package from a run's ledger and inference-execution records; then, (a) before launching blue/verifier/judge cells for a claim id that another package or lane has already adjudicated in this attempt, reuse that adjudication (recorded as a relation, with the reusing package's own evidence request if its entities differ) instead of re-running the cells; (b) make the timeout retry policy typed: a timed-out red cell retries at most once, at a reduced reasoning effort or a narrower task prompt chosen in configuration, and a second timeout records a worker gap and releases the team. Model, effort, timeout and retry counts stay in the central TOML.
+- **Scope:** first, a small read-only script under `scripts/` that reports per-role cell duration quantiles, timeout and invalid counts per package from a run's ledger and inference-execution records; then, (a) before launching blue/verifier/judge cells for a claim id that another package or lane has already adjudicated in this attempt, reuse that adjudication (recorded as a relation, with the reusing package's own evidence request if its entities differ) instead of re-running the cells; (b) make the timeout retry policy typed: a timed-out red cell retries at most once, at a reduced reasoning effort or a narrower task prompt chosen in configuration, and a second timeout records a worker gap and releases the team. (c) bound the cell itself: a cell must go final by its fourth turn and the cell token cap drops to what a bounded answer needs (run `2026-11-15-0005` cells reached 6 turns, 20 queries and 78,000 output tokens before the cap ended them with nothing); both caps stay in the central TOML. Model, effort, timeout and retry counts stay in the central TOML.
 - **Done when:** the script exists and its output for run `2026-11-15-0005` is recorded in the task doc; a unit test shows two packages proposing one claim id producing one adjudication with both packages citing it; a unit test shows a red cell timing out twice recording one gap and no third launch; the next cpp smoke's lane wall time falls with the same or more adjudicated claim ids.
 - **Refs:** `src/appsec_review/jobs/job_inference_security_review/teams.py` (`_run_rounds`, `run_team`, `_team_body`), `src/appsec_review/config/inference_review.py` (`rounds`, `retry`, `teams`), `src/appsec_review/review/claims.py` (`claim/3`), run `2026-11-15-0005` `steps/lead_review/tasks/teams/ledger.jsonl` (host-local), T-5024, T-5025.
+
+### T-5029 — Admit only critical and high leads to lane A; unknown severity enters through an assessment or becomes a named gap
+
+- **State:** in-progress
+- **Area:** review
+- **Why:** Run `2026-11-15-0005` spent 49 model-hours and 35.6M output tokens on five source files. Its lane A already admitted only 24 leads (11 reported high, 13 assessed high), but the policy `lanes.lead_admission = ["critical", "high", "unknown"]` and its validator ("must admit unknown") meant every unknown-severity lead without a triage assessment would enter the full red, blue, verifier and judge treatment on a larger target. The user's decision (2026-11-15): review only critical and high; unknown is never treated as low, so it is assessed, and an unassessed lead is a named gap.
+- **Scope:** `lanes.lead_admission = ["critical", "high"]` in `appsec-review.toml`; the validator requires critical and high and no longer requires unknown; `review.packages.assemble_packages` records every unassessed unknown lead as a `lead_admission` skipped gap and `residual_coverage: unassessed_unknown` on the manifest (schema enum widened), while the lead still reaches lane B through its unit; docs and config tests follow.
+- **Done when:** the config and package tests pass with the new policy, `docs/architecture/inference-security-review.md` states the effective-severity rule, and the next cpp smoke's manifest shows the gap entries for its unassessed unknown leads with the lane A membership audit passing.
+- **Refs:** `src/appsec_review/config/inference_review.py` (`LaneSettings.__post_init__`), `src/appsec_review/review/packages.py` (`admission_reasons`, `assemble_packages`), `docs/schemas/review-package-manifest.schema.json`, `src/appsec_review/review/lead_triage.py`, run `2026-11-15-0005` `steps/packages/tasks/assemble_lead_packages/lead-packages.json` (host-local), T-5030, T-5031.
+
+### T-5030 — Gate the hunt lane on admitted leads and bound its share of the review
+
+- **State:** open
+- **Area:** review
+- **Why:** On run `2026-11-15-0005` the hunt lane took 50 of the target's 53 units (`hunt_max_units = 50` is "everything" on a small target), ran 618 hunter attempts for 106 that succeeded (247 ended over their cell budget), spent 15.9M output tokens (45% of the run) and 5.4 hours of wall time against lane A's 3.4, with the lead teams idle for two hours because the lanes do not rebalance. Most hunted units had no admitted lead at all.
+- **Scope:** select hunt units by reach from the admitted leads, not by rank alone: a unit is hunted when it contains an admitted (critical or high) lead or lies within one call hop of an admitted lead's enclosing function in the accepted graph; `hunt_max_units` stays as the outer cap; a unit left out records `below_hunt_cutoff` with the reason `no_admitted_lead_in_reach`. Make hunt packages per enclosing function (the lane B part of T-5025). Let an idle lane take the other lane's remaining packages once its own queue is empty (the fair-share scheduler already releases the share; the team pool does not pick up the work). Report hunt yield (supported hunt claims per 100 attempts) from `scripts/cell-outcomes.py` each run.
+- **Done when:** a unit test hunts only the reachable units and records the reason for the rest; the cpp smoke hunts no more than the units reachable from its admitted leads, hunter attempts fall by at least half with the same or more supported hunt claims, and the lanes finish within thirty minutes of each other.
+- **Refs:** `src/appsec_review/review/units.py` (`build_units`, `rank_units`, `select_hunts`), `src/appsec_review/review/packages.py` (`_Assembler.hunts`), `src/appsec_review/jobs/job_inference_security_review/teams.py` (`lane_allocation`, `run_lane`), `scripts/cell-outcomes.py`, T-5025, T-5028, T-5029.
+
+### T-5031 — Design triage-first, incremental and distributed review for million-line targets
+
+- **State:** open
+- **Area:** review
+- **Why:** The review's wall time scales with packages × roles × rounds × retries, and packages scale with tool observations. Run `2026-11-15-0005` needed 445 minutes and 49 model-hours for five files (66 minutes of tooling, 330 minutes of lanes at 16 teams, 40 minutes of post-processing) and failed at the dossier step. The intended targets are games of millions of lines whose CodeQL analysis alone takes six hours; at today's per-package cost the lanes would take months, and a six-hour CodeQL run cannot sit on every review's critical path.
+- **Scope:** a design document under `docs/architecture/` that decides, with the user: (1) triage-first review, where cheap clustering and one bounded triage cell select the few hundred packages that receive the full team and the rest get a single bounded cell or a tool-only disposition recorded as coverage; (2) per-function packages with hard cell caps and a round budget per package (T-5025, T-5028); (3) a tooling phase cached per target snapshot and re-run only for changed files, so CodeQL, builds and indexing are inputs to a review rather than part of it; (4) one shared package queue served by teams on several hosts, with cell memoization by fingerprint reused across runs and hosts, and lanes that rebalance. Each decision names its job-contract changes under `.claude/skills/add-a-job-contract/SKILL.md` and its measurement from `scripts/cell-outcomes.py` and `scripts/smoke-score.py`.
+- **Done when:** the design document is reviewed by the user, each accepted decision has its own TODO entry with a measurable target, and the first of them is in progress.
+- **Refs:** `docs/architecture/inference-security-review.md`, `docs/architecture/review-package-contract.md`, `src/appsec_review/jobs/job_inference_security_review/teams.py`, `src/appsec_review/review/cells.py` (memoization), run `2026-11-15-0005` `data/verification/cell-outcomes.txt` and `smoke-score.txt` (host-local), T-5025, T-5027, T-5028, T-5029, T-5030.
+
+### T-5032 — Repair the lead-coverage audit tests: the secret fixture yields no secret lead and job_dependency_intelligence lacks a lead decision
+
+- **State:** open
+- **Area:** testing
+- **Why:** On main `102a111c` (2026-11-15) four tests in `tests/review/test_lead_coverage.py` fail: `test_every_job_that_publishes_tool_observations_is_decided` finds `job_dependency_intelligence` deriving `tool_observation` entities (`derive(EntityKind.TOOL_OBSERVATION`, since T-5022's native resolution work) with no entry in `lead_families.OBSERVATION_PRODUCERS`, and the three secret-family tests find no `secret` lead in the fixture built with `secrets=True` (`collect_leads` yields none, so `_secret_package` unpacks nothing). Both are pre-existing on `origin/main`; neither is caused by the admission-policy change, which only updated the lane-settings assertion in the same file.
+- **Scope:** decide and record the lead decision for the dependency-intelligence observations (a lead family or a non-lead reason with the gap it records), and find why the gitleaks fixture row no longer becomes a `secret` lead (the fixture builder, the `secret_scanner` producer selector or the family rule) and fix the owning side; keep the secret-redaction tests green.
+- **Done when:** `tests/review/test_lead_coverage.py` passes alone and under `-n 4 --shuffle-seed`, and the lead-coverage audit document still names every observation producer.
+- **Refs:** `tests/review/test_lead_coverage.py`, `src/appsec_review/review/lead_families.py` (`OBSERVATION_PRODUCERS`, `collect_leads`), `src/appsec_review/jobs/job_dependency_intelligence/job.py`, `tests/fixtures/inference_review/builder.py` (`secrets=True`), `docs/reviews/lead-coverage-audit.md`, T-5022.
 
 ## Legacy backlog
 
@@ -3229,7 +3269,38 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   proposal validation and bounds, crosswalk derivation, SQLite shard publication with `attest_existing`
   reuse, and tag-cloud rollup; two `JobRunner` whole-graph tests relocated to
   `tests/integration/job_security_tagging/test_security_tagging_jobrunner.py`; 1,641/1,674
-  job-package lines [98.0%] and 632/672 branches [94.0%] covered across all 9 modules).
+  job-package lines [98.0%] and 632/672 branches [94.0%] covered across all 9 modules);
+  job_review_prioritization (35/47; 5 unit files, 60 cases: pinned 9-input / 6-dataset contract,
+  7-unit DAG topology and registry parity, typed settings/validator fail-closed guards, accepted
+  input loading with detached generated-source backing and Swift known-gap filtering, streaming
+  syntax metrics with admission leases and shard bounds, conservative multi-language import graph
+  resolution, heuristic/Semgrep/CodeQL lead and flow extraction across all dispositions,
+  zero-anchored mid-rank percentile scoring with history hotspot tie-breaking, SQLite `priority`
+  shard publication/reuse and `RetrievalCore` verification, plus `_fast_intake_and_catalog`
+  optimization keeping `test_wave2_contracts.py` and `test_wave2_consumers.py` under 10 s under
+  coverage; 4 `GraphRunner` tests and optional `tree-sitter-language-pack` golden check relocated
+  to `tests/integration/job_review_prioritization/test_review_prioritization_graph.py`;
+  2,171/2,240 job-package lines [96.92%] and 956/1,060 branches [90.19%] covered across all 13
+  modules);
+  job_threat_model_generation (36/47; 15 unit files, 298 cases: pinned 13-envelope + 17-dataset
+  accepted-evidence contract, 8-unit DAG topology and disabled-by-default wave1/CLI refusal,
+  typed settings/limits/reservation fail-closed validation, `SinkClass` interaction-catalog
+  parity [`97a82c725`], structure and interaction lanes, deterministic DFD assembly and threat
+  enumeration, citation resolution and demotion, Mermaid/Markdown rendering with truncation and
+  redacted-name structured gaps, working-file path/digest/JSON/record custody guards, pure-function
+  and fresh-render publication checks, and review-admissibility indirectness; 10 whole-job
+  `JobRunner` cases relocated to
+  `tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py`; 234/234
+  job-package lines [100.0%] and 22/22 branches [100.0%] covered across all 3 modules);
+  job_review_data_indexing (37/47; 4 unit files, 51 cases: pinned 34-input / 3-dataset contract,
+  16-unit DAG topology and registry parity, resolved-configuration and feed-freshness pin checks
+  across OSV/KEV/EPSS/MITRE/Grype/NVD, OWASP workbench acceptance/rejection classification,
+  16-unit `UnitExecutor` execution with `InProcessSqliteFts` and dropped-shard reconciliation,
+  snapshot-mismatch and corrupted-shard fail-closed refusal, `audit.inventory` stray/undeclared/
+  configuration-mismatch violation checks, downstream `T-150` topological completion order, and
+  resume compatibility; 11 whole-job `JobRunner` cases relocated to
+  `tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py`; 426/426
+  job-package lines [100.0%] and 107/110 branches [97.27%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

@@ -2924,7 +2924,11 @@ blue_per_team = 2
 verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
-lead_admission = ["critical", "high", "unknown"]
+# Lane A reviews critical and high leads by effective severity: the scanner's reported value, or for a lead
+# reported unknown the assessed severity from lead triage. An unassessed unknown lead is a lead_admission
+# skipped gap (manifest residual_coverage unassessed_unknown) and reaches lane B through its unit. Adding
+# "unknown" admits unassessed leads too. (T-5029: run 2026-11-15-0005 spent 49 model-hours on five files.)
+lead_admission = ["critical", "high"]
 # KEV-listed advisory leads enter lane A whatever their reported severity (EPSS is context only).
 lead_admission_kev = true
 # Opt-in medium/low exploration uses existing team-package capacity, never an extra budget.
