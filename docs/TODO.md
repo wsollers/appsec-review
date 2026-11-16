@@ -3260,7 +3260,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   configuration-mismatch violation checks, downstream `T-150` topological completion order, and
   resume compatibility; 11 whole-job `JobRunner` cases relocated to
   `tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py`; 426/426
-  job-package lines [100.0%] and 107/110 branches [97.27%] covered across all 3 modules).
+  job-package lines [100.0%] and 107/110 branches [97.27%] covered across all 3 modules);
+  job_review_package_assembly (38/47; 3 unit files, 20 cases: pinned 109-input / 1-dataset contract,
+  single-unit `publication.publish_packages` topology and registry parity, `max_page_size` boundary
+  and type validation, `_core` validation-scope caching and uncached construction, `UnitExecutor`
+  package publication across both `COMPLETED_WITH_GAPS` lineage manifests and zero-gap `SUCCEEDED`
+  runs, `_validate_output` receipt integrity checks, and target-snapshot/unbound-manifest/missing-handoff
+  refusal; 71/71 job-package lines [100.0%] and 20/20 branches [100.0%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

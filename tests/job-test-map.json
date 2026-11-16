@@ -587,7 +587,11 @@
       "live": []
     },
     "job_review_package_assembly": {
-      "unit": ["tests/review/test_packages.py"],
+      "unit": [
+        "tests/unit/job_review_package_assembly/test_contract.py",
+        "tests/unit/job_review_package_assembly/test_handlers.py",
+        "tests/review/test_packages.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
