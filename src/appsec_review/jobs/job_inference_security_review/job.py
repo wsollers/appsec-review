@@ -429,6 +429,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                     collection, assembly, run_id=unit.job.run_id,
                     manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
                     policy={"lead_admission": list(settings.lanes.lead_admission),
+                            "lead_admission_basis": settings.lanes.lead_admission_basis,
                             "lead_admission_kev": settings.lanes.lead_admission_kev,
                             "exploration_enabled": settings.lanes.exploration_enabled,
                             "exploration_reserve": settings.lanes.exploration_reserve}))
@@ -527,10 +528,27 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         for lane in ("lead", "hunt"):
             document = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
             entities.update({item["package_id"]: item["entities"] for item in document["packages"]})
-        merged = stages.merge_claims(lanes, shard_paths(unit, LEDGER_UNITS[:2]), entities,
-                                     unit.output("scope.assemble_scope")["components"])
+        # Claim scope resolution (claim-scope-resolution/1): a package's source files locate affected entities
+        # the package does not list (a claim folded to its enclosing symbol), and an entity another package's
+        # file holds re-homes the claim there instead of discarding it as out of scope.
+        scope = _scope(unit)
+        source_paths = {item.identity: item.path for item in scope.source_files}
+        package_paths = {package_id: sorted({source_paths[entity] for entity in listed if entity in source_paths})
+                         for package_id, listed in entities.items()}
+        shards = shard_paths(unit, LEDGER_UNITS[:2])
+        projection = project(stages.merge_verified(shards).events)
+        affected = sorted({entity for view in projection.claims.values() for entity in view.claim.affected_entities})
+        entity_paths: dict[str, str | None] = {}
+        if affected:
+            core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
+                                 manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
+                                 manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+            entity_paths = {entity: stages.locate_entity_path(core, entity) for entity in affected}
+        merged = stages.merge_claims(lanes, shards, entities, unit.output("scope.assemble_scope")["components"],
+                                     entity_paths=entity_paths, package_paths=package_paths)
         return {"artifact": _write(unit, "merge.json", merged), "claim_count": len(merged["claims"]),
                 "duplicate_proposal_count": sum(sum(item.values()) for item in merged["duplicate_proposals"].values()),
+                "rehomed_claim_count": len(merged["rehoming"]),
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def adjudicate_unit(unit: UnitContext) -> Mapping[str, Any]:

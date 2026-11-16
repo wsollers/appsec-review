@@ -7,9 +7,9 @@ manifest, and every referenced cell receipt from bytes before it writes the ledg
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Collection, Any, Iterable, Mapping, Sequence
 
 from appsec_review.config.inference_review import PocCandidateSettings
 from appsec_review.review import adjudication as r5
@@ -22,7 +22,7 @@ from appsec_review.review.ledger import (
     EVENT_SCHEMA, LedgerWriter, MergedLedger, Projection, gap_from_json, merge_shards, project,
 )
 from appsec_review.review.models import (
-    Admissibility, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane,
+    Admissibility, Claim, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane,
     RelationKind, Role, make_gap,
 )
 from appsec_review.review.scoring import (
@@ -71,8 +71,106 @@ def merge_verified(paths: Sequence[Path]) -> MergedLedger:
 # merge.claims
 
 
+SCOPE_RESOLUTION_RULE = "claim-scope-resolution/1"
+
+
+def locate_entity_path(core: Any, identity: str) -> str | None:
+    """The accepted source path of an entity (``find`` on the accepted index set), or ``None``.
+
+    An entity the index does not locate is simply unlocated; an integrity error of the index propagates.
+    """
+    try:
+        rows = core.find(identity=identity, limit=1)["results"]
+    except (ValueError, LookupError):
+        return None
+    row = rows[0] if rows else None
+    location = row.get("location") if isinstance(row, Mapping) and isinstance(row.get("location"), Mapping) else {}
+    path = location.get("path")
+    return path if isinstance(path, str) and path else None
+
+
+def _containing_packages(entity: str, entity_sets: Mapping[str, frozenset[str]],
+                         package_paths: Mapping[str, frozenset[str]], path: str | None) -> dict[str, str]:
+    """Packages whose scope holds ``entity``: ``listed`` when the entity id is in the package's entities,
+    ``located`` when the entity's accepted source path is a source file of the package."""
+    found = {package_id: "listed" for package_id, entities in entity_sets.items() if entity in entities}
+    if path is not None:
+        for package_id, paths in package_paths.items():
+            if path in paths and package_id not in found:
+                found[package_id] = "located"
+    return found
+
+
+def resolve_claim_scopes(claims: Iterable[Claim], proposals: Mapping[str, Collection[str]],
+                         package_entities: Mapping[str, Sequence[str]], components: Sequence[str], *,
+                         entity_paths: Mapping[str, str | None] | None = None,
+                         package_paths: Mapping[str, Collection[str]] | None = None
+                         ) -> tuple[dict[str, list[str]], dict[str, dict[str, Any]]]:
+    """``claim-scope-resolution/1``: the scope each claim is adjudicated in, and how it was resolved.
+
+    A claim's own scope is the entities of the packages that proposed it plus the accepted components. An
+    affected entity is inside a package's scope when the package lists it or when its accepted source path is
+    one of the package's source files (``entity_paths`` from the accepted index set, ``package_paths`` from
+    the accepted scope): a claim folded to an enclosing ``symbol`` of a file the package covers never left
+    its unit. When no affected entity is inside the own scope but some lie inside another package's scope,
+    the claim is **re-homed** to the owning package (the one holding the most of its entities; ties by package
+    id) and adjudicated there with the same predicates and verifier evidence: the hunt unit still cannot widen
+    its own scope, the claim simply lands where it belongs. A claim none of whose entities any package holds
+    keeps its own scope and falls to row 2 (``out_of_scope``) as outside the review's accepted scope.
+    """
+    entity_sets = {package_id: frozenset(entities) for package_id, entities in package_entities.items()}
+    paths = {package_id: frozenset(values) for package_id, values in (package_paths or {}).items()}
+    located = entity_paths or {}
+    component_set = frozenset(components)
+    scope: dict[str, list[str]] = {}
+    resolution: dict[str, dict[str, Any]] = {}
+    for claim in sorted(claims, key=lambda item: item.claim_id):
+        proposing = sorted(proposals[claim.claim_id])
+        own = set(component_set)
+        for package_id in proposing:
+            own.update(entity_sets[package_id])
+        containing = {entity: _containing_packages(entity, entity_sets, paths, located.get(entity))
+                      for entity in claim.affected_entities}
+        in_own = [entity for entity in claim.affected_entities
+                  if entity in own or any(package_id in proposing for package_id in containing[entity])]
+        record: dict[str, Any] = {"rule": SCOPE_RESOLUTION_RULE, "proposing_packages": proposing,
+                                  "rehomed_from": [], "rehomed_to": None,
+                                  "entities": {entity: {"path": located.get(entity),
+                                                        "packages": dict(sorted(containing[entity].items()))}
+                                               for entity in claim.affected_entities}}
+        if in_own:
+            extra = sorted(entity for entity in in_own if entity not in own)
+            scope[claim.claim_id] = sorted(own | set(extra))
+            record.update(status="in_scope", basis="located" if extra else "listed", located_entities=extra)
+        else:
+            owners: Counter[str] = Counter()
+            for packages in containing.values():
+                owners.update(packages.keys())
+            if not owners:
+                scope[claim.claim_id] = sorted(own)
+                record.update(status="outside_review_scope", basis=None, located_entities=[])
+            else:
+                owner = sorted(owners.items(), key=lambda item: (-item[1], item[0]))[0][0]
+                contained = sorted(entity for entity, packages in containing.items() if owner in packages)
+                scope[claim.claim_id] = sorted(component_set | entity_sets[owner] | set(contained))
+                record.update(status="rehomed", basis="located" if any(
+                    containing[entity][owner] == "located" for entity in contained) else "listed",
+                              located_entities=contained, rehomed_from=proposing, rehomed_to=owner,
+                              candidates=dict(sorted(owners.items())))
+        resolution[claim.claim_id] = record
+    return scope, resolution
+
+
 def merge_claims(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path],
-                 package_entities: Mapping[str, Sequence[str]], components: Sequence[str]) -> dict[str, Any]:
+                 package_entities: Mapping[str, Sequence[str]], components: Sequence[str], *,
+                 entity_paths: Mapping[str, str | None] | None = None,
+                 package_paths: Mapping[str, Collection[str]] | None = None) -> dict[str, Any]:
+    """Merge the lane ledgers and resolve every claim's adjudication scope (:func:`resolve_claim_scopes`).
+
+    ``entity_paths`` maps affected entities no package lists to their accepted source path (or ``None``) and
+    ``package_paths`` maps each package to the paths of its source-file entities; without them an entity is
+    inside a scope only when listed, as before.
+    """
     merged = merge_verified(shard_paths)
     projection = project(merged.events)
     proposals: dict[str, set[str]] = defaultdict(set)
@@ -87,13 +185,9 @@ def merge_claims(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path]
             verifier_gaps[claim_id].extend(values)
     if set(proposals) != set(projection.claims):
         raise IntegrityError("lane documents and ledger shards disagree on the proposed claims")
-    scope: dict[str, list[str]] = {}
-    for claim_id, packages in proposals.items():
-        entities = set(components)
-        for package_id in packages:
-            entities.update(package_entities[package_id])
-        scope[claim_id] = sorted(entities)
     claims = [view.claim for view in projection.claims.values()]
+    scope, resolution = resolve_claim_scopes(claims, proposals, package_entities, components,
+                                             entity_paths=entity_paths, package_paths=package_paths)
     return {
         "schema": "appsec-review/inference-review-merge/1", "ledger_head_sha256": merged.head,
         "streams": list(merged.streams), "claims": sorted(projection.claims),
@@ -106,6 +200,10 @@ def merge_claims(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path]
         "verifier_gaps": {key: sorted(values, key=lambda item: item["gap_id"])
                           for key, values in sorted(verifier_gaps.items())},
         "scope_entities": scope,
+        "scope_resolution": resolution,
+        "rehoming": {claim_id: {"from": record["rehomed_from"], "to": record["rehomed_to"],
+                                "entities": record["located_entities"]}
+                     for claim_id, record in sorted(resolution.items()) if record["status"] == "rehomed"},
         "claim_rounds": {claim_id: max((record["round"] for lane in lanes
                                        for package_id in proposals[claim_id]
                                        for record in lane.get("rounds", {}).get(package_id, ())), default=0)
@@ -126,7 +224,8 @@ def adjudication_json(item: Adjudication, round_index: int = 0) -> dict[str, Any
                             "outcome": status.outcome.value, "supporting": list(status.supporting),
                             "contradicting": list(status.contradicting)} for status in item.predicates],
             "counted_relation_ids": list(item.counted_relation_ids), "gap_ids": list(item.gap_ids),
-            "policy_sha256": item.policy_sha256}
+            "policy_sha256": item.policy_sha256,
+            "rehomed_from": list(item.rehomed_from), "rehomed_to": item.rehomed_to}
 
 
 def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path: Path, stream: str, *,
@@ -153,10 +252,13 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
         if not independent and merged["verifier_gaps"].get(claim_id):
             verifier_gap = gap_from_json(merged["verifier_gaps"][claim_id][0])
         claim_warrants = warrants_by_claim.get(claim_id, ()) if warrant_policy_enabled else None
+        resolution = (merged.get("scope_resolution") or {}).get(claim_id) or {}
         decision = adjudicate(view.claim, projection.relations.get(claim_id, ()), independent,
                               merged["scope_entities"].get(claim_id, ()), adjudicated, view.claim.state,
                               verifier_gap=verifier_gap, round=round_index,
-                              warrants=claim_warrants, warrant_policy_enabled=warrant_policy_enabled)
+                              warrants=claim_warrants, warrant_policy_enabled=warrant_policy_enabled,
+                              rehomed_from=resolution.get("rehomed_from", ()),
+                              rehomed_to=resolution.get("rehomed_to"))
         adjudicated.append(claim_id)
         records.append(adjudication_json(decision, round_index))
         state = ClaimState.PROPOSED
@@ -174,6 +276,9 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
         counts[record["state"]] += 1
     return {"schema": "appsec-review/inference-review-adjudications/1", "rules": r5.RULES_VERSION,
             "policy_sha256": r5.policy_sha256(warrant_policy_enabled=warrant_policy_enabled),
+            "scope_resolution_rule": SCOPE_RESOLUTION_RULE,
+            "rehomed": {record["claim_id"]: {"from": record["rehomed_from"], "to": record["rehomed_to"]}
+                        for record in records if record["rehomed_to"] is not None},
             "adjudications": records, "states": dict(sorted(counts.items())),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
 

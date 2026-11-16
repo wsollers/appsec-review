@@ -2928,11 +2928,19 @@ blue_per_team = 1
 verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
-# Lane A reviews critical and high leads by effective severity: the scanner's reported value, or for a lead
-# reported unknown the assessed severity from lead triage. An unassessed unknown lead is a lead_admission
-# skipped gap (manifest residual_coverage unassessed_unknown) and reaches lane B through its unit. Adding
-# "unknown" admits unassessed leads too. (T-5029: run 2026-11-15-0005 spent 49 model-hours on five files.)
+# Lane A reviews critical and high leads. Every lead carries the scanner's reported severity and, when a
+# lead-severity-rules/1 row or its rule CWE in the pinned MITRE catalog decides one, an assessed severity for
+# the impact of the weakness class (lead triage; the model pass runs only for leads reported unknown). An
+# unassessed unknown lead is a lead_admission skipped gap (manifest residual_coverage unassessed_unknown) and
+# reaches lane B through its unit. Adding "unknown" admits unassessed leads too. (T-5029: run 2026-11-15-0005
+# spent 49 model-hours on five files.)
 lead_admission = ["critical", "high"]
+# Which severity lead_admission is weighed against. "either" (default) admits a lead when its reported OR its
+# assessed severity qualifies: a scanner's medium on a format-string or unbounded-copy sink encodes the rule's
+# confidence, not the defect's impact (run 2026-11-16-0004 left both unreviewed). "reported" restores the
+# earlier policy (the effective severity: reported when known, else assessed); "assessed" weighs the assessed
+# severity when one exists, else the reported one. The admission reason names the severity that admitted.
+lead_admission_basis = "either"
 # KEV-listed advisory leads enter lane A whatever their reported severity (EPSS is context only).
 lead_admission_kev = true
 # Opt-in medium/low exploration uses existing team-package capacity, never an extra budget.
@@ -3193,6 +3201,13 @@ rules = [
   { scanner = "clang-static-analysis", rule = "clang-diagnostic-format-security", severity = "medium", basis = "rule_semantics", reason = "Non-literal format string diagnostic (CWE-134): exploitable only with attacker influence." },
   { scanner = "clang-static-analysis", rule = "cert-err33-c", severity = "low", basis = "rule_semantics", reason = "Unchecked return value of a library call (CERT ERR33-C): a robustness gap." },
   { scanner = "clang-static-analysis", rule = "cert-err34-c", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
+  # The same CERT rules through the semgrep/opengrep SEI CERT pack (run 2026-11-16-0004): ERR34-C carries CWE-20,
+  # whose catalog class would rank every unchecked conversion high; the row keeps the clang-tidy judgement.
+  { scanner = "semgrep", rule = "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
+  { scanner = "opengrep", rule = "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
+  # Review-signal sink rules carry no CWE, so the catalog cannot rank them; an unbounded copy length is CWE-120.
+  { scanner = "semgrep", rule = "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded", severity = "high", basis = "rule_semantics", reason = "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced." },
+  { scanner = "opengrep", rule = "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded", severity = "high", basis = "rule_semantics", reason = "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced." },
   { scanner = "clang-static-analysis", rule = "concurrency-mt-unsafe", severity = "low", basis = "rule_semantics", reason = "Thread-unsafe library call: a reliability gap unless threads are attacker driven." },
   { scanner = "clang-static-analysis", rule = "bugprone-easily-swappable-parameters", severity = "info", basis = "rule_semantics", reason = "Readability warning on a signature; no security consequence." },
   { scanner = "checkov", rule = "CKV_DOCKER_3", severity = "medium", basis = "rule_semantics", reason = "No non-root user is created (CWE-250): a container escape or file write runs as root." },

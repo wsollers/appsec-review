@@ -90,6 +90,11 @@ class Adjudication:
     counted_relation_ids: tuple[str, ...]
     policy_sha256: str = POLICY_SHA256
     linked_gap_ids: tuple[str, ...] = field(default_factory=tuple)
+    # Claim scope resolution (``claim-scope-resolution/1``): the proposing packages a claim was re-homed from
+    # and the owning package it was adjudicated in, when its entities lay outside its own package scope but
+    # inside the review's accepted scope. Empty / None for a claim adjudicated in its own package.
+    rehomed_from: tuple[str, ...] = field(default_factory=tuple)
+    rehomed_to: str | None = None
 
     @property
     def gap_ids(self) -> tuple[str, ...]:
@@ -161,15 +166,22 @@ def adjudicate(claim: Claim, relations: Iterable[EvidenceRelation], verifier_ind
                scope_entities: Collection[str], existing_claim_ids: Collection[str],
                prior_state: ClaimState = ClaimState.PROPOSED, *, verifier_gap: Gap | None = None,
                round: int = 0, warrants: Iterable[PredicateWarrant] | None = None,
-               warrant_policy_enabled: bool = False) -> Adjudication:
+               warrant_policy_enabled: bool = False, rehomed_from: Iterable[str] = (),
+               rehomed_to: str | None = None) -> Adjudication:
     """Apply the R5 table to ``claim``; the first matching row wins.
 
     ``existing_claim_ids`` are canonical claims adjudicated earlier in canonical order.
-    ``scope_entities`` is the package scope plus accepted components. ``verifier_gap`` is the failed
-    verifier cell's ``worker_gap``; it is linked whenever given. When ``warrant_policy_enabled`` is
-    ``True`` or ``warrants`` is supplied, only relations carrying a matching established
+    ``scope_entities`` is the claim's resolved scope (``stages.resolve_claim_scopes``): its proposing packages'
+    entities plus accepted components, or, for a re-homed claim, the owning package's entities; row 2 fires only
+    when every affected entity lies outside it, which after resolution means outside the review's accepted scope.
+    ``rehomed_from`` / ``rehomed_to`` record a re-homing and enter the adjudication identity. ``verifier_gap``
+    is the failed verifier cell's ``worker_gap``; it is linked whenever given. When ``warrant_policy_enabled``
+    is ``True`` or ``warrants`` is supplied, only relations carrying a matching established
     ``PredicateWarrant`` count, and ``WARRANT_POLICY_SHA256`` versions the adjudication identity.
     """
+    rehomed_from = tuple(sorted(set(rehomed_from)))
+    if (rehomed_to is None) != (not rehomed_from):
+        raise ValueError("a re-homed claim names both the proposing packages and the owning package")
     use_warrants = bool(warrant_policy_enabled or warrants is not None)
     warrant_map = _warrant_index(claim, warrants or ()) if use_warrants else None
     active_policy = WARRANT_POLICY_SHA256 if use_warrants else POLICY_SHA256
@@ -221,9 +233,12 @@ def adjudicate(claim: Claim, relations: Iterable[EvidenceRelation], verifier_ind
         "gap_ids": sorted({item.gap_id for item in gaps} | set(linked)),
         "policy_sha256": active_policy,
     }
+    if rehomed_to is not None:          # absent for a claim adjudicated in place: its identity is unchanged
+        body["rehoming"] = {"from": list(rehomed_from), "to": rehomed_to}
     return Adjudication(
         adjudication_id=make_id("adjudication", 1, body), claim_id=claim.claim_id,
         prior_state=ClaimState(prior_state), state=state, deciding_row=row, predicates=statuses,
         verifier_independent=bool(verifier_independent), duplicate_of=duplicate_of, gaps=tuple(gaps),
         counted_relation_ids=counted, policy_sha256=active_policy, linked_gap_ids=linked,
+        rehomed_from=rehomed_from, rehomed_to=rehomed_to,
     )

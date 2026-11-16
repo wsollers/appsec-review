@@ -9,7 +9,7 @@ import random
 import jsonschema
 import pytest
 
-from appsec_review.review.lead_families import FAMILIES, collect_leads
+from appsec_review.review.lead_families import FAMILIES, Lead, collect_leads
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.packages import (
     PackageSettings, assemble_packages, audit_membership, publish_packages, verify_package_manifest,
@@ -353,6 +353,94 @@ def test_excluded_leads_artifact_lists_every_lead_lane_a_left_out_with_its_reaso
     assert counts["admitted"] == len(admitted) and counts["by_residual_coverage"]["unassessed_unknown"] == 1
     assert document["leads"] == sorted(document["leads"], key=lambda row: (
         row["residual_coverage"], row["exclusion"] or "", row["path"] or "", row["start_line"] or 0, row["lead_id"]))
+
+
+def _lead(identifier: str, reported: str, assessed: str | None, *, source: str = "cwe_catalog") -> Lead:
+    from appsec_review.review.lead_families import AssessedSeverity
+    assessment = None if assessed is None else AssessedSeverity(assessed, source, "cwe_catalog" if source == "cwe_catalog"
+                                                                else "rule_semantics", "impact of the weakness class",
+                                                                "cwe-impact-derivation/1", "triage-" + "0" * 64)
+    return Lead(identifier, "source_sast", "tool-semgrep", "fio30-c", "WARNING", reported, "native-label", None,
+                ("CWE-134",), "src/request.cpp", 28, True, "observations", "default", "b" * 64,
+                assessed_severity=assessment, triage_state=None if assessment is None else "assessed")
+
+
+@pytest.mark.parametrize("basis, reported, assessed, expected", [
+    # either (default): a scanner's medium on a format-string sink is admitted on the catalog's high.
+    ("either", "medium", "high", ["assessed_severity"]),
+    ("either", "medium", "medium", []),
+    ("either", "high", "medium", ["reported_severity"]),          # the assessment never demotes a reported high
+    ("either", "high", "high", ["reported_severity", "assessed_severity"]),
+    ("either", "unknown", "high", ["assessed_severity"]),
+    ("either", "unknown", None, []),
+    ("either", "info", "high", ["assessed_severity"]),
+    # reported: the earlier policy, the effective severity (reported when known, else assessed).
+    ("reported", "medium", "high", []),
+    ("reported", "unknown", "high", ["assessed_severity"]),
+    ("reported", "high", "medium", ["reported_severity"]),
+    # assessed: the assessed severity when one exists, else the reported one.
+    ("assessed", "medium", "high", ["assessed_severity"]),
+    ("assessed", "high", "medium", []),
+    ("assessed", "high", None, ["reported_severity"]),
+])
+def test_lead_admission_basis_weighs_reported_or_assessed_severity(basis, reported, assessed, expected) -> None:
+    """lead-admission-basis/1: which of a lead's two severities lane A weighs against lanes.lead_admission."""
+    from appsec_review.review.packages import admission_reasons, severity_admission
+    settings = PackageSettings(admit_severities=("critical", "high"), admission_basis=basis)
+    lead = _lead("asr:tool_observation:" + "1" * 64, reported, assessed)
+    assert severity_admission(lead, settings) == expected
+    assert admission_reasons(lead, settings) == expected
+    assert lead.reported_severity == reported                       # never rewritten
+
+
+def test_unknown_in_the_policy_admits_only_unassessed_unknown_leads_under_either() -> None:
+    from appsec_review.review.packages import admission_reasons
+    settings = PackageSettings(admit_severities=("critical", "high", "unknown"), admission_basis="either")
+    assert admission_reasons(_lead("asr:tool_observation:" + "2" * 64, "unknown", None), settings) == ["reported_severity"]
+    assert admission_reasons(_lead("asr:tool_observation:" + "3" * 64, "unknown", "medium"), settings) == []
+    with pytest.raises(ValueError, match="admission_basis"):
+        PackageSettings(admission_basis="scanner")
+
+
+def test_excluded_leads_artifact_shows_both_severities_and_the_admission_basis(fixture, scope) -> None:
+    """An operator reads "reported medium, assessed high, admitted" against "reported medium, assessed medium,
+    excluded" from the artifact: every row carries both severities, the assessment's source and the basis."""
+    from appsec_review.review.excluded_leads import excluded_leads_document
+    from appsec_review.review.lead_families import AssessedSeverity, LeadTriage
+    collection = collect_leads(scope)
+    medium_id = fixture.ids["sast_medium"]
+    high = AssessedSeverity("high", "cwe_catalog", "cwe_catalog", "CWE-134: catalog impact critical; ranked high",
+                            "cwe-impact-derivation/1", "triage-" + "4" * 64)
+    assessed = collect_leads(scope, {medium_id: LeadTriage("assessed", high)})
+    [medium] = [lead for lead in assessed.leads if lead.observation_id == medium_id]
+    assert (medium.reported_severity, medium.assessed_value) == ("medium", "high")
+    strict = PackageSettings(admit_severities=("critical", "high"), admission_basis="either")
+    assembly = assemble_packages(scope, strict, collection=assessed)
+    entry = next(item for item in assembly.manifest["admission"] if item["lead_id"] == medium_id)
+    assert (entry["status"], entry["reasons"], entry["reported_severity"], entry["assessed_severity"]) == (
+        "admitted", ["assessed_severity"], "medium", "high")
+    assert assembly.manifest["settings"]["admission_basis"] == "either"
+    assert any(medium_id in item.lead_ids for item in assembly.packages if item.kind == "finding_lead")
+    menu = next(item for package in assembly.packages if package.kind == "finding_lead"
+                for item in package.document()["lead_menu"] if item["observation_id"] == medium_id)
+    assert menu["admission_reasons"] == ["assessed_severity"] and menu["severity_record"]["assessed"]["value"] == "high"
+    document = excluded_leads_document(assessed, assembly, run_id=scope.run_id, manifest_sha256=scope.manifest_sha256,
+                                       policy={"lead_admission": ["critical", "high"], "lead_admission_basis": "either"})
+    assert medium_id not in {row["lead_id"] for row in document["leads"]}
+    low = next(row for row in document["leads"] if row["lead_id"] == fixture.ids["sast_low"])
+    assert (low["reported_severity"], low["assessed_severity"], low["assessed_source"], low["admission_basis"]) == (
+        "low", None, None, "either")
+    assert low["residual_coverage"] == "outside_admission_policy"
+    # The earlier policy, selectable: reported basis leaves the same lead out, and the artifact says so.
+    reported_only = assemble_packages(scope, PackageSettings(admit_severities=("critical", "high"),
+                                                             admission_basis="reported"), collection=assessed)
+    entry = next(item for item in reported_only.manifest["admission"] if item["lead_id"] == medium_id)
+    assert (entry["status"], entry["reasons"], entry["residual_coverage"]) == ("not_admitted", [], "outside_admission_policy")
+    excluded = excluded_leads_document(assessed, reported_only, run_id=scope.run_id, manifest_sha256=scope.manifest_sha256,
+                                       policy={"lead_admission": ["critical", "high"], "lead_admission_basis": "reported"})
+    row = next(row for row in excluded["leads"] if row["lead_id"] == medium_id)
+    assert (row["reported_severity"], row["assessed_severity"], row["assessed_source"], row["admission_basis"]) == (
+        "medium", "high", "cwe_catalog", "reported")
 
 
 def test_settings_are_typed_and_reject_unknown_keys() -> None:

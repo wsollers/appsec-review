@@ -254,10 +254,12 @@ builds the first two; the document hunt package comes only from the separate
 
 The lead-lane assembly task also publishes `excluded-leads.json` beside `lead-packages.json`
 (`review/excluded_leads.py`, `inference-review-excluded-leads/1`): every lead the manifest did not admit to
-lane A, with its scanner, rule, location, reported and effective severity, the reason (a scope exclusion such
-as `vendored` or `stylistic`, `outside_admission_policy`, `unassessed_unknown`, or the exploration cutoff),
-and whether a lane B hunt menu still lists it. Messages are omitted so a secret lead's literal never leaves
-the redacted projections.
+lane A, with its scanner, rule, location, reported, assessed (with the assessment's source) and effective
+severity, the admission basis, the reason (a scope exclusion such as `vendored` or `stylistic`,
+`outside_admission_policy`, `unassessed_unknown`, or the exploration cutoff), and whether a lane B hunt menu
+still lists it, so an operator can tell "reported medium, assessed high, admitted" from "reported medium,
+assessed medium, excluded". Messages are omitted so a secret lead's literal never leaves the redacted
+projections.
 
 - A **finding package** groups one normalized upstream lead with its source/artifact identities,
   original evidence, known supporting and contradicting relations, proof obligations, coverage,
@@ -570,12 +572,20 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 
 ### Lane A: lead review
 
-- **Admission.** Lane A admits every accepted lead whose *effective* severity is `critical` or `high`
-  (`lanes.lead_admission`): the scanner's normalized reported severity, or for a lead reported `unknown`
-  the audited assessed severity from lead triage. An unknown lead without an assessment is not admitted:
-  the manifest records it with `residual_coverage: unassessed_unknown` and a `lead_admission` skipped gap,
-  and it reaches lane B through its unit. Adding `unknown` to the policy admits unassessed leads too.
-  Admission applies to **every** lead family:
+- **Admission.** Lane A admits every accepted lead one of whose severities is `critical` or `high`
+  (`lanes.lead_admission`). Every lead carries the scanner's normalized *reported* severity and, when a
+  `lead-severity-rules/1` row or its rule CWE in the run-pinned MITRE catalog decides one, an audited
+  *assessed* severity for the impact of the weakness class (lead triage; the model pass runs only for leads
+  reported `unknown`). `lanes.lead_admission_basis` (`lead-admission-basis/1`) says which is weighed:
+  `either` (default) admits when the reported **or** the assessed value qualifies, so a scanner's `medium` on
+  a format-string or unbounded-copy sink (rule confidence, not impact) no longer hides a `high`-impact
+  weakness; `reported` restores the earlier policy (the effective severity: reported when known, else
+  assessed); `assessed` weighs the assessed value when one exists, else the reported one. The admission
+  reason names the severity that admitted (`reported_severity`, `assessed_severity`, or both); the manifest's
+  admission list and `excluded-leads.json` carry both severities beside every lead. An unknown lead without
+  an assessment is not admitted: the manifest records it with `residual_coverage: unassessed_unknown` and a
+  `lead_admission` skipped gap, and it reaches lane B through its unit. Adding `unknown` to the policy admits
+  unassessed leads too. Admission applies to **every** lead family:
   - source SAST;
   - CodeQL;
   - artifact scanners;
@@ -1185,6 +1195,7 @@ verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
 lead_admission = ["critical", "high", "unknown"]   # normalized reported severity, every lead family
+lead_admission_basis = "either"  # reported | assessed | either: which severity lead_admission weighs
 lead_admission_kev = true        # KEV-listed advisory leads enter lane A whatever their severity
 lead_budget_share = 0.5          # unused share flows to the other lane
 lead_max_claims_per_package = 3
@@ -2134,7 +2145,18 @@ policy, not prompt text. A change to them changes the adjudication policy hash.
 row wins.
 
 1. Equal canonical identity with an earlier claim → `duplicate`.
-2. Every affected entity lies outside the package scope or accepted components → `out_of_scope`.
+2. Every affected entity lies outside the review's accepted scope → `out_of_scope`. The scope a claim is
+   judged in is resolved first (`claim-scope-resolution/1`, `merge.claims`): an affected entity is inside a
+   package's scope when the package lists it **or** when its accepted source path is one of the package's
+   source files (a claim folded to the enclosing `symbol` of a file its unit covers never left the unit).
+   When no entity is inside the proposing packages' scope but some lie inside another package's, the claim
+   is **re-homed** to the owning package (the one holding the most of its entities; ties by package id) and
+   adjudicated there with the same predicates and verifier evidence; the adjudication records
+   `rehomed_from` / `rehomed_to`, the merge document its `scope_resolution` and `rehoming`, and the
+   decision audit names the move. The hunt unit's own scope is unchanged (it still cannot widen itself);
+   the claim lands where it belongs. A claim that a lead package also proposed is one canonical claim in
+   the lead lane and is adjudicated in place. Only a claim none of whose entities any package holds is
+   `out_of_scope`.
 3. A required predicate has both direct support and direct contradiction → `insufficient_evidence`
    with an `unresolved_contradiction` evidence gap. Slice 1 does not rank integrity classes.
 4. Direct contradiction, and no direct support, on `source_to_sink_reachability` →

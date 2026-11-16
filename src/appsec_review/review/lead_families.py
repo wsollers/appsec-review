@@ -175,7 +175,7 @@ ASSESSED_VALUES = ("critical", "high", "medium", "low", "info")
 
 @dataclass(frozen=True, slots=True)
 class AssessedSeverity:
-    """An audited severity assigned to a lead whose scanner reported none (``review.lead_triage``).
+    """An audited severity assessed beside the scanner's reported one (``review.lead_triage``).
 
     It orders and admits the lead only; it never feeds scoring, ship-block decisions or claim states.
     """
@@ -234,7 +234,8 @@ class Lead:
     # Bounded reference context from the accepted dependency_advisories facts (review.advisories).
     advisory: Mapping[str, Any] | None = field(default=None, compare=False, hash=False)
     # Lead severity triage (review.lead_triage): ``reported_severity`` is the scanner's own value and is never
-    # rewritten. ``assessed_severity`` is a separate, audited assessment for a lead the scanner left ``unknown``.
+    # rewritten. ``assessed_severity`` is a separate, audited assessment of the weakness's impact: deterministic
+    # (rule table, pinned CWE catalog) for any lead, model-assessed only for a lead the scanner left ``unknown``.
     # ``triage_state`` is None when no triage ran for this collection (the lead then has no severity record).
     assessed_severity: "AssessedSeverity | None" = None
     triage_state: str | None = None
@@ -257,6 +258,11 @@ class Lead:
         if self.reported_severity != "unknown":
             return "reported"
         return "assessed" if self.assessed_severity is not None else "unknown"
+
+    @property
+    def assessed_value(self) -> str | None:
+        """The assessed severity value, or ``None`` when no step assessed this lead."""
+        return self.assessed_severity.value if self.assessed_severity is not None else None
 
     def severity_record(self) -> dict[str, Any] | None:
         """The two-sided severity record (original and assessed), or None when no triage ran."""
@@ -333,10 +339,14 @@ class LeadCollection:
 
 
 def with_triage(lead: Lead, outcome: LeadTriage | None) -> Lead:
-    """``lead`` carrying its triage outcome; ``reported_severity`` is never touched."""
-    if lead.reported_severity != "unknown":
-        return replace(lead, triage_state="not_needed")
+    """``lead`` carrying its triage outcome; ``reported_severity`` is never touched.
+
+    A lead with a known reported severity and no outcome had no deterministic basis (``not_needed``: the
+    scanner's value stands alone); an unknown lead without an outcome is a missing result, a named gap.
+    """
     if outcome is None:
+        if lead.reported_severity != "unknown":
+            return replace(lead, triage_state="not_needed")
         return replace(lead, triage_state="unresolved", triage_gap="triage_failed:missing_result",
                        triage_reason="the triage step produced no result for this lead")
     return replace(lead, triage_state=outcome.state, assessed_severity=outcome.assessed, triage_gap=outcome.gap,

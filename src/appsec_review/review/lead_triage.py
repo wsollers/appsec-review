@@ -1,8 +1,10 @@
-"""Lead severity triage (``appsec-review/lead-triage/1``): an auditable severity for leads the scanner left unknown.
+"""Lead severity triage (``appsec-review/lead-triage/1``): an auditable assessed severity beside the reported one.
 
-A scanner that reports no meaningful severity leaves a lead ``unknown``. Lane admission keeps such a lead (an
-unknown severity is never treated as low), but its position in the lane budgets is then arbitrary. Triage gives
-each ``unknown`` lead an *assessed* severity in three ordered steps, cheapest first:
+A scanner's severity label encodes the rule's confidence as much as the defect's impact, and a scanner that
+reports no meaningful severity leaves a lead ``unknown``. Triage gives every lead with a deterministic basis
+(a rule-table row or a rule CWE in the pinned catalog) an *assessed* severity beside the reported one, so lane
+admission can weigh the impact of the weakness class and not only the scanner's label; a lead reported
+``unknown`` that no deterministic step decides goes to a bounded model pass. The steps, cheapest first:
 
 1. the versioned deterministic table ``lead-severity-rules/1`` (``settings.triage.rules``): (scanner, rule) or
    rule-CWE to severity, with a basis and a reason;
@@ -22,9 +24,10 @@ overflow, wrap or loops without citing one of that finding's supplied facts is j
 stays ``unknown`` with the ``triage_unresolved:uncited_numeric_reasoning`` gap.
 
 The assessed severity is a separate field. ``reported_severity`` is the scanner's own value and is never
-rewritten. The *effective* severity (reported if known, else assessed, else unknown) orders and admits leads and
-is displayed; it never feeds scoring, ship-block decisions or claim states. Finding text, messages and excerpts
-are data in the request, never instructions.
+rewritten. The *effective* severity (reported if known, else assessed, else unknown) orders leads and is
+displayed; admission weighs the reported and the assessed value under ``lanes.lead_admission_basis``
+(``review.packages.severity_admission``). Neither feeds scoring, ship-block decisions or claim states. Finding
+text, messages and excerpts are data in the request, never instructions.
 """
 from __future__ import annotations
 
@@ -479,18 +482,26 @@ def disabled_document(settings: TriageSettings) -> dict[str, Any]:
             "counts": counts_of([]), "deterministic": [], "batches": [], "leads": []}
 
 
-def counts_of(rows: Sequence[Mapping[str, Any]], **extra: int) -> dict[str, int]:
+def counts_of(rows: Sequence[Mapping[str, Any]], *, unknown_leads: int | None = None, **extra: int) -> dict[str, int]:
+    """Counts over the lead rows: ``unknown_leads`` is the number of leads the scanner reported ``unknown`` (every
+    one has a row), ``assessed_leads`` the rows with an assessed severity and ``reported_known_assessed`` the
+    rows of leads whose reported severity was known and that a deterministic step assessed as well."""
     found = Counter()
     for row in rows:
         assessed = row.get("assessed")
-        found["unknown_leads"] += 1
+        if row.get("reported_severity", "unknown") == "unknown":
+            found["unknown_rows"] += 1
+        else:
+            found["reported_known_assessed"] += 1
         if assessed is not None:
             found[assessed["source"]] += 1
+            found["assessed_leads"] += 1
         else:
             found["unresolved"] += 1
-    return {"unknown_leads": found["unknown_leads"], "rule_table": found["rule_table"],
-            "cwe_catalog": found["cwe_catalog"], "model_triage": found["model_triage"],
-            "unresolved": found["unresolved"], **extra}
+    return {"unknown_leads": found["unknown_rows"] if unknown_leads is None else unknown_leads,
+            "assessed_leads": found["assessed_leads"], "reported_known_assessed": found["reported_known_assessed"],
+            "rule_table": found["rule_table"], "cwe_catalog": found["cwe_catalog"],
+            "model_triage": found["model_triage"], "unresolved": found["unresolved"], **extra}
 
 
 def numeric_guardrail_record(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -515,30 +526,37 @@ def _catalog_record(reference: CweReference | None, impact: ImpactCatalog | None
 def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any, infer: Callable[..., Any],
                read_excerpt: ExcerptReader, reference: CweReference | None, guidance: TriageGuidance,
                schemas: Any, cache_dir: Path | None = None, shared: SharedArtifacts | None = None) -> TriageOutcome:
-    """Triage every ``unknown`` lead of ``leads``: table, CWE catalog, then batched model turns.
+    """Assess every lead of ``leads``: table and CWE catalog for all, then batched model turns for the unknown.
 
-    Never raises for a model failure: an undecided lead keeps ``unknown`` and a named gap.
+    The deterministic steps run for every lead, whatever its reported severity, so a lead the scanner labelled
+    by rule confidence (``medium`` on a format-string sink) still carries the impact class of its weakness as
+    an assessed severity. The model pass is bounded to leads reported ``unknown`` that no deterministic step
+    decided. A lead with a known reported severity and no deterministic basis gets no row: the scanner's value
+    stands alone. Never raises for a model failure: an undecided lead keeps ``unknown`` and a named gap.
     """
     impact = ImpactCatalog.from_reference(reference) if reference is not None else None
-    unknown = sorted((lead for lead in leads if lead.reported_severity == "unknown"),
-                     key=lambda lead: lead.observation_id)
+    ordered_leads = sorted(leads, key=lambda lead: lead.observation_id)
+    unknown_count = sum(1 for lead in ordered_leads if lead.reported_severity == "unknown")
     rows: dict[str, dict[str, Any]] = {}
     deterministic: list[dict[str, Any]] = []
     pending: list[_Pending] = []
 
-    for lead in unknown:
+    for lead in ordered_leads:
         decision = rule_table_decision(lead, settings.rules) or catalog_decision(lead, reference, impact)
         references = cwe_references(lead, reference, impact, full=False)
         if decision is not None:
             assessed = decision.assessed(lead.observation_id)
-            rows[lead.observation_id] = {"lead_id": lead.observation_id, "state": "assessed",
-                                         "assessed": assessed.record(), "gap": None, "references": references,
-                                         "fingerprint": None, "origin": "deterministic"}
-            deterministic.append({"lead_id": lead.observation_id, "source": decision.source, "entry": decision.entry,
+            rows[lead.observation_id] = {"lead_id": lead.observation_id, "reported_severity": lead.reported_severity,
+                                         "state": "assessed", "assessed": assessed.record(), "gap": None,
+                                         "references": references, "fingerprint": None, "origin": "deterministic"}
+            deterministic.append({"lead_id": lead.observation_id, "reported_severity": lead.reported_severity,
+                                  "source": decision.source, "entry": decision.entry,
                                   "value": decision.value, "basis": decision.basis, "reason": decision.reason,
                                   "version": decision.version, "triage_id": assessed.triage_id,
                                   "table_version": RULE_TABLE_VERSION, "table_sha256": settings.table_sha256})
             continue
+        if lead.reported_severity != "unknown":
+            continue                      # the scanner's value stands; the model pass is for unknown leads only
         item = finding_input(lead, settings=settings, reader=read_excerpt, reference=reference, impact=impact)
         pending.append(_Pending(lead, item, finding_fingerprint(item, settings=settings, profile=profile,
                                                                 guidance=guidance), references))
@@ -602,7 +620,7 @@ def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any,
             rows[lead_id]["shared_receipt"] = cache_write(
                 cache_dir, entry.fingerprint, lead_id, item, record, shared=shared)
 
-    ordered = [rows[lead.observation_id] for lead in unknown]
+    ordered = [rows[lead.observation_id] for lead in ordered_leads if lead.observation_id in rows]
     document = {
         "schema": ARTIFACT_SCHEMA, "enabled": True, "rule": TRIAGE_RULE,
         "rule_table": {"version": RULE_TABLE_VERSION, "sha256": settings.table_sha256, "entries": len(settings.rules),
@@ -614,8 +632,8 @@ def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any,
                      "result_schema": RESULT_SCHEMA},
         "settings": {"batch_size": settings.batch_size, "max_leads": settings.max_leads,
                      "max_excerpt_lines": settings.max_excerpt_lines, "max_reason_chars": settings.max_reason_chars},
-        "counts": counts_of(ordered, leads_total=len(leads), reused_from_cache=reused, batches=len(batches),
-                            model_calls=calls),
+        "counts": counts_of(ordered, unknown_leads=unknown_count, leads_total=len(leads), reused_from_cache=reused,
+                            batches=len(batches), model_calls=calls),
         "numeric_reasoning": numeric_guardrail_record(ordered),
         "deterministic": deterministic, "batches": batches, "leads": ordered,
     }
@@ -624,7 +642,8 @@ def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any,
 
 
 def _unresolved(entry: _Pending, gap: str, reason: str) -> dict[str, Any]:
-    return {"lead_id": entry.lead.observation_id, "state": "unresolved", "assessed": None,
+    return {"lead_id": entry.lead.observation_id, "reported_severity": entry.lead.reported_severity,
+            "state": "unresolved", "assessed": None,
             "gap": {"code": gap, "reason": reason[:200]}, "references": entry.references,
             "fingerprint": entry.fingerprint, "origin": "model"}
 
@@ -656,7 +675,8 @@ def _from_item(entry: _Pending, item: Mapping[str, Any], version: str, settings:
                 "reason": reason, "rule_or_prompt_version": version, "triage_id": lead_triage_id(identity)}
     if cited is not None:
         assessed["tool_fact"] = cited
-    row = {"lead_id": entry.lead.observation_id, "state": "assessed", "assessed": assessed, "gap": None,
+    row = {"lead_id": entry.lead.observation_id, "reported_severity": entry.lead.reported_severity,
+           "state": "assessed", "assessed": assessed, "gap": None,
            "references": entry.references, "fingerprint": entry.fingerprint, "origin": origin, "batch_id": batch_id}
     if guardrail is not None:
         row["numeric_reasoning"] = guardrail
@@ -750,7 +770,10 @@ def handoff_summary(document: Mapping[str, Any], artifact: Mapping[str, Any] | N
     """The backward-compatible ``lead_severity_triage`` block of the handoff accounting."""
     counts = document.get("counts", {})
     summary = {"enabled": bool(document.get("enabled")), "rule_table_version": RULE_TABLE_VERSION,
-               "unknown_leads": int(counts.get("unknown_leads", 0)), "rule_table": int(counts.get("rule_table", 0)),
+               "unknown_leads": int(counts.get("unknown_leads", 0)),
+               "assessed_leads": int(counts.get("assessed_leads", 0)),
+               "reported_known_assessed": int(counts.get("reported_known_assessed", 0)),
+               "rule_table": int(counts.get("rule_table", 0)),
                "cwe_catalog": int(counts.get("cwe_catalog", 0)), "model_triage": int(counts.get("model_triage", 0)),
                "unresolved": int(counts.get("unresolved", 0)), "model_calls": int(counts.get("model_calls", 0))}
     if artifact is not None:
@@ -768,6 +791,8 @@ def display_severity(entry: Mapping[str, Any]) -> str:
     assessed = record.get("assessed")
     if effective.get("from") == "assessed" and isinstance(assessed, Mapping):
         return f"{effective['value']} (assessed by {assessed['source']}; scanner reported none)"
+    if effective.get("from") == "reported" and isinstance(assessed, Mapping) and assessed.get("value") != reported:
+        return f"{reported} (reported; assessed {assessed['value']} by {assessed['source']})"
     gap = record.get("gap")
     if effective.get("from") == "unknown" and isinstance(gap, Mapping):
         return f"unknown ({gap.get('code')})"

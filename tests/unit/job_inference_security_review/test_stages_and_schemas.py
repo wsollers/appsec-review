@@ -20,6 +20,7 @@ from appsec_review.jobs.job_inference_security_review.schemas import (
     schema_set,
 )
 from appsec_review.review.accounting import PoolOutcome
+from appsec_review.review.identity import make_id
 from appsec_review.review.ledger import LedgerWriter, gap_json, merge_shards, project
 from appsec_review.review.models import (
     Admissibility,
@@ -458,3 +459,103 @@ def test_stages_scoring_findings_poc_candidates_and_completeness_helpers(tmp_pat
             ship_block_policy_sha256="6" * 64,
             verification={},
         )
+
+
+def _scope_claim(entity: str, lane: Lane = Lane.HUNT, pkg: str = "hunt-1", cwe: str = "CWE-134") -> Claim:
+    from appsec_review.review.claims import normalize_claim
+    return normalize_claim(lane=lane, package_id=pkg, affected_entities=[entity], weakness_cwe=cwe,
+                           security_predicate="memory_corruption", preconditions=["attacker_controls_request_field"],
+                           statement="s", accepted_cwe_ids={cwe}).claim
+
+
+SYMBOL = "asr:symbol:" + "a" * 64
+FILE = "asr:source_file:" + "b" * 64
+OTHER_FILE = "asr:source_file:" + "c" * 64
+STRAY = "asr:symbol:" + "d" * 64
+
+
+def test_claim_scope_resolution_locates_folded_symbols_rehomes_to_the_owner_or_keeps_out_of_scope() -> None:
+    """claim-scope-resolution/1. Run 2026-11-16-0004: nine hunt claims folded to enclosing symbols of
+    src/request.cpp were discarded as out of scope although their own hunt packages list that file."""
+    own = _scope_claim(SYMBOL, pkg="hunt-1")                                   # symbol in the proposer's own file
+    foreign = _scope_claim(SYMBOL, pkg="hunt-2", cwe="CWE-120")                # proposer covers no file of it
+    stray = _scope_claim(STRAY, pkg="hunt-2", cwe="CWE-78")                    # nowhere in the review scope
+    listed = _scope_claim(OTHER_FILE, pkg="hunt-2", cwe="CWE-22")              # a listed entity, in place
+    claims = [own, foreign, stray, listed]
+    proposals = {own.claim_id: ["hunt-1"], foreign.claim_id: ["hunt-2"], stray.claim_id: ["hunt-2"],
+                 listed.claim_id: ["hunt-2"]}
+    entities = {"hunt-1": [FILE], "hunt-2": [OTHER_FILE], "finding_lead-1": [FILE, "asr:tool_observation:" + "e" * 64]}
+    paths = {"hunt-1": ["src/request.cpp"], "hunt-2": ["src/other.cpp"], "finding_lead-1": ["src/request.cpp"]}
+    located = {SYMBOL: "src/request.cpp", STRAY: None}
+    scope, resolution = stages.resolve_claim_scopes(claims, proposals, entities, ["comp-1"],
+                                                    entity_paths=located, package_paths=paths)
+    assert resolution[own.claim_id]["status"] == "in_scope" and resolution[own.claim_id]["basis"] == "located"
+    assert SYMBOL in scope[own.claim_id] and resolution[own.claim_id]["rehomed_to"] is None
+    # The foreign claim lands in the owning package: two hold the file, the lowest package id wins the tie.
+    assert resolution[foreign.claim_id]["status"] == "rehomed"
+    assert (resolution[foreign.claim_id]["rehomed_from"], resolution[foreign.claim_id]["rehomed_to"]) == (
+        ["hunt-2"], "finding_lead-1")
+    assert resolution[foreign.claim_id]["candidates"] == {"finding_lead-1": 1, "hunt-1": 1}
+    assert set(scope[foreign.claim_id]) == {"comp-1", FILE, "asr:tool_observation:" + "e" * 64, SYMBOL}
+    assert resolution[stray.claim_id]["status"] == "outside_review_scope" and scope[stray.claim_id] == sorted(["comp-1", OTHER_FILE])
+    assert resolution[listed.claim_id] == {**resolution[listed.claim_id], "status": "in_scope", "basis": "listed",
+                                           "rehomed_to": None, "located_entities": []}
+    # Without locations (the earlier inputs) only listed entities count: nothing is located or re-homed.
+    plain_scope, plain = stages.resolve_claim_scopes(claims, proposals, entities, ["comp-1"])
+    assert {key: value["status"] for key, value in plain.items()} == {
+        own.claim_id: "outside_review_scope", foreign.claim_id: "outside_review_scope",
+        stray.claim_id: "outside_review_scope", listed.claim_id: "in_scope"}
+    assert plain_scope[own.claim_id] == sorted(["comp-1", FILE])
+
+
+def test_merge_and_adjudication_rehome_a_claim_instead_of_discarding_it(tmp_path: Path) -> None:
+    """End to end over the ledger: a hunt claim on a symbol of a lead package's file is adjudicated in that
+    package with its own verifier evidence (confirmed), recorded on the adjudication and the merge document;
+    a claim outside every package stays out_of_scope; a claim a lead package also proposed is one claim in
+    the lead lane, adjudicated in place (the lead-lane claim wins the duplicate proposal)."""
+    from appsec_review.review.obligations import ALWAYS_REQUIRED
+    shard = tmp_path / "hunt.jsonl"
+    writer = LedgerWriter(shard, "hunt_review.teams")
+    foreign = _scope_claim(SYMBOL, pkg="hunt-2")
+    stray = _scope_claim(STRAY, pkg="hunt-2", cwe="CWE-78")
+    shared_hunt = _scope_claim(OTHER_FILE, pkg="hunt-2", cwe="CWE-22")
+    shared_lead = _scope_claim(OTHER_FILE, lane=Lane.LEAD, pkg="finding_lead-2", cwe="CWE-22")
+    assert shared_hunt.claim_id == shared_lead.claim_id               # one site, one CWE, one predicate: one claim
+    for claim in (foreign, stray, shared_hunt, shared_lead):
+        writer.propose_claim(claim)
+    for predicate in ALWAYS_REQUIRED:
+        body = {"p": predicate.value, "claim": foreign.claim_id}
+        writer.add_relation(EvidenceRelation(
+            make_id("evidence_relation", 1, body), foreign.claim_id, predicate, RelationKind.SUPPORTS, SYMBOL,
+            "source_span", Admissibility.DIRECT, "analysis/default", "0" * 64, "src/request.cpp:28-28", True,
+            "cell-" + "7" * 64, "f" * 64))
+    writer.seal()
+    lanes = [{"proposals": {foreign.claim_id: ["hunt-2"], stray.claim_id: ["hunt-2"],
+                            shared_hunt.claim_id: ["finding_lead-2", "hunt-2"]},
+              "independence": {foreign.claim_id: [{"verifier_cell_id": "cell-" + "8" * 64, "independent": True,
+                                                   "provider_distinct": True, "verifier_model_distinct": False,
+                                                   "review_id": "review-1", "gap_ids": []}]},
+              "verifier_gaps": {}}]
+    entities = {"hunt-2": [OTHER_FILE], "finding_lead-1": [FILE], "finding_lead-2": [OTHER_FILE]}
+    merged = stages.merge_claims(lanes, [shard], entities, ["comp-1"],
+                                 entity_paths={SYMBOL: "src/request.cpp", STRAY: None},
+                                 package_paths={"hunt-2": ["src/other.cpp"], "finding_lead-1": ["src/request.cpp"],
+                                                "finding_lead-2": ["src/other.cpp"]})
+    assert merged["rehoming"] == {foreign.claim_id: {"from": ["hunt-2"], "to": "finding_lead-1", "entities": [SYMBOL]}}
+    assert merged["scope_resolution"][stray.claim_id]["status"] == "outside_review_scope"
+    assert merged["scope_resolution"][shared_hunt.claim_id]["status"] == "in_scope"
+    projection = project(merge_shards([shard]).events)
+    assert projection.claims[shared_hunt.claim_id].claim.lane is Lane.LEAD
+    assert projection.claims[shared_hunt.claim_id].duplicate_proposals[Lane.HUNT] == 1
+    document = stages.apply_policy(merged, projection, tmp_path / "adj.jsonl", "adjudicate.apply_policy")
+    by_claim = {row["claim_id"]: row for row in document["adjudications"]}
+    assert by_claim[foreign.claim_id]["state"] == "confirmed" and by_claim[foreign.claim_id]["deciding_row"] == "r5_confirmed"
+    assert (by_claim[foreign.claim_id]["rehomed_from"], by_claim[foreign.claim_id]["rehomed_to"]) == (["hunt-2"], "finding_lead-1")
+    assert document["rehomed"] == {foreign.claim_id: {"from": ["hunt-2"], "to": "finding_lead-1"}}
+    assert by_claim[stray.claim_id]["state"] == "out_of_scope" and by_claim[stray.claim_id]["rehomed_to"] is None
+    assert by_claim[shared_hunt.claim_id]["state"] == "insufficient_evidence"      # in place, no evidence
+    assert by_claim[shared_hunt.claim_id]["rehomed_to"] is None
+    assert document["states"] == {"confirmed": 1, "insufficient_evidence": 1, "out_of_scope": 1}
+    assert stages.locate_entity_path(SimpleNamespace(find=lambda **_: {"results": [{"location": {"path": "src/a.c"}}]}),
+                                     SYMBOL) == "src/a.c"
+    assert stages.locate_entity_path(SimpleNamespace(find=lambda **_: {"results": []}), SYMBOL) is None

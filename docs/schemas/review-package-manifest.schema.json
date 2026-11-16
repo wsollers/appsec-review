@@ -23,6 +23,7 @@
       "required": ["admit_severities", "slice_strategies"],
       "properties": {
         "admit_severities": {"type": "array", "items": {"$ref": "#/$defs/severity"}},
+        "admission_basis": {"enum": ["reported", "assessed", "either"]},
         "slice_strategies": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
       }
     },
@@ -39,6 +40,11 @@
         "properties": {
           "lead_id": {"type": "string", "minLength": 1},
           "effective_severity": {"$ref": "#/$defs/severity"},
+          "reported_severity": {"$ref": "#/$defs/severity"},
+          "assessed_severity": {
+            "description": "The audited assessed severity (lead triage), or null when no step assessed the lead.",
+            "oneOf": [{"$ref": "#/$defs/severity"}, {"type": "null"}]
+          },
           "status": {"enum": ["admitted", "not_admitted"]},
           "reasons": {"type": "array", "items": {"type": "string"}},
           "residual_coverage": {"enum": ["review_pending", "exploration_reserve_cutoff", "outside_admission_policy",

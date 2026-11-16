@@ -193,3 +193,19 @@ def test_adding_indirect_relations_never_changes_state_property() -> None:
         assert after.adjudication_id == before.adjudication_id
 
     check()
+
+
+def test_rehoming_enters_the_adjudication_identity_and_scope_decides_row_two() -> None:
+    """A claim whose entities lie in another package's scope is adjudicated there (same predicates, same
+    evidence) and the adjudication records where it came from and where it landed; row 2 keeps only entities
+    outside the resolved scope."""
+    in_place = run(all_supported())
+    rehomed = run(all_supported(), rehomed_from=("hunt-a", "hunt-b"), rehomed_to="finding_lead-x")
+    assert rehomed.state is ClaimState.CONFIRMED and rehomed.deciding_row is DecidingRow.CONFIRMED
+    assert rehomed.rehomed_from == ("hunt-a", "hunt-b") and rehomed.rehomed_to == "finding_lead-x"
+    assert in_place.rehomed_from == () and in_place.rehomed_to is None
+    assert rehomed.adjudication_id != in_place.adjudication_id          # re-homing is part of the decision
+    outside = run(all_supported(), scope={"asr:symbol:" + "9" * 64})
+    assert outside.state is ClaimState.OUT_OF_SCOPE and outside.deciding_row is DecidingRow.OUT_OF_SCOPE
+    with pytest.raises(ValueError, match="re-homed claim"):
+        run(all_supported(), rehomed_to="finding_lead-x")

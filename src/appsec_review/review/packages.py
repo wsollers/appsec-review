@@ -161,9 +161,17 @@ OBLIGATIONS: Mapping[str, tuple[Predicate, ...]] = {
 }
 
 
+#: ``lanes.lead_admission_basis``: which severity of a lead lane A weighs against ``lead_admission``.
+#: ``reported`` is the earlier policy (the effective severity: reported when known, else assessed); ``assessed``
+#: weighs the assessed severity when one exists, else the reported one; ``either`` (default) admits a lead when
+#: either value qualifies, so a scanner's confidence label never hides the impact of the weakness class.
+ADMISSION_BASES = ("reported", "assessed", "either")
+
+
 @dataclass(frozen=True, slots=True)
 class PackageSettings:
     admit_severities: tuple[str, ...] = ("critical", "high", "unknown")
+    admission_basis: str = "either"
     admit_kev: bool = True
     exploration_enabled: bool = False
     exploration_reserve: int = 1
@@ -197,6 +205,8 @@ class PackageSettings:
                 item not in REPORTED_SEVERITIES for item in admitted):
             raise ValueError("admit_severities must be distinct normalized reported severities")
         object.__setattr__(self, "admit_severities", tuple(sorted(admitted, key=SEVERITY_ORDER.__getitem__)))
+        if self.admission_basis not in ADMISSION_BASES:
+            raise ValueError(f"admission_basis must be one of: {', '.join(ADMISSION_BASES)}")
         if not isinstance(self.admit_kev, bool):
             raise ValueError("admit_kev must be a Boolean")
         if not isinstance(self.exploration_enabled, bool):
@@ -229,7 +239,8 @@ class PackageSettings:
     def from_review_settings(cls, settings: Any) -> "PackageSettings":
         """Package settings from the central ``InferenceSecurityReviewSettings`` (the job's only source).
 
-        Admission is ``lanes.lead_admission`` plus ``lanes.lead_admission_kev``, the hunt cutoff
+        Admission is ``lanes.lead_admission`` weighed under ``lanes.lead_admission_basis``, plus
+        ``lanes.lead_admission_kev``, the hunt cutoff
         ``lanes.hunt_max_units``, the assembly bounds ``packages.*``, and the lane B rank weights
         ``ranking``. The dataclass defaults exist for library and test use only.
         """
@@ -239,13 +250,14 @@ class PackageSettings:
         if package_budget != "all":
             exploration_reserve = min(exploration_reserve, package_budget)
         return cls(admit_severities=tuple(settings.lanes.lead_admission),
+                   admission_basis=settings.lanes.lead_admission_basis,
                    admit_kev=settings.lanes.lead_admission_kev,
                    exploration_enabled=settings.lanes.exploration_enabled,
                    exploration_reserve=exploration_reserve,
                    hunt_max_units=settings.lanes.hunt_max_units, rank_weights=settings.ranking,
                    **{item.name: getattr(bounds, item.name) for item in fields(cls)
-                      if item.name not in {"admit_severities", "admit_kev", "exploration_enabled", "exploration_reserve",
-                                           "hunt_max_units", "rank_weights"}})
+                      if item.name not in {"admit_severities", "admission_basis", "admit_kev", "exploration_enabled",
+                                           "exploration_reserve", "hunt_max_units", "rank_weights"}})
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "PackageSettings":
@@ -401,11 +413,37 @@ def resolve_package_document(package_path: Path) -> dict[str, Any]:
     return merge_unit_context(document, load_unit_context(package_path.parent.parent, reference))
 
 
+def severity_admission(lead: Lead, settings: PackageSettings) -> list[str]:
+    """Which severities of ``lead`` qualify under ``settings.admission_basis`` (``lead-admission-basis/1``).
+
+    ``reported_severity`` names the scanner's value, ``assessed_severity`` the audited assessment; both may
+    appear under ``either``. A reported ``unknown`` counts as a reported severity only when the policy lists
+    ``unknown`` and no assessment exists (listing ``unknown`` admits *unassessed* leads).
+    """
+    admit = settings.admit_severities
+    reported, assessed = lead.reported_severity, lead.assessed_value
+    reasons: list[str] = []
+    if settings.admission_basis == "reported":
+        if lead.effective_severity in admit:
+            reasons.append("reported_severity" if lead.effective_from == "reported" else "assessed_severity")
+        return reasons
+    if settings.admission_basis == "assessed":
+        if assessed is not None:
+            if assessed in admit:
+                reasons.append("assessed_severity")
+        elif reported in admit:
+            reasons.append("reported_severity")
+        return reasons
+    if reported in admit and (reported != "unknown" or assessed is None):
+        reasons.append("reported_severity")
+    if assessed is not None and assessed in admit:
+        reasons.append("assessed_severity")
+    return reasons
+
+
 def admission_reasons(lead: Lead, settings: PackageSettings) -> list[str]:
-    """Why lane A admits ``lead``: reported/assessed severity, a KEV listing, or nothing."""
-    reasons = []
-    if lead.effective_severity in settings.admit_severities:
-        reasons.append("reported_severity" if lead.effective_from == "reported" else "assessed_severity")
+    """Why lane A admits ``lead``: reported and/or assessed severity, a KEV listing, or nothing."""
+    reasons = severity_admission(lead, settings)
     if settings.admit_kev and lead.kev_listed is True:
         reasons.append("kev_listed")
     if not reasons and settings.exploration_enabled and lead.effective_severity in {"medium", "low"}:
@@ -1919,7 +1957,7 @@ class _Assembler:
 
 def audit_membership(collection: LeadCollection, packages: Iterable[Package],
                      admit: Iterable[str], admit_kev: bool = False, exploration_enabled: bool = False,
-                     exploration_reserve: int = 1) -> dict[str, Any]:
+                     exploration_reserve: int = 1, admission_basis: str = "either") -> dict[str, Any]:
     """Gate 5 for lane A: E ⊆ F per family and severity, exactly once, with no invented lead.
 
     ``E`` holds every lead whose effective severity is admitted and, with ``admit_kev``, every
@@ -1929,7 +1967,7 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
     expected = {lead.observation_id: lead for lead in admitted_leads(
         collection, PackageSettings(admit_severities=tuple(admitted), admit_kev=admit_kev,
                                     exploration_enabled=exploration_enabled,
-                                    exploration_reserve=exploration_reserve))}
+                                    exploration_reserve=exploration_reserve, admission_basis=admission_basis))}
     seen: Counter[str] = Counter()
     for package in packages:
         if package.kind == "finding_lead":
@@ -2010,7 +2048,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     groups = cluster_leads(admitted, assembler.graph.enclosing_functions, settings.lead_cluster_lines)
     packages = [assembler.finding_leads(group) for group in groups]
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev,
-                             settings.exploration_enabled, settings.exploration_reserve)
+                             settings.exploration_enabled, settings.exploration_reserve,
+                             admission_basis=settings.admission_basis)
 
     from appsec_review.review.behavior import graph_operations, load_model
     operations, operation_gaps = graph_operations(scope, limit=settings.max_operation_records)
@@ -2051,6 +2090,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "settings": settings.record(), "graph_settings": asdict(graph_settings),
         "admission": sorted([
             *({"lead_id": lead.observation_id, "effective_severity": lead.effective_severity,
+               "reported_severity": lead.reported_severity, "assessed_severity": lead.assessed_value,
                "status": "admitted" if lead.observation_id in admitted_ids else "not_admitted",
                "reasons": admission_reasons(lead, settings),
                "residual_coverage": "review_pending" if lead.observation_id in admitted_ids
@@ -2060,6 +2100,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
             # Leads outside the review scope (T-165 dispositions, T-167 stylistic classes): not admitted
             # by scope, with the reason; the observation remains scanner coverage, never a gap.
             *({"lead_id": item.lead.observation_id, "effective_severity": item.lead.effective_severity,
+               "reported_severity": item.lead.reported_severity, "assessed_severity": item.lead.assessed_value,
                "status": "not_admitted", "reasons": [], "residual_coverage": "outside_review_scope",
                "exclusion": item.reason, "exclusion_detail": item.detail[:500]} for item in collection.excluded)],
             key=lambda entry: entry["lead_id"]),
