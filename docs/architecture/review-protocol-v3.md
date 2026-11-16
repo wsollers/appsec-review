@@ -53,10 +53,10 @@ The review has two **intakes** and one **review**.
 1. **Scanner observations** are candidate findings produced by tools. They are normalized by their lead
    family, assessed when their severity is unknown, admitted by policy, clustered by defect site and reviewed.
    This is lane A today and it stays.
-2. **Model hunting** is a second *producer of candidate findings*, not a second review protocol. A hunter
-   with the retrieval tools and the accepted facts proposes hypotheses about code the scanners did not flag,
-   and each hypothesis is published as a `tool_observation` of the same shape a scanner produces: scanner,
-   rule, location, message, severity unknown. From there it is a lead like any other.
+2. **Model hunting** is a second *producer of candidate findings*, not a second review protocol. A campaign of
+   frontier-model agents, each with a mission, the code, the indices as tools and a budget, hunts the code and
+   files each hypothesis as a `tool_observation` of the same shape a scanner produces: scanner, rule, location,
+   message, severity unknown. From there it is a lead like any other (section 4).
 
 The review itself is one lane: **analyse**, **verify**, **decide**. One analyst cell per package proposes
 structured findings with label citations; one verifier cell per finding checks each predicate against the
@@ -82,82 +82,99 @@ Unchanged in shape; two policies decided on 2026-11-15 already apply (T-5029, T-
 - `excluded-leads.json` lists every observation the manifest did not admit, with its reason and whether a
   hunt unit still covers it.
 
-## 4. Intake B: model hunting as a producer
+## 4. Intake B: hunting campaigns
 
-### 4.1 Where it runs, and how much
+Decided 2026-11-16 (D20 to D25): hunting is an **agent campaign**, not a lane of unit cells. A frontier model is
+given a mission, the code, the indices as tools and a budget, and decides where to look. The application owns the
+partition, the budget, the receipts, the coverage computation, dedupe and redaction; everything inside those is
+the agent's judgment. Unit menus and per-item accounting remain the analyst's package shape in Intake A
+(section 3) and are not used for hunting.
 
-A producer job, `job_model_hunting` (working name), runs after review data indexing and package-scope
-acceptance and before the inference review. It consumes the accepted indices through the same `RetrievalCore`
-and capability grants as review cells.
+### 4.1 The campaign
 
-The grain of one hunter **cell** is one function with its neighborhood: that is what fits a cell's token cap
-and four turns, and the scale at which the menu accounting (section 4.3) is exact. The grain must never set
-the **count**: a game has hundreds of thousands of functions, and even a one-hop reach from a few thousand
-admitted leads is tens of thousands of units. The count comes from a budget and a ranking:
+A producer job, `job_model_hunting` (working name), runs a **campaign** over one accepted snapshot: `N` agents,
+each on the hunter's model profile, each with
 
-- **Budget.** `hunting.max_cells` per run, set per profile, replaces `hunt_max_units` as the outer bound.
-  Selection takes ranked units until the budget is spent; every unit below the line is recorded as
-  `below_hunt_cutoff` with its rank and the reason it was a candidate. A run always finishes, and the artifact
-  says what was not looked at.
-- **Ranking, attack surface first.** Units are ordered by (1) distance from an attack-surface entry point in
-  the accepted graph (network message handlers, file and save parsers, asset and mod loaders, scripting
-  bindings; the threat model's interaction catalog and the `trust:user-tainted` and `exposure:client-facing`
-  tags identify them), (2) containing or lying within one call hop of an admitted lead, (3) carrying an
-  unassessed unknown lead, (4) facet score. The hunter's cost then grows with the attack surface, not with
-  lines of code.
-- **Areas, a coarse tier above the function.** Before per-function hunting, one bounded cell per component or
-  subsystem (hundreds on a game, not hundreds of thousands) reads the threat model, the tags and the
-  entry-point summary and nominates *areas* such as "the packet dispatcher and its handlers" or "the save-game
-  deserializer". An area is a selection input that raises its functions in the ranking, never a finding. This
-  is where a model's judgment about architecture is paid for, bounded by the component count.
-- **Incremental.** On a later run against the same codebase, only functions whose source hash or neighborhood
-  changed since the last reviewed snapshot are candidates; unchanged functions reuse the previous run's
-  verified results through cell memoization. This is the M6 cache; for a game it is a requirement, not an
-  option.
+- a **mission** from the profile ("find exploitable memory corruption and injection reachable from the network
+  and file surfaces of this program"), the stack persona and the threat model's interaction catalog as
+  orientation, never as a checklist;
+- the **source tree** read-only through the accepted source index (hash-verified reads, secret redaction);
+- the **index and graph tools over MCP**: `find`, `expand`, `search`, `read_excerpt`, `trace`,
+  `query_code_graph`, `query_codeql`, `query_observations` and the rest of the catalog the retrieval server
+  already serves to cells, under a `CellCapability` whose entity grant is the agent's area and one hop beyond;
+- the **known-findings feed**: scanner leads admitted to review and every hypothesis any agent of the campaign
+  has filed so far, refreshed on each tool call, so agents neither re-find scanner leads nor each other's work;
+- an **area**: a partition of the attack surface (components, entry-point classes, or subsystems the area tier
+  nominated) so `N` agents do not crowd the same code. An agent may leave its area through one call hop; a
+  hypothesis outside the area is filed with that noted, never dropped.
 
-The honest consequence: one run never covers a whole game. It covers the attack surface to a budget, records
-what it skipped, and the next run continues from there.
+Agents run as **campaign cells**: the existing cell runtime (provider `claude-cli`, capability, receipts,
+redaction, budget checks) with a wall deadline and a token budget in place of the four-turn cap, and with
+hypotheses **filed incrementally** as the agent works, so a killed agent loses nothing and verification starts
+while hunting continues.
 
-### 4.2 What it publishes
+### 4.2 Stop conditions
 
-One accepted shard of `tool_observation` entities, family `model_hypothesis`:
+A campaign closes, and each agent stops, on the first of three, every one in the central TOML:
+
+| Condition | Measured as | Why this form |
+|---|---|---|
+| **Y findings** | `Y` hypotheses that passed **triage** (not `Y` filed) | Filing is cheap; counting filed hypotheses rewards volume |
+| **Budget** | wall deadline and token budget per agent and per campaign | The hunter runs on a frontier model; agent-hours are the real cost and the budget is a hard brake |
+| **Coverage** | the agent declares its area covered **and** the receipt-derived coverage ratio (4.3) reaches the configured floor | A declaration is a claim; the ratio is evidence |
+
+Closing records which condition fired, per agent and for the campaign, in the job result.
+
+### 4.3 The coverage ledger
+
+"Confident things are covered" is a number, not a sentence. The application derives, from each agent's retrieval
+receipts, the set of **source files, functions and entry points actually read** (every `read_excerpt`, `find`,
+`expand` and slice the cell authorized and executed is receipted today), and compares it with the area's
+attack-surface functions from the accepted graph and tags. The ledger records per area: functions in scope,
+functions read, entry points traced, the ratio, and the functions never touched by name. It is published with
+the hypotheses and summarized in `excluded-leads.json`'s successor table in the report. An agent's own coverage
+statement is kept beside it and is never the number the report uses.
+
+### 4.4 What a hypothesis is
+
+Unchanged from the decision in section 2: one `tool_observation` of family `model_hypothesis` per hypothesis,
+filed into the campaign's accepted shard as it is made:
 
 | Field | Value |
 |---|---|
 | `tool_id` | `model-hunter` |
-| `native_rule_id` | `<security_predicate>/<CWE or none>` from the hypothesis |
-| `location` | the cited sink or construct line (a label the hunter cited; unresolved labels are dropped with feedback) |
+| `native_rule_id` | `<security_predicate>/<CWE or none>` |
+| `location` | the cited sink or construct, resolved through the index; an unresolvable citation is refused with feedback, not filed |
 | `message` | the hypothesis statement, bounded, redacted by `secret-redaction/1` |
-| `native_severity` | absent: the hunter nominates a *consequence*, never a severity |
-| `payload.hypothesis` | the structured claim the hunter emitted (predicate support labels, taint path, evidence requests), kept for the verifier |
-| `payload.producer` | `job_model_hunting`, cell id, guidance bundle hash, model, provider |
+| `native_severity` | absent: a consequence is nominated, never a severity |
+| `payload.hypothesis` | the structured claim (predicate support labels, taint path, evidence requests) for the analyst |
+| `payload.campaign` | campaign id, agent id, area, cell id, guidance bundle hash, model, provider, filing sequence |
 
-The shard's dataset authority is `PROVISIONAL`: nothing downstream may count a model hypothesis as scanner
-coverage, and no claim state beyond `proposed` is reachable without verification against accepted facts.
-`lead_families.OBSERVATION_PRODUCERS` gains the decision for the job (`tests/review/test_lead_coverage.py`
-enforces that every producer has one), and `lead-family/model_hypothesis/1` sets the family's obligations:
-`affected_construct`, `attacker_input_control`, `source_to_sink_reachability`, `missing_or_ineffective_guard`,
-`security_impact`.
+The shard's dataset authority is `PROVISIONAL`. From the shard onward a hypothesis takes the scanner lead's
+path: triage assesses its severity, the admission policy decides, clustering merges it with a scanner
+observation on the same site (the hypothesis becomes corroboration), `excluded-leads.json` lists the dropped
+ones with reasons, and an admitted hypothesis is analysed and verified like any lead. The verifier sees the
+structured claim and its own retrieval, never the hunter's reasoning: a frontier model's confidence does not
+become a finding on its own.
 
-### 4.3 What happens to a hypothesis
+### 4.5 Bounds and measurement
 
-Nothing special. Triage assesses its severity (the rule table and, where configured, the model triage pass);
-the admission policy decides; clustering merges it with a scanner observation on the same site, which makes
-the model's view *corroboration* of the scanner's lead instead of a second claim; and `excluded-leads.json`
-lists the hypotheses that were dropped and why. A hypothesis that reaches a package is analysed and verified
-like a scanner lead. Its `payload.hypothesis` is shown to the analyst as a lead's message is today, never to
-the verifier.
+In the TOML: `hunting.agents` (`N`), `hunting.findings_target` (`Y`, triage-accepted), `hunting.deadline_minutes`
+and `hunting.token_budget` per agent and per campaign, `hunting.coverage_floor`, the hunter model profile, and
+the area partition rule. Reported per run by `scripts/cell-outcomes.py` and the campaign result: hypotheses
+filed, triage-accepted, admitted, verified; agent-hours and tokens; coverage ratio per area; **yield** as
+verified findings per agent-hour. A target whose yield falls under a configured floor has hunting disabled for
+its later runs by configuration, never silently.
 
-### 4.4 Bounds
+### 4.6 Scale
 
-All in the central TOML, all reported per run by `scripts/cell-outcomes.py`:
-
-- `hunting.max_cells` (the budget) and the ranking rule of section 4.1;
-- area cells per component (one) and hunter cells per unit (one, a second only for a unit with both sinks and
-  entry points, where sink-up and entry-down look at different things);
-- turns per cell (four) and hypotheses per cell (`hunt_max_claims_per_package` today);
-- **yield**: verified findings per hundred hypotheses, reported every run. A target whose yield falls under a
-  configured floor (5 to start) has hunting disabled for its later runs by configuration, never silently.
+For a game the campaign's cost is `N` agents times the deadline on a frontier model, independent of lines of
+code. What scales with the code is the **area partition**, so a large target gets more areas than agents and
+the campaign works through them in priority order (attack surface first, then components holding admitted
+leads, then the rest), recording the areas it did not reach. Across runs on the same codebase, areas whose
+functions did not change since the last campaign start with that campaign's coverage ledger and hypotheses and
+are revisited only on budget left over (the M6 cache). One campaign never covers a whole game; it covers the
+attack surface to a budget and says what it skipped.
 
 ## 5. The review: analyse, verify, decide
 
@@ -235,14 +252,24 @@ Decided with the user from the evidence above and the recommendations put to the
 | D17 | M2 runs as the next review after the clean run, same target and overlay, configuration only. | One change against one baseline. |
 | D18 | The cpp smoke target stays the baseline through M5; a larger target joins at M3. | Small enough to read every finding; the hunter is the component whose cost scales with code size. |
 | D19 | Scale work (M6) is designed after M3 lands. | The cache and the shared queue must fit the job graph M3 produces. |
+| D20 | Hunting is an agent campaign: `N` frontier-model agents with a mission, the code, the index tools over MCP and a budget decide where to look; unit menus and per-item accounting stay in Intake A only. Supersedes D1 to D4 for hunting. | A menu is how a small model is kept honest; a frontier model's judgment about where to look is what is being paid for. |
+| D21 | Three stop conditions, first to fire: `Y` triage-accepted hypotheses, the wall and token budget, or a declared coverage confirmed by the receipt-derived ratio. | Filing is cheap and declarations are claims; triage and receipts are evidence. |
+| D22 | Coverage is computed from retrieval receipts (files, functions, entry points read) against the area's attack-surface functions and published per area, with the untouched functions named. | "Confident things are covered" has to be a number the report can show. |
+| D23 | Agents are partitioned by area (attack surface, components, subsystems) and share a live known-findings feed of admitted scanner leads and filed hypotheses. | No two agents crowd the same code or file the same hypothesis. |
+| D24 | Hypotheses are filed incrementally during the campaign, provisional, with citations that must resolve; the verifier never sees the hunter's reasoning. | A killed agent loses nothing, verification overlaps hunting, and confidence does not become a finding. |
+| D25 | Campaign cost is `N` times the deadline on the hunter's model, independent of code size; the area partition and the cross-run cache absorb scale. | For a game the budget, not the function count, sets the time. |
 
 ## 9. Open questions for the user
 
-1. **Area tier model.** The area-nomination pass is few cells with wide context. Same model as the hunter,
-   or the stronger one from the start?
-2. **Attack-surface catalog.** Which entry-point classes count as attack surface for the first large target
+1. **Hunter model and `N`.** Which frontier model profile runs the campaign, and how many agents run at once on
+   the review host against the provider's concurrency?
+2. **`Y` and the deadline for the smoke target.** The first campaign needs a findings target and a wall budget
+   to calibrate yield; proposal: `Y = 8`, 30 minutes, 2 agents.
+3. **Attack-surface catalog.** Which entry-point classes count as attack surface for the first large target
    (network, file, scripting, asset loading, IPC)? The threat model's interaction catalog is the default list.
-3. **Incremental baseline.** For the first run against a game there is no previous snapshot: run the budgeted
+4. **Coverage floor.** The receipt-derived ratio at which an agent's coverage declaration is accepted; proposal:
+   0.8 of the area's attack-surface functions read.
+5. **Incremental baseline.** For the first campaign against a game there is no previous snapshot: the budgeted
    attack-surface pass alone, or also a one-time wider pass over a configured allowance?
 
 ## 10. References
