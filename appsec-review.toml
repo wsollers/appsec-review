@@ -3111,9 +3111,25 @@ max_queries = 0
 max_turns = 1
 timeout_seconds = 600
 
+# Independent verification on a second model (T-5055, owner decision 2026-11-16). With every role on one model,
+# verification.require_distinct_model_for_ship_blocking published every ship-blocking finding as
+# ship_blocking_pending_distinct_verification and the attack-chain weakest-link verifier never launched
+# (independence_not_established), so no chain could leave insufficient_evidence. The verifier (claim R6 and the
+# chain weakest link) now runs on Sonnet with the default profile's bounds; the analysts, hunters, refuters and
+# judge stay on "default". profiles/prod.toml puts every profile on the frontier model; see its note.
+[jobs.job_inference_security_review.settings.models.verifier]
+provider = "claude-cli"
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 128000
+max_output_tokens = 32000
+max_queries = 40
+max_turns = 4
+timeout_seconds = 600
+
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 workers = 4
-model_profile = "default"
+model_profile = "verifier"
 require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
 
 # The adjudication judge (docs/architecture/review-judge-and-poc.md section 3). After the red, blue and blind

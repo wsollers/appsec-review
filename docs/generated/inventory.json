@@ -21862,6 +21862,16 @@
             "provider": "claude-cli",
             "reasoning": "medium",
             "timeout_seconds": 600
+          },
+          "verifier": {
+            "max_input_tokens": 128000,
+            "max_output_tokens": 32000,
+            "max_queries": 40,
+            "max_turns": 4,
+            "model": "claude-sonnet-5-5",
+            "provider": "claude-cli",
+            "reasoning": "high",
+            "timeout_seconds": 600
           }
         },
         "retry": {
@@ -21891,7 +21901,7 @@
             "workers": 4
           },
           "independent_verifier": {
-            "model_profile": "default",
+            "model_profile": "verifier",
             "require_distinct_from_roles": [
               "hypothesis_hunter",
               "red_team_analyst",
@@ -22275,6 +22285,16 @@
             "provider": "claude-cli",
             "reasoning": "medium",
             "timeout_seconds": 600
+          },
+          "verifier": {
+            "max_input_tokens": 128000,
+            "max_output_tokens": 32000,
+            "max_queries": 40,
+            "max_turns": 4,
+            "model": "claude-sonnet-5-5",
+            "provider": "claude-cli",
+            "reasoning": "high",
+            "timeout_seconds": 600
           }
         },
         "packages": {
@@ -22405,7 +22425,7 @@
             "workers": 4
           },
           "independent_verifier": {
-            "model_profile": "default",
+            "model_profile": "verifier",
             "require_distinct_from_roles": [
               "hypothesis_hunter",
               "red_team_analyst",
@@ -44426,7 +44446,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "9debe0abec76150e8bc1cfd34c4c159beb03e795ddf0ca35197d79a32a808aab",
+    "appsec-review.toml": "d4cf1584d03de24274e0b5ea8cc92918443d5c29aebc3e7f2f44633c5f5fb07c",
     "containers/catalog.toml": "995c0e1f684a69913f3175450c28b27b97726a1f977cbc1ce77e6c98ed10af2c",
     "docs/intelligence-buckets.json": "cec74cb02f073d0e91bcbad28246ab34ab7bef5262a7c8b1cb8c7e8d2f65c725",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",

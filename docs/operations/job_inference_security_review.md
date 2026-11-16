@@ -252,6 +252,16 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
       "provider": "claude-cli",
       "reasoning": "medium",
       "timeout_seconds": 600
+    },
+    "verifier": {
+      "max_input_tokens": 128000,
+      "max_output_tokens": 32000,
+      "max_queries": 40,
+      "max_turns": 4,
+      "model": "claude-sonnet-5-5",
+      "provider": "claude-cli",
+      "reasoning": "high",
+      "timeout_seconds": 600
     }
   },
   "retry": {
@@ -281,7 +291,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
       "workers": 4
     },
     "independent_verifier": {
-      "model_profile": "default",
+      "model_profile": "verifier",
       "require_distinct_from_roles": [
         "hypothesis_hunter",
         "red_team_analyst",
