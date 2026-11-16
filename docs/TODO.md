@@ -211,6 +211,11 @@ until each is rewritten into the entry format when it is next touched.
 | T-5036 | [Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them](#t-5036-retain-a-bounded-redacted-copy-of-an-unparseable-model-reply-and-find-why-blue-cells-produce-them) | review | open |
 | T-5037 | [Route a lead package to a specialist persona through the rule-to-CWE crosswalk when its leads carry no CWE](#t-5037-route-a-lead-package-to-a-specialist-persona-through-the-rule-to-cwe-crosswalk-when-its-leads-carry-no-cwe) | review | open |
 | T-5038 | [Find why a shared feed snapshot manifest no longer verifies after a run and keep replays of accepted reviews possible](#t-5038-find-why-a-shared-feed-snapshot-manifest-no-longer-verifies-after-a-run-and-keep-replays-of-accepted-reviews-possible) | pipeline | open |
+| T-5039 | [Read build_outcome in the remaining language-build receipt consumers](#t-5039-read-build_outcome-in-the-remaining-language-build-receipt-consumers) | build | open |
+| T-5040 | [Render the language-build outcome and gap-class counts in the final and telemetry reports](#t-5040-render-the-language-build-outcome-and-gap-class-counts-in-the-final-and-telemetry-reports) | pipeline | open |
+| T-5041 | [Attribute attack-chain cell telemetry to its own step](#t-5041-attribute-attack-chain-cell-telemetry-to-its-own-step) | review | open |
+| T-5042 | [Cover the attack-chain analyst in the guidance vocabulary parity tests](#t-5042-cover-the-attack-chain-analyst-in-the-guidance-vocabulary-parity-tests) | testing | open |
+| T-5043 | [Repair the pre-existing tests/test_final_report.py failures and its over-budget module fixture](#t-5043-repair-the-pre-existing-teststest_final_reportpy-failures-and-its-over-budget-module-fixture) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3068,6 +3073,51 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** locate the snapshot (`runs/metadata` or the shared feed store), compare its current bytes and mtime with the receipt the run bound, and the sync job's write pattern (write-then-rename into a content-addressed path versus in-place update); make snapshot manifests immutable once a run has bound them (content-addressed, never rewritten), and add a unit test that a receipt-bound snapshot survives a later sync. Record what changed the file.
 - **Done when:** `load_accepted_review` on a finished run verifies again after a later `third_party_data_sync`, with a test for the immutability rule.
 - **Refs:** `src/appsec_review/storage/feed_provenance.py` (`verify_feed_receipt`, `_verify_snapshot`), `src/appsec_review/storage/shared.py` (`verify_reference`), `src/appsec_review/jobs/job_third_party_data_sync/`, run `2026-11-16-0003` (host-local), T-5001.
+
+### T-5039 — Read build_outcome in the remaining language-build receipt consumers
+
+- **State:** open
+- **Area:** build
+- **Why:** `src/appsec_review/jobs/build_outcome.py` separates the receipt's `terminal_status` (any named gap makes it `COMPLETED_WITH_GAPS`) from the typed `build_outcome` (`built`, `failed`, `not_run`). `job_debug_symbol_indexing`, `job_tree_sitter_ast.generated_sources` and the `BuildIterations` controller still decide "did the build run" from `terminal_status == "SUCCEEDED"`, so a built receipt flipped by provenance gaps (run 2026-11-16-0003: 17 `provenance_unavailable` gaps) reads as unbuilt and tree-sitter emits `generated_source_build_unsuccessful`.
+- **Scope:** classify each reader in a code comment as a "products exist" question (switch to `build_outcome` through `build_outcome.build_succeeded`) or a "clean receipt" question (keep `terminal_status`); never widen enforcement, rejected artifacts stay rejected.
+- **Done when:** each reader is classified and tested with a `COMPLETED_WITH_GAPS` / `built` receipt.
+- **Refs:** `src/appsec_review/jobs/build_outcome.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/`, `src/appsec_review/jobs/job_tree_sitter_ast/generated_sources.py`, `src/appsec_review/jobs/build_iterations.py`, commit 7aa16cff.
+
+### T-5040 — Render the language-build outcome and gap-class counts in the final and telemetry reports
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** no report surface shows a build line; "built, 17 provenance gaps" versus "completed with gaps" is only readable on the receipt, so a tech lead cannot tell a failed build from an unproven delivery.
+- **Scope:** one build line per family in the executive and Markdown final reports and in the telemetry report: `build_outcome`, `terminal_status`, counts of gap records by `code`, artifacts catalogued versus rejected. Read it only through gate-bound or run-owned receipts.
+- **Done when:** the reports show per-family outcome plus counts by gap code, with a unit test on a run-0003-shaped receipt.
+- **Refs:** `src/appsec_review/reporting/executive_report.py`, `src/appsec_review/jobs/job_final_report_publication/`, `src/appsec_review/reporting/telemetry/`, T-5039.
+
+### T-5041 — Attribute attack-chain cell telemetry to its own step
+
+- **State:** open
+- **Area:** review
+- **Why:** `chains._run_cell` reuses `teams._run` with `step_id="hunt_review", task_id="teams"`, so composer, refuter and weakest-link cells are counted against the hunt lane in telemetry and in `scripts/cell-outcomes.py` (system review C14-F10, third point).
+- **Scope:** pass the attack-chain step and unit ids into `_run` for chain cells; keep the ledger and receipts unchanged.
+- **Done when:** `INFERENCE_REVIEW_CELL_COMPLETED` for a chain cell carries `attack_chains.<unit>` and the telemetry report lists chain cells under their own step.
+- **Refs:** `src/appsec_review/jobs/job_inference_security_review/chains.py`, `docs/reviews/system-review-2026-11-13.md` C14-F10.
+
+### T-5042 — Cover the attack-chain analyst in the guidance vocabulary parity tests
+
+- **State:** open
+- **Area:** testing
+- **Why:** `tests/test_guidance_examples.py::ROLES` cannot list `attack_chain_analyst`: `_closed_sets` finds no enum in `chain-composer-result.schema.json` and the parity test asserts a non-empty closed set. A dedicated test validates the prompt's examples meanwhile, but the role is outside the parity rule that caught about 430 lost answers in run 2026-11-15-0005.
+- **Scope:** let `_closed_sets` accept a role whose result schema has no enum, or give the composer result a closed vocabulary worth stating (for example the chaining-table predicate pairs), then register the role.
+- **Done when:** the role is in `ROLES`, its examples validate there, and the dedicated test is removed.
+- **Refs:** `tests/test_guidance_examples.py`, `pipeline/prompt-fragments/roles/attack_chain_analyst.md`, `docs/schemas/inference-security-review/chain-composer-result.schema.json`.
+
+### T-5043 — Repair the pre-existing tests/test_final_report.py failures and its over-budget module fixture
+
+- **State:** open
+- **Area:** testing
+- **Why:** at 293b3e8c (before the attack-chain and build-outcome changes) 27 of its node ids fail (`replacement attempt refused: historical worker stop state is unknown` 17 times, a reader test double missing `run_root`, `KeyError: 'possible_duplicates'`, topology and producer-digest set assertions) and its module fixture runs a whole scripted review at 110-145 s per test, far over the 10 s unit budget. Also `test_datasets_and_handoff_contracts_are_declared` pins the gate's `consumes` to five producers while the contract now derives fourteen.
+- **Scope:** attribute each failure (stale fixture, runtime regression, environment), fix or re-pin, and split the scripted-review flow into an integration case with a declared time budget so the unit cases stay under 10 s.
+- **Done when:** the file passes shuffled with `-n 4` and no unit case exceeds 10 s, or the heavyweight cases are declared integration with a budget.
+- **Refs:** `tests/test_final_report.py`, `tests/test_openvex_inputs.py::test_rehashed_review_settings_cannot_disagree_with_semantic_review_hash` (same class of stale expectation), T-5032, T-5026.
 
 ## Legacy backlog
 
