@@ -142,10 +142,52 @@ def _locations(dossier: Mapping[str, Any] | None) -> list[str]:
         path = clean(source.get("path")) or "path not recorded"
         start, end = source.get("start_line"), source.get("end_line")
         if start is not None and end is not None:
-            rows.append(f"{path}, lines {start}-{end}" if start != end else f"{path}, line {start}")
+            row = f"{path}, lines {start}-{end}" if start != end else f"{path}, line {start}"
         else:
-            rows.append(f"{path}, line range not recorded")
+            row = f"{path}, line range not recorded"
+        if row not in rows:                     # several evidence rows resolve to the same lines
+            rows.append(row)
     return rows
+
+
+#: What each accepted consequence class lets an attacker do, for a reader who does not know the CWE. Keyed by the
+#: closed ``security_predicate`` vocabulary of the review; an unlisted value falls back to a generic sentence.
+CONSEQUENCES = {
+    "memory_corruption": "an attacker who reaches this code can corrupt the program's memory, which typically means "
+                         "crashing the service and, with more effort, running code of their choosing inside it.",
+    "out_of_bounds_read": "an attacker who reaches this code can make the program read memory it should not, which "
+                          "leaks data such as secrets or internal addresses and can crash the service.",
+    "use_after_free": "an attacker who reaches this code can make the program use memory after it was released, "
+                      "which can crash the service or let the attacker run code inside it.",
+    "integer_error": "an attacker who reaches this code can make a size or count calculation wrap or overflow, which "
+                     "usually turns into a memory-corruption or logic defect further on.",
+    "injection": "an attacker who reaches this code can smuggle their own instructions into something the program "
+                 "builds from their input.",
+    "command_injection": "an attacker who reaches this code can run operating-system commands of their choosing on "
+                         "the host, with the privileges of the service.",
+    "sql_injection": "an attacker who reaches this code can run their own database queries: reading, changing or "
+                     "deleting data they should not have access to.",
+    "code_injection": "an attacker who reaches this code can have the program execute code they supply.",
+    "path_traversal": "an attacker who reaches this code can read or write files outside the directory the program "
+                      "was meant to use, including configuration and secrets.",
+    "ssrf": "an attacker who reaches this code can make the server send requests on their behalf to internal "
+            "systems it can reach but the attacker cannot.",
+    "deserialization": "an attacker who reaches this code can feed the program crafted serialized data that it "
+                       "turns into objects, which often lets them run code or bypass checks.",
+    "authn_bypass": "an attacker can act as a user without proving who they are.",
+    "authz_bypass": "an attacker can do or see something their account is not allowed to.",
+    "info_disclosure": "an attacker can learn data the program was meant to keep private.",
+    "crypto_weakness": "protection that depends on this cryptography is weaker than intended; data it guards may be "
+                       "readable or forgeable.",
+    "race_condition": "an attacker who times their actions can make two operations interleave in a way the program "
+                      "did not expect, which can bypass a check or corrupt state.",
+    "resource_exhaustion": "an attacker can make the service consume memory, CPU, disk or connections until it "
+                           "stops serving others.",
+    "insecure_configuration": "a setting leaves a protection off or weaker than intended, so other defects or "
+                              "attacks become easier.",
+    "supply_chain_compromise": "a dependency or build input the program trusts can be used to introduce malicious "
+                               "behaviour into what ships.",
+}
 
 
 def _attacker_gain(dossier: Mapping[str, Any] | None, item: Mapping[str, Any]) -> str:
@@ -153,7 +195,9 @@ def _attacker_gain(dossier: Mapping[str, Any] | None, item: Mapping[str, Any]) -
     if not predicate:
         return ("The dossier that names the consequence was not available; the accepted finding states only "
                 "the title and state shown here.")
-    text = f"The accepted security consequence is {predicate}: an attacker who reaches this code can bring it about."
+    meaning = CONSEQUENCES.get(str((dossier or {}).get("security_predicate")))
+    text = (f"The accepted security consequence is {predicate}: {meaning}" if meaning else
+            f"The accepted security consequence is {predicate}: an attacker who reaches this code can bring it about.")
     preconditions = [_text(row, 300) for row in (dossier or {}).get("preconditions") or ()]
     if preconditions:
         text += " What the attacker needs first: " + "; ".join(preconditions) + "."

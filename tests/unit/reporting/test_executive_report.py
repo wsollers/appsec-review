@@ -163,3 +163,16 @@ def test_rendering_is_deterministic_and_order_independent_of_dossier_input() -> 
     assert first == second
     assert executive_document(report, (bound(dossier),)) == executive_document(report, (bound(dossier),))
     assert words("ship_blocking_pending_distinct_verification") == "ship blocking pending distinct verification"
+
+
+def test_consequence_classes_are_explained_in_business_terms_and_locations_deduplicated() -> None:
+    from appsec_review.reporting import executive_report as E
+    from appsec_review.review.models import SecurityPredicate
+    # Every value of the closed vocabulary has a plain-language meaning, except "other".
+    assert {p.value for p in SecurityPredicate} - {"other"} <= set(E.CONSEQUENCES)
+    dossier = {"security_predicate": "command_injection", "preconditions": [],
+               "sources": [{"path": "src/a.cpp", "start_line": 3, "end_line": 5},
+                           {"path": "src/a.cpp", "start_line": 3, "end_line": 5},
+                           {"path": "src/a.cpp", "start_line": 9, "end_line": 9}]}
+    assert "operating-system commands" in E._attacker_gain(dossier, {})
+    assert E._locations(dossier) == ["src/a.cpp, lines 3-5", "src/a.cpp, line 9"]
