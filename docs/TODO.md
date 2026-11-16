@@ -3318,7 +3318,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and snapshot verification, protected LaTeX/PDF container policy and non-execution assurance
   labelling, and relocated `run_review_chain` test to
   `tests/integration/job_dossier_publication/test_dossier_review_chain.py`; 404/406 job-package
-  lines [99.51%] and 167/172 branches [97.09%] covered across all 5 modules).
+  lines [99.51%] and 167/172 branches [97.09%] covered across all 5 modules);
+  job_remediation_planning (45/47; 3 unit files, 66 cases: pinned 3-unit `load.verify_inputs` ->
+  `assess.propose` -> `acceptance.publish_handoff` DAG topology, confirmed-only candidate intake
+  and `max_candidates` cap accounting, bounded `SourceReader`/retrieval/model execution and
+  telemetry receipts, exact patch scope/custody/manual-validation gates, and publish-time plan
+  verification; 511/516 job-package lines [99.03%] and 168/170 branches [98.82%] covered across
+  all 7 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

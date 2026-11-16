@@ -589,7 +589,11 @@
       "live": []
     },
     "job_remediation_planning": {
-      "unit": ["tests/test_remediation_models.py"],
+      "unit": [
+        "tests/test_remediation_models.py",
+        "tests/test_remediation_patches.py",
+        "tests/unit/job_remediation_planning/test_coverage_edges.py"
+      ],
       "integration": [],
       "acceptance": ["tests/test_remediation_jobs.py::test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs"],
       "live": []

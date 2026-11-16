@@ -31117,7 +31117,9 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_remediation_models.py"
+          "tests/test_remediation_models.py",
+          "tests/test_remediation_patches.py",
+          "tests/unit/job_remediation_planning/test_coverage_edges.py"
         ]
       },
       "workers": 1
@@ -44910,7 +44912,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "b26eaa359f96e6ec7b84e87d728323f939a086d411c8e21a639e4423924bf754"
+    "tests/job-test-map.json": "6d6bc22c195f071756b8ca7e19a5bfa43f6f03fb3ca7cd8c5d8ac151044b0a6e"
   },
   "tool_policy": {
     "disable_grype": true,
