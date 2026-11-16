@@ -3285,7 +3285,17 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `JobRunner` scenarios relocated to
   `tests/integration/job_inference_security_review/test_inference_security_review_jobrunner.py`;
   2,615/2,787 job-package lines [93.83%] and 857/996 branches [86.04%] covered across all 8
-  modules).
+  modules);
+  job_final_publication_gate (41/47; 7 unit files, 121 cases: pinned 3-unit `load.verify_review` ->
+  `gate.classify` -> `acceptance.publish_handoff` DAG topology, `publication_gate_decisions`
+  dataset and registry parity, `FinalPublicationGateSettings` `[1, 10000]` boundary and strict-bool
+  validation, exact upstream handoff pin enforcement across review and optional producers,
+  `decision_audit` sidecar summary wiring, publishable/verification-backlog/withheld bucketing and
+  all `LIMITATION_ORDER` gap/not-run/notice classifications, certified snapshot verification and
+  concurrent acceptance invalidation, and compile-only PoC/remediation/dossier/attack-chain
+  attachment verification; replaced the three `tests/test_final_report.py` unit nodeids whose
+  module fixture executed a 3-job `JobRunner` chain; 534/534 job-package lines [100.0%] and
+  173/174 branches [99.43%] covered across all 7 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

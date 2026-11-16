@@ -314,9 +314,11 @@
     },
     "job_final_publication_gate": {
       "unit": [
-        "tests/test_final_report.py::test_a_clean_review_is_publishable_and_not_run_stages_never_change_that",
-        "tests/test_final_report.py::test_package_counts_reject_a_package_in_no_bucket",
-        "tests/test_final_report.py::test_unrated_unscored_and_empty_reviews_are_named_gaps",
+        "tests/test_completion_publication.py",
+        "tests/test_gate_snapshot.py",
+        "tests/unit/job_final_publication_gate/test_classify_and_verify.py",
+        "tests/unit/job_final_publication_gate/test_contract_and_settings.py",
+        "tests/unit/job_final_publication_gate/test_job_and_attachments.py",
         "tests/unit/review_decision_audit_wiring/test_classification.py",
         "tests/unit/review_decision_audit_wiring/test_gate_handler.py"
       ],
