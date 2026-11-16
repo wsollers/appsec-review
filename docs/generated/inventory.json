@@ -19693,8 +19693,9 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_final_report.py::test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden",
-          "tests/test_final_report.py::test_decision_pending_without_bounds_names_the_unrated_severity_itself"
+          "tests/unit/job_final_report_publication/test_contract_and_settings.py",
+          "tests/unit/job_final_report_publication/test_job_units.py",
+          "tests/unit/job_final_report_publication/test_report_and_render.py"
         ]
       },
       "workers": 1
@@ -44915,7 +44916,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "9160a4d44b94e9c7db04a0e7c9156ed39a3f2cd88d39355b456839fc8ac546af"
+    "tests/job-test-map.json": "953876917ad57e38d273390664a684d0e3cec19192cb52a50d6cb7c018e6df67"
   },
   "tool_policy": {
     "disable_grype": true,

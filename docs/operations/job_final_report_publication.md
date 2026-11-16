@@ -60,7 +60,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_final_report.py::test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden`<br>`tests/test_final_report.py::test_decision_pending_without_bounds_names_the_unrated_severity_itself` |
+| unit | `tests/unit/job_final_report_publication/test_contract_and_settings.py`<br>`tests/unit/job_final_report_publication/test_job_units.py`<br>`tests/unit/job_final_report_publication/test_report_and_render.py` |
 
 ### Dagster placement
 

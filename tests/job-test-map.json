@@ -331,8 +331,9 @@
     },
     "job_final_report_publication": {
       "unit": [
-        "tests/test_final_report.py::test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden",
-        "tests/test_final_report.py::test_decision_pending_without_bounds_names_the_unrated_severity_itself"
+        "tests/unit/job_final_report_publication/test_contract_and_settings.py",
+        "tests/unit/job_final_report_publication/test_job_units.py",
+        "tests/unit/job_final_report_publication/test_report_and_render.py"
       ],
       "integration": [],
       "acceptance": ["tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections"],

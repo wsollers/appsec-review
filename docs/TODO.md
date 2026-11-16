@@ -3330,10 +3330,22 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and candidate-binding verification, bounded manifest-exact scratch materialization/cleanup,
   nonexecuting native syntax-only compiler argv allowlist and baseline-first comparison,
   independent semantic reviewer outcomes, and publish-time drift/integrity checks; 486/490
-  job-package lines [99.18%] and 180/184 branches [97.83%] covered across all 6 modules).
-  Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
-  remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
-  consumer parity (T-114 done).
+  job-package lines [99.18%] and 180/184 branches [97.83%] covered across all 6 modules);
+  job_final_report_publication (47/47; 3 unit files, 7 cases: pinned 2-input / 1-dataset contract
+  and 4-unit `load.accepted_gate` -> `report.assemble` -> `report.render` ->
+  `acceptance.publish_handoff` DAG topology, `FinalReportSettings` bounds/identity validation,
+  schema-valid `build_report` assembly across complete/incomplete reviews, `decision_pending`
+  projection with and without severity bounds, confirmed/supported attack-chain filtering,
+  `poc_handoff` provenance, `withheld` accounting, deterministic CommonMark rendering with bounded/
+  zero ID truncation and hostile-markup neutralization, `FileClaims` custody, and publish-time
+  drift/provenance guards while preserving `tests/test_final_report.py` on the `review-chain`
+  acceptance lane; 284/284 job-package lines [100.0%] and 80/80 branches [100.0%] covered across
+  all 6 modules).
+  All 47 registered jobs in `builtin_registry` now have certified code-level `tests/unit/<job_id>/`
+  suites wired in `tests/job-test-map.json`; remaining T-113 work is migrating the non-job root
+  `tests/test_*.py` files and tightening `scripts/run-tests.sh fast` to `tests/unit`.
+  Bounded repair Waves 1a–5 are complete. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol
+  declarations and consumer parity (T-114 done).
   The typed-gap and bounded ELF repairs now pass the complete 757-case language-build selection
   shuffled twice; the host-dependent ELF oracle is preserved as an unexecuted integration case.
   Wave 1c (`4b875e0ea`) aligns image-repair proposal validation and its JSON schema on
