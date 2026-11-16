@@ -3012,7 +3012,7 @@ until each is rewritten into the entry format when it is next touched.
 
 - **State:** open
 - **Area:** review
-- **Blocked by:** the clean run of the 2026-11-15 repairs (review protocol v3, step M1)
+- **Blocked by:** T-5024, T-5025, T-5027, T-5029
 - **Why:** Review protocol v3 (`docs/architecture/review-protocol-v3.md`, decisions D8 to D11) replaces the red, blue, verifier and judge teams with analyse, verify, decide. Before any code moves, one review run with the roles reduced by configuration measures what the adversarial layer was buying: findings and cost side by side with the clean run on the same target and overlay (D17).
 - **Scope:** a profile or overlay-independent configuration change for one run only: `teams.red_per_team = 1`, `teams.blue_per_team = 0`, the adjudication judge disabled through its role setting, `rounds.max_rounds = 1`; same target, overlay and model as the clean run; landed between runs (a configuration commit kills an active run). Compare with `scripts/cell-outcomes.py`, `scripts/smoke-score.py` (structural) and the adjudicated claim lists; record the comparison in a task doc under `docs/tasks/` that names this id.
 - **Done when:** the comparison table exists (claims by state, confirmed findings matched by site, cell attempts, model-hours, output tokens, wall time per lane), and D8 to D10 are each confirmed or revised in the design document from it.
