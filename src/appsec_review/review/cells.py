@@ -29,7 +29,9 @@ import traceback
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
-from appsec_review.inference.errors import ExecutionLimit, FailureCategory, ProviderError, failure_category
+from appsec_review.inference.errors import (
+    ExecutionLimit, FailureCategory, ModelTokenCapExceeded, ProviderError, failure_category,
+)
 from appsec_review.inference.execution import CallAccounting, CallContext, Execution, RetryPolicy
 from appsec_review.inference.usage import Usage
 from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
@@ -449,6 +451,7 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
                                  "retrievals": []}
         attempt.turns.append(entry)
         recorded_before = len(execution.receipts)
+        over_cap: ModelTokenCapExceeded | None = None
         try:
             response = execution.call(infer, request, timeout_seconds=spec.timeout_seconds,
                                       retry_count=retry_index, retry_reason=retry_reason)
@@ -458,6 +461,10 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, f"cell_budget_exceeded:{exc.reason}")
             attempt.retry_error = FailureCategory.BUDGET
             return attempt
+        except ModelTokenCapExceeded as exc:
+            # The reply exists; the per-call output cap is a budget gap on the cell, decided below once the turn
+            # is parsed (run 2026-11-16-0005 discarded complete final answers of 5 hunters and a lane A cell).
+            over_cap, response = exc, exc.result
         except ExecutionLimit as exc:
             reason = "cell_deadline" if exc.code == "execution_deadline" else "cell_token_cap"
             attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, f"cell_budget_exceeded:{reason}")
@@ -485,6 +492,16 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
         entry["response_sha256"] = sha256_hex(response.raw_response if response.raw_response is not None
                                               else _plain(response.proposal))
         turn, error = _parse_turn(response.proposal)
+        if over_cap is not None:
+            kept = not error and turn["action"] == "final"
+            attempt.gaps.append(_gap(cell_id, spec, attempt.number, f"turn-{turn_number}", GapClass.BUDGET_GAP,
+                                     f"model_token_cap: {'final' if kept else 'retrieve'} turn used {over_cap.tokens} "
+                                     f"of {over_cap.cap} output tokens"))
+            if not kept:
+                # Only a final answer is worth keeping over the cap: the cell cannot continue after this turn.
+                attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, "cell_budget_exceeded:cell_token_cap")
+                attempt.retry_error = over_cap
+                return attempt
         if error:
             attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "malformed_turn")
             attempt.repair_errors = (error,)

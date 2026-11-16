@@ -23,7 +23,7 @@ from appsec_review.storage import canonical_json
 from appsec_review.storage.shared import current, immutable_bytes
 
 from .errors import (
-    ExecutionContractError, ExecutionLimit, FailureCategory, ModelOutputError, ProviderError,
+    ExecutionContractError, ExecutionLimit, ModelTokenCapExceeded, FailureCategory, ModelOutputError, ProviderError,
     failure_category,
 )
 from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
@@ -302,9 +302,11 @@ class Execution:
                 raise ModelOutputError("model reply exceeded response byte bound")
             if self.max_total_response_bytes is not None and self.response_bytes > self.max_total_response_bytes:
                 raise ExecutionLimit("cumulative_output_byte_bound")
-            if ((usage.input_tokens is not None and usage.input_tokens > request.max_input_tokens)
-                    or (usage.output_tokens is not None and usage.output_tokens > request.max_output_tokens)):
+            if usage.input_tokens is not None and usage.input_tokens > request.max_input_tokens:
                 raise ExecutionLimit("model_token_cap")
+            if usage.output_tokens is not None and usage.output_tokens > request.max_output_tokens:
+                # The reply is complete and parsed; only the accounting tripped. The caller keeps or drops it.
+                raise ModelTokenCapExceeded(result, tokens=int(usage.output_tokens), cap=int(request.max_output_tokens))
             self.deadline.remaining()
             return result
         except BaseException as exc:

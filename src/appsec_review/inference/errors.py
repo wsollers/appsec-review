@@ -1,6 +1,8 @@
 """Closed failure categories at the model transport/application boundary."""
 from __future__ import annotations
 
+from typing import Any
+
 import asyncio
 from enum import Enum
 import subprocess
@@ -68,6 +70,19 @@ class ExecutionLimit(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+class ModelTokenCapExceeded(ExecutionLimit):
+    """``model_token_cap`` tripped by the output-token accounting of a reply that was already received and parsed.
+
+    The call is still a failed execution (receipt, budget charge and telemetry are unchanged), but the parsed reply
+    exists: the caller decides what it is worth. The reply stays off ``args`` so failure records never carry it."""
+
+    def __init__(self, result: Any, *, tokens: int, cap: int) -> None:
+        super().__init__("model_token_cap")
+        self.result = result
+        self.tokens = tokens
+        self.cap = cap
 
 
 class ExecutionContractError(RuntimeError):
