@@ -2971,8 +2971,9 @@ exploration_enabled = false
 exploration_reserve = 1
 lead_budget_share = 0.5
 lead_max_claims_per_package = 3
-# Interim hunt budget until the hunting campaign producer (T-5030): run 0005 hunted 50 of 53 units for 45% of the
-# tokens. Ten covers the smoke target's attack surface.
+# Hunt package cap: with settings.hunting enabled the campaign plan selects and orders the hunt units and this caps
+# the packages after the plan (units beyond it are beyond_hunt_max_units gaps); with it disabled the top units by
+# rank are hunted (T-5030: run 0005 hunted 50 of 53 units for 45% of the tokens). Ten covers the smoke target.
 hunt_max_units = 10
 hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
@@ -3130,6 +3131,19 @@ max_queries = 40
 max_turns = 4
 timeout_seconds = 600
 
+# Hunting campaign planner (settings.hunting, T-5030): one tool-free turn plus one repair turn over the bounded
+# attack-surface brief, on a frontier model (the plan decides where the hunters go). max_queries must stay 0: the
+# planner retrieves nothing. profiles/prod.toml upgrades the model while keeping these bounded limits.
+[jobs.job_inference_security_review.settings.models.planner]
+provider = "claude-cli"
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 128000
+max_output_tokens = 32000
+max_queries = 0
+max_turns = 2
+timeout_seconds = 900
+
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 workers = 4
 model_profile = "verifier"
@@ -3213,6 +3227,29 @@ derived_continuity = ["same_native_executable"]
 # rewritten; the assessed severity only orders and admits leads and never feeds scoring, ship-block or claim
 # states. A lead nothing decides stays unknown with a named gap. enabled = false restores the earlier behaviour.
 # Editing a row, the bounds or the profile changes every triage fingerprint, so cached results are not reused.
+# Hunting campaign plan (review protocol v3 section 4, D20 to D25; T-5030 first piece; review/hunt_plan.py). A
+# hunt_planner cell on models.<planner_profile> receives one bounded, deterministic attack-surface brief (components
+# and stack, first-party files with complexity points, lead density and facets, the function inventory, entry
+# points, the units the rank would hunt) and answers a hunting-campaign-plan/1: areas with a mission, closed
+# weakness classes, a priority, an agent count and the files, functions and entry points assigned. The
+# application keeps the partition honest: every function and entry point of the brief is in exactly one area or
+# unassigned with a reason; unknown ids are refused then dropped; agents are clamped to `agents`; areas beyond the
+# budget or `max_areas` are kept as not_reached; an empty or twice-invalid plan falls back to the rank with the
+# gap hunt_plan_unavailable:<code>. Hunt units are then selected and ordered by the plan (lanes.hunt_max_units caps
+# the packages after the plan) and each hunt package carries its area's mission as campaign_area. Coverage stays
+# derived from cells and receipts, never from the plan. brief_bounds cap what the brief lists; beyond them the
+# brief counts omissions. The campaign cell runtime (wall deadline and token budget, incremental filing, coverage
+# ledger) is the follow-on and is not configured here. Semantic: a change here changes the plan fingerprint.
+[jobs.job_inference_security_review.settings.hunting]
+enabled = true
+agents = 4
+max_areas = 8
+planner_profile = "planner"
+[jobs.job_inference_security_review.settings.hunting.brief_bounds]
+max_functions = 400
+max_files = 120
+max_leads = 60
+
 [jobs.job_inference_security_review.settings.triage]
 enabled = true
 batch_size = 20
@@ -3375,6 +3412,7 @@ workers = 1
 
 [jobs.job_inference_security_review.steps.packages]
 workers = 2
+[jobs.job_inference_security_review.steps.packages.tasks.plan_hunt_campaign]
 [jobs.job_inference_security_review.steps.packages.tasks.assemble_lead_packages]
 [jobs.job_inference_security_review.steps.packages.tasks.assemble_hunt_packages]
 

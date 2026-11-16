@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/guidance-registry/1",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "roles": {
     "build_engineer_native": {"responsibility": "Produce bounded reproducible C/C++ and native build-system recipes."},
     "build_engineer_rust": {"responsibility": "Produce bounded reproducible Rust and Cargo build recipes."},
@@ -30,6 +30,7 @@
     "finding_adjudicator": {"responsibility": "Apply the deterministic adjudication table to recorded evidence relations.", "path": "pipeline/prompt-fragments/roles/finding_adjudicator.md", "lens": "skeptical", "output_schema": "adjudication", "outputs": ["supported", "confirmed", "contradicted", "not_reachable", "not_exploitable_in_observed_configuration", "insufficient_evidence", "duplicate", "out_of_scope", "coverage_gap"], "prohibited": ["assign_severity", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "widen_scope"], "tools": []},
     "completeness_reviewer": {"responsibility": "Identify review-coverage gaps across units, strategies, and personas.", "path": "pipeline/prompt-fragments/roles/completeness_reviewer.md", "lens": "generative", "output_schema": "completeness-result", "outputs": ["coverage_gap", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["coverage", "find", "query_dataset_inventory"]},
     "lead_triager": {"responsibility": "Assign one priority severity to each scanner lead whose scanner reported none, from the rule and a bounded excerpt.", "path": "pipeline/prompt-fragments/roles/lead_triager.md", "lens": "skeptical", "output_schema": "lead-triage-result", "outputs": [], "prohibited": ["accept_claim", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": []},
+    "hunt_planner": {"responsibility": "Partition one program's attack surface into hunting areas and divide the hunters' work and agent budget between them from a bounded brief; never a finding.", "path": "pipeline/prompt-fragments/roles/hunt_planner.md", "lens": "generative", "output_schema": "hunting-campaign-plan", "outputs": [], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": []},
     "native_dependency_resolver": {"responsibility": "Resolve one bounded native dependency candidate to plausible public repository context."},
     "unit_purpose_collator": {
       "responsibility": "State one first-party component's role and asset facets and purpose from supplied excerpts, citing a supplied line or a deterministic tag for every claim (T-5008 collation model pass)."
@@ -92,6 +93,7 @@
       "blue_reachability": {"path": "pipeline/guidance/tasks/inference-security-review/blue_reachability.md"},
       "blind_verifier": {"path": "pipeline/guidance/tasks/inference-security-review/blind_verifier.md"},
       "lead_severity": {"path": "pipeline/guidance/tasks/inference-security-review/lead_severity.md"},
+      "hunt_campaign_plan": {"path": "pipeline/guidance/tasks/inference-security-review/hunt_campaign_plan.md"},
       "adjudicate_claim": {"path": "pipeline/guidance/tasks/inference-security-review/adjudicate_claim.md"},
       "chain_composer": {"path": "pipeline/guidance/tasks/inference-security-review/chain_composer.md"},
       "chain_refuter": {"path": "pipeline/guidance/tasks/inference-security-review/chain_refuter.md"},

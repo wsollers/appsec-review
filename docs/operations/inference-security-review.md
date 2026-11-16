@@ -162,6 +162,68 @@ red and blue cells are reused. Setting `require_distinct_model_for_ship_blocking
 same-model findings as `ship_blocking` and removes the warning. Do that only on purpose: it gives
 up the decision 2 safeguard.
 
+## The hunting campaign plan
+
+Review protocol v3 section 4 (D20 to D25; T-5030) makes hunting a campaign over **areas** of the attack
+surface. The first piece is implemented: a frontier model defines and divides the hunters' work, and the
+application keeps the partition honest. `packages.plan_hunt_campaign` (`review/hunt_plan.py`) runs before
+both package-assembly tasks:
+
+1. **The brief.** The application builds one bounded, deterministic attack-surface brief from accepted data
+   only: components and stack facts, first-party files with review-prioritization points, hotspot points,
+   lead density (admitted, excluded and other leads), collation facets and threat tags, the function
+   inventory from the accepted graph symbols (names and lines, with sink and entry-point counts), the entry
+   points with their source class, and the hunt units the rank produced (`candidate_units`, with
+   `hunted_by_rank`). Everything is listed under short ids (`F` files, `N` functions, `E` entry points, `U`
+   units); no target text beyond paths, names and lines reaches the planner. `hunting.brief_bounds`
+   (`max_functions`, `max_files`, `max_leads`) cap the lists; the brief counts what it omitted. It is written
+   as `hunt-brief.json` beside the plan.
+2. **The planner.** The `hunt_planner` role (persona `generalist`, model profile `hunting.planner_profile`,
+   `models.planner`: Sonnet in dev, Fable in prod, `max_queries = 0`) answers `hunting-campaign-plan/1` in one
+   tool-free turn plus one repair turn: `areas[]` with `area_id`, `title`, `mission`, `weakness_classes`
+   (the closed `security_predicate` vocabulary), `priority`, `agents`, `files`, `functions`, `entry_points`
+   and `rationale`; `unassigned[]` with a reason each; `gaps[]`.
+3. **Validation.** Every function and entry point of the brief must be in exactly one area or unassigned;
+   an id the brief did not list is refused with feedback and, on the repair turn, dropped from the area
+   (never the area) and recorded in the plan's `notes`; a double assignment keeps the first area; an omitted
+   id joins `unassigned` as `planner_omitted`. Agent counts are clamped to `hunting.agents` in priority
+   order; areas beyond the budget or `hunting.max_areas` stay in the plan as `not_reached`. A plan that
+   assigns nothing, or fails validation on both turns, or hits a model problem, falls back to the rank with
+   the named gap `hunt_plan_unavailable:<code>` (`empty_plan`, `invalid_output`, `timeout`, `budget`,
+   `provider_error`). The result is `hunt-plan.json` (`appsec-review/hunt-plan/1`: status `planned`,
+   `fallback` or `disabled`, `plan_id`, the resolved areas, unassigned identities, attempts and notes).
+4. **Selection.** Both assembly tasks read the plan. A unit belongs to the reached area holding most of its
+   functions and entry points (ties to the higher priority), else to the first area naming one of its
+   files; hunted units are ordered by area priority then rank, and `lanes.hunt_max_units` caps the packages
+   after the plan. Every hunt package carries its area's mission, weakness classes and the functions and
+   entry points of that unit as `campaign_area` (shown to the hunters in the package view as routing
+   context, never evidence); the unit menu shape is unchanged, so hunters, triage and the scorecard keep
+   working. An unhunted unit's gap names the plan's reason: `not_reached:<area>`, `unassigned`,
+   `not_in_plan` or `beyond_hunt_max_units:<area>`; the coverage matrix and the completeness gaps carry the
+   same reason, and `excluded-leads.json`'s `hunted` flags reflect plan membership. The lane documents
+   (`lead-packages.json`, `hunt-packages.json`) record the plan id, status, areas reached and not reached,
+   agents and unassigned count under `hunt_plan`; `scripts/cell-outcomes.py` lists the planner under the
+   `hunt_planner` role.
+
+Settings:
+
+```toml
+[jobs.job_inference_security_review.settings.hunting]
+enabled = true          # false: the rank selects the top lanes.hunt_max_units units as before
+agents = 4              # the agent budget the plan's counts are clamped to
+max_areas = 8           # areas beyond this stay in the plan as not_reached
+planner_profile = "planner"
+[jobs.job_inference_security_review.settings.hunting.brief_bounds]
+max_functions = 400
+max_files = 120
+max_leads = 60
+```
+
+Not implemented yet (the follow-on of T-5030): the campaign cell runtime with a wall deadline and token budget
+in place of the four-turn cap, incremental filing of hypotheses, and the receipt-derived coverage ledger. The
+`agents` count therefore sizes the plan, not a pool of long-running agents; hunt cells still run as today.
+Coverage is derived from hunt cells and their receipts, never from the plan.
+
 ## Capacity and local runs
 
 `[...settings.teams].review_teams` is **3 in dev/copilot-dev and 7 in prod/copilot-prod**.

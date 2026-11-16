@@ -31,6 +31,7 @@ class Role(StrEnum):
     COMPLETENESS_REVIEWER = "completeness_reviewer"
     LEAD_TRIAGER = "lead_triager"                # review.lead_triage: assigns a lead's priority severity only
     ADJUDICATION_JUDGE = "adjudication_judge"   # decides which side of a claim is correct; never sets a state
+    HUNT_PLANNER = "hunt_planner"               # review.hunt_plan: partitions the attack surface into hunt areas
 
 
 class BlueTask(StrEnum):

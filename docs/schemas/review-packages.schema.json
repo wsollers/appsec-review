@@ -2155,6 +2155,39 @@
         "scope": {
           "$ref": "#/$defs/inference_scope"
         },
+        "campaign_area": {
+          "description": "Hunt lane (T-5030, review/hunt_plan.py): the hunting campaign plan's area record for the hunted unit (hunting-campaign/1): plan id, area id, title, mission, weakness classes, priority, agents, and the functions and entry points of this unit the plan assigned. Routing context for the hunters, never evidence. Absent when the deterministic rank selected the unit (those bodies keep their pre-plan identity) and on a finding-lead package; null is accepted for compatibility.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["rule", "authority", "plan_id", "area_id", "title", "mission", "weakness_classes",
+                           "priority", "agents", "functions", "entry_points"],
+              "properties": {
+                "rule": {"type": "string", "pattern": "^appsec-review/hunting-campaign/[0-9]+$"},
+                "authority": {"const": "routing_context"},
+                "plan_id": {"type": "string", "pattern": "^plan-[0-9a-f]{64}$"},
+                "area_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$"},
+                "title": {"type": "string", "maxLength": 120},
+                "mission": {"type": "string", "maxLength": 1000},
+                "weakness_classes": {"type": "array", "maxItems": 8, "items": {"type": "string"}},
+                "priority": {"type": "integer", "minimum": 1},
+                "agents": {"type": "integer", "minimum": 0},
+                "functions": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                              "required": ["identity", "name", "path", "line"],
+                              "properties": {"identity": {"type": "string"}, "name": {"type": "string"},
+                                             "path": {"type": "string"}, "line": {"type": ["integer", "null"]}}}},
+                "entry_points": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+                                 "required": ["identity", "path", "line", "display"],
+                                 "properties": {"identity": {"type": "string"}, "path": {"type": ["string", "null"]},
+                                                "line": {"type": ["integer", "null"]}, "display": {"type": "string"}}}}
+              }
+            }
+          ]
+        },
         "unit_context": {
           "description": "Schema v7 (T-5000), hunt lane: the hash-pinned reference to the unit's context document (package-unit-context/2), published once per hunted unit under unit-context/<sha256>.json beside the packages and holding the unit's context entries, source identities and unit-wide retrieval entity ids. null on a finding-lead package. Consumers merge the document back with review/packages.py merge_unit_context.",
           "oneOf": [

@@ -290,6 +290,25 @@
         "responsibility": "Apply the deterministic adjudication table to recorded evidence relations.",
         "tools": []
       },
+      "hunt_planner": {
+        "lens": "generative",
+        "output_schema": "hunting-campaign-plan",
+        "outputs": [],
+        "path": "pipeline/prompt-fragments/roles/hunt_planner.md",
+        "prohibited": [
+          "accept_claim",
+          "assign_severity",
+          "execute_code",
+          "propose_claim",
+          "read_target_guidance",
+          "refute_claim",
+          "request_unlisted_tool",
+          "set_claim_state",
+          "widen_scope"
+        ],
+        "responsibility": "Partition one program's attack surface into hunting areas and divide the hunters' work and agent budget between them from a bounded brief; never a finding.",
+        "tools": []
+      },
       "hypothesis_hunter": {
         "lens": "generative",
         "output_schema": "red-compact",
@@ -689,6 +708,9 @@
         "entry_down": {
           "path": "pipeline/guidance/tasks/inference-security-review/entry_down.md"
         },
+        "hunt_campaign_plan": {
+          "path": "pipeline/guidance/tasks/inference-security-review/hunt_campaign_plan.md"
+        },
         "lead_red_failure_modes": {
           "path": "pipeline/guidance/tasks/inference-security-review/lead_red_failure_modes.md"
         },
@@ -712,7 +734,7 @@
         }
       }
     },
-    "version": "1.5.0"
+    "version": "1.6.0"
   },
   "guidance_assignments": {
     "personas": {
@@ -838,6 +860,9 @@
       ],
       "evidence_verifier": [],
       "finding_adjudicator": [],
+      "hunt_planner": [
+        "job_inference_security_review"
+      ],
       "hypothesis_hunter": [
         "job_inference_security_review"
       ],
@@ -1625,6 +1650,10 @@
       "appsec-review/holdout-usage/1",
       "appsec-review/host-pins/1",
       "appsec-review/hunt-facet-obligations/1",
+      "appsec-review/hunt-plan/1",
+      "appsec-review/hunting-campaign-brief/1",
+      "appsec-review/hunting-campaign-plan/1",
+      "appsec-review/hunting-campaign/1",
       "appsec-review/image-pin-plan/2",
       "appsec-review/image-pin-verification-job/3",
       "appsec-review/image-pin-verification/1",
@@ -2453,6 +2482,10 @@
       "https://openvex.dev/ns/v0.2.0",
       "hunt-facet-obligations/1",
       "hunt-panel/1",
+      "hunt-plan/1",
+      "hunting-campaign-brief/1",
+      "hunting-campaign-plan/1",
+      "hunting-campaign/1",
       "image-pin-plan/2",
       "image-pin-verification-job/3",
       "image-pin-verification/1",
@@ -3222,6 +3255,7 @@
       "package.files",
       "packages.assemble_hunt_packages",
       "packages.assemble_lead_packages",
+      "packages.plan_hunt_campaign",
       "parse.dynamic_scopes",
       "plan.accepted_cpp_plan",
       "plan.briefs",
@@ -21893,6 +21927,16 @@
             "reasoning": "high",
             "timeout_seconds": 600
           },
+          "planner": {
+            "max_input_tokens": 128000,
+            "max_output_tokens": 32000,
+            "max_queries": 0,
+            "max_turns": 2,
+            "model": "claude-sonnet-5-5",
+            "provider": "claude-cli",
+            "reasoning": "high",
+            "timeout_seconds": 900
+          },
           "triage": {
             "max_input_tokens": 64000,
             "max_output_tokens": 16000,
@@ -22275,6 +22319,17 @@
           "shard_bytes": 8388608,
           "shard_records": 5000
         },
+        "hunting": {
+          "agents": 4,
+          "brief_bounds": {
+            "max_files": 120,
+            "max_functions": 400,
+            "max_leads": 60
+          },
+          "enabled": true,
+          "max_areas": 8,
+          "planner_profile": "planner"
+        },
         "lanes": {
           "exploration_enabled": false,
           "exploration_reserve": 1,
@@ -22315,6 +22370,16 @@
             "provider": "claude-cli",
             "reasoning": "high",
             "timeout_seconds": 600
+          },
+          "planner": {
+            "max_input_tokens": 128000,
+            "max_output_tokens": 32000,
+            "max_queries": 0,
+            "max_turns": 2,
+            "model": "claude-sonnet-5-5",
+            "provider": "claude-cli",
+            "reasoning": "high",
+            "timeout_seconds": 900
           },
           "triage": {
             "max_input_tokens": 64000,
@@ -22976,7 +23041,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.adjudicate_unit",
               "id": "adjudicate.apply_policy",
               "internal_tools": [],
-              "line": 554,
+              "line": 607,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23000,7 +23065,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.chain_compose",
               "id": "attack_chains.compose_candidates",
               "internal_tools": [],
-              "line": 611,
+              "line": 664,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23018,7 +23083,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.chain_challenge.<locals>.handler",
               "id": "attack_chains.refute_edges",
               "internal_tools": [],
-              "line": 646,
+              "line": 699,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23036,7 +23101,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.chain_challenge.<locals>.handler",
               "id": "attack_chains.verify_weakest_links",
               "internal_tools": [],
-              "line": 646,
+              "line": 699,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23060,7 +23125,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.completeness",
               "id": "completeness.audit",
               "internal_tools": [],
-              "line": 686,
+              "line": 739,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23084,7 +23149,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.review.<locals>.handler",
               "id": "hunt_review.teams",
               "internal_tools": [],
-              "line": 441,
+              "line": 494,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23108,7 +23173,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.review.<locals>.handler",
               "id": "lead_review.teams",
               "internal_tools": [],
-              "line": 441,
+              "line": 494,
               "pool": "inference_teams",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23133,7 +23198,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.merge",
               "id": "merge.claims",
               "internal_tools": [],
-              "line": 525,
+              "line": 578,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23150,14 +23215,14 @@
           "tasks": {
             "assemble_hunt_packages": {
               "dependencies": [
-                "triage.lead_severity"
+                "packages.plan_hunt_campaign"
               ],
               "guidance_binding": "not_declared",
               "guidance_gap": "T-147",
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.assemble.<locals>.handler",
               "id": "packages.assemble_hunt_packages",
               "internal_tools": [],
-              "line": 348,
+              "line": 394,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23168,14 +23233,32 @@
             },
             "assemble_lead_packages": {
               "dependencies": [
-                "triage.lead_severity"
+                "packages.plan_hunt_campaign"
               ],
               "guidance_binding": "not_declared",
               "guidance_gap": "T-147",
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.assemble.<locals>.handler",
               "id": "packages.assemble_lead_packages",
               "internal_tools": [],
-              "line": 348,
+              "line": 394,
+              "pool": "application",
+              "settings": {},
+              "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
+              "tool_binding": "not_declared",
+              "tool_gap": "T-147",
+              "tools": [],
+              "workers": 1
+            },
+            "plan_hunt_campaign": {
+              "dependencies": [
+                "triage.lead_severity"
+              ],
+              "guidance_binding": "not_declared",
+              "guidance_gap": "T-147",
+              "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.plan_hunt_campaign",
+              "id": "packages.plan_hunt_campaign",
+              "internal_tools": [],
+              "line": 349,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23199,7 +23282,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.publish_ledger",
               "id": "publication.publish_claim_ledger",
               "internal_tools": [],
-              "line": 721,
+              "line": 774,
               "pool": "lifecycle",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23217,7 +23300,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.publish_handoff",
               "id": "publication.publish_handoff",
               "internal_tools": [],
-              "line": 744,
+              "line": 797,
               "pool": "lifecycle",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23239,7 +23322,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.accept",
               "id": "scope.accept_manifest",
               "internal_tools": [],
-              "line": 276,
+              "line": 278,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23257,7 +23340,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.assemble_scope",
               "id": "scope.assemble_scope",
               "internal_tools": [],
-              "line": 289,
+              "line": 291,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23281,7 +23364,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.score",
               "id": "scoring.score_claims",
               "internal_tools": [],
-              "line": 575,
+              "line": 628,
               "pool": "inference_score",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -23305,7 +23388,7 @@
               "handler": "appsec_review.jobs.job_inference_security_review.job.build_job.<locals>.triage_leads",
               "id": "triage.lead_severity",
               "internal_tools": [],
-              "line": 302,
+              "line": 304,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_inference_security_review/job.py",
@@ -44567,10 +44650,10 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "d929fb3368acda6daebcfed028e592e4979d662272522d21011d4895aa735d5a",
+    "appsec-review.toml": "078096b2ff79c0aba23944dd4bc24fd87daad6b1181e360482c53e0657177c99",
     "containers/catalog.toml": "995c0e1f684a69913f3175450c28b27b97726a1f977cbc1ce77e6c98ed10af2c",
     "docs/intelligence-buckets.json": "cec74cb02f073d0e91bcbad28246ab34ab7bef5262a7c8b1cb8c7e8d2f65c725",
-    "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",
+    "pipeline/guidance/registry.json": "e16297aa9375bd671594fae2cb45df23e5293eb0c0d8d069dea6c8ffcf181a42",
     "src/appsec_review/__init__.py": "e8ee360d5e72b7f3ad9bf9b84ca9b734b76a9f9d2cf9730e4eabb11121ce692c",
     "src/appsec_review/__main__.py": "6eb6f048c25e857f17755bbc341b70b7184cb4026b743fba3eaecc6951f65fc3",
     "src/appsec_review/acceptance/__init__.py": "df4d9f44a3263bd86f55dac08f2e25ad71b074411d78adc2e8dcf377178688ce",
@@ -44628,7 +44711,7 @@
     "src/appsec_review/config/host_pins.py": "d7f4a411be50fe0d4c197a0bed15f4a2474dc06fa682999aaf3f10fccbe061ee",
     "src/appsec_review/config/image_builder_service.py": "a2cbaa1f748c630ba1816afc31a29de62494f4036cab087f0a2c4c9aa6148d3a",
     "src/appsec_review/config/image_pin_verification.py": "ebc74bd6cef04001bef7237939e73f72f585fe34f1328f4caadae845616a240a",
-    "src/appsec_review/config/inference_review.py": "7a288d69b70d333d8e7188af3ffdaa102149e16358e40df3899b10d8f3fc5837",
+    "src/appsec_review/config/inference_review.py": "642be1076ec8de222b6e9c93076073c71e9b6213850ba52e371a68387293232a",
     "src/appsec_review/config/loader.py": "e02b68cf0cffbaf7f524692357eb434b4ebb9f7c80455c1ccac95af4aa0a5780",
     "src/appsec_review/config/native_dagster.py": "b1be8153fa77a1a565ceff7449adc5a2e01adc031ce356abaf50c0d26bbc3bb7",
     "src/appsec_review/config/native_engine.py": "b21229a3ffafb5e87e4f339b7b0e6dc3489ee6611bc06c348e310da09d189fab",
@@ -44694,13 +44777,13 @@
     "src/appsec_review/graph/settings.py": "7d5cf9ab8f981793a603f8ed3c14da0d48b2f3e1ac6b1f5d8a76e7389286f342",
     "src/appsec_review/graph/svf_crosscheck.py": "076735aa424c7f26c28722a142f752a6836055fb1b8adf7fbccdaee85b4f7347",
     "src/appsec_review/guidance/__init__.py": "d0872a53c488984113a073a6ed1f108e4b8b6886a117f5275e9dee7598b83df1",
-    "src/appsec_review/guidance/cards.py": "ee515a90d7c21b1958d9c93daa16e574e943bd4930ccda9dcb78b90a5452ca34",
+    "src/appsec_review/guidance/cards.py": "f36473fd1632b97aa0125f2de91790d34af5d561a6fbd3999f0eb14ec11a4fcf",
     "src/appsec_review/guidance/compose.py": "8553163e2c99a0148a65b78f7830de88911dc776da1dc0343d9b4919b1f83bb5",
     "src/appsec_review/guidance/coverage.py": "7f1a00a615a78a0d17e93efe9a0b3273cbe4e74a47b7208397ee0949a13f7b92",
     "src/appsec_review/guidance/fragments.py": "bececbb73099c868e6fb0abc36cbcaffff32fa67b0437c007a4de30de79977a6",
     "src/appsec_review/guidance/routing.py": "13c150666701f082440e7b647d22e8a985132832bb4a18085ed3cdb88074c8a5",
     "src/appsec_review/guidance/skills.py": "aa9d5c13b9c445fb0ccf2ddda87909dc48112934d2975f75ac59741d4e489bcf",
-    "src/appsec_review/guidance/workers.py": "eb00ba2460652523d3c52548b0411ab7109b1993c429c7b6c597b0fe1ba12cd1",
+    "src/appsec_review/guidance/workers.py": "0327fdc2d05449c2a204bb2f0c6f8a5be8bda3d9f548b259e34710293a57e4d7",
     "src/appsec_review/indexing/build_facts.py": "24f8656f8639ab07f8b697b41241d29c2ff0043238fde0eccbc70db0cba3c4b2",
     "src/appsec_review/indexing/derive.py": "c6123eb2e6dbffd2125026f50062c2d177a98fe5c1951930b9553b23839301a0",
     "src/appsec_review/indexing/document_interfaces.py": "47181983ee789d2ebe1a558679409097536bd0345ae89fcffb5204c40ccb6b21",
@@ -44867,9 +44950,9 @@
     "src/appsec_review/jobs/job_inference_security_review/audit.py": "f7593f51182c28e2a3601c24ab9fe47539b46128a55c01f503f4546f05371b45",
     "src/appsec_review/jobs/job_inference_security_review/chains.py": "9b3180e7cca27ef4f2f59b4f062d5d04b5785ca0f9ca48775393def4e478f8ed",
     "src/appsec_review/jobs/job_inference_security_review/datasets.py": "1e1150db4f2250102c1821dab326a4687c34302401562b07154b95da42338094",
-    "src/appsec_review/jobs/job_inference_security_review/job.py": "37fc5cb7d3d36c0c750cc86acd43c3df9b5ac392c36d47ff59bbe10286f4d30f",
+    "src/appsec_review/jobs/job_inference_security_review/job.py": "f600d96467e8564a15851118e33a2e081d542493d81bbddf6d71c302cd6992df",
     "src/appsec_review/jobs/job_inference_security_review/schemas.py": "ae955a119971360de2a2d731830bd02ec7f6ff20f4f29b3f41eca7137e24c9d2",
-    "src/appsec_review/jobs/job_inference_security_review/stages.py": "9d7fdcf894ab9c9b5f7798aab0ca4fc7e9bd7851b6c4f9d29d193893ac68f06c",
+    "src/appsec_review/jobs/job_inference_security_review/stages.py": "9850a287c7ec60c61cc78abfe54fe80b10d2d18767abe7ff48f0197ec6942143",
     "src/appsec_review/jobs/job_inference_security_review/teams.py": "e9f6ec6b9dc9d447646c9208a7e5718b5e1914a57621a47c3a1e75badf3cb15e",
     "src/appsec_review/jobs/job_language_build/__init__.py": "9cfa5d5894f7683b0425711e233917fa2d9f1c8d82d712433f1551093c06fd40",
     "src/appsec_review/jobs/job_language_build/capture.py": "dd71bef6015a152029d22d444a628349271fe33cbec75d16a89285c2b180b1af",
@@ -45143,7 +45226,7 @@
     "src/appsec_review/provenance.py": "51d966a35af68293cd8a758770295c088e3c5b44234c1376a7ed99fa8a4450fc",
     "src/appsec_review/reporting/__init__.py": "5546750238dd0c4e2addb7ff1442a525067780d4855ca56fb8d96cb0cf57b2c7",
     "src/appsec_review/reporting/__main__.py": "c377dead429ffeb96560f42b4c98456b1082ea89570d352b92dd48c8e3e50a5a",
-    "src/appsec_review/reporting/cell_outcomes.py": "c6452e99b967d91f5403dbf75c271f40280d5fb938a42b147cac482f7a9b0e94",
+    "src/appsec_review/reporting/cell_outcomes.py": "3b88b50377bc929afc2f477152096b749c4919cd7514f2652d33736ad48081aa",
     "src/appsec_review/reporting/digest.py": "1a981eee247cd9a0c3ce1dc305832ac98a1f5251dee4956034152bf7da0b2601",
     "src/appsec_review/reporting/dimensions.py": "310c24fd21428421b2cb2370d27c9903db258d8dbf82264590bb1a4d3df6dc89",
     "src/appsec_review/reporting/dossier_render.py": "489e09210e9216f1427afbde7324f5d700ac916778ad42074d5c80fa4c40dbd2",
@@ -45211,6 +45294,8 @@
     "src/appsec_review/review/evidence_obligations.py": "0780cd1d36e2b55a54158aa9f6db508cc5dc646feed767d23ac17ad5eef3e853",
     "src/appsec_review/review/excluded_leads.py": "a8241c5b1bd04e7c8e3af2720e8487ded1d5ff37b3ac5b74aa7d5f32337ad605",
     "src/appsec_review/review/fact_summary.py": "24165e6f9dd20234203c61c8ae5f6c3621b286857b8965e8a6c408cd2ee7c124",
+    "src/appsec_review/review/hunt_plan.py": "ab01815bcd20c8b41641be01833bff0269df40800ca739c98a7c295a8b05afa7",
+    "src/appsec_review/review/hunt_plan_settings.py": "33e5ad749eb8509dcb3ea0f9b9ee96ccb3dd4e7b476dda9b1d7e48f524fc8b52",
     "src/appsec_review/review/identity.py": "add52aa90754f0b74ccc4f1ee0c64f0eda0d9dae91fd81abeea64f35086c8166",
     "src/appsec_review/review/independence.py": "7703361d24f62fd96711a50dc051a66c957f1a81c21908dcd1a78c4e0291bf0f",
     "src/appsec_review/review/judge.py": "c8dba974766ba6f5b23cd9d645eb0144e7ebf0afe60b898ea17b5a73cd955a5e",
@@ -45221,13 +45306,13 @@
     "src/appsec_review/review/lead_triage_settings.py": "da456d70389e1d0ea9fe50a76bac48ca5f3314e08213a31979295419a47f423a",
     "src/appsec_review/review/ledger.py": "31f33e3c44b133a8540f018d4d03aeed3a91a07b04d388bbbd41f20d248b3b68",
     "src/appsec_review/review/memory_context.py": "a7a3a606c94512decf9ca8c2950089effb33e43b1d83dfe44661ad2197af79fd",
-    "src/appsec_review/review/models.py": "9bc0ff7d110946b42f9649d5f54c00ca90f47293e98360afc70d3db477eeabc1",
+    "src/appsec_review/review/models.py": "87bd1e549445d7342d90391ac694e1585c0d06d6ea34ea2af3c12cd164e04b65",
     "src/appsec_review/review/native_continuity.py": "3a0bc103e78bb4d4ab75cb7f8c1a960b0c93acac8baeab8c98c61b767443f0b5",
     "src/appsec_review/review/neighborhood.py": "1cdcc2c1b00a3b812ab335a2d8c31a6f019e4bb8f40586fb4c289c6ae1363134",
     "src/appsec_review/review/numeric_reasoning.py": "281ec6decfe49574d48ce12b7372f748047b0f6fc6697ca3450e4a020e5d3190",
     "src/appsec_review/review/obligations.py": "70dc85cc2d9ca06030b8b5cf725014db6fb98ab2aa3c3e25bcdbc642114b37d8",
-    "src/appsec_review/review/package_view.py": "f944feb79b3edf921294e132b2f83c4018ffdf8960fda3a38679d63e453bd585",
-    "src/appsec_review/review/packages.py": "dedc6a40df2a3d0328accd723cd148445888853f404b44769464d8b29cdbda3d",
+    "src/appsec_review/review/package_view.py": "9eabc379c22654db9deff7543706154eedd036dae9bcda7a93b37378db7b1c89",
+    "src/appsec_review/review/packages.py": "5b96366277e3c00d0d85c60143f61e4769961b94a26809766d797cdf91e4670d",
     "src/appsec_review/review/ranking.py": "567b043300ff4552d1a9eeb67bfa5d6bd3fdd99daf885ef67bd50798af6a2897",
     "src/appsec_review/review/red_discovery.py": "7196881874068d303b4573dde5e9e88aea36bb92673ccb1b1a61756c55c86c87",
     "src/appsec_review/review/references.py": "082b47912ec5fe2c0febd7db8fabdc39f62f8f4cc607f2f3a6a8571852b1cdc4",

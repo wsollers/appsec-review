@@ -7,7 +7,9 @@ Reads three run-owned sources and changes nothing but the optional output file:
 * every cell attempt receipt (``cells/<cell-id>/attempt-N.json``) for the attempt's status, the reason it
   ended, its turn, query and token counts and the retrieval tool errors its turns recorded;
 * every model execution receipt (``data/inference-executions/*/*/*.json``) for wall time per model call by
-  outcome and failure code.
+  outcome and failure code;
+* the hunting campaign plan artifact (``steps/packages/tasks/plan_hunt_campaign/hunt-plan.json``) for the
+  ``hunt_planner`` role, which runs outside the lane ledgers (T-5030).
 
 A cell whose lane has not sealed yet has no ledger record; its attempts are counted under the role
 ``unattributed`` so a partial run still reports honestly. Nothing here is evidence about the target: the
@@ -56,6 +58,21 @@ def _attempt_receipts(job_root: Path):
         yield json.loads(path.read_text(encoding="utf-8"))
 
 
+def _planner(attempt_root: Path) -> dict[str, Any] | None:
+    """The hunting campaign planner's attempts (``steps/packages/tasks/plan_hunt_campaign/hunt-plan.json``).
+
+    The planner is one bounded tool-free turn (plus one repair turn) outside the lane ledgers, so it is reported
+    under its own role from the plan artifact; a disabled planner reports nothing.
+    """
+    path = attempt_root / "steps" / "packages" / "tasks" / "plan_hunt_campaign" / "hunt-plan.json"
+    if not path.is_file():
+        return None
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if document.get("status") == "disabled":
+        return None
+    return document
+
+
 def _execution_receipts(run_root: Path):
     for path in sorted((run_root / "data" / "inference-executions").glob("*/*/*.json")):
         yield json.loads(path.read_text(encoding="utf-8"))
@@ -94,6 +111,23 @@ def summarize(run_root: Path, attempt_id: str = "attempt_0001") -> dict[str, Any
         if meta:
             packages[meta["package_id"]][status] += 1
 
+    planner = _planner(attempt_root)
+    hunt_plan: dict[str, Any] | None = None
+    if planner is not None:
+        bucket = roles["hunt_planner"]
+        attempts = planner.get("attempts") or []
+        bucket["attempts"] = 1
+        bucket["cells"].add("hunt-planner")
+        status = "succeeded" if planner.get("status") == "planned" else "failed"
+        bucket["outcomes"][status] += 1
+        if status != "succeeded":
+            bucket["reasons"][planner.get("gap") or "fallback"] += 1
+        bucket["output_tokens"] += sum(int((item.get("usage") or {}).get("output_tokens") or 0) for item in attempts)
+        bucket["turns"].append(len(attempts))
+        bucket["queries"].append(0)
+        hunt_plan = {"plan_id": planner.get("plan_id"), "status": planner.get("status"), "gap": planner.get("gap"),
+                     **{key: value for key, value in (planner.get("summary") or {}).items()}}
+
     executions: dict[str, list[float]] = defaultdict(list)
     failure_codes: Counter = Counter()
     models: Counter = Counter()
@@ -117,6 +151,7 @@ def summarize(run_root: Path, attempt_id: str = "attempt_0001") -> dict[str, Any
         "attempt_id": attempt_id,
         "ledger_cells": len(ledger),
         "roles": {role: _role_document(bucket) for role, bucket in sorted(roles.items())},
+        "hunt_plan": hunt_plan,
         "packages": {"count": len(packages),
                      "attempts_per_package": _quantiles([sum(c.values()) for c in packages.values()]),
                      "succeeded_per_package": _quantiles([c.get("succeeded", 0) for c in packages.values()]),
@@ -138,6 +173,11 @@ def render(document: Mapping[str, Any]) -> str:
             lines.append(f"      {count:5d} {reason}")
         for error, count in list(info["retrieval_errors"].items())[:4]:
             lines.append(f"      {count:5d} retrieval tool_error {error}")
+    plan = document.get("hunt_plan")
+    if plan:
+        lines.append(f"  hunt plan {plan.get('plan_id') or '-'}: {plan['status']}; areas {plan.get('areas', 0)} "
+                     f"(reached {plan.get('reached', 0)}, not reached {plan.get('not_reached', 0)}); agents {plan.get('agents', 0)}; "
+                     f"unassigned {plan.get('unassigned', 0)}" + (f"; gap {plan['gap']}" if plan.get('gap') else ''))
     pk = document["packages"]
     lines.append(f"  packages {pk['count']}; attempts per package p50 {pk['attempts_per_package'].get('p50', 0)} "
                  f"max {pk['attempts_per_package'].get('max', 0)}; packages without a succeeded cell {pk['without_success']}")

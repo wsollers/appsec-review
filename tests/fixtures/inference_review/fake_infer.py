@@ -133,6 +133,19 @@ class ScriptedInfer:
                 {"lead_id": item["lead_id"], "severity": None, "basis": "insufficient_context",
                  "reason": "The scripted fixture does not establish additional severity evidence."}
                 for item in request.task_input["findings"]]}, input_tokens=100, output_tokens=20)
+        if request.role == "hunt_planner":
+            # One area over everything the brief lists, with the brief's agent budget; empty when the brief is empty
+            # (the application then falls back to the rank with a named gap).
+            brief = request.task_input["brief"]
+            ids = {key: [row["id"] for row in brief.get(key, ())] for key in ("files", "functions", "entry_points")}
+            areas = [] if not any(ids.values()) else [{
+                "area_id": "whole-surface", "title": "The listed attack surface",
+                "mission": "Scripted fixture: hunt every listed file, function and entry point for memory corruption.",
+                "weakness_classes": ["memory_corruption", "injection"], "priority": 1,
+                "agents": int(brief["budget"]["agents"]), "files": ids["files"], "functions": ids["functions"],
+                "entry_points": ids["entry_points"], "rationale": "The fixture surface is small; one area covers it."}]
+            return ModelResult({"schema": request.schema, "areas": areas, "unassigned": [], "gaps": []},
+                               input_tokens=100, output_tokens=40)
         if task == "chain_composer":
             return self._final({"candidates": [], "gaps": ["fixture_has_no_native_chain_continuity_evidence"]})
         if task in ("chain_refuter", "chain_weakest_link_verifier"):

@@ -192,3 +192,25 @@ def test_attack_chain_analyst_examples_compose_from_supplied_ids_and_validate() 
     for value in ("info_disclosure", "out_of_bounds_read", "memory_corruption", "use_after_free", "path_traversal",
                   "command_injection", "authn_bypass", "authz_bypass", "admitted_pairs", "seed_hints", "candidate_limit"):
         assert value in text
+
+
+def test_hunt_planner_examples_validate_state_every_weakness_class_and_the_non_example_fails() -> None:
+    """The planner answers the plan object itself (no worker-turn wrapper, like the lead triager), so its examples
+    are checked here rather than through ``ROLES``: both good plans validate, the non-example breaks the schema, and
+    the role text names every closed security_predicate value a plan may use."""
+    role = "hunt_planner"
+    good, bad = blocks(role)
+    assert len(good) == 2 and len(bad) == 1
+    for result in good:
+        assert SCHEMAS.errors("hunting-campaign-plan", result) == [], result
+        labels = {label for area in result["areas"] for key in ("files", "functions", "entry_points") for label in area[key]}
+        assert labels and all(re.fullmatch(r"[FNE][0-9]+", label) for label in labels)
+    errors = SCHEMAS.errors("hunting-campaign-plan", bad[0])
+    assert errors and any("closed set" in error for error in errors) and any("pattern" in error for error in errors)
+    text = (ROOT / "pipeline" / "prompt-fragments" / "roles" / f"{role}.md").read_text(encoding="utf-8")
+    missing = sorted({f"{where}: {value}" for where, values in _closed_sets("hunting-campaign-plan") for value in values
+                      if re.search(rf"(?<![A-Za-z0-9_]){re.escape(str(value))}(?![A-Za-z0-9_])", text) is None})
+    assert missing == []
+    assert "Tools\nNone." in text
+    registry = load_registry(ROOT)["roles"][role]
+    assert registry["tools"] == [] and registry["output_schema"] == "hunting-campaign-plan"

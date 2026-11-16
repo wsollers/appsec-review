@@ -53,7 +53,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 import hashlib
 from itertools import zip_longest
 import json
@@ -97,7 +97,7 @@ from appsec_review.review.slicing.registry import (
 from appsec_review.review.slicing.sources import AcceptedSliceSources, UnavailableSliceSources
 from appsec_review.review.slicing.spans import Header as SpanHeader
 from appsec_review.review.units import (
-    RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
+    CUTOFF_REASON, RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
 )
 from appsec_review.jobs.job_security_tagging.taxonomy import (
     BASIS_RANK, COLLATION_NAMESPACES, TARGET_NAMESPACE,
@@ -354,6 +354,11 @@ class Assembly:
     manifest: Mapping[str, Any]
     gaps: tuple[ScopeGap, ...]
     unit_contexts: tuple[UnitContext, ...] = ()
+    # unit_key -> reason a unit received no hunt package (``below_hunt_cutoff`` under the rank; the campaign plan's
+    # ``not_reached:<area>``, ``unassigned``, ``not_in_plan`` or ``beyond_hunt_max_units:<area>`` otherwise).
+    hunt_gaps: Mapping[str, str] = field(default_factory=dict)
+    # unit_key -> campaign area id for every hunted unit under a plan; empty under the rank.
+    hunt_areas: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def manifest_bytes(self) -> bytes:
@@ -1640,7 +1645,8 @@ class _Assembler:
                truncation: Mapping[str, Any], graph_families: Iterable[str] = (),
                graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = (),
                neighborhood: Mapping[str, Any] | None = None,
-               unit_context: UnitContext | None = None) -> tuple[str, bytes]:
+               unit_context: UnitContext | None = None,
+               campaign: Mapping[str, Any] | None = None) -> tuple[str, bytes]:
         """Render one package body. With ``unit_context`` (hunt lane) the unit-wide material is referenced,
         not embedded: the body's ``context`` is empty, its ``scope`` omits ``source_ids`` and its
         ``retrieval.entity_ids`` exclude the identities the unit context document lists. The fingerprint
@@ -1716,6 +1722,10 @@ class _Assembler:
             "retrieval": retrieval, "coverage_gaps": [gap.record() for gap in sorted_gaps(gaps)],
             "truncation": dict(truncation),
         }
+        if kind == "hunt" and campaign is not None:
+            # The hunting campaign plan's area record (review/hunt_plan.py): routing context for the hunters, never
+            # evidence. Absent when the rank selected the unit, so those bodies keep their pre-plan identity.
+            body["campaign_area"] = dict(campaign)
         package_id = f"{kind}-{sha256_hex(body)}"
         return package_id, canonical_json({**body, "package_id": package_id})
 
@@ -1881,7 +1891,9 @@ class _Assembler:
         validate_schema(UNIT_CONTEXT_SCHEMA_FILE, document, "package unit context")
         return UnitContext(unit.key, document, canonical_json(document))
 
-    def hunts(self, ranked: RankedUnit) -> list[Package]:
+    def hunts(self, ranked: RankedUnit, campaign: Mapping[str, Any] | None = None) -> list[Package]:
+        """The hunt partitions of one unit; ``campaign`` is the hunting campaign plan's area record for the unit
+        (``hunting-campaign/1``, review/hunt_plan.py), carried by every partition as ``campaign_area``."""
         unit = ranked.unit
         menu = [(lead, *self._locate(lead)[:2]) for lead in unit.leads]
         menu.sort(key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
@@ -1933,7 +1945,7 @@ class _Assembler:
                 gaps=[*gaps, *graph_gaps, *missing],
                 truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": following},
                 graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
-                neighborhood=neighborhood, unit_context=unit_context)
+                neighborhood=neighborhood, unit_context=unit_context, campaign=campaign)
 
         def split(chunk: list) -> list[list]:
             _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
@@ -2019,11 +2031,47 @@ def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> di
     return {"status": "passed", "listed_leads": listed}
 
 
+@dataclass(frozen=True, slots=True)
+class HuntCandidates:
+    """The ranked review units of a scope and the gaps of the operations and behaviour model they rest on."""
+
+    ranked: tuple[RankedUnit, ...]
+    gaps: tuple[ScopeGap, ...]
+    model_identity: Any
+
+
+def rank_hunt_candidates(scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection, *,
+                         behavior_core: Any = None) -> HuntCandidates:
+    """Build and rank the review units (``review-unit-rank/4``) exactly as package assembly does.
+
+    The hunting campaign planner (review/hunt_plan.py) reads the same candidates before assembly, so the plan
+    and the packages describe the same units.
+    """
+    from appsec_review.review.behavior import graph_operations, load_model
+    operations, operation_gaps = graph_operations(scope, limit=settings.max_operation_records)
+    model_context, model_gaps, model_identity = {}, (), None
+    if behavior_core is not None:
+        model_context, model_gaps, model_identity = load_model(
+            scope, operations, core=behavior_core, max_bytes=settings.max_behavior_artifact_bytes,
+            limit=settings.max_context_entries)
+    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights,
+                        operations=operations, model_context=model_context)
+    return HuntCandidates(rank_units(units), tuple((*operation_gaps, *model_gaps)), model_identity)
+
+
+def sorted_collection(collection: LeadCollection) -> LeadCollection:
+    """The collection with its leads and exclusions in identity order, as assembly reads it."""
+    return LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
+                          collection.gaps, collection.available, collection.correlation_audit,
+                          collection.correlation_shards, collection.non_lead_counts,
+                          tuple(sorted(collection.excluded, key=lambda item: item.lead.observation_id)))
+
+
 def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = None, *,
                       collection: LeadCollection | None = None,
                       cwe_reference: CweReference | None = None,
                       graph_settings: GraphSettings | None = None, slice_sources: Any = None,
-                      behavior_core: Any = None) -> Assembly:
+                      behavior_core: Any = None, hunt_selection: Any = None) -> Assembly:
     """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
 
     ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
@@ -2031,13 +2079,12 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     ``slice_sources`` (``slicing.contract.SliceSources``) backs the slices of dataflow-bounded leads; by
     default it is ``slicing.sources.AcceptedSliceSources`` over ``scope``. When no facade can be built,
     slices keep their path anchors and name the unavailable sources as gaps.
+    ``hunt_selection`` (``review.hunt_plan.HuntSelection``) replaces the rank cutoff with the hunting campaign
+    plan's unit order and attaches each hunted unit's area record to its packages; without it the top
+    ``hunt_max_units`` units by rank are hunted.
     """
     settings = settings or PackageSettings()
-    collection = collection if collection is not None else collect_leads(scope)
-    collection = LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
-                                collection.gaps, collection.available, collection.correlation_audit,
-                                collection.correlation_shards, collection.non_lead_counts,
-                                tuple(sorted(collection.excluded, key=lambda item: item.lead.observation_id)))
+    collection = sorted_collection(collection if collection is not None else collect_leads(scope))
     graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
     admitted = admitted_leads(collection, settings)
@@ -2056,19 +2103,17 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                              settings.exploration_enabled, settings.exploration_reserve,
                              admission_basis=settings.admission_basis)
 
-    from appsec_review.review.behavior import graph_operations, load_model
-    operations, operation_gaps = graph_operations(scope, limit=settings.max_operation_records)
-    model_context, model_gaps, model_identity = {}, (), None
-    if behavior_core is not None:
-        model_context, model_gaps, model_identity = load_model(
-            scope, operations, core=behavior_core, max_bytes=settings.max_behavior_artifact_bytes,
-            limit=settings.max_context_entries)
-    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights,
-                        operations=operations, model_context=model_context)
-    ranked = rank_units(units)
-    hunted, cutoff_gaps = select_hunts(ranked, settings.hunt_max_units)
+    candidates = rank_hunt_candidates(scope, settings, collection, behavior_core=behavior_core)
+    ranked, model_identity = candidates.ranked, candidates.model_identity
+    if hunt_selection is not None:
+        hunted, cutoff_gaps, hunt_areas, hunt_gaps = hunt_selection.select(ranked, settings.hunt_max_units)
+    else:
+        hunted, cutoff_gaps = select_hunts(ranked, settings.hunt_max_units)
+        hunt_areas = {}
+        hunt_gaps = {gap.scope: CUTOFF_REASON for gap in cutoff_gaps}
     for item in hunted:
-        packages.extend(assembler.hunts(item))
+        packages.extend(assembler.hunts(
+            item, hunt_selection.campaign(item.unit, hunt_areas[item.unit.key]) if hunt_selection is not None else None))
     lane_b = audit_hunts(hunted, packages)
     packages.sort(key=lambda package: package.package_id)
     if len({package.package_id for package in packages}) != len(packages):
@@ -2076,8 +2121,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     scope.verify()
 
     # A missing graph index is already the scope's ``code_graph`` producer gap (review/scope.py).
-    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps,
-                        *operation_gaps, *model_gaps))
+    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps, *candidates.gaps))
     hunted_keys = {item.unit.key for item in hunted}
     unit_packages: dict[str, list[str]] = defaultdict(list)
     for package in packages:
@@ -2118,7 +2162,9 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "units": [{"unit_key": item.unit.key, **item.rank_record(), "hunted": item.unit.key in hunted_keys,
                    "source_ids": list(item.unit.source_ids), "coverage_scope": "operation" if item.unit.operation else "files",
                    "operation": item.unit.operation,
-                   "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ()))}
+                   "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ())),
+                   # The hunting campaign plan's area for a hunted unit and the named reason an unhunted one was left out.
+                   "hunt_area": hunt_areas.get(item.unit.key), "hunt_gap": hunt_gaps.get(item.unit.key)}
                   for item in ranked],
         "behavior_model": model_identity,
         "gaps": [gap.record() for gap in gaps],
@@ -2139,7 +2185,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
     document["content_sha256"] = sha256_hex(document)
     return Assembly(tuple(packages), document, gaps,
-                    tuple(assembler.unit_contexts[key] for key in sorted(assembler.unit_contexts)))
+                    tuple(assembler.unit_contexts[key] for key in sorted(assembler.unit_contexts)),
+                    dict(sorted(hunt_gaps.items())), dict(sorted(hunt_areas.items())))
 
 
 def _reference_weaknesses(scope: AcceptedScope) -> dict[str, tuple[str | None, str | None]]:
