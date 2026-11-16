@@ -274,10 +274,10 @@ def test_leads_of_one_site_merge_their_neighborhoods_into_the_shared_package(gra
     entries = {(entry["id"], entry["role"]) for entry in _graph_entries(document)}
     assert {(ids["path_bridged"], "path"), (ids["sink_multiply"], "sink"), (ids["guard_multiply"], "guard"),
             (ids["range_multiply"], "range"), (ids["entry_n"], "entry_point")} <= entries
-    # The broken correlation may appear as a flow the call-depth side touches, never as the package's path.
-    assert (ids["path_broken"], "path") not in entries
     neighborhood = document["neighborhood"]
-    assert neighborhood["bound"]["kind"] == "dataflow_path" and ids["path_bridged"] in neighborhood["bound"]["paths"]
+    # Flow rows carry the "path" role, so the broken correlation may be listed as a flow the call-depth side
+    # touches; it never bounds the package or its slice. Only the verified correlation does.
+    assert neighborhood["bound"]["kind"] == "dataflow_path" and neighborhood["bound"]["paths"] == [ids["path_bridged"]]
     assert {ids["sink_strcpy"], ids["sink_multiply"]} <= {row["ref"] for row in neighborhood["sinks"]}
     assert {ids["guard_strcpy"], ids["guard_multiply"]} <= {row["ref"] for row in neighborhood["guards"]}
     assert neighborhood["slice"] is not None and neighborhood["slice"]["paths"] == sorted(neighborhood["bound"]["paths"])
