@@ -3479,6 +3479,14 @@
       "path": "scripts/README.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/review-protocol-v3.md",
+      "reason": "Decision record for the two-intake, one-review redesign decided 2026-11-16 from runs 0005 and 0006; describes the target state while review-protocol-v2 describes the code as it runs.",
+      "subsystem": "review inference and guidance"
     }
   ],
   "schema": "appsec-review/docs-ledger/1",

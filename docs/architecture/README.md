@@ -60,6 +60,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [Review package and finding-lead contract](review-package-contract.md) | review inference and guidance | current |
 | [Review prioritization](review-prioritization.md) | review inference and guidance | current |
 | [Review protocol v2: the model-facing layer](review-protocol-v2.md) | review inference and guidance | current |
+| [Review protocol v3: two intakes, one review](review-protocol-v3.md) | review inference and guidance | current |
 | [Runtime interchange](runtime-interchange.md) | runtime interchange | current |
 | [Scanners and evidence collection](scanners-and-evidence-collection.md) | scanners and evidence collection | current |
 | [Security tag taxonomy](security-tag-taxonomy.md) | review inference and guidance | current |

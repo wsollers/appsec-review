@@ -57,6 +57,7 @@ Relevant bounded procedures and design references:
 - [`architecture/seeded-neighborhoods.md`](architecture/seeded-neighborhoods.md) — seeded neighborhoods for the Clang AST/IR, Clang-Tidy/Static Analyzer and CPG producers: shared seeding module, card `producers`, flow, diagnostics and symbol exposure.
 - [`architecture/seeded-codeql-neighborhoods.md`](architecture/seeded-codeql-neighborhoods.md) — seeded, bounded-depth CodeQL neighborhoods around findings, database cards and their MCP tools.
 - [`architecture/dataflow-bounded-slices.md`](architecture/dataflow-bounded-slices.md) — lead packages bounded by correlated dataflow paths; pluggable source-slice strategies and multi-language function spans (`package-slice/2`).
+- [`architecture/review-protocol-v3.md`](architecture/review-protocol-v3.md) — decided target state: scanner observations and model hunting as two intakes of one analyse-verify-decide review; evidence from runs 2026-11-15-0005 and -0006, data contracts, bounds, migration steps M1 to M6 and the open questions.
 - [`operations/code-graph-index.md`](operations/code-graph-index.md) — `job_code_graph_index` inputs, units, shards, resume and verification.
 - [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — preserved SVF design and implementation record; current behavior and accounting limits are in the code-intelligence view and canonical job page.
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.
