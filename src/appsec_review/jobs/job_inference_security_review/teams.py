@@ -1274,25 +1274,30 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
         # The blind verifier\'s request is built here and only here: the claim\'s identity fields and the package.
         verifier_input = {"claim": _claim_view(claim, statement=False, labels=added, names=ctx.entity_name),
                           "package": document}
-        control = _cell(ctx, work, routing, role=Role.BLUE_TEAM_REFUTER, persona=group["persona"],
-                        task=BlueTask.CONTROL.value, kind="blue", claim=claim, view=claim_view,
-                        task_input={**blue_input, "task": BlueTask.CONTROL.value})
-        reach = _cell(ctx, work, routing, role=Role.BLUE_TEAM_REFUTER, persona=group["persona"],
+        # The blue refuter is opt-in (review protocol v3, D8): with ``teams.blue_per_team`` 0 no blue cell is built
+        # and the verifier alone answers the claim; the judge, when enabled, then sees no blue side.
+        blues: tuple[_Cell, ...] = ()
+        if teams.blue_per_team > 0:
+            blues = (
+                _cell(ctx, work, routing, role=Role.BLUE_TEAM_REFUTER, persona=group["persona"],
+                      task=BlueTask.CONTROL.value, kind="blue", claim=claim, view=claim_view,
+                      task_input={**blue_input, "task": BlueTask.CONTROL.value}),
+                _cell(ctx, work, routing, role=Role.BLUE_TEAM_REFUTER, persona=group["persona"],
                       task=BlueTask.REACHABILITY.value, kind="blue", claim=claim, view=claim_view,
-                      task_input={**blue_input, "task": BlueTask.REACHABILITY.value})
+                      task_input={**blue_input, "task": BlueTask.REACHABILITY.value}),
+            )
         verifier = _cell(ctx, work, routing, role=Role.INDEPENDENT_VERIFIER, persona=group["persona"],
                          task=VERIFIER_TASK, kind="verifier", claim=claim, view=claim_view,
                          task_input=verifier_input)
-        reviews.append((group, control, reach, verifier))
+        reviews.append((group, blues, verifier))
     workers = max(1, teams.blue_per_team + teams.verifier_per_team)
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="review") as pool:
         futures = []
-        for group, control, reach, verifier in reviews:
+        for group, blues, verifier in reviews:
             claim_id = group["claim"].claim_id
-            futures.append(pool.submit(_run, ctx, control, _validator(
-                ctx, Role.BLUE_TEAM_REFUTER, claim_id=claim_id, task=BlueTask.CONTROL.value)))
-            futures.append(pool.submit(_run, ctx, reach, _validator(
-                ctx, Role.BLUE_TEAM_REFUTER, claim_id=claim_id, task=BlueTask.REACHABILITY.value)))
+            for blue in blues:
+                futures.append(pool.submit(_run, ctx, blue, _validator(
+                    ctx, Role.BLUE_TEAM_REFUTER, claim_id=claim_id, task=blue.spec.task)))
             futures.append(pool.submit(_run, ctx, verifier, _validator(
                 ctx, Role.INDEPENDENT_VERIFIER, claim_id=claim_id), capture=True))
         for future in futures:
@@ -1300,8 +1305,8 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
     judges = _plan_judges(ctx, work, routing, reviews, result)
     _run_judges(ctx, judges)
     warrant_scope = _warrant_scope(work) if _warrants_enabled(ctx) else None
-    for group, control, reach, verifier in reviews:
-        _review(ctx, group, (control, reach), verifier, result, scope=warrant_scope)
+    for group, blues, verifier in reviews:
+        _review(ctx, group, blues, verifier, result, scope=warrant_scope)
     for plan in judges:
         _judged(ctx, plan, result)
 
@@ -1313,7 +1318,7 @@ class _JudgePlan:
     group: Mapping[str, Any]
     cell: _Cell
     assignment: dict[str, str]
-    blues: tuple[_Cell, _Cell]
+    blues: tuple[_Cell, ...]
     markers: tuple[str, ...]
     index: int
 
@@ -1334,7 +1339,7 @@ def _blindness_markers(ctx: ReviewContext, actors: Sequence[_Cell], judge: Model
 
 
 def _plan_judges(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any],
-                 reviews: Sequence[tuple[dict[str, Any], _Cell, _Cell, _Cell]], result: TeamResult
+                 reviews: Sequence[tuple[dict[str, Any], tuple[_Cell, ...], _Cell]], result: TeamResult
                  ) -> list[_JudgePlan]:
     """Judge cells for the admitted claims ``roles.adjudication_judge.when`` selects; the rest are accounted."""
     settings = ctx.settings.judge
@@ -1342,19 +1347,19 @@ def _plan_judges(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, An
         return []
     plans: list[_JudgePlan] = []
     profile = ctx.profile(Role.ADJUDICATION_JUDGE)
-    for group, control, reach, _verifier in reviews:
+    for group, blues, _verifier in reviews:
         claim: Claim = group["claim"]
         red = red_side((proposal, red_result) for _cell_, proposal, red_result, _seen_ in group["items"])
         blue, dispositions = blue_side(
             cell.outcome.result if cell.record is not None and cell.record.status is CellStatus.SUCCEEDED else None
-            for cell in (control, reach))
+            for cell in blues)
         if not selected(settings.when, red_affirmed=red_affirms(red), blue_dispositions=dispositions):
             result.judging[claim.claim_id] = {
                 "selected": False,
                 "reason": "red_not_affirmed" if not red_affirms(red) else "no_disagreement"}
             continue
         claim_view, added = ctx.package_view(work).with_extra(claim.affected_entities)
-        actors = (*group["cells"], control, reach)
+        actors = (*group["cells"], *blues)
         markers = _blindness_markers(ctx, actors, profile)
         entries = []
         for index in range(settings.judges_per_claim):
@@ -1369,7 +1374,7 @@ def _plan_judges(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, An
             cell = _cell(ctx, work, routing, role=Role.ADJUDICATION_JUDGE, persona=JUDGE_PERSONA, task=JUDGE_TASK,
                          kind="judge", claim=claim, strategy=f"judge-{index + 1}", view=shown.view,
                          task_input=task_input, side_map=assignment, extra_entities=shown.rows)
-            plans.append(_JudgePlan(group, cell, assignment, (control, reach), markers, index))
+            plans.append(_JudgePlan(group, cell, assignment, blues, markers, index))
             entries.append(cell.cell_id)
         result.judging[claim.claim_id] = {"selected": True, "cells": entries}
     return plans
@@ -1654,7 +1659,7 @@ def _actor(cell: _Cell) -> ActorRecord:
                        model=cell.spec.model, conversation_id=cell.cell_id)
 
 
-def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _Cell], verifier: _Cell,
+def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, ...], verifier: _Cell,
             result: TeamResult, *, scope: WarrantScope | None = None) -> None:
     claim: Claim = group["claim"]
     markers = list(group["narratives"])

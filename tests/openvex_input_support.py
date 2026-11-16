@@ -15,9 +15,12 @@ from typing import Any
 
 import pytest
 
-from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
+from appsec_review.config.inference_review import (
+    DecisionAuditSettings, parse_inference_review_settings, semantic_settings_sha256,
+)
 from appsec_review.interchange import HANDOFF_SCHEMA
 from appsec_review.jobs.accepted_review import VerifiedReview
+from appsec_review.review.decision_audit.reader import AcceptedAudit
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA
 from appsec_review.jobs.job_final_publication_gate import classify as classifier
 from appsec_review.jobs.job_final_publication_gate.attachments import capability
@@ -183,10 +186,14 @@ class AcceptedInputDisk:
         self.publish_gate()
         self.calls: list[str] = []
 
-        def verify_review(run_root: Path, schemas: Any, *, max_packages: int) -> VerifiedReview:
+        def verify_review(run_root: Path, schemas: Any, *, max_packages: int,
+                          include_decision_audit: bool = False) -> VerifiedReview:
             assert run_root == self.root
             assert schemas.directory == ROOT / "docs" / "schemas" / "inference-security-review"
             assert max_packages == self.settings.max_packages
+            # The export must classify from the same document as the gate, which includes the decision-audit
+            # summary; this fixture's gate was classified without audit records, so the audit is "legacy_unrecorded".
+            assert include_decision_audit is True
             self.calls.append("load_accepted_review")
             document = deepcopy(self.authority)
             for name in ("capabilities", "attachments", "status", "package_counts", "buckets", "limitations"):
@@ -195,7 +202,9 @@ class AcceptedInputDisk:
             document["packages"] = [{key: value for key, value in row.items()
                                      if key not in {"bucket", "withheld_reasons"}}
                                     for row in document["packages"]]
-            return VerifiedReview(document)
+            audit = AcceptedAudit(None, None, (), (), (), DecisionAuditSettings(enabled=False),
+                                  document["inputs"]["job_handoff"]["sha256"], "legacy_unrecorded")
+            return VerifiedReview(document, decision_audit=audit)
 
         monkeypatch.setattr(inputs, "load_accepted_review", verify_review)
         if acquisition is not None:

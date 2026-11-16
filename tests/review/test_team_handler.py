@@ -775,6 +775,20 @@ def test_red_citations_that_disagree_with_re_resolution_are_evidence_gaps() -> N
     assert _citation_mismatch(ctx, relation, citation(locator=elsewhere)).startswith("source-line locator")
 
 
+def test_without_blue_refuters_only_the_verifier_answers_a_claim(prepared) -> None:
+    """Review protocol v3 D8: with teams.blue_per_team = 0 no blue cell is built; run 2026-11-16-0003 still ran 38
+    blue cells under that setting because the cells were created per claim regardless of the pool size."""
+    teams = replace(prepared.settings.teams, red_per_team=1, blue_per_team=0)
+    no_judge = MappingProxyType({**prepared.settings.roles, Role.ADJUDICATION_JUDGE: replace(
+        prepared.settings.roles[Role.ADJUDICATION_JUDGE], enabled=False)})
+    result = run_team(prepared.context(prepared.infer, teams=teams, roles=no_judge),
+                      prepared.work("lead", "sast_critical"), launch=True)
+    roles = [cell.role for cell in result.cells]
+    assert Role.BLUE_TEAM_REFUTER not in roles
+    assert Role.RED_TEAM_ANALYST in roles and Role.INDEPENDENT_VERIFIER in roles
+    assert result.claims                                        # the claim was proposed and verified without a refuter
+
+
 def test_lead_accounting_and_named_gaps_reach_the_lane(prepared) -> None:
     def enrich(request, result):
         if request.task_input["task"] != "lead_red_stack" or not result["claims"]:

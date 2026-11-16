@@ -585,8 +585,12 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
             schemas = SchemaSet(Path(repository_root) / "docs" / "schemas" / "final-report")
             schemas.validate("final-publication-gate", gate)
         reader.check_deadline()
+        # The gate classifies the verified review together with its protected decision-audit summary
+        # (``classify.decision_audit_summary``); the projection recomputed here must start from the same document, or
+        # the gate's audit limitations (``decision_audit_partial``, ``decision_audit_scope``) never reproduce. Run
+        # 2026-11-16-0003 failed its last job on exactly that.
         authoritative = load_accepted_review(reader.root, SchemaSet(Path(repository_root) / SCHEMA_DIRECTORY),
-                                             max_packages=settings.max_packages)
+                                             max_packages=settings.max_packages, include_decision_audit=True)
         reader.check_deadline()
         certified_bindings = {_ref(raw) for raw in gate["bindings"]}
         _require({_ref(raw) for raw in authoritative.document["bindings"]} | {config_ref} <= certified_bindings,
@@ -594,6 +598,8 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
         # Completion is a pre-gate certified snapshot, never rediscovered from optional latest heads.
         document = {**authoritative.document, "capabilities": gate["capabilities"],
                     "attachments": gate["attachments"], "bindings": gate["bindings"]}
+        document["_decision_audit"] = classifier.decision_audit_summary(
+            authoritative.decision_audit, document["inputs"]["job_handoff"]["sha256"])
         expected = classifier.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, document, classifier.classify(document))
         _require(canonical_bytes(gate) == canonical_bytes(expected),
                  "accepted gate does not exactly equal its authoritative classifier projection", Reason.INPUT_STALE)

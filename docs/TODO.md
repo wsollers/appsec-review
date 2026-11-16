@@ -210,6 +210,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5035 | [Make the judge an escalation for disputed high and critical findings and the blue refuter opt-in](#t-5035-make-the-judge-an-escalation-for-disputed-high-and-critical-findings-and-the-blue-refuter-opt-in) | review | open |
 | T-5036 | [Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them](#t-5036-retain-a-bounded-redacted-copy-of-an-unparseable-model-reply-and-find-why-blue-cells-produce-them) | review | open |
 | T-5037 | [Route a lead package to a specialist persona through the rule-to-CWE crosswalk when its leads carry no CWE](#t-5037-route-a-lead-package-to-a-specialist-persona-through-the-rule-to-cwe-crosswalk-when-its-leads-carry-no-cwe) | review | open |
+| T-5038 | [Find why a shared feed snapshot manifest no longer verifies after a run and keep replays of accepted reviews possible](#t-5038-find-why-a-shared-feed-snapshot-manifest-no-longer-verifies-after-a-run-and-keep-replays-of-accepted-reviews-possible) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3058,6 +3059,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** derive the package's CWE set from every menu lead's `rule_cwe` plus the crosswalk mapping of its `(scanner, rule_id)`, pass the full set to `route_persona` (owner by the most specific cover over all of them, not the first), record the basis, and keep the generalist with a routing gap only when no CWE and no tag matches; a unit test routes a CodeQL use-after-free lead without `rule_cwe` to `memory_safety_native`.
 - **Done when:** the routing test passes and the next cpp smoke's lead lane records no `no_persona_coverage_matched` gap for a package whose leads the crosswalk can map.
 - **Refs:** `src/appsec_review/guidance/routing.py` (`route_persona`, `owner`), `src/appsec_review/jobs/job_inference_security_review/teams.py` (`lead_cwes`), `src/appsec_review/jobs/job_inference_security_review/job.py` (`_taxonomy`, `crosswalk_tags`), run `2026-11-16-0002` lead ledger (host-local), T-5023.
+
+### T-5038 — Find why a shared feed snapshot manifest no longer verifies after a run and keep replays of accepted reviews possible
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Replaying `load_accepted_review` offline against run `2026-11-16-0003` (to diagnose the OpenVEX failure) failed in `verify_feed_receipt` with `shared artifact integrity mismatch: snapshots/sha256-9e3c02d8eb3c8774ece63b5c/manifest.json`, although the live OpenVEX step verified the same review minutes earlier. Either a shared feed snapshot manifest was rewritten in place after the run (the nightly `third_party_data_sync` failed at 19:00 UTC on 2026-11-15 and may have left a partial write), or the receipt binds a path whose bytes legitimately move. Either way an accepted review stopped being re-verifiable from its own run, which every post-run reader, including the operator's diagnosis, depends on.
+- **Scope:** locate the snapshot (`runs/metadata` or the shared feed store), compare its current bytes and mtime with the receipt the run bound, and the sync job's write pattern (write-then-rename into a content-addressed path versus in-place update); make snapshot manifests immutable once a run has bound them (content-addressed, never rewritten), and add a unit test that a receipt-bound snapshot survives a later sync. Record what changed the file.
+- **Done when:** `load_accepted_review` on a finished run verifies again after a later `third_party_data_sync`, with a test for the immutability rule.
+- **Refs:** `src/appsec_review/storage/feed_provenance.py` (`verify_feed_receipt`, `_verify_snapshot`), `src/appsec_review/storage/shared.py` (`verify_reference`), `src/appsec_review/jobs/job_third_party_data_sync/`, run `2026-11-16-0003` (host-local), T-5001.
 
 ## Legacy backlog
 
