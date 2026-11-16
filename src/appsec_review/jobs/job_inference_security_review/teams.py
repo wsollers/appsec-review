@@ -182,6 +182,10 @@ class ReviewContext:
     # Lane A's accepted (R5/R6) seeds, supplied to lane B so hunters do not re-propose lead claims
     # and can hunt variants of confirmed ones; ``None`` when no other lane's results were supplied.
     cross_lane_seeds: tuple[Mapping[str, Any], ...] | None = None
+    # Accepted native link facts for derived chain continuity (``chains._native_facts``): injected, or
+    # loaded once from the run when ``attack_chains.derived_continuity`` names ``same_native_executable``.
+    native_continuity: Any = None
+    _native_continuity_loaded: bool = False
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
     _symbols: dict[str, str | None] = field(default_factory=dict)
     _path_symbols: dict[str, tuple[tuple[int, int | None, str], ...]] = field(default_factory=dict)

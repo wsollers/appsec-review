@@ -174,6 +174,39 @@ class AcceptedBuilds:
             self._rows[identity] = [row for row in document.get("rows", ()) if isinstance(row, Mapping)]
         return self._rows[identity]
 
+    def native_link_facts(self) -> list[dict[str, Any]]:
+        """Per accepted native unit, its bound compile-database rows and link-database rows.
+
+        Used by the attack-chain ``same_native_executable`` derivation (``review/native_continuity.py``).
+        A unit without a bound link database is skipped (nothing links without it); an empty list means the
+        run has no accepted native build. A bound file that changed is an ``IntegrityError``.
+        """
+        try:
+            accepted = self.accepted
+        except MissingBuild:
+            return []
+        receipts = sorted((item for item in accepted.get("receipts", ()) if isinstance(item, Mapping)
+                           and item.get("family") == "native"
+                           and item.get("terminal_status") in ACCEPTED_BUILD_STATUSES),
+                          key=lambda item: str(item["build_unit_id"]))
+        result = []
+        for receipt in receipts:
+            link_ref = receipt.get("link_database")
+            if not isinstance(link_ref, Mapping):
+                continue
+            rows = self._compile_rows(receipt)
+            link_path = self._bound(link_ref, "link database")
+            link_rows = json.loads(link_path.read_text(encoding="utf-8"))
+            if not isinstance(link_rows, list):
+                raise IntegrityError("accepted build link database is not a list of link commands")
+            compile_ref = receipt["protected_compile_commands"]
+            result.append({"build_unit_id": str(receipt["build_unit_id"]), "compile_rows": rows,
+                           "link_rows": [row for row in link_rows if isinstance(row, Mapping)],
+                           "protected_compile_commands": {"path": str(compile_ref["path"]),
+                                                          "sha256": str(compile_ref["sha256"])},
+                           "link_database": {"path": str(link_ref["path"]), "sha256": str(link_ref["sha256"])}})
+        return result
+
     def locate(self, source_path: str) -> Located:
         """The native build unit and compiler invocation that cover ``source_path`` (target-relative)."""
         language = language_of(source_path)

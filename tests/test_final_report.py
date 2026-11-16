@@ -229,12 +229,15 @@ def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: C
             assert {"technical_severity", "exploitability_confidence", "environmental_business_impact",
                     "remediation_priority"} <= set(score)
             assert score["technical_severity"]["rating"] in {"low", "medium", "high", "critical", None}
-    assert report["attack_chains"] == {"status": "none_available", "reason": report["attack_chains"]["reason"], "items": []}
+    assert report["attack_chains"] == {"status": "none_available", "reason": report["attack_chains"]["reason"],
+                                       "items": [], "status_counts": report["attack_chains"]["status_counts"]}
+    assert report["attack_chains"]["status_counts"]["admitted"] == 0
     assert report["poc_outcomes"]["status"] == "none_available" and report["poc_outcomes"]["items"] == []
     chains = gate["capabilities"]["attack_chains"]
     assert chains["enabled"] and chains["disposition"] == "GAP" and chains["gap_count"] > 0
     assert chains["summary"] == review_handoff(chain)["attack_chain_manifest"]
-    assert report["attack_chains"]["reason"] == chains["reason"]
+    assert report["attack_chains"]["reason"].endswith(chains["reason"])
+    assert report["attack_chains"]["status_counts"]["admitted"] == chains["status_counts"]["admitted"]
     assert "frozen configuration" in report["poc_outcomes"]["reason"]
     assert report["renderers"]["pdf"]["state"] == "not_rendered"
     assert report["provenance"]["gate_handoff"]["sha256"] == chain.pointer_sha(GATE)

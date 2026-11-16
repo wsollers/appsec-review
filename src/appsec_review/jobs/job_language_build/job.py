@@ -133,9 +133,18 @@ def _safe_artifact(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, 
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_accepted_language_build(run_root: Path, *, for_execution: bool = False) -> Mapping[str, Any]:
+def load_accepted_language_build(run_root: Path, *, for_execution: bool = False,
+                                 required: bool = True) -> Mapping[str, Any]:
+    """The accepted language-build receipt set.
+
+    ``required=False`` is for a consumer whose contract declares ``job_language_build`` as an optional
+    input (the attack-chain derivation): an unsupplied build is then an ordinary ``ValueError`` the caller
+    treats as "no accepted build", not a recorded input-contract violation of the reading unit.
+    """
     from appsec_review.runtime.consume import accepted_upstream
-    accepted = accepted_upstream(run_root, "job_language_build")
+    accepted = accepted_upstream(run_root, "job_language_build", required=required)
+    if accepted is None:
+        raise ValueError("accepted job_language_build handoff is required")
     handoff = accepted.handoff
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None

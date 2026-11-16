@@ -3152,6 +3152,12 @@ max_evidence_per_obligation = 8
 max_result_bytes = 65536
 # Only commissioned exact producer identities can establish structured continuity, never model prose.
 continuity_producers = []
+# Deterministic continuity derived from the accepted native build (attack-chain-continuity/2). With
+# same_native_executable, an edge whose two source files compile into objects linked into the same executable or
+# shared library has identity and privilege continuity SATISFIED from the bound compile and link databases; trust
+# boundary, artifact/deployment and temporal stay unresolved (no deployment or zone facts exist). Never contradicts.
+# An empty list disables the derivation; without any continuity source the composer cell is not launched.
+derived_continuity = ["same_native_executable"]
 
 # Lead severity triage (docs/operations/lead-severity-triage.md). A lead whose scanner reported no severity gets
 # an audited assessed severity before package assembly: first the deterministic table below

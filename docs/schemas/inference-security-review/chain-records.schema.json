@@ -49,7 +49,49 @@
         "shard_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
         "content_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
         "outcome": {"$ref": "#/$defs/outcome"},
-        "reason": {"type": "string", "minLength": 1, "maxLength": 256}
+        "reason": {"type": "string", "minLength": 1, "maxLength": 256},
+        "derivation": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/derivation"}]}
+      }
+    },
+    "compiled_object": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_path", "source_sha256", "object_path", "object_sha256", "argv_sha256"],
+      "properties": {
+        "source_path": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "source_sha256": {"oneOf": [{"type": "null"}, {"$ref": "common.schema.json#/$defs/sha256"}]},
+        "object_path": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "object_sha256": {"oneOf": [{"type": "null"}, {"$ref": "common.schema.json#/$defs/sha256"}]},
+        "argv_sha256": {"$ref": "common.schema.json#/$defs/sha256"}
+      }
+    },
+    "link_step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["output_path", "command_sha256", "left_via", "right_via"],
+      "properties": {
+        "output_path": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "command_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "left_via": {"type": ["string", "null"], "maxLength": 2000},
+        "right_via": {"type": ["string", "null"], "maxLength": 2000}
+      }
+    },
+    "derivation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policy", "basis", "build_unit_id", "bound_files", "left", "right", "link"],
+      "properties": {
+        "policy": {"const": "same_native_executable"},
+        "basis": {"const": "accepted_native_build_facts_not_model_prose"},
+        "build_unit_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "bound_files": {
+          "type": "object", "additionalProperties": false,
+          "required": ["protected_compile_commands", "link_database"],
+          "properties": {
+            "protected_compile_commands": {"$ref": "#/$defs/artifact"},
+            "link_database": {"$ref": "#/$defs/artifact"}
+          }
+        },
+        "left": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/compiled_object"}]},
+        "right": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/compiled_object"}]},
+        "link": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/link_step"}]}
       }
     },
     "obligation": {
@@ -108,7 +150,7 @@
         "limitations": {"$ref": "#/$defs/texts"},
         "challenge_ids": {"type": "array", "maxItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/challenge_id"}},
         "artifact": {"$ref": "#/$defs/artifact"},
-        "policy": {"const": "attack-chain-continuity/1"}
+        "policy": {"const": "attack-chain-continuity/2"}
       }
     }
   }

@@ -282,6 +282,20 @@ native relation includes accepted index/shard/relation identity, shard hash, nat
 outcome and reason. Default `continuity_producers=[]` means none of this authorizes a model,
 target document or source-only producer to invent deployed identity/privilege/time facts.
 
+Derived continuity rows (`review/native_continuity.py`, policy `attack-chain-continuity/2`) use the
+same evidence record with `index` `derived:same_native_executable`, `shard_id` the build unit id,
+`shard_sha256` the bound link database's hash, `content_sha256` the hash of the derivation, and a
+`derivation` object naming the policy, the basis (`accepted_native_build_facts_not_model_prose`),
+the build unit, the bound `protected_compile_commands` and `link_database` files with their hashes,
+the two compiled objects (source and object paths and hashes, compile argv hash) and the final link
+(output path, command hash, the static library each side passed through). Identity and privilege
+are `satisfied` only when both sides link into one executable or shared library; otherwise they are
+`unresolved` with the reason (`entity_has_no_accepted_source_location`,
+`source_not_compiled_by_accepted_native_build`, `objects_not_linked_into_one_accepted_executable`).
+Trust boundary, artifact/deployment and temporal rows are always `unresolved` with a reason naming
+the missing deployment, zone or timing facts. A derived row is never `contradicted`. Index evidence
+carries `derivation: null`.
+
 ## 4. Physical indexes, shards and producer ownership
 
 The 19 logical retrieval indexes are defined by

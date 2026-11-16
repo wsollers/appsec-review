@@ -1749,7 +1749,8 @@ This tree is the original proposal. The implemented layout differs: the job pack
 `references`, `scope`, `ship_block`, `teams`, `units` and the `scoring/` package
 (`application_matrix_v3`, `cwe_impact`, `evidence_source`, `factors`, `interface`, `risk_model`);
 `review/attack_chains.py` and job-local `chains.py` now implement continuity policy and pre-seal
-composition/challenges; `jobs/accepted_review.py` is the shared reader and downstream
+composition/challenges, with `review/native_continuity.py` deriving identity and privilege
+continuity from the accepted native build's compile and link databases (`same_native_executable`); `jobs/accepted_review.py` is the shared reader and downstream
 `job_remediation_*` / `job_dossier_publication` packages now exist. `review/rounds.py`,
 `review/poc/` and the CVSS/SSVC providers do not exist. Guidance composition lives in
 `src/appsec_review/guidance/`.

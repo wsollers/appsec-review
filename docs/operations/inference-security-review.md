@@ -36,7 +36,7 @@ Default `settings.attack_chains` bounds are 4 links, 100 expansions, 8 candidate
 `settings.rounds.max_attack_chains` is 50. Frontiers/caps and unsuccessful challenges retain gaps.
 The five continuity dimensions are identity, privilege, trust boundary, artifact/deployment and
 temporal. Refutation must be independent; a required weakest-link verifier must also be
-model-distinct. Deterministic `attack-chain-continuity/1` evaluates native values, not model stance.
+model-distinct. Deterministic `attack-chain-continuity/2` evaluates native values, not model stance.
 Each native edge resolution separately bounds and charges every physical `trace`/`find` query;
 exhaustion leaves all its obligations unresolved. Artifact/configuration/deployment identities
 must resolve and connect; conflicting artifact/temporal configuration identities contradict
@@ -44,9 +44,28 @@ continuity. Evidence caps cannot turn a retained prefix into proof of omitted ro
 
 `continuity_producers=[]` by default: no native deployment-continuity exporter is commissioned.
 Source/build facts and seed prose therefore cannot manufacture a confirmed deployed chain.
+`derived_continuity = ["same_native_executable"]` adds the one deterministic source that exists
+today: when both entities of an edge resolve to source files that the accepted native build
+compiles into objects linked into the same executable or shared library (a static library is
+followed one hop), identity and privilege continuity are SATISFIED with reason
+`same_native_executable`, and the evidence row carries the derivation (build unit, bound compile
+and link databases with their hashes, the two compiled objects and the final link command). Trust
+boundary, artifact/deployment and temporal stay unresolved from this source (no deployment, zone
+or timing facts exist) and it never contradicts: two different binaries do not prove separation.
+The derivation runs inside the stage's edge resolution, so the composer and every challenger see
+the same rows; a challenger cannot cite or drop them. Such a chain reaches `qualified_supported`
+with the three unresolved dimensions as named limitations once its independent refuter succeeds.
+Without any continuity source (no producer and derivation disabled or no accepted native build),
+the composer cell is not launched and the manifest names the gap. Admitted pairs are ordered
+seed hints first, then pairs whose predicates plausibly chain (`info_disclosure` or
+`out_of_bounds_read` into `memory_corruption` or `use_after_free`; `path_traversal`,
+`command_injection`, `authn_bypass` and `authz_bypass` into anything), then the rest.
 Supported components cap the chain at `qualified_supported`; missing challenges/no meaningful
 counted continuity gives `insufficient_evidence`, contradiction gives `refuted`. A chain cannot
-upgrade its component findings or sum their severities. See
+upgrade its component findings or sum their severities. The final report lists only confirmed and
+qualified-supported chains, and its `attack_chains.reason` and `status_counts` (also on the gate's
+`capabilities.attack_chains.status_counts`) say how many candidates were proposed, admitted,
+refuted or insufficient, so "none available" is explained. See
 [`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py) and the
 [completion contract](../architecture/evidence-completion-and-remediation.md).
 

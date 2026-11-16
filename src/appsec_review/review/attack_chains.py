@@ -1,8 +1,9 @@
 """Evidence-qualified chains, independent challenges and deterministic weakest-link policy.
 
-An accepted citation is not automatically continuity proof. Counted facts must come from an
-explicitly commissioned deterministic index producer and satisfy the closed continuity fact
-contract below. Source prose, seed edges and model stances never satisfy that contract.
+An accepted citation is not automatically continuity proof. Counted facts come from an explicitly
+commissioned deterministic index producer satisfying the closed continuity fact contract below, or
+from a configured deterministic derivation over accepted build facts (``native_continuity``,
+policy ``attack-chain-continuity/2``). Source prose, seed edges and model stances never count.
 """
 from __future__ import annotations
 
@@ -17,11 +18,25 @@ from appsec_review.review.models import (
     ChainStatus, ClaimState, ContinuityDimension as Dimension, ContinuityOutcome as Outcome, IntegrityError,
 )
 from appsec_review.retrieval.model import LogicalIdentity
+from appsec_review.review.native_continuity import (
+    BASIS as DERIVATION_BASIS, Derivation, REASONS_UNRESOLVED, SAME_NATIVE_EXECUTABLE,
+)
 from appsec_review.storage import canonical_json
 
 CHAIN_SCHEMA = "appsec-review/attack-chain/1"
 FACT_SCHEMA = "appsec-review/chain-continuity-fact/1"
-POLICY = "attack-chain-continuity/1"
+POLICY = "attack-chain-continuity/2"
+#: Evidence derived deterministically from accepted build facts carries this index prefix; it is never a
+#: retrieval index, a challenger cannot cite or omit it, and both the composer and every challenge see it.
+DERIVED_INDEX_PREFIX = "derived:"
+_DERIVATION_KEYS = frozenset({"policy", "basis", "build_unit_id", "bound_files", "left", "right", "link"})
+#: Predicate pairs that plausibly chain (left outcome feeds the right step): a leak defeats a mitigation of a
+#: memory-safety defect; file or command control and authentication/authorization bypass feed anything.
+CHAINING_PREDICATES: Mapping[str, frozenset[str] | None] = {
+    "info_disclosure": frozenset({"memory_corruption", "use_after_free"}),
+    "out_of_bounds_read": frozenset({"memory_corruption", "use_after_free"}),
+    "path_traversal": None, "command_injection": None, "authn_bypass": None, "authz_bypass": None,
+}
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _REL = re.compile(r"^rel:[0-9a-f]{64}$")
 _KINDS = {
@@ -98,6 +113,8 @@ class ContinuityEvidence:
     content_sha256: str
     outcome: Outcome
     reason: str
+    # Present only on evidence derived from accepted build facts: the bound rows the outcome rests on.
+    derivation: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if (not _REL.fullmatch(self.relation_id) or not _SHA.fullmatch(self.shard_sha256)
@@ -106,6 +123,17 @@ class ContinuityEvidence:
             raise ValueError("invalid accepted continuity evidence identity")
         if not isinstance(self.outcome, Outcome):
             raise ValueError("unknown continuity evidence outcome")
+        derived = self.index.startswith(DERIVED_INDEX_PREFIX)
+        if derived != (self.derivation is not None):
+            raise ValueError("derived continuity evidence carries its derivation; index evidence carries none")
+        if self.derivation is not None:
+            if (not isinstance(self.derivation, Mapping) or set(self.derivation) != _DERIVATION_KEYS
+                    or self.derivation["policy"] != SAME_NATIVE_EXECUTABLE
+                    or self.derivation["basis"] != DERIVATION_BASIS
+                    or self.index != DERIVED_INDEX_PREFIX + SAME_NATIVE_EXECUTABLE
+                    or self.outcome is Outcome.CONTRADICTED
+                    or len(canonical_json(dict(self.derivation))) > 16384):
+                raise ValueError("derived continuity evidence must be a bounded same_native_executable derivation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +267,76 @@ class Decision:
 
 def challenge_identity(chain_id: str, kind: str, actor: ActorRecord) -> str:
     return _id("chain_challenge", {"chain_id": chain_id, "kind": kind, "actor": document(actor)})
+
+
+def order_pairs(ids: Sequence[str], predicates: Mapping[str, str],
+                hints: Sequence[Sequence[str]]) -> list[tuple[str, str]]:
+    """Ordered component pairs for the composer: seed-hint pairs, then plausibly chaining predicate pairs,
+    then the remaining lexicographic pairs. Every ordered pair of distinct ids appears exactly once."""
+    known = set(ids)
+    ordered: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(pair: tuple[str, str]) -> None:
+        if pair[0] != pair[1] and pair[0] in known and pair[1] in known and pair not in seen:
+            seen.add(pair)
+            ordered.append(pair)
+
+    for hint in hints:
+        for pair in zip(hint, hint[1:]):
+            add(pair)
+    for left in ids:
+        successors = CHAINING_PREDICATES.get(predicates.get(left, ""), frozenset())
+        for right in ids:
+            if successors is None or predicates.get(right, "") in successors:
+                add((left, right))
+    for left in ids:
+        for right in ids:
+            add((left, right))
+    return ordered
+
+
+def derived_evidence(edge: Edge, derivation: Derivation) -> dict[Dimension, ContinuityEvidence]:
+    """One derived evidence row per dimension for ``same_native_executable`` over ``edge``.
+
+    Identity and privilege are SATISFIED when the derivation established one executable, otherwise
+    UNRESOLVED with the derivation's reason; the other three dimensions are always UNRESOLVED with a reason
+    naming the facts this source lacks. Nothing here is ever CONTRADICTED.
+    """
+    body = json.loads(canonical_json(dict(derivation.document)))
+    content = sha256_hex(body)
+    result: dict[Dimension, ContinuityEvidence] = {}
+    for dimension in Dimension:
+        if dimension in (Dimension.IDENTITY, Dimension.PRIVILEGE):
+            outcome, reason = ((Outcome.SATISFIED, SAME_NATIVE_EXECUTABLE) if derivation.established
+                               else (Outcome.UNRESOLVED, derivation.reason))
+        else:
+            outcome, reason = Outcome.UNRESOLVED, REASONS_UNRESOLVED[dimension.value]
+        relation = "rel:" + sha256_hex({"derivation": SAME_NATIVE_EXECUTABLE, "dimension": dimension.value,
+                                        "output_entity": edge.output_entity, "input_entity": edge.input_entity,
+                                        "build_unit_id": derivation.build_unit_id})
+        result[dimension] = ContinuityEvidence(relation, DERIVED_INDEX_PREFIX + SAME_NATIVE_EXECUTABLE,
+                                               derivation.build_unit_id, derivation.link_database_sha256, content,
+                                               outcome, reason, body)
+    return result
+
+
+def with_derived(edge: Edge, derived: Mapping[Dimension, ContinuityEvidence]) -> Edge:
+    """``edge`` with the derived rows merged into each obligation (canonical order, bounded to 32 rows)."""
+    obligations = []
+    for obligation in edge.obligations:
+        items = {(ref.index, ref.shard_id, ref.relation_id): ref for ref in obligation.evidence}
+        extra = derived.get(obligation.dimension)
+        if extra is not None:
+            items[(extra.index, extra.shard_id, extra.relation_id)] = extra
+        keys = sorted(items)
+        if len(keys) > 32:
+            # Derived rows are kept; accepted index rows beyond the record bound are dropped from the end.
+            kept = [key for key in keys if items[key].derivation is not None]
+            kept += [key for key in keys if items[key].derivation is None][:32 - len(kept)]
+            keys = sorted(kept)
+        obligations.append(Obligation(obligation.dimension, tuple(items[key] for key in keys)))
+    return Edge(edge.from_claim_id, edge.to_claim_id, edge.output_entity, edge.input_entity, tuple(obligations))
 
 
 def independent(actor: ActorRecord, others: Sequence[ActorRecord], *, distinct_model: bool = False) -> bool:
@@ -480,7 +578,7 @@ def resolve_edge(core: Any, edge: Edge, environment: str, *, producers: Sequence
 def edge_from_json(value: Mapping[str, Any]) -> Edge:
     result = Edge(value["from_claim_id"], value["to_claim_id"], value["output_entity"], value["input_entity"],
                   tuple(Obligation(Dimension(item["dimension"]), tuple(ContinuityEvidence(
-                      **{**ref, "outcome": Outcome(ref["outcome"])}) for ref in item["evidence"]))
+                      **{"derivation": None, **ref, "outcome": Outcome(ref["outcome"])}) for ref in item["evidence"]))
                         for item in value["obligations"]))
     if canonical_json(document(result)) != canonical_json(value):
         raise ValueError("noncanonical or unknown edge fields")

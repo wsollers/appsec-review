@@ -165,3 +165,30 @@ def test_role_guidance_states_every_closed_vocabulary_value(role: str) -> None:
     missing = sorted({f"{where}: {value}" for where, values in closed for value in values
                       if re.search(rf"(?<![A-Za-z0-9_]){re.escape(str(value))}(?![A-Za-z0-9_])", text) is None})
     assert missing == []
+
+
+def test_attack_chain_analyst_examples_compose_from_supplied_ids_and_validate() -> None:
+    """Run 2026-11-16-0003's composer spent its whole budget investigating and answered no candidate. The
+    guidance shows composed answers in the real result shape; the chain result has no closed vocabulary of
+    its own, so it is checked here rather than through ``ROLES``."""
+    role = "attack_chain_analyst"
+    good, bad = blocks(role)
+    finals = [item["result"] for item in good if item["action"] == "final"]
+    assert finals and any(result["candidates"] for result in finals)
+    for result in finals:
+        assert SCHEMAS.errors("chain-composer-result", result) == [], result
+        for candidate in result["candidates"]:
+            assert len(candidate["edges"]) == len(candidate["component_claim_ids"]) - 1
+    requests = [request for item in good if item["action"] == "retrieve" for request in item["requests"]]
+    assert requests and all(isinstance(_decide(role, request), Authorized) for request in requests)
+    broken = 0
+    for item in bad:
+        if item["action"] == "final":
+            broken += bool(SCHEMAS.errors("chain-composer-result", item["result"])) or "the " in json.dumps(item["result"])
+        else:
+            broken += all(_decide(role, request).code == "forbidden_parameter" for request in item["requests"])
+    assert broken == len(bad) == 3
+    text = (ROOT / "pipeline" / "prompt-fragments" / "roles" / f"{role}.md").read_text(encoding="utf-8")
+    for value in ("info_disclosure", "out_of_bounds_read", "memory_corruption", "use_after_free", "path_traversal",
+                  "command_injection", "authn_bypass", "authz_bypass", "admitted_pairs", "seed_hints", "candidate_limit"):
+        assert value in text

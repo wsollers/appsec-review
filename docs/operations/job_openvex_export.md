@@ -47,6 +47,12 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_inference_security_review` | `claim_ledger` | `appsec-review/ledger-event/1` | handoff | optional | gap |
 | `job_inference_security_review` | `attack_chains` | `appsec-review/attack-chain-manifest/1` | handoff | optional | gap |
 | `job_inference_security_review` | `scores_and_findings` | `appsec-review/finding-package/2` | handoff | optional | gap |
+| `job_inference_security_review` | `review_audit_metadata` | `appsec-review/review-audit-publication/1` | handoff | when_output_declared | gap |
+| `job_inference_security_review` | `review_decision_audit` | `appsec-review/review-audit-manifest/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_decisions` | `appsec-review/review-decision/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_verification_coverage` | `appsec-review/verification-coverage/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_decision_bases` | `appsec-review/decision-basis/1` | handoff | when_output_declared | not_applicable |
+| `job_inference_security_review` | `review_audit_continuations` | `application/x-ndjson` | handoff | when_output_declared | not_applicable |
 
 ### Published dataset declarations
 
@@ -132,6 +138,36 @@ flowchart LR
   input_schema9["appsec-review/finding-package/2"]
   producer9 --> input9 --> job
   input9 -. schema .-> input_schema9
+  producer10["job_inference_security_review"]
+  input10["review_audit_metadata"]
+  input_schema10["appsec-review/review-audit-publication/1"]
+  producer10 --> input10 --> job
+  input10 -. schema .-> input_schema10
+  producer11["job_inference_security_review"]
+  input11["review_decision_audit"]
+  input_schema11["appsec-review/review-audit-manifest/1"]
+  producer11 --> input11 --> job
+  input11 -. schema .-> input_schema11
+  producer12["job_inference_security_review"]
+  input12["review_decisions"]
+  input_schema12["appsec-review/review-decision/1"]
+  producer12 --> input12 --> job
+  input12 -. schema .-> input_schema12
+  producer13["job_inference_security_review"]
+  input13["review_verification_coverage"]
+  input_schema13["appsec-review/verification-coverage/1"]
+  producer13 --> input13 --> job
+  input13 -. schema .-> input_schema13
+  producer14["job_inference_security_review"]
+  input14["review_decision_bases"]
+  input_schema14["appsec-review/decision-basis/1"]
+  producer14 --> input14 --> job
+  input14 -. schema .-> input_schema14
+  producer15["job_inference_security_review"]
+  input15["review_audit_continuations"]
+  input_schema15["application/x-ndjson"]
+  producer15 --> input15 --> job
+  input15 -. schema .-> input_schema15
   output0["openvex_documents"]
   output_schema0["https://openvex.dev/ns/v0.2.0"]
   job --> output0
