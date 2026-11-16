@@ -303,7 +303,10 @@ def test_writer_and_aggregator_overhead_is_visible_in_existing_spans(tmp_path):
         emit(log, "DURABLE_LIFECYCLE")
         aggregate_run_metrics(tmp_path)
     phases = span.phase_view()
-    assert {"telemetry.lock_wait", "telemetry.fsync", "telemetry.aggregate"} <= phases.keys()
+    assert {"telemetry.lock_wait", "telemetry.aggregate"} <= phases.keys() and "telemetry.fsync" not in phases
+    with operation_span(local, "failure") as span:      # errors, failures and stops still fsync (T-5027)
+        log.write("FIXTURE_FAILED", run_id=tmp_path.name, level="ERROR")
+    assert {"telemetry.lock_wait", "telemetry.fsync"} <= span.phase_view().keys()
 
 
 def test_oversized_critical_events_fail_and_only_progress_can_be_sampled(tmp_path):
