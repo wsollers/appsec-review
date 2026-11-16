@@ -282,9 +282,12 @@ def verify_attachments(run_root: Path, review: Mapping[str, Any], *, repository_
                     "PoC summary belongs to another accepted review job")
         bind_tree(run_root, document["upstream"], bindings)
         rows = document["candidates"] if name == "poc_generation" else document["items"]
+        # A producer with an empty eligible scope (no confirmed finding to plan or validate) publishes SKIPPED_NA
+        # with no items: a valid terminal, accounted below as the not-clean-coverage disposition, never a mismatch.
+        accepted_terminals = {"SUCCEEDED", "COMPLETED_WITH_GAPS"} | ({"SKIPPED_NA"} if not rows else set())
         require(isinstance(rows, list) and published.get("item_count") == len(rows) and
                 published.get("gaps") == document["gaps"] and
-                published.get("terminal_status") in {"SUCCEEDED", "COMPLETED_WITH_GAPS"},
+                published.get("terminal_status") in accepted_terminals,
                 f"{job} summary disagrees with its accepted envelope")
         omitted = 0
         if name == "poc_generation":

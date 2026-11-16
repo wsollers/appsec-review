@@ -209,6 +209,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5034 | [Remove lane B from the inference review once the hunting producer exists](#t-5034-remove-lane-b-from-the-inference-review-once-the-hunting-producer-exists) | review | open |
 | T-5035 | [Make the judge an escalation for disputed high and critical findings and the blue refuter opt-in](#t-5035-make-the-judge-an-escalation-for-disputed-high-and-critical-findings-and-the-blue-refuter-opt-in) | review | open |
 | T-5036 | [Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them](#t-5036-retain-a-bounded-redacted-copy-of-an-unparseable-model-reply-and-find-why-blue-cells-produce-them) | review | open |
+| T-5037 | [Route a lead package to a specialist persona through the rule-to-CWE crosswalk when its leads carry no CWE](#t-5037-route-a-lead-package-to-a-specialist-persona-through-the-rule-to-cwe-crosswalk-when-its-leads-carry-no-cwe) | review | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3048,6 +3049,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** when a reply fails the single-object parse, record a bounded (first and last 2,000 characters), secret-redacted copy in the attempt receipt's turn record and a `model_output_unparseable` reason naming the parse failure (no object, several objects, truncated); then read the blue replies of the next run and fix the owning side: the blue task prompt if the model is writing prose, the output cap if replies truncate, or the parser if a reply with a trailing newline or fence is rejected.
 - **Done when:** a unit test shows the bounded redacted copy and the specific reason in the receipt, and the next cpp smoke's blue `model_output_unparseable` count falls below the verifier's.
 - **Refs:** `src/appsec_review/review/cells.py` (the turn parse and `model_output_unparseable`), `src/appsec_review/inference/recording.py`, `pipeline/prompt-fragments/roles/blue_team_refuter.md`, run `2026-11-15-0006` cell attempt receipts (host-local), T-5033, T-5035.
+
+### T-5037 — Route a lead package to a specialist persona through the rule-to-CWE crosswalk when its leads carry no CWE
+
+- **State:** open
+- **Area:** review
+- **Why:** In run `2026-11-16-0002` six of the eight lead packages recorded `no_persona_coverage_matched` and ran under the generalist persona: `route_persona` uses only the first CWE of the menu's `rule_cwe` union, and CodeQL, clang-analyzer and cppcheck observations on this target carry `rule_cwe: []`, so a use-after-free package was reviewed without the memory-safety persona. In run 0005 the same leads ran under `parsing_deserialization`. The crosswalk that maps scanner rules to CWEs (`_taxonomy`, `crosswalk_tags`) already exists in the package assembly step but is not consulted by routing.
+- **Scope:** derive the package's CWE set from every menu lead's `rule_cwe` plus the crosswalk mapping of its `(scanner, rule_id)`, pass the full set to `route_persona` (owner by the most specific cover over all of them, not the first), record the basis, and keep the generalist with a routing gap only when no CWE and no tag matches; a unit test routes a CodeQL use-after-free lead without `rule_cwe` to `memory_safety_native`.
+- **Done when:** the routing test passes and the next cpp smoke's lead lane records no `no_persona_coverage_matched` gap for a package whose leads the crosswalk can map.
+- **Refs:** `src/appsec_review/guidance/routing.py` (`route_persona`, `owner`), `src/appsec_review/jobs/job_inference_security_review/teams.py` (`lead_cwes`), `src/appsec_review/jobs/job_inference_security_review/job.py` (`_taxonomy`, `crosswalk_tags`), run `2026-11-16-0002` lead ledger (host-local), T-5023.
 
 ## Legacy backlog
 

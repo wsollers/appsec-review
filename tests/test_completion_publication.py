@@ -266,6 +266,26 @@ def test_remediation_is_confirmed_only_exact_and_hash_bound(fixture, mutate):
         fixture.verify("remediation_planning")
 
 
+def test_a_producer_that_skipped_an_empty_scope_is_accepted_as_not_clean_coverage(fixture):
+    """Run 2026-11-16-0002: no finding was confirmed, remediation planning published SKIPPED_NA with no items, and
+    the gate refused it as a summary that disagreed with its envelope."""
+    fixture.review["packages"][0]["state"] = "supported"          # nothing confirmed: nothing to plan
+    document = fixture.planning()
+    document["items"] = []
+    job, schema, _, unit = intake.PRODUCERS["remediation_planning"]
+    ref = fixture.write("remediation_planning.json", document)
+    handoff = {"job_id": job, "outputs": {unit: {"schema": schema, "artifact": ref, "item_count": 0, "gaps": [],
+                                                 "terminal_status": "SKIPPED_NA"}}}
+    handoff_ref = fixture.write(f"{job}.json", handoff)
+    fixture.accepted[job] = AcceptedHandoff(job, handoff, handoff_ref["sha256"], handoff_ref["path"])
+    record = fixture.verify("remediation_planning")["capabilities"]["remediation_planning"]
+    assert record["disposition"] == "SKIPPED_NA" and "not clean coverage" in record["reason"]
+    # The same terminal with items present is still a disagreement.
+    handoff["outputs"][unit]["item_count"] = 1
+    with pytest.raises(IntegrityError, match="disagrees"):
+        fixture.verify("remediation_planning")
+
+
 def test_supported_finding_cannot_enter_remediation_or_become_confirmed(fixture):
     document = fixture.planning()
     fixture.review["packages"][0]["state"] = "supported"

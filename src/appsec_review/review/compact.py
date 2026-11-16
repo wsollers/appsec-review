@@ -16,6 +16,9 @@ request is built (``jobs.job_inference_security_review.teams``), never here.
 """
 from __future__ import annotations
 
+import json
+import re
+
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -309,10 +312,58 @@ def expand_poc_basis(brief: Any, labels: LabelTable, expansion: Expansion, owner
     return poc, [item for item in preconditions if item in CLOSED_PRECONDITIONS], (entry[0] if entry else None)
 
 
+# Optional claim sub-structures a worker may get wrong without the claim itself being wrong. A malformed one
+# is dropped with feedback so the claim, its support citations and its lead accounting survive; the required
+# fields (id, leads, security_predicate, statement, support) are never salvaged. Run 2026-11-16-0002 lost 12 of
+# 14 red attempts to taint-path nodes without ``id``/``why``; runs 0005 and 0006 lost hundreds the same way.
+SALVAGEABLE_CLAIM_FIELDS = frozenset({"taint_paths", "poc_basis", "obligations", "evidence_requests", "counter",
+                                      "missing", "entry", "trigger", "consequence", "mechanism", "affected",
+                                      "preconditions"})
+_CLAIM_FIELD_ERROR = re.compile(r"^\$\.claims\[(\d+)\]\.([a-z_]+)")
+_TOP_LEVEL_SALVAGEABLE = ("chain_seeds",)
+
+
+def salvage_red(compact: Mapping[str, Any], schema_errors: SchemaErrors, expansion: Expansion
+                ) -> tuple[dict[str, Any], bool]:
+    """Drop the malformed optional parts of a ``red-compact`` answer until it satisfies its schema.
+
+    Returns the salvaged copy and whether it now validates. Every drop is feedback the model and the receipt see;
+    the schema's own errors stay in ``expansion.errors`` when the answer cannot be rescued.
+    """
+    document = json.loads(json.dumps(compact))
+    for _round in range(6):
+        errors = schema_errors(COMPACT_SCHEMAS["red"], document)
+        if not errors:
+            return document, True
+        dropped = False
+        claims = document.get("claims") if isinstance(document.get("claims"), list) else []
+        for error in errors:
+            match = _CLAIM_FIELD_ERROR.match(error)
+            if match:
+                index, field_name = int(match.group(1)), match.group(2)
+                if field_name in SALVAGEABLE_CLAIM_FIELDS and index < len(claims) \
+                        and isinstance(claims[index], Mapping) and field_name in claims[index]:
+                    claims[index].pop(field_name)
+                    expansion.note(f"red: claim {claims[index].get('id', index)} {field_name} did not satisfy the "
+                                   f"schema and was dropped ({error[len(match.group(0)):][:120].strip(': ')})")
+                    dropped = True
+                continue
+            for name in _TOP_LEVEL_SALVAGEABLE:
+                if error.startswith(f"$.{name}") and name in document:
+                    document.pop(name)
+                    expansion.note(f"red: {name} did not satisfy the schema and was dropped ({error[:120]})")
+                    dropped = True
+        if not dropped:
+            break
+    return document, not schema_errors(COMPACT_SCHEMAS["red"], document)
+
+
 def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: RedInvocation,
                schema_errors: SchemaErrors) -> Expansion:
     """``red-compact/1`` -> ``red-discovery-result/1`` for one package\'s lead (or unit) accounting."""
     expansion = Expansion()
+    if isinstance(compact, Mapping):
+        compact, _ok = salvage_red(compact, schema_errors, expansion)
     if not _validate(compact, COMPACT_SCHEMAS["red"], schema_errors, expansion):
         return expansion
     echo = invocation.echo()
@@ -535,7 +586,7 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
     return expansion
 
 
-__all__ = ["expand_poc_basis", "BLUE_SCHEMA", "COMPACT_SCHEMAS", "Expander", "Expansion", "JUDGE_RESULT_SCHEMA",
+__all__ = ["expand_poc_basis", "salvage_red", "BLUE_SCHEMA", "COMPACT_SCHEMAS", "Expander", "Expansion", "JUDGE_RESULT_SCHEMA",
            "PREDICATES", "Position", "VERIFIER_SCHEMA", "citations_of", "deshuffle", "expand_blue", "expand_judge",
            "expand_red", "expand_verifier", "overall_stance", "positions_of",
            "relations_of", "resolve_position", "summary_why", "text"]

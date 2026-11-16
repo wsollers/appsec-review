@@ -109,6 +109,32 @@ def test_a_label_that_does_not_resolve_is_dropped_with_feedback_and_the_claim_lo
     assert _id("sink_site", "9") in [item["entity_id"] for item in red(answer, labels=labels).result["evidence_refs"]]
 
 
+def test_malformed_optional_claim_parts_are_dropped_with_feedback_and_the_claim_survives() -> None:
+    """Run 2026-11-16-0002 discarded 12 of 14 red answers for taint-path nodes without ``id``/``why``; the claim,
+    its support citations and the lead accounting were lost with them."""
+    answer = {"claims": [claim(
+        taint_paths=[{"source": "n1", "sink": "n2",
+                      "nodes": [{"role": "source", "label": "E1"}, {"role": "sink", "label": "K1"}],   # no id, no why
+                      "edges": [{"from": "n1", "to": "n2", "kind": "data", "basis": "analyst_hypothesis"}]}],
+        poc_basis={"entry": ["E1"], "trigger": {"field": "x"}},                                       # trigger not a list
+        evidence_requests=[{"predicate": "security_impact", "question": "q"}])],                     # missing fields
+        "no_claim": [{"lead": "L2", "why": "covered"}], "blocked": []}
+    expansion = red(answer, LEAD, OTHER_LEAD)
+    result = assert_admitted(expansion, LEAD, OTHER_LEAD)
+    assert len(result["proposals"]) == 1 and result["taint_paths"] == []
+    dropped = [note for note in expansion.feedback if "was dropped" in note and note.startswith("red: claim c1 ")]
+    assert {note.split(" ")[3] for note in dropped} == {"taint_paths", "poc_basis", "evidence_requests"}
+    proposal = result["proposals"][0]
+    assert proposal["weakness"] == {"namespace": "CWE", "id": "CWE-787"} and "poc_basis" not in proposal
+
+
+def test_a_malformed_required_claim_field_is_still_rejected() -> None:
+    expansion = red({"claims": [claim(security_predicate="format_string")], "no_claim": [], "blocked": []}, LEAD)
+    assert expansion.result is None
+    assert any("security_predicate" in error for error in expansion.errors)
+    assert not any("was dropped" in note for note in expansion.feedback)
+
+
 def test_red_cannot_name_a_lead_outside_the_package() -> None:
     expansion = red({"claims": [claim(leads=["L1", "L2"])]})
     assert expansion.result["proposals"][0]["source_lead_ids"] == [LEAD]
@@ -231,14 +257,19 @@ def test_poc_basis_labels_that_do_not_resolve_or_have_the_wrong_kind_are_dropped
     assert sum("poc_basis" in note for note in expansion.feedback) >= 3
 
 
-def test_poc_basis_bounds_are_enforced_by_the_compact_schema() -> None:
+def test_poc_basis_bounds_drop_the_brief_with_feedback_and_keep_the_claim() -> None:
     long = "x" * 241
     for changed in (basis(input_format=long), basis(expected_observation=long), basis(preconditions=[long]),
                     basis(trigger=[{"field": long, "where": "w", "constraint": "c", "why": "y"}]),
                     basis(entry=["E1"] * 9), basis(path=[f"F{n}" for n in range(1, 18)]),
                     basis(trigger=[{"field": "f", "where": "w", "constraint": "c"}])):
         expansion = red({"claims": [claim(poc_basis=changed)]})
-        assert expansion.result is None and expansion.errors, changed
+        # The bound still holds: the out-of-bounds brief is dropped with feedback and the claim survives without
+        # a poc_basis (salvage_red); the answer as a whole is no longer discarded for it.
+        result = assert_admitted(expansion)
+        assert "poc_basis" not in result["proposals"][0], changed
+        assert any(note.startswith("red: claim c1 poc_basis") and "was dropped" in note
+                   for note in expansion.feedback), changed
 
 
 def test_a_poc_basis_without_an_entry_point_becomes_a_named_gap() -> None:
