@@ -164,6 +164,42 @@ def test_competing_tuple_components_never_select_the_last_value():
     assert any(item["value"] == "#define FOO_VERSION_MAJOR 1\n" for item in result["evidence"])
 
 
+def test_release_synonym_tuple_behind_a_balanced_prelude_and_unrelated_conditional_macro():
+    result, _ = discover({"vendor/lz4/lib/lz4.h": (
+        '#if defined (__cplusplus)\nextern "C" {\n#endif\n'
+        "#ifndef LZ4_H_2983827168210\n#define LZ4_H_2983827168210\n"
+        "#define LZ4_VERSION_MAJOR    1    /* for breaking interface changes  */\n"
+        "#define LZ4_VERSION_MINOR    9\n#define LZ4_VERSION_RELEASE  1\n"
+        "#define LZ4_VERSION_NUMBER (LZ4_VERSION_MAJOR *100*100 + LZ4_VERSION_MINOR *100 + LZ4_VERSION_RELEASE)\n"
+        "#define LZ4_LIB_VERSION LZ4_VERSION_MAJOR.LZ4_VERSION_MINOR.LZ4_VERSION_RELEASE\n"
+        "#ifdef LZ4_DISABLE_DEPRECATE_WARNINGS\n#else\n"
+        "#  define LZ4_GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)\n#endif\n"
+        '#endif\n#if defined (__cplusplus)\n}\n#endif\n')})
+    candidate = named(result, "lz4")
+    assert candidate["release"]["value"] == "1.9.1"
+    assert candidate["release"]["status"] == "inferred"
+    assert "version_conflict" not in kinds(result)
+    evidence = next(item for item in result["evidence"] if item["kind"] == "macro_version_tuple")
+    assert (evidence["selector"]["start_line"], evidence["selector"]["end_line"]) == (6, 8)
+    details = {gap["detail"] for gap in result["gaps"]}
+    assert "conditional version macro is not evaluated" in details
+    assert "version macro spells the literal version tuple; not evaluated" in details
+
+
+def test_dated_version_string_releases_the_leading_number_through_the_prefix_alias():
+    result, _ = discover({"vendor/bzip2/bzlib_private.h": (
+        '#ifndef _BZLIB_PRIVATE_H\n#define _BZLIB_PRIVATE_H\n'
+        '#define BZ_VERSION  "1.0.6, 6-Sept-2010"\n#endif\n')})
+    candidate = named(result, "bzip2")
+    assert candidate["release"]["value"] == "1.0.6"
+    evidence = next(item for item in result["evidence"] if item["kind"] == "macro_version")
+    assert evidence["value"] == '#define BZ_VERSION  "1.0.6, 6-Sept-2010"\n'
+    assert "unsupported_metadata" not in kinds(result)
+    result, _ = discover({"vendor/foo/foo.h": '#define FOO_VERSION "7 beta"\n'})
+    assert "unsupported_metadata" in kinds(result)
+    assert all(candidate["release"]["status"] == "unknown" for candidate in result["candidates"])
+
+
 def test_conditional_redefinition_cannot_promote_an_unconditional_release():
     result, _ = discover({"vendor/zlib/zlib.h": (
         '#define ZLIB_VERSION "1.2.3"\n#ifdef OTHER\n#define ZLIB_VERSION "2.3.4"\n#endif\n')})

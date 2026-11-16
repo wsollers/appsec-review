@@ -13,8 +13,10 @@ from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts i
     NativeInferenceBounds, NativeInferenceError,
 )
 from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import (
-    DISCOVERY_SCHEMA, GAP_KINDS, NativeInputIntegrityError, evidence_identity,
+    DISCOVERY_SCHEMA, GAP_KINDS, NativeInputIntegrityError, SbomBounds, evidence_identity,
 )
+from appsec_review.jobs.job_dependency_intelligence.resolution import normalize_dependencies
+from appsec_review.jobs.job_dependency_intelligence.sbom import build_spdx
 from appsec_review.storage import canonical_json
 
 
@@ -323,8 +325,15 @@ def test_fake_citation_is_rejected(edit):
     model = Model(lambda payload: [{"field": "version", "value": "1.2.3",
                                    "citations": [edit(citation(payload))]}])
     result, candidate, _ = run({"vendor/foo/foo.h": '#define FOO_VERSION "1.2.3"\n'}, model)
-    assert candidate["release"]["status"] == "unknown"
+    # The model's claim earns nothing from a fake citation: it stays inferred and is a named gap.
+    cited = [item for item in result["findings"] if item["field"] == "version"
+             and item["basis"] != ["literal_header_macro"]]
+    assert [(item["status"], item["evidence_ids"]) for item in cited] == [("inferred", [])]
     assert "unsupported_metadata" in kinds(result)
+    # The release is corroborated only by the parser's own header literal, on its own span.
+    assert candidate["release"]["status"] == "corroborated"
+    header = [item for item in result["findings"] if item["basis"] == ["literal_header_macro"]]
+    assert [item["evidence_ids"] for item in header] == [candidate["release"]["evidence_ids"]]
 
 
 @pytest.mark.parametrize("path", [
@@ -539,9 +548,16 @@ def test_metadata_schema_or_transport_response_cannot_promote_claims(malformed):
     planner = Model(lambda payload: [])
     def model(stage, payload):
         return planner(stage, payload) if stage == "plan" else malformed
-    result, candidate, _ = run({"vendor/foo/foo.h": '#define FOO_VERSION "1.2.3"\n'}, model)
+    result, candidate, _ = run({"vendor/foo/README": "Name: foo\nVersion: 1.2.3\n"}, model)
     assert candidate["release"]["status"] == "unknown"
     assert "unsupported_metadata" in kinds(result)
+    assert result["findings"] == []
+    # A header literal the parser read is corroborated regardless; the malformed response adds nothing.
+    result, candidate, _ = run({"vendor/foo/foo.h": '#define FOO_VERSION "1.2.3"\n'}, model)
+    assert candidate["release"]["status"] == "corroborated"
+    assert "unsupported_metadata" in kinds(result)
+    assert {tuple(item["basis"]) for item in result["findings"]} == {
+        ("literal_header_macro",), ("derived_generic_purl",)}
 
 
 def test_model_response_size_is_limited_before_claim_processing():
@@ -576,8 +592,14 @@ def test_line_payload_bound_is_exact_and_hidden_lines_cannot_be_cited():
                                     bounds=replace(BOUNDS, max_payload_bytes=1000))
     assert len(calls) == 1
     assert len(seen[1][1]["files"][0]["lines"]) < 101
-    assert candidate["release"]["status"] == "unknown"
+    cited = [item for item in result["findings"] if item["field"] == "version"
+             and item["basis"] != ["literal_header_macro"]]
+    assert [(item["status"], item["evidence_ids"]) for item in cited] == [("inferred", [])]
     assert "bounds" in kinds(result)
+    # The parser read the whole authenticated file, so its own literal on line 101 still counts.
+    assert candidate["release"]["status"] == "corroborated"
+    evidence = {item["evidence_id"]: item for item in result["discovery"]["evidence"]}
+    assert [evidence[key]["selector"]["start_line"] for key in candidate["release"]["evidence_ids"]] == [101]
 
 
 def test_source_budget_is_global_across_roots_and_component_omissions_are_explicit():
@@ -792,3 +814,164 @@ def test_missing_model_never_leaves_an_unsubstantiated_input_purl_spdx_eligible(
     assert candidate["metadata"]["sbom_claims"]["purl"]["value"] == "pkg:conan/guessed/foo@1.2.3"
     assert candidate["metadata"]["sbom_claims"]["purl"]["status"] == "inferred"
     assert not calls
+
+
+LZ4_HEADER = (
+    "#if defined (__cplusplus)\nextern \"C\" {\n#endif\n\n"
+    "#ifndef LZ4_H_2983827168210\n#define LZ4_H_2983827168210\n\n"
+    "#define LZ4_VERSION_MAJOR    1    /* for breaking interface changes  */\n"
+    "#define LZ4_VERSION_MINOR    9    /* for new (non-breaking) interface capabilities */\n"
+    "#define LZ4_VERSION_RELEASE  1    /* for tweaks, bug-fixes, or development */\n\n"
+    "#define LZ4_VERSION_NUMBER (LZ4_VERSION_MAJOR *100*100 + LZ4_VERSION_MINOR *100 + LZ4_VERSION_RELEASE)\n\n"
+    "#define LZ4_LIB_VERSION LZ4_VERSION_MAJOR.LZ4_VERSION_MINOR.LZ4_VERSION_RELEASE\n"
+    "#define LZ4_QUOTE(str) #str\n#define LZ4_EXPAND_AND_QUOTE(str) LZ4_QUOTE(str)\n"
+    "#define LZ4_VERSION_STRING LZ4_EXPAND_AND_QUOTE(LZ4_LIB_VERSION)\n\n"
+    "#ifdef LZ4_DISABLE_DEPRECATE_WARNINGS\n#  define LZ4_DEPRECATED(message)\n#else\n"
+    "#  define LZ4_GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)\n#endif\n\n"
+    "#endif /* LZ4_H_2983827168210 */\n\n#if defined (__cplusplus)\n}\n#endif\n"
+)
+CJSON_HEADER = (
+    "#ifndef cJSON__h\n#define cJSON__h\n\n#ifdef __cplusplus\nextern \"C\"\n{\n#endif\n\n"
+    "#if !defined(__WINDOWS__) && (defined(WIN32) || defined(_MSC_VER))\n#define __WINDOWS__\n#endif\n\n"
+    "/* project version */\n#define CJSON_VERSION_MAJOR 1\n#define CJSON_VERSION_MINOR 7\n"
+    "#define CJSON_VERSION_PATCH 17\n\n#ifndef CJSON_NESTING_LIMIT\n#define CJSON_NESTING_LIMIT 1000\n#endif\n\n"
+    "#ifdef __cplusplus\n}\n#endif\n\n#endif\n"
+)
+ZLIB_HEADER = ('#ifndef ZLIB_H\n#define ZLIB_H\n\n#define ZLIB_VERSION "1.2.11"\n'
+               "#define ZLIB_VERNUM 0x12b0\n#define Z_VERSION_ERROR (-6)\n\n#endif /* ZLIB_H */\n")
+BZIP2_HEADER = ('#ifndef _BZLIB_PRIVATE_H\n#define _BZLIB_PRIVATE_H\n\n#include <stdlib.h>\n\n'
+                '#define BZ_VERSION  "1.0.6, 6-Sept-2010"\n\n#endif\n')
+VENDORED = {
+    "zlib": ("third_party/zlib", "third_party/zlib/zlib.h", ZLIB_HEADER, "1.2.11",
+             [(4, 4, 'ZLIB_VERSION "1.2.11"')]),
+    "bzip2": ("third_party/bzip2", "third_party/bzip2/bzlib_private.h", BZIP2_HEADER, "1.0.6",
+              [(6, 6, 'BZ_VERSION  "1.0.6, 6-Sept-2010"')]),
+    "lz4": ("third_party/lz4", "third_party/lz4/lib/lz4.h", LZ4_HEADER, "1.9.1",
+            [(8, 10, "LZ4_VERSION_RELEASE  1")]),
+    "cjson": ("third_party/cjson", "third_party/cjson/cJSON.h", CJSON_HEADER, "1.7.17",
+              [(14, 16, "CJSON_VERSION_PATCH 17")]),
+}
+
+
+def version_findings(result, basis):
+    return [item for item in result["findings"] if item["field"] == "version" and item["basis"] == basis]
+
+
+@pytest.mark.parametrize("name", sorted(VENDORED))
+def test_vendored_header_version_macro_corroborates_release_without_a_model_citation(name):
+    root, path, text, version, spans = VENDORED[name]
+    result, candidate, _ = run({path: text}, Model(lambda payload: []), name=name, root=root)
+    assert candidate["release"]["status"] == "corroborated"
+    assert candidate["release"]["value"] == candidate["metadata"]["version"] == version
+    assert candidate["identity"]["status"] == "corroborated"
+    assert "version_conflict" not in kinds(result)
+    assert result["metrics"]["version_claims"] == 0
+    assert result["metrics"]["versions_corroborated"] == 1
+    header = version_findings(result, ["literal_header_macro"])
+    assert [(item["value"], item["status"]) for item in header] == [(version, "corroborated")]
+    assert header[0]["evidence_ids"] == candidate["release"]["evidence_ids"]
+    assert "no model citation" in header[0]["reason"]
+    evidence = {item["evidence_id"]: item for item in result["discovery"]["evidence"]}
+    cited = [evidence[key] for key in candidate["release"]["evidence_ids"]]
+    assert [(item["path"], item["selector"]["start_line"], item["selector"]["end_line"]) for item in cited] == [
+        (path, first, last) for first, last, _ in spans]
+    assert all(literal in item["value"] for item, (_, _, literal) in zip(cited, spans))
+    assert all(item["kind"] == "native_metadata_citation" for item in cited)
+    # With no package-manager coordinate anywhere, the generic PURL is derived and evidence-bound.
+    purl = f"pkg:generic/{name}@{version}"
+    assert candidate["purl"] == purl
+    assert candidate["metadata"]["sbom_claims"]["purl"] == {
+        "value": purl, "status": "inferred", "alternatives": [],
+        "evidence_ids": candidate["release"]["evidence_ids"]}
+    derived = [item for item in result["findings"] if item["basis"] == ["derived_generic_purl"]]
+    assert [(item["field"], item["value"], item["status"]) for item in derived] == [("purl", purl, "inferred")]
+    assert result["metrics"]["purls_corroborated"] == result["metrics"]["purl_claims"] == 0
+
+
+def test_bzip2_dated_literal_keeps_the_whole_line_as_evidence_but_releases_the_leading_number():
+    root, path, text, version, _ = VENDORED["bzip2"]
+    result, candidate, _ = run({path: text}, Model(lambda payload: []), name="bzip2", root=root)
+    evidence = {item["evidence_id"]: item for item in result["discovery"]["evidence"]}
+    values = [evidence[key]["value"] for key in candidate["release"]["evidence_ids"]]
+    assert values == ['#define BZ_VERSION  "1.0.6, 6-Sept-2010"\n']
+    assert candidate["release"]["value"] == "1.0.6"
+    assert candidate["purl"] == "pkg:generic/bzip2@1.0.6"
+
+
+@pytest.mark.parametrize("text", [
+    '#define FOO_VERSION "9.9.9"\n',
+    "#define FOO_VERSION_MAJOR 9\n#define FOO_VERSION_MINOR 9\n#define FOO_VERSION_RELEASE 9\n",
+    '#ifdef SPECIAL\n#define ZLIB_VERSION "9.9.9"\n#endif\n',
+])
+def test_header_macro_naming_another_component_or_conditional_never_corroborates(text):
+    for model in (Model(lambda payload: []), propose_value("version", "9.9.9")):
+        result, candidate, _ = run({"third_party/zlib/zlib.h": text}, model, name="zlib",
+                                   root="third_party/zlib")
+        assert candidate["release"]["status"] == "unknown"
+        assert "purl" not in candidate
+        assert version_findings(result, ["literal_header_macro"]) == []
+        assert result["metrics"]["versions_corroborated"] == 0
+    assert candidate["metadata"]["sbom_claims"]["version"]["status"] == "inferred"
+
+
+def test_two_different_header_literals_for_one_component_stay_a_version_conflict():
+    result, candidate, _ = run({
+        "third_party/zlib/zlib.h": '#define ZLIB_VERSION "1.2.11"\n',
+        "third_party/zlib/zconf.h": '#define ZLIB_VERSION "1.2.12"\n',
+    }, Model(lambda payload: []), name="zlib", root="third_party/zlib")
+    assert candidate["release"]["status"] == "conflicted"
+    assert candidate["release"]["value"] is None
+    assert candidate["release"]["alternatives"] == ["1.2.11", "1.2.12"]
+    assert "version_conflict" in kinds(result)
+    assert "purl" not in candidate
+    assert candidate["metadata"]["sbom_claims"]["purl"]["status"] == "unknown"
+    evidence = {item["evidence_id"]: item for item in result["discovery"]["evidence"]}
+    assert {evidence[key]["path"] for key in candidate["release"]["evidence_ids"]} == {
+        "third_party/zlib/zlib.h", "third_party/zlib/zconf.h"}
+
+
+def test_header_literal_survives_a_failed_metadata_request_and_model_citations_are_unchanged():
+    root, path, text, version, _ = VENDORED["zlib"]
+    planner = Model(lambda payload: [])
+    def failed(stage, payload):
+        if stage == "plan":
+            return planner(stage, payload)
+        raise NativeInferenceError("bounds", "native request summary exceeds its byte bound")
+    result, candidate, _ = run({path: text}, failed, name="zlib", root=root)
+    assert "upstream_partial" in kinds(result)
+    assert candidate["release"]["status"] == "corroborated"
+    assert candidate["release"]["value"] == version
+    assert candidate["purl"] == "pkg:generic/zlib@1.2.11"
+    # The model path is unchanged: an exact citation of the same span yields the same evidence id.
+    result, candidate, _ = run({path: text}, propose_value("version", version, first=4, last=4),
+                               name="zlib", root=root)
+    assert candidate["release"]["status"] == "corroborated"
+    assert result["metrics"]["version_claims"] == result["metrics"]["versions_corroborated"] == 1
+    assert sorted(tuple(item["basis"]) for item in result["findings"] if item["field"] == "version") == [
+        ("literal_header",), ("literal_header_macro",)]
+    assert len({item["evidence_id"] for item in result["discovery"]["evidence"]
+                if item["kind"] == "native_metadata_citation"}) == 1
+    # Document, pkg-config and manifest literals still need the model's citation.
+    _, candidate, _ = run({"vendor/foo/foo.pc": "Name: foo\nVersion: 1.2.3\n"}, Model(lambda payload: []))
+    assert candidate["release"]["status"] == "unknown"
+
+
+def test_header_corroborated_release_reaches_spdx_version_info_generic_purl_and_handoff_rows():
+    root, path, text, version, _ = VENDORED["cjson"]
+    result, candidate, _ = run({path: text}, Model(lambda payload: []), name="cjson", root=root)
+    sbom = build_spdx(
+        source_fingerprint="snapshot-1", created="2026-11-16T00:00:00Z", baselines=[],
+        discovery=result["discovery"], input_identities=[dict(REF)],
+        bounds=SbomBounds(input_bytes=1_000_000, element_limit=1000, output_bytes=2_000_000,
+                          field_bytes=100_000))
+    package = next(item for item in sbom["document"]["packages"] if item["name"] == "cjson")
+    assert package["versionInfo"] == version
+    assert package["externalRefs"] == [{"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl",
+                                        "referenceLocator": "pkg:generic/cjson@1.7.17"}]
+    assert "supplier" not in package
+    assert package["licenseDeclared"] == package["downloadLocation"] == "NOASSERTION"
+    rows, gaps = normalize_dependencies([], [], result["discovery"]["candidates"],
+                                        supported_hosts=("github.com",), max_dependencies=10)
+    assert gaps == []
+    assert [(row["name"], row["version"], row["purl"]) for row in rows] == [
+        ("cjson", "1.7.17", "pkg:generic/cjson@1.7.17")]
