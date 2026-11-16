@@ -559,8 +559,15 @@
       "live": []
     },
     "job_review_data_indexing": {
-      "unit": ["tests/test_review_data_indexing.py::test_scanner_menu_partition_fits_review_package_page"],
-      "integration": [],
+      "unit": [
+        "tests/unit/job_review_data_indexing/test_contract.py",
+        "tests/unit/job_review_data_indexing/test_handlers.py",
+        "tests/test_review_data_indexing.py",
+        "tests/test_inventory_resume.py"
+      ],
+      "integration": [
+        "tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py"
+      ],
       "acceptance": [],
       "live": []
     },

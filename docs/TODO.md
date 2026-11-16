@@ -3251,7 +3251,16 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and fresh-render publication checks, and review-admissibility indirectness; 10 whole-job
   `JobRunner` cases relocated to
   `tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py`; 234/234
-  job-package lines [100.0%] and 22/22 branches [100.0%] covered across all 3 modules).
+  job-package lines [100.0%] and 22/22 branches [100.0%] covered across all 3 modules);
+  job_review_data_indexing (37/47; 4 unit files, 51 cases: pinned 34-input / 3-dataset contract,
+  16-unit DAG topology and registry parity, resolved-configuration and feed-freshness pin checks
+  across OSV/KEV/EPSS/MITRE/Grype/NVD, OWASP workbench acceptance/rejection classification,
+  16-unit `UnitExecutor` execution with `InProcessSqliteFts` and dropped-shard reconciliation,
+  snapshot-mismatch and corrupted-shard fail-closed refusal, `audit.inventory` stray/undeclared/
+  configuration-mismatch violation checks, downstream `T-150` topological completion order, and
+  resume compatibility; 11 whole-job `JobRunner` cases relocated to
+  `tests/integration/job_review_data_indexing/test_review_data_indexing_jobrunner.py`; 426/426
+  job-package lines [100.0%] and 107/110 branches [97.27%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
