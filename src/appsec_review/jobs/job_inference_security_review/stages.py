@@ -608,14 +608,20 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
     return sorted(written, key=lambda item: item["finding_package_id"])
 
 
+#: The ``judge_verdict`` of a PoC candidate whose claim no judge was convened for.
+JUDGE_NOT_CONVENED = "not_convened"
+
+
 def poc_candidates(findings: Sequence[Mapping[str, Any]], briefs: Iterable[Mapping[str, Any]],
                    settings: PocCandidateSettings) -> list[dict[str, Any]]:
     """Claims a later job may build a proof-of-concept function for (review-judge-and-poc.md section 4).
 
     A claim is listed when **all** of these hold: its R5 state is ``supported`` or ``confirmed`` (it has a finding
-    package); the judge said ``red_correct`` (``partly`` too when ``settings.accept_partly``); one of its red cells
-    gave a ``poc_basis`` whose ``entry`` and ``path`` resolved (non-empty after label resolution); and its risk-matrix
-    technical severity is one of ``settings.risk_ratings``. Nothing else about the claim is copied.
+    package); the judge said ``red_correct`` (``partly`` too when ``settings.accept_partly``) or no judge was convened
+    for the claim (the judge is an escalation, review protocol v3 D9; the entry then carries ``not_convened``); one
+    of its red cells gave a ``poc_basis`` whose ``entry`` and ``path`` resolved (non-empty after label resolution);
+    and its risk-matrix technical severity is one of ``settings.risk_ratings``. Nothing else about the claim is
+    copied. Run 2026-11-16-0003 ran with the judge disabled and listed no candidate for five confirmed claims.
     """
     accepted = {JudgeVerdictValue.RED_CORRECT.value} | (
         {JudgeVerdictValue.PARTLY.value} if settings.accept_partly else set())
@@ -627,14 +633,18 @@ def poc_candidates(findings: Sequence[Mapping[str, Any]], briefs: Iterable[Mappi
     found = []
     for finding in sorted(findings, key=lambda item: item["claim_id"]):
         claim_id = finding["claim_id"]
+        verdict = finding.get("judge_verdict")
+        if verdict is None:
+            verdict = JUDGE_NOT_CONVENED
+        elif verdict not in accepted:
+            continue
         if (finding["state"] not in (ClaimState.CONFIRMED.value, ClaimState.SUPPORTED.value)
-                or finding.get("judge_verdict") not in accepted
                 or finding.get("technical_severity") not in settings.risk_ratings
                 or claim_id not in by_claim):
             continue
         brief = min(by_claim[claim_id], key=lambda item: (str(item["cell_id"]), str(item["package_id"])))
         found.append({"claim_id": claim_id, "package_id": brief["package_id"], "state": finding["state"],
-                      "judge_verdict": finding["judge_verdict"],
+                      "judge_verdict": verdict,
                       "poc_basis": {"sha256": sha256_hex(brief["poc_basis"]), "brief": dict(brief["poc_basis"])},
                       "finding_package": {"finding_package_id": finding["finding_package_id"],
                                           "sha256": finding["sha256"]},

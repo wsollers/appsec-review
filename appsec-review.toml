@@ -3108,8 +3108,9 @@ max_cited_rows_per_side = 12         # distinct rows each side may cite to the j
 max_cited_row_chars = 400            # resolved content shown per cited row
 
 # Review-judge-and-poc.md section 4: the handoff lists a claim in poc_candidates when it is supported or confirmed,
-# the judge said red_correct (partly only when accept_partly), it carries a resolved poc_basis, and its
-# application_risk_matrix/2 technical severity is one of risk_ratings.
+# the judge said red_correct (partly only when accept_partly) or no judge was convened for it (not_convened; the
+# judge is an escalation), it carries a resolved poc_basis, and its application_risk_matrix/2 technical
+# severity is one of risk_ratings.
 [jobs.job_inference_security_review.settings.poc_candidates]
 accept_partly = false
 risk_ratings = ["medium", "high", "critical"]

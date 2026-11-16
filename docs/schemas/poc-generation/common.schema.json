@@ -76,7 +76,8 @@
         "blue_correct",
         "partly",
         "neither",
-        "unresolved"
+        "unresolved",
+        "not_convened"
       ]
     },
     "claim_state": {

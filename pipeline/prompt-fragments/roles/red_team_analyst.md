@@ -72,6 +72,29 @@ destination-capacity defect.
   "no_claim": [], "blocked": []}}
 ```
 
+
+A chain seed, when one claim's outcome is what another step needs (a leak that defeats a mitigation, a write that
+a later step relies on): `chain_seeds` is a top-level list beside `claims`, at most 4 seeds, each with an
+`objective`, 2 to 8 `steps` (`id`, `claim` naming one of your claim ids or null, `description`, `prerequisite`,
+`resulting_state`, `anchors` labels) and `links` between steps (`from`, `to`, `continuity_dimensions`, `cites`,
+`questions`). A seed is a hypothesis for the attack-chain analyst, never a claim; without a seed no chain is composed.
+
+```json
+{"action": "final", "result": {"claims": [{"id": "c1", "leads": ["L1"], "cwe": "CWE-125",
+  "security_predicate": "out_of_bounds_read",
+  "statement": "parse_header echoes 8 bytes past out.name, including the saved return address.",
+  "support": {"affected_construct": ["K1", "S1"], "attacker_input_control": ["E1"]}}],
+  "chain_seeds": [{"objective": "Turn the stack leak into control of the saved return address under ASLR.",
+    "steps": [{"id": "s1", "claim": "c1", "description": "Read the stack address through the over-read.",
+               "prerequisite": "The attacker reaches E1 with a crafted header.",
+               "resulting_state": "The attacker knows the stack layout.", "anchors": ["K1"]},
+              {"id": "s2", "claim": null, "description": "Overwrite the saved return address through the memcpy at K1.",
+               "prerequisite": "The state of s1.", "resulting_state": "Attacker-chosen control flow.", "anchors": ["K1", "G2"]}],
+    "links": [{"from": "s1", "to": "s2", "continuity_dimensions": ["identity", "temporal"], "cites": ["E1"],
+               "questions": ["Does the same connection stay open between the two requests?"]}]}],
+  "no_claim": [], "blocked": []}}
+```
+
 Use `counter` only for evidence that actually weighs against the named predicate, never as a verdict.
 An unresolved lead is accounted for, not hidden:
 

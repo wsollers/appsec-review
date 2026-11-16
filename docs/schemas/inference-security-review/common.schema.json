@@ -1256,7 +1256,8 @@
         "judge_verdict": {
           "enum": [
             "red_correct",
-            "partly"
+            "partly",
+            "not_convened"
           ]
         },
         "poc_basis": {

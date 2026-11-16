@@ -132,7 +132,9 @@ without a resolvable citation becomes `unresolved`.
 After adjudication, the inference handoff lists `poc_candidates`: every claim that meets **all** of
 
 - R5 state is `supported` or `confirmed`;
-- the judge verdict is `red_correct` (`partly` is configurable, default off);
+- the judge verdict is `red_correct` (`partly` is configurable, default off), or no judge was convened for the
+  claim and the entry carries `not_convened` (the judge is an escalation, review protocol v3 D9; the verifier's
+  confirmation is the eligibility);
 - the claim carries a `poc_basis` whose `entry` and `path` resolved;
 - the configured policy asks for developer documentation (default: risk matrix rating in
   `["medium", "high", "critical"]`).
