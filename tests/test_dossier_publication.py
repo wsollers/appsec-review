@@ -335,20 +335,3 @@ def test_raised_render_failure_emits_no_sensitive_error_content(seeded):
     event = next(value for value in events if value["event"] == "DOSSIER_RENDER_FAILED")
     assert event["duration_ms"] >= 0 and event["error_type"] == "IntegrityError"
     assert "PRIVATE_SOURCE" not in json.dumps(event)
-
-
-def test_real_accepted_review_reader_to_dossier_models(tmp_path):
-    from appsec_review.jobs.accepted_review import load_accepted_review
-    from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
-    from tests.final_report_support import run_review_chain
-    chain = run_review_chain(tmp_path / "c", tmp_path / "l")
-    verified = load_accepted_review(chain.run_root, SchemaSet(ROOT / SCHEMA_DIRECTORY), max_packages=10000)
-    document = inputs.load_inputs(chain.run_root, verified.document, settings())
-    assert document["run_id"] == chain.fixture.run_id
-    assert document["source_manifest"]["sha256"] == verified.document["review"]["accepted_manifest_sha256"]
-    fixture = SimpleNamespace(root=chain.run_root, verified=verified.document)
-    result = build_job(repository_root=ROOT).execute(context(fixture))
-    _publication, summary = output_summary(fixture, result)
-    confirmed = sum(row["state"] == "confirmed" for row in verified.document["packages"])
-    assert summary["counts"]["items"] == confirmed
-    assert all(item["kind"] == "confirmed_finding" for item in summary["items"])

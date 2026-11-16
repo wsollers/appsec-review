@@ -128,9 +128,9 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | Tier | Files or selectors |
 | --- | --- |
 | acceptance | None declared |
-| integration | None declared |
+| integration | `tests/integration/job_dossier_publication/test_dossier_review_chain.py` |
 | live | `tests/integration/test_dossier_live.py` |
-| unit | `tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer`<br>`tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier`<br>`tests/unit/review_decision_audit_consumers/test_dossier.py` |
+| unit | `tests/test_dossier_publication.py`<br>`tests/test_dossiers.py`<br>`tests/unit/job_dossier_publication/test_coverage_edges.py`<br>`tests/unit/review_decision_audit_consumers/test_dossier.py` |
 
 ### Dagster placement
 

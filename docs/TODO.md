@@ -3311,7 +3311,14 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   source assembly, Clang AST reduction and policy/buildcheck compile-only enforcement, writer
   decline/failure/answer normalization, and relocated multi-job `JobRunner` chain suite to
   `tests/integration/job_poc_generation/test_poc_generation_job.py`; 2,261/2,360 job-package lines
-  [95.81%] and 741/826 branches [89.71%] covered across all 15 modules).
+  [95.81%] and 741/826 branches [89.71%] covered across all 15 modules);
+  job_dossier_publication (44/47; 4 unit files, 66 cases: pinned 3-unit `load.verify_inputs` ->
+  `dossiers.create` -> `acceptance.publish_handoff` DAG topology, `DossierPublicationSettings`
+  bounds/image-pin validation, accepted review/PoC/remediation/attack-chain/decision-audit input
+  and snapshot verification, protected LaTeX/PDF container policy and non-execution assurance
+  labelling, and relocated `run_review_chain` test to
+  `tests/integration/job_dossier_publication/test_dossier_review_chain.py`; 404/406 job-package
+  lines [99.51%] and 167/172 branches [97.09%] covered across all 5 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

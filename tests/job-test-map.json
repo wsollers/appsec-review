@@ -287,11 +287,14 @@
     },
     "job_dossier_publication": {
       "unit": [
-        "tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer",
-        "tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier",
+        "tests/test_dossier_publication.py",
+        "tests/test_dossiers.py",
+        "tests/unit/job_dossier_publication/test_coverage_edges.py",
         "tests/unit/review_decision_audit_consumers/test_dossier.py"
       ],
-      "integration": [],
+      "integration": [
+        "tests/integration/job_dossier_publication/test_dossier_review_chain.py"
+      ],
       "acceptance": [],
       "live": ["tests/integration/test_dossier_live.py"]
     },

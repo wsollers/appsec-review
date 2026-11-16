@@ -17378,13 +17378,16 @@
       "strict_gaps": false,
       "tests": {
         "acceptance": [],
-        "integration": [],
+        "integration": [
+          "tests/integration/job_dossier_publication/test_dossier_review_chain.py"
+        ],
         "live": [
           "tests/integration/test_dossier_live.py"
         ],
         "unit": [
-          "tests/test_dossier_publication.py::test_empty_scope_does_not_read_target_or_call_renderer",
-          "tests/test_dossier_publication.py::test_supported_finding_has_only_a_poc_dossier",
+          "tests/test_dossier_publication.py",
+          "tests/test_dossiers.py",
+          "tests/unit/job_dossier_publication/test_coverage_edges.py",
           "tests/unit/review_decision_audit_consumers/test_dossier.py"
         ]
       },
@@ -44907,7 +44910,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "a50ce5df0e2f9ecd75805f2b5beec9c0b8e3d698c9a48acfdc792622e1de6be2"
+    "tests/job-test-map.json": "b26eaa359f96e6ec7b84e87d728323f939a086d411c8e21a639e4423924bf754"
   },
   "tool_policy": {
     "disable_grype": true,
