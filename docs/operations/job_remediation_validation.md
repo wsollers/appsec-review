@@ -83,7 +83,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_remediation_patches.py` |
+| unit | `tests/test_remediation_compiler.py`<br>`tests/test_remediation_models.py`<br>`tests/test_remediation_patches.py`<br>`tests/unit/job_remediation_validation/test_coverage_edges.py` |
 
 ### Dagster placement
 

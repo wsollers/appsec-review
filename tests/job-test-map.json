@@ -599,7 +599,12 @@
       "live": []
     },
     "job_remediation_validation": {
-      "unit": ["tests/test_remediation_patches.py"],
+      "unit": [
+        "tests/test_remediation_compiler.py",
+        "tests/test_remediation_models.py",
+        "tests/test_remediation_patches.py",
+        "tests/unit/job_remediation_validation/test_coverage_edges.py"
+      ],
       "integration": [],
       "acceptance": ["tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment"],
       "live": []

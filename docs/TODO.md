@@ -3324,7 +3324,13 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and `max_candidates` cap accounting, bounded `SourceReader`/retrieval/model execution and
   telemetry receipts, exact patch scope/custody/manual-validation gates, and publish-time plan
   verification; 511/516 job-package lines [99.03%] and 168/170 branches [98.82%] covered across
-  all 7 modules).
+  all 7 modules);
+  job_remediation_validation (46/47; 4 unit files, 247 cases: pinned 3-unit `load.verify_inputs`
+  -> `assess.validate` -> `acceptance.publish_handoff` DAG topology, accepted planning handoff
+  and candidate-binding verification, bounded manifest-exact scratch materialization/cleanup,
+  nonexecuting native syntax-only compiler argv allowlist and baseline-first comparison,
+  independent semantic reviewer outcomes, and publish-time drift/integrity checks; 486/490
+  job-package lines [99.18%] and 180/184 branches [97.83%] covered across all 6 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
