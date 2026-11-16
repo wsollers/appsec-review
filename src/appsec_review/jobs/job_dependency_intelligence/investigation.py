@@ -147,6 +147,18 @@ def _purl_parts(value: str) -> tuple[str, str, str | None] | None:
     return package_type, name, version
 
 
+def _generic_purl(name: str, version: str) -> str | None:
+    """``pkg:generic/<normalized name>@<release>`` derived from a corroborated name and release."""
+    normalized = _normalized_name(name)
+    if not normalized or not _VERSION.fullmatch(version):
+        return None
+    purl = "pkg:generic/" + quote(normalized, safe=".-") + "@" + quote(version, safe=".+-")
+    parsed = _purl_parts(purl)
+    if parsed is None or _normalized_name(parsed[1]) != normalized or parsed[2] != version:
+        return None
+    return purl
+
+
 def _json_unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -653,16 +665,6 @@ class _Investigation:
         if not metadata_payload["files"]:
             self.gap("input_missing", scope, "no readable metadata fits the evidence payload")
             return
-        response = self.request("metadata", metadata_payload)
-        if response is None:
-            return
-        if (set(response) != {"schema", "candidate_id", "claims"} or response["schema"] != METADATA_SCHEMA
-                or response["candidate_id"] != scope or not isinstance(response["claims"], list)
-                or len(response["claims"]) > self.bounds.files_per_root * len(_FIELDS)):
-            self.gap("unsupported_metadata", scope, "invalid metadata proposal")
-            return
-        if not response["claims"]:
-            self.gap("unsupported_metadata", scope, "metadata proposal returned no claims")
         facts: list[_Fact] = []
         tuple_conflict = False
         for read in reads.values():
@@ -671,7 +673,25 @@ class _Investigation:
             tuple_conflict |= conflict
         direct_versions = {fact.value for fact in facts if fact.field == "version" and fact.direct}
         proposals: dict[str, list[tuple[str, bool, list[str]]]] = defaultdict(list)
-        for claim in response["claims"]:
+        # Header version macros the parser itself read under the component root are direct
+        # evidence without a model citation; every other field still needs the model's citation.
+        proposals["version"].extend(self.header_literals(scope, facts, reads))
+        response = self.request("metadata", metadata_payload)
+        claims: list[Any] = []
+        if response is None:
+            if not proposals["version"]:
+                return
+        elif (set(response) != {"schema", "candidate_id", "claims"} or response["schema"] != METADATA_SCHEMA
+                or response["candidate_id"] != scope or not isinstance(response["claims"], list)
+                or len(response["claims"]) > self.bounds.files_per_root * len(_FIELDS)):
+            self.gap("unsupported_metadata", scope, "invalid metadata proposal")
+            if not proposals["version"]:
+                return
+        else:
+            claims = response["claims"]
+            if not claims:
+                self.gap("unsupported_metadata", scope, "metadata proposal returned no claims")
+        for claim in claims:
             if (not isinstance(claim, Mapping) or set(claim) != {"field", "value", "citations"}
                     or claim.get("field") not in _FIELDS
                     or not _literal(claim.get("value"), self.bounds.field_bytes)
@@ -728,6 +748,37 @@ class _Investigation:
                         conflict_ids.append(self.file_evidence(read, first, last))
         for item in candidates:
             self.apply(item, proposals, facts, tuple_conflict, conflict_ids)
+
+    def header_literals(self, scope: str, facts: Sequence[_Fact],
+                        reads: Mapping[str, _Read]) -> list[tuple[str, bool, list[str]]]:
+        """Deterministic release literals from version macros in the component's own headers.
+
+        ``_facts`` keeps only macros whose prefix spells the component's normalized name (or a
+        documented alias) and marks a literal direct only when the header is lexically complete
+        with no conditional, incomplete or competing version macro. The macro span itself is the
+        evidence; no model citation is involved, and the finding says so.
+        """
+        result: list[tuple[str, bool, list[str]]] = []
+        for fact in facts:
+            if fact.field != "version" or not fact.direct or fact.basis != "literal_header":
+                continue
+            ids: list[str] = []
+            for path, first, last in fact.spans:
+                read = reads[path]
+                if read.offsets[last] - read.offsets[first - 1] > self.bounds.field_bytes:
+                    self.gap("bounds", path, "field_bytes: header version literal span omitted")
+                    break
+                ids.append(self.file_evidence(read, first, last))
+            else:
+                ids = sorted(set(ids))
+                result.append((fact.value, True, ids))
+                self.findings.append({
+                    "candidate_id": scope, "field": "version", "value": fact.value,
+                    "status": "corroborated", "evidence_ids": ids, "basis": ["literal_header_macro"],
+                    "reason": "deterministic header version macro literal under the component root; "
+                              "no model citation",
+                })
+        return result
 
     def apply(self, candidate: NativeCandidate, proposals: Mapping[str, list[tuple[str, bool, list[str]]]],
               facts: Sequence[_Fact], tuple_conflict: bool, conflict_ids: list[str]) -> None:
@@ -798,6 +849,25 @@ class _Investigation:
             else:
                 candidate["purl"] = claims["purl"]["value"]
                 self.metrics["purls_corroborated"] += 1
+        release = candidate["release"]
+        if ("purl" not in candidate and claims["purl"]["status"] == "unknown"
+                and not any(fact.field == "purl" for fact in facts)
+                and release["status"] == "corroborated" and release["value"]
+                and candidate["identity"]["status"] == "corroborated"):
+            # No package-manager coordinate exists anywhere: derive the generic locator from the
+            # corroborated name and release so advisories can be matched. Nothing else is derived.
+            generic = _generic_purl(candidate["native_name"], release["value"])
+            if generic is not None:
+                claims["purl"] = {"value": generic, "status": "inferred",
+                                  "evidence_ids": list(release["evidence_ids"]), "alternatives": []}
+                candidate["purl"] = generic
+                self.findings.append({
+                    "candidate_id": candidate["candidate_id"], "field": "purl", "value": generic,
+                    "status": "inferred", "evidence_ids": list(release["evidence_ids"]),
+                    "basis": ["derived_generic_purl"],
+                    "reason": "generic PURL derived from the corroborated component name and release; "
+                              "not an observed package-manager coordinate",
+                })
         candidate["evidence_ids"] = sorted(set(candidate["evidence_ids"]) |
                                            {key for claim in claims.values() for key in claim["evidence_ids"]})
 
@@ -848,7 +918,15 @@ class _Investigation:
                     release["status"] != "conflicted" and
                     (release["status"] != "corroborated" or release["value"] == parsed[2])))
             )
-            if not eligible:
+            derived = (
+                observed["status"] == "inferred" and observed["value"] == purl
+                and bool(observed["evidence_ids"])
+                and set(observed["evidence_ids"]) <= self.evidence.keys()
+                and candidate["identity"]["status"] == "corroborated"
+                and release["status"] == "corroborated" and bool(release["value"])
+                and purl == _generic_purl(candidate["native_name"], release["value"])
+            )
+            if not eligible and not derived:
                 claims["purl"] = _merge(observed, [(purl, False, [])])
                 if claims["purl"]["status"] == "corroborated":
                     claims["purl"]["status"] = "inferred"
@@ -881,7 +959,12 @@ def investigate_native_metadata(
 
     Catalog paths and target contents are data. Plans can select only exact, bounded catalog
     entries. Inferred proposals remain in ``metadata.sbom_claims`` and findings, never as an
-    SPDX-eligible PURL or a promoted release. Reader custody/integrity errors propagate.
+    SPDX-eligible PURL or a promoted release. Two deterministic sources need no model citation:
+    a version macro the parser reads from a header under the component's own root corroborates
+    the release (basis ``literal_header_macro``), and a candidate with a corroborated name and
+    release but no package-manager coordinate of any kind publishes
+    ``pkg:generic/<name>@<release>`` as an inferred, evidence-bound PURL
+    (basis ``derived_generic_purl``). Reader custody/integrity errors propagate.
     """
     if not isinstance(bounds, NativeInferenceBounds) or not callable(read_file):
         raise ValueError("NativeInferenceBounds and read_file are required")

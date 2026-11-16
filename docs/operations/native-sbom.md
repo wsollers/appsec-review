@@ -35,6 +35,9 @@ Between discovery and publication, model-assisted curation identifies libraries 
 inferred SDK families; root-scoped investigation selects bounded catalog files and proposes
 independently cited metadata. Models do not browse or execute search patterns. Deterministic
 literal checks, exact citations and input custody establish corroboration, not model confidence.
+A version macro the parser itself reads from a component's own header (name-prefix match, header
+macros only) corroborates the release without a model citation, and a corroborated name and
+release with no package-manager coordinate publish a derived `pkg:generic/<name>@<release>` PURL.
 Unavailable/invalid inference preserves conservative candidates and reports gaps. Versions
 are never propagated between bundled components or vendored copies.
 
