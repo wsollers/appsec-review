@@ -88,6 +88,31 @@ def _row(identity, kind, path, start, end, payload=None):
             "payload": payload or {}}
 
 
+def test_enclosing_symbol_uses_a_call_sites_caller_and_the_nearest_preceding_declaration() -> None:
+    """Run 2026-11-15-0006: the accepted symbol rows carry only their declaration line (start == end) and a
+    call-site fact names its function as ``caller``; the fold resolved nothing and 22 use-after-free proposals
+    kept 17 identities."""
+    touch = "asr:symbol:" + "6" * 64
+    close = "asr:symbol:" + "7" * 64
+    opened = "asr:symbol:" + "8" * 64
+    free_call = "asr:call_site:" + "9" * 64
+    rows = [
+        _row(opened, "symbol", "src/session.cpp", 7, 7), _row(touch, "symbol", "src/session.cpp", 27, 27),
+        _row(close, "symbol", "src/session.cpp", 49, 49),
+        _row(free_call, "call_site", "src/session.cpp", 33, 33,
+             {"result": {"caller": {"display": "session_touch", "symbol": touch},
+                         "callee": {"display": "free", "symbol": None}}}),
+        _row("asr:tool_observation:" + "a" * 64, "tool_observation", "src/session.cpp", 34, 34),
+        _row("asr:ast_node:" + "b" * 64, "ast_node", "src/session.cpp", 35, 35),
+        _row("asr:ast_node:" + "c" * 64, "ast_node", "src/session.cpp", 3, 3),
+    ]
+    ctx = _context(rows)
+    assert ctx.enclosing_symbol(free_call) == touch                             # the call site's caller
+    assert ctx.enclosing_symbol("asr:tool_observation:" + "a" * 64) == touch    # nearest preceding declaration
+    assert ctx.enclosing_symbol("asr:ast_node:" + "b" * 64) == touch
+    assert ctx.enclosing_symbol("asr:ast_node:" + "c" * 64) is None             # before any definition
+
+
 def test_enclosing_symbol_prefers_the_graph_facts_function_then_the_tightest_symbol_range() -> None:
     outer = "asr:symbol:" + "1" * 64
     inner = "asr:symbol:" + "2" * 64

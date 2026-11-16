@@ -245,8 +245,11 @@ class ReviewContext:
     def enclosing_symbol(self, identity: str) -> str | None:
         """The accepted ``symbol`` enclosing a site identity (claim identity fold, R7), or ``None``.
 
-        A graph fact names its enclosing function; any other located entity is matched against the
-        symbols indexed on its path, taking the tightest range that contains its start line.
+        A graph fact names its function (``enclosing_function`` on a sink or entry fact, ``caller`` on a call
+        site); any other located entity is matched against the symbols indexed on its path: the tightest range
+        that contains its line when the index records extents, else the nearest preceding definition, as
+        ``packages.GraphContext.function_at`` chooses. Run ``2026-11-15-0006`` showed the accepted symbol rows
+        carry only their declaration line, so the range match alone folded nothing.
         """
         with self._lock:
             if identity in self._symbols:
@@ -260,9 +263,14 @@ class ReviewContext:
         if row is not None:
             payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
             result = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
-            function = result.get("enclosing_function") if isinstance(result.get("enclosing_function"), Mapping) else {}
-            named = function.get("symbol")
-            if isinstance(named, str) and named.startswith("asr:symbol:") and self.resolves(named):
+            named = None
+            for key in ("enclosing_function", "caller"):
+                function = result.get(key) if isinstance(result.get(key), Mapping) else {}
+                candidate = function.get("symbol")
+                if isinstance(candidate, str) and candidate.startswith("asr:symbol:") and self.resolves(candidate):
+                    named = candidate
+                    break
+            if named is not None:
                 symbol = named
             else:
                 location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
@@ -274,7 +282,8 @@ class ReviewContext:
     def _symbol_at(self, path: Any, line: Any) -> str | None:
         if not isinstance(path, str) or not isinstance(line, int):
             return None
-        best: tuple[int, str] | None = None
+        enclosing: tuple[int, str] | None = None        # tightest extent containing the line
+        preceding: tuple[int, str] | None = None        # nearest definition at or before the line
         cursor = None
         for _page in range(16):
             try:
@@ -284,15 +293,23 @@ class ReviewContext:
             for row in page.get("results", ()):
                 location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
                 start, end = location.get("start_line"), location.get("end_line")
-                if not (isinstance(start, int) and isinstance(end, int) and start <= line <= end):
+                if not isinstance(start, int):
                     continue
-                candidate = (end - start, str(row["identity"]))
-                if best is None or candidate < best:
-                    best = candidate
+                identity = str(row["identity"])
+                if isinstance(end, int) and end > start and start <= line <= end:
+                    candidate = (end - start, identity)
+                    if enclosing is None or candidate < enclosing:
+                        enclosing = candidate
+                if start <= line:
+                    candidate = (-start, identity)
+                    if preceding is None or candidate < preceding:
+                        preceding = candidate
             cursor = page.get("next_cursor") or page.get("cursor")
             if not page.get("has_more") or not cursor:
                 break
-        return best[1] if best else None
+        if enclosing is not None:
+            return enclosing[1]
+        return preceding[1] if preceding else None
 
     def entity_name(self, identity: str) -> str | None:
         with self._lock:
