@@ -338,6 +338,8 @@
           "dependency_context",
           "dependency_intelligence_handoff",
           "feed_sync_work",
+          "native_advisory_lookup",
+          "native_advisory_observations",
           "native_component_curation",
           "native_discovery",
           "native_inference_inputs",
@@ -363,6 +365,7 @@
           "coverage",
           "find",
           "query_dataset_inventory",
+          "query_observations",
           "query_precomputed",
           "search"
         ]
@@ -389,7 +392,8 @@
         "gaps": [],
         "state": "declared",
         "values": [
-          "inventory"
+          "inventory",
+          "observations"
         ]
       },
       "review_roles": {
@@ -3892,6 +3896,109 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
       "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
+      "dataset": "native_advisory_lookup",
+      "description": "Native advisory lookup record: components, decided CPE rows, matches, snapshot provenance and gaps.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/native-advisory-lookup/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "indexed_evidence",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
+      "dataset": "native_advisory_observations",
+      "description": "NVD CPE range matches of corroborated native component releases against the verified cve-bin-tool snapshot: dependency leads with vendor confidence, never confirmed vulnerabilities.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_observations; query_precomputed query_set=dependency_advisories",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "query_observations",
+          "query_precomputed"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.indexes",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "observations"
+        ]
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "hypothesis_hunter",
+          "red_team_analyst"
+        ]
+      },
+      "schema": "appsec-review/retrieval-index/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "indexed",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -14737,6 +14844,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -14816,6 +14925,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -14895,6 +15006,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -14974,6 +15087,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15053,6 +15168,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15132,6 +15249,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15211,6 +15330,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15290,6 +15411,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15369,6 +15492,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15448,6 +15573,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15527,6 +15654,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15606,6 +15735,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15685,6 +15816,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15764,6 +15897,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15843,6 +15978,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -15922,6 +16059,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -16001,6 +16140,8 @@
       "unbound_datasets": [
         "job_dependency_intelligence/dependency_context",
         "job_dependency_intelligence/dependency_intelligence_handoff",
+        "job_dependency_intelligence/native_advisory_lookup",
+        "job_dependency_intelligence/native_advisory_observations",
         "job_dependency_intelligence/native_component_curation",
         "job_dependency_intelligence/native_discovery",
         "job_dependency_intelligence/native_inference_inputs",
@@ -26996,6 +27137,7 @@
   "tool_policy": {
     "disable_grype": true,
     "enable_cve_bin_tool": true,
+    "enable_native_advisory_lookup": true,
     "enable_swift": false
   }
 }

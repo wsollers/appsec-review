@@ -132,6 +132,8 @@
     "llvm_ir": "symbols_and_calls",
     "model_connectivity": "metrics",
     "model_preflight": "metrics",
+    "native_advisory_lookup": "dependencies_and_advisories",
+    "native_advisory_observations": "dependencies_and_advisories",
     "native_component_curation": "dependencies_and_advisories",
     "native_discovery": "dependencies_and_advisories",
     "native_inference_inputs": "dependencies_and_advisories",

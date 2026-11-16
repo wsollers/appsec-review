@@ -87,6 +87,62 @@ decide. A package-name match, inferred repository,
 maximal-exposure value, Scorecard response, or absence of any of them is not a vulnerability
 finding.
 
+### Native advisory lookup (NVD CPE ranges)
+
+OSV has no ecosystem for a vendored C library, Grype and osv-scanner match package-manager
+coordinates only, and cve-bin-tool matches only the version strings its checkers know inside the
+binaries it is handed. A component whose release this job corroborated from its own headers
+(`pkg:generic/<name>@<version>`, see [native SBOM](../architecture/native-sbom.md)) therefore
+reaches no scanner. `publication.native_advisory_lookup`
+(`jobs/job_dependency_intelligence/native_advisories.py`) closes that gap without a model or the
+network: it opens the verified cve-bin-tool snapshot read-only (`verify_consumer`: pointer, manifest
+and file hashes, build record, SQLite integrity; the snapshot is the NVD CPE range database) and
+decides every `cve_range` row whose product is the component's normalized name, across **all**
+vendors, against the corroborated version: an exact-version row matches only an equal version,
+a `*` row is decided by its four range bounds with a dotted-numeric comparison (one to four parts,
+zero-padded). The comparison is conservative: a bound that is not dotted numeric (`2023-11-16`,
+`r118`, `0.9.5a`) and a release whose distro-style suffix (`1.0.6-r3`) sits exactly on a bound are
+`unknown`, reported as the gap `version_uncomparable: <component>: <CVE> ...`, never a match and
+never a clean result. The empty `purl2cpe` table is consulted and recorded (`purl2cpe: []`).
+
+Every match is a **lead with a stated confidence, not a confirmed vulnerability**: NVD considers
+the release affected, which says nothing about whether the affected code is compiled, reachable or
+patched here. `confidence: canonical` means the row's vendor is the product's own NVD spelling
+(`zlib/zlib`, `lz4_project/lz4`, `bzip/bzip2`: the product itself, `<product>_project`, or the
+product without its trailing release digits); every other vendor (`cloudflare/zlib`,
+`ruby-lang/zlib`, `davegamble/cjson`) is `confidence: alternate_vendor`, reported with lower
+confidence rather than hidden, because the same product name is used by forks, bindings and
+unrelated projects. The vendor and product are always on the record so a reviewer can re-rate
+a lead (`davegamble` is cJSON's upstream author yet an alternate vendor under this rule).
+
+The matches are indexed as an `observations` shard (`native-advisory`, dataset
+`native_advisory_observations`) in this job's manifest: one `finding` record per match
+(`tool_id: native-advisory-lookup`, `scanner_identity: native-advisory-lookup/1`,
+`match_basis: cpe-range`, `category: vulnerability_matching`, the CVE as `rule_id`, the snapshot's
+NVD severity, CVSS score, version and vector, `known_exploited` from `cve_exploited`, the matched
+row's bounds, the dependency ids, and the provenance `snapshot_id`, `manifest_sha256`,
+`nvd_snapshot_id` and `cve.db` SHA-256) plus one `scan_summary` per component (products queried,
+rows evaluated and rejected, `unknown_advisories`, outcome). A finding projects the same
+`observation.matches` pair as a Grype or cve-bin-tool match, so `advisory_pairs` turns it into a
+`dependency_advisories` fact joined to the pinned OSV, NVD, KEV and EPSS snapshots and the review
+sees it as a `dependency_advisory` lead; each finding is `DERIVED_FROM` the `dependency_package`
+entity it names. The whole decision record (`native-advisory-lookup.json`, dataset
+`native_advisory_lookup`) is retained beside the unit.
+
+Named gaps, never silence: `tools.enable_native_advisory_lookup = false` records a
+`CONFIGURED_DISABLED` gap and `TOOL_CONFIGURED_DISABLED` event; a missing or unverifiable snapshot
+is `verified immutable cve-bin-tool database unavailable: <reason>` for every component; a native
+component without a corroborated version is an `advisory_version_unresolved` gap naming it (it is
+not looked up: a CPE range needs a version); an uncomparable bound is `version_uncomparable`; and
+the typed bounds `jobs.job_dependency_intelligence.settings.native_advisory_lookup`
+(`component_limit`, `rows_per_component`, `match_limit`) each report `truncated:` when exceeded.
+Rows with a scanner-covered purl type (`pkg:npm/...`, `pkg:pypi/...`, ...) are left to the package
+scanners. On the C/C++ smoke target the lookup lists, for zlib 1.2.11, bzip2 1.0.6, lz4 1.9.1 and
+cjson 1.7.17, the planted CVE-2018-25032, CVE-2019-12900 and CVE-2019-17543 beside the other
+ranges NVD assigns those releases (replayed read-only against snapshot
+`sha256-9b5fac4b35e740ac8d12c0a6`); cjson 1.7.17 matches CVE-2024-31755 (exact), CVE-2023-53154 and,
+as alternate-vendor leads, four `davegamble/cjson` ranges.
+
 Focused verification:
 
 ```text

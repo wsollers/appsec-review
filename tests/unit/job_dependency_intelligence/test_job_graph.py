@@ -601,6 +601,10 @@ def test_validate_config_rejects_invalid_settings(tmp_path: Path) -> None:
         ({"scorecard": {**ctx.config.settings["scorecard"], "retries": -1}}, "retry bounds"),
         ({"scorecard": {**ctx.config.settings["scorecard"], "cache_root": "/abs/path"}}, "repository-relative"),
         ({"scorecard": {**ctx.config.settings["scorecard"], "cache_root": "../escape"}}, "repository-relative"),
+        ({"native_advisory_lookup": None}, "native_advisory_lookup settings must be a table"),
+        ({"native_advisory_lookup": {"component_limit": 0, "rows_per_component": 1, "match_limit": 1}},
+         "native_advisory_lookup bounds"),
+        ({"native_advisory_lookup": {"component_limit": 1, "rows_per_component": 1}}, "native_advisory_lookup bounds"),
     ]:
         bad_ctx = replace(ctx, config=replace(ctx.config, settings={**ctx.config.settings, **override}))
         with pytest.raises(ValueError, match=match):

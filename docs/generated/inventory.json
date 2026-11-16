@@ -1069,6 +1069,8 @@
       "llvm_ir",
       "model_connectivity",
       "model_preflight",
+      "native_advisory_lookup",
+      "native_advisory_observations",
       "native_component_curation",
       "native_discovery",
       "native_inference_inputs",
@@ -1710,6 +1712,7 @@
       "appsec-review/model-recording-root/2",
       "appsec-review/model-recording/1",
       "appsec-review/model-recording/2",
+      "appsec-review/native-advisory-lookup/1",
       "appsec-review/native-build-capture/4",
       "appsec-review/native-capture-provenance/1",
       "appsec-review/native-component-compile-database/2",
@@ -2546,6 +2549,7 @@
       "model-recording/1",
       "model-recording/2",
       "msbuild-mapping/1",
+      "native-advisory-lookup/1",
       "native-build-capture/4",
       "native-capture-provenance/1",
       "native-component-compile-database/2",
@@ -3242,6 +3246,7 @@
       "probe.rust",
       "probe.wasm",
       "provenance.native_units",
+      "publication.native_advisory_lookup",
       "publication.publish_claim_ledger",
       "publication.publish_context",
       "publication.publish_handoff",
@@ -4859,6 +4864,8 @@
       "llvm_ir": "symbols_and_calls",
       "model_connectivity": "metrics",
       "model_preflight": "metrics",
+      "native_advisory_lookup": "dependencies_and_advisories",
+      "native_advisory_observations": "dependencies_and_advisories",
       "native_component_curation": "dependencies_and_advisories",
       "native_discovery": "dependencies_and_advisories",
       "native_inference_inputs": "dependencies_and_advisories",
@@ -14322,6 +14329,58 @@
         },
         {
           "artifacts": [
+            "data/jobs/job_dependency_intelligence/attempts/*/steps/publication/tasks/native_advisory_lookup/native-advisory-lookup.json"
+          ],
+          "authority": "producer_evidence",
+          "description": "Native advisory lookup record: components, decided CPE rows, matches, snapshot provenance and gaps.",
+          "disposition": "artifact_only",
+          "family": "scanner_findings",
+          "indexes": [],
+          "mcp_tools": [
+            "coverage",
+            "query_dataset_inventory"
+          ],
+          "output_kind": "native_advisory_lookup",
+          "query_route": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+          "reason": "matches are indexed as observations; the whole decision record is retained for audit",
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/native-advisory-lookup/1",
+          "sensitivity": "internal",
+          "shard_prefixes": [],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [],
+          "authority": "producer_evidence",
+          "description": "NVD CPE range matches of corroborated native component releases against the verified cve-bin-tool snapshot: dependency leads with vendor confidence, never confirmed vulnerabilities.",
+          "disposition": "indexed",
+          "family": "scanner_findings",
+          "indexes": [
+            "observations"
+          ],
+          "mcp_tools": [
+            "query_observations",
+            "query_precomputed"
+          ],
+          "output_kind": "native_advisory_observations",
+          "query_route": "query_observations; query_precomputed query_set=dependency_advisories",
+          "reason": null,
+          "required": false,
+          "route_gap": null,
+          "schema": "appsec-review/retrieval-index/2",
+          "sensitivity": "internal",
+          "shard_prefixes": [
+            "native-advisory"
+          ],
+          "shard_suffixes": [],
+          "step": "publication",
+          "store": "retrieval"
+        },
+        {
+          "artifacts": [
             "data/jobs/job_dependency_intelligence/attempts/*/steps/resolution/tasks/curate_components/native-inference.json"
           ],
           "authority": "producer_evidence",
@@ -14685,6 +14744,11 @@
           "retries": 1,
           "timeout_seconds": 120
         },
+        "native_advisory_lookup": {
+          "component_limit": 4096,
+          "match_limit": 20000,
+          "rows_per_component": 512
+        },
         "native_candidate_limit": 10000,
         "native_evidence_limit": 50000,
         "native_evidence_per_candidate": 32,
@@ -14777,6 +14841,7 @@
                 "scorecards.fetch",
                 "publication.publish_context",
                 "publication.publish_sbom",
+                "publication.native_advisory_lookup",
                 "resolution.detect_dependencies",
                 "resolution.curate_components",
                 "resolution.investigate_components"
@@ -14786,7 +14851,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.publish_handoff",
               "id": "acceptance.publish_handoff",
               "internal_tools": [],
-              "line": 462,
+              "line": 570,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14808,7 +14873,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.load",
               "id": "inputs.load_accepted",
               "internal_tools": [],
-              "line": 244,
+              "line": 263,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14823,6 +14888,25 @@
         "publication": {
           "settings": {},
           "tasks": {
+            "native_advisory_lookup": {
+              "dependencies": [
+                "inputs.load_accepted",
+                "resolution.infer_repositories"
+              ],
+              "guidance_binding": "not_declared",
+              "guidance_gap": "T-147",
+              "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.native_advisory_lookup",
+              "id": "publication.native_advisory_lookup",
+              "internal_tools": [],
+              "line": 414,
+              "pool": "application",
+              "settings": {},
+              "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
+              "tool_binding": "not_declared",
+              "tool_gap": "T-147",
+              "tools": [],
+              "workers": 1
+            },
             "publish_context": {
               "dependencies": [
                 "inputs.load_accepted",
@@ -14832,14 +14916,15 @@
                 "resolution.infer_repositories",
                 "repositories.deduplicate",
                 "scorecards.fetch",
-                "publication.publish_sbom"
+                "publication.publish_sbom",
+                "publication.native_advisory_lookup"
               ],
               "guidance_binding": "not_declared",
               "guidance_gap": "T-147",
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.publish_context",
               "id": "publication.publish_context",
               "internal_tools": [],
-              "line": 395,
+              "line": 495,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14859,7 +14944,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.<lambda>",
               "id": "publication.publish_sbom",
               "internal_tools": [],
-              "line": 502,
+              "line": 613,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14883,7 +14968,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.repositories",
               "id": "repositories.deduplicate",
               "internal_tools": [],
-              "line": 322,
+              "line": 341,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14908,7 +14993,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.<lambda>",
               "id": "resolution.curate_components",
               "internal_tools": [],
-              "line": 494,
+              "line": 605,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14926,7 +15011,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.detect",
               "id": "resolution.detect_dependencies",
               "internal_tools": [],
-              "line": 262,
+              "line": 281,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14945,7 +15030,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.infer_repositories",
               "id": "resolution.infer_repositories",
               "internal_tools": [],
-              "line": 293,
+              "line": 312,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14964,7 +15049,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.<lambda>",
               "id": "resolution.investigate_components",
               "internal_tools": [],
-              "line": 496,
+              "line": 607,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -14988,7 +15073,7 @@
               "handler": "appsec_review.jobs.job_dependency_intelligence.job.build_job.<locals>.scorecards",
               "id": "scorecards.fetch",
               "internal_tools": [],
-              "line": 330,
+              "line": 349,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_dependency_intelligence/job.py",
@@ -15020,6 +15105,7 @@
           "tests/unit/job_dependency_intelligence/test_native_inference_runtime.py",
           "tests/unit/job_dependency_intelligence/test_native_inference_wiring.py",
           "tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py",
+          "tests/unit/job_dependency_intelligence/test_native_advisories.py",
           "tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py",
           "tests/unit/job_dependency_intelligence/test_native_spdx.py",
           "tests/unit/job_dependency_intelligence/test_unity_inventory.py"
@@ -43822,6 +43908,7 @@
     "query_observations": {
       "declared_dataset_indexes": [
         "graph",
+        "observations",
         "precomputed"
       ],
       "description": "Filter accepted scanner observations by exact scanner, rule, normalized reported severity, suppression/duplicate state, source/artifact and location; returns native severity and the normalization rule. Tool observations are never confirmed findings; rule is the analyzer check, and seed (path:line), function, fix_it and min_trace_length select seeded Clang-Tidy / Clang Static Analyzer diagnostics.",
@@ -44272,9 +44359,9 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "229e913afab1fc1799059b8df6584a6a90f3257613847c9e53f8e8786fde15ee",
+    "appsec-review.toml": "e95353e126b1d32f4a65f13457c09b516f257ad5f45de7afe4080f9470b4199d",
     "containers/catalog.toml": "995c0e1f684a69913f3175450c28b27b97726a1f977cbc1ce77e6c98ed10af2c",
-    "docs/intelligence-buckets.json": "ef0d1b77cb2801a41cb87f6f5b491004993874c7551468f09d0415977d8bb818",
+    "docs/intelligence-buckets.json": "cec74cb02f073d0e91bcbad28246ab34ab7bef5262a7c8b1cb8c7e8d2f65c725",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",
     "src/appsec_review/__init__.py": "e8ee360d5e72b7f3ad9bf9b84ca9b734b76a9f9d2cf9730e4eabb11121ce692c",
     "src/appsec_review/__main__.py": "6eb6f048c25e857f17755bbc341b70b7184cb4026b743fba3eaecc6951f65fc3",
@@ -44334,7 +44421,7 @@
     "src/appsec_review/config/image_builder_service.py": "a2cbaa1f748c630ba1816afc31a29de62494f4036cab087f0a2c4c9aa6148d3a",
     "src/appsec_review/config/image_pin_verification.py": "ebc74bd6cef04001bef7237939e73f72f585fe34f1328f4caadae845616a240a",
     "src/appsec_review/config/inference_review.py": "acf023884e924a28a879a8dde1c13ff2ec11de2f4f39396022dc27e683143a98",
-    "src/appsec_review/config/loader.py": "f6f7f404bc5bfbfb0ccdacb7f2563b70f74145fd54d75a11186c52d6f9190bb3",
+    "src/appsec_review/config/loader.py": "e02b68cf0cffbaf7f524692357eb434b4ebb9f7c80455c1ccac95af4aa0a5780",
     "src/appsec_review/config/native_dagster.py": "b1be8153fa77a1a565ceff7449adc5a2e01adc031ce356abaf50c0d26bbc3bb7",
     "src/appsec_review/config/native_engine.py": "b21229a3ffafb5e87e4f339b7b0e6dc3489ee6611bc06c348e310da09d189fab",
     "src/appsec_review/config/owasp.py": "51185e78f4f3295b88896c3341509efab413283964c629a06c0f0e266fb8dcc5",
@@ -44412,10 +44499,10 @@
     "src/appsec_review/indexing/fts_worker.py": "8eea803658e3d7c88a6f552db09b65258a2fe803f8149c4f2da61db370f16e34",
     "src/appsec_review/indexing/input_matrix.py": "c115e19eaa1068195d2a24d95637b4f0e829f3c976203417cbba9fe92017bf08",
     "src/appsec_review/indexing/inventory.py": "48b9096fc8248906f5efe7f7a128676ed10f6e8165f74ed5bf93816fe6c1c6cc",
-    "src/appsec_review/indexing/links.py": "c052b071929a59db31fdb4902e619426ba0177feef07241e24d01fb5e70ad90c",
+    "src/appsec_review/indexing/links.py": "bef09f01913a3e9e8664fcbe2d63a7d7081d35d01005ef595f071369ba6d52c2",
     "src/appsec_review/indexing/matrix.py": "437365cd28331659429aa30058d36d57e09ab97083d11893f50fc5fdbb3712bf",
     "src/appsec_review/indexing/metrics.py": "8dd632ecc21e881305493dd870388a9246ff90b574428119f3a1b93fbbb140ed",
-    "src/appsec_review/indexing/products.py": "42bca495cd493340d79914179fcce285fbceb8eaa3744a1e769a623feb3b159b",
+    "src/appsec_review/indexing/products.py": "772b797b5a08c292ad6d5dbeb2d9402e864ea4c9c47e094d5e7875877d688fe5",
     "src/appsec_review/indexing/products_base.py": "d3a707eb9eed46676bca96f669f54d079088402398de858d8e2cc8cbca9fba19",
     "src/appsec_review/indexing/sast.py": "8518b308d7f6f1e72d0fb37ae73dd4fb9a6df5fb7ab381ded49f602d9da49976",
     "src/appsec_review/indexing/store.py": "b322a25f5b1ecf9d8f50807e2c2ebb1f17197372fcf5ff39993680353f1f8637",
@@ -44521,13 +44608,14 @@
     "src/appsec_review/jobs/job_debug_symbol_indexing/job.py": "1e860bd2c454aa7827dddaf9947a1eacb3f0d48375da3dba7f9591633f902332",
     "src/appsec_review/jobs/job_dependency_intelligence/__init__.py": "0ead53d2147f344c6505df9e72b80ef1a7d50a568099519795f82a642177d662",
     "src/appsec_review/jobs/job_dependency_intelligence/curation.py": "680bab09dc72c38318af1b38a25bbfb11f39388eaba6e1796a4df914b63719aa",
-    "src/appsec_review/jobs/job_dependency_intelligence/datasets.py": "e59ca50c00bb7a55014cf334b9dc98653f31681503178a14a9d45e1a6d81b044",
+    "src/appsec_review/jobs/job_dependency_intelligence/datasets.py": "2f332f11da4f82a341b52291a059ba91df5bf49859cf91950fd1dc4bbfb9aac4",
     "src/appsec_review/jobs/job_dependency_intelligence/discovery.py": "6662b792bb7fc0ee5f41955282d958b81267d5d0e59125a6bba38e236efe90ee",
     "src/appsec_review/jobs/job_dependency_intelligence/inference.py": "e80ab858657233cdb8d3e21f74711dfb9c1bebe62e0834bc8e2ffd024a8cb672",
     "src/appsec_review/jobs/job_dependency_intelligence/integration.py": "28d06fed2eede0d96d3bf793ff5e61fb9aa4a58bc2f77ca8aa15046af1a65270",
     "src/appsec_review/jobs/job_dependency_intelligence/investigation.py": "08cd88eb8183a91fd22a6b092884c3148e4166168c549c4fde0fdb8a4fab8825",
-    "src/appsec_review/jobs/job_dependency_intelligence/job.py": "0ec43f41dabb10326e8029f0a8e3d2e7332847054d0ebda4cac61cb740da3595",
+    "src/appsec_review/jobs/job_dependency_intelligence/job.py": "29bfa0a5423619f21cbeef46bab0e33e92fa0682b115ebfc83b19cc893544bdf",
     "src/appsec_review/jobs/job_dependency_intelligence/native.py": "5bd6b4b0213e6de50d5ed372faef2585c401213284f1e7b35a66d89c76b3c5c7",
+    "src/appsec_review/jobs/job_dependency_intelligence/native_advisories.py": "2136f243a29cfac32454702ccebd74ee115d07771081165a7b4a29f625135af6",
     "src/appsec_review/jobs/job_dependency_intelligence/native_inference_contracts.py": "dd2282aa7730542fe17a9a6f2f9b971834c3e8af9dba75b3a9690aed22379598",
     "src/appsec_review/jobs/job_dependency_intelligence/native_inference_integration.py": "195b23511d567c926d2f62e820971ed4c4bf596bcc1ed797fcc333f3d2d0dfee",
     "src/appsec_review/jobs/job_dependency_intelligence/native_inference_runtime.py": "29be22a1afc7fe3d6ad18f87938eb29535d036cdff10855173f5326a223fdee0",
@@ -44916,7 +45004,7 @@
     "src/appsec_review/review/independence.py": "7703361d24f62fd96711a50dc051a66c957f1a81c21908dcd1a78c4e0291bf0f",
     "src/appsec_review/review/judge.py": "c8dba974766ba6f5b23cd9d645eb0144e7ebf0afe60b898ea17b5a73cd955a5e",
     "src/appsec_review/review/labels.py": "26079efc8199ac3f1c2e46609dcc96b5c88fafd57c8684aea6393f21a593469a",
-    "src/appsec_review/review/lead_families.py": "2baf9505d257fe0ee8125a8e31b1931736dd0bb3b9a501c5c4269f6dd7adab6d",
+    "src/appsec_review/review/lead_families.py": "5dbc53252a257572f0166763d0984cc9a0d762f52f761953371f090fcea3f4f6",
     "src/appsec_review/review/lead_filters.py": "65bd9675f7ae3873af91e88a79a7825a53940ce5ecb7850789900d8e68116bf3",
     "src/appsec_review/review/lead_triage.py": "d869bc450fb52b65cc69d1537d04b65a5836c0bcd852b234f44c8668e192ebfc",
     "src/appsec_review/review/lead_triage_settings.py": "da456d70389e1d0ea9fe50a76bac48ca5f3314e08213a31979295419a47f423a",
@@ -44934,7 +45022,7 @@
     "src/appsec_review/review/references.py": "082b47912ec5fe2c0febd7db8fabdc39f62f8f4cc607f2f3a6a8571852b1cdc4",
     "src/appsec_review/review/result_cache.py": "dc8f7daa923c3a9f45410ad5f2d62baadd47a3fa53a057c09ef4dc99c638a787",
     "src/appsec_review/review/schemas.py": "5c5b1668bd59c4b2fa6c128c41352bd98949afbdd6b80dc6fc3851c0161ca0da",
-    "src/appsec_review/review/scope.py": "753ed72d5860c5ade7704e1e4356c1ac4ed97a7968a45ab21df2621365446766",
+    "src/appsec_review/review/scope.py": "403891f560a74873b59b69feccb7ccf0fa38d0d10ea4f89c2d681464b07ccd30",
     "src/appsec_review/review/scoring/__init__.py": "6560b8357cae22111c98f0bc18dd358947964867b65cbc323bfdbd5f2e85becf",
     "src/appsec_review/review/scoring/application_matrix.py": "ed620dd1e47410ac0eacc4baaa1db20223473e7087a95d8899b45de1d5600e37",
     "src/appsec_review/review/scoring/application_matrix_v3.py": "805c91c3cb32c30f2e1d90d7d9f36d2166537231471475815b6b0396d1126c1f",
@@ -45048,11 +45136,12 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "7d2d1e2c134649a1775c94b45f27f527b266f95e87b2dcd95e621e6dbe144adf",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "953876917ad57e38d273390664a684d0e3cec19192cb52a50d6cb7c018e6df67"
+    "tests/job-test-map.json": "ef79e26b00795631d3d7b1b553edd8296a3d8e2b50fbe09852e6cd2ffe468ab5"
   },
   "tool_policy": {
     "disable_grype": true,
     "enable_cve_bin_tool": true,
+    "enable_native_advisory_lookup": true,
     "enable_swift": false
   },
   "unregistered_inputs": {

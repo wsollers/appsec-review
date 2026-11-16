@@ -103,6 +103,10 @@ def test_dependency_advisory_selection_includes_heuristic_inventory() -> None:
 
     assert any(row["name"] == "inventory" and
                row["producer"]["job"] == "job_dependency_intelligence" for row in selected)
+    # The native advisory lookup publishes an observations shard under the same job.
+    assert any(row["name"] == "observations" and
+               row["producer"]["job"] == "job_dependency_intelligence" for row in selected)
+    assert "native-advisory" in products.ADVISORY_SCANNER_SHARDS
 
 
 def test_dependency_inventory_osv_match_publishes_unverified_cve_lead(tmp_path: Path) -> None:

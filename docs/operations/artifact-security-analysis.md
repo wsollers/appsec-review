@@ -59,7 +59,11 @@ cve-bin-tool sees only the strings its checkers expect. In the C/C++ smoke targe
 zlib 1.2.11 is matched from its compiled objects, but the final executable drops that copyright
 string at link time, the trimmed bzip2 copy lacks the `bzip2recover` strings its checker needs and
 lz4 assembles its version from macros, so a clean executable scan proves nothing about them. See
-[the tool image](../../containers/tools/cve-bin-tool/README.md).
+[the tool image](../../containers/tools/cve-bin-tool/README.md). Those releases are instead decided
+against the same snapshot's NVD CPE ranges by dependency intelligence's model-free
+[native advisory lookup](dependency-intelligence.md#native-advisory-lookup-nvd-cpe-ranges)
+(`native-advisory` observations shard, `match_basis: cpe-range`), which joins
+`dependency_advisories` the same way.
 
 Prebuilt objects retain content-addressed storage, but scanner invocation mounts only the selected
 object read-only under its original basename in an otherwise empty target directory. This preserves

@@ -26,7 +26,9 @@ from appsec_review.storage import file_sha256
 
 SCOPE_RULE = "appsec-review/review-scope/1"
 GAP_STATES = ("missing", "skipped", "failed", "unavailable", "partial", "stale", "ambiguous", "truncated")
-DEPENDENCY_SHARDS = frozenset({"osv_scanner", "grype"})
+# Dependency scanner observation shards: the evidence-collection package scanners and dependency
+# intelligence's NVD CPE range lookup of corroborated native releases (``native-advisory``).
+DEPENDENCY_SHARDS = frozenset({"osv_scanner", "grype", "native-advisory"})
 REFERENCE_QUERY_SETS = ("dependency_advisories", "reference_intelligence")
 
 

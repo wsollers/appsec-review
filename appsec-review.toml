@@ -154,6 +154,11 @@ enable_swift = false
 # is a lead about a vendored or linked library version, never a confirmed vulnerability. Disabling
 # records a CONFIGURED_DISABLED gap; a missing or unverifiable snapshot is a named gap either way.
 enable_cve_bin_tool = true
+# Model-free NVD CPE range lookup of corroborated native component releases (pkg:generic PURLs and
+# purl-less native rows of job_dependency_intelligence, publication.native_advisory_lookup) in the same
+# verified cve-bin-tool snapshot. A match is a dependency lead with a vendor confidence (canonical or
+# alternate_vendor), never a confirmed vulnerability; disabling records a CONFIGURED_DISABLED gap.
+enable_native_advisory_lookup = true
 
 [signing]
 # Ed25519 signatures verified through the system OpenSSL 3 CLI (src/appsec_review/signing/).
@@ -2635,6 +2640,13 @@ sbom_output_bytes = 33554432
 sbom_conversion_timeout_seconds = 120
 repository_hosts = ["github.com", "gitlab.com"]
 
+# Bounds of publication.native_advisory_lookup: components looked up, cve_range rows evaluated per component
+# (every vendor of the product name) and matches recorded in total; each exceeded bound is a named gap.
+[jobs.job_dependency_intelligence.settings.native_advisory_lookup]
+component_limit = 4096
+rows_per_component = 512
+match_limit = 20000
+
 [jobs.job_dependency_intelligence.settings.model]
 enabled = true
 provider = "claude-cli"
@@ -2690,6 +2702,7 @@ workers = 4
 [jobs.job_dependency_intelligence.steps.publication]
 workers = 1
 [jobs.job_dependency_intelligence.steps.publication.tasks.publish_sbom]
+[jobs.job_dependency_intelligence.steps.publication.tasks.native_advisory_lookup]
 [jobs.job_dependency_intelligence.steps.publication.tasks.publish_context]
 
 [jobs.job_dependency_intelligence.steps.acceptance]

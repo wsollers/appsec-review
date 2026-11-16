@@ -261,6 +261,7 @@
         "tests/unit/job_dependency_intelligence/test_native_inference_runtime.py",
         "tests/unit/job_dependency_intelligence/test_native_inference_wiring.py",
         "tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py",
+        "tests/unit/job_dependency_intelligence/test_native_advisories.py",
         "tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py",
         "tests/unit/job_dependency_intelligence/test_native_spdx.py",
         "tests/unit/job_dependency_intelligence/test_unity_inventory.py"

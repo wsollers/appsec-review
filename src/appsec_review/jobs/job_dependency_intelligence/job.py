@@ -19,7 +19,7 @@ from appsec_review.jobs.job_artifact_indexing import load_accepted_artifact_inde
 from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, IndexIdentity,
                                      LogicalIdentity, RelationKind, RelationRecord, index_fingerprint,
                                      SourceLocation, write_manifest)
-from appsec_review.retrieval.index import load_verified_manifest
+from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import safe_path, verify_reference
@@ -31,6 +31,14 @@ from .native_inference_integration import inference_bounds, run_native_inference
 from .integration import (
     Converter, collect_inputs, native_bounds, publish_sbom, read_native_file, sbom_bounds,
     validate_publication,
+)
+from .native_advisories import (
+    MAPPING_IDENTITY as ADVISORY_MAPPING_IDENTITY, MATCH_BASIS as ADVISORY_MATCH_BASIS,
+    NORMALIZER_IDENTITY as ADVISORY_NORMALIZER_IDENTITY, PARSER_IDENTITY as ADVISORY_PARSER_IDENTITY,
+    RESULT_SCHEMA as ADVISORY_RESULT_SCHEMA, SCANNER_IDENTITY as ADVISORY_SCANNER_IDENTITY,
+    TOOL_ID as ADVISORY_TOOL_ID, LookupBounds, SnapshotResolver, lookup as advisory_lookup,
+    observation_records, open_database, result_fingerprint, select_components, snapshot_provenance,
+    verified_snapshot,
 )
 from .resolution import deduplicate_repositories, normalize_dependencies, repository_identity
 from .scorecard import (ScorecardCache, ScorecardCacheError, ScorecardClient, ScorecardError,
@@ -44,12 +52,19 @@ TOPOLOGY = {
                    "infer_repositories"),
     "repositories": ("deduplicate",),
     "scorecards": ("fetch",),
-    "publication": ("publish_sbom", "publish_context"),
+    "publication": ("publish_sbom", "native_advisory_lookup", "publish_context"),
     "acceptance": ("publish_handoff",),
 }
 PARSER_IDENTITY = "dependency-intelligence-parser/2"
 NORMALIZER_IDENTITY = "dependency-intelligence-normalizer/2"
 MAPPING_IDENTITY = "dependency-intelligence-evidence-map/2"
+ADVISORY_SHARD_ID = "native-advisory"
+
+
+def _dependency_identity(snapshot: str, dependency: Mapping[str, Any]) -> LogicalIdentity:
+    """The inventory entity identity of one normalized dependency row (shared by every shard that cites it)."""
+    return LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, snapshot,
+        {key: dependency.get(key) for key in ("dependency_id", "name", "version", "purl", "repository")})
 
 
 def _index_native_evidence(unit: UnitContext, builder: IndexBuilder, identities: Mapping[str, str],
@@ -204,6 +219,7 @@ def _validate_config(context, _result) -> None:
     native_bounds(settings)
     sbom_bounds(settings)
     inference_bounds(settings)
+    LookupBounds.from_settings(settings.get("native_advisory_lookup"))
     if (type(settings.get("sbom_conversion_timeout_seconds")) is not int
             or settings["sbom_conversion_timeout_seconds"] < 1):
         raise ValueError("SPDX conversion timeout must be a positive integer")
@@ -240,7 +256,10 @@ def _validate_config(context, _result) -> None:
 
 
 def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = https_get,
-              syft_converter: Converter | None = None) -> Job:
+              syft_converter: Converter | None = None,
+              advisory_snapshot: SnapshotResolver | None = None) -> Job:
+    """``advisory_snapshot`` resolves the verified cve-bin-tool snapshot; tests inject a fixture, production
+    uses :func:`native_advisories.verified_snapshot` (pointer, manifest, file hashes, build record)."""
     def load(unit: UnitContext) -> Mapping[str, Any]:
         declared, catalog_sha = _target_dependencies(unit.job.run_root)
         language = load_accepted_language_build(unit.job.run_root)
@@ -392,22 +411,105 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                 "repository_count": len(deduplicated["repositories"]), "cache_hit_count": cache_hits,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
+    def native_advisory_lookup(unit: UnitContext) -> Mapping[str, Any]:
+        """Decide every corroborated native release against the NVD CPE ranges of the verified cve-bin-tool snapshot.
+
+        Model-free and offline. Each match is a dependency lead (``observation.matches``) with its vendor confidence;
+        a disabled tool, an unverifiable snapshot, a version-less component and an uncomparable bound are named
+        gaps, never silence and never a clean result. The matches are indexed as an ``observations`` shard
+        (``native-advisory``) that ``publish_context`` binds into this job's manifest.
+        """
+        from contextlib import closing
+        loaded, resolved = unit.output("inputs.load_accepted"), unit.output("resolution.infer_repositories")
+        bounds = LookupBounds.from_settings(unit.job.config.settings.get("native_advisory_lookup"))
+        path = unit.unit_root / "native-advisory-lookup.json"
+        tool_identity = {"scanner": ADVISORY_TOOL_ID, "identity": ADVISORY_SCANNER_IDENTITY,
+                         "match_basis": ADVISORY_MATCH_BASIS}
+
+        def finish(document: Mapping[str, Any], gaps: list[Any], status: str, *, disposition: str,
+                   index_identity: Mapping[str, Any] | None = None, **counts: int) -> dict[str, Any]:
+            atomic_json(path, {"schema": ADVISORY_RESULT_SCHEMA, "tool_identity": tool_identity,
+                               "bounds": bounds.as_dict(), **document, "coverage_disposition": disposition,
+                               "gaps": gaps})
+            return {"artifact": _artifact(unit.job.run_root, path), "index_identity": index_identity,
+                    "coverage_disposition": disposition, "gaps": gaps,
+                    **{key: counts.get(key, 0) for key in ("component_count", "match_count", "observation_count")},
+                    "terminal_status": status}
+
+        if not unit.job.tools.enable_native_advisory_lookup:
+            gap = "native advisory lookup was configured disabled by tools.enable_native_advisory_lookup"
+            unit.job.events.write("TOOL_CONFIGURED_DISABLED", unit_id=unit.unit_id, tool_id=ADVISORY_TOOL_ID,
+                                  disposition="CONFIGURED_DISABLED", gap_count=1, gaps=[gap], checkpoint_reused=False)
+            return finish({}, [gap], "NOT_APPLICABLE", disposition="CONFIGURED_DISABLED")
+        components, component_gaps, gaps = select_components(resolved["dependencies"], bounds)
+        component_view = [{"name": item.name, "version": item.version, "purl": item.purl,
+                           "dependency_ids": list(item.dependency_ids)} for item in components]
+        try:
+            snapshot = (advisory_snapshot or verified_snapshot)(unit.job.repository_root, unit.job.run_root)
+            provenance = snapshot_provenance(snapshot)
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as exc:
+            # A missing or unverifiable snapshot is a named coverage gap for every component, never a failure.
+            gap = f"verified immutable cve-bin-tool database unavailable: {type(exc).__name__}: {str(exc)[:200]}"
+            return finish({"components": component_view}, [gap, *gaps, *component_gaps], "COMPLETED_WITH_GAPS",
+                          disposition="unavailable", component_count=len(components))
+        with closing(open_database(snapshot)) as connection:
+            result = advisory_lookup(connection, components, bounds)
+        records = observation_records(result, provenance)
+        producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
+        producer_artifacts.append({"native_advisory_lookup_sha256": result_fingerprint(components, provenance, bounds)})
+        fingerprint = index_fingerprint(name="observations", target_snapshot=unit.job.source_fingerprint,
+            producer_artifacts=producer_artifacts, tool_identity={**tool_identity, **provenance},
+            parser_identity=ADVISORY_PARSER_IDENTITY, normalizer_identity=ADVISORY_NORMALIZER_IDENTITY,
+            mapping_identity=ADVISORY_MAPPING_IDENTITY)
+        shard_path = (unit.job.run_root / "data" / "indices" / "observations"
+                      / f"{ADVISORY_SHARD_ID}-{fingerprint}.sqlite")
+        builder = IndexBuilder(shard_path, name="observations", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint, shard_id=ADVISORY_SHARD_ID)
+        identities = {str(row.get("dependency_id")): _dependency_identity(unit.job.source_fingerprint, row).value
+                      for row in resolved["dependencies"] if isinstance(row, Mapping) and row.get("dependency_id")}
+        for record in records:
+            identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
+                                              record["identity_key"])
+            builder.add_entity(EntityRecord(identity, record["native_id"], record["name"], record["text"],
+                                            record["payload"]))
+            for dependency_id in record["dependency_ids"]:
+                target = identities.get(dependency_id)
+                if target is not None:
+                    builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value, target, True, 1.0,
+                                                        payload={"match_basis": ADVISORY_MATCH_BASIS}))
+        all_gaps: list[Any] = [*gaps, *result["gaps"], *component_gaps]
+        gap_texts = [gap if isinstance(gap, str) else str(gap.get("detail") or gap)[:4096] for gap in all_gaps]
+        builder.add_coverage("native-advisory-lookup", "partial" if gap_texts else "complete",
+                             gap_texts[0] if gap_texts else None)
+        sha, _reused = builder.build_or_reuse()
+        identity = IndexIdentity("observations", INDEX_SCHEMA, sha, fingerprint,
+                                 shard_path.relative_to(unit.job.run_root).as_posix(),
+                                 {"job": JOB_ID, "unit": unit.unit_id}, tuple(gap_texts[:1000]), ADVISORY_SHARD_ID)
+        document = {**result, "provenance": provenance, "index_identity": asdict(identity),
+                    "component_gaps": component_gaps, "observation_count": len(records)}
+        return finish(document, all_gaps, "COMPLETED_WITH_GAPS" if all_gaps else "SUCCEEDED",
+                      disposition="partial" if all_gaps else "complete", index_identity=asdict(identity),
+                      component_count=len(components),
+                      match_count=int(result["match_count"]), observation_count=len(records))
+
     def publish_context(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("inputs.load_accepted")
         resolved = unit.output("resolution.infer_repositories")
         repositories = unit.output("repositories.deduplicate")
         scorecard = unit.output("scorecards.fetch")
         sbom = unit.output("publication.publish_sbom")
+        advisory = unit.output("publication.native_advisory_lookup")
         gaps = [*unit.output("resolution.detect_dependencies")["gaps"], *resolved["gaps"],
                 *unit.output("resolution.curate_components")["gaps"],
                 *unit.output("resolution.investigate_components")["gaps"],
-                *repositories["gaps"], *scorecard["gaps"], *sbom["gaps"]]
+                *repositories["gaps"], *scorecard["gaps"], *sbom["gaps"], *advisory["gaps"]]
         unique_gaps = {canonical_json(item): item for item in gaps}
         gaps = [unique_gaps[key] for key in sorted(unique_gaps)]
         producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
         producer_artifacts.append({"dependency_context_sha256": hashlib.sha256(canonical_json({
             "dependencies": resolved["dependencies"], "scorecards": scorecard["records"], "gaps": gaps,
         })).hexdigest()})
+        producer_artifacts.append({"native_advisory_lookup_sha256": advisory["artifact"]["sha256"]})
         fingerprint = index_fingerprint(name="inventory", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=producer_artifacts,
             tool_identity={"scorecard_api": unit.job.config.settings["scorecard"]["base_url"],
@@ -425,8 +527,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             if isinstance(gap, Mapping) and gap.get("dependency_id"):
                 gaps_by_dependency.setdefault(str(gap["dependency_id"]), []).append(dict(gap))
         for dependency in resolved["dependencies"]:
-            identity = LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, unit.job.source_fingerprint,
-                {key: dependency.get(key) for key in ("dependency_id", "name", "version", "purl", "repository")})
+            identity = _dependency_identity(unit.job.source_fingerprint, dependency)
             identities[dependency["dependency_id"]] = identity.value
             scoped = gaps_by_dependency.get(dependency["dependency_id"], [])
             builder.add_entity(EntityRecord(identity, dependency["dependency_id"], dependency["name"],
@@ -453,10 +554,17 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                                  tuple(str(gap)[:4096] for gap in gaps), "dependency-intelligence")
         manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / \
                         f"dependency-intelligence-{unit.job.attempt_id}.json"
+        # The native advisory observations shard (when the lookup executed) travels in the same manifest, so
+        # review-data indexing selects it beside the scanner observation shards of other jobs.
+        indexes = [identity]
+        if advisory.get("index_identity"):
+            raw = dict(advisory["index_identity"])
+            indexes.append(IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}))
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
-                       target_root=unit.job.target_root or unit.job.repository_root, indexes=(identity,))
+                       target_root=unit.job.target_root or unit.job.repository_root, indexes=tuple(indexes))
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
         return {"index_identity": asdict(identity), "index_manifest": _artifact(unit.job.run_root, manifest_path),
+                "advisory_index_identity": advisory.get("index_identity"),
                 "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish_handoff(unit: UnitContext) -> Mapping[str, Any]:
@@ -480,6 +588,9 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                     "native_metadata": unit.output("resolution.investigate_components")["artifact"],
                     "unity_inventory": loaded["unity_inventory_artifact"],
                     "sbom": sbom,
+                    "native_advisory_lookup": {key: unit.output("publication.native_advisory_lookup").get(key)
+                                               for key in ("artifact", "index_identity", "coverage_disposition",
+                                                           "component_count", "match_count", "observation_count")},
                     "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
         path = unit.unit_root / "dependency-intelligence-handoff.json"
         atomic_json(path, document)
@@ -502,14 +613,18 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         Unit("publication.publish_sbom", lambda unit: publish_sbom(unit, syft_converter),
              ("inputs.load_accepted", "resolution.investigate_components",
               "resolution.curate_components")),
+        Unit("publication.native_advisory_lookup", native_advisory_lookup,
+             ("inputs.load_accepted", "resolution.infer_repositories")),
         Unit("publication.publish_context", publish_context,
              ("inputs.load_accepted", "resolution.detect_dependencies", "resolution.curate_components",
               "resolution.investigate_components", "resolution.infer_repositories",
-              "repositories.deduplicate", "scorecards.fetch", "publication.publish_sbom")),
+              "repositories.deduplicate", "scorecards.fetch", "publication.publish_sbom",
+              "publication.native_advisory_lookup")),
         Unit("acceptance.publish_handoff", publish_handoff,
              ("inputs.load_accepted", "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch",
-              "publication.publish_context", "publication.publish_sbom", "resolution.detect_dependencies",
-              "resolution.curate_components", "resolution.investigate_components")),
+              "publication.publish_context", "publication.publish_sbom", "publication.native_advisory_lookup",
+              "resolution.detect_dependencies", "resolution.curate_components",
+              "resolution.investigate_components")),
     )
     implementation = None
     return Job(JOB_ID, "dependency_intelligence", UnitExecutor(units).execute,
