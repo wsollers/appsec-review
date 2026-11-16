@@ -44832,7 +44832,7 @@
     "src/appsec_review/reporting/loader.py": "a4f9657785d10538a173caa5b4ffa5520dab66a21eaddc60cae6958108a3b0e6",
     "src/appsec_review/reporting/model.py": "0346c417a550f41fbc37bb1f084f08fb5df9d80ecbe0f60dd5e0f5a1ecd7e523",
     "src/appsec_review/reporting/smoke_score.py": "2a99bdedbd1d4c8a4b3a3ddb30bb282da68004693bec8f9cd9d6664c03b64abd",
-    "src/appsec_review/reporting/smoke_scorecard.py": "26f336c90277f4ea8cd63a5ae65b26aa76dbf8d9448564f80c6fdd851552140a",
+    "src/appsec_review/reporting/smoke_scorecard.py": "653e6600781d8af233a6129d5f7120a9139a87bf0e65d8da0dba02927eb49b41",
     "src/appsec_review/reporting/sources.py": "2d638068708635b928748766f1c2adea0c058d683f7a8f88f9ed9694378d9bce",
     "src/appsec_review/reporting/telemetry/__init__.py": "798d86c76a1996ff5d762ac5b6f1df1faa699a3be18ad53a209d6934595aacce",
     "src/appsec_review/reporting/telemetry/format.py": "6eebe80223d8bae1776389483c2141da54cedb0e212ed7c497874b6caa6d0c1d",
