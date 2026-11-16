@@ -21719,7 +21719,7 @@
         },
         "roles": {
           "adjudication_judge": {
-            "enabled": false,
+            "enabled": true,
             "judges_per_claim": 1,
             "max_cited_row_chars": 400,
             "max_cited_rows_per_side": 12,
@@ -21744,7 +21744,7 @@
           }
         },
         "teams": {
-          "blue_per_team": 0,
+          "blue_per_team": 1,
           "red_per_team": 1,
           "review_teams": 3,
           "verifier_per_team": 1
@@ -22201,7 +22201,7 @@
         },
         "roles": {
           "adjudication_judge": {
-            "enabled": false,
+            "enabled": true,
             "judges_per_claim": 1,
             "max_cited_row_chars": 400,
             "max_cited_rows_per_side": 12,
@@ -22418,7 +22418,7 @@
           ]
         },
         "teams": {
-          "blue_per_team": 0,
+          "blue_per_team": 1,
           "red_per_team": 1,
           "review_teams": 3,
           "verifier_per_team": 1
@@ -27357,7 +27357,8 @@
       "schedule": null,
       "settings": {
         "accepted_judge_verdicts": [
-          "red_correct"
+          "red_correct",
+          "not_convened"
         ],
         "bounds": {
           "max_array_elements": 65536,
@@ -27384,6 +27385,7 @@
             "cxx": "clang++"
           },
           "command_timeout_seconds": 300,
+          "compile_check": false,
           "debug_flags": [
             "-g",
             "-O0"
@@ -27735,7 +27737,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.compile_step",
               "id": "compile.build_check",
               "internal_tools": [],
-              "line": 304,
+              "line": 306,
               "pool": "cpp_build",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -27757,7 +27759,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.load",
               "id": "load.verify_inputs",
               "internal_tools": [],
-              "line": 151,
+              "line": 153,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -27785,7 +27787,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.package",
               "id": "package.files",
               "internal_tools": [],
-              "line": 324,
+              "line": 330,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -27809,7 +27811,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.plan",
               "id": "plan.briefs",
               "internal_tools": [],
-              "line": 203,
+              "line": 205,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -27834,7 +27836,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.publish",
               "id": "publish.publish_handoff",
               "internal_tools": [],
-              "line": 342,
+              "line": 348,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -27860,7 +27862,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.validate",
               "id": "validate.policy",
               "internal_tools": [],
-              "line": 273,
+              "line": 275,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -27884,7 +27886,7 @@
               "handler": "appsec_review.jobs.job_poc_generation.job.build_job.<locals>.write",
               "id": "write.poc_writer",
               "internal_tools": [],
-              "line": 230,
+              "line": 232,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_poc_generation/job.py",
@@ -44146,7 +44148,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "fdb09ed0a6d27d423a5fafb9a583b21b5e16c7947bdf9d6eea11c49f31617857",
+    "appsec-review.toml": "4439a4f8ae55d23cc401265c5c35a54bf3893b5e8cb58c77d61a06746fa629e6",
     "containers/catalog.toml": "000a6be217f2d62b280288c758f53bfda099b7036a8b315acfd76047552b687d",
     "docs/intelligence-buckets.json": "29e398870efeb2e8d8947281156a39f8654739f4710a63192474722f852e067a",
     "pipeline/guidance/registry.json": "6442eb5d79242ac7a5f7cae61d9623234257a98d2c8920010b0848bff018dc44",
@@ -44494,10 +44496,10 @@
     "src/appsec_review/jobs/job_poc_generation/candidates.py": "7d35c502e5a2219e5bc9e0e70f32fc664f3cbd2e53afacdf76daaa18fe590684",
     "src/appsec_review/jobs/job_poc_generation/datasets.py": "a17565d3e929f3eb8281eef92ac0257f60d2ae50ae94b7a580a91df06fc8ec72",
     "src/appsec_review/jobs/job_poc_generation/inputs.py": "3b8abfd3b32e00f9b019cd8091c0b71fbf79318a2b7f6b9e1930ed4d851fc788",
-    "src/appsec_review/jobs/job_poc_generation/job.py": "f03dded198843c1a759635bcc24341999faa8b0fb400ddf7ad7b19974119cdef",
+    "src/appsec_review/jobs/job_poc_generation/job.py": "6ddce0610de62b27832d58e3aa838952e4384edd8b966ecfc5b25d45c9663de7",
     "src/appsec_review/jobs/job_poc_generation/package.py": "e69251eda332d192b5c5a089c00452f76bc683cd870a622ab9a57df19e8b15c6",
     "src/appsec_review/jobs/job_poc_generation/policy.py": "f2ea9561274d72e62d81cc0bb8bb443169779b9c41e3c958be0a71fac1dfb0e5",
-    "src/appsec_review/jobs/job_poc_generation/settings.py": "679bc0bb4eefdcb70bab4e51ab388e9a0adee23988f978963a431173c3d9f6ae",
+    "src/appsec_review/jobs/job_poc_generation/settings.py": "a2a42b23fff2e95874464d3f04560f5993d8677dae5e6e4469cc95af1b7a0cc9",
     "src/appsec_review/jobs/job_poc_generation/source.py": "264f51b8c6aa6d039f3d83ebe18d65dd31c5b1aa8c10feeb45ee31048b63e5b9",
     "src/appsec_review/jobs/job_poc_generation/statuses.py": "97536237521e288feac01bd2a197a13a01cc0e3ce0d2923b63a3e48cf0d16c93",
     "src/appsec_review/jobs/job_poc_generation/writer.py": "0cb1001ccb9983f9b26b6128462debf714969c5c543ebe492cf6f23ccdc143ca",

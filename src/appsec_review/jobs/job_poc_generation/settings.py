@@ -26,8 +26,8 @@ _BOUNDS = frozenset({"max_function_lines", "max_file_bytes", "max_includes", "ma
                      "max_violations"})
 _POLICY = frozenset({"allowed_std_headers", "project_header_suffixes", "call_allowlist", "type_allowlist",
                      "call_denylist", "project_calls"})
-_BUILD = frozenset({"command_timeout_seconds", "output_bytes", "workspace_file_limit", "workspace_bytes_limit",
-                    "ast_compilers", "debug_flags", "sanitizer_flags", "runtime_libraries",
+_BUILD = frozenset({"compile_check", "command_timeout_seconds", "output_bytes", "workspace_file_limit",
+                    "workspace_bytes_limit", "ast_compilers", "debug_flags", "sanitizer_flags", "runtime_libraries",
                     "runtime_symbol_prefixes", "object_limit", "scratch_directory"})
 _BRIEF = frozenset({"view_bytes", "view_source_lines", "view_type_declarations", "declaration_lines",
                     "max_brief_bytes", "max_source_files"})
@@ -111,6 +111,7 @@ class Policy:
 
 @dataclass(frozen=True, slots=True)
 class Build:
+    compile_check: bool               # replay the project's compile command on the validated function
     command_timeout_seconds: int
     output_bytes: int
     workspace_file_limit: int
@@ -208,7 +209,8 @@ class PocGenerationSettings:
                    {category: _names(denylist[category], f"policy.call_denylist.{category}", _API, empty=True)
                     for category in _DENY_CATEGORIES},
                    str(policy["project_calls"])),
-            Build(_int(build["command_timeout_seconds"], "build.command_timeout_seconds", high=7200),
+            Build(_bool(build["compile_check"], "build.compile_check"),
+                  _int(build["command_timeout_seconds"], "build.command_timeout_seconds", high=7200),
                   _int(build["output_bytes"], "build.output_bytes", high=2**28),
                   _int(build["workspace_file_limit"], "build.workspace_file_limit", high=10**6),
                   _int(build["workspace_bytes_limit"], "build.workspace_bytes_limit", high=2**40),
@@ -239,6 +241,7 @@ class PocGenerationSettings:
         """The settings that change what the compile check does."""
         return {"debug_flags": list(self.build.debug_flags), "sanitizer_flags": list(self.build.sanitizer_flags),
                 "ast_compilers": dict(sorted(self.build.ast_compilers.items())),
+                "compile_check": self.build.compile_check,
                 "runtime_libraries": sorted(self.build.runtime_libraries),
                 "runtime_symbol_prefixes": sorted(self.build.runtime_symbol_prefixes)}
 

@@ -2920,10 +2920,11 @@ max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
 review_teams = 3
-# Review protocol v3: analyse (one red), verify (one verifier), decide (policy). The blue refuter is opt-in (D8):
-# in run 2026-11-15-0005 its answers did not move states and in run 0006 two thirds of its attempts were lost.
+# Review protocol v3: analyse (one red), verify (one verifier), decide (policy). The blue refuter is opt-in (D8).
+# With critical/high admission the review carries a few claims, so one refuter per claim is affordable again and
+# gives the judge below a real second side: a judge shown "no answer was produced for this side" decides nothing.
 red_per_team = 1
-blue_per_team = 0
+blue_per_team = 1
 verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
@@ -3094,10 +3095,13 @@ require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_te
 # (red affirmed and blue contradicts, qualifies, leaves a predicate unresolved, or the blue cells disagree).
 # `require_distinct_from_roles` records judge_model_distinct and is never required. Set enabled = false to
 # switch the judge off; changing anything here changes the judge cells' fingerprints and the configuration hash.
-# Review protocol v3 D9: the judge becomes an escalation for disputed high and critical findings (T-5035); until
-# that routing exists it is off. Run 2026-11-15-0005: 33 of 45 judge attempts invalid.
+# With admission limited to critical and high leads the review carries few claims, so every affirmed claim gets a
+# judge (selection "all"): the verdict is recorded beside the verifier's state, routes PoC generation
+# (job_poc_generation.settings.accepted_judge_verdicts) and never changes a claim state. Review protocol v3 D9
+# (escalation-only routing, T-5035) stays the target for large targets. Run 2026-11-15-0005: 33 of 45 judge
+# attempts invalid, before the closed vocabularies were stated in the prompts.
 [jobs.job_inference_security_review.settings.roles.adjudication_judge]
-enabled = false
+enabled = true
 when = "all"
 judges_per_claim = 1
 workers = 4
@@ -3432,7 +3436,9 @@ workers = 1
 enabled = true
 workers = 1
 max_candidates = 16
-accepted_judge_verdicts = ["red_correct"]
+# red_correct: the judge sided with the analyst. not_convened: no judge saw the claim (judge disabled or not
+# launched); the verifier's confirmation alone listed the candidate.
+accepted_judge_verdicts = ["red_correct", "not_convened"]
 
 [jobs.job_poc_generation.settings.models.default]
 provider = "claude-cli"
@@ -3512,6 +3518,10 @@ control = ["abort", "exit", "_exit", "_Exit", "quick_exit", "atexit", "at_quick_
            "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc"]
 
 [jobs.job_poc_generation.settings.build]
+# compile_check = false: the validators still parse the function on the clang AST in the build image, but the
+# project's compile command is not replayed on it; every validated candidate is published as artifact_generated
+# with that reason. Initial operation: proof-of-trigger text and validation first, compilation later.
+compile_check = false
 command_timeout_seconds = 300
 output_bytes = 8388608
 workspace_file_limit = 20000
