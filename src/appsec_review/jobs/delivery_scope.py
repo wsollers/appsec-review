@@ -20,7 +20,7 @@ _EVIDENCE = frozenset({
     "native-symbols", "package-integrity",
 })
 _BUILD_CHAIN = frozenset({"package-metadata", "resolved-dependency-metadata"})
-_SUPPLY_CHAIN_CAPABILITIES = frozenset({"inventory", "packages", "syft", "grype", "osv"})
+_SUPPLY_CHAIN_CAPABILITIES = frozenset({"inventory", "packages", "syft", "grype", "osv", "cve_bin_tool"})
 # Production dependencies run with the target, so their machine code also gets blint's binary
 # review. Build-only dependencies do not; blint's format gate still decides tool support.
 _RUNTIME_NATIVE_KINDS = frozenset({"executable", "shared-library", "native-addon", "native-extension"})

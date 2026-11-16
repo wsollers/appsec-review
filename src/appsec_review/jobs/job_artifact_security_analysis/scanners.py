@@ -17,6 +17,9 @@ import xml.etree.ElementTree as ET
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
 from appsec_review import blint_report
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build import (
+    database as cve_bin_tool_feed,
+)
 from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed as grype_feed
 from appsec_review.osv_offline import (
     DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, offline_database_mounts,
@@ -52,6 +55,21 @@ def _bounded(value: Any, *, depth: int = 0, truncations: set[str] | None = None)
     if value is None or isinstance(value, (bool, int, float)):
         return value
     return str(value)[:4_096]
+
+
+# cve-bin-tool 3.4 data sources that fetch over the network, disabled by name on every scan. NVD is
+# deliberately absent: the snapshot's rows all carry data_source NVD and cve-bin-tool filters reported
+# CVEs by disabled source, so naming NVD would silently drop every match, while --offline with
+# --update never already keeps the tool from ever instantiating an NVD downloader.
+CVE_BIN_TOOL_DISABLED_SOURCES = "CURL,EPSS,GAD,OSV,PURL2CPE,REDHAT,RSD"
+CVE_BIN_TOOL_OFFLINE_ARGV = ("--offline", "--update", "never", "--disable-data-source",
+                             CVE_BIN_TOOL_DISABLED_SOURCES, "--disable-version-check",
+                             "--disable-validation-check")
+# Where the verified snapshot directory is bind-mounted read-only; the image's read-only wrapper links
+# cve.db and version_map.db from here into the tmpfs cache directory cve-bin-tool insists on.
+CVE_BIN_TOOL_DATABASE_MOUNT = "/database"
+CVE_BIN_TOOL_DATABASE_ENVIRONMENT = "CVE_BIN_TOOL_DATABASE"
+FEED_NAMES = {"grype": "grype", "osv": "osv", "cve_bin_tool": "cve-bin-tool"}
 
 
 def parse_json(payload: bytes) -> Mapping[str, Any]:
@@ -136,6 +154,10 @@ class ScannerAdapter:
                     self.output_file, "--lockfile", target)
         if self.capability == "spotbugs":
             return (executable, "-textui", "-xml:withMessages", "-output", self.output_file, target)
+        if self.capability == "cve_bin_tool":
+            # argv[0] is the image's read-only wrapper; the policy flags are asserted by the unit tests.
+            return (executable, *CVE_BIN_TOOL_OFFLINE_ARGV, "--log", "warning", "--format", "json",
+                    "--output-file", self.output_file, target)
         raise ValueError(f"unknown scanner capability: {self.capability}")
 
     def parse(self, payload: bytes) -> Mapping[str, Any]:
@@ -148,6 +170,8 @@ ADAPTERS = {item.capability: item for item in (
     ScannerAdapter("grype", "tool-grype", frozenset({0}), "/scratch/output.json"),
     ScannerAdapter("osv", "tool-osv-scanner", frozenset({0, 1}), "/scratch/output.json"),
     ScannerAdapter("spotbugs", "tool-spotbugs", frozenset({0}), "/scratch/output.xml"),
+    # Exit 1 is cve-bin-tool's "at least one CVE matched"; its errors exit 3 or 21 and above.
+    ScannerAdapter("cve_bin_tool", "tool-cve-bin-tool", frozenset({0, 1}), "/scratch/output.json"),
 )}
 
 
@@ -211,14 +235,19 @@ class ContainerScannerRunner:
         value: dict[str, Any] = {"scanner": adapter.tool_id, "version": tool.version,
             "image": image_id,
             "adapter": adapter.identity, "rules": None}
-        if capability in {"grype", "osv"}:
-            feed = "grype" if capability == "grype" else "osv"
+        if capability in FEED_NAMES:
+            feed = FEED_NAMES[capability]
             try:
                 if capability == "grype":
                     settings = grype_feed.consumer_settings(self.repository_root, self.run_root)
                     current = grype_feed.verify(settings, expected_image_id=image_id)
                     if current["tool"]["tool_version"] != tool.version:
                         raise ValueError("Grype consumer release differs from the database validator")
+                elif capability == "cve_bin_tool":
+                    # Pointer, manifest and file hashes, build record, SQLite integrity and the exact
+                    # tool release; the NVD snapshot the database derives from joins the provenance.
+                    settings = cve_bin_tool_feed.consumer_settings(self.repository_root, self.run_root)
+                    current = cve_bin_tool_feed.verify_consumer(settings, tool_version=tool.version)
                 else:
                     current = verify_current(self.repository_root / "data" / "feeds" / feed, feed)
                 self._feeds[capability] = current
@@ -226,7 +255,11 @@ class ContainerScannerRunner:
                     self._osv_ecosystems = snapshot_ecosystems(Path(str(current["directory"])))
                 value["rules"] = {"feed": feed, "snapshot_id": current["snapshot_id"],
                                   "manifest_sha256": current["manifest_sha256"]}
-            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                if capability == "cve_bin_tool":
+                    value["rules"]["nvd_snapshot_id"] = current["nvd_snapshot_id"]
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                # A missing or unverifiable snapshot is a named coverage gap on every artifact of the
+                # capability (the job records the message), never a scanner failure.
                 safety.fail(f"artifact feed integrity failed: {type(exc).__name__}", action="artifact.feed")
                 value["unavailable"] = f"verified immutable {feed} database unavailable: {type(exc).__name__}"
         self._identities[capability] = value
@@ -264,6 +297,10 @@ class ContainerScannerRunner:
             snapshot = self._feeds[capability]
             mounts.append(Mount(Path(str(snapshot["directory"])), "/database", True))
             environment["GRYPE_DB_CACHE_DIR"] = "/database"
+        elif capability == "cve_bin_tool":
+            snapshot = self._feeds[capability]
+            mounts.append(Mount(Path(str(snapshot["directory"])), CVE_BIN_TOOL_DATABASE_MOUNT, True))
+            environment[CVE_BIN_TOOL_DATABASE_ENVIRONMENT] = CVE_BIN_TOOL_DATABASE_MOUNT
         elif capability == "osv":
             ecosystem = osv_ecosystem(input_name)
             if ecosystem is not None and ecosystem not in self._osv_ecosystems:

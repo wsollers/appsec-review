@@ -232,6 +232,7 @@
     "tool-git": "history",
     "tool-gitleaks": "scanner_observations",
     "tool-gosec": "scanner_observations",
+    "tool-cve-bin-tool": "dependencies_and_advisories",
     "tool-grype": "dependencies_and_advisories",
     "tool-hadolint": "scanner_observations",
     "tool-infer": "scanner_observations",

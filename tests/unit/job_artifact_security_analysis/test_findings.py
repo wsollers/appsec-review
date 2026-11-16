@@ -41,7 +41,7 @@ def test_primitive_helpers_outcome_and_summary_category() -> None:
 
     for inv in ("inventory", "syft", "packages"):
         assert summary_category(inv) == CATEGORY_INVENTORY
-    for diag in ("native", "blint", "grype", "osv", "spotbugs"):
+    for diag in ("native", "blint", "grype", "osv", "spotbugs", "cve_bin_tool"):
         assert summary_category(diag) == CATEGORY_DIAGNOSTIC
 
     syft_summary = _summary_observation("syft", {"artifacts": [{"name": "a"}], "extra": 1}, 0, 0)
@@ -229,3 +229,49 @@ def test_scan_records_splits_blint_spotbugs_grype_osv_and_builtin_summaries(monk
     assert osv_summary.payload["scan_outcome"] == "completed_with_gaps"
     assert osv_summary.payload["findings_complete"] is False
     assert any("reported 3 findings; only the first 2 are recorded" in g for g in osv_summary.payload["gaps"])
+
+
+def test_scan_records_turns_cve_bin_tool_version_string_matches_into_advisory_leads() -> None:
+    from appsec_review.indexing.links import advisory_pairs
+
+    records = [
+        {"vendor": "zlib", "product": "zlib", "version": "1.2.11", "cve_number": "CVE-2018-25032",
+         "severity": "HIGH", "score": "7.5", "cvss_version": "3", "cvss_vector": "CVSS:31/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+         "source": "NVD", "paths": "/target/inftrees.c.o, /target/deflate.c.o", "remarks": "NewFound"},
+        {"vendor": "zlib", "product": "zlib", "version": "1.2.11", "cve_number": "CVE-2022-37434",
+         "severity": "CRITICAL", "paths": "/target/deflate.c.o"},
+        {"vendor": "bzip", "product": "bzip2", "cve_number": "CVE-2019-12900", "severity": "CRITICAL"},
+        {"vendor": "lz4_project", "product": "lz4", "version": "1.9.1"},
+    ]
+    summary, found = scan_records({
+        "artifact": {"path": "data/build/deflate.c.o", "canonical_identity": "asr:artifact:deflate"},
+        "classification": {"format": "elf"}, "fingerprint": "f" * 64, "capability": "cve_bin_tool",
+        "scanner_identity": "tool-cve-bin-tool:3.4:adapter-1",
+        "tool_identity": {"scanner": "tool-cve-bin-tool", "rules": {"feed": "cve-bin-tool", "snapshot_id": "s"}},
+        "gaps": [], "raw_artifacts": [], "attempt_identity": "a" * 64, "exit_code": 1, "timed_out": False,
+        "duration_ms": 12, "result_artifact": {"path": "res.json", "sha256": "4" * 64, "size_bytes": 20},
+        "native_output": None, "observation": {"records": records, "_native_result_count": 4},
+    })
+    # The record without a CVE id is not a finding; the version-less bzip2 match keeps its product.
+    assert [finding.payload["subject"] for finding in found] == ["zlib@1.2.11", "zlib@1.2.11", "bzip2"]
+    first = found[0].payload
+    assert first["record_kind"] == RECORD_KIND_FINDING and first["tool_id"] == "tool-cve-bin-tool"
+    assert first["category"] == CATEGORY_VULNERABILITY and first["rule_id"] == "CVE-2018-25032"
+    assert (first["package_name"], first["package_version"], first["advisory_id"]) == ("zlib", "1.2.11", "CVE-2018-25032")
+    assert first["vendor"] == "zlib" and first["checker"] == "zlib" and first["match_basis"] == "version-string"
+    assert first["matched_paths"] == ["/target/inftrees.c.o", "/target/deflate.c.o"]
+    assert first["severity"] == "HIGH" and first["cvss_score"] == "7.5" and first["data_source"] == "NVD"
+    assert "version string matched in inftrees.c.o" in first["message"]
+    # The projection dependency_advisories reads (indexing.links.advisory_pairs) names product, version and CVE.
+    assert advisory_pairs({"payload": first}) == [{
+        "package": "zlib", "version": "1.2.11", "purl": None, "advisory": "CVE-2018-25032",
+        "severity": "HIGH", "scanner": "tool-cve-bin-tool:3.4:adapter-1"}]
+    assert advisory_pairs({"payload": found[2].payload}) == [{
+        "package": "bzip2", "version": None, "purl": None, "advisory": "CVE-2019-12900",
+        "severity": "CRITICAL", "scanner": "tool-cve-bin-tool:3.4:adapter-1"}]
+    # Distinct identities for the two zlib CVEs; the summary drops the records and keeps the counts.
+    assert len({finding.native_id for finding in found}) == 3
+    assert summary.payload["category"] == CATEGORY_DIAGNOSTIC and summary.payload["finding_count"] == 3
+    assert "records" not in summary.payload["observation"]
+    assert summary.payload["observation"]["finding_count_reported"] == 3
+    assert summary.payload["observation"]["_native_result_count"] == 4

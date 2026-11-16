@@ -90,8 +90,12 @@ container with networking disabled. It never invokes an NVD downloader. The imag
 manifest. When the configured `image` tag is missing locally, the step runs `docker build` on
 `build_context` first; that build installs cve-bin-tool from PyPI and needs network access.
 `build_timeout_seconds` (default 1800) bounds the image build and `run_timeout_seconds` (default
-3600) bounds the networkless database build container. Scanning consumers must still treat CVE
-matches as applicability leads rather than findings.
+3600) bounds the networkless database build container. The published snapshot is consumed by the
+`cve_bin_tool` capability of `job_artifact_security_analysis` through `verify_consumer`
+(pointer, manifest and file hashes, build record, SQLite integrity, exact tool release), which
+mounts it read-only into the separate scanner image `tool-cve-bin-tool`; see
+[produced-artifact security analysis](artifact-security-analysis.md#cve-bin-tool-version-strings-in-produced-binaries).
+Scanning consumers must still treat CVE matches as applicability leads rather than findings.
 
 With the opt-in `[signing] image_enforcement = "required"`, a pre-existing `image` is launched by ID
 only after its signature verifies (see [signing](signing.md)); a freshly built one is derived and

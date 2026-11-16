@@ -472,13 +472,23 @@ purpose = "Offline IaC policy scanning."
 
 [[images]]
 id = "tool-cve-bin-tool"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "tool"
 legacy_class = 2
+version = "3.4"
+tag = "appsec-review/tool-cve-bin-tool:3.4"
+context = "containers/tools/cve-bin-tool"
+dockerfile = "Dockerfile"
+dependencies = ["base-python"]
 architectures = ["linux/amd64"]
-purpose = "Offline binary component vulnerability matching against a derived NVD database."
-reason = "Reconfirm GPL policy decision; port and independently test database lineage/ceiling logic; keep builder/scan scripts read-only and outside image; prove all network-prone data sources are disabled; validate false-positive disposition"
-recommended_destination = "containers/tools/cve-bin-tool/ plus src/appsec_review/jobs/.../adapters/"
+tool_manifest = "containers/tools/cve-bin-tool/tool.toml"
+assets_lock = "containers/tools/cve-bin-tool/assets.lock.json"
+build_args = { TOOL_VERSION = "3.4" }
+# Deferral lifted 2026-11-16: the owner accepted the GPL-3.0-or-later licence (the tool runs in its
+# own container; nothing is linked or redistributed). Database lineage is the verified
+# cve-bin-tool-snapshot/1 feed, the scan wrapper is baked read-only into the image, the adapter
+# argv disables every network-prone data source and the tests assert it, and a match is a lead.
+purpose = "Offline version-string matching of produced binaries against the verified cve-bin-tool database snapshot."
 
 [[images]]
 id = "tool-cppcheck"

@@ -568,6 +568,16 @@ validator image/release. The new `zstandard` runtime dependency requires an auth
 image rebuild before deployment; adding the step is not evidence that nightly execution is active.
 See [Grype database synchronization](docs/operations/third-party-data-sync.md#grype-database-cache).
 
+### cve-bin-tool binary version matching
+
+`[tools].enable_cve_bin_tool = true` lets `job_artifact_security_analysis` run the catalog image
+`tool-cve-bin-tool` (cve-bin-tool 3.4) over each accepted produced binary, offline, against the
+verified database snapshot the nightly `cve_bin_tool_db_build` branch publishes under
+`data/feeds/cve-bin-tool`. A match is a lead about a vendored or linked library version joined to
+the pinned advisory feeds, never a confirmed vulnerability, and a missing or unverifiable snapshot
+is a named gap. See [produced-artifact security
+analysis](docs/operations/artifact-security-analysis.md#cve-bin-tool-version-strings-in-produced-binaries).
+
 ## Run a review
 
 For a full Dagster review, start with the

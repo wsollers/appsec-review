@@ -43,6 +43,8 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert config.tools.disable_grype is True
     assert config.tools.enable_swift is False
     assert json.loads(config.resolved_json)["tools"]["enable_swift"] is False
+    assert config.tools.enable_cve_bin_tool is True
+    assert json.loads(config.resolved_json)["tools"]["enable_cve_bin_tool"] is True
     assert config.build_capture == BuildCaptureConfig(
         "ptrace", 100000, 256, 16384, True, 1024, 131072,
         ("AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "NUGET_AUTH_TOKEN",

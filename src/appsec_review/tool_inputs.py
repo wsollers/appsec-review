@@ -266,6 +266,12 @@ _declare(
     InputSupport("artifact:tool-grype", "any produced artifact file except media and asset files",
                  any_input=True, excluded_formats=MEDIA_ASSET_FORMATS,
                  excluded_description=_MEDIA_ASSET_DESCRIPTION),
+    # cve-bin-tool matches library version strings in machine code it detects as binary: ELF
+    # executables, shared and relocatable objects, PE (including .NET assemblies), COFF and Mach-O.
+    # Its detection rejects ar archives, so static libraries are never launched; their members are
+    # matched as the objects they were built from. Source trees are never its input.
+    InputSupport("artifact:tool-cve-bin-tool", "ELF, PE/.NET, COFF and Mach-O binaries and objects",
+                 formats=frozenset({"elf", "pe", "dotnet-assembly", "coff", "macho"})),
     # osv-scanner selects an extractor by file name only; it has no extractor for produced binaries,
     # archives, objects, or package metadata, so those are never launched.
     InputSupport("artifact:tool-osv-scanner", "lockfiles and manifests osv-scanner extracts offline",

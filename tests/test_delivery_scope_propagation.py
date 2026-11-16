@@ -53,7 +53,7 @@ def test_runtime_dependency_is_supply_chain_review_without_established_delivery(
     assert fields["analysis_reason"] == "accepted-runtime-dependency-review"
     assert fields["analysis_lane"] == "supply_chain"
     assert fields["delivery_status"] == "not_established"
-    for capability in ("inventory", "packages", "syft", "grype", "osv"):
+    for capability in ("inventory", "packages", "syft", "grype", "osv", "cve_bin_tool"):
         assert analysis_scope(row, capability) == (True, "accepted-runtime-dependency-review")
     for capability in ("native", "jvm", "wasm", "spotbugs", "blint"):
         assert analysis_scope(row, capability)[0] is False

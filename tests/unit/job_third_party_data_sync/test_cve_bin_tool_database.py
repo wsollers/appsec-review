@@ -404,3 +404,61 @@ def test_docker_and_native_builders_and_bind_source_preserve_pinned_image_isolat
     assert cve_db._docker_bind_source(Path("/workspace/runs/r1/work")) == Path("/host/runs/r1/work")
     with pytest.raises(RuntimeError, match="not backed by a host mount"):
         cve_db._docker_bind_source(Path("/unmounted/path"))
+
+
+# --- scanning consumer -------------------------------------------------------------------------------
+
+def _published(tmp_path: Path):
+    root, pointer = _nvd_root(tmp_path)
+    resolved = cve_db.resolve_nvd_snapshot(root, pointer)
+    settings = _settings(tmp_path)
+    built = cve_db.build(settings, resolved, tmp_path / "work", fake_runner)
+    return settings, pointer, cve_db.publish(settings, built)
+
+
+def test_verify_consumer_resolves_the_current_snapshot_for_the_exact_tool_release(tmp_path: Path) -> None:
+    settings, pointer, published = _published(tmp_path)
+    verified = cve_db.verify_consumer(settings, tool_version="3.4")
+    assert verified["snapshot_id"] == published["snapshot_id"]
+    assert verified["manifest_sha256"] == published["manifest_sha256"]
+    assert Path(verified["directory"]) == settings.feed_root / "snapshots" / published["snapshot_id"]
+    assert verified["nvd_snapshot_id"] == pointer["snapshot_id"] and verified["cve_count"] == 2
+    assert verified["tool"] == {"image": settings.image, "image_id": "sha256:" + "f" * 64, "tool_version": "3.4"}
+    with pytest.raises(ValueError, match="consumer release differs from the configured database builder"):
+        cve_db.verify_consumer(settings, tool_version="3.5")
+
+
+def test_verify_consumer_refuses_a_missing_tampered_or_foreign_snapshot(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    with pytest.raises((OSError, ValueError)):
+        cve_db.verify_consumer(settings, tool_version="3.4")      # nothing published yet
+    settings, _pointer, published = _published(tmp_path)
+    snapshot = settings.feed_root / "snapshots" / published["snapshot_id"]
+    record = snapshot / "build.json"
+    original = record.read_bytes()
+    record.chmod(0o644)
+    record.write_bytes(original.replace(b'"3.4"', b'"9.9"'))
+    with pytest.raises(ValueError, match="integrity mismatch"):
+        cve_db.verify_consumer(settings, tool_version="3.4")
+    record.write_bytes(original)
+    assert cve_db.verify_consumer(settings, tool_version="3.4")["snapshot_id"] == published["snapshot_id"]
+    # A snapshot whose manifest names another tool release is refused even when every hash verifies.
+    manifest_path = snapshot / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["tool"]["tool_version"] = "3.3"
+    manifest_path.chmod(0o644)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    with pytest.raises(ValueError):
+        cve_db.verify_consumer(settings, tool_version="3.4")
+
+
+def test_consumer_settings_read_the_builder_settings_the_run_froze(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    (run_root / "data" / "configuration").mkdir(parents=True)
+    (run_root / "data" / "configuration" / "resolved.json").write_text(json.dumps({"jobs": {
+        "job_third_party_data_sync": {"steps": {"cve_bin_tool_db_build": {"settings": {
+            "feed_root": "data/feeds/cve-bin-tool", "image": "appsec-review/cve-bin-tool:3.4",
+            "tool_version": "3.4", "build_context": "tools/cve-bin-tool"}}}}}}), encoding="utf-8")
+    settings = cve_db.consumer_settings(ROOT, run_root)
+    assert settings.feed_root == (ROOT / "data" / "feeds" / "cve-bin-tool").resolve()
+    assert settings.tool_version == "3.4" and settings.image == "appsec-review/cve-bin-tool:3.4"

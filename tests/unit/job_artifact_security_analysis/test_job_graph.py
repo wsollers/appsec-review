@@ -46,6 +46,7 @@ def _unit_context(
     settings_override: dict | None = None,
     declared_releases: bool = True,
     disable_grype: bool = False,
+    enable_cve_bin_tool: bool = True,
     source_fingerprint: str = "a" * 64,
     outputs: dict | None = None,
     unit_id: str = "analyze.syft",
@@ -58,7 +59,7 @@ def _unit_context(
         {
             "platform": "1",
             "validation": "1",
-            **{f"tool-{k}": "1" for k in ("blint", "syft", "grype", "osv-scanner", "spotbugs")},
+            **{f"tool-{k}": "1" for k in ("blint", "syft", "grype", "osv-scanner", "spotbugs", "cve-bin-tool")},
         }
         if declared_releases
         else {}
@@ -102,7 +103,7 @@ def _unit_context(
             source_fingerprint=source_fingerprint,
             orchestration={"system": "cli"},
             config=SimpleNamespace(job_id="job_artifact_security_analysis", settings=settings),
-            tools=SimpleNamespace(disable_grype=disable_grype),
+            tools=SimpleNamespace(disable_grype=disable_grype, enable_cve_bin_tool=enable_cve_bin_tool),
             review_policy=ReviewPolicy(releases=ComponentReleases(values=releases)),
             events=SimpleNamespace(write=lambda name, **kw: events.append((name, kw))),
         ),
@@ -310,7 +311,7 @@ def test_runtime_dependency_and_installer_record_unit_wiring(tmp_path: Path, mon
         ),
     )
     unit = SimpleNamespace(
-        job=SimpleNamespace(run_root=tmp_path, tools=SimpleNamespace(disable_grype=False)),
+        job=SimpleNamespace(run_root=tmp_path, tools=SimpleNamespace(disable_grype=False, enable_cve_bin_tool=True)),
         output=lambda _: {"artifacts": [artifact, binary, dev_binary]},
     )
     units = {item.unit_id: item for item in build_job(scanner_runner=lambda *args: None).units}
@@ -327,6 +328,14 @@ def test_runtime_dependency_and_installer_record_unit_wiring(tmp_path: Path, mon
     assert disabled_res["terminal_status"] == "NOT_APPLICABLE"
     assert disabled_res["coverage_disposition"] == "CONFIGURED_DISABLED"
     assert events[0][0] == "TOOL_CONFIGURED_DISABLED"
+
+    # Configured disabled cve-bin-tool: the same named gap shape, keyed to its own tool id
+    off_ctx, off_events = _unit_context(tmp_path, enable_cve_bin_tool=False, unit_id="analyze.cve_bin_tool")
+    off_res = units["analyze.cve_bin_tool"].handler(off_ctx)
+    assert off_res["terminal_status"] == "NOT_APPLICABLE"
+    assert off_res["coverage_disposition"] == "CONFIGURED_DISABLED"
+    assert off_res["gaps"] == ["cve-bin-tool artifact coverage was configured disabled by tools.enable_cve_bin_tool"]
+    assert off_events[0][0] == "TOOL_CONFIGURED_DISABLED" and off_events[0][1]["tool_id"] == "tool-cve-bin-tool"
 
     # _applicable built-in and adapter branches
     assert security._applicable("inventory", {}) is True
@@ -381,7 +390,7 @@ def test_runtime_dependency_and_installer_record_unit_wiring(tmp_path: Path, mon
         "artifact_id": "cargo-lock",
     }
     lock_unit = SimpleNamespace(
-        job=SimpleNamespace(run_root=tmp_path, tools=SimpleNamespace(disable_grype=False)),
+        job=SimpleNamespace(run_root=tmp_path, tools=SimpleNamespace(disable_grype=False, enable_cve_bin_tool=True)),
         output=lambda _: {"artifacts": [lock_row]},
     )
     na_res = units["analyze.osv"].handler(lock_unit)

@@ -9,7 +9,7 @@ result into
   its gaps and ``finding_count``, so a scan with zero findings is distinguishable from a scan that never completed.
   It is class ``inventory`` (inventory scans) or ``diagnostic`` (every other scan), never a lead; and
 * one **finding** per scanner finding (``record_kind: finding``): a blint check result, a SpotBugs bug instance, an
-  OSV vulnerability or a Grype match, each at its own native severity with a stable identity (scan identity,
+  OSV vulnerability, a Grype match or a cve-bin-tool version-string match, each at its own native severity with a stable identity (scan identity,
   artifact identity, check id, subject and an occurrence ordinal for repeats). These are the artifact leads.
 
 The built-in inspectors (``inventory``, ``native``, ``jvm``, ``packages``, ``wasm``) record format facts and the
@@ -154,11 +154,43 @@ def _osv(observation: Mapping[str, Any]) -> Iterator[Finding]:
                                             "vulnerabilities", index).as_dict())
 
 
+def _cve_bin_tool(observation: Mapping[str, Any]) -> Iterator[Finding]:
+    """One finding per cve-bin-tool JSON record: a CVE the snapshot assigns to a library version whose
+    version or copyright string a checker found in the scanned file. The match is a lead about the
+    vendored or linked library, never a confirmed vulnerability; the record keeps the vendor/product
+    pair (cve-bin-tool names its checker after the product it matches), the files the string was found
+    in and the snapshot's CVSS facts, and projects the same ``observation.matches`` pair that
+    ``indexing.links.advisory_pairs`` reads for Grype so the match joins ``dependency_advisories``."""
+    for index, item in enumerate(_list(observation.get("records"))):
+        item = _mapping(item)
+        check = _text(item.get("cve_number"))
+        if check is None:
+            continue
+        name, version = _text(item.get("product")), _text(item.get("version"))
+        severity = _text(item.get("severity"))
+        subject = f"{name}@{version}" if name and version else name or "unknown"
+        paths = [part.strip() for part in str(item.get("paths") or "").split(",") if part.strip()][:16]
+        where = os.path.basename(paths[0]) if paths else "the artifact"
+        yield Finding(check, severity,
+                      f"{check} affects {subject} (version string matched in {where})"[:MESSAGE_BOUND],
+                      CATEGORY_VULNERABILITY, "tool-cve-bin-tool", subject,
+                      {"package_name": name, "package_version": version, "advisory_id": check,
+                       "vendor": _text(item.get("vendor")), "checker": name, "matched_paths": paths,
+                       "match_basis": "version-string", "cvss_score": _text(item.get("score")),
+                       "cvss_version": _text(item.get("cvss_version")), "cvss_vector": _text(item.get("cvss_vector")),
+                       "data_source": _text(item.get("source")),
+                       "observation": {"matches": [{
+                           "artifact": {"name": name, "version": version, "purl": None},
+                           "vulnerability": {"id": check, "severity": severity},
+                       }]}}, json_selector("records", index).as_dict())
+
+
 SPLITTERS: Mapping[str, Callable[[Mapping[str, Any]], Iterator[Finding]]] = {
-    "blint": _blint, "spotbugs": _spotbugs, "grype": _grype, "osv": _osv,
+    "blint": _blint, "spotbugs": _spotbugs, "grype": _grype, "osv": _osv, "cve_bin_tool": _cve_bin_tool,
 }
 # Nested scanner bodies the summary drops because the findings carry them (the counts remain).
-_SUMMARY_DROPS = {"blint": ("findings",), "spotbugs": ("findings",), "grype": ("matches",), "osv": ("results",)}
+_SUMMARY_DROPS = {"blint": ("findings",), "spotbugs": ("findings",), "grype": ("matches",), "osv": ("results",),
+                  "cve_bin_tool": ("records",)}
 
 
 @dataclass(frozen=True, slots=True)

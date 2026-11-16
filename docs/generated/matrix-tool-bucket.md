@@ -23,6 +23,7 @@ Bindings are source declarations, not observed launches. Input compatibility is 
 | `tool-clang-static-analysis` | `scanner_observations` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |
 | `tool-clangd-indexer` | `symbols_and_calls` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |
 | `tool-cppcheck` | `scanner_observations` | `job_evidence_collection`<br>`job_evidence_collection.source_sast.cppcheck_scan` | `C`, `C++`, `C/C++` | enabled | None |
+| `tool-cve-bin-tool` | `dependencies_and_advisories` | Undeclared; see gap<br>Undeclared; see gap | Not applicable (source-backed) | enabled | [T-147](../TODO.md) |
 | `tool-ghidra` | `artifacts_and_binary` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |
 | `tool-git` | `history` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |
 | `tool-gitleaks` | `scanner_observations` | `job_evidence_collection`<br>`job_evidence_collection.secrets.gitleaks_scan` | Not applicable (source-backed) | enabled | None |
