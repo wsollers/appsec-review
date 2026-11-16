@@ -464,7 +464,7 @@ def test_duplicate_proposal_merges_into_the_lead_claim_and_is_counted(prepared) 
     lead_ctx = prepared.context(quick_review, lane="lead", budgets=budgets, teams=single_red, roles=no_judge)
     hunt_ctx = prepared.context(_rewriting(quick_review, only_duplicate_claim), lane="hunt",
                                 budgets=budgets, teams=single_red, roles=no_judge)
-    lead_works = [prepared.work("lead", "sast_critical"), prepared.work("lead", "sast_unknown")]
+    lead_works = [prepared.work("lead", "sast_critical"), prepared.work("lead", "sast_suppressed")]
     hunt_works = package_works(prepared.fixture.run_root, prepared.documents("hunt"))
     shards = prepared.tmp / "shards"
     lead = run_lane(lead_ctx, Lane.LEAD, lead_works,
@@ -745,7 +745,7 @@ def test_lead_accounting_and_named_gaps_reach_the_lane(prepared) -> None:
 
     single_red = replace(prepared.settings.teams, red_per_team=1)
     ctx = prepared.context(_rewriting(prepared.infer, enrich), lane="lead", teams=single_red)
-    selected_works = [prepared.work("lead", "sast_critical"), prepared.work("lead", "sast_unknown")]
+    selected_works = [prepared.work("lead", "sast_critical"), prepared.work("lead", "sast_suppressed")]
     shards = prepared.tmp / "seeded"
     lane = run_lane(ctx, Lane.LEAD, selected_works,
                     other_lane_count=2, ledger_path=shards / "ledger.jsonl", stream="lead_review.teams",
