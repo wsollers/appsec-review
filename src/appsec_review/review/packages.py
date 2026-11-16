@@ -1883,6 +1883,14 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
     admitted = admitted_leads(collection, settings)
     admitted_ids = {lead.observation_id for lead in admitted}
+    # Unknown is never treated as low: a lead the policy leaves out because no assessed severity exists is a
+    # named gap on the manifest (and still reaches lane B through its unit), never a silent drop.
+    assembler.extra_gaps.extend(
+        ScopeGap("lead_admission", lead.observation_id, "skipped",
+                 "unknown severity without an assessed severity is outside lanes.lead_admission; the lead is "
+                 "not reviewed in lane A and reaches lane B only through its unit")
+        for lead in collection.leads
+        if lead.effective_severity == "unknown" and lead.observation_id not in admitted_ids)
     packages = [assembler.finding_lead(lead) for lead in admitted]
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev,
                              settings.exploration_enabled, settings.exploration_reserve)
@@ -1930,6 +1938,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                "reasons": admission_reasons(lead, settings),
                "residual_coverage": "review_pending" if lead.observation_id in admitted_ids
                else "exploration_reserve_cutoff" if admission_reasons(lead, settings)
+               else "unassessed_unknown" if lead.effective_severity == "unknown"
                else "outside_admission_policy"} for lead in collection.leads),
             # Leads outside the review scope (T-165 dispositions, T-167 stylistic classes): not admitted
             # by scope, with the reason; the observation remains scanner coverage, never a gap.

@@ -82,10 +82,11 @@ def test_secret_lead_is_admitted_by_default_and_packaged_with_its_obligations(se
     assert assembly.manifest["audit"]["families_available"]["secret"] is True
 
 
-def test_secret_lead_is_admitted_under_the_repository_lane_settings() -> None:
+def test_repository_lane_settings_admit_critical_and_high_and_assess_the_rest() -> None:
+    """T-5029: a secret lead (reported unknown) enters lane A through its assessed severity, never by default."""
     from appsec_review.config import load_config
     settings = load_config(ROOT / "appsec-review.toml").job("job_inference_security_review").typed_settings
-    assert PackageSettings.from_review_settings(settings).admit_severities == ("critical", "high", "unknown")
+    assert PackageSettings.from_review_settings(settings).admit_severities == ("critical", "high")
     assert settings.lanes.lead_admission_kev is True and 0.0 < settings.lanes.lead_budget_share < 1.0
 
 

@@ -251,6 +251,25 @@ def test_missing_scanner_correlation_recomputes_duplicates_and_marks_suppression
     assert assembly.manifest["audit"]["lane_a"]["expected"] == len(ADMITTED)
 
 
+def test_an_unassessed_unknown_lead_is_a_named_gap_under_the_critical_high_policy(fixture, scope) -> None:
+    """T-5029: lanes.lead_admission is critical and high; an unknown lead enters only through an assessed severity.
+    The fixture runs no triage, so sast_unknown stays unassessed: not a lane A package, a skipped gap on the
+    manifest, and still on its unit's hunt menu."""
+    strict = assemble_packages(scope, PackageSettings(admit_severities=("critical", "high")))
+    unknown = fixture.ids["sast_unknown"]
+    assert unknown not in {lead for item in strict.packages if item.kind == "finding_lead" for lead in item.lead_ids}
+    entry = next(item for item in strict.manifest["admission"] if item["lead_id"] == unknown)
+    assert (entry["status"], entry["reasons"], entry["residual_coverage"]) == ("not_admitted", [], "unassessed_unknown")
+    gap = next(item for item in strict.manifest["gaps"] if item["producer"] == "lead_admission" and item["scope"] == unknown)
+    assert gap["state"] == "skipped" and "assessed severity" in gap["reason"]
+    assert strict.manifest["audit"]["lane_a"]["status"] == "passed"
+    assert any(unknown in item.lead_ids for item in strict.packages if item.kind == "hunt")
+    # Admitting unknown as well packages the lead and records no such gap.
+    loose = assemble_packages(scope, PackageSettings(admit_severities=("critical", "high", "unknown")))
+    assert any(unknown in item.lead_ids for item in loose.packages if item.kind == "finding_lead")
+    assert not [item for item in loose.manifest["gaps"] if item["producer"] == "lead_admission"]
+
+
 def test_settings_are_typed_and_reject_unknown_keys() -> None:
     assert PackageSettings.from_mapping({"admit_severities": ["unknown", "critical"]}).admit_severities == (
         "critical", "unknown")
