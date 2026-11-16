@@ -11,11 +11,12 @@ _A = "data/jobs/job_final_report_publication/attempts/*"
 DATASETS = (
     artifact_only(
         "final_report_publications", "acceptance", "inference_review", "appsec-review/final-report/2",
-        "The machine-readable final report (final-report.json) and its deterministic Markdown rendering "
-        "(final-report.md), hash-pinned by the accepted handoff.",
+        "The machine-readable final report (final-report.json), its deterministic Markdown rendering "
+        "(final-report.md) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained "
+        "renderer logs), all hash-pinned by the accepted handoff.",
         artifacts=(_A + "/steps/load/**", _A + "/steps/report/**", _A + "/steps/acceptance/**"),
         reason="the report is the pipeline's terminal publication; indexing sanitized findings for retrieval "
-               "and PDF rendering are later steps"),
+               "is a later step"),
 )
 
 from appsec_review.runtime.contracts import (

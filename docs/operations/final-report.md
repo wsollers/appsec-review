@@ -154,7 +154,8 @@ Missing optional work can make publication limited without hiding a valid base f
 ## The report
 
 ```text
-load.accepted_gate -> report.assemble -> report.render -> acceptance.publish_handoff
+load.accepted_gate -> report.assemble -> report.render -----> acceptance.publish_handoff
+                                      \-> report.render_pdf -/
 ```
 
 `load.accepted_gate` reads only the accepted gate handoff, validates the gate document against
@@ -194,11 +195,22 @@ fails the job. No optional producer's latest pointer is read during report assem
 environment input (`final-report-markdown/2`). Text that came from review artifacts is shown in code spans or escaped, so it
 cannot become Markdown or HTML structure.
 
+`report.render_pdf` renders the executive PDF (next section) from `final-report.json` and the dossier
+JSON the gate binds, through the pinned `tool-report-latex` image, and writes `final-report.tex`,
+`final-report.pdf` when the renderer produced a valid PDF, the retained renderer logs and a
+`final-report-pdf-receipt/1` receipt (schema
+[`../schemas/final-report/final-report-pdf-receipt.schema.json`](../schemas/final-report/final-report-pdf-receipt.schema.json)).
+
 `acceptance.publish_handoff` re-validates the JSON, proves `final-report.md` is exactly the rendering
-of `final-report.json`, and publishes the handoff. The handoff's `artifact` is `final-report.json`
-and the `report.render` output's `artifact` is `final-report.md`; both are hash-pinned by the accepted
-job handoff and are run-owned (`data/jobs/job_final_report_publication/attempts/<attempt>/steps/...`).
-The job is `COMPLETED_WITH_GAPS` whenever a `gap` limitation exists.
+of `final-report.json`, re-proves the executive PDF files (the LaTeX is exactly the rendering of the JSON
+plus the gate-bound dossiers, the receipt hashes those bytes, and a rendered PDF is the valid file the
+receipt names), and publishes the handoff. The handoff's `artifact` is `final-report.json`, the
+`report.render` output's `artifact` is `final-report.md`, and the handoff's `pdf` field carries the
+executive PDF's outcome from the receipt (`state` `rendered` with `file` and `sha256`, `render_failed`,
+or `not_rendered` by policy, always with a `reason`, the `latex` and the `receipt` references). All are
+hash-pinned by the accepted job handoff and are run-owned
+(`data/jobs/job_final_report_publication/attempts/<attempt>/steps/...`). The job is
+`COMPLETED_WITH_GAPS` whenever a `gap` limitation exists or the PDF unit recorded a named gap.
 
 ### Proof-of-concept outcomes
 
@@ -250,15 +262,58 @@ claim statement, worker narrative, rationale, prompt, retrieval query, transcrip
 source (only its description, status and file references), and no secret or target source. The finding projection is a closed schema, so a new field
 needs a schema change.
 
-### PDF
+### The executive PDF
 
-A standalone PDF and single-page HTML renderer now exists (`python -m appsec_review.reporting`,
-`scripts/render-report.sh`, the `tool-report-latex` image; see
-[`report-rendering.md`](report-rendering.md)). It reads a finished run and is a tool: this publication
-job does not call its broad diagnostic loader. The consolidated public report records
-`renderers.pdf.state = "not_rendered"`; protected per-finding/PoC PDFs are independently produced
-by the pre-gate dossier job and appear here only as certified refs. A failed dossier render retains
-JSON/LaTeX/receipt and a named gap, not an empty PDF.
+`report.render_pdf` writes `final-report.pdf`, an executive report whose readers are the project's tech
+lead and business owner. Its document model is built by
+`appsec_review.reporting.executive_report.executive_document` (a pure function of `final-report.json`
+and the bound dossier documents) and rendered with the shared LaTeX template and `tool-report-latex`
+image exactly as the dossiers are (`SOURCE_DATE_EPOCH` 0; the `.tex` is byte-identical for the same
+inputs). The container rendering, receipt and dossier binding live in
+`appsec_review.jobs.job_final_report_publication.pdf`.
+
+It contains, in plain language:
+
+- an executive summary: confirmed, backlog and withheld counts, the review status and whether the
+  review may be presented as complete (and, from `limitations`, why not), the ship-block counts in
+  words, and what "not performed by policy" means (generated PoCs and regressions were compiled only,
+  never executed; compilation is not runtime proof);
+- one entry per confirmed finding: what the weakness is (the dossier statement and CWE), where it is
+  (file and line range), what an attacker gains (the accepted security predicate and preconditions),
+  the technical severity in words, whether an independent verifier confirmed it (state, label,
+  independence and judge verdict), the ship-block status in words, and the remediation proposals;
+- attack chains, proof-of-trigger outcomes, remediation proposals and remediation validation, each with
+  its status in words and its items; a `none_available` section states its reason and that this is a
+  limit of the review, never evidence that the target is clean;
+- the verification backlog and withheld packages, listed as unconfirmed or withheld, never as findings;
+- limitations grouped as gaps, stages not run and notices, the coverage summary, and which dossiers
+  were available; and an appendix with the provenance hashes (gate handoff, gate document, review
+  handoff, configuration, ledger head, policy) and the dossier and renderer references.
+
+The finding narratives come only from the dossier JSON the gate binds
+(`dossiers.items[*].files.json`), read through `bound_artifacts.read_bound_json`, so every byte is proven
+against the gate's hash before it is used, and `bind_dossiers` refuses a reference outside the gate's
+binding set. A dossier whose JSON is missing, changed or malformed is a named gap
+(`executive_dossier_unavailable`, `executive_dossier_unsupported`, `executive_dossier_mismatch`) in the
+receipt and the handoff; the finding is still listed with its accepted title, state, severity and
+ship-block decision and the entry says the narrative was unavailable. The PDF never contains exploit
+code, prompts, payloads, generated functions or dossier source excerpts (`sources[*].excerpt` is
+protected developer content): only paths and line ranges appear.
+
+Failure behaviour: `render_pdf = false` writes the LaTeX and a `not_rendered` receipt with the gap
+`final_report_pdf_disabled_by_policy`. A renderer failure (non-zero exit, timeout, OOM, oversized or
+invalid output) or an unavailable image writes a `render_failed` receipt, keeps `final-report.tex`,
+`report.log` and `report.pdfinfo.txt`, and names the gap (`final_report_pdf_render_failed`,
+`final_report_pdf_renderer_unavailable`); no PDF is invented. A changed immutable tool pin is an
+`IntegrityError`, not a gap. Every gap makes the job `COMPLETED_WITH_GAPS`. `final-report.json` is
+assembled before the PDF exists and records `renderers.pdf.state = "not_rendered"` with a reason that
+points at the handoff; the handoff's `pdf` field is the authoritative outcome.
+
+A standalone diagnostic PDF and single-page HTML renderer also exists (`python -m appsec_review.reporting`,
+`scripts/render-report.sh`; see [`report-rendering.md`](report-rendering.md)). It reads a finished run
+and is a tool: this publication job does not call its broad loader. Protected per-finding/PoC PDFs are
+independently produced by the pre-gate dossier job and appear here only as certified refs. A failed
+dossier render retains JSON/LaTeX/receipt and a named gap, not an empty PDF.
 
 ## Configuration
 
@@ -274,10 +329,16 @@ max_packages = 10000        # finding packages one gate accounts for (schema bou
 enabled = true
 markdown_evidence_ids = 8   # evidence relation ids listed per finding in final-report.md
 markdown_gap_ids = 16       # gap ids listed per finding and in total in final-report.md
+render_pdf = true           # render the executive final-report.pdf; false keeps the LaTeX and names the gap
+image_tag = "appsec-review/tool-report-latex:1.0.0"   # the dossier renderer image; image_id is bound from the host pins
+render_timeout_seconds = 600
+max_pdf_bytes = 16777216    # bound for the LaTeX, the PDF and each retained renderer log
 ```
 
 The two Markdown bounds change `final-report.md` only; `final-report.json` always carries every
-identifier. Neither job has a Dagster pool of its own: both use the default `application` pool.
+identifier. The `render_pdf`, `image_*` and byte/timeout settings govern only the executive PDF and are
+hashed into its receipt (`settings_sha256`). Neither job has a Dagster pool of its own: both use the
+default `application` pool.
 
 ## Verification
 
@@ -286,7 +347,13 @@ both jobs, offline. It checks exact bucket accounting, verbatim projection of st
 statuses, tamper detection (ledger, projection, shard, finding, score, coverage, manifests, handoffs
 and the gate document), DEGRADED and `review_incomplete` limitations, deterministic Markdown, schema
 validation against `jsonschema` and the closed validator, and that every file the jobs write is
-claimed by a dataset declaration. `tests/test_completion_publication.py` covers optional capability
+claimed by a dataset declaration. `tests/unit/job_final_report_publication/test_job_units.py` exercises
+`report.render_pdf` with a container double (rendered, render failure, disabled by policy, a tampered
+or unbound dossier) and the publish re-proof of the LaTeX, receipt and PDF bytes;
+`tests/unit/reporting/test_executive_report.py` checks the executive document's plain-language content,
+its `none_available` framing, that no excerpt reaches it and that it is deterministic. The real
+`tool-report-latex` rendering of `final-report.pdf` is checked only in a review run, not by unit tests.
+`tests/test_completion_publication.py` covers optional capability
 combinations, disabled/manual admission, exact candidate/finding/plan/dossier/chain bindings,
 snapshot-only reporting, tamper rejection and public/protected separation.
 The separate owner-reported `039b24e4` native check passes genuine review-emitted candidate flow,
@@ -297,6 +364,7 @@ acceptance or authorization for new Dagster/review runs; see the
 [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
 
 `FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED`, `FINAL_PUBLICATION_GATE_REVIEW_VERIFIED`,
-`FINAL_PUBLICATION_GATE_PUBLISHED`, `FINAL_REPORT_ASSEMBLED` and `FINAL_REPORT_PUBLISHED` expose
+`FINAL_PUBLICATION_GATE_PUBLISHED`, `FINAL_REPORT_ASSEMBLED`, `FINAL_REPORT_PDF_RENDERED` and
+`FINAL_REPORT_PUBLISHED` expose
 bounded counts/dispositions/admission/duration where emitted. Their
 [completion metrics](metrics.md) count attempted work and retries, not accepted evidence.

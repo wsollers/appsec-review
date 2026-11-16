@@ -18,16 +18,28 @@
     "limitations",
     "gap_ids",
     "renderers",
-    "notices", "capabilities", "remediation_planning", "remediation_validation", "dossiers"
+    "notices",
+    "capabilities",
+    "remediation_planning",
+    "remediation_validation",
+    "dossiers"
   ],
   "properties": {
     "schema": {
       "const": "appsec-review/final-report/2"
     },
-    "capabilities": {"$ref": "common.schema.json#/$defs/capabilities"},
-    "remediation_planning": {"$ref": "common.schema.json#/$defs/planning_section"},
-    "remediation_validation": {"$ref": "common.schema.json#/$defs/validation_section"},
-    "dossiers": {"$ref": "common.schema.json#/$defs/dossier_section"},
+    "capabilities": {
+      "$ref": "common.schema.json#/$defs/capabilities"
+    },
+    "remediation_planning": {
+      "$ref": "common.schema.json#/$defs/planning_section"
+    },
+    "remediation_validation": {
+      "$ref": "common.schema.json#/$defs/validation_section"
+    },
+    "dossiers": {
+      "$ref": "common.schema.json#/$defs/dossier_section"
+    },
     "run_id": {
       "$ref": "common.schema.json#/$defs/short_text"
     },
@@ -47,10 +59,27 @@
         "configuration_profile": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["name", "sha256"],
+          "required": [
+            "name",
+            "sha256"
+          ],
           "properties": {
-            "name": {"enum": ["dev", "prod"]},
-            "sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/sha256"}, {"type": "null"}]}
+            "name": {
+              "enum": [
+                "dev",
+                "prod"
+              ]
+            },
+            "sha256": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
           }
         },
         "gate_handoff": {
@@ -190,17 +219,34 @@
             "required": [
               "finding_package_id",
               "status",
-              "result_id", "claim_id", "description", "functions", "files", "execution", "runtime_verified"
+              "result_id",
+              "claim_id",
+              "description",
+              "functions",
+              "files",
+              "execution",
+              "runtime_verified"
             ],
             "properties": {
-              "execution": {"const": "not_performed_by_policy"},
-              "runtime_verified": {"const": false},
+              "execution": {
+                "const": "not_performed_by_policy"
+              },
+              "runtime_verified": {
+                "const": false
+              },
               "finding_package_id": {
                 "$ref": "common.schema.json#/$defs/finding_package_id"
               },
               "status": {
-                "enum": ["compile_verified", "compile_failed", "artifact_generated", "policy_denied",
-                         "insufficient_evidence", "not_applicable", "unsafe_to_attempt"]
+                "enum": [
+                  "compile_verified",
+                  "compile_failed",
+                  "artifact_generated",
+                  "policy_denied",
+                  "insufficient_evidence",
+                  "not_applicable",
+                  "unsafe_to_attempt"
+                ]
               },
               "result_id": {
                 "type": "null"
@@ -342,12 +388,36 @@
           ],
           "properties": {
             "state": {
-              "const": "not_rendered"
+              "enum": [
+                "not_rendered",
+                "rendered",
+                "render_failed"
+              ]
             },
             "reason": {
               "$ref": "common.schema.json#/$defs/text"
+            },
+            "file": {
+              "$ref": "common.schema.json#/$defs/ref_or_null"
+            },
+            "sha256": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "latex": {
+              "$ref": "common.schema.json#/$defs/ref_or_null"
+            },
+            "receipt": {
+              "$ref": "common.schema.json#/$defs/ref_or_null"
             }
-          }
+          },
+          "description": "The executive PDF's state. final-report.json is assembled before report.render_pdf runs and always records not_rendered here; the publish handoff's pdf field carries the actual outcome from the receipt (rendered with file/sha256, render_failed or not_rendered by policy)."
         }
       }
     },

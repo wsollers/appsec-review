@@ -5931,7 +5931,7 @@
       "authority": "producer_evidence",
       "bucket": "review_products",
       "dataset": "final_report_publications",
-      "description": "The machine-readable final report (final-report.json) and its deterministic Markdown rendering (final-report.md), hash-pinned by the accepted handoff.",
+      "description": "The machine-readable final report (final-report.json), its deterministic Markdown rendering (final-report.md) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained renderer logs), all hash-pinned by the accepted handoff.",
       "family": "inference_review",
       "gap": [
         "T-157"

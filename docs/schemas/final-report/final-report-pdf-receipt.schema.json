@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/final-report-pdf-receipt.schema.json",
+  "title": "Executive PDF rendering receipt of the final report",
+  "description": "Written by report.render_pdf beside final-report.tex and, when the pinned renderer produced a valid PDF, final-report.pdf. A render failure or a policy opt-out keeps the LaTeX and names the gap; the state is never an invented PDF.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "status", "reason", "renderer", "report", "files", "tex_sha256", "pdf_sha256",
+               "source_date_epoch", "template", "tool", "settings_sha256", "execution", "dossiers", "named_gaps", "policy"],
+  "properties": {
+    "schema": {"const": "appsec-review/final-report-pdf-receipt/1"},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "status": {"enum": ["rendered", "render_failed", "not_rendered"]},
+    "reason": {"$ref": "common.schema.json#/$defs/text"},
+    "renderer": {"const": "appsec-review/executive-report/1"},
+    "report": {"$ref": "common.schema.json#/$defs/artifact_ref"},
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latex", "pdf"],
+      "properties": {
+        "latex": {"$ref": "common.schema.json#/$defs/artifact_ref"},
+        "pdf": {"$ref": "common.schema.json#/$defs/ref_or_null"}
+      }
+    },
+    "tex_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "pdf_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/sha256"}, {"type": "null"}]},
+    "source_date_epoch": {"const": 0},
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "sha256"],
+      "properties": {
+        "sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "files": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "sha256"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 64},
+              "sha256": {"$ref": "common.schema.json#/$defs/sha256"}
+            }
+          }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tag", "image_id"],
+      "properties": {
+        "id": {"const": "tool-report-latex"},
+        "tag": {"type": "string", "minLength": 1, "maxLength": 512},
+        "image_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "manifest_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "runtime_policy_sha256": {"$ref": "common.schema.json#/$defs/sha256"}
+      }
+    },
+    "settings_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "execution": {"$ref": "common.schema.json#/$defs/ref_or_null"},
+    "dossiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["certified", "read", "unavailable"],
+      "properties": {
+        "certified": {"type": "integer", "minimum": 0},
+        "read": {"type": "integer", "minimum": 0},
+        "unavailable": {"type": "array", "maxItems": 20000, "items": {"$ref": "common.schema.json#/$defs/record_id"}}
+      }
+    },
+    "named_gaps": {"type": "array", "maxItems": 20000, "uniqueItems": true,
+                   "items": {"type": "string", "minLength": 1, "maxLength": 600}},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["network", "shell_escape", "input_read_only", "template_read_only", "source_excerpts",
+                   "generated_code_execution"],
+      "properties": {
+        "network": {"const": "none"},
+        "shell_escape": {"const": false},
+        "input_read_only": {"const": true},
+        "template_read_only": {"const": true},
+        "source_excerpts": {"const": "not_included"},
+        "generated_code_execution": {"const": "not_performed_by_policy"}
+      }
+    }
+  }
+}

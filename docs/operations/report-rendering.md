@@ -10,10 +10,12 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 `python -m appsec_review.reporting` turns a finished review run into a readable report: a LaTeX
 document compiled to PDF by the `tool-report-latex` image, or one self-contained HTML file. It is a
-standalone diagnostic tool; `job_final_report_publication` does not call that full-run loader, and
-`final-report.json` keeps `renderers.pdf.state = "not_rendered"` (see
-[`final-report.md`](final-report.md)). The image is still an enabled `manual = true` catalog entry,
-but integration `b702eb7` now pins it in the enabled-by-default dossier job. Its executor verifies
+standalone diagnostic tool; `job_final_report_publication` does not call that full-run loader. That
+job's own `report.render_pdf` unit renders the executive `final-report.pdf` from `final-report.json` and
+the gate-bound dossier JSON with the same template and image (see [`final-report.md`](final-report.md));
+`final-report.json` itself is assembled first and keeps `renderers.pdf.state = "not_rendered"`, the
+publish handoff's `pdf` field carrying the outcome. The image is still an enabled `manual = true` catalog
+entry, pinned by the enabled-by-default dossier job and the report job. Its executor verifies
 that immutable configured image identity when rendering; a catalog flag is not permission to
 silently use another image. Build/smoke ownership remains with the image-producing session.
 

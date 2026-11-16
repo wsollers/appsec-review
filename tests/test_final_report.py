@@ -809,8 +809,10 @@ def test_settings_are_typed_and_strictly_validated() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     assert FinalPublicationGateSettings.from_mapping(config.job(GATE).settings) == FinalPublicationGateSettings(True, 10000)
     settings = FinalReportSettings.from_mapping(config.job(REPORT).settings)
-    assert settings == FinalReportSettings(True, 8, 16) and settings.identity() == {
-        "markdown_evidence_ids": 8, "markdown_gap_ids": 16}
+    assert settings == FinalReportSettings(True, 8, 16, True, "appsec-review/tool-report-latex:1.0.0",
+                                           settings.image_id, 600, 16777216)
+    assert settings.identity() == {"markdown_evidence_ids": 8, "markdown_gap_ids": 16}
+    assert settings.pdf_identity()["image_id"].startswith("sha256:")
     for bad in ({"enabled": True}, {"enabled": True, "max_packages": 0}, {"enabled": True, "max_packages": 10001},
                 {"enabled": "yes", "max_packages": 5}, {"enabled": True, "max_packages": True},
                 {"enabled": True, "max_packages": 5, "model": "x"}):

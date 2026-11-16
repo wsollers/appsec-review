@@ -23,26 +23,36 @@ from appsec_review.runtime.contracts import (
 from appsec_review.runtime.registry import builtin_registry
 
 ROOT = Path(__file__).resolve().parents[3]
+IMAGE_TAG = "appsec-review/tool-report-latex:1.0.0"
+IMAGE_ID = "sha256:" + "ab" * 32
+PDF = {"render_pdf": True, "image_tag": IMAGE_TAG, "image_id": IMAGE_ID, "render_timeout_seconds": 600,
+       "max_pdf_bytes": 16777216}
 
 
 def test_settings_parse_bounds_identity_and_reject_invalid_mappings() -> None:
     lower = FinalReportSettings.from_mapping(
-        {"enabled": True, "markdown_evidence_ids": 0, "markdown_gap_ids": 0}
+        {"enabled": True, "markdown_evidence_ids": 0, "markdown_gap_ids": 0, **PDF,
+         "render_timeout_seconds": 1, "max_pdf_bytes": 1}
     )
-    assert lower == FinalReportSettings(True, 0, 0)
+    assert lower == FinalReportSettings(True, 0, 0, True, IMAGE_TAG, IMAGE_ID, 1, 1)
     assert lower.identity() == {"markdown_evidence_ids": 0, "markdown_gap_ids": 0}
+    assert lower.pdf_identity() == {**PDF, "render_timeout_seconds": 1, "max_pdf_bytes": 1}
+    assert lower.settings_sha256() != FinalReportSettings.from_mapping(
+        {"enabled": True, "markdown_evidence_ids": 0, "markdown_gap_ids": 0, **PDF}).settings_sha256()
 
     upper = FinalReportSettings.from_mapping(
-        {"enabled": False, "markdown_evidence_ids": 256, "markdown_gap_ids": 256}
+        {"enabled": False, "markdown_evidence_ids": 256, "markdown_gap_ids": 256, **PDF, "render_pdf": False,
+         "max_pdf_bytes": 67108864}
     )
-    assert upper == FinalReportSettings(False, 256, 256)
+    assert upper == FinalReportSettings(False, 256, 256, False, IMAGE_TAG, IMAGE_ID, 600, 67108864)
     assert upper.identity() == {"markdown_evidence_ids": 256, "markdown_gap_ids": 256}
 
     for bad in (
         None,
         "not-a-mapping",
-        {"enabled": True, "markdown_evidence_ids": 8},
-        {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, "extra": 1},
+        {"enabled": True, "markdown_evidence_ids": 8, **PDF},
+        {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16},
+        {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, **PDF, "extra": 1},
     ):
         with pytest.raises(ValueError, match="documented keys"):
             FinalReportSettings.from_mapping(bad)  # type: ignore[arg-type]
@@ -50,14 +60,31 @@ def test_settings_parse_bounds_identity_and_reject_invalid_mappings() -> None:
     for bad_enabled in (1, 0, "true", None):
         with pytest.raises(ValueError, match="enabled must be a boolean"):
             FinalReportSettings.from_mapping(
-                {"enabled": bad_enabled, "markdown_evidence_ids": 8, "markdown_gap_ids": 16}
+                {"enabled": bad_enabled, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, **PDF}
+            )
+        with pytest.raises(ValueError, match="render_pdf must be a boolean"):
+            FinalReportSettings.from_mapping(
+                {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, **PDF, "render_pdf": bad_enabled}
             )
 
     for key in ("markdown_evidence_ids", "markdown_gap_ids"):
         for bad_bound in (True, False, -1, 257, "8", 1.5, None):
-            payload = {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, key: bad_bound}
+            payload = {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, **PDF, key: bad_bound}
             with pytest.raises(ValueError, match=f"{key} must be an integer in \\[0, 256\\]"):
                 FinalReportSettings.from_mapping(payload)
+
+    base = {"enabled": True, "markdown_evidence_ids": 8, "markdown_gap_ids": 16, **PDF}
+    for key, bad_bounds in (("render_timeout_seconds", (0, 601, True, "600", None)),
+                            ("max_pdf_bytes", (0, 67108865, False, 1.0, None))):
+        for bad_bound in bad_bounds:
+            with pytest.raises(ValueError, match=f"{key} must be an integer in"):
+                FinalReportSettings.from_mapping({**base, key: bad_bound})
+    for bad_tag in ("", " tag", "-tag", None, 1):
+        with pytest.raises(ValueError, match="image_tag must be a nonempty image tag"):
+            FinalReportSettings.from_mapping({**base, "image_tag": bad_tag})
+    for bad_id in ("latest", "sha256:abc", "ab" * 32, None):
+        with pytest.raises(ValueError, match="image_id must be an immutable sha256 image identity"):
+            FinalReportSettings.from_mapping({**base, "image_id": bad_id})
 
 
 def test_contract_datasets_registry_topology_and_input_validator_parity() -> None:
@@ -126,14 +153,20 @@ def test_contract_datasets_registry_topology_and_input_validator_parity() -> Non
         "load.accepted_gate",
         "report.assemble",
         "report.render",
+        "report.render_pdf",
         "acceptance.publish_handoff",
     )
     assert {u.unit_id: u.dependencies for u in job.units} == {
         "load.accepted_gate": (),
         "report.assemble": ("load.accepted_gate",),
         "report.render": ("report.assemble",),
-        "acceptance.publish_handoff": ("load.accepted_gate", "report.assemble", "report.render"),
+        "report.render_pdf": ("load.accepted_gate", "report.assemble"),
+        "acceptance.publish_handoff": ("load.accepted_gate", "report.assemble", "report.render", "report.render_pdf"),
     }
+    assert TOPOLOGY == {"load": ("accepted_gate",), "report": ("assemble", "render", "render_pdf"),
+                        "acceptance": ("publish_handoff",)}
+    assert tuple(job_cfg.step("report").tasks) == ("assemble", "render", "render_pdf")
+    assert job_cfg.settings["render_pdf"] is True and job_cfg.settings["image_id"].startswith("sha256:")
 
     wave = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
     assert wave[JOB_ID]["dependencies"] == ["job_final_publication_gate"]
@@ -168,7 +201,7 @@ def test_contract_datasets_registry_topology_and_input_validator_parity() -> Non
         config=SimpleNamespace(
             steps=TOPOLOGY,
             step=job_cfg.step,
-            settings={"enabled": True, "markdown_evidence_ids": -1, "markdown_gap_ids": 16},
+            settings={"enabled": True, "markdown_evidence_ids": -1, "markdown_gap_ids": 16, **PDF},
         )
     )
     with pytest.raises(ValueError, match="markdown_evidence_ids"):
