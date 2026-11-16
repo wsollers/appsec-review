@@ -24,6 +24,8 @@ class OwaspSettings:
     max_queries: int
     max_discovery_files: int = 512
     max_discovery_bytes: int = 8_388_608
+    # D1: the tags-index scan bound for classification; separate from the priority/graph context cap.
+    max_tag_records: int = 20_000
 
 
 def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
@@ -33,7 +35,7 @@ def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
         "masvs_profile", "max_batch_size", "max_components_per_batch", "max_components",
         "dynamic_authorized", "model", "models", "standards", "parser_versions",
     }
-    optional = {"max_discovery_files": 512, "max_discovery_bytes": 8_388_608}
+    optional = {"max_discovery_files": 512, "max_discovery_bytes": 8_388_608, "max_tag_records": 20_000}
     if not required <= set(value) or set(value) - required - optional.keys():
         raise ValueError(f"OWASP settings missing={sorted(required - set(value))}, "
                          f"unknown={sorted(set(value) - required - optional.keys())}")
@@ -67,7 +69,7 @@ def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
         "max_evidence_per_component": 200, "max_source_lines": 500,
         "max_subjects_per_control": 32, "max_batches": 10000, "max_turns": 16, "max_queries": 100,
         "max_batch_size": 64, "max_components_per_batch": 16, "max_components": 128,
-        "max_discovery_files": 4096, "max_discovery_bytes": 16_777_216,
+        "max_discovery_files": 4096, "max_discovery_bytes": 16_777_216, "max_tag_records": 200_000,
     }
     for key, maximum in bounds.items():
         if type(value[key]) is not int or not 1 <= value[key] <= maximum:
@@ -78,4 +80,5 @@ def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
         raise ValueError("OWASP masvs_profile must be L1 or L2")
     return OwaspSettings(value["enabled"], mode, profile, **{key: value[key] for key in (
         "max_evidence_per_component", "max_source_lines", "max_subjects_per_control",
-        "max_batches", "max_turns", "max_queries", "max_discovery_files", "max_discovery_bytes")})
+        "max_batches", "max_turns", "max_queries", "max_discovery_files", "max_discovery_bytes",
+        "max_tag_records")})

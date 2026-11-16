@@ -29,16 +29,26 @@ With the collation pass (T-5008, [design](../architecture/collation-pass.md)) th
 longer classifies components itself: it reads the component's `target:*` class and facet tags
 from the accepted `tags` index, derives the control roles from them, and gates applicability on
 the class. A component that is not `target:web-api` gets every selected ASVS control as
-`not_applicable` with the target-class citation, one that is not `target:mobile` likewise for
-MASVS; such a component produces no batch, no `OWASP_WORKER_STARTED` event and no
-`control_evidence` fact, and the job ends `SUCCEEDED` with a not-applicable ledger when the pinned
-catalogs report no gap of their own. This is implemented: `classify_components` reads the tags,
-`build_applicability` applies the class gate first (`applicability-rules/2`, rows carry
-`target_classes` and `target_class_citations`), `target-class-ledger.json` records the per-family
-verdict per component, and a component without a `target:*` tag is `cannot_determine` for every
-control and is not dispatched. Review data indexing projects no `not_applicable` row into
-`control_evidence`. The handoff's `gaps` are missing coverage (catalog and result gaps); the method
-limitations stay under `limitations`.
+`not_applicable` with the target-class citation, except that `target:network-service` (a non-HTTP
+listener) admits the transport-agnostic ASVS 5.0 chapters V1, V2, V5, V7 and V16 (ledger verdict
+`partially_applicable`, rows carry `admitted_chapters`); one that is not `target:mobile` is
+`not_applicable` for MASVS; such a component produces no batch, no `OWASP_WORKER_STARTED` event and
+no `control_evidence` fact, and the job ends `SUCCEEDED` with a not-applicable ledger when the
+pinned catalogs report no gap of their own. This is implemented: `classify_components` reads the
+tags (`tag_assignment` rows of the `tags` index under `max_tag_records`; priority/graph rows are a
+separately capped `graph_context`), `build_applicability` applies the class gate first
+(`applicability-rules/3`, rows carry `target_classes`, `target_class_citations`, `basis_class` and
+`admitted_chapters`), `target-class-ledger.json` records the per-family verdict per component, a
+component whose accepted sources no recogniser reads (Python only until T-5011/T-5013) is
+`unsupported_missing_evidence` ("no supported source language for this component") on every
+admitted row, and a component without a `target:*` tag is `cannot_determine` for every control and
+is not dispatched; when the tag cap dropped a target or facet record the reason is "target class
+not read: routing cap omitted tag records" and the component carries a gap. Review data indexing
+projects no `not_applicable` row into `control_evidence`; `cannot_determine` and
+`unsupported_missing_evidence` rows are still projected as partial facts with a named gap (T-5009).
+The handoff's `gaps` are missing coverage (catalog and result gaps); the method limitations stay
+under `limitations`; `coverage_disposition` is `partial` while any row is unresolved and
+`complete` otherwise. `selection.json` records a `reasons` list per family.
 
 Direct CLI `start`, `resume` and `plan-resume` also select security tagging and OWASP after
 prioritization/code-graph indexing and before review data indexing. Normal enabled-job filtering
@@ -74,7 +84,8 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 | `max_components` | 128 | 1–128 | Components accepted for tag-based classification |
 | `max_discovery_files` | 512 | 1–4096 | Candidate accepted source files per component; omission counts remain explicit |
 | `max_discovery_bytes` | 8388608 | 1–16777216 | Total accepted source bytes inspected per component |
-| `max_evidence_per_component` | 60 | 1–200 | Accepted evidence/routing bounds; omissions remain named |
+| `max_evidence_per_component` | 60 | 1–200 | Accepted evidence, tag-record and priority/graph context bounds per component; a dropped component-level target/facet record is a gap |
+| `max_tag_records` | 20000 | 1–200000 | `tag_assignment` rows read from the `tags` index for classification; reaching it is a gap |
 | `max_source_lines` | 120 | 1–500 | Source materialization cap, recorded in publication `assessment_bounds` |
 | `max_subjects_per_control` | 8 | 1–32 | Named proof subjects per control |
 | `max_batches` | 200 | 1–10000 | Admitted validation batches; excluded work remains gaps |
@@ -83,7 +94,7 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 | `dynamic_authorized` | false | boolean | Authorization policy, not adapter availability; no runtime/manual evidence adapter is implemented |
 | `model.*` | enabled, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | complete selected model profile | Worker policy; separate job-level gate controls dispatch |
 | `models.reviewer.*` | same as worker | complete selected model profile | Separate fresh request context using original evidence, no prior worker answer/transcript |
-| `parser_versions.*` | component/applicability/batching/subject selection `"1"`; evidence binding `"2"`; result validator `"3"` | strings | Versioned parser/validator fingerprint inputs; exact keys remain in central TOML |
+| `parser_versions.*` | component rules `"2"`; applicability rules `"3"`; batching rules `"1"`; evidence binding `"3"`; subject selection `"1"`; result validator `"3"` | strings | Must equal the versions the code implements (`owasp_workbench/versions.py`); the job's input validator refuses any other value |
 | `standards.<family>` | complete catalog pins in TOML | pinned catalog path/hash and upstream identity | Reviewed ASVS, MASVS, MASTG and risk-context catalogs |
 
 Selected model profiles require `enabled`, `provider`, `model`, `reasoning`, `max_input_tokens`,

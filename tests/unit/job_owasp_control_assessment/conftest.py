@@ -20,7 +20,7 @@ def settings():
 
 @pytest.fixture
 def accepted(monkeypatch, tmp_path):
-    def make(sources, *, hints=(), languages=None):
+    def make(sources, *, hints=(), languages=None, extra_rows=(), extra_shards=()):
         snapshot, run_id = "target-sha256:" + "1" * 64, "unit-run"
         component = Component("api", ".", "component")
         rows, entities, files, reads = [], {}, [], []
@@ -44,14 +44,21 @@ def accepted(monkeypatch, tmp_path):
                                  "index": "components", "shard_id": "default",
                                  "payload": {"root": ".", "component_id": "api"}, "location": None}
         rows.append(entities["component"])
+        for row in extra_rows:
+            rows.append(deepcopy(row))
+            entities.setdefault(row["identity"], rows[-1])
         shards = tuple({"name": name, "shard_id": "default", "sha256": "2" * 64,
                         "producer": {"job": "job_target_catalog"}}
-                       for name in ("source", "analysis", "components"))
+                       for name in ("source", "analysis", "components")) + tuple(extra_shards)
 
-        def indexed(shards, *, limit):
-            allowed = {item["name"] for item in shards}
-            return iter([row for row in sorted(rows, key=lambda row: row["identity"])
-                         if row["index"] in allowed][:limit])
+        def indexed(shards, *, kinds=(), limit):
+            # The real store yields shards in (name, shard_id) order, rows by identity (indexing/store.py).
+            allowed = {(item["name"], str(item.get("shard_id", "default"))) for item in shards}
+            selected = [row for row in rows
+                        if (row["index"], str(row.get("shard_id", "default"))) in allowed
+                        and (not kinds or row["kind"] in kinds)]
+            selected.sort(key=lambda row: (row["index"], str(row.get("shard_id", "default")), row["identity"]))
+            return iter(selected[:limit])
 
         scope = SimpleNamespace(run_id=run_id, run_root=tmp_path, manifest_sha256="3" * 64,
                                 target_snapshot=snapshot, components=(component,), build_units=(),

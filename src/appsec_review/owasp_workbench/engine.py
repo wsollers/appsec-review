@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 import hashlib
 from pathlib import PurePosixPath
 import re
@@ -40,9 +40,55 @@ def _citation_valid(citation: Mapping[str, Any]) -> bool:
 
 
 CLASSIFICATION_SCHEMA = "appsec-review/component-classification/2"
+APPLICABILITY_RULE = "applicability-rules/3"
+WORK_SCHEMA = "appsec-review/validation-work/1"
 # T-5008: the control family a target class admits. A component without the class gets every selected
 # control of the family as not_applicable, citing the class assignment; no batch is dispatched for it.
 FAMILY_TARGET_CLASSES = {"ASVS": "target:web-api", "MASVS": "target:mobile"}
+# Run 2026-11-16-0005 (D3): a non-HTTP network listener (target:network-service) admits only the
+# transport-agnostic ASVS 5.0 chapters, named by chapter id in the ingested catalog: V1 Encoding and
+# Sanitization (its V1.4 holds the memory-safety controls ASVS 4.0 kept at V5.4), V2 Validation and
+# Business Logic, V5 File Handling, V7 Session Management and V16 Security Logging and Error Handling.
+# Every other chapter is web-only for that class and stays not_applicable with the class cited.
+FAMILY_PARTIAL_TARGET_CLASSES: Mapping[str, Mapping[str, frozenset[str]]] = {
+    "ASVS": {"target:network-service": frozenset({"V1", "V2", "V5", "V7", "V16"})},
+}
+UNRESOLVED_OUTCOMES = frozenset({"cannot_determine", "unsupported_missing_evidence"})
+
+
+def chapter_of(control_id: str) -> str:
+    """The ASVS chapter id of a control id (``V1.4.2`` -> ``V1``)."""
+    return str(control_id).split(".", 1)[0]
+
+
+def _chapter_order(chapter: str) -> tuple[int, str]:
+    digits = "".join(character for character in chapter if character.isdigit())
+    return (int(digits) if digits else 0, chapter)
+
+
+def class_admission(family: str, control_id: str, classes: set[str]
+                    ) -> tuple[bool, str | None, frozenset[str] | None]:
+    """``(admitted, basis_class, admitted_chapters)`` of one control for a component's target classes.
+
+    The full class admits every chapter (``admitted_chapters`` is None); a partial class admits only
+    its chapters; no class admits nothing. A family with no gate is admitted with no basis.
+    """
+    required = FAMILY_TARGET_CLASSES.get(family)
+    if required is None:
+        return True, None, None
+    if required in classes:
+        return True, required, None
+    for partial, chapters in sorted(FAMILY_PARTIAL_TARGET_CLASSES.get(family, {}).items()):
+        if partial in classes:
+            return chapter_of(control_id) in chapters, partial, chapters
+    return False, None, None
+
+
+def _unsupported_source(component: Mapping[str, Any]) -> bool:
+    """D2: accepted sources exist but no recogniser reads any of them, and no evidence was selected."""
+    support = component.get("source_support")
+    return (isinstance(support, Mapping) and support.get("evidence_count") == 0
+            and support.get("supported_files") == 0 and int(support.get("unsupported_files") or 0) > 0)
 # Collation facets and classes (docs/architecture/collation-pass.md) to the control roles the catalogs
 # name. The workbench keeps no classifier of its own: a role exists only when a tag establishes it.
 FACET_COMPONENT_ROLES: Mapping[str, tuple[str, ...]] = {
@@ -53,6 +99,7 @@ FACET_COMPONENT_ROLES: Mapping[str, tuple[str, ...]] = {
     "asset:credentials": ("cryptography_data_protection",),
     "mechanism:http": ("application_api_server", "network"), "mechanism:rpc": ("application_api_server", "network"),
     "mechanism:networked-listener": ("network",), "target:web-api": ("application_api_server",),
+    "target:network-service": ("network",),
     "component:android-mobile": ("android_mobile",), "component:ios-mobile": ("ios_mobile",),
     "role:build-glue": ("build_supply_chain",), "exposure:build-time": ("build_supply_chain",),
     "target:build-tooling": ("build_supply_chain",),
@@ -119,9 +166,10 @@ def classify_components(
             if namespace not in _FACET_NAMESPACES and namespace != "target" and tag not in FACET_COMPONENT_ROLES:
                 continue
             tags.setdefault(tag, basis)
+            subject = record.get("subject") if isinstance(record.get("subject"), Mapping) else {}
+            assignment_id = record.get("assignment_id") if isinstance(record.get("assignment_id"), str) else None
             tag_citations.append({"tag": tag, "basis": basis, "identity": record.get("identity"),
-                                  "assignment_id": (record.get("subject") or {}).get("assignment_id")
-                                  if isinstance(record.get("subject"), Mapping) else None,
+                                  "assignment_id": assignment_id or subject.get("assignment_id"),
                                   "usage": "routing_only"})
         target_classes = sorted(tag for tag in tags if tag.startswith("target:"))
         facets = sorted(tag for tag in tags if tag.split(":", 1)[0] in _FACET_NAMESPACES)
@@ -136,8 +184,13 @@ def classify_components(
         if "target:mobile" in tags and not roles & MOBILE_ROLES:
             roles.update(MOBILE_ROLES)
             reasons.append("target:mobile without a platform tag routes both mobile roles; the platform is unknown")
-        gaps = ([] if target_classes else
-                ["collation assigned no target class to this component; applicability cannot be determined"])
+        # D9: a class the routing cap kept from being read is an unread class, not an unassigned one.
+        unread = bool(raw.get("tag_records_omitted")) or raw.get("tag_scan_complete") is False
+        gaps = list(raw.get("gaps", ()))
+        if not target_classes:
+            gaps.append("target class not read: routing cap omitted tag records; applicability cannot be determined"
+                        if unread else
+                        "collation assigned no target class to this component; applicability cannot be determined")
         result = {
             "schema": CLASSIFICATION_SCHEMA,
             "target_id": str(raw.get("target_id", "target")),
@@ -152,6 +205,9 @@ def classify_components(
             "evidence": citations,
             "assessment_mode": assessment_mode,
             "routing_context": routing,
+            "graph_context": list(raw.get("graph_context", ())),
+            "source_support": dict(raw["source_support"]) if isinstance(raw.get("source_support"), Mapping) else None,
+            "target_class_unread": bool(unread and not target_classes),
             "evidence_fingerprint": raw.get("evidence_fingerprint"),
             "limitations": list(raw.get("limitations", ())),
             "ambiguity": list(gaps),
@@ -187,10 +243,20 @@ def target_class_ledger(classifications: Sequence[Mapping[str, Any]], rows: Sequ
             for row in family_rows:
                 outcomes[row["outcome"]] = outcomes.get(row["outcome"], 0) + 1
             classes = list(component.get("target_classes", ()))
+            partial = FAMILY_PARTIAL_TARGET_CLASSES.get(family, {})
+            basis = next((name for name in sorted(partial) if name in classes), None)
+            verdict = ("applicable" if required in classes else
+                       "partially_applicable" if basis else
+                       "not_applicable" if classes else "cannot_determine")
             entries.append({
                 "component_id": cid, "family": family, "required_class": required, "target_classes": classes,
-                "verdict": ("applicable" if required in classes else
-                            "not_applicable" if classes else "cannot_determine"),
+                "verdict": verdict,
+                "basis_class": required if required in classes else basis,
+                "admitted_chapters": sorted(partial[basis], key=_chapter_order) if basis else None,
+                "reason": ("target class not read: routing cap omitted tag records" if component.get("target_class_unread")
+                           else "collation assigned no target class") if not classes else
+                          f"class {required if required in classes else basis or ', '.join(classes)} decides {family}; "
+                          "the class assignment is cited, not inferred",
                 "outcomes": dict(sorted(outcomes.items())), "selected_controls": len(family_rows),
                 "citations": [item for item in component.get("tag_citations", ()) if item["tag"].startswith("target:")],
             })
@@ -200,6 +266,23 @@ def target_class_ledger(classifications: Sequence[Mapping[str, Any]], rows: Sequ
 def select_profiles(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int = 2,
                     masvs_profile: str = "L2") -> dict[str, Any]:
     controls = control_records(catalogs, asvs_level=asvs_level, masvs_profile=masvs_profile)
+    counts = Counter(str(control["family"]) for control in controls)
+    # D4: every selected family records why it is selected, so the selection record is auditable.
+    gate = ("applicability is decided per component by the target-class gate: target:web-api admits every "
+            "ASVS chapter, target:network-service the transport-agnostic chapters "
+            + ", ".join(sorted(FAMILY_PARTIAL_TARGET_CLASSES["ASVS"]["target:network-service"], key=_chapter_order))
+            + "; target:mobile admits MASVS")
+    reasons = {
+        "ASVS": [f"selected by configuration policy asvs_level={asvs_level}: {counts.get('ASVS', 0)} controls at this level",
+                 gate],
+        "MASVS": [f"selected by configuration policy masvs_profile={masvs_profile}: {counts.get('MASVS', 0)} controls",
+                  "MASVS/MASTG retained pending the target-class gate; any non-mobile class makes every row "
+                  "not_applicable with the class cited (a ledger line, not a gap)"],
+        "MASTG": ["supporting test documents crosswalked to MASVS; no controls are selected from this family",
+                  "MASVS/MASTG retained pending the target-class gate"],
+        "OWASP_API_TOP_10": ["OWASP API Top 10 is routing context; no controls are selected from this family"],
+        "OWASP_TOP_10": ["OWASP Top 10 is routing context; no controls are selected from this family"],
+    }
     selections = []
     for family in sorted(catalogs):
         catalog = catalogs[family]
@@ -209,6 +292,8 @@ def select_profiles(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int 
             "family": family, "version": catalog.version, "profile": profile,
             "authority": catalog.authority, "snapshot_id": catalog.snapshot_id,
             "catalog_sha256": catalog.catalog_sha256,
+            "selected_controls": counts.get(family, 0),
+            "reasons": reasons.get(family, [f"{family} is a supported family with no selection rule"]),
         })
     value = {"schema": "appsec-review/owasp-selection/1", "selections": selections,
              "control_count": len(controls), "policy": {"asvs_level": asvs_level,
@@ -240,17 +325,36 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
             required_class = FAMILY_TARGET_CLASSES.get(family)
             class_citations = [item for item in component.get("tag_citations", ())
                                if str(item.get("tag", "")).startswith("target:")]
+            admitted, basis_class, admitted_chapters = class_admission(family, str(control["id"]), classes)
+            if admitted_chapters is not None:
+                # A network service is admitted by its class; its `network` role is inside the boundary.
+                family_match = bool(roles.intersection(allowed | {"network"}))
+            basis = ", ".join(str(item.get("assignment_id") or item.get("identity")) for item in class_citations)
             gated = True
             if not classes:
                 outcome = "cannot_determine"
-                reason = "component target class is unresolved: collation assigned no target tag"
+                # D9: an unread class (routing cap) is named as such, never as an unassigned one.
+                reason = ("component target class not read: routing cap omitted tag records"
+                          if component.get("target_class_unread") else
+                          "component target class is unresolved: collation assigned no target tag")
                 gaps = ["target class unresolved; no control of this component is dispatched"]
-            elif required_class is not None and required_class not in classes:
+            elif not admitted and admitted_chapters is None:
                 outcome = "not_applicable"
                 reason = (f"component target class {', '.join(sorted(classes))} excludes {family}: "
-                          f"{required_class} is required; basis "
-                          + ", ".join(str(item.get("assignment_id") or item.get("identity")) for item in class_citations))
+                          f"{required_class} is required; basis {basis}")
                 gaps = []
+            elif not admitted:
+                outcome = "not_applicable"
+                reason = (f"component target class {basis_class} admits {family} only for the transport-agnostic "
+                          f"chapters {', '.join(sorted(admitted_chapters, key=_chapter_order))}; "
+                          f"{chapter_of(str(control['id']))} is web-only; basis {basis}")
+                gaps = []
+            elif _unsupported_source(component):
+                # D2: the class admits the control, but no recogniser reads this component's sources.
+                outcome = "unsupported_missing_evidence"
+                reason = "no supported source language for this component"
+                gaps = ["no supported source language for this component; the subject recognisers read "
+                        "Python only (T-5011/T-5013)"]
             elif component.get("confidence") == "low" or not roles:
                 gated = False
                 outcome = "cannot_determine"
@@ -312,8 +416,11 @@ def build_applicability(catalogs: Mapping[str, StandardCatalog],
                 "outcome": outcome, "reason": reason, "evidence": citations,
                 "confidence": component["confidence"], "gaps": gaps,
                 "target_classes": sorted(classes), "target_class_citations": class_citations,
+                "basis_class": basis_class,
+                "admitted_chapters": (sorted(admitted_chapters, key=_chapter_order)
+                                      if admitted_chapters is not None else None),
                 "assessment_mode": assessment_mode,
-                "rule_version": "applicability-rules/2",
+                "rule_version": APPLICABILITY_RULE,
             }
             if outcome not in APPLICABILITY_OUTCOMES:
                 raise AssertionError("invalid applicability outcome")
@@ -371,7 +478,7 @@ def partition_work(rows: Sequence[Mapping[str, Any]], repository_root, *, max_ba
     if sorted(assigned) != sorted(expected) or len(assigned) != len(set(assigned)):
         raise ValueError("batch partitioning failed exactly-once dispatch accounting")
     return {
-        "schema": "appsec-review/validation-work/1",
+        "schema": WORK_SCHEMA,
         "batches": sorted(batches, key=lambda item: item["batch_id"]),
         "non_dispatch_dispositions": [
             {"row_id": row["row_id"], "outcome": row["outcome"], "reason": row["reason"]}
@@ -420,6 +527,7 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
             "retrieval_manifest": dict(retrieval_manifest),
             "assessment_mode": assessment_mode,
             "routing_context": component.get("routing_context", []),
+            "graph_context": component.get("graph_context", []),
             "proof_obligations": [{"obligation_id": f"{row_id}:primary",
                                    "evidence_mode": row["evidence_mode"],
                                    "required_tools": row["required_tools"]}],

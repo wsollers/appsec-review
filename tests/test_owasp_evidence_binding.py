@@ -411,11 +411,14 @@ def test_tag_cloud_priorities_and_graph_are_bounded_routing_not_proof(publicatio
         "usage": "routing_only", "counts": {"asvs:v5-input": 1, "cwe:89": 1}, "counts_are_lower_bounds": True,
         "count_metric": "distinct_subjects", "reading_rule": "Absent tags are unknown, never proof of absence.",
     }
-    assert {row["index"] for row in component["routing_context"]} == {"tags", "priority", "graph"}
-    assert all(row["usage"] == "routing_only" for row in component["routing_context"])
-    assert any(row["identity"] == identity for row in component["routing_context"])
+    # D1: tags are the classification input; priority and graph rows are a separately capped context.
+    assert {row["index"] for row in component["routing_context"]} == {"tags"}
+    assert {row["index"] for row in component["graph_context"]} == {"priority", "graph"}
+    assert all(row["usage"] == "routing_only" for row in component["routing_context"] + component["graph_context"])
+    assert any(row["identity"] == identity for row in component["graph_context"])
     limited = inputs(publication, max_evidence_per_component=1)
-    assert all(len(item["routing_context"]) <= 1 for item in limited["components"])
+    assert all(len(item["routing_context"]) <= 1 and len(item["graph_context"]) <= 1
+               for item in limited["components"])
     assert all(sum(item["component_id"] == component["component_id"] for item in limited["evidence"]) <= 1
                for component in limited["components"])
     assert "at least" in " ".join(limited["limitations"])
@@ -442,7 +445,7 @@ def test_unlocated_graph_scope_is_routing_context_and_not_static_proof(publicati
     assert value["category"] == "declaration"
     component = next(item for item in inputs(publication)["components"] if item["component_id"] == COMPONENT)
     assert any(row["identity"] == identity and row["context"]["result"]["source_class"] == "network"
-               for row in component["routing_context"])
+               for row in component["graph_context"])
 
 
 def test_source_and_input_excerpts_redact_values_without_losing_names(publication):

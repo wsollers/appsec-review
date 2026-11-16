@@ -78,7 +78,7 @@ def test_cpp_cli_component_is_not_applicable_to_both_families_with_the_class_cit
         assert row["target_classes"] == ["target:cli"] and row["gaps"] == []
         assert [item["tag"] for item in row["target_class_citations"]] == ["target:cli"]
         assert "target:cli is required" not in row["reason"] and "target:cli excludes" in row["reason"]
-        assert row["rule_version"] == "applicability-rules/2"
+        assert row["rule_version"] == engine.APPLICABILITY_RULE == "applicability-rules/3"
     work = partition_work(rows, ROOT)
     assert work["batches"] == [] and work["accounting"]["dispatched_rows"] == 0
     assert len(work["non_dispatch_dispositions"]) == len(rows)

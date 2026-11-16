@@ -2721,6 +2721,7 @@ max_evidence_per_component = 60
 max_source_lines = 120
 max_discovery_files = 512
 max_discovery_bytes = 8388608
+max_tag_records = 20000
 max_subjects_per_control = 8
 max_batches = 200
 max_turns = 4
@@ -2752,11 +2753,13 @@ max_output_tokens = 6000
 timeout_seconds = 120
 retries = 1
 
+# Declared rule versions; job_owasp_control_assessment refuses to start unless these equal the
+# versions its code implements (owasp_workbench/versions.py), key for key.
 [jobs.job_owasp_control_assessment.settings.parser_versions]
-component_rules = "1"
-applicability_rules = "1"
+component_rules = "2"
+applicability_rules = "3"
 batching_rules = "1"
-evidence_binding = "2"
+evidence_binding = "3"
 subject_selection = "1"
 result_validator = "3"
 
@@ -2854,9 +2857,9 @@ max_assignments = 500000
 
 [jobs.job_security_tagging.settings.taxonomy]
 vocabulary_path = "data/reference/taxonomy/vocabulary.json"
-vocabulary_sha256 = "546b54f5f09d6c7d554d026b55e91314165daddf82899909b133ea18d64ea6c5"
+vocabulary_sha256 = "bfea6cad747373d089a690a1a13692c5b424ae773f77a88e18ab6bfd0ec56382"
 capability_rules_path = "data/reference/taxonomy/capability-rules.json"
-capability_rules_sha256 = "0de983d5be6d178df48a43580f28a34ac42e4b0ae1065cc4a2a72eb85de5a24e"
+capability_rules_sha256 = "d171bd524478f0ba748fbd8f90b5a952556f166bafc589fa8c078f04d0ff000b"
 crosswalk_path = "data/reference/taxonomy/crosswalk.json"
 crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
 
