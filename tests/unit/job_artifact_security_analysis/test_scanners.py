@@ -325,3 +325,87 @@ def test_runner_executes_target_intake_missing_osv_ecosystem_blint_and_stdout_fa
     )
     assert syft_out["payload"] == b'{"fallback":true}'
     assert syft_out["payload_truncated"] is True
+
+
+def test_cve_bin_tool_adapter_is_offline_and_mounts_the_verified_snapshot(tmp_path: Path, monkeypatch) -> None:
+    adapter = ADAPTERS["cve_bin_tool"]
+    assert adapter.tool_id == "tool-cve-bin-tool" and adapter.accepted_exit_codes == frozenset({0, 1})
+    argv = adapter.argv("/opt/tool/bin/scan-cve-bin-tool", "build/smoke_server")
+    assert argv[0] == "/opt/tool/bin/scan-cve-bin-tool" and argv[-1] == "/target/smoke_server"
+    # Offline policy: never fetch, never check for a release, every network data source disabled by name.
+    assert "--offline" in argv and "--disable-version-check" in argv and "--disable-validation-check" in argv
+    assert argv[argv.index("--update") + 1] == "never"
+    disabled = set(argv[argv.index("--disable-data-source") + 1].split(","))
+    assert disabled == {"CURL", "EPSS", "GAD", "OSV", "PURL2CPE", "REDHAT", "RSD"}
+    # NVD stays enabled: the snapshot's rows carry data_source NVD and the tool filters matches by
+    # disabled source, so naming it would silently report nothing (the offline flags prevent a fetch).
+    assert "NVD" not in disabled
+    assert argv[argv.index("--format") + 1] == "json"
+    assert argv[argv.index("--output-file") + 1] == adapter.output_file == "/scratch/output.json"
+    parsed = adapter.parse(
+        b'[{"vendor":"zlib","product":"zlib","version":"1.2.11","cve_number":"CVE-2018-25032","severity":"HIGH"}]')
+    assert parsed["records"][0]["cve_number"] == "CVE-2018-25032" and parsed["_native_result_count"] == 1
+    assert adapter.parse(b"[]")["records"] == [] and adapter.parse(b"[]")["_native_result_count"] == 0
+
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    runner = ContainerScannerRunner(ROOT, run_root, run_root / "scratch")
+    monkeypatch.setattr(runner.executor, "resolve_image", lambda tool: "sha256:" + "1" * 64)
+    tool = runner.catalog.tool("tool-cve-bin-tool")
+    assert tool.executable == "/opt/tool/bin/scan-cve-bin-tool"
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    verified_for: list[str] = []
+    monkeypatch.setattr(scanners_module.cve_bin_tool_feed, "consumer_settings", lambda repo, run: "settings")
+
+    def verify_consumer(settings, *, tool_version):
+        assert settings == "settings"
+        verified_for.append(tool_version)
+        return {"snapshot_id": "sha256-cbt", "manifest_sha256": "4" * 64, "directory": str(snapshot),
+                "nvd_snapshot_id": "sha256-nvd", "cve_count": 3}
+
+    monkeypatch.setattr(scanners_module.cve_bin_tool_feed, "verify_consumer", verify_consumer)
+    identity = runner.identity("cve_bin_tool", {})
+    assert verified_for == [tool.version] == ["3.4"]
+    assert identity["scanner"] == "tool-cve-bin-tool" and identity["image"] == "sha256:" + "1" * 64
+    assert identity["rules"] == {"feed": "cve-bin-tool", "snapshot_id": "sha256-cbt",
+                                 "manifest_sha256": "4" * 64, "nvd_snapshot_id": "sha256-nvd"}
+    assert runner.identity("cve_bin_tool", {}) is identity and verified_for == ["3.4"]
+
+    requests = []
+
+    class Captured(Exception):
+        pass
+
+    def execute(self, request):
+        requests.append(request)
+        raise Captured
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    binary = run_root / "data" / "build" / "smoke_server"
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"\x7fELF" + b"\0" * 60)
+    with pytest.raises(Captured):
+        runner("cve_bin_tool", binary, {"canonical_identity": "asr:bin", "sha256": "a" * 64}, 30, 4096)
+    [request] = requests
+    assert request.tool_id == "tool-cve-bin-tool" and request.argv[0] == tool.executable
+    assert request.argv[-1] == "/target/smoke_server" and request.target_root == binary.parent
+    assert [(mount.source, mount.target, mount.read_only) for mount in request.extra_mounts] == [
+        (snapshot, "/database", True)]
+    assert request.environment == {"CVE_BIN_TOOL_DATABASE": "/database"}
+    assert request.accepted_exit_codes == frozenset({0, 1})
+
+    # A missing snapshot and a refused verification are named gaps, not exceptions from identity().
+    for scratch, error in (("missing", FileNotFoundError("current.json")),
+                           ("refused", ValueError("cve-bin-tool manifest hash mismatch"))):
+        other = ContainerScannerRunner(ROOT, run_root, run_root / scratch)
+        monkeypatch.setattr(other.executor, "resolve_image", lambda tool: "sha256:" + "1" * 64)
+        monkeypatch.setattr(scanners_module.cve_bin_tool_feed, "verify_consumer",
+                            lambda settings, *, tool_version, error=error: (_ for _ in ()).throw(error))
+        unavailable = other.identity("cve_bin_tool", {})
+        assert unavailable["unavailable"] == (
+            f"verified immutable cve-bin-tool database unavailable: {type(error).__name__}")
+        assert "rules" in unavailable and unavailable["rules"] is None
+        with pytest.raises(RuntimeError, match="verified immutable cve-bin-tool database unavailable"):
+            other("cve_bin_tool", binary, {"canonical_identity": "asr:bin", "sha256": "a" * 64}, 30, 4096)
+    assert requests == [request]

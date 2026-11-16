@@ -134,7 +134,10 @@ def test_cli_main_reading_argv_is_operator_only_and_user_tainted() -> None:
                                              settings(), [], LIMIT)
     assert file_tags(records, "tools/main.c") == {"mechanism:cli", "trust:user-tainted", "exposure:operator-only",
                                                    "role:input-parsing"}
-    operator = by_tag(records)["exposure:operator-only"][0]
+    # Two assignments carry the tag (the operator-channel derivation and the component roll-up); their
+    # order follows assignment ids that hash the rules file, so select the derivation by rule.
+    operator = next(item for item in by_tag(records)["exposure:operator-only"]
+                    if item["producer"]["rule_id"] == "exposure-from-operator-channel")
     assert operator["basis"] == "derived" and operator["confidence"] == "medium"
     assert operator["evidence"][0]["rests_on_absence"] is True
     assert "mechanism:http" in operator["evidence"][0]["condition"]["none_of"]

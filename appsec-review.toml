@@ -149,6 +149,11 @@ disable_grype = true
 # Catalog Swift, but keep it out of execution and downstream evidence unless explicitly enabled.
 # Enabling removes only this policy gate; unsupported tool/platform requirements remain gaps.
 enable_swift = false
+# cve-bin-tool version-string matching of accepted produced binaries against the verified
+# cve-bin-tool database snapshot (job_artifact_security_analysis, capability cve_bin_tool). A match
+# is a lead about a vendored or linked library version, never a confirmed vulnerability. Disabling
+# records a CONFIGURED_DISABLED gap; a missing or unverifiable snapshot is a named gap either way.
+enable_cve_bin_tool = true
 
 [signing]
 # Ed25519 signatures verified through the system OpenSSL 3 CLI (src/appsec_review/signing/).
@@ -1657,6 +1662,7 @@ syft = "tool-syft:1.52.0:adapter-2"
 grype = "tool-grype:0.119.0:adapter-2"
 osv = "tool-osv-scanner:1.9.2:adapter-2"
 spotbugs = "tool-spotbugs:4.10.4:adapter-2"
+cve_bin_tool = "tool-cve-bin-tool:3.4:adapter-1"
 
 [jobs.job_artifact_security_analysis.steps.load]
 workers = 1
@@ -1674,6 +1680,7 @@ workers = 8
 [jobs.job_artifact_security_analysis.steps.analyze.tasks.syft]
 [jobs.job_artifact_security_analysis.steps.analyze.tasks.grype]
 [jobs.job_artifact_security_analysis.steps.analyze.tasks.osv]
+[jobs.job_artifact_security_analysis.steps.analyze.tasks.cve_bin_tool]
 
 [jobs.job_artifact_security_analysis.steps.index]
 workers = 1
@@ -2836,7 +2843,7 @@ max_assignments = 500000
 vocabulary_path = "data/reference/taxonomy/vocabulary.json"
 vocabulary_sha256 = "546b54f5f09d6c7d554d026b55e91314165daddf82899909b133ea18d64ea6c5"
 capability_rules_path = "data/reference/taxonomy/capability-rules.json"
-capability_rules_sha256 = "2f0eb7d2976bcf102ecdb613c209fffaf481e7950a1b8c0f214148f78a973df5"
+capability_rules_sha256 = "0de983d5be6d178df48a43580f28a34ac42e4b0ae1065cc4a2a72eb85de5a24e"
 crosswalk_path = "data/reference/taxonomy/crosswalk.json"
 crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
 

@@ -9,8 +9,8 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 # Container packaging
 
 `catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it
-accounts for all 42 audited legacy image variants. The current enabled inventory contains 46
-images: 32 tool images, four narrow shared runtime bases, and ten build environments (the shared
+accounts for all 42 audited legacy image variants. The current enabled inventory contains 47
+images: 33 tool images, four narrow shared runtime bases, and ten build environments (the shared
 native toolchain plus the C/C++, Go, Python, PHP, Rust/WebAssembly, Node/TypeScript, Android,
 Java/Kotlin and .NET
 buildenvs). An

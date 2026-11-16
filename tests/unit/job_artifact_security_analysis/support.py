@@ -309,7 +309,7 @@ def _record_handlers(
 
     monkeypatch.setattr(security, "_scan_one", fake_scan)
     unit = SimpleNamespace(
-        job=SimpleNamespace(run_root=root, tools=SimpleNamespace(disable_grype=False)),
+        job=SimpleNamespace(run_root=root, tools=SimpleNamespace(disable_grype=False, enable_cve_bin_tool=True)),
         output=lambda _: {"artifacts": artifacts},
     )
     units = {item.unit_id: item for item in build_job(scanner_runner=lambda *args: None).units}

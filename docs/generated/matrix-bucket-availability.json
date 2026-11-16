@@ -26995,6 +26995,7 @@
   },
   "tool_policy": {
     "disable_grype": true,
+    "enable_cve_bin_tool": true,
     "enable_swift": false
   }
 }

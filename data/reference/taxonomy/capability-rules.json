@@ -131,7 +131,7 @@
     {"id": "sarif-rule-cwe-tags", "producers": ["codeql"], "extract": "sarif-rule-cwe-tags"},
     {"id": "cert-rule-id", "producers": ["*"], "extract": "cert-rule-id"},
     {"id": "gitleaks-hard-coded-credential", "producers": ["tool-gitleaks"], "emit": ["cwe:798"]},
-    {"id": "advisory-match", "producers": ["tool-grype", "tool-osv-scanner"], "extract": "advisory-severity",
+    {"id": "advisory-match", "producers": ["tool-grype", "tool-osv-scanner", "tool-cve-bin-tool"], "extract": "advisory-severity",
      "emit": ["cwe:1395"]},
     {"id": "syft-package-capability", "producers": ["tool-syft"], "extract": "package-capability"},
     {"id": "ci-untrusted-trigger", "producers": ["ci:*"], "rule_ids": ["CI-UNTRUSTED-TRIGGER"],

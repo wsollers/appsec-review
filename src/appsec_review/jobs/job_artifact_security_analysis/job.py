@@ -48,7 +48,8 @@ NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/2"
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
 # Changing only the splitting re-indexes without re-running a scanner.
 INDEX_NORMALIZER_IDENTITY = f"{NORMALIZER_IDENTITY}+{FINDING_NORMALIZER}"
-CAPABILITIES = ("inventory", "native", "jvm", "packages", "wasm", "spotbugs", "blint", "syft", "grype", "osv")
+CAPABILITIES = ("inventory", "native", "jvm", "packages", "wasm", "spotbugs", "blint", "syft", "grype", "osv",
+                "cve_bin_tool")
 TOPOLOGY = {
     "load": ("accepted_artifacts",),
     "analyze": CAPABILITIES,
@@ -599,10 +600,14 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
     def analyze(capability: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
             loaded = unit.output("load.accepted_artifacts")
+            gap = None
             if capability == "grype" and unit.job.tools.disable_grype:
                 gap = "Grype artifact coverage was configured disabled by tools.disable_grype"
+            elif capability == "cve_bin_tool" and not unit.job.tools.enable_cve_bin_tool:
+                gap = "cve-bin-tool artifact coverage was configured disabled by tools.enable_cve_bin_tool"
+            if gap is not None:
                 unit.job.events.write("TOOL_CONFIGURED_DISABLED", unit_id=unit.unit_id,
-                                      tool_id="tool-grype", disposition="CONFIGURED_DISABLED",
+                                      tool_id=ADAPTERS[capability].tool_id, disposition="CONFIGURED_DISABLED",
                                       gap_count=1, gaps=[gap], checkpoint_reused=False)
                 return {"capability": capability, "observations": [], "observation_count": 0,
                         "gaps": [gap], "coverage_disposition": "CONFIGURED_DISABLED",
