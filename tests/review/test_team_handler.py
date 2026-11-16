@@ -179,6 +179,7 @@ def _prepared_template(tmp_path_factory):
                         "runs_dir": str(built.runs_dir),
                         "run_root": str(built.run_root),
                         "ids": dict(built.ids),
+                        "upstream_handoffs": dict(built.upstream_handoffs),
                         "manifest_sha256": scope.manifest_sha256,
                         "scope_out": scope_out,
                         "docs": docs,
@@ -193,6 +194,7 @@ def _prepared_template(tmp_path_factory):
             runs_dir=Path(ready["runs_dir"]),
             run_root=Path(ready["run_root"]),
             ids=dict(ready["ids"]),
+            upstream_handoffs=dict(ready.get("upstream_handoffs", {})),
         )
         docs = ready["docs"]
         manifest_sha256 = ready["manifest_sha256"]
@@ -209,7 +211,8 @@ def _prepared_template(tmp_path_factory):
     return SimpleNamespace(
         fixture=fixture, settings=settings, docs=docs,
         manifest_sha256=manifest_sha256, base_contexts=base_contexts,
-        bundles={}, views={}, resolves={}, names={}, locations={}, cache_lock=threading.Lock(),
+        bundles={}, symbols={}, path_symbols={}, views={}, resolves={}, names={}, locations={},
+        cache_lock=threading.Lock(),
     )
 
 
@@ -224,11 +227,19 @@ def prepared(tmp_path: Path, monkeypatch, _prepared_template):
     runs_dir = tmp_path / "review" / "runs"
     run_root = runs_dir / _prepared_template.fixture.run_id
     shutil.copytree(_prepared_template.fixture.run_root, run_root)
+    config_path = write_config(
+        tmp_path / "review",
+        runs_dir,
+        overrides={"backoff_seconds": [0]},
+        extra=job_tables("job_third_party_data_sync"),
+    )
     fixture = SimpleNamespace(
         run_id=_prepared_template.fixture.run_id,
         runs_dir=runs_dir,
         run_root=run_root,
         ids=dict(_prepared_template.fixture.ids),
+        upstream_handoffs=dict(_prepared_template.fixture.upstream_handoffs),
+        config=config_path,
     )
     settings = _prepared_template.settings
 
@@ -255,6 +266,8 @@ def prepared(tmp_path: Path, monkeypatch, _prepared_template):
             max_page_size=resolved.packages.max_page_size,
             max_depth=resolved.packages.max_depth,
             _bundles=_prepared_template.bundles,
+            _symbols=_prepared_template.symbols,
+            _path_symbols=_prepared_template.path_symbols,
             _pinned=set(),
             _views=_prepared_template.views if same_packages else {},
             _resolves=_prepared_template.resolves,
@@ -333,14 +346,21 @@ def test_lane_dispatch_and_shared_reservations_follow_profile(tmp_path, monkeypa
 
 def test_hunt_triage_orders_by_direct_support_then_claim_id_and_caps(prepared) -> None:
     def quick_verifier(request, *, timeout_seconds):
+        if request.role == "blue_team_refuter":
+            return ScriptedInfer._final({"stance": "unresolved", "why": NARRATIVES["blue-guard"]})
         if request.role == "independent_verifier":
             return ScriptedInfer._final({"disposition": "insufficient_evidence", "per_predicate": {},
-                                         "why": NARRATIVES["verifier"]})
+                                          "why": NARRATIVES["verifier"]})
         return prepared.infer(request, timeout_seconds=timeout_seconds)
 
     no_judge = MappingProxyType({**prepared.settings.roles, Role.ADJUDICATION_JUDGE: replace(
         prepared.settings.roles[Role.ADJUDICATION_JUDGE], enabled=False)})
-    ctx = prepared.context(quick_verifier, lane="hunt", roles=no_judge)
+    no_cache = replace(prepared.settings.result_cache, enabled=False)
+    no_audit = replace(prepared.settings.decision_audit, enabled=False)
+    ctx = prepared.context(
+        quick_verifier, lane="hunt", roles=no_judge, result_cache=no_cache,
+        decision_audit=no_audit,
+    )
     result = run_team(ctx, prepared.work("hunt", "sast_critical"), launch=True)
     decisions = [item for item in result.triage if item["decision"] != "rejected"]
     admitted = [item for item in decisions if item["decision"] == "admitted"]

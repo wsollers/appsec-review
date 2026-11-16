@@ -23041,24 +23041,35 @@
           "tests/acceptance/review_behavior/test_behavioral_review.py"
         ],
         "integration": [
-          "tests/integration/test_review_consumer_acceptance.py",
-          "tests/integration/review_behavior/test_package_join.py"
+          "tests/integration/job_inference_security_review/test_inference_security_review_jobrunner.py",
+          "tests/integration/review_behavior/test_package_join.py",
+          "tests/integration/test_review_consumer_acceptance.py"
         ],
         "live": [],
         "unit": [
+          "tests/review/test_attack_chain_job.py",
+          "tests/review/test_attack_chains.py",
+          "tests/review/test_bounded_cells.py",
+          "tests/review/test_discovery_competence.py",
+          "tests/review/test_execution_budget_wiring.py",
+          "tests/review/test_inference_review_schemas.py",
+          "tests/review/test_prompt_competence.py",
+          "tests/review/test_team_handler.py",
+          "tests/review/test_teams.py",
+          "tests/test_inference_fixture_contracts.py",
+          "tests/test_inference_review_config.py",
+          "tests/test_review_guidance_execution.py",
+          "tests/unit/job_inference_security_review/test_contract.py",
+          "tests/unit/job_inference_security_review/test_handlers.py",
+          "tests/unit/job_inference_security_review/test_stages_and_schemas.py",
+          "tests/unit/observability_findings/test_actionability_evidence.py",
+          "tests/unit/review/test_schema_set_messages.py",
           "tests/unit/review_behavior/test_contract_and_view.py",
-          "tests/unit/review_behavior/test_handler_wiring.py",
           "tests/unit/review_behavior/test_coverage.py",
+          "tests/unit/review_behavior/test_handler_wiring.py",
           "tests/unit/review_behavior/test_model_context.py",
           "tests/unit/review_behavior/test_operations.py",
           "tests/unit/review_behavior/test_publication_bindings.py",
-          "tests/unit/observability_findings/test_actionability_evidence.py",
-          "tests/review/test_discovery_competence.py",
-          "tests/review/test_prompt_competence.py",
-          "tests/review/test_team_handler.py::test_lane_allocation_is_fair_share_work_conserving_and_timing_free",
-          "tests/review/test_team_handler.py::test_all_packages_allocation_has_no_lane_quota",
-          "tests/review/test_team_handler.py::test_closed_schema_validator_agrees_with_jsonschema",
-          "tests/test_inference_fixture_contracts.py",
           "tests/unit/review_decision_audit_producer/test_adapter.py",
           "tests/unit/review_decision_audit_producer/test_bounds.py",
           "tests/unit/review_decision_audit_producer/test_capture.py",
@@ -23067,7 +23078,10 @@
           "tests/unit/review_decision_audit_producer/test_publication.py",
           "tests/unit/review_decision_audit_producer/test_review_fixes.py",
           "tests/unit/review_decision_audit_wiring/test_inference_handler.py",
-          "tests/unit/review_decision_audit_wiring/test_origin.py"
+          "tests/unit/review_decision_audit_wiring/test_origin.py",
+          "tests/unit/review_obligations/test_pipeline_reconciliation.py",
+          "tests/unit/review_warrants/test_optin_wiring.py",
+          "tests/unit/review_warrants/test_pipeline_audit_wiring.py"
         ]
       },
       "workers": 8
@@ -44407,7 +44421,7 @@
     "src/appsec_review/jobs/job_inference_security_review/job.py": "3eb58350d40f31b26ee980ce9fe8b2efa9ae00a738153dccc7eb629824f6baf6",
     "src/appsec_review/jobs/job_inference_security_review/schemas.py": "ae955a119971360de2a2d731830bd02ec7f6ff20f4f29b3f41eca7137e24c9d2",
     "src/appsec_review/jobs/job_inference_security_review/stages.py": "7052bb40a41b7d57a73e7fc02cda32644607f079abd195f48aee0155728ca085",
-    "src/appsec_review/jobs/job_inference_security_review/teams.py": "fce64c8782a666e547ca535843cb4e8ac32518795d96368690fb006534cf6581",
+    "src/appsec_review/jobs/job_inference_security_review/teams.py": "5e8eac692fb39144904837aff1da62187c080bf09efd63135e23b498a0e4d57a",
     "src/appsec_review/jobs/job_language_build/__init__.py": "9cfa5d5894f7683b0425711e233917fa2d9f1c8d82d712433f1551093c06fd40",
     "src/appsec_review/jobs/job_language_build/capture.py": "dd71bef6015a152029d22d444a628349271fe33cbec75d16a89285c2b180b1af",
     "src/appsec_review/jobs/job_language_build/datasets.py": "9f3ef8ee5b7041153e2fedf871a37c7789ed70335170cc507894f24713c3baff",
@@ -44878,7 +44892,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "68a3e3d50765250af5ac2bb39a90d31990adc4f055a4d1a37a5486349f744611"
+    "tests/job-test-map.json": "f58c6308abfa04da0558dc48a80b2a7ecf966a17a4e7c1983860e240448da9ed"
   },
   "tool_policy": {
     "disable_grype": true,

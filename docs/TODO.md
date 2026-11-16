@@ -3274,7 +3274,18 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   `UNADJUDICATED_GAP`-first `COMPLETED_WITH_GAPS` publication, `_validate_output` receipt/count
   verification, handoff/snapshot tamper refusal, and fast `document_issues` route mapping and
   evidence-qualified adjudication gates; 91/91 job-package lines [100.0%] and 26/26 branches
-  [100.0%] covered across all 3 modules).
+  [100.0%] covered across all 3 modules);
+  job_inference_security_review (40/47; 35 unit files, 918 cases: pinned 33-input / 16-dataset
+  contract, 16-unit DAG topology and registry parity, `ReviewContext._path_symbols` cache and
+  `validation_scope` around `run_team`/`run_lane`, closed model schema subsets across CWE/predicate/
+  precondition vocabularies, direct per-unit handler execution across scope, lead triage, package
+  assembly, lead/hunt lanes, claim merge, adjudication, scoring, attack-chain composition/refutation/
+  verification, completeness audit, claim/chain/poc/handoff publication and decision-audit
+  publication with manifest/shard/ledger/warrant/obligation tamper refusal; 2 whole-job 16-unit
+  `JobRunner` scenarios relocated to
+  `tests/integration/job_inference_security_review/test_inference_security_review_jobrunner.py`;
+  2,615/2,787 job-package lines [93.83%] and 857/996 branches [86.04%] covered across all 8
+  modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
