@@ -297,6 +297,21 @@ def _review(run: Path, *, admit_vendored: bool, unit_overlap: bool, unknown_term
         "claim-5": [relation("claim-5", 1, "asr:dataflow_path:" + "c5" * 32, "dataflow_path", "attacker_input_control", f"{REQUEST}:137-137"),
                     relation("claim-5", 2, "asr:call_site:" + "c6" * 32, "call_site", "affected_construct", f"{UTIL}:20-20")],
     }
+    gap_id = "gap-" + "a" * 64
+    ledger = attempt / "steps" / "lead_review" / "tasks" / "teams" / "ledger.jsonl"
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text("".join(json.dumps(record) + "\n" for record in (
+        {"schema": "appsec-review/ledger-event/1", "kind": "gap_recorded", "stream": "lead_review.teams", "body": {"gap": {
+            "gap_id": gap_id, "gap_class": "schema_error", "reason": "final_result_rejected", "subject_id": "cell-red-2"}}},
+        {"schema": "appsec-review/ledger-event/1", "kind": "cell_terminal", "stream": "lead_review.teams", "body": {"cell": {
+            "cell_id": "cell-red-2", "role": "red_team_analyst", "lane": "lead", "package_id": "finding_lead-2",
+            "status": "invalid", "gap_ids": [gap_id], "attempts": 2}}},
+        {"schema": "appsec-review/ledger-event/1", "kind": "cell_terminal", "stream": "lead_review.teams", "body": {"cell": {
+            "cell_id": "cell-blue-1", "role": "blue_team_refuter", "lane": "lead", "package_id": "finding_lead-1",
+            "status": "succeeded", "gap_ids": [], "attempts": 1}}},
+        {"schema": "appsec-review/ledger-event/1", "kind": "cell_terminal", "stream": "lead_review.teams", "body": {"cell": {
+            "cell_id": "cell-red-1", "role": "red_team_analyst", "lane": "lead", "package_id": "finding_lead-1",
+            "status": "succeeded", "gap_ids": [], "attempts": 1}}})), encoding="utf-8")
     _write(attempt / "steps" / "publication" / "tasks" / "publish_claim_ledger" / "projection.json", {
         "schema": "appsec-review/claim-projection/1", "ledger_head_sha256": "1" * 64, "claims": claims,
         "relations": relations,
@@ -401,6 +416,11 @@ def test_items_carry_stage_axis_and_severities_derived_from_the_run(tmp_path) ->
     assert items["TP-C1"]["finding_packages"][0]["technical_severity"] is None and items["TP-C1"]["real_severity"] is None
     assert items["FP-1"]["stage_evidence"] == "not reported; claim states contradicted, out_of_scope, supported"
     assert items["TP-D1"]["components"] == [{"identity": ID["dep-zlib"], "version": "1.2.11"}]
+    # Package rows carry the red cells the lane ledger recorded (blue cells are not red; gap classes are joined).
+    assert items["TP-C1"]["packages"][0]["red_cells"] == [
+        {"cell_id": "cell-red-1", "role": "red_team_analyst", "status": "succeeded", "gap_classes": []}]
+    assert items["TP-D1"]["packages"][0]["red_cells"] == [
+        {"cell_id": "cell-red-2", "role": "red_team_analyst", "status": "invalid", "gap_classes": ["schema_error"]}]
     assert items["FX-D1"]["stage_evidence"] == "not reported; no lead and no claim" and items["FX-D1"]["components"] == []
     keyed = document["keyed"]
     assert keyed["funnel"] == {"confirmed": 1, "correctly_passed": 3, "reported": 1}

@@ -72,14 +72,16 @@ Every planted item gets exactly one `stage`: the furthest point it reached in th
 lost, or where it arrived. The stage is decided from the item's own scored record (its leads and their
 admission, the packages that carried it, the claims raised on it and their states, the finding packages
 and their gate bucket, whether a matching finding reached the report, and for dependencies the
-inventory component rows), so the same record always yields the same stage; `stage_evidence` is the one
+inventory component rows, and for `answer_rejected` the red cells the lane ledgers record on its packages, carried
+on each package row as `red_cells`), so the same record always yields the same stage; `stage_evidence` is the one
 line that justifies it. `outcome` and `observed_disposition` are unchanged and sit beside it.
 
 | Stage | Items | Meaning | Owner (where a loss at this stage points) |
 | --- | --- | --- | --- |
 | `not_observed` | code true positives | no scanner lead at the planted site, not in a hunt unit, no claim | scanners |
 | `not_admitted` | positives with leads | leads exist, none admitted; the evidence lists the exclusion reasons and the reported and effective severities of the leads | admission policy (lead-severity triage, dispositions) |
-| `no_claim` | positives | admitted or hunted (in a hunt unit or a lead package), no claim proposed | analysts (red / hunters) |
+| `no_claim` | positives | admitted or hunted (in a hunt unit or a lead package), no claim proposed; the red cells on its packages succeeded and declined, or ended on a budget, authority or worker gap | analysts (red / hunters) |
+| `answer_rejected` | positives | admitted or hunted, no claim, and every red cell (`red_team_analyst`, `hypothesis_hunter`) on the item's packages ended `invalid` with a `schema_error` gap in the lane ledger's `cell_terminal` records: the analysis was lost to the answer-shape contract, not declined | answer shape contract (compact schema, salvage, role prompts) |
 | `out_of_scope` | positives with claims | every claim decided `out_of_scope` (or `duplicate`, `coverage_gap`) | scope rule |
 | `refuted` | positives with claims | a claim `contradicted`, `not_reachable` or `not_exploitable_in_observed_configuration`, none pending | verifier and judge (blue) |
 | `unverified` | positives with claims | a claim `supported`, `insufficient_evidence` or `proposed`, or a finding package in `verification_backlog` or `withheld`: decision pending or not independently confirmed | verifier and judge |
@@ -92,8 +94,8 @@ line that justifies it. `outcome` and `observed_disposition` are unchanged and s
 | `false_report` | fixed and false-positive items | a matching finding reached the report | whole pipeline |
 
 A dependency item whose advisory lead exists but was not admitted, not claimed or not decided takes the
-shared middle stages (`not_admitted`, `no_claim`, `out_of_scope`, `refuted`, `unverified`) like a code item.
-Items at `no_claim` or later were looked at by the review (admitted or hunted); that set is the
+shared middle stages (`not_admitted`, `no_claim`, `answer_rejected`, `out_of_scope`, `refuted`, `unverified`) like
+a code item. Items at `no_claim` or later were looked at by the review (admitted or hunted); that set is the
 *coverage* of the radar chart.
 
 ## Axes and per-axis metrics

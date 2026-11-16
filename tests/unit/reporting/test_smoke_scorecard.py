@@ -14,7 +14,7 @@ from appsec_review.reporting.model import RadarChart
 from appsec_review.reporting.smoke_score import (
     AXIS_IDS, SCHEMA, STAGES, SmokeScoreError, axis_metrics, axis_of, stage_of,
 )
-from appsec_review.reporting.smoke_scorecard import (
+from appsec_review.reporting.smoke_scorecard import (STAGE_OWNERS,
     RECEIPT_SCHEMA, compare_axes, compare_text, load_score, radar_axes, radar_series, render_scorecard,
     smoke_scorecard_document,
 )
@@ -59,14 +59,31 @@ def staged(**changes) -> dict:
     return item
 
 
-UNIT = {"package_id": "hunt-1", "lane": "hunt", "kind": "hunt", "via": "unit"}
-LEAD_PACKAGE = {"package_id": "finding_lead-1", "lane": "lead", "kind": "finding_lead", "via": "lead"}
+UNIT = {"package_id": "hunt-1", "lane": "hunt", "kind": "hunt", "via": "unit", "red_cells": []}
+LEAD_PACKAGE = {"package_id": "finding_lead-1", "lane": "lead", "kind": "finding_lead", "via": "lead", "red_cells": []}
+
+
+def red_cell(status="invalid", *classes, role="red_team_analyst", number=1) -> dict:
+    return {"cell_id": f"cell-{number}", "role": role, "status": status, "gap_classes": list(classes)}
+
+
+# Run 2026-11-16-0005 lane A: every red cell of a package rejected on shape, twice; the item has no claim.
+REJECTED = {**LEAD_PACKAGE, "red_cells": [red_cell("invalid", "schema_error"), red_cell("invalid", "schema_error", number=2)]}
+DECLINED = {**LEAD_PACKAGE, "red_cells": [red_cell("succeeded"), red_cell("invalid", "schema_error", number=2)]}
+DENIED = {**LEAD_PACKAGE, "red_cells": [red_cell("invalid", "authority_error")]}
+HUNT_REJECTED = {**UNIT, "red_cells": [red_cell("invalid", "schema_error", role="hypothesis_hunter")]}
 
 CODE_CASES = sorted([
     ("not_observed", dict()),
     ("not_admitted", dict(leads=[lead("not_admitted", "vendored"), lead("not_admitted", None, "unknown", "info")])),
     ("no_claim_admitted", dict(leads=[lead()], packages=[LEAD_PACKAGE])),
     ("no_claim_hunted", dict(packages=[UNIT])),
+    ("answer_rejected", dict(leads=[lead()], packages=[REJECTED])),
+    ("answer_rejected_hunted", dict(packages=[HUNT_REJECTED])),
+    ("no_claim_one_cell_declined", dict(leads=[lead()], packages=[DECLINED])),
+    ("no_claim_denied_not_schema", dict(leads=[lead()], packages=[DENIED])),
+    ("no_claim_rejected_then_declined", dict(leads=[lead()], packages=[REJECTED, {**UNIT, "red_cells": [red_cell("succeeded")]}])),
+    ("unverified_after_rejection", dict(leads=[lead()], packages=[REJECTED], claims=[claim("supported")])),
     ("out_of_scope", dict(leads=[lead()], claims=[claim("out_of_scope"), claim("duplicate")])),
     ("refuted", dict(leads=[lead()], claims=[claim("contradicted"), claim("out_of_scope")])),
     ("unverified_supported", dict(leads=[lead()], claims=[claim("supported"), claim("contradicted")])),
@@ -77,7 +94,10 @@ CODE_CASES = sorted([
     ("confirmed_reported", dict(leads=[lead()], claims=[claim("confirmed")], findings=[finding()], reported=True)),
 ], key=lambda case: case[0])
 EXPECTED_CODE = {"not_observed": "not_observed", "not_admitted": "not_admitted", "no_claim_admitted": "no_claim",
-                 "no_claim_hunted": "no_claim", "out_of_scope": "out_of_scope", "refuted": "refuted",
+                 "no_claim_hunted": "no_claim", "answer_rejected": "answer_rejected", "answer_rejected_hunted": "answer_rejected",
+                 "no_claim_one_cell_declined": "no_claim", "no_claim_denied_not_schema": "no_claim",
+                 "no_claim_rejected_then_declined": "no_claim", "unverified_after_rejection": "unverified",
+                 "out_of_scope": "out_of_scope", "refuted": "refuted",
                  "unverified_supported": "unverified", "unverified_backlog": "unverified",
                  "unverified_insufficient": "unverified", "confirmed_publishable": "confirmed",
                  "confirmed_reported": "confirmed"}
@@ -89,6 +109,14 @@ def test_code_true_positives_reach_exactly_the_specified_stage(case) -> None:
     stage, evidence = stage_of(row(**changes))
     assert stage == EXPECTED_CODE[name] and stage in STAGES
     assert evidence
+
+
+def test_answer_rejected_evidence_names_the_cells_and_roles() -> None:
+    stage, evidence = stage_of(row(leads=[lead()], packages=[REJECTED]))
+    assert stage == "answer_rejected"
+    assert evidence == ("2 red cell(s) over 1 package(s) all ended invalid with schema_error gaps (red_team_analyst); "
+                        "the analyst answer was rejected on shape, no claim was proposed")
+    assert "answer_rejected" in STAGE_OWNERS and STAGES.index("answer_rejected") == STAGES.index("no_claim") + 1
 
 
 def test_not_admitted_evidence_records_exclusions_and_severities() -> None:

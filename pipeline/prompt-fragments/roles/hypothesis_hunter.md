@@ -32,7 +32,9 @@ The compact shape has closed vocabularies; a value outside them is rejected toge
 - Shapes the validator rejected most often: `evidence_requests` entries are objects with all of `predicate`,
   `requested_kind`, `anchors` and `question`; `anchors` are package or Q labels (K1, G2, E1, Q7), never X gap
   labels; `taint_paths` is plural and a list; `obligations` entries are objects with `predicate`, `question`
-  and `cites`; `entry` is a single label string.
+  and `cites`; `poc_basis.entry` and `poc_basis.path` are lists of labels (`["E1"]`, `["F1"]`), never a bare
+  string; `evidence_requests` lives inside a claim, never at the top level of the result; a `no_claim` or
+  `blocked` entry is a lead label or `{"lead": "L1", "why": "..."}` and carries no other key.
 - chain seed link `continuity_dimensions`: identity, privilege, trust_boundary, deployment_artifact, temporal.
 - Every `statement`, `why` and `question` is at most 1000 characters; each `poc_basis` text at most 240.
 

@@ -90,7 +90,7 @@ provider = "claude-cli"          # claude-cli | anthropic-api
 model = "claude-haiku-5-5"       # development default; upgrade for real reviews
 reasoning = "high"
 max_input_tokens = 128000        # per turn; the request byte bound is 4x this (T-5023)
-max_output_tokens = 32000        # per turn; thinking tokens count
+max_output_tokens = 32000        # per turn; thinking tokens count (a final turn over it is kept, see below)
 max_queries = 40                 # retrieval requests per cell
 max_turns = 12                   # model turns per cell
 timeout_seconds = 600            # per-cell deadline
@@ -191,6 +191,16 @@ raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts;
 default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
 The overlay leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
 7 review teams.
+
+`max_output_tokens` is a per-call cap checked after the reply has been received and parsed, so the reply
+exists when it trips. A **final** turn over the cap is expanded and validated exactly like an in-cap final:
+the cell's status follows the answer's validation, and the cell records a `budget_gap`
+`model_token_cap: final turn used N of M output tokens` on itself, which reaches its attempt receipt and the
+lane ledger. A **retrieve** turn over the cap ends the cell as before (`cell_budget_exceeded:cell_token_cap`,
+never retried) and records the same gap text for the turn. The model-execution receipt of the call still
+records `model_token_cap` as a failed call, and the whole-cell and job budgets are charged the actual usage;
+only the consequence for a reply that already exists changed (run 2026-11-16-0005 lost 5 complete hunter
+finals this way). `max_input_tokens` is unchanged: a request over it is a token-cap timeout.
 [`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml) is the
 capacity for a [smoke-target](test-targets.md#smoke-runs) review under `dev`: 8 review teams, the
 `inference_teams` pool at 2 so both lane units run, and prod's four I/O slots and scanner pool of 4.
@@ -778,7 +788,8 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
   `counts.queries` include it. A cell that repeats an identical denial ends `invalid` with one `authority_error` gap
   `repeated_denial:<code>:<tool> <request>`.
 - **Label feedback.** The cell receipt records `feedback` (labels dropped, stances recorded as unresolved, leads the
-  answer did not account for), `compact_result` (what the model wrote), `result` (the expanded document the
+  answer did not account for, shapes the expansion repaired), `compact_result` (what the model wrote, kept also when
+  the answer was rejected so the rejection can be diagnosed after the run), `result` (the expanded document the
   validators saw), `repair_errors` (why the last attempt was rejected) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
   and validator versions changed.
 - **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` and names it under

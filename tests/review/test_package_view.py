@@ -57,6 +57,43 @@ def test_lead_view_is_labelled_deterministic_and_complete(graph) -> None:
     assert "entity_ids" not in json.dumps(document) and "package_id" not in document
 
 
+def test_every_label_the_view_presents_is_inside_the_package_entity_scope(graph) -> None:
+    """The capability a cell is issued grants the package's ``retrieval.entity_ids``; a label the view presents
+    for an identity outside them is a request the cell can only be denied (run 2026-11-16-0005, E1)."""
+    fixture, ids, assembly, core = graph
+    checked = 0
+    for item in assembly.packages:
+        package = item.resolved()
+        view = build_view(package, core, LIMITS)
+        granted = set(package["retrieval"]["entity_ids"])
+        outside = sorted(f"{label}={ref[:40]}" for label, ref in view.labels.items() if ref not in granted)
+        assert outside == [], (item.package_id, outside)
+        checked += len(view.labels)
+    assert checked > 0
+
+
+def test_trimming_a_neighborhood_row_keeps_the_context_entry_the_chain_still_shows() -> None:
+    from appsec_review.review.packages import _Assembler
+    from appsec_review.review.units import context_entry
+    entry_point, hop, guard = "asr:entry_point:" + "1" * 64, "asr:call_site:" + "2" * 64, "asr:guard_fact:" + "3" * 64
+    record = {name: [] for name in ("sinks", "ranges", "guards", "callers", "callees", "flows", "entries", "corroboration")}
+    record["entries"] = [{"ref": entry_point, "role": "entry_point"}]
+    record["guards"] = [{"ref": guard, "role": "guard"}]
+    record["chain"] = {"reached": True, "depth_limit": 3, "hops": [{"ref": hop, "role": "caller"}],
+                       "entries": [{"ref": entry_point, "role": "entry_point"}]}
+    record["omitted"] = {name: 0 for name in record if name not in ("chain", "omitted")}
+    record["slice"] = None
+    entries = [context_entry(entry_point, "entry_point"), context_entry(hop, "caller"), context_entry(guard, "guard")]
+    # The entries row is trimmed first (trim order), but the chain still shows the entry point: its entry stays.
+    assert _Assembler.trim_neighborhood(record, entries)
+    assert record["entries"] == [] and record["omitted"]["entries"] == 1
+    assert {item.id for item in entries} == {entry_point, hop, guard}
+    # The guards row goes next and nothing else shows the guard: its entry goes with it.
+    assert _Assembler.trim_neighborhood(record, entries)
+    assert record["guards"] == [] and {item.id for item in entries} == {entry_point, hop}
+    assert not _Assembler.trim_neighborhood(record, entries)
+
+
 def test_every_stored_gap_is_accounted_inline_or_in_the_hash_referenced_file(graph) -> None:
     fixture, _ids, assembly, core = graph
     for package in (_package(assembly, fixture, "sast_critical"), _package(assembly, fixture, "codeql_high")):
