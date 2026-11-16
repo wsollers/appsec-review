@@ -13,6 +13,7 @@ from typing import Any
 from appsec_review import seeding
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.jobs.cpp_index_scopes import container_compile_database, project_prefix, workspace_root
+from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_language_build.native_components import (
     compile_commands as native_component_compile_commands,
@@ -895,7 +896,7 @@ def native_analysis_actions(accepted: Mapping[str, Any], target_root: Path) -> l
         component_database = receipt.get("native_compile_database")
         mixed = (isinstance(component_database, Mapping) and
                  int(component_database.get("entry_count", 0)) > 0 and
-                 receipt.get("terminal_status") == "SUCCEEDED")
+                 build_succeeded(receipt))
         if receipt.get("family") != "native" and not mixed:
             continue
         if receipt.get("family") == "native" and receipt.get("workspace") and not isinstance(component_database, Mapping):

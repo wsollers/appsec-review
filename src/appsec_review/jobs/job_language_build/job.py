@@ -39,7 +39,10 @@ from appsec_review.jobs.build_discovery import (
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, SCOPE_FIELDS, apply_scope
 from appsec_review.jobs.job_project_build import load_accepted_builds
-from appsec_review.jobs.job_project_build.enforcement import gap_text, unique_gaps
+from appsec_review.jobs.build_outcome import (
+    build_outcome_from_status, build_succeeded, validate_build_outcome, with_build_outcome,
+)
+from appsec_review.jobs.job_project_build.enforcement import gap_text, scoped_gaps, unique_gaps
 from appsec_review.interchange import validate_unit_output
 from appsec_review.jobs.job_project_build.job import (
     _node_recipe_restores_dependencies, _normalized_argv, _probe_environment, _safe_root,
@@ -143,10 +146,16 @@ def load_accepted_language_build(run_root: Path, *, for_execution: bool = False)
         raise ValueError("language-build handoff schema is unsupported")
     if type(for_execution) is not bool:
         raise ValueError("language-build execution reader mode must be explicit")
+    receipts = [item for item in document.get("receipts", ()) if isinstance(item, Mapping)]
+    for receipt in receipts:
+        if "build_outcome" in receipt:
+            validate_build_outcome(receipt["build_outcome"],
+                                   context=f"language-build receipt {receipt.get('build_unit_id')}")
     if for_execution:
         from appsec_review.jobs.build_topology_artifacts import guard_cache_action
-        for receipt in document.get("receipts", ()):
-            if receipt.get("terminal_status") == "SUCCEEDED":
+        for receipt in receipts:
+            # The cache action is guarded for every build that ran, clean receipt or not.
+            if build_succeeded(receipt):
                 guard_cache_action(run_root, receipt)
     reject_swift_derived(
         document, enabled=swift_enabled_from_run(run_root),
@@ -1054,7 +1063,7 @@ def _production_iteration(unit: UnitContext, request: Mapping[str, Any], dagster
              if receipt.get("terminal_status") == "SUCCEEDED" else ())
     receipt = durable_artifacts(unit.job.run_root, receipt)
     decisions = [finalize_processing(
-        decision_from_mapping(value), succeeded=receipt.get("terminal_status") == "SUCCEEDED",
+        decision_from_mapping(value), succeeded=build_succeeded(receipt),
         evidence_complete=not bool(receipt.get("gaps")),
         artifacts_valid=(_has_build_output(receipt) if value["feature"] ==
                          ProcessingFeature.COMPILER_ARTIFACTS.value else True),
@@ -1109,8 +1118,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                 # Reuse is not new coverage: a capture-backed receipt keeps the gaps it named.
                 gaps: list[str] = (list(prior["receipt"].get("gaps", ()))
                                    if family in _CAPTURED_FAMILIES else [])
-                receipt = {**prior["receipt"], "artifacts": artifacts, "gaps": gaps, "checkpoint_reused": True,
-                           "completed_at": datetime.now(timezone.utc).isoformat()}
+                receipt = with_build_outcome({
+                    **prior["receipt"], "artifacts": artifacts, "gaps": gaps, "checkpoint_reused": True,
+                    "completed_at": datetime.now(timezone.utc).isoformat()})
                 unit.job.events.write("LANGUAGE_BUILD_REUSED", unit_id=unit.unit_id,
                                       build_unit_id=build_unit_id, fingerprint=fingerprint,
                                       result_count=len(artifacts), gap_count=len(gaps), duration_ms=0)
@@ -1576,6 +1586,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "build_output_dispositions": dispositions.document(),
         "delivery_gaps": delivery_gaps,
         "gaps": list(dict.fromkeys(gaps)), "terminal_status": status,
+        # The build's own result; the compile database and workspace manifest above are bound.
+        # Provenance and enforcement gaps appended below never change it (jobs/build_outcome.py).
+        "build_outcome": build_outcome_from_status(status),
         "checkpoint_reused": False, "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(), "duration_ms": int((time.monotonic()-started)*1000),
         "executor_identity": EXECUTOR_IDENTITY, "capture_identity": CAPTURE_IDENTITIES[family]}
@@ -1613,7 +1626,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         from appsec_review.container_runtime.compiler_profiles import (
             CompilerProfileError, CompilerProfileCleanupError, SET_SCHEMA,
         )
-        from appsec_review.jobs.job_project_build.enforcement import captured_enforcement, scoped_gaps
+        from appsec_review.jobs.job_project_build.enforcement import captured_enforcement
         from appsec_review.jobs.build_topology_artifacts import load_refinement
         try:
             profiles = executor.compiler_profiles(scratch=root)
@@ -1627,13 +1640,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             captures=captures, dispatch=dispatch, bound=selected_target,
             profiles=profiles, policy=refinement["policy"], run_root=unit.job.run_root,
             artifacts=receipt["artifacts"])
-        receipt["enforcement"] = [proof]
-        receipt["gaps"] = [*scoped_gaps(receipt["gaps"], unit.unit_id, build_unit_id), *target_gaps]
-        if target_gaps and receipt["terminal_status"] == "SUCCEEDED":
-            receipt["terminal_status"] = "COMPLETED_WITH_GAPS"
-        if target_gaps:
-            receipt["rejected_artifacts"], receipt["artifacts"] = receipt["artifacts"], []
-        status = receipt["terminal_status"]
+        status = apply_target_enforcement(receipt, unit_id=unit.unit_id, proof=proof, target_gaps=target_gaps)
         capture_complete = capture_complete and proof["status"] == "proven"
     if family == "php":
         receipt["composer"] = php_metadata
@@ -1651,6 +1658,24 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                           command_count=len(commands), link_relationship_count=len(normalized_links),
                           checkpoint_reused=False, **output_counts, duration_ms=receipt["duration_ms"])
     return receipt
+
+
+def apply_target_enforcement(receipt: dict[str, Any], *, unit_id: str, proof: Mapping[str, Any],
+                             target_gaps: Sequence[Mapping[str, Any]]) -> str:
+    """Record the native target proof on an executed receipt; the receipt's status after it.
+
+    Text gaps become ``producer-gap/1`` records classified by their producer (provenance gaps are
+    ``provenance_unavailable``). An unproven target flips a ``SUCCEEDED`` receipt to
+    ``COMPLETED_WITH_GAPS`` and moves its artifacts to ``rejected_artifacts``; ``build_outcome``
+    is untouched, because the build completed and only its provenance is incomplete.
+    """
+    receipt["enforcement"] = [proof]
+    receipt["gaps"] = [*scoped_gaps(receipt["gaps"], unit_id, str(receipt["build_unit_id"])), *target_gaps]
+    if target_gaps and receipt["terminal_status"] == "SUCCEEDED":
+        receipt["terminal_status"] = "COMPLETED_WITH_GAPS"
+    if target_gaps:
+        receipt["rejected_artifacts"], receipt["artifacts"] = receipt["artifacts"], []
+    return str(receipt["terminal_status"])
 
 
 def _validate_config(context, _result) -> None:
@@ -1980,13 +2005,17 @@ def build_job(*, executor_factory=None) -> Job:
       def execute(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output(f"load.{family}")
         if loaded["accepted"].get("execution_mode") == "iterative":
-            receipts = [dict(item) for item in unit.output("iterations.dispatch")["receipts"]
+            receipts = [with_build_outcome(item) for item in unit.output("iterations.dispatch")["receipts"]
                         if item.get("family") == family]
-            receipts.extend(loaded.get("engine_receipts", ()))
-            gaps = unique_gaps(
-                gap if isinstance(gap, Mapping) else f"{item['build_unit_id']}: {gap}"
-                for item in receipts
-                for gap in _receipt_gaps(item.get("gaps", ()), item.get("delivery_gaps", ())))
+            receipts.extend(with_build_outcome(item) for item in loaded.get("engine_receipts", ()))
+            # Delivery facts are provenance: their records say so (provenance_unavailable), scoped to
+            # the build unit, instead of the unit-prefixed text the runtime would type as reported gaps.
+            gaps = unique_gaps([
+                *(gap if isinstance(gap, Mapping) else f"{item['build_unit_id']}: {gap}"
+                  for item in receipts for gap in _receipt_gaps(item.get("gaps", ()))),
+                *(gap for item in receipts
+                  for gap in scoped_gaps(_receipt_gaps(item.get("delivery_gaps", ())),
+                                         unit.unit_id, str(item["build_unit_id"])))])
             return {"receipts": receipts, "receipt_count": len(receipts), "gaps": gaps,
                     "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
                                        "SUCCEEDED" if receipts else "NOT_APPLICABLE"}
@@ -2061,7 +2090,7 @@ def build_job(*, executor_factory=None) -> Job:
                     for decision in planned:
                         artifacts_required = decision.feature is ProcessingFeature.COMPILER_ARTIFACTS
                         terminal_decisions.append(finalize_processing(
-                            decision, succeeded=receipt.get("terminal_status") == "SUCCEEDED",
+                            decision, succeeded=build_succeeded(receipt),
                             evidence_complete=not bool(receipt.get("gaps")),
                             artifacts_valid=(_has_build_output(receipt) if artifacts_required else True),
                             toolchain_available=receipt.get("terminal_status") not in {"BLOCKED"},
@@ -2073,7 +2102,7 @@ def build_job(*, executor_factory=None) -> Job:
                         "gaps": _receipt_gaps(receipt.get("gaps", ()), processing_gaps),
                         "processing_decisions": terminal_decisions}
             pending.difference_update(ready)
-        receipts = [completed[key] for key in sorted(completed)]
+        receipts = [with_build_outcome(completed[key]) for key in sorted(completed)]
         gaps = unique_gaps(
             gap if isinstance(gap, Mapping) else f"{value['build_unit_id']}: {gap}"
             for value in receipts for gap in _receipt_gaps(value.get("gaps", ())))

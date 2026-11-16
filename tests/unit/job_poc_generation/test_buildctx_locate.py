@@ -11,13 +11,13 @@ from appsec_review.jobs.job_poc_generation import buildctx
 from appsec_review.storage import atomic_bytes
 
 
-def _receipt(run_root: Path, status: str, files: dict[str, str]) -> dict:
+def _receipt(run_root: Path, status: str, files: dict[str, str], **fields) -> dict:
     manifest = run_root / f"data/jobs/job_language_build/{status.lower()}/workspace-manifest.json"
     payload = json.dumps({"files": files}).encode()
     atomic_bytes(manifest, payload)
     return {"family": "native", "terminal_status": status, "build_unit_id": f"build-unit-{status.lower()}",
             "workspace_manifest": {"path": manifest.relative_to(run_root).as_posix(),
-                                   "sha256": hashlib.sha256(payload).hexdigest()}}
+                                   "sha256": hashlib.sha256(payload).hexdigest()}, **fields}
 
 
 @pytest.mark.parametrize("status", ["SUCCEEDED", "COMPLETED_WITH_GAPS"])
@@ -39,6 +39,24 @@ def test_a_build_without_products_is_not_an_accepted_build(tmp_path: Path, statu
     receipt = _receipt(run_root, status, {"src/request.cpp": "0" * 64})
     builds = buildctx.AcceptedBuilds(run_root, loader=lambda _root: {"receipts": [receipt]})
     located = builds.locate("src/request.cpp")
+    assert (located.code, located.reason) == ("no_native_build", "the run has no successful accepted native build")
+
+
+@pytest.mark.parametrize("status", ["SUCCEEDED", "COMPLETED_WITH_GAPS"])
+def test_a_receipt_that_says_built_is_searched_whatever_its_gaps_did_to_the_status(tmp_path: Path, status: str) -> None:
+    run_root = tmp_path / "run"
+    receipt = _receipt(run_root, status, {"src/other.cpp": "0" * 64}, build_outcome="built")
+    located = buildctx.AcceptedBuilds(run_root, loader=lambda _root: {"receipts": [receipt]}).locate("src/request.cpp")
+    assert (located.code, located.reason) == ("no_native_build", "no accepted native build contains src/request.cpp")
+
+
+@pytest.mark.parametrize("build_outcome", ["failed", "not_run"])
+def test_a_receipt_whose_build_did_not_complete_has_no_products_whatever_its_status_says(
+        tmp_path: Path, build_outcome: str) -> None:
+    """``build_outcome`` is the build's own verdict; a status alone no longer admits a receipt that carries one."""
+    run_root = tmp_path / "run"
+    receipt = _receipt(run_root, "SUCCEEDED", {"src/request.cpp": "0" * 64}, build_outcome=build_outcome)
+    located = buildctx.AcceptedBuilds(run_root, loader=lambda _root: {"receipts": [receipt]}).locate("src/request.cpp")
     assert (located.code, located.reason) == ("no_native_build", "the run has no successful accepted native build")
 
 

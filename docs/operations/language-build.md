@@ -72,6 +72,40 @@ rejected product commit publishes no accepted artifacts; its immutable prepared 
 available for diagnosis. Not-applicable and policy dispositions remain explicit, not successful
 compilation.
 
+**Receipt status, build outcome and gap classes.** Three fields answer three different questions
+(`src/appsec_review/jobs/build_outcome.py` states the rule once):
+
+- `terminal_status` describes the *receipt*. It comes from the closed `ProducerStatus`
+  vocabulary and any named gap makes it `COMPLETED_WITH_GAPS`; native target enforcement that
+  cannot prove the build's target flips a `SUCCEEDED` receipt the same way and moves its
+  artifacts to `rejected_artifacts`.
+- `build_outcome` describes the *build*: `built` (the family's build commands ran to completion
+  and the bound products exist: the protected compile database and workspace manifest for native,
+  their equivalents for the other families), `failed` (the build started but did not complete) or
+  `not_run` (blocked, skipped, not applicable, never dispatched). It is decided from the build's own
+  result before provenance and enforcement gaps are appended and is kept when enforcement later
+  flips `terminal_status`. Every published receipt carries it; a controller or engine receipt that
+  set none receives the status-derived value at family publication.
+- a gap record's `code` classifies the gap. `provenance_unavailable` marks the gaps about where an
+  output ships (`delivery_fact_unavailable`), how a build-output root was classified
+  (`build-output-heuristic`) and what the execution capture could not establish about the compilers
+  it saw (`unknown_compiler_in_capture`, `capture_empty`, `mixed_targets_in_capture`);
+  `producer_reported_gap` and `producer_failed` mark gaps that mean the build is incomplete or its
+  target is not permitted (`cross_target_not_permitted`). Delivery facts merged from a receipt's
+  `delivery_gaps` are published as unit-scoped `provenance_unavailable` records.
+
+So the receipt of run `2026-11-16-0003`, which compiled and linked every target under CMake's
+compiler-identification probes, reads: `terminal_status: COMPLETED_WITH_GAPS`,
+`build_outcome: built`, 17 `provenance_unavailable` gaps, artifacts rejected. Consumers that need
+the build products (the PoC build context in `job_poc_generation`, the `job_sanitizer_build`
+replay guard, the C++ compiled-analysis mixed-unit check, the processing-decision `succeeded`
+test and the execution reader's cache-action guard) read `build_outcome`, falling back to their
+former `terminal_status` test for receipts written before the field existed; consumers that need
+a clean receipt (accepted artifacts for indexing, product interfaces for dependent units,
+checkpoint reuse) keep reading `terminal_status`. Rejected artifacts stay rejected either way: an
+unproven target is a provenance consequence, never a build failure, and never a reason to widen
+enforcement.
+
 Successful iteration artifacts retain their bytes in canonical run-local
 `data/shared/objects/<sha256>` objects so later workspace rollback cannot destroy their evidence.
 Artifact indexing accepts the original workspace location or that exact verified immutable-object
@@ -991,6 +1025,10 @@ Classification gaps:
 | `build-output-ninja-edge-bound-exceeded` | `build.ninja` has more edges than `max_ninja_edges` |
 | `build-output-msbuild-directory-unresolved` | an MSBuild output directory could not be resolved |
 | `build-output-capture-incomplete: ...` | capture was incomplete, so capture-based classification is off; layout facts and the heuristic still apply |
+
+`build-output-heuristic` gaps (and the catalog's `delivery_fact_unavailable` gaps) are published as
+`provenance_unavailable` records; the other classification gaps are `producer_reported_gap`. None of
+them changes the receipt's `build_outcome`.
 
 `node.catalog` and `php.catalog` use the dispositions walk and their installed-package classifiers.
 Verified npm/Composer trees are summarized with resolving installer evidence; unverified nested

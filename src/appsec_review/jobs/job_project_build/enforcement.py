@@ -27,10 +27,27 @@ def unique_gaps(values):
 
 
 def scoped_gaps(values, unit_id: str, scope_id: str | None = None):
+    """Text gaps as ``producer-gap/1`` records scoped to their build unit (or the unit), typed records kept.
+
+    The code is the class the gap's producer gave it (``build_outcome.gap_code_for``): a provenance
+    gap is ``provenance_unavailable``, anything else ``producer_reported_gap``.
+    """
+    from appsec_review.jobs.build_outcome import gap_code_for
     return unique_gaps(value if isinstance(value, Mapping) else producer_gap(
-        "producer_reported_gap", str(value),
+        gap_code_for(str(value)), str(value),
         scope_id=scope_id or (str(value).split(":", 1)[0] if str(value).startswith("build-unit-") else unit_id))
         for value in values)
+
+
+def enforcement_gaps(reasons, build_unit_id: str) -> list[dict]:
+    """One unit-scoped ``producer-gap/1`` record per unresolved enforcement input.
+
+    Capture-provenance reasons (``unknown_compiler_in_capture``, ``capture_empty``,
+    ``mixed_targets_in_capture``) are ``provenance_unavailable``; a forbidden or mismatched target
+    (``cross_target_not_permitted``) stays ``producer_reported_gap``.
+    """
+    from appsec_review.jobs.build_outcome import gap_code_for
+    return [producer_gap(gap_code_for(reason), reason, scope_id=build_unit_id) for reason in reasons]
 
 
 def _profile_for(executable, records):
@@ -229,9 +246,7 @@ def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],
     }
     proof["enforcement_id"] = _digest(proof)
     validate_enforcement(proof, dispatch=dispatch)
-    gaps = [producer_gap("producer_reported_gap", reason,
-                         scope_id=dispatch["build_unit_id"]) for reason in reasons]
-    return proof, gaps
+    return proof, enforcement_gaps(reasons, dispatch["build_unit_id"])
 
 
 @lru_cache(maxsize=1)

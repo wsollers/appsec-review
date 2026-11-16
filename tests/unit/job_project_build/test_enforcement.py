@@ -288,6 +288,8 @@ def test_captured_enforcement_covers_empty_incomplete_mixed_cross_target_and_ima
     )
     assert empty_proof["status"] == "unknown"
     assert empty_proof["unresolved_inputs"] == ["capture_empty"] and len(empty_gaps) == 1
+    # An empty capture says nothing about the build's target: provenance, not a failed build.
+    assert (empty_gaps[0]["code"], empty_gaps[0]["reason"]) == ("provenance_unavailable", "capture_empty")
 
     # Incomplete capture + unknown compiler + mixed targets
     mixed_events = [
