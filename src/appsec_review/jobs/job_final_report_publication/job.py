@@ -2,9 +2,11 @@
 
 Units: ``load.accepted_gate`` re-verifies the accepted ``job_final_publication_gate`` handoff, the
 gate document and every artifact the gate binds, ``report.assemble`` writes the schema-validated
-``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON, and
-``acceptance.publish_handoff`` re-proves both files and publishes the hash-pinned handoff. The job
-calls no model and reads nothing the gate does not bind. PDF rendering is a later step.
+``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON,
+``report.render_pdf`` renders the executive ``final-report.pdf`` (with its ``final-report.tex`` and a
+receipt) from that JSON plus the gate-bound dossier documents, and ``acceptance.publish_handoff``
+re-proves every file and publishes the hash-pinned handoff. The job calls no model and reads nothing
+the gate does not bind.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.applicability import resolved_configuration_identity
+from appsec_review.container_runtime.executor import ContainerExecutor
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json
 from appsec_review.jobs.engineering_contracts import (
     FINAL_REPORT_HANDOFF_SCHEMA, FINAL_REPORT_SCHEMA,
@@ -28,6 +31,9 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json
 
 from .datasets import CONTRACT, DATASETS
+from .pdf import (
+    ExecutorFactory, bind_dossiers, render_executive_latex, render_executive_pdf, template_dir, valid_pdf,
+)
 from .render import render_markdown
 from .report import build_report
 from .settings import FinalReportSettings
@@ -35,10 +41,12 @@ from .settings import FinalReportSettings
 JOB_ID = "job_final_report_publication"
 GATE_JOB = "job_final_publication_gate"
 SCHEMA_ROOT = Path("docs") / "schemas" / "final-report"
-TOPOLOGY = {"load": ("accepted_gate",), "report": ("assemble", "render"), "acceptance": ("publish_handoff",)}
+TOPOLOGY = {"load": ("accepted_gate",), "report": ("assemble", "render", "render_pdf"),
+            "acceptance": ("publish_handoff",)}
 IMPLEMENTATION = "appsec-review/final-report-publication/1"
 REPORT_JSON = "final-report.json"
 REPORT_MARKDOWN = "final-report.md"
+PDF_RECEIPT = "final-report-pdf-receipt"
 
 
 def _configuration_profile(run_root: Path) -> Mapping[str, Any]:
@@ -68,8 +76,16 @@ def _check(schemas: SchemaSet, name: str, document: Any) -> None:
         raise IntegrityError(f"{name} does not satisfy its schema: {'; '.join(errors[:3])}")
 
 
-def build_job(*, repository_root: Path | None = None) -> Job:
-    """``repository_root`` is injectable for acceptance tests whose configuration lives elsewhere."""
+def pdf_record(receipt: Mapping[str, Any], files: Mapping[str, Any]) -> dict[str, Any]:
+    """The handoff's ``pdf`` field: the executive PDF's outcome, from its receipt."""
+    return {"state": receipt["status"], "reason": receipt["reason"], "file": files["pdf"],
+            "sha256": receipt["pdf_sha256"], "latex": files["latex"], "receipt": files["receipt"]}
+
+
+def build_job(*, repository_root: Path | None = None,
+              executor_factory: ExecutorFactory = ContainerExecutor) -> Job:
+    """``repository_root`` is injectable for acceptance tests whose configuration lives elsewhere;
+    ``executor_factory`` lets unit tests stand in for the container runtime of the PDF renderer."""
 
     def _root(unit: UnitContext) -> Path:
         return Path(repository_root or unit.job.repository_root).resolve()
@@ -125,12 +141,33 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         return {"artifact": artifact_ref(unit.job.run_root, path), "settings": settings.identity(),
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
+    def render_pdf(unit: UnitContext) -> Mapping[str, Any]:
+        started = time.monotonic()
+        settings = _settings(unit)
+        run_root = unit.job.run_root
+        loaded, assembled = unit.output("load.accepted_gate"), unit.output("report.assemble")
+        gate = read_bound_json(run_root, loaded["gate_document"])
+        report = read_bound_json(run_root, assembled["artifact"])
+        dossiers = bind_dossiers(run_root, report, gate["bindings"])
+        result = render_executive_pdf(run_root, unit.unit_root, report, dossiers, report_ref=assembled["artifact"],
+                                      settings=settings, repository_root=_root(unit), executor_factory=executor_factory)
+        _check(_schemas(unit), PDF_RECEIPT, read_bound_json(run_root, result["files"]["receipt"]))
+        unit.job.events.write("FINAL_REPORT_PDF_RENDERED", status=result["status"], findings=len(report["findings"]),
+                              dossiers_certified=len(dossiers), dossiers_read=sum(1 for row in dossiers if row.document),
+                              gap_count=len(result["gaps"]), render_pdf=settings.render_pdf,
+                              duration_ms=max(0, round((time.monotonic() - started) * 1000)))
+        return {"status": result["status"], "reason": result["reason"], "files": result["files"],
+                "tex_sha256": result["tex_sha256"], "pdf_sha256": result["pdf_sha256"],
+                "settings": settings.pdf_identity(), "gaps": list(result["gaps"]),
+                "terminal_status": "SUCCEEDED" if not result["gaps"] else "COMPLETED_WITH_GAPS"}
+
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
         settings = _settings(unit)
-        loaded, assembled, rendered = (unit.output(name) for name in (
-            "load.accepted_gate", "report.assemble", "report.render"))
-        _verify_bindings(run_root, read_bound_json(run_root, loaded["gate_document"]))
+        loaded, assembled, rendered, pdf = (unit.output(name) for name in (
+            "load.accepted_gate", "report.assemble", "report.render", "report.render_pdf"))
+        gate = read_bound_json(run_root, loaded["gate_document"])
+        _verify_bindings(run_root, gate)
         report = read_bound_json(run_root, assembled["artifact"])
         _check(_schemas(unit), "final-report", report)
         expected = render_markdown(report, evidence_ids=settings.markdown_evidence_ids,
@@ -139,17 +176,35 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
+        # Re-prove the executive PDF bytes: the LaTeX is the rendering of the JSON plus the gate-bound dossiers,
+        # the receipt names exactly those bytes, and a rendered PDF is the valid file the receipt hashes.
+        files = pdf["files"]
+        receipt = read_bound_json(run_root, files["receipt"])
+        _check(_schemas(unit), PDF_RECEIPT, receipt)
+        tex = read_bound(run_root, files["latex"])
+        if tex != render_executive_latex(report, bind_dossiers(run_root, report, gate["bindings"]), template_dir(_root(unit))):
+            raise IntegrityError("final-report.tex is not the rendering of final-report.json and its bound dossiers")
+        if receipt["tex_sha256"] != hashlib.sha256(tex).hexdigest() or receipt["report"] != assembled["artifact"]:
+            raise IntegrityError("the executive PDF receipt does not name the published report and LaTeX")
+        if receipt["status"] == "rendered":
+            if files["pdf"] is None or receipt["pdf_sha256"] != files["pdf"]["sha256"]:
+                raise IntegrityError("the executive PDF receipt claims a rendering without the PDF it hashes")
+            if not valid_pdf(read_bound(run_root, files["pdf"]), settings.max_pdf_bytes):
+                raise IntegrityError("final-report.pdf is not a valid PDF")
+        elif files["pdf"] is not None or receipt["pdf_sha256"] is not None:
+            raise IntegrityError("a PDF is published without a rendered receipt")
         gaps = [f"{item['limitation_id']}: {item['statement']}"[:300] for item in report["limitations"]
-                if item["kind"] == "gap"]
+                if item["kind"] == "gap"] + [gap[:300] for gap in pdf["gaps"]]
         counts = report["summary"]["package_counts"]
         unit.job.events.write("FINAL_REPORT_PUBLISHED", publication=report["status"]["publication"],
                               review_complete=report["status"]["review_complete"], findings=counts["publishable"],
-                              verification_backlog=counts["verification_backlog"], withheld=counts["withheld"])
+                              verification_backlog=counts["verification_backlog"], withheld=counts["withheld"],
+                              pdf=receipt["status"])
         return {"schema": FINAL_REPORT_HANDOFF_SCHEMA, "report_schema": FINAL_REPORT_SCHEMA,
                 "artifact": assembled["artifact"], "markdown": rendered["artifact"],
                 "gate_handoff": loaded["gate_handoff"], "status": report["status"],
                 "package_counts": counts, "item_count": counts["publishable"] + counts["verification_backlog"],
-                "pdf": report["renderers"]["pdf"], "poc_handoff": report["provenance"].get("poc_handoff"),
+                "pdf": pdf_record(receipt, files), "poc_handoff": report["provenance"].get("poc_handoff"),
                 "gaps": gaps,
                 "terminal_status": "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS"}
 
@@ -157,9 +212,10 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         Unit("load.accepted_gate", load),
         Unit("report.assemble", assemble, ("load.accepted_gate",)),
         Unit("report.render", render, ("report.assemble",)),
-        Unit("acceptance.publish_handoff", publish, ("load.accepted_gate", "report.assemble", "report.render")),
+        Unit("report.render_pdf", render_pdf, ("load.accepted_gate", "report.assemble")),
+        Unit("acceptance.publish_handoff", publish,
+             ("load.accepted_gate", "report.assemble", "report.render", "report.render_pdf")),
     )
-    package = Path(__file__).parent
     implementation = None
     return Job(JOB_ID, "final_report_publication", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=FINAL_REPORT_HANDOFF_SCHEMA, implementation_identity=implementation,

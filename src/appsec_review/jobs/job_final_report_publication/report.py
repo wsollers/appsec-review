@@ -10,8 +10,10 @@ from typing import Any, Mapping
 from appsec_review.jobs.engineering_contracts import FINAL_REPORT_SCHEMA
 
 RENDERER = "final-report-markdown/2"
-PDF_REASON = ("A consolidated public-report PDF is not rendered. Protected finding and PoC dossier PDFs "
-              "are produced separately when configured; this report publishes only their certified references.")
+PDF_REASON = ("The executive PDF (final-report.pdf) is rendered after this document is assembled, by "
+              "report.render_pdf, from this JSON and the gate-bound dossier JSON; its outcome, file and receipt "
+              "are reported in the publish handoff's pdf field. Protected finding and PoC dossier PDFs are "
+              "produced separately when configured; this report publishes only their certified references.")
 NOTICES = (
     "This report is a deterministic projection of the accepted inference security review. It reinterprets "
     "no claim state and no ship-block-policy/1 status.",

@@ -3689,9 +3689,14 @@ workers = 1
 [jobs.job_dossier_publication.steps.acceptance.tasks.publish_handoff]
 
 # Final report publication (docs/operations/final-report.md): the terminal job. It reads only the
-# accepted gate handoff and the artifacts the gate binds, and writes final-report.json and a
-# deterministic final-report.md. It calls no model. The two settings only shorten identifier lists in
-# the Markdown; the JSON always carries every identifier. Protected dossier PDFs are certified by the gate.
+# accepted gate handoff and the artifacts the gate binds, and writes final-report.json, a deterministic
+# final-report.md and the executive final-report.pdf (with its final-report.tex and a receipt) for the
+# project's tech lead and business owner. It calls no model. The two markdown_* settings only shorten
+# identifier lists in the Markdown; the JSON always carries every identifier. The PDF is rendered through
+# the same pinned tool-report-latex image as the dossiers (image_id is bound from the host pins); a
+# rendering failure retains the LaTeX and a named gap, never an invented PDF. Protected dossier PDFs are
+# certified by the gate; the executive PDF reads their JSON only through the gate's hashes and never
+# includes a source excerpt.
 [jobs.job_final_report_publication]
 name = "final_report_publication"
 workers = 1
@@ -3700,6 +3705,10 @@ workers = 1
 enabled = true
 markdown_evidence_ids = 8
 markdown_gap_ids = 16
+render_pdf = true
+image_tag = "appsec-review/tool-report-latex:1.0.0"
+render_timeout_seconds = 600
+max_pdf_bytes = 16777216
 
 [jobs.job_final_report_publication.steps.load]
 workers = 1
@@ -3709,6 +3718,7 @@ workers = 1
 workers = 1
 [jobs.job_final_report_publication.steps.report.tasks.assemble]
 [jobs.job_final_report_publication.steps.report.tasks.render]
+[jobs.job_final_report_publication.steps.report.tasks.render_pdf]
 
 [jobs.job_final_report_publication.steps.acceptance]
 workers = 1
