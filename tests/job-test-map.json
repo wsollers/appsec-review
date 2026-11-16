@@ -273,7 +273,11 @@
       "live": []
     },
     "job_document_issue_analysis": {
-      "unit": [],
+      "unit": [
+        "tests/unit/job_document_issue_analysis/test_contract.py",
+        "tests/unit/job_document_issue_analysis/test_document_issues.py",
+        "tests/unit/job_document_issue_analysis/test_handlers.py"
+      ],
       "integration": [
         "tests/test_target_document_pipeline.py::test_document_issue_path_keeps_claims_private_and_resolves_source",
         "tests/test_target_document_pipeline.py::test_document_issue_analysis_rejects_changed_source"

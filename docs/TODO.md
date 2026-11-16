@@ -3266,7 +3266,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   and type validation, `_core` validation-scope caching and uncached construction, `UnitExecutor`
   package publication across both `COMPLETED_WITH_GAPS` lineage manifests and zero-gap `SUCCEEDED`
   runs, `_validate_output` receipt integrity checks, and target-snapshot/unbound-manifest/missing-handoff
-  refusal; 71/71 job-package lines [100.0%] and 20/20 branches [100.0%] covered across all 3 modules).
+  refusal; 71/71 job-package lines [100.0%] and 20/20 branches [100.0%] covered across all 3 modules);
+  job_document_issue_analysis (39/47; 3 unit files, 22 cases: pinned `document_issue_ledger`
+  provisional artifact-only dataset and `job_review_package_assembly` required handoff contract,
+  `max_source_files`/`max_source_file_bytes` positive integer validation, `SharedArtifacts`
+  checkpoint computation and reuse across job-release, platform-fallback and missing-release modes,
+  `UNADJUDICATED_GAP`-first `COMPLETED_WITH_GAPS` publication, `_validate_output` receipt/count
+  verification, handoff/snapshot tamper refusal, and fast `document_issues` route mapping and
+  evidence-qualified adjudication gates; 91/91 job-package lines [100.0%] and 26/26 branches
+  [100.0%] covered across all 3 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
