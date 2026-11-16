@@ -284,6 +284,7 @@ class ReviewContext:
             return None
         enclosing: tuple[int, str] | None = None        # tightest extent containing the line
         preceding: tuple[int, str] | None = None        # nearest definition at or before the line
+        extents = False                                 # does this path's index record function extents at all?
         cursor = None
         for _page in range(16):
             try:
@@ -296,10 +297,12 @@ class ReviewContext:
                 if not isinstance(start, int):
                     continue
                 identity = str(row["identity"])
-                if isinstance(end, int) and end > start and start <= line <= end:
-                    candidate = (end - start, identity)
-                    if enclosing is None or candidate < enclosing:
-                        enclosing = candidate
+                if isinstance(end, int) and end > start:
+                    extents = True
+                    if start <= line <= end:
+                        candidate = (end - start, identity)
+                        if enclosing is None or candidate < enclosing:
+                            enclosing = candidate
                 if start <= line:
                     candidate = (-start, identity)
                     if preceding is None or candidate < preceding:
@@ -309,7 +312,10 @@ class ReviewContext:
                 break
         if enclosing is not None:
             return enclosing[1]
-        return preceding[1] if preceding else None
+        # With extents recorded, a line outside every function is file scope and stays unfolded; without them
+        # (declaration lines only, as the accepted index carries today) the nearest preceding definition is the
+        # best evidence of the enclosing function.
+        return preceding[1] if preceding and not extents else None
 
     def entity_name(self, identity: str) -> str | None:
         with self._lock:
