@@ -66,7 +66,11 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     # T-5023: the shipped first-pass worker limits; 32000/8000 exhausted every red-team cell on run 2026-11-15-0002.
     assert (settings.models["default"].max_input_tokens, settings.models["default"].max_output_tokens) == (128000, 32000)
     verifier = settings.roles[Role.INDEPENDENT_VERIFIER]
-    assert verifier.model_profile == "default" and verifier.workers == 4
+    # T-5055: the verifier runs on a second model so distinct-model verification and chain verification complete.
+    assert verifier.model_profile == "verifier" and verifier.workers == 4
+    assert settings.models["verifier"].model == "claude-sonnet-5-5"
+    assert settings.profile_for(Role.INDEPENDENT_VERIFIER) is settings.models["verifier"]
+    assert settings.profile_for(Role.RED_TEAM_ANALYST).model != settings.models["verifier"].model
     assert Role.BLUE_TEAM_REFUTER in verifier.require_distinct_from_roles
     assert settings.profile_for(Role.HYPOTHESIS_HUNTER) is settings.models["default"]
     # Only exceptions to cwe-impact-derivation/1 are configured; CWE-89 is derived from the catalog.
@@ -616,10 +620,10 @@ def test_ship_block_and_verification_default_to_the_recorded_decisions(tmp_path:
     assert settings.ship_block.kev_dependency_blocks is True
     assert settings.ship_block.dependency_lead_families == ("dependency_advisory", "artifact_scanner")
     assert settings.verification.require_distinct_model_for_ship_blocking is True
-    # Every checked-in profile is claude-haiku-5-5, so the verifier is not distinct and a warning is recorded.
-    assert {profile.model for profile in settings.models.values()} == {"claude-haiku-5-5"}
+    # T-5055: the verifier profile is the one checked-in profile on another model, so verification is distinct.
+    assert {profile.model for profile in settings.models.values()} == {"claude-haiku-5-5", "claude-sonnet-5-5"}
     record = settings.verifier_distinctness()
-    assert record["distinct"] is False and "ship_blocking_pending_distinct_verification" in record["warning"]
+    assert record["distinct"] is True and record["warning"] is None
     # Omitting both tables keeps the same defaults.
     source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     start = source.index(f"{SECTION}.verification]")
@@ -630,17 +634,20 @@ def test_ship_block_and_verification_default_to_the_recorded_decisions(tmp_path:
 
 
 def test_a_distinct_verifier_profile_clears_the_warning_and_changes_the_fingerprint(tmp_path: Path) -> None:
-    base = _settings(_variant(tmp_path / "base"))
-    distinct = _settings(_variant(tmp_path / "distinct", ('workers = 4\nmodel_profile = "default"',
-                                                         'workers = 4\nmodel_profile = "verifier"'),
-                                  suffix=VERIFIER_PROFILE))
+    # The checked-in verifier profile is distinct; pointing the verifier back at "default" records the warning.
+    base = _settings(_variant(tmp_path / "base", ('workers = 4\nmodel_profile = "verifier"',
+                                                   'workers = 4\nmodel_profile = "default"')))
+    assert base.verifier_distinctness()["distinct"] is False
+    assert "ship_blocking_pending_distinct_verification" in base.verifier_distinctness()["warning"]
+    distinct = _settings(_variant(tmp_path / "distinct", ('model = "claude-sonnet-5-5"\nreasoning = "high"',
+                                                         'model = "claude-verifier-model"\nreasoning = "high"')))
     record = distinct.verifier_distinctness()
     assert record["distinct"] is True and record["warning"] is None
     assert record["verifier"] == {"provider": "claude-cli", "model": "claude-verifier-model"}
     assert set(record["red"]) == {"hypothesis_hunter", "red_team_analyst"}
     off = _settings(_variant(tmp_path / "off", ("require_distinct_model_for_ship_blocking = true",
                                                 "require_distinct_model_for_ship_blocking = false")))
-    assert off.verifier_distinctness()["warning"] is None and off.verifier_distinctness()["distinct"] is False
+    assert off.verifier_distinctness()["warning"] is None and off.verifier_distinctness()["distinct"] is True
     critical = _settings(_variant(tmp_path / "critical", ('blocking_technical_severities = ["high", "critical"]',
                                                           'blocking_technical_severities = ["critical"]')))
     assert critical.ship_block.blocking_technical_severities == ("critical",)
