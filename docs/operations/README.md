@@ -157,6 +157,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [Operating the security-tagging stage](security-tagging.md) | review inference and guidance | current |
 | [Operating the SEI CERT rule pack](sei-cert-rule-pack.md) | scanners and evidence collection | current |
 | [Container image and Python module signing](signing.md) | images and deployment | current |
+| [Smoke scorecard: funnel stages, axes, radar PDF and trend](smoke-scorecard.md) | testing and operations | current |
 | [Source history analysis operations](source-history-analysis.md) | scanners and evidence collection | current |
 | [SSH from Windows into the WSL checkout](ssh.md) | testing and operations | current |
 | [Deterministic static-analysis evidence collection](static-analysis.md) | scanners and evidence collection | current |

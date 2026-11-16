@@ -226,3 +226,7 @@ tokens from the `data/inference-executions/` receipts, and budget use from the r
 
 The unit tests (`tests/unit/reporting/test_smoke_score.py`) build a synthetic run tree and a synthetic key;
 the real key is never read by a test or an agent.
+
+Each item also carries the one loss-funnel `stage` it reached and its `axis`; the per-axis metrics, the
+radar-chart PDF under `data/verification/smoke-scorecard.pdf` (on by default with the key, `--no-pdf` to
+skip) and the `--compare <other-run-id>` trend are described in [smoke-scorecard.md](smoke-scorecard.md).
