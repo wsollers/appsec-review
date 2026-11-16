@@ -402,12 +402,43 @@ def test_execute_in_iterative_mode_takes_its_family_receipts_from_the_dispatch_u
                "load.php": {"accepted": {"execution_mode": "iterative"}, "engine_receipts": []}}
     graph = units()
     native = graph["execute.native"].handler(unit_context(tmp_path, "execute.native", outputs))
-    assert native["receipts"] == [native_receipt] and native["gaps"] == [f"{native_receipt['build_unit_id']}: scope unresolved"]
+    # Every published receipt says what its build did; a producer that set none gets the status-derived value.
+    assert native["receipts"] == [{**native_receipt, "build_outcome": "built"}]
+    # Delivery facts are provenance records scoped to the unit, not unit-prefixed text.
+    [delivery] = native["gaps"]
+    assert (delivery["schema"], delivery["scope_id"], delivery["reason"]) == (
+        "appsec-review/producer-gap/1", native_receipt["build_unit_id"], "scope unresolved")
+    assert delivery["code"] == "producer_reported_gap"
     assert native["terminal_status"] == "COMPLETED_WITH_GAPS"
+    go = graph["execute.go"].handler(unit_context(tmp_path, "execute.go", {
+        **outputs, "load.go": {"accepted": {"execution_mode": "iterative"}, "engine_receipts": []}}))
+    assert go["receipts"] == [{**go_receipt, "build_outcome": "failed"}]
+    assert go["gaps"] == [f"{go_receipt['build_unit_id']}: x"]
     dotnet = graph["execute.dotnet"].handler(unit_context(tmp_path, "execute.dotnet", outputs))
-    assert dotnet["receipts"] == [unity] and dotnet["terminal_status"] == "SUCCEEDED"
+    assert dotnet["receipts"] == [{**unity, "build_outcome": "built"}] and dotnet["terminal_status"] == "SUCCEEDED"
     php = graph["execute.php"].handler(unit_context(tmp_path, "execute.php", outputs))
     assert php == {"receipts": [], "receipt_count": 0, "gaps": [], "terminal_status": "NOT_APPLICABLE"}
+
+
+def test_execute_in_iterative_mode_types_delivery_facts_as_provenance_and_keeps_the_producer_outcome(
+        tmp_path: Path) -> None:
+    """Run 2026-11-16-0003: a built native unit whose receipt enforcement flipped to COMPLETED_WITH_GAPS."""
+    unit_id = "build-unit-" + "a" * 20
+    receipt = {"build_unit_id": unit_id, "family": "native", "terminal_status": "COMPLETED_WITH_GAPS",
+               "build_outcome": "built", "gaps": [],
+               "delivery_gaps": ["build/libsmoke_bz2.a: delivery status is unknown (delivery_fact_unavailable)"]}
+    outputs = {"iterations.dispatch": {"receipts": [receipt], "graph": {}, "gaps": []},
+               "load.native": {"accepted": {"execution_mode": "iterative"}, "engine_receipts": []}}
+    native = units()["execute.native"].handler(unit_context(tmp_path, "execute.native", outputs))
+    assert native["receipts"] == [receipt] and native["receipts"][0]["build_outcome"] == "built"
+    [delivery] = native["gaps"]
+    assert (delivery["code"], delivery["scope_id"]) == ("provenance_unavailable", unit_id)
+    assert delivery["reason"] == receipt["delivery_gaps"][0]
+    assert native["terminal_status"] == "COMPLETED_WITH_GAPS"
+    with pytest.raises(ValueError, match="build_outcome 'green'"):
+        units()["execute.native"].handler(unit_context(tmp_path, "execute.native", {
+            **outputs, "iterations.dispatch": {"receipts": [{**receipt, "build_outcome": "green"}], "graph": {},
+                                               "gaps": []}}))
 
 
 def test_execute_dotnet_turns_unavailable_probes_into_blocked_or_not_applicable_receipts(

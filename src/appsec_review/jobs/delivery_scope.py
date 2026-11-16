@@ -58,11 +58,21 @@ def scope_fields(row: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+#: The marker every delivery gap carries; a gap that carries it is provenance (where an output
+#: ships is unknown), never evidence that the build is incomplete.
+DELIVERY_FACT_UNAVAILABLE = "delivery_fact_unavailable"
+
+
 def delivery_gap(row: Mapping[str, Any]) -> str | None:
     if scope_fields(row)["scope_role"] == ScopeRole.UNKNOWN.value:
         path = row.get("workspace_path") or row.get("target_relative_path") or row.get("path", "")
-        return f"{path}: delivery status is unknown (delivery_fact_unavailable)"
+        return f"{path}: delivery status is unknown ({DELIVERY_FACT_UNAVAILABLE})"
     return None
+
+
+def is_delivery_gap(text: Any) -> bool:
+    """Whether a gap text is one :func:`delivery_gap` wrote (possibly prefixed by its build unit)."""
+    return DELIVERY_FACT_UNAVAILABLE in str(text)
 
 
 def apply_scope(rows: Sequence[dict[str, Any]]) -> list[str]:

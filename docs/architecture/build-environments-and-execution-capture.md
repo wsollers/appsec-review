@@ -62,7 +62,10 @@ resolved invocation paths) are matched to kernel-observed executables and every 
 switch; compiled translation units and the derived axes are retained in one
 `native-target-enforcement/2` record with `proof_kind: captured_invocation`. Exactly one compatible
 axis set is `proven`; unknown compilers, mixed or forbidden targets and empty captures publish
-unit-scoped `producer-gap/1` records. Dynamic commands, compiler-resolution overrides, missing or
+unit-scoped `producer-gap/1` records (`provenance_unavailable` for `unknown_compiler_in_capture`,
+`capture_empty` and `mixed_targets_in_capture`, which say what the capture could not establish;
+`producer_reported_gap` for `cross_target_not_permitted`, which says the build's target is not
+allowed). Dynamic commands, compiler-resolution overrides, missing or
 invalid recipes, unknown operations and network-required native recipes still refuse before
 execution; native execution is network-disabled. CMake's retained `compile_commands.json` is
 declaration evidence until matched to captured compiler invocations; downstream native catalogs
@@ -73,7 +76,11 @@ input requires a produced executable, exactly one proven captured record and a n
 capture-backed compile database before acceptance.
 The C++ and CodeQL consumers retain these build-unit gaps. Unproven native outputs remain
 diagnostic `rejected_artifacts`, never accepted compiler products; the existing native-byte
-machine/class and archive-member checks still apply. Build artifact indexing retains partial
+machine/class and archive-member checks still apply. The flip changes the receipt's
+`terminal_status` to `COMPLETED_WITH_GAPS`, not its `build_outcome`, which stays `built` because
+the build completed and only its provenance is incomplete
+(`src/appsec_review/jobs/build_outcome.py`; see the
+[language-build operations](../operations/language-build.md)). Build artifact indexing retains partial
 receipts' gaps; `job_binary_evidence_indexing` instead indexes
 intake-frozen decompilation publications before project build and does not consume build receipts.
 

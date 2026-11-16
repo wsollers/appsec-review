@@ -106,9 +106,19 @@ def language_of(path: str) -> str | None:
     return "cxx" if suffix in HEADER_SUFFIXES else None
 
 
-#: Receipt terminal statuses whose build products the lookup may use. A gap on an accepted build is a named
-#: limit of that build, not the absence of a build; FAILED, BLOCKED and NOT_APPLICABLE receipts have no products.
+#: Receipt terminal statuses whose build products the lookup may use when the receipt predates
+#: ``build_outcome``. A gap on an accepted build is a named limit of that build, not the absence of a
+#: build; FAILED, BLOCKED and NOT_APPLICABLE receipts have no products.
 ACCEPTED_BUILD_STATUSES = frozenset({"SUCCEEDED", "COMPLETED_WITH_GAPS"})
+
+
+def _has_build_products(receipt: Mapping[str, Any]) -> bool:
+    """``build_outcome == "built"`` when the receipt carries it; the accepted statuses for older receipts."""
+    from appsec_review.jobs.build_outcome import build_succeeded
+    try:
+        return build_succeeded(receipt, legacy_statuses=ACCEPTED_BUILD_STATUSES)
+    except ValueError as exc:
+        raise IntegrityError(f"accepted build receipt is invalid: {exc}") from exc
 
 
 class MissingBuild(ValueError):
@@ -174,13 +184,14 @@ class AcceptedBuilds:
             accepted = self.accepted
         except MissingBuild as exc:
             return Located(None, str(exc), "no_native_build")
-        # ``COMPLETED_WITH_GAPS`` is an accepted build whose products exist (compile database, workspace manifest,
-        # image) but which recorded named gaps, such as output-classification heuristics or unknown delivery facts.
-        # Run 2026-11-16-0003 lost every remediation plan and PoC to "no_native_build" because its only native
+        # The receipt's ``build_outcome`` says whether the build completed; its ``terminal_status`` says
+        # whether the receipt is clean. A ``COMPLETED_WITH_GAPS`` native build whose products exist (compile
+        # database, workspace manifest, image) but which recorded provenance gaps, such as output-classification
+        # heuristics, unknown delivery facts or an unknown compiler in the capture, is still a build. Run
+        # 2026-11-16-0003 lost every remediation plan and PoC to "no_native_build" because its only native
         # build carried 17 such gaps; the bound products are verified below and a missing one is still refused.
         receipts = sorted((item for item in accepted.get("receipts", ()) if isinstance(item, Mapping)
-                           and item.get("family") == "native"
-                           and item.get("terminal_status") in ACCEPTED_BUILD_STATUSES),
+                           and item.get("family") == "native" and _has_build_products(item)),
                           key=lambda item: str(item["build_unit_id"]))
         if not receipts:
             return Located(None, "the run has no successful accepted native build", "no_native_build")

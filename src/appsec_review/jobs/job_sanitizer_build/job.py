@@ -31,6 +31,7 @@ from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.engineering_contracts import SANITIZER_BUILD_HANDOFF_SCHEMA
 from appsec_review.jobs.job_codeql_analysis.planning import replay_commands
 from appsec_review.jobs.job_language_build import elf as elf_reader
+from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_language_build.job import _build_output_policy, _copy_source, _kind, _snapshot
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -261,7 +262,7 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
 
     unit.job.events.write("SANITIZER_BUILD_STARTED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
                           build_system=receipt.get("build_system"), flags=list(settings.flags))
-    if receipt.get("terminal_status") != "SUCCEEDED":
+    if not build_succeeded(receipt):
         return gap("the accepted native build did not succeed, so there is no recipe to instrument")
     if receipt.get("build_system") not in settings.build_systems:
         return gap(f"build system {receipt.get('build_system')!r} is not enabled for sanitizer rebuilds "

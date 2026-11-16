@@ -364,8 +364,18 @@ def summarized_content_gap(count: int, unit_noun: str, files: int, bytes: int, e
             f"{evidence_ref} routed to {lane} review; per-file target review not performed")
 
 
+#: The prefix of a directory-name classification gap: provenance about a build-output root, not
+#: evidence that the build is incomplete.
+HEURISTIC_GAP_PREFIX = "build-output-heuristic:"
+
+
 def heuristic_gap(root: str, disposition: str, confidence: str) -> str:
-    return f"build-output-heuristic: {root} classified {disposition} by directory name ({confidence})"
+    return f"{HEURISTIC_GAP_PREFIX} {root} classified {disposition} by directory name ({confidence})"
+
+
+def is_heuristic_gap(text: Any) -> bool:
+    """Whether a gap text is one :func:`heuristic_gap` wrote (possibly prefixed by its build unit)."""
+    return HEURISTIC_GAP_PREFIX in str(text)
 
 
 def conflict_gap(root: str) -> str:

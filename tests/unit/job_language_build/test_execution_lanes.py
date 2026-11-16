@@ -319,6 +319,7 @@ def test_execute_one_python_php_dotnet_and_checkpoint_reuse(
         lambda _u, prof: simulated_executor(prof, py_behavior),
     )
     assert py_receipt["terminal_status"] == "SUCCEEDED"
+    assert py_receipt["build_outcome"] == "built"
     assert py_receipt["checkpoint_reused"] is False
     assert len(py_receipt["package_members"]) == 1
     assert any(r["tool_kind"] == "build-backend" for r in py_receipt["tool_invocations"])
@@ -328,7 +329,7 @@ def test_execute_one_python_php_dotnet_and_checkpoint_reuse(
         py_unit, py_dispatch, py_accepted,
         lambda _u, prof: simulated_executor(prof, py_behavior),
     )
-    assert reused["checkpoint_reused"] is True
+    assert reused["checkpoint_reused"] is True and reused["build_outcome"] == "built"
 
     # Corrupting workspace file triggers FrameworkIntegrityError in _validate_checkpoint_artifacts
     whl_in_ws = py_unit.job.run_root / py_receipt["workspace"] / "dist" / "demo-0.1.0-py3-none-any.whl"

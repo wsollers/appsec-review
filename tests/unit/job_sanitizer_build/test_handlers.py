@@ -399,6 +399,15 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
     assert "did not succeed" in sanitizer_job._build_unit(
         ctx, {**receipt, "terminal_status": "FAILED"}, _settings(), _never_started
     )["gaps"][0]
+    # A built receipt whose provenance gaps flipped its status still has a recipe to instrument; a
+    # receipt whose build failed has none whatever its status says.
+    assert "not enabled" in sanitizer_job._build_unit(
+        ctx, {**receipt, "terminal_status": "COMPLETED_WITH_GAPS", "build_outcome": "built"},
+        _settings(build_systems=["meson"]), _never_started
+    )["gaps"][0]
+    assert "did not succeed" in sanitizer_job._build_unit(
+        ctx, {**receipt, "terminal_status": "SUCCEEDED", "build_outcome": "failed"}, _settings(), _never_started
+    )["gaps"][0]
     no_prot = deepcopy(receipt)
     for c in no_prot["commands"]:
         c.pop("protected_argv")
