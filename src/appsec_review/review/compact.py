@@ -195,6 +195,8 @@ def expand_requests(items: Iterable[Mapping[str, Any]], labels: LabelTable, expa
 def expand_blue(compact: Mapping[str, Any], labels: LabelTable, *, claim_id: str, task: str,
                 schema_errors: SchemaErrors) -> Expansion:
     expansion = Expansion()
+    if isinstance(compact, Mapping):
+        compact, _ok = salvage_position(compact, "blue", schema_errors, expansion)
     if not _validate(compact, COMPACT_SCHEMAS["blue"], schema_errors, expansion):
         return expansion
     # ``claim`` is advisory: the cell is bound to one claim and the application fills ``claim_id``.
@@ -213,6 +215,8 @@ def expand_blue(compact: Mapping[str, Any], labels: LabelTable, *, claim_id: str
 def expand_verifier(compact: Mapping[str, Any], labels: LabelTable, *, claim_id: str,
                     schema_errors: SchemaErrors) -> Expansion:
     expansion = Expansion()
+    if isinstance(compact, Mapping):
+        compact, _ok = salvage_position(compact, "verifier", schema_errors, expansion)
     if not _validate(compact, COMPACT_SCHEMAS["verifier"], schema_errors, expansion):
         return expansion
     positions = positions_of({**compact, "stance": None, "predicate": None}, labels, expansion, "verifier")
@@ -319,24 +323,139 @@ def expand_poc_basis(brief: Any, labels: LabelTable, expansion: Expansion, owner
 SALVAGEABLE_CLAIM_FIELDS = frozenset({"taint_paths", "poc_basis", "obligations", "evidence_requests", "counter",
                                       "missing", "entry", "trigger", "consequence", "mechanism", "affected",
                                       "preconditions"})
+# Every property a red-compact claim may carry (red-compact.schema.json). A top-level stray with one of these
+# names belongs to the only claim when there is exactly one; anything else at the top level is dropped.
+CLAIM_PROPERTIES = frozenset({"id", "leads", "cwe", "security_predicate", "statement", "mechanism", "entry",
+                              "trigger", "consequence", "preconditions", "affected", "support", "counter",
+                              "obligations", "taint_paths", "evidence_requests", "missing", "poc_basis"})
+RED_TOP_LEVEL = frozenset({"schema", "claims", "chain_seeds", "no_claim", "blocked"})
+# Keys a worker uses for the reason of a ``no_claim``/``blocked`` entry; the first present one becomes ``why``.
+LEAD_WHY_KEYS = ("why", "reason", "because", "note")
+LEAD_KEYS = ("lead", "label")
+# poc_basis members that are lists of labels or texts; a bare string is one element.
+POC_LIST_FIELDS = ("entry", "path", "unknowns", "preconditions")
 _CLAIM_FIELD_ERROR = re.compile(r"^\$\.claims\[(\d+)\]\.([a-z_]+)")
+_ACCOUNTING_ERROR = re.compile(r"^\$\.(no_claim|blocked)\[(\d+)\]")
 _TOP_LEVEL_SALVAGEABLE = ("chain_seeds",)
+
+
+def _listify(container: dict[str, Any], key: str, expansion: Expansion, owner: str) -> None:
+    """A bare string where the schema wants a list of strings becomes a one-element list (run 2026-11-16-0005
+    gave ``poc_basis.entry`` as a string because the role prompt said so)."""
+    if isinstance(container.get(key), str):
+        container[key] = [container[key]]
+        expansion.note(f"{owner}: {key} was a bare string and was read as a one-element list")
+
+
+def _wrap_object(container: dict[str, Any], key: str, expansion: Expansion, owner: str) -> None:
+    """A single object where the schema wants a list of objects is read as a one-element list."""
+    if isinstance(container.get(key), Mapping):
+        container[key] = [container[key]]
+        expansion.note(f"{owner}: {key} was a single object and was read as a one-element list")
+
+
+def _salvage_top_level(document: dict[str, Any], claims: list[Any], expansion: Expansion) -> None:
+    """Unexpected top-level properties: moved into the only claim when they are claim properties the claim does
+    not have (run 2026-11-16-0005: five of eight lane A answers put ``evidence_requests`` beside ``claims``),
+    otherwise dropped. Either way the model and the receipt are told."""
+    only = claims[0] if len(claims) == 1 and isinstance(claims[0], dict) else None
+    for name in [key for key in document if key not in RED_TOP_LEVEL]:
+        value = document.pop(name)
+        if name in CLAIM_PROPERTIES and only is not None and name not in only:
+            only[name] = value
+            expansion.note(f"red: top-level {name} belongs inside a claim and was moved into claim "
+                           f"{only.get('id', 0)}")
+        elif name in CLAIM_PROPERTIES:
+            expansion.note(f"red: top-level {name} belongs inside a claim; with {len(claims)} claim(s) it could not "
+                           "be placed and was dropped")
+        else:
+            expansion.note(f"red: unexpected top-level property {name[:40]} was dropped")
+
+
+def _salvage_claim_shapes(claim: dict[str, Any], expansion: Expansion) -> None:
+    """Unambiguous container coercions inside one claim; nothing here changes what the analyst said."""
+    owner = f"red: claim {claim.get('id', '?')}"
+    for key in ("leads", "affected", "missing"):
+        _listify(claim, key, expansion, owner)
+    for key in ("support", "counter"):
+        if isinstance(claim.get(key), dict):
+            for predicate in PREDICATES:
+                _listify(claim[key], predicate, expansion, f"{owner} {key}")
+    for key in ("evidence_requests", "obligations", "taint_paths"):
+        _wrap_object(claim, key, expansion, owner)
+    brief = claim.get("poc_basis")
+    if isinstance(brief, dict):
+        for key in POC_LIST_FIELDS:
+            _listify(brief, key, expansion, f"{owner} poc_basis")
+        _wrap_object(brief, "trigger", expansion, f"{owner} poc_basis")
+        for key in ("entry", "path"):
+            if not brief.get(key):
+                brief.setdefault(key, [])
+                expansion.note(f"{owner} poc_basis names no {key} label; the brief is kept and the gap is recorded")
+
+
+def _salvage_accounting(document: dict[str, Any], expansion: Expansion) -> None:
+    """``no_claim``/``blocked`` entries are a lead label or ``{lead, why}``. An object with a lead and a reason
+    under another name is reshaped; an object without a resolvable lead is dropped; a label stays."""
+    for group in ("no_claim", "blocked"):
+        items = document.get(group)
+        if isinstance(items, (str, Mapping)):
+            items = [items]
+            expansion.note(f"red: {group} was not a list and was read as a one-element list")
+        if not isinstance(items, list):
+            continue
+        kept: list[Any] = []
+        for index, item in enumerate(items):
+            if isinstance(item, str):
+                kept.append(item)
+                continue
+            if not isinstance(item, Mapping):
+                expansion.note(f"red: {group}[{index}] is neither a label nor an object and was dropped")
+                continue
+            lead = next((item[key] for key in LEAD_KEYS if isinstance(item.get(key), str)), None)
+            if lead is None:
+                expansion.note(f"red: {group}[{index}] names no lead label and was dropped "
+                               f"(keys: {', '.join(sorted(str(key) for key in item))[:80]})")
+                continue
+            why = next((item[key] for key in LEAD_WHY_KEYS if isinstance(item.get(key), str) and item[key].strip()),
+                       None)
+            entry: dict[str, Any] = {"lead": lead}
+            if why is not None:
+                entry["why"] = text(why, "", 1000)
+            if set(item) - {"lead", "why"} or (why is not None and entry["why"] != item.get("why")):
+                expansion.note(f"red: {group}[{index}] was reshaped to {{lead, why}} "
+                               f"(other keys: {', '.join(sorted(str(key) for key in set(item) - {'lead', 'why'}))[:60]})")
+            kept.append(entry)
+        document[group] = kept
 
 
 def salvage_red(compact: Mapping[str, Any], schema_errors: SchemaErrors, expansion: Expansion
                 ) -> tuple[dict[str, Any], bool]:
-    """Drop the malformed optional parts of a ``red-compact`` answer until it satisfies its schema.
+    """Repair the recoverable shape faults of a ``red-compact`` answer, then drop what is still malformed and
+    optional, until it satisfies its schema.
 
-    Returns the salvaged copy and whether it now validates. Every drop is feedback the model and the receipt see;
-    the schema's own errors stay in ``expansion.errors`` when the answer cannot be rescued.
+    The shape contract never throws away a correct analysis: strays are moved or dropped, bare strings become
+    lists, accounting entries are reshaped, and only then are still-malformed optional parts dropped. Returns the
+    salvaged copy and whether it now validates. Every repair is feedback the model and the receipt see; the
+    schema's own errors stay in ``expansion.errors`` when the answer cannot be rescued. The answer as a whole is
+    rejected only when ``claims`` itself is unusable.
     """
     document = json.loads(json.dumps(compact))
+    if isinstance(document.get("claims"), Mapping):
+        _wrap_object(document, "claims", expansion, "red")
+    claims = document.get("claims") if isinstance(document.get("claims"), list) else []
+    if isinstance(document.get("claims"), list):
+        _salvage_top_level(document, claims, expansion)
+        for claim in claims:
+            if isinstance(claim, dict):
+                _salvage_claim_shapes(claim, expansion)
+        _salvage_accounting(document, expansion)
     for _round in range(6):
         errors = schema_errors(COMPACT_SCHEMAS["red"], document)
         if not errors:
             return document, True
         dropped = False
-        claims = document.get("claims") if isinstance(document.get("claims"), list) else []
+        drop_accounting: dict[str, set[int]] = {}
         for error in errors:
             match = _CLAIM_FIELD_ERROR.match(error)
             if match:
@@ -348,14 +467,44 @@ def salvage_red(compact: Mapping[str, Any], schema_errors: SchemaErrors, expansi
                                    f"schema and was dropped ({error[len(match.group(0)):][:120].strip(': ')})")
                     dropped = True
                 continue
+            accounting = _ACCOUNTING_ERROR.match(error)
+            if accounting and isinstance(document.get(accounting.group(1)), list):
+                drop_accounting.setdefault(accounting.group(1), set()).add(int(accounting.group(2)))
+                continue
             for name in _TOP_LEVEL_SALVAGEABLE:
                 if error.startswith(f"$.{name}") and name in document:
                     document.pop(name)
                     expansion.note(f"red: {name} did not satisfy the schema and was dropped ({error[:120]})")
                     dropped = True
+        for group, indexes in drop_accounting.items():
+            items = document[group]
+            for index in sorted(indexes, reverse=True):
+                if index < len(items):
+                    shown = json.dumps(items[index], sort_keys=True, ensure_ascii=True)[:60]
+                    items.pop(index)
+                    expansion.note(f"red: {group}[{index}] did not satisfy the schema and was dropped ({shown})")
+                    dropped = True
         if not dropped:
             break
     return document, not schema_errors(COMPACT_SCHEMAS["red"], document)
+
+
+# Blue and verifier answers get the unambiguous container coercions (a bare string where ``cites`` wants a list,
+# one request object where a list is wanted). Their closed sets, role boundary (no ``poc_basis`` for blue) and
+# request anchors stay rejections: the stance and disposition are never salvaged.
+def salvage_position(compact: Mapping[str, Any], role: str, schema_errors: SchemaErrors, expansion: Expansion
+                     ) -> tuple[dict[str, Any], bool]:
+    """Coerce the recoverable containers of a ``blue-compact`` or ``verifier-compact`` answer."""
+    document = json.loads(json.dumps(compact))
+    _listify(document, "cites", expansion, role)
+    _wrap_object(document, "evidence_requests", expansion, role)
+    per_predicate = document.get("per_predicate")
+    if isinstance(per_predicate, dict):
+        for predicate, entry in per_predicate.items():
+            if isinstance(entry, dict):
+                _listify(entry, "cites", expansion, f"{role} {predicate}")
+                _listify(entry, "missing", expansion, f"{role} {predicate}")
+    return document, not schema_errors(COMPACT_SCHEMAS[role], document)
 
 
 def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: RedInvocation,
@@ -462,6 +611,9 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
         if poc is not None and not poc["entry"]:
             new_gap("unresolved", "no entry point is cited for the proof-of-concept basis; how input reaches the "
                                   "lead is unknown", f"stated by the analyst for {owner}")
+        if poc is not None and not poc["path"]:
+            new_gap("unresolved", "no call-site path is cited for the proof-of-concept basis; the hops from the "
+                                  "entry to the lead are unknown", f"stated by the analyst for {owner}")
         preconditions = list(dict.fromkeys([*claim.get("preconditions", ()), *closed]))
         proposal = {
             "local_id": local, "source_lead_ids": sources, "affected_entities": affected, "statement": statement,
@@ -586,7 +738,7 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
     return expansion
 
 
-__all__ = ["expand_poc_basis", "salvage_red", "BLUE_SCHEMA", "COMPACT_SCHEMAS", "Expander", "Expansion", "JUDGE_RESULT_SCHEMA",
+__all__ = ["expand_poc_basis", "salvage_position", "salvage_red", "BLUE_SCHEMA", "COMPACT_SCHEMAS", "Expander", "Expansion", "JUDGE_RESULT_SCHEMA",
            "PREDICATES", "Position", "VERIFIER_SCHEMA", "citations_of", "deshuffle", "expand_blue", "expand_judge",
            "expand_red", "expand_verifier", "overall_stance", "positions_of",
            "relations_of", "resolve_position", "summary_why", "text"]

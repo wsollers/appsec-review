@@ -322,6 +322,29 @@ def test_query_cap_denies_extra_requests_and_then_requires_final(tmp_path: Path)
     assert infer.requests[1].transcript[1]["final_required"] is True
 
 
+def test_a_rejected_final_answer_keeps_the_compact_document_in_its_receipt(tmp_path: Path) -> None:
+    """Run 2026-11-16-0005: five lane A packages were rejected on shape and the receipts retained nothing of what
+    the model wrote (``compact_result`` null), so the rejections could not be diagnosed after the run."""
+    from appsec_review.review.compact import Expansion
+    sent = {"claims": [{"id": "c1"}], "evidence_requests": [{"question": "q"}]}
+    rejection = "red-compact: $: unexpected property evidence_requests; allowed: blocked, chain_seeds, claims, no_claim, schema"
+
+    def expand(compact, labels):
+        return Expansion(feedback=["red: claim c1 poc_basis did not satisfy the schema and was dropped"], errors=[rejection])
+
+    outcome = run(tmp_path, ScriptedInfer({"action": "final", "result": sent}), cell_spec=spec(expand=expand))
+    assert outcome.record.status is CellStatus.INVALID and outcome.result is None
+    receipt = json.loads(outcome.receipt_paths[0].read_text(encoding="utf-8"))
+    assert receipt["status"] == "invalid" and receipt["reason"] == "final_result_rejected"
+    assert receipt["compact_result"] == sent and receipt["result"] is None
+    assert receipt["repair_errors"] == [rejection]
+    assert receipt["feedback"] == ["red: claim c1 poc_basis did not satisfy the schema and was dropped"]
+    # A direct (unexpanded) answer rejected by the validators is retained the same way.
+    direct = run(tmp_path / "direct", ScriptedInfer(final(SINK)))
+    receipt = json.loads(direct.receipt_paths[0].read_text(encoding="utf-8"))
+    assert receipt["status"] == "invalid" and receipt["compact_result"] == final(SINK)["result"]
+
+
 def test_citing_an_identity_not_seen_in_the_cell_is_a_schema_error(tmp_path: Path) -> None:
     infer = ScriptedInfer(final(SINK))      # in entity scope but never retrieved or packaged
     outcome = run(tmp_path, infer)

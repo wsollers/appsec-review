@@ -1549,16 +1549,21 @@ class _Assembler:
     def trim_neighborhood(record: dict[str, Any], entries: list[ContextEntry]) -> bool:
         """Drop the least valuable neighborhood row to respect ``max_package_bytes``; False when none is left.
 
-        Non-anchor slice lines go first (lowest precision, then highest line); path anchors stay."""
+        Non-anchor slice lines go first (lowest precision, then highest line); path anchors stay. A context
+        entry stays while any row the view still labels names its identity: the sections and the entry chain
+        (run 2026-11-16-0005 trimmed an ``entries`` row whose entry point the chain still showed as E1, so the
+        cell was denied ``expand`` on a label its own view presented)."""
         if trim_slice(record):
             return True
         for section in ("corroboration", "callees", "callers", "flows", "entries", "guards", "ranges", "sinks"):
             if record[section]:
                 row = record[section].pop()
                 record["omitted"][section] += 1
+                chain = record.get("chain") if isinstance(record.get("chain"), Mapping) else {}
+                shown = {other["ref"] for name in NEIGHBORHOOD_SECTIONS for other in record[name]}
+                shown |= {other["ref"] for key in ("hops", "entries") for other in chain.get(key, ())}
                 entries[:] = [item for item in entries if item.id != row["ref"] or item.role == "build"
-                              or any(other["ref"] == row["ref"] for name in NEIGHBORHOOD_SECTIONS
-                                     for other in record[name])]
+                              or item.id in shown]
                 return True
         return False
 

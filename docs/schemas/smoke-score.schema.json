@@ -138,7 +138,7 @@
             "items": {"type": "array", "items": {"$ref": "#/$defs/item"}},
             "metrics": {"$ref": "#/$defs/metrics"},
             "by_axis": {"type": "array", "items": {"$ref": "#/$defs/axis"}},
-            "funnel": {"type": "object", "propertyNames": {"enum": ["not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]}, "additionalProperties": {"type": "integer", "minimum": 0}},
+            "funnel": {"type": "object", "propertyNames": {"enum": ["not_observed", "not_admitted", "no_claim", "answer_rejected", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]}, "additionalProperties": {"type": "integer", "minimum": 0}},
             "complexity": {
               "oneOf": [
                 {"type": "null"},
@@ -246,12 +246,25 @@
           "type": "array",
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["package_id", "lane", "kind", "via"],
+            "required": ["package_id", "lane", "kind", "via", "red_cells"],
             "properties": {
               "package_id": {"type": "string"},
               "lane": {"type": "string"},
               "kind": {"type": "string"},
-              "via": {"enum": ["lead", "unit"]}
+              "via": {"enum": ["lead", "unit"]},
+              "red_cells": {
+                "type": "array",
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["cell_id", "role", "status", "gap_classes"],
+                  "properties": {
+                    "cell_id": {"type": "string"},
+                    "role": {"type": "string"},
+                    "status": {"type": "string"},
+                    "gap_classes": {"type": "array", "items": {"type": "string"}}
+                  }
+                }
+              }
             }
           }
         },
@@ -312,7 +325,7 @@
         "observed_disposition": {"enum": ["reported", "verification_backlog", "withheld", "finding_not_reported", "claimed_not_published", "packaged", "admitted_not_packaged", "lead_not_admitted", "in_hunt_unit_only", "not_observed"]},
         "outcome": {"enum": ["hit", "miss", "not_evaluable"]},
         "outcome_reason": {"type": "string"},
-        "stage": {"enum": ["not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]},
+        "stage": {"enum": ["not_observed", "not_admitted", "no_claim", "answer_rejected", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]},
         "stage_evidence": {"type": "string"}
       }
     },
@@ -332,7 +345,7 @@
         "correctly_passed": {"type": "integer", "minimum": 0},
         "false_reports": {"type": "integer", "minimum": 0},
         "precision": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-        "stages": {"type": "object", "propertyNames": {"enum": ["not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]}, "additionalProperties": {"type": "integer", "minimum": 0}},
+        "stages": {"type": "object", "propertyNames": {"enum": ["not_observed", "not_admitted", "no_claim", "answer_rejected", "out_of_scope", "refuted", "unverified", "confirmed", "not_identified", "no_version", "no_advisory", "reported", "correctly_passed", "false_report"]}, "additionalProperties": {"type": "integer", "minimum": 0}},
         "low_confidence": {"type": "boolean"},
         "severity": {
           "type": "object", "additionalProperties": false,

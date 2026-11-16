@@ -119,12 +119,17 @@ AXIS_OF_DIMENSION = {"M": "memory_safety", "N": "numeric_handling", "C": "contro
 AXIS_OF_CWE = {"CWE-134": "format_string"}
 AXIS_BASES = ("key", "cwe", "cwe_rollup", "class", "none")
 # One stage per planted item: how far it travelled through the review before it was lost (or arrived).
-CODE_STAGES = ("not_observed", "not_admitted", "no_claim", "out_of_scope", "refuted", "unverified", "confirmed")
+CODE_STAGES = ("not_observed", "not_admitted", "no_claim", "answer_rejected", "out_of_scope", "refuted", "unverified",
+               "confirmed")
 DEPENDENCY_STAGES = ("not_identified", "no_version", "no_advisory", "reported")
 NEGATIVE_STAGES = ("correctly_passed", "false_report")
 STAGES = (*CODE_STAGES, *DEPENDENCY_STAGES, *NEGATIVE_STAGES)
 # Stages at or past ``no_claim``: the item was admitted or hunted, so the review looked at it.
-COVERED_STAGES = frozenset({"no_claim", "out_of_scope", "refuted", "unverified", "confirmed", "reported"})
+COVERED_STAGES = frozenset({"no_claim", "answer_rejected", "out_of_scope", "refuted", "unverified", "confirmed",
+                            "reported"})
+# Analyst roles whose cells propose claims; their terminal records decide ``answer_rejected``.
+RED_ROLES = frozenset({"red_team_analyst", "hypothesis_hunter"})
+MAX_LEDGER_BYTES = 256 * 1024 * 1024
 CONFIRMED_STAGES = frozenset({"confirmed", "reported"})
 POSITIVE_CLASSES = frozenset({"true_positive_code", "true_positive_dependency"})
 NEGATIVE_CLASSES = frozenset({"fixed_code", "fixed_dependency", "false_positive"})
@@ -203,6 +208,7 @@ class RunData:
         self._observations: list[Observation] | None = None
         self._assembly: dict[str, Any] | None | bool = False
         self._handoffs: dict[str, tuple[Path, Mapping[str, Any]] | None] = {}
+        self._red_cells: dict[str, list[dict[str, Any]]] | None = None
 
     # recording -----------------------------------------------------------------------------------
     def gap(self, message: str) -> None:
@@ -246,6 +252,31 @@ class RunData:
             if value is not None:
                 found.append((path, value))
         return found
+
+    def read_jsonl(self, path: Path, name: str) -> list[Any]:
+        """Every JSON object of a JSON-lines file (bounded); a bad line is a named gap, not a failure."""
+        path = Path(path)
+        try:
+            if path.stat().st_size > MAX_LEDGER_BYTES:
+                self.gap(f"{name}: {self.rel(path)} exceeds the {MAX_LEDGER_BYTES} byte read bound")
+                return []
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            self.gap(f"{name}: {self.rel(path)} is missing")
+            return []
+        except (OSError, UnicodeDecodeError) as exc:
+            self.gap(f"{name}: {self.rel(path)} is unreadable ({type(exc).__name__})")
+            return []
+        self.seen(path)
+        records = []
+        for number, line in enumerate(text.splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except ValueError:
+                self.gap(f"{name}: {self.rel(path)} line {number} is not JSON")
+        return records
 
     # configuration -------------------------------------------------------------------------------
     def resolved_config(self) -> Mapping[str, Any]:
@@ -463,6 +494,36 @@ class RunData:
             return []
         return [(path, value) for path, value in
                 ((path, self.read_json(path, name)) for path in sorted(attempt.glob(pattern))) if value is not None]
+
+    def red_cells(self) -> dict[str, list[dict[str, Any]]]:
+        """The red (claim-proposing) cells per package from the sealed lane ledgers' ``cell_terminal`` records,
+        each with its terminal status and the classes of the gaps it recorded (run 2026-11-16-0005: eight lane A
+        red cells, five of them ``invalid`` with ``schema_error`` gaps and no claim behind them)."""
+        if self._red_cells is not None:
+            return self._red_cells
+        cells: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        attempt = self.attempt_dir(REVIEW_JOB)
+        for ledger in sorted(attempt.glob("steps/*/tasks/teams/ledger.jsonl")) if attempt is not None else ():
+            records = [record for record in self.read_jsonl(ledger, "review lane ledger") if isinstance(record, Mapping)]
+            gap_classes = {}
+            for record in records:
+                body = record.get("body") if isinstance(record.get("body"), Mapping) else {}
+                gap = body.get("gap")
+                if record.get("kind") == "gap_recorded" and isinstance(gap, Mapping) and isinstance(gap.get("gap_id"), str):
+                    gap_classes[gap["gap_id"]] = _string(gap.get("gap_class")) or "unknown"
+            for record in records:
+                body = record.get("body") if isinstance(record.get("body"), Mapping) else {}
+                cell = body.get("cell")
+                if record.get("kind") != "cell_terminal" or not isinstance(cell, Mapping):
+                    continue
+                if cell.get("role") not in RED_ROLES or not isinstance(cell.get("package_id"), str):
+                    continue
+                classes = sorted({gap_classes.get(str(gap_id), "unknown") for gap_id in cell.get("gap_ids") or ()})
+                cells[cell["package_id"]].append({"cell_id": str(cell.get("cell_id")), "role": str(cell.get("role")),
+                                                  "status": _string(cell.get("status")) or "unknown",
+                                                  "gap_classes": classes})
+        self._red_cells = {package_id: sorted(rows, key=lambda row: row["cell_id"]) for package_id, rows in cells.items()}
+        return self._red_cells
 
     # review publication ----------------------------------------------------------------------------
     def assembly(self) -> dict[str, Any] | None:
@@ -1116,6 +1177,7 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
     findings_by_claim: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for finding in findings:
         findings_by_claim[str(finding["claim_id"])].append(finding)
+    red_cells = run.red_cells() if assembly else {}
     matched_claims_by_item: dict[str, set[str]] = {}
     rows = []
     for item in items:
@@ -1138,11 +1200,13 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
         for lead_id in hit_ids:
             for package in packages_by_lead.get(lead_id, ()):
                 packages.setdefault(package["package_id"], {"package_id": package["package_id"], "lane": package["lane"],
-                                                            "kind": package["kind"], "via": "lead"})
+                                                            "kind": package["kind"], "via": "lead",
+                                                            "red_cells": list(red_cells.get(package["package_id"], ()))})
         if source is not None:
             for package in packages_by_source.get(source["identity"], ()):
                 packages.setdefault(package["package_id"], {"package_id": package["package_id"], "lane": package["lane"],
-                                                            "kind": package["kind"], "via": "unit"})
+                                                            "kind": package["kind"], "via": "unit",
+                                                            "red_cells": list(red_cells.get(package["package_id"], ()))})
         matched_claims = []
         citing: list[Location] = []
         for claim in claims:
@@ -1232,9 +1296,12 @@ def stage_of(row: Mapping[str, Any]) -> tuple[str, str]:
     Decided from the item's own record (leads and their admission, packages, claims and their states, finding
     packages and their gate bucket, whether a finding reached the report, dependency components), so the same
     record always yields the same stage. Positives travel ``not_observed`` -> ``not_admitted`` -> ``no_claim``
-    -> ``out_of_scope`` / ``refuted`` / ``unverified`` -> ``confirmed`` (dependencies: ``not_identified`` ->
-    ``no_version`` -> ``no_advisory`` -> the same middle -> ``reported``); the stage is the furthest point
-    reached. Negatives (fixed and false-positive items) are ``correctly_passed`` or ``false_report``.
+    -> ``answer_rejected`` -> ``out_of_scope`` / ``refuted`` / ``unverified`` -> ``confirmed`` (dependencies:
+    ``not_identified`` -> ``no_version`` -> ``no_advisory`` -> the same middle -> ``reported``); the stage is the
+    furthest point reached. ``answer_rejected`` is ``no_claim`` with a cause: every red cell on the item's packages
+    ended ``invalid`` with a ``schema_error`` gap, so the analyst's answer was lost to the shape contract rather
+    than declined; a package whose red cells succeeded and declined, or ended on another gap class, stays
+    ``no_claim``. Negatives (fixed and false-positive items) are ``correctly_passed`` or ``false_report``.
     """
     klass, leads, packages = str(row["class"]), row["leads"], row["packages"]
     claims, findings, reported = row["claims"], row["finding_packages"], bool(row["reported"])
@@ -1284,6 +1351,13 @@ def stage_of(row: Mapping[str, Any]) -> tuple[str, str]:
         if state_set & REFUTING_STATES:
             return "refuted", f"claim states {', '.join(states)}"
         return "out_of_scope", f"{len(claims)} claim(s) decided {', '.join(states)} only"
+    red_cells = [cell for package in packages for cell in package.get("red_cells") or ()]
+    rejected = [cell for cell in red_cells
+                if cell.get("status") == "invalid" and "schema_error" in (cell.get("gap_classes") or ())]
+    if (admitted or hunted or lead_packages) and red_cells and len(rejected) == len(red_cells):
+        return "answer_rejected", (f"{len(red_cells)} red cell(s) over {len(packages)} package(s) all ended invalid with "
+                                   f"schema_error gaps ({', '.join(sorted({cell['role'] for cell in red_cells}))}); "
+                                   "the analyst answer was rejected on shape, no claim was proposed")
     if admitted or hunted or lead_packages:
         return "no_claim", (f"{len(admitted)} admitted lead(s) (effective severity {_severity_list(admitted, 'effective_severity')}); "
                             f"packages via lead {lead_packages}, via unit {len(packages) - lead_packages}; no claim proposed")

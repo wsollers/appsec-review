@@ -493,6 +493,10 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
         if turn["action"] == "final":
             final = turn["result"]
             if spec.expand is not None:
+                # The compact document the model sent is retained whether or not it expands (T-5036; run
+                # 2026-11-16-0005 kept nothing of eight rejected lane A answers), so a rejection can be diagnosed
+                # after the run. It is already bounded by the execution response byte bound.
+                attempt.compact = final
                 expansion = spec.expand(final, attempt.labels)
                 attempt.feedback.extend(expansion.feedback)
                 if expansion.errors or expansion.result is None:
@@ -500,10 +504,12 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
                     attempt.repair_errors = tuple(expansion.errors[:MAX_REPAIR_ERRORS]) or (
                         "the compact answer could not be expanded",)
                     return attempt
-                attempt.compact, final = final, _plain(expansion.result)
+                final = _plain(expansion.result)
             errors = _citation_errors(final, attempt.seen | citable_package)
             errors.extend(str(item)[:256] for item in validate_final(final))
             if errors:
+                if attempt.compact is None:
+                    attempt.compact = final               # a rejected direct answer is retained the same way
                 attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "final_result_rejected")
                 attempt.repair_errors = tuple(errors[:MAX_REPAIR_ERRORS])
                 return attempt
