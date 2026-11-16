@@ -204,6 +204,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5029 | [Admit only critical and high leads to lane A; unknown severity enters through an assessment or becomes a named gap](#t-5029-admit-only-critical-and-high-leads-to-lane-a-unknown-severity-enters-through-an-assessment-or-becomes-a-named-gap) | review | in-progress |
 | T-5030 | [Gate the hunt lane on admitted leads and bound its share of the review](#t-5030-gate-the-hunt-lane-on-admitted-leads-and-bound-its-share-of-the-review) | review | open |
 | T-5031 | [Design triage-first, incremental and distributed review for million-line targets](#t-5031-design-triage-first-incremental-and-distributed-review-for-million-line-targets) | review | open |
+| T-5032 | [Repair the lead-coverage audit tests: the secret fixture yields no secret lead and job_dependency_intelligence lacks a lead decision](#t-5032-repair-the-lead-coverage-audit-tests-the-secret-fixture-yields-no-secret-lead-and-job_dependency_intelligence-lacks-a-lead-decision) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -2994,6 +2995,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** a design document under `docs/architecture/` that decides, with the user: (1) triage-first review, where cheap clustering and one bounded triage cell select the few hundred packages that receive the full team and the rest get a single bounded cell or a tool-only disposition recorded as coverage; (2) per-function packages with hard cell caps and a round budget per package (T-5025, T-5028); (3) a tooling phase cached per target snapshot and re-run only for changed files, so CodeQL, builds and indexing are inputs to a review rather than part of it; (4) one shared package queue served by teams on several hosts, with cell memoization by fingerprint reused across runs and hosts, and lanes that rebalance. Each decision names its job-contract changes under `.claude/skills/add-a-job-contract/SKILL.md` and its measurement from `scripts/cell-outcomes.py` and `scripts/smoke-score.py`.
 - **Done when:** the design document is reviewed by the user, each accepted decision has its own TODO entry with a measurable target, and the first of them is in progress.
 - **Refs:** `docs/architecture/inference-security-review.md`, `docs/architecture/review-package-contract.md`, `src/appsec_review/jobs/job_inference_security_review/teams.py`, `src/appsec_review/review/cells.py` (memoization), run `2026-11-15-0005` `data/verification/cell-outcomes.txt` and `smoke-score.txt` (host-local), T-5025, T-5027, T-5028, T-5029, T-5030.
+
+### T-5032 — Repair the lead-coverage audit tests: the secret fixture yields no secret lead and job_dependency_intelligence lacks a lead decision
+
+- **State:** open
+- **Area:** testing
+- **Why:** On main `102a111c` (2026-11-15) four tests in `tests/review/test_lead_coverage.py` fail: `test_every_job_that_publishes_tool_observations_is_decided` finds `job_dependency_intelligence` deriving `tool_observation` entities (`derive(EntityKind.TOOL_OBSERVATION`, since T-5022's native resolution work) with no entry in `lead_families.OBSERVATION_PRODUCERS`, and the three secret-family tests find no `secret` lead in the fixture built with `secrets=True` (`collect_leads` yields none, so `_secret_package` unpacks nothing). Both are pre-existing on `origin/main`; neither is caused by the admission-policy change, which only updated the lane-settings assertion in the same file.
+- **Scope:** decide and record the lead decision for the dependency-intelligence observations (a lead family or a non-lead reason with the gap it records), and find why the gitleaks fixture row no longer becomes a `secret` lead (the fixture builder, the `secret_scanner` producer selector or the family rule) and fix the owning side; keep the secret-redaction tests green.
+- **Done when:** `tests/review/test_lead_coverage.py` passes alone and under `-n 4 --shuffle-seed`, and the lead-coverage audit document still names every observation producer.
+- **Refs:** `tests/review/test_lead_coverage.py`, `src/appsec_review/review/lead_families.py` (`OBSERVATION_PRODUCERS`, `collect_leads`), `src/appsec_review/jobs/job_dependency_intelligence/job.py`, `tests/fixtures/inference_review/builder.py` (`secrets=True`), `docs/reviews/lead-coverage-audit.md`, T-5022.
 
 ## Legacy backlog
 
