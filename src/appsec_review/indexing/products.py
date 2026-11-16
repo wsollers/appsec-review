@@ -302,9 +302,16 @@ def _feed_reference(context: ProductContext, feed: str) -> dict[str, Any]:
                                           "stale", "reason")}
 
 
+# Observation shards whose ``tool_observation`` rows carry scanner-reported package/advisory pairs: the
+# evidence-collection scanners, artifact security analysis, and dependency intelligence's model-free NVD
+# CPE range lookup of corroborated native releases (``native-advisory``, match_basis ``cpe-range``).
+ADVISORY_SCANNER_SHARDS = frozenset({"osv_scanner", "grype", "syft", "artifact-security", "native-advisory"})
+
+
 def _select_dependency_advisories(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
     return (*shards.select(index="observations", job="job_evidence_collection"),
             *shards.select(index="observations", job="job_artifact_security_analysis"),
+            *shards.select(index="observations", job="job_dependency_intelligence"),
             *shards.select(index="inventory", job="job_dependency_intelligence"))
 
 
@@ -580,10 +587,9 @@ def _reference_joins(context: ProductContext, databases: Mapping[str, sqlite3.Co
 
 def _build_dependency_advisories(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
     derived, shards, name = Derived(), context.shards, "dependency_advisories"
-    scanners = [shard for shard in selected if shard.get("shard_id") in {"osv_scanner", "grype", "syft",
-                                                                           "artifact-security"}]
-    dependencies = [shard for shard in selected
-                    if shard.get("producer", {}).get("job") == "job_dependency_intelligence"]
+    scanners = [shard for shard in selected if shard.get("shard_id") in ADVISORY_SCANNER_SHARDS]
+    dependencies = [shard for shard in selected if shard.get("name") == "inventory"
+                    and shard.get("producer", {}).get("job") == "job_dependency_intelligence"]
     if not scanners and not dependencies:
         return _finish(derived, name, unavailable="dependency advisories are unavailable: no accepted dependency "
                                                   "scanner or intelligence shards")

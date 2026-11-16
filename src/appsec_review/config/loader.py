@@ -237,6 +237,12 @@ class ToolCapabilityConfig:
 
     disable_grype: bool = False
     enable_swift: bool = False
+    # cve-bin-tool version-string matching of produced binaries (job_artifact_security_analysis);
+    # disabled coverage is a named CONFIGURED_DISABLED gap, never a clean result.
+    enable_cve_bin_tool: bool = False
+    # Model-free NVD CPE range lookup of corroborated native releases in the cve-bin-tool snapshot
+    # (job_dependency_intelligence, publication.native_advisory_lookup); disabled is a named gap.
+    enable_native_advisory_lookup: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1097,8 +1103,15 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     enable_swift = tools_value.get("enable_swift", False)
     if not isinstance(enable_swift, bool):
         raise ValueError("tools.enable_swift must be a Boolean")
+    enable_cve_bin_tool = tools_value.get("enable_cve_bin_tool", False)
+    if not isinstance(enable_cve_bin_tool, bool):
+        raise ValueError("tools.enable_cve_bin_tool must be a Boolean")
+    enable_native_advisory_lookup = tools_value.get("enable_native_advisory_lookup", False)
+    if not isinstance(enable_native_advisory_lookup, bool):
+        raise ValueError("tools.enable_native_advisory_lookup must be a Boolean")
     tool_capabilities = ToolCapabilityConfig(
-        disable_grype=disable_grype, enable_swift=enable_swift)
+        disable_grype=disable_grype, enable_swift=enable_swift, enable_cve_bin_tool=enable_cve_bin_tool,
+        enable_native_advisory_lookup=enable_native_advisory_lookup)
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
     binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
@@ -1534,6 +1547,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         document["runtime"].get("metadata_dir", "runs/metadata"))
     resolved_document.setdefault("tools", {})["disable_grype"] = tool_capabilities.disable_grype
     resolved_document["tools"]["enable_swift"] = tool_capabilities.enable_swift
+    resolved_document["tools"]["enable_cve_bin_tool"] = tool_capabilities.enable_cve_bin_tool
+    resolved_document["tools"]["enable_native_advisory_lookup"] = tool_capabilities.enable_native_advisory_lookup
     for job_id, job in jobs.items():
         resolved_document["jobs"][job_id]["settings"] = copy.deepcopy(dict(job.settings))
     pending = {job_id: jobs.pop(job_id) for job_id in sorted(PENDING_JOBS & set(jobs))}

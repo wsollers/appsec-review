@@ -235,8 +235,15 @@ Only supported bounded literal recognizers run. Initial recognizers cover:
 - self-identifying version strings such as `ZLIB_VERSION`, `SQLITE_VERSION`,
   `OPENSSL_VERSION_STR`/literal `OPENSSL_VERSION_TEXT`, and `PNG_LIBPNG_VER_STRING`;
 - `BOOST_LIB_VERSION` and documented packed `BOOST_VERSION`, using explicit decoding tests;
-- generic literal `FOO_VERSION "x.y.z"` and a matching
-  `FOO_VERSION_MAJOR`/`MINOR`/`PATCH` numeric tuple, with inferred identity until corroborated;
+- generic literal `FOO_VERSION "x.y.z"`, also with a dated or descriptive tail after a dotted
+  release (`BZ_VERSION "1.0.6, 6-Sept-2010"` yields `1.0.6`; the whole line stays the evidence),
+  and a matching `FOO_VERSION_MAJOR`/`MINOR`/`PATCH` numeric tuple (`RELEASE` and `MICRO` are
+  accepted spellings of `PATCH`), with inferred identity until corroborated. The include guard
+  is the first `#ifndef X`/`#define X` pair at nesting depth zero, so a balanced
+  `#if defined(__cplusplus)` prelude does not make every later macro conditional. A tiny
+  documented alias table maps macro prefixes that spell a component differently (`BZ` →
+  `bzip2`). An unsupported or conditional version macro makes a root's release incomplete only
+  when it speaks about a release that header emits (`LZ4_GCC_VERSION` does not touch `lz4`);
 - `.pc` name/version/URL and literal CMake package metadata, without evaluating CMake;
 - narrow anchored README/NOTICE/VERSION self-declarations such as `Package:`, `Version:`,
   `Repository:`, or a project title with an explicit release version.
@@ -362,6 +369,17 @@ Treat identity, release version, and upstream as separate claims.
 - A generic identity/version becomes corroborated only when independent roles at the same
   unambiguous root agree: for example a self-declaration in README plus a matching version
   header. Repeated copies of the same line/hash or header aliases are not independent.
+- Deterministic header exception, model-free: a version literal the parser itself reads from a
+  header under the component's own root, in a `<PREFIX>_VERSION "x.y.z"` string macro or a
+  `<PREFIX>_VERSION_{MAJOR,MINOR,PATCH|RELEASE|MICRO}` numeric triple whose prefix spells the
+  component's normalized name (or its documented alias), corroborates the release on its own.
+  The macro span is the evidence and the finding carries basis `literal_header_macro`, so a
+  reader can tell it from model-cited evidence. Limits: header macros only (README, `.pc`,
+  CMake and manifest literals still need the model's exact citation); the header must be
+  lexically complete with no conditional, incomplete or competing version macro for that
+  prefix; a macro whose prefix names something else (`FOO_VERSION` under zlib's root) never
+  corroborates; two different literals for one component remain a `version_conflict`; and the
+  rule sees only the catalog files the investigation plan selected and the reader actually read.
 - A supported explicit repository declaration is an observed upstream claim. Keep a general
   homepage distinct from a repository. Only the existing public-host repository canonicalizer
   can supply a supported repository identity. Model-supplied repositories remain inferred;
@@ -395,7 +413,12 @@ For SPDX merging:
 5. A native candidate not safely matched becomes a separate package with its observed name.
    `versionInfo` is omitted unless the release is corroborated. Do not fabricate purls, CPEs,
    download URLs, source commits, package checksums, SPDX license expressions, or vulnerability
-   matches. Explicitly mark inferred identity/version/upstream states in bounded `sourceInfo`
+   matches. The one derived locator is `pkg:generic/<normalized name>@<release>`, published only
+   for a candidate whose identity and release are corroborated and which has no observed
+   package-manager PURL or PURL claim of any kind; it is an `inferred` claim bound to the
+   release evidence (finding basis `derived_generic_purl`) and becomes the package's external
+   reference so advisories can match the release. Supplier, license, download location and
+   upstream are never derived. Explicitly mark inferred identity/version/upstream states in bounded `sourceInfo`
    and in the provenance sidecar.
 6. Sort inputs, evidence, package records, relationships, and annotations by canonical keys.
    Native package SPDXIDs derive from candidate identity; baseline element ids derive from

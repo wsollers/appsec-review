@@ -37,6 +37,12 @@ _PATH_FLAGS = ("-isystem", "-iquote", "-idirafter", "-I", "-L", "/external:I", "
 _OUTPUT_FLAGS = ("-o", "--output", "/Fo", "/Fe", "/Fd", "/OUT:")
 _DIRECTIVE = re.compile(r"^\s*#\s*(\w+)\b(.*)")
 _DEFINE = re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)\s+(.+?)\s*$")
+_TUPLE = re.compile(r"(.+)_VERSION_(MAJOR|MINOR|PATCH|RELEASE|MICRO)")
+_TUPLE_PARTS = {"MAJOR": "MAJOR", "MINOR": "MINOR", "PATCH": "PATCH", "RELEASE": "PATCH", "MICRO": "PATCH"}
+# A ``FOO_VERSION`` macro spelled from the numeric tuple is an alias of it, never evaluated.
+_TUPLE_ALIAS = re.compile(r"(\w+)_VERSION_MAJOR\s*\.\s*\1_VERSION_MINOR\s*\.\s*\1_VERSION_(?:PATCH|RELEASE|MICRO)")
+# The only version-macro prefixes allowed to spell a component name differently (kept tiny).
+_MACRO_PREFIX_ALIASES = {"bz": "bzip2"}
 
 
 def _relative(value: object, *, dot: bool = False) -> str:
@@ -127,6 +133,20 @@ def _locality(path: str) -> str:
 
 def _normalized_name(name: str) -> str:
     return name.strip().casefold().replace("_", "-")
+
+
+def _prefix_name(prefix: str) -> str:
+    """Component name spelled by a version-macro prefix, through the documented alias table."""
+    name = prefix.casefold()
+    return _MACRO_PREFIX_ALIASES.get(name, name)
+
+
+def _macro_subject(macro: str) -> str | None:
+    """The component a release-shaped version macro speaks about, or None for other macros."""
+    if macro in _KNOWN:
+        return _KNOWN[macro]
+    match = re.fullmatch(r"(.+)_VERSION(?:_(?:MAJOR|MINOR|PATCH|RELEASE|MICRO))?", macro)
+    return _prefix_name(match[1]) if match else None
 
 
 def _option_prefix(value: str, option: str, *, msvc: bool) -> bool:
@@ -497,16 +517,31 @@ class _Discovery:
                lines: Sequence[tuple[str, tuple[int, int, int, int]]]) -> None:
         directives = [(index, _DIRECTIVE.match(line)) for index, (line, _) in enumerate(lines)]
         directives = [(index, match) for index, match in directives if match]
+        # The include guard is the first ``#ifndef X`` / ``#define X`` pair at nesting depth zero;
+        # a balanced prelude such as ``#if defined(__cplusplus)`` ... ``#endif`` may precede it.
         guard = None
-        if len(directives) >= 2:
-            first, second = directives[0][1], directives[1][1]
-            if (first[1] == "ifndef" and second[1] == "define"
-                    and first[2].strip() == second[2].strip()
-                    and "VERSION" not in first[2].upper()):
-                guard = directives[0][0]
+        depth = 0
+        for position, (index, match) in enumerate(directives):
+            operator = match[1]
+            if depth == 0 and operator == "ifndef" and position + 1 < len(directives):
+                following = directives[position + 1][1]
+                if (following[1] == "define" and match[2].strip() == following[2].strip()
+                        and "VERSION" not in match[2].upper()):
+                    guard = index
+                    break
+            if operator in {"if", "ifdef", "ifndef"}:
+                depth += 1
+            elif operator == "endif":
+                if not depth:
+                    break
+                depth -= 1
         conditions: list[bool] = []
         tuples: dict[str, dict[str, tuple[int, tuple[int, int, int, int], str]]] = defaultdict(dict)
         emitted = False
+        first_fact = len(self.facts)
+        # Subjects of release-shaped macros this file could not read; they make the root's release
+        # incomplete only when they speak about a release this file emits (or when it emits none).
+        unread_subjects: list[str] = []
         for index, (line, span) in enumerate(lines):
             directive = _DIRECTIVE.match(line)
             if directive:
@@ -524,20 +559,26 @@ class _Discovery:
             if macro not in _KNOWN and not re.search(r"(?:^|_)VERSION(?:_|$)", macro):
                 continue
             raw = re.sub(r"\s*(?://.*|/\*.*?\*/)\s*$", "", raw).strip()
-            affects_release = macro in _KNOWN or bool(re.fullmatch(
-                r".+_VERSION(?:_(?:MAJOR|MINOR|PATCH))?", macro))
+            subject = _macro_subject(macro)
             if any(not allowed for allowed in conditions):
+                unread_subjects.extend([subject] if subject else [])
                 self.unsupported_file(file, "conditional version macro is not evaluated", span, line,
-                                      affects_release=affects_release)
+                                      affects_release=False)
                 continue
             name, version = _KNOWN.get(macro), None
-            tuple_match = re.fullmatch(r"(.+)_VERSION_(MAJOR|MINOR|PATCH)", macro)
+            tuple_match = _TUPLE.fullmatch(macro)
             if re.fullmatch(r"\d+", raw) and len(raw) > 9:
+                unread_subjects.extend([subject] if subject else [])
                 self.unsupported_file(file, "numeric version literal exceeds the supported encoding",
-                                      span, line, affects_release=affects_release)
+                                      span, line, affects_release=False)
+                continue
+            if _TUPLE_ALIAS.fullmatch(raw) and re.fullmatch(r".+_VERSION", macro):
+                self.unsupported_file(file, "version macro spells the literal version tuple; not evaluated",
+                                      span, line, affects_release=False)
                 continue
             if tuple_match and re.fullmatch(r"\d+", raw):
-                prior = tuples[tuple_match[1]].get(tuple_match[2])
+                part = _TUPLE_PARTS[tuple_match[2]]
+                prior = tuples[tuple_match[1]].get(part)
                 if prior is not None and prior[0] != int(raw):
                     key = file["domain"], file["root_id"], root
                     self.version_conflicts.add(key)
@@ -549,7 +590,7 @@ class _Discovery:
                             self.conflict_evidence[key].add(evidence)
                             self.support.append({"domain": file["domain"], "root_id": file["root_id"],
                                                  "root": root, "evidence_id": evidence})
-                tuples[tuple_match[1]][tuple_match[2]] = (int(raw), span, line)
+                tuples[tuple_match[1]][part] = (int(raw), span, line)
                 continue
             if macro == "BOOST_VERSION" and re.fullmatch(r"\d+", raw):
                 packed = int(raw)
@@ -561,18 +602,21 @@ class _Discovery:
                 literal = re.fullmatch(r'"OpenSSL (' + _VERSION + r')(?: [^"\\]*)?"', raw)
                 version = literal[1] if literal else None
             else:
-                literal = re.fullmatch(r'"(' + _VERSION + r')"', raw)
-                if literal:
+                # A dotted release may be followed by a dated or descriptive tail, as in
+                # ``"1.0.6, 6-Sept-2010"``; the leading number is the release, the line is kept.
+                literal = re.fullmatch(r'"(' + _VERSION + r')((?:[\s,;][^"\\]*)?)"', raw)
+                if literal and (not literal[2] or "." in literal[1]):
                     version = literal[1]
                     generic = re.fullmatch(r"(.+)_VERSION", macro)
-                    name = name or (generic[1].casefold() if generic else None)
+                    name = name or (_prefix_name(generic[1]) if generic else None)
             if name and version:
                 self.emit(file, root, name, "macro_version", line, span, role="header",
                           release=version, strong=macro in _KNOWN)
                 emitted = True
             else:
+                unread_subjects.extend([subject] if subject else [])
                 self.unsupported_file(file, "version macro is not a supported literal", span, line,
-                                      affects_release=affects_release)
+                                      affects_release=False)
         for prefix, values in sorted(tuples.items()):
             if set(values) != {"MAJOR", "MINOR", "PATCH"}:
                 for _, span, line in values.values():
@@ -583,12 +627,17 @@ class _Discovery:
                     min(value[1][2] for value in ordered), max(value[1][3] for value in ordered))
             literal = "".join(line for line, location in lines
                               if span[0] <= location[0] and location[1] <= span[1])
-            self.emit(file, root, prefix.casefold(), "macro_version_tuple", literal, span,
+            self.emit(file, root, _prefix_name(prefix), "macro_version_tuple", literal, span,
                       role="header", release=".".join(str(value[0]) for value in ordered))
             emitted = True
         if not emitted:
             name = PurePosixPath(root).name if root != "." else PurePosixPath(file["path"]).stem
             self.emit(file, root, name, "header_path", file["path"], (0, 0, 1, 1), role="path")
+        released = {_normalized_name(fact["name"]) for fact in self.facts[first_fact:]
+                    if fact["field"] == "release" and fact["name"]}
+        if unread_subjects and (not released or any(
+                _normalized_name(subject) in released for subject in unread_subjects)):
+            self.release_incomplete.add((file["domain"], file["root_id"], root))
 
     def metadata(self, file: NativeFile, root: str,
                  lines: Sequence[tuple[str, tuple[int, int, int, int]]]) -> None:

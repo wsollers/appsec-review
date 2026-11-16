@@ -127,12 +127,12 @@ decision would weaken the recorded acceptance contract.
 
 ## Status update (2026-10-14)
 
-The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 32 enabled tool
+The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 33 enabled tool
 images plus 4 bases and ten build environments (shared native toolchain, C/C++, Go, Python, PHP,
 Rust/WebAssembly, Node/TypeScript, Android, Java/Kotlin, .NET), adding tools not derived from the legacy archive (see
 `containers/README.md`). Not every enabled tool has an asset lock: `tool-sqlite-fts` packages a
 repository-owned script on `base-python` and has none. `job_evidence_collection` now registers 20
-adapters, including `tool-opengrep` for the SEI CERT rule pack; the eight tools whose `tool.toml`
+adapters, including `tool-opengrep` for the SEI CERT rule pack; the nine tools whose `tool.toml`
 sets `static_adapter = false` are run by their own jobs. The registry-equality rule above still
 applies to the remaining tools.
 

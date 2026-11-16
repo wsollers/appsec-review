@@ -55,7 +55,7 @@ def test_job_contract_datasets_and_topology_parity() -> None:
     assert len(handoff_reqs) == 32
     assert all(req.authority is EvidenceAuthority.PRODUCER_EVIDENCE for req in handoff_reqs)
 
-    assert len(DATASETS) == 15
+    assert len(DATASETS) == 17
     by_kind = {item.output_kind: item for item in DATASETS}
     assert set(by_kind) == {
         "native_discovery",
@@ -66,6 +66,8 @@ def test_job_contract_datasets_and_topology_parity() -> None:
         "native_sbom_provenance",
         "native_sbom_metrics",
         "dependency_context",
+        "native_advisory_observations",
+        "native_advisory_lookup",
         "scorecard_responses",
         "native_inputs",
         "unity_inventory",
@@ -75,6 +77,9 @@ def test_job_contract_datasets_and_topology_parity() -> None:
         "dependency_intelligence_handoff",
     }
     assert by_kind["dependency_context"].disposition == "indexed"
+    assert by_kind["native_advisory_observations"].disposition == "indexed"
+    assert by_kind["native_advisory_observations"].indexes == ("observations",)
+    assert by_kind["native_advisory_observations"].shard_prefixes == ("native-advisory",)
     assert {k for k, v in by_kind.items() if v.disposition == "protected"} == {
         "native_inputs",
         "native_inference_io",

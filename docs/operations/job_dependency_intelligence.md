@@ -30,16 +30,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L462) |
-| `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L244) |
-| `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L395) |
-| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L502) |
-| `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L322) |
-| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L494) |
-| `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L262) |
-| `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L293) |
-| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L496) |
-| `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L330) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L570) |
+| `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L263) |
+| `publication` | `publication.native_advisory_lookup` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L414) |
+| `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L495) |
+| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L613) |
+| `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L341) |
+| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L605) |
+| `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L281) |
+| `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L312) |
+| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L607) |
+| `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L349) |
 
 ### Accepted input declarations
 
@@ -85,6 +86,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 | --- | --- | --- | --- | --- | --- |
 | `dependency_context` | `publication` | `appsec-review/retrieval-index/2` | indexed | `inventory` | `find`, `query_precomputed`, `search` |
 | `dependency_intelligence_handoff` | `acceptance` | `appsec-review/dependency-intelligence-handoff/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `native_advisory_lookup` | `publication` | `appsec-review/native-advisory-lookup/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `native_advisory_observations` | `publication` | `appsec-review/retrieval-index/2` | indexed | `observations` | `query_observations`, `query_precomputed` |
 | `native_component_curation` | `resolution` | `appsec-review/native-component-curation/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_discovery` | `resolution` | `appsec-review/native-discovery/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_inference_inputs` | `resolution` | `appsec-review/native-inference-artifacts/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
@@ -144,7 +147,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | `tests/integration/job_dependency_intelligence/test_native_sbom_job.py`<br>`tests/integration/test_dependency_job_acceptance.py` |
 | live | None declared |
-| unit | `tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
+| unit | `tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_advisories.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
 
 ### Dagster placement
 
@@ -330,58 +333,66 @@ flowchart LR
   output_schema1["appsec-review/dependency-intelligence-handoff/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["native_component_curation"]
-  output_schema2["appsec-review/native-component-curation/1"]
+  output2["native_advisory_lookup"]
+  output_schema2["appsec-review/native-advisory-lookup/1"]
   job --> output2
   output2 -. schema .-> output_schema2
-  output3["native_discovery"]
-  output_schema3["appsec-review/native-discovery/1"]
+  output3["native_advisory_observations"]
+  output_schema3["appsec-review/retrieval-index/2"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["native_inference_inputs"]
-  output_schema4["appsec-review/native-inference-artifacts/1"]
+  output4["native_component_curation"]
+  output_schema4["appsec-review/native-component-curation/1"]
   job --> output4
   output4 -. schema .-> output_schema4
-  output5["native_inference_io"]
-  output_schema5["appsec-review/native-inference-attempt/1"]
+  output5["native_discovery"]
+  output_schema5["appsec-review/native-discovery/1"]
   job --> output5
   output5 -. schema .-> output_schema5
-  output6["native_inference_metrics"]
-  output_schema6["appsec-review/native-inference-metrics/1"]
+  output6["native_inference_inputs"]
+  output_schema6["appsec-review/native-inference-artifacts/1"]
   job --> output6
   output6 -. schema .-> output_schema6
-  output7["native_inputs"]
-  output_schema7["appsec-review/native-inputs/1"]
+  output7["native_inference_io"]
+  output_schema7["appsec-review/native-inference-attempt/1"]
   job --> output7
   output7 -. schema .-> output_schema7
-  output8["native_metadata_investigation"]
-  output_schema8["appsec-review/native-metadata-investigation/1"]
+  output8["native_inference_metrics"]
+  output_schema8["appsec-review/native-inference-metrics/1"]
   job --> output8
   output8 -. schema .-> output_schema8
-  output9["native_sbom_conversion"]
-  output_schema9["appsec-review/container-execution/1"]
+  output9["native_inputs"]
+  output_schema9["appsec-review/native-inputs/1"]
   job --> output9
   output9 -. schema .-> output_schema9
-  output10["native_sbom_metrics"]
-  output_schema10["appsec-review/native-sbom-metrics/1"]
+  output10["native_metadata_investigation"]
+  output_schema10["appsec-review/native-metadata-investigation/1"]
   job --> output10
   output10 -. schema .-> output_schema10
-  output11["native_sbom_provenance"]
-  output_schema11["appsec-review/native-sbom-provenance/1"]
+  output11["native_sbom_conversion"]
+  output_schema11["appsec-review/container-execution/1"]
   job --> output11
   output11 -. schema .-> output_schema11
-  output12["native_spdx"]
-  output_schema12["SPDX-2.3"]
+  output12["native_sbom_metrics"]
+  output_schema12["appsec-review/native-sbom-metrics/1"]
   job --> output12
   output12 -. schema .-> output_schema12
-  output13["scorecard_responses"]
-  output_schema13["application/json"]
+  output13["native_sbom_provenance"]
+  output_schema13["appsec-review/native-sbom-provenance/1"]
   job --> output13
   output13 -. schema .-> output_schema13
-  output14["unity_inventory"]
-  output_schema14["appsec-review/unity-inventory/1"]
+  output14["native_spdx"]
+  output_schema14["SPDX-2.3"]
   job --> output14
   output14 -. schema .-> output_schema14
+  output15["scorecard_responses"]
+  output_schema15["application/json"]
+  job --> output15
+  output15 -. schema .-> output_schema15
+  output16["unity_inventory"]
+  output_schema16["appsec-review/unity-inventory/1"]
+  job --> output16
+  output16 -. schema .-> output_schema16
 ```
 
 <!-- generated:end -->
@@ -464,11 +475,22 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
    conflicts; apply field/package/document/schema bounds. Conversion failure may leave partial
    inventory; schema validation failure publishes no SPDX document, but does retain provenance
    and metrics with failed SBOM status.
-3. In `publication.publish_context`, deduplicate reasons and index dependency packages, native
+3. In `publication.native_advisory_lookup`, decide every corroborated native release
+   (`pkg:generic/<name>@<version>` and purl-less native rows with a version) against the NVD CPE
+   ranges of the verified cve-bin-tool snapshot, model-free and offline, across every vendor of
+   the product name. Index each match as a `finding` observation (`native-advisory` shard, tool
+   `native-advisory-lookup/1`, `match_basis: cpe-range`, `confidence: canonical` or
+   `alternate_vendor`) and each component as a `scan_summary`; retain the decision record
+   `native-advisory-lookup.json`. A disabled tool, an unverifiable snapshot, a version-less
+   component, an uncomparable bound and an exceeded bound are named gaps. A match is a lead, not
+   a confirmed vulnerability; see
+   [native advisory lookup](dependency-intelligence.md#native-advisory-lookup-nvd-cpe-ranges).
+4. In `publication.publish_context`, deduplicate reasons and index dependency packages, native
    evidence and Scorecard review signals. Link Scorecard context with explicit context-only
    semantics; retain per-dependency coverage and SBOM identities.
-4. Publish a verified dependency-intelligence inventory manifest. It contains this context shard;
-   it is not represented as a flattened copy of every upstream index.
+5. Publish a verified dependency-intelligence inventory manifest. It contains this context shard
+   and, when the lookup executed, the `native-advisory` observations shard; it is not represented
+   as a flattened copy of every upstream index.
 
 ### `acceptance`
 

@@ -263,7 +263,8 @@ def advisory_pairs(row: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def _select_advisories(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
     return (*shards.select(index="observations", job="job_evidence_collection"),
-            *shards.select(index="observations", job="job_artifact_security_analysis"))
+            *shards.select(index="observations", job="job_artifact_security_analysis"),
+            *shards.select(index="observations", job="job_dependency_intelligence"))
 
 
 def _build_advisories(context: LinkContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
@@ -299,7 +300,7 @@ def _build_advisories(context: LinkContext, selected: tuple[Mapping[str, Any], .
         derived.gap(f"uncertain_package_identity: {derived.counts['name_only_pairs']} match(es) carry a package "
                     "name without a version or purl")
     scanners = [shard for shard in selected if shard.get("shard_id") in {"osv_scanner", "grype", "syft",
-                                                                           "artifact-security"}]
+                                                                           "artifact-security", "native-advisory"}]
     if not scanners:
         derived.coverage.append(("package-advisory-links", "unavailable",
                                  "no accepted dependency scanner observation shards"))

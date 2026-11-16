@@ -136,6 +136,16 @@ OBSERVATION_PRODUCERS: tuple[ProducerDecision, ...] = (
                      "reviewed through the package neighborhood, not through lead packages"),
     ProducerDecision("job_cpg_analysis", "*", None,
                      "Joern publishes evidence-artifact and CPG function rows, no tool observations"),
+    # job_dependency_intelligence: the ``native-advisory`` observations shard carries one ``finding`` per NVD CPE
+    # range match of a corroborated native release (class dependency through its category, so the family is
+    # decided before this table is consulted); its ``scan_summary`` rows are class diagnostic. The job's other
+    # tool_observation rows live in the ``inventory`` index: native evidence spans (header literals, manifest
+    # fields) that corroborate a component identity, not findings.
+    ProducerDecision("job_dependency_intelligence", "native-advisory-lookup", "dependency_advisory",
+                     "NVD CPE range match of a corroborated native release (lead with vendor confidence)"),
+    ProducerDecision("job_dependency_intelligence", "*", None,
+                     "native dependency evidence rows (header literals, manifest and build fields) are SBOM "
+                     "provenance indexed in the inventory shard, not findings"),
 )
 # Observation class -> family for a scanner the table does not name (fail toward review, not toward silence);
 # classes that are never findings.

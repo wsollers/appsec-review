@@ -122,10 +122,6 @@
       "kind": "replacement",
       "state": "replaced"
     },
-    "tool-cve-bin-tool": {
-      "kind": "redesign",
-      "state": "deferred"
-    },
     "tool-microsoft-sbom-tool": {
       "kind": "replacement",
       "state": "replaced"
@@ -561,6 +557,57 @@
         ]
       },
       "tool": "tool-cppcheck"
+    },
+    {
+      "bucket": "dependencies_and_advisories",
+      "catalog_state": "enabled",
+      "gap": [
+        "T-147"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "input_support": [
+        {
+          "any_input": false,
+          "description": "ELF, PE/.NET, COFF and Mach-O binaries and objects",
+          "excluded_description": "",
+          "excluded_formats": [],
+          "formats": [
+            "coff",
+            "dotnet-assembly",
+            "elf",
+            "macho",
+            "pe"
+          ],
+          "interpreters": [],
+          "key": "artifact:tool-cve-bin-tool",
+          "names": [],
+          "predicate": null,
+          "suffixes": []
+        }
+      ],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-cve-bin-tool"
     },
     {
       "bucket": "artifacts_and_binary",
@@ -2092,6 +2139,8 @@
   },
   "tool_policy": {
     "disable_grype": true,
+    "enable_cve_bin_tool": true,
+    "enable_native_advisory_lookup": true,
     "enable_swift": false
   }
 }

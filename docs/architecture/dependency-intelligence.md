@@ -51,6 +51,19 @@ and one it cannot decide stays unverified with a named gap. See
 [OSV version matching](../operations/third-party-data-sync.md#osv-version-matching-against-the-index)
 for the ecosystems and range types it decides.
 
+Native components have no OSV ecosystem and no scanner coverage, so the job itself produces their
+advisory observations: `publication.native_advisory_lookup` decides each corroborated
+`pkg:generic/<name>@<version>` release (and purl-less native rows that carry a version) against
+the NVD CPE ranges of the verified cve-bin-tool snapshot, model-free and offline, across every
+vendor of the product name, and publishes the matches as an `observations` shard
+(`native-advisory`, tool `native-advisory-lookup/1`, `match_basis: cpe-range`) that
+`dependency_advisories`, the package-advisory links and the `dependency_advisory` lead family
+consume exactly as a Grype or cve-bin-tool match. A match is a lead with `confidence: canonical`
+(the product's own NVD vendor spelling) or `confidence: alternate_vendor` (a fork, binding or
+unrelated project of the same name), never a confirmed vulnerability; an uncomparable bound, a
+version-less component, a disabled tool or an unverifiable snapshot is a named gap. See
+[native advisory lookup](../operations/dependency-intelligence.md#native-advisory-lookup-nvd-cpe-ranges).
+
 ## Maximal exposure
 
 Each normalized dependency receives one value from the ordered vocabulary

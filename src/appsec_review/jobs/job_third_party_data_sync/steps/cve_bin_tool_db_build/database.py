@@ -276,10 +276,45 @@ def publish(settings: CveBinToolSettings, built: Mapping[str, Any]) -> dict[str,
     directory = Path(built["directory"])
     files = {name: directory / name for name in ("cve.db", "version_map.db", "build.json")}
     return publish_snapshot(settings.feed_root, feed_id="cve-bin-tool",
-                            schema="appsec-review/cve-bin-tool-snapshot/1", files=files,
+                            schema=SNAPSHOT_SCHEMA, files=files,
                             manifest_fields={key: built[key] for key in
                                              ("nvd_snapshot_id", "nvd_manifest_sha256", "tool", "cve_count",
                                               "range_count", "layer_records")})
+
+
+SNAPSHOT_SCHEMA = "appsec-review/cve-bin-tool-snapshot/1"
+
+
+def consumer_settings(repository_root: Path, run_root: Path) -> CveBinToolSettings:
+    """The database builder's settings as the run froze them, for a scanning consumer of the feed."""
+    document = json.loads((run_root / "data/configuration/resolved.json").read_bytes())
+    values = document["jobs"]["job_third_party_data_sync"]["steps"]["cve_bin_tool_db_build"]["settings"]
+    return CveBinToolSettings.from_mapping(repository_root, values)
+
+
+def verify_consumer(settings: CveBinToolSettings, *, tool_version: str) -> dict[str, Any]:
+    """Resolve the current verified snapshot for a scanner that runs the exact tool release.
+
+    Hash-verifies the pointer, the manifest and every published file and records the consumption
+    (``verify_current``), re-checks the build record and both SQLite databases (``_check``) and
+    refuses a snapshot another cve-bin-tool release built: the scanner's checkers and the builder's
+    schema must agree. The NVD snapshot the database derives from is returned for the scan's
+    provenance. Callers treat any ``ValueError``/``OSError`` as a named coverage gap.
+    """
+    if tool_version != settings.tool_version:
+        raise ValueError("cve-bin-tool consumer release differs from the configured database builder")
+    identity = verify_current(settings.feed_root, "cve-bin-tool")
+    directory = Path(identity["directory"])
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    tool = manifest.get("tool")
+    if (manifest.get("schema") != SNAPSHOT_SCHEMA or not isinstance(tool, Mapping)
+            or tool.get("tool_version") != tool_version):
+        raise ValueError("cve-bin-tool snapshot was not built by the consumer's tool release")
+    nvd_snapshot_id = manifest.get("nvd_snapshot_id")
+    if not isinstance(nvd_snapshot_id, str) or not nvd_snapshot_id:
+        raise ValueError("cve-bin-tool snapshot lacks the NVD snapshot identity it was built from")
+    return {**identity, **_check(directory, tool_version), "nvd_snapshot_id": nvd_snapshot_id,
+            "nvd_manifest_sha256": manifest.get("nvd_manifest_sha256"), "tool": dict(tool)}
 
 
 def verify(settings: CveBinToolSettings, expected_nvd: Mapping[str, Any]) -> dict[str, Any]:

@@ -19,7 +19,7 @@ Before any payload access, each capability applies the artifact's
 [delivery scope lane](performance-assurance.md#delivery-scope-roles) and records a per-artifact
 scope disposition. Target-lane rows reach every capability. Supply-chain rows, including installed
 npm packages with role `runtime_dependency` or `build_dependency`, reach only `inventory`,
-`packages`, `syft`, `grype` and `osv`, with one exception: a `runtime_dependency` row of kind
+`packages`, `syft`, `grype`, `osv` and `cve_bin_tool`, with one exception: a `runtime_dependency` row of kind
 `executable`, `shared-library`, `native-addon` or `native-extension` also reaches `blint`. That is
 production dependency machine code, such as a retained npm `.node` addon or a shared library a
 target executable names in `DT_NEEDED`, which runs with the target. `build_dependency` binaries,
@@ -28,6 +28,42 @@ still refuses every supply-chain row. blint's declared format gate then decides 
 for any other row. Evidence-lane rows reach only `inventory`.
 A changed path, file, handoff, or index manifest is a framework-integrity
 failure and stops publication.
+
+## cve-bin-tool: version strings in produced binaries
+
+The `cve_bin_tool` capability (`[tools] enable_cve_bin_tool`, default on in the shipped
+configuration; off records a `CONFIGURED_DISABLED` gap like Grype's `disable_grype`) runs the
+catalog image `tool-cve-bin-tool` (cve-bin-tool 3.4) over each accepted binary with the verified
+`cve-bin-tool-snapshot/1` database of `job_third_party_data_sync.cve_bin_tool_db_build` mounted
+read-only at `/database`. Before the first scan the runner verifies the snapshot pointer, manifest
+and file hashes, the build record (tool 3.4, NVD the only source, matching CVE count) and both
+SQLite files (`verify_consumer`), and records `snapshot_id`, `manifest_sha256` and the
+`nvd_snapshot_id` it derives from in `tool_identity.rules`. A missing or unverifiable snapshot is
+the gap `verified immutable cve-bin-tool database unavailable: <reason>` on every artifact of the
+capability, never a failure. The argv is `--offline --update never --disable-data-source
+CURL,EPSS,GAD,OSV,PURL2CPE,REDHAT,RSD --disable-version-check --disable-validation-check
+--format json --output-file /scratch/output.json /target/<name>` (asserted by
+`tests/unit/job_artifact_security_analysis/test_scanners.py`); NVD is not disabled because the
+snapshot's rows all carry that source and the offline flags already prevent any fetch. Exit 1 means
+a CVE matched and is accepted.
+
+Each JSON record becomes one `vulnerability_matching` finding (`tool_id: tool-cve-bin-tool`) with
+`package_name`, `package_version`, `vendor`, `checker` (cve-bin-tool names its checker after the
+product it matched), `advisory_id`, the `matched_paths` the version string was found in, the
+snapshot's CVSS facts and `match_basis: version-string`; it projects the same
+`observation.matches` pair as a Grype match, so `dependency_advisories` joins it to the pinned OSV,
+NVD, KEV and EPSS snapshots and it reaches the review as a dependency lead. **A version-string match
+is a lead, not a confirmed vulnerability**: it shows that a library version's own strings are in
+the binary, not that the affected code is linked, reachable or unpatched. The converse holds too:
+cve-bin-tool sees only the strings its checkers expect. In the C/C++ smoke target the vendored
+zlib 1.2.11 is matched from its compiled objects, but the final executable drops that copyright
+string at link time, the trimmed bzip2 copy lacks the `bzip2recover` strings its checker needs and
+lz4 assembles its version from macros, so a clean executable scan proves nothing about them. See
+[the tool image](../../containers/tools/cve-bin-tool/README.md). Those releases are instead decided
+against the same snapshot's NVD CPE ranges by dependency intelligence's model-free
+[native advisory lookup](dependency-intelligence.md#native-advisory-lookup-nvd-cpe-ranges)
+(`native-advisory` observations shard, `match_basis: cpe-range`), which joins
+`dependency_advisories` the same way.
 
 Prebuilt objects retain content-addressed storage, but scanner invocation mounts only the selected
 object read-only under its original basename in an otherwise empty target directory. This preserves
@@ -48,7 +84,9 @@ member count or size, expansion ratios, corrupt containers, and unsupported form
 coverage gaps.
 
 Pinned scanners run only on the inputs `appsec_review.tool_inputs` declares for them: BLint on
-ELF, PE/.NET, COFF, Mach-O, and Android packages; SpotBugs on JVM classes and on archives that
+ELF, PE/.NET, COFF, Mach-O, and Android packages; cve-bin-tool on ELF (executables, shared and
+relocatable objects), PE/.NET, COFF and Mach-O files, never on `ar` archives or sources; SpotBugs
+on JVM classes and on archives that
 contain `.class` members; osv-scanner on lockfiles and manifests it extracts offline (by file name,
 `OSV_LOCKFILE_ECOSYSTEMS`); Syft and Grype on any produced artifact except media and asset files
 (images, audio, video, fonts, 3D models, textures, game data), in which a package cataloger finds
