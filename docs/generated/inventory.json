@@ -24554,7 +24554,14 @@
         "integration": [],
         "live": [],
         "unit": [
-          "tests/test_openvex_job_units.py"
+          "tests/test_openvex_contracts.py",
+          "tests/test_openvex_inputs.py",
+          "tests/test_openvex_job_units.py",
+          "tests/test_openvex_metrics.py",
+          "tests/test_openvex_projection.py",
+          "tests/test_openvex_settings.py",
+          "tests/test_openvex_wiring.py",
+          "tests/unit/job_openvex_export/test_coverage_edges.py"
         ]
       },
       "workers": 1
@@ -44894,7 +44901,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0afee43aab252caf4e1ddc3cf966e61a15849a0b42fbad3c27987a714be2e214",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "6ad3a63f6ab4c5f6824ee145160f0bcf2a17f92f5f28d2cec56a7ee01465a5dd"
+    "tests/job-test-map.json": "9a1aa8521f649c3fec652326d59999877828f00395a27d1b77da18c728dbb439"
   },
   "tool_policy": {
     "disable_grype": true,

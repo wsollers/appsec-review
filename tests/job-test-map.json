@@ -468,7 +468,16 @@
       "live": []
     },
     "job_openvex_export": {
-      "unit": ["tests/test_openvex_job_units.py"],
+      "unit": [
+        "tests/test_openvex_contracts.py",
+        "tests/test_openvex_inputs.py",
+        "tests/test_openvex_job_units.py",
+        "tests/test_openvex_metrics.py",
+        "tests/test_openvex_projection.py",
+        "tests/test_openvex_settings.py",
+        "tests/test_openvex_wiring.py",
+        "tests/unit/job_openvex_export/test_coverage_edges.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []

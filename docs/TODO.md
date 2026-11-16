@@ -3295,7 +3295,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   concurrent acceptance invalidation, and compile-only PoC/remediation/dossier/attack-chain
   attachment verification; replaced the three `tests/test_final_report.py` unit nodeids whose
   module fixture executed a 3-job `JobRunner` chain; 534/534 job-package lines [100.0%] and
-  173/174 branches [99.43%] covered across all 7 modules).
+  173/174 branches [99.43%] covered across all 7 modules);
+  job_openvex_export (42/47; 8 unit files, 551 cases: pinned 3-unit `load.verify_inputs` ->
+  `export.assemble` -> `acceptance.publish_handoff` DAG topology, protected OpenVEX dataset and
+  registry parity, `OpenVexExportSettings` bounds/issuer/IRI validation, bounded private-file
+  input/output custody and hardlink/symlink/size tamper rejection, offline schema pin closure,
+  affected-only OpenVEX v0.2.0 statement/companion/result canonical projection, historical and
+  latest acceptance reproof, stale upstream/release/gate invalidation, and semantic metric
+  aggregation; 1,877/1,939 job-package lines [96.80%] and 623/678 branches [91.89%] covered
+  across all 10 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).
