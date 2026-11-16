@@ -208,6 +208,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5033 | [Run the analyse-then-verify measurement review on the cpp smoke target with the roles reduced by configuration](#t-5033-run-the-analyse-then-verify-measurement-review-on-the-cpp-smoke-target-with-the-roles-reduced-by-configuration) | review | open |
 | T-5034 | [Remove lane B from the inference review once the hunting producer exists](#t-5034-remove-lane-b-from-the-inference-review-once-the-hunting-producer-exists) | review | open |
 | T-5035 | [Make the judge an escalation for disputed high and critical findings and the blue refuter opt-in](#t-5035-make-the-judge-an-escalation-for-disputed-high-and-critical-findings-and-the-blue-refuter-opt-in) | review | open |
+| T-5036 | [Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them](#t-5036-retain-a-bounded-redacted-copy-of-an-unparseable-model-reply-and-find-why-blue-cells-produce-them) | review | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3037,6 +3038,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** a typed routing setting that launches the judge only when the analyst's and the verifier's per-predicate positions conflict on a finding whose effective severity is at or above a configured level, with the blue refuter launched only when a target's profile enables it; the role records, ledger events and adjudication policy inputs are unchanged, and a finding that is not escalated records why.
 - **Done when:** unit tests show the judge launched for a disputed high finding and not for an agreed or low one, the blue role absent unless enabled, and the next measured review's cell counts fall accordingly with no change in confirmed findings matched by site.
 - **Refs:** `docs/architecture/review-protocol-v3.md` (D8, D9, step M5), `src/appsec_review/jobs/job_inference_security_review/teams.py` (`_team_body`, `route`), `src/appsec_review/config/inference_review.py` (`roles`, `teams`), T-5033.
+
+### T-5036 — Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them
+
+- **State:** open
+- **Area:** review
+- **Why:** In run `2026-11-15-0006`'s lead lane, 55 of 191 blue-refuter attempts ended `model_output_unparseable` ("the reply was not exactly one appsec-review/worker-turn/1 object"), against 3 verifier and no red attempts; most were fifth turns, where the cell requires a final answer. The recording layer keeps the parsed proposal of a successful reply but nothing of a reply that did not parse, so the cause (prose around the object, two objects, a truncated object at the output cap) cannot be read from the run.
+- **Scope:** when a reply fails the single-object parse, record a bounded (first and last 2,000 characters), secret-redacted copy in the attempt receipt's turn record and a `model_output_unparseable` reason naming the parse failure (no object, several objects, truncated); then read the blue replies of the next run and fix the owning side: the blue task prompt if the model is writing prose, the output cap if replies truncate, or the parser if a reply with a trailing newline or fence is rejected.
+- **Done when:** a unit test shows the bounded redacted copy and the specific reason in the receipt, and the next cpp smoke's blue `model_output_unparseable` count falls below the verifier's.
+- **Refs:** `src/appsec_review/review/cells.py` (the turn parse and `model_output_unparseable`), `src/appsec_review/inference/recording.py`, `pipeline/prompt-fragments/roles/blue_team_refuter.md`, run `2026-11-15-0006` cell attempt receipts (host-local), T-5033, T-5035.
 
 ## Legacy backlog
 

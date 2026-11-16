@@ -29,6 +29,10 @@ The compact shape has closed vocabularies; a value outside them is rejected toge
   authorization_access_control, cryptography_data_protection, mobile_platform, build_supply_chain,
   memory_safety_native, injection_interpreters, parsing_deserialization, network_api_surface,
   filesystem_resources, business_logic_abuse, ci_cd_pipeline, cloud_container_deployment, generalist.
+- Shapes the validator rejected most often: `evidence_requests` entries are objects with all of `predicate`,
+  `requested_kind`, `anchors` and `question`; `anchors` are package or Q labels (K1, G2, E1, Q7), never X gap
+  labels; `taint_paths` is plural and a list; `obligations` entries are objects with `predicate`, `question`
+  and `cites`; `entry` is a single label string.
 - chain seed link `continuity_dimensions`: identity, privilege, trust_boundary, deployment_artifact, temporal.
 - Every `statement`, `why` and `question` is at most 1000 characters; each `poc_basis` text at most 240.
 

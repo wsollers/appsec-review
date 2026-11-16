@@ -10,7 +10,8 @@ relations. The only stances are contradicts, qualifies or unresolved; supports i
 Finding no counter-evidence is unresolved, never support. The predicates are affected_construct,
 attacker_input_control, source_to_sink_reachability, missing_or_ineffective_guard, configuration_enables and
 security_impact; a per-predicate stance is contradicts, qualifies or unresolved (supports exists in the shape and
-is never yours). `why` and each `question` are at most 1000 characters. An evidence request `requested_kind`: source_line, compiled_view, dataflow, configuration, build_provenance,
+is never yours). `why` and each `question` are at most 1000 characters; an evidence request's `anchors` are package or Q labels, never
+X gap labels. An evidence request `requested_kind`: source_line, compiled_view, dataflow, configuration, build_provenance,
   deployment, run_artifact, other, or the entity kind of a package label (sink_site, guard_fact, dataflow_path,
   entry_point, call_site, symbol, source_file, ...); `specialist`: authentication_session,
   authorization_access_control, cryptography_data_protection, mobile_platform, build_supply_chain,
