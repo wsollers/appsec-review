@@ -273,10 +273,33 @@ def _review(run: Path, *, admit_vendored: bool, unit_overlap: bool, unknown_term
          "affected_entities": [ID["obs-dep"]], "state_history": []},
         {"claim_id": "claim-4", "lane": "hunt", "package_id": "hunt-1", "state": "supported", "weakness_cwe": "CWE-20",
          "affected_entities": [ID["obs-other"]], "state_history": []},
+        # Cites an entry point inside TP-C1's span but its sink (affected_construct) is inside FP-1's span.
+        {"claim_id": "claim-5", "lane": "hunt", "package_id": "hunt-1", "state": "supported", "weakness_cwe": "CWE-120",
+         "affected_entities": [], "state_history": []},
+        # No relations: the primary site comes from the finding title's locator (TP-C1's span).
+        {"claim_id": "claim-6", "lane": "hunt", "package_id": "hunt-1", "state": "out_of_scope", "weakness_cwe": "CWE-120",
+         "affected_entities": [], "state_history": []},
+        # No relations and no title locator: the primary site comes from the dossier's affected_construct source row.
+        {"claim_id": "claim-7", "lane": "hunt", "package_id": "hunt-1", "state": "out_of_scope", "weakness_cwe": "CWE-120",
+         "affected_entities": [], "state_history": []},
     ]
+
+    def relation(claim_id, number, entity_id, kind, predicate, locator):
+        return {"relation_id": f"evrel-{claim_id}-{number}", "claim_id": claim_id, "entity_id": entity_id, "entity_kind": kind,
+                "kind": "supports", "predicate": predicate, "locator": f"{locator}#b0-1@{SNAPSHOT}"}
+
+    relations = {
+        "claim-1": [relation("claim-1", 1, ID[REQUEST], "source_file", "source_to_sink_reachability", f"{REQUEST}:1-200"),
+                    relation("claim-1", 2, "asr:call_site:" + "c1" * 32, "call_site", "attacker_input_control", f"{REQUEST}:169-169"),
+                    relation("claim-1", 3, "asr:call_site:" + "c2" * 32, "call_site", "affected_construct", f"{REQUEST}:137-137")],
+        "claim-2": [relation("claim-2", 1, "asr:call_site:" + "c3" * 32, "call_site", "affected_construct", f"{UTIL}:20-20")],
+        "claim-4": [relation("claim-4", 1, "asr:call_site:" + "c4" * 32, "call_site", "affected_construct", f"{REQUEST}:80-80")],
+        "claim-5": [relation("claim-5", 1, "asr:dataflow_path:" + "c5" * 32, "dataflow_path", "attacker_input_control", f"{REQUEST}:137-137"),
+                    relation("claim-5", 2, "asr:call_site:" + "c6" * 32, "call_site", "affected_construct", f"{UTIL}:20-20")],
+    }
     _write(attempt / "steps" / "publication" / "tasks" / "publish_claim_ledger" / "projection.json", {
         "schema": "appsec-review/claim-projection/1", "ledger_head_sha256": "1" * 64, "claims": claims,
-        "relations": {"claim-1": [{"relation_id": "evrel-1", "claim_id": "claim-1", "entity_id": ID[REQUEST], "kind": "supports"}]},
+        "relations": relations,
         "cells": {}, "gaps": [], "evidence_requests": [],
         "judge_verdicts": {"claim-1": [{"verdict_id": "judge-1", "claim_id": "claim-1", "verdict": "red_correct", "cell_id": "cell-j1"}],
                            "claim-2": [{"verdict_id": "judge-2", "claim_id": "claim-2", "verdict": "blue_correct", "cell_id": "cell-j2"}]}})
@@ -286,6 +309,17 @@ def _review(run: Path, *, admit_vendored: bool, unit_overlap: bool, unknown_term
         _write(attempt / "steps" / "publication" / "tasks" / "publish_handoff" / "findings" / f"finding_package-{number}.json",
                {"schema": "appsec-review/finding-package/2", "finding_package_id": f"finding_package-{number}", "claim_id": claim,
                 "state": "confirmed" if number != "4" else "supported"})
+    _write(attempt / "steps" / "publication" / "tasks" / "publish_handoff" / "findings" / "finding_package-6.json",
+           {"schema": "appsec-review/finding-package/2", "finding_package_id": "finding_package-6", "claim_id": "claim-6",
+            "state": "out_of_scope", "title": f"memory_corruption (CWE-120) at {REQUEST}:137"})
+    _handoff(run, smoke_score.DOSSIER_JOB, {"dossiers.create": "SUCCEEDED"}, steps=("dossiers",))
+    _write(run / "data" / "jobs" / smoke_score.DOSSIER_JOB / "attempts" / ATTEMPT / "steps" / "dossiers" / "tasks" / "create"
+           / "items" / "d7" / "dossier.json",
+           {"schema": "appsec-review/dossier/1", "kind": "confirmed_finding", "finding": {"claim_id": "claim-7"},
+            "evidence": [{"entity_id": "asr:call_site:" + "c7" * 32, "entity_kind": "call_site", "predicate": "affected_construct"},
+                         {"entity_id": "asr:dataflow_path:" + "c8" * 32, "entity_kind": "dataflow_path", "predicate": "attacker_input_control"}],
+            "sources": [{"entity_id": "asr:call_site:" + "c7" * 32, "path": UTIL, "start_line": 20, "end_line": 20},
+                        {"entity_id": "asr:dataflow_path:" + "c8" * 32, "path": REQUEST, "start_line": 137, "end_line": 137}]})
 
 
 def answer_key(root: Path, *, tp_file: str = REQUEST, axes: bool = False) -> Path:
@@ -331,10 +365,10 @@ def test_keyed_scoring_reports_every_planted_item_and_the_metrics(tmp_path) -> N
     assert tp["facets"] == ["exposure:network", "role:request-handler"]
     assert [(lead["family"], lead["scanner"], lead["admission"]) for lead in tp["leads"]] == [("source_sast", "tool-semgrep", "admitted")]
     assert [(p["package_id"], p["lane"], p["via"]) for p in tp["packages"]] == [("finding_lead-1", "lead", "lead"), ("hunt-1", "hunt", "unit")]
-    assert [c["claim_id"] for c in tp["claims"]] == ["claim-1"]
+    assert [c["claim_id"] for c in tp["claims"]] == ["claim-1", "claim-6"]
     assert [v["verdict"] for v in tp["judge_verdicts"]] == ["red_correct"]
     assert tp["finding_packages"][0]["bucket"] == "publishable"
-    assert [(line["path"], line["start_line"]) for line in tp["citing_lines"]] == [(REQUEST, 137)]  # never the whole file
+    assert {(line["path"], line["start_line"]) for line in tp["citing_lines"]} == {(REQUEST, 137)}  # never the whole file
     fixed = items["FX-C1"]
     assert fixed["match_basis"] == "function" and fixed["span"] == {"start_line": 40, "end_line": 60}
     assert fixed["outcome"] == "hit" and fixed["observed_disposition"] == "in_hunt_unit_only" and fixed["leads"] == []
@@ -362,10 +396,10 @@ def test_items_carry_stage_axis_and_severities_derived_from_the_run(tmp_path) ->
         "TP-C1": ("confirmed", "control_injection", "cwe_rollup"), "FX-C1": ("correctly_passed", "control_injection", "cwe_rollup"),
         "FP-1": ("correctly_passed", "unassigned", "none"), "TP-D1": ("reported", "supply_chain", "class"),
         "FX-D1": ("correctly_passed", "supply_chain", "class")}
-    assert items["TP-C1"]["stage_evidence"] == "a matching finding reached the report (claim states confirmed)"
+    assert items["TP-C1"]["stage_evidence"] == "a matching finding reached the report (claim states confirmed, out_of_scope)"
     assert items["TP-C1"]["leads"][0]["reported_severity"] == "high" and items["TP-C1"]["leads"][0]["effective_severity"] == "high"
     assert items["TP-C1"]["finding_packages"][0]["technical_severity"] is None and items["TP-C1"]["real_severity"] is None
-    assert items["FP-1"]["stage_evidence"] == "not reported; claim states contradicted"
+    assert items["FP-1"]["stage_evidence"] == "not reported; claim states contradicted, out_of_scope, supported"
     assert items["TP-D1"]["components"] == [{"identity": ID["dep-zlib"], "version": "1.2.11"}]
     assert items["FX-D1"]["stage_evidence"] == "not reported; no lead and no claim" and items["FX-D1"]["components"] == []
     keyed = document["keyed"]
@@ -397,6 +431,37 @@ def test_key_axis_and_real_severity_override_the_derivation_and_key_the_severity
                                         "recall": None, "covered": 0, "coverage": None, "negatives": 1, "correctly_passed": 1,
                                         "false_reports": 0, "precision": None, "stages": {"correctly_passed": 1},
                                         "low_confidence": True, "severity": {"keyed": False, "planted_high_admitted_below": 0, "items": []}}
+
+
+def test_claims_match_by_their_primary_site_never_by_an_entry_point_citation(tmp_path) -> None:
+    items = _items(score_run(build_run(tmp_path), load_answer_key(answer_key(tmp_path))))
+    tp, fp = items["TP-C1"], items["FP-1"]
+    # claim-5 cites an entry point at TP-C1's line 137 but its affected construct is FP-1's line 20: FP-1 only.
+    assert {c["claim_id"]: c["site_source"] for c in tp["claims"]} == {"claim-1": "relations", "claim-6": "title"}
+    assert {c["claim_id"]: c["site_source"] for c in fp["claims"]} == {"claim-2": "relations", "claim-5": "relations",
+                                                                       "claim-7": "dossier"}
+    assert {line["start_line"] for line in fp["citing_lines"]} == {20} and {line["path"] for line in fp["citing_lines"]} == {UTIL}
+    assert all(line["start_line"] == 137 for line in tp["citing_lines"])
+    assert items["TP-D1"]["claims"] == [{"claim_id": "claim-3", "state": "confirmed", "lane": "lead", "package_id": "finding_lead-2",
+                                         "site_source": "dependency"}]
+    assert items["FX-C1"]["claims"] == [] and items["FX-D1"]["claims"] == []
+
+
+def test_primary_sites_fall_back_from_relations_to_the_dossier_to_the_title() -> None:
+    from appsec_review.reporting.smoke_score import primary_sites
+    claim = {"claim_id": "c"}
+    relations = {"c": [{"predicate": "attacker_input_control", "entity_kind": "call_site", "entity_id": "e1", "locator": f"{REQUEST}:169-169#b0-1@x"},
+                       {"predicate": "affected_construct", "entity_kind": "source_file", "entity_id": "f", "locator": f"{REQUEST}:1-200#b0-1@x"},
+                       {"predicate": "affected_construct", "entity_kind": "call_site", "entity_id": "e2", "locator": f"{REQUEST}:137-137#b0-1@x"}]}
+    sites, source = primary_sites(claim, relations, None, ())
+    assert source == "relations" and [(s.path, s.start_line, s.end_line, s.entity_id) for s in sites] == [(REQUEST, 137, 137, "e2")]
+    dossier = {"evidence": [{"entity_id": "d1", "entity_kind": "call_site", "predicate": "affected_construct"}],
+               "sources": [{"entity_id": "d1", "path": UTIL, "start_line": 20, "end_line": 21}, {"entity_id": "other", "path": UTIL, "start_line": 1, "end_line": 1}]}
+    sites, source = primary_sites(claim, {}, dossier, (f"x (CWE-1) at {REQUEST}:5",))
+    assert source == "dossier" and [(s.path, s.start_line, s.end_line) for s in sites] == [(UTIL, 20, 21)]
+    sites, source = primary_sites(claim, {}, {"evidence": [], "sources": []}, (f"memory_corruption (CWE-120) at {REQUEST}:5-7",))
+    assert source == "title" and [(s.path, s.start_line, s.end_line) for s in sites] == [(REQUEST, 5, 7)]
+    assert primary_sites(claim, {}, None, ("memory_corruption (CWE-120)",)) == ([], "none")
 
 
 def test_items_match_by_path_and_span_never_by_title(tmp_path) -> None:

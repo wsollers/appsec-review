@@ -16,7 +16,11 @@ Two parts:
   (``appsec-review/smoke-answer-key/1``, ``~/smoke-work/tools/answer-key-schema.md``). Every planted item
   is matched by its target-relative path plus line range (or function range when the key gives a
   function and no span), or by exact package/version and advisory identifiers for dependency items.
-  Titles are never matched. Per item the document records whether the file was in the accepted scope and
+  Titles are never matched. A claim is on a code item only when the claim's *primary site* (the location of
+  its ``affected_construct`` evidence; else the dossier source rows with that predicate; else a locator in the
+  finding title) falls inside the item's span: entry-point, reachability, guard and impact citations are
+  context and never a match, and a lead matches by its own location only.
+  Per item the document records whether the file was in the accepted scope and
   its disposition, its facet tags, the leads that hit it (family, scanner, rule, admission), the packages
   that carried it (lane, package id), the claims raised on it, the judge verdicts, whether it reached the
   report and the citing source lines, then the outcome against the key's ``expected_disposition``, the one
@@ -56,6 +60,7 @@ TEXT_NAME = "smoke-score.txt"
 REVIEW_JOB = "job_inference_security_review"
 GATE_JOB = "job_final_publication_gate"
 REPORT_JOB = "job_final_report_publication"
+DOSSIER_JOB = "job_dossier_publication"
 GRAPH_JOB = "job_code_graph_index"
 TAGGING_JOB = "job_security_tagging"
 PRIORITY_JOB = "job_review_prioritization"
@@ -76,6 +81,12 @@ MAX_OFFENDERS = 200
 MAX_CITING_LINES = 64
 MAX_ITEM_MATCHES = 64
 _SAFE_ATTEMPT = re.compile(r"^attempt_\d{4}$")
+# A relation locator: ``path:start-end#bytes@file_sha256``; a title locator is the same ``path:start[-end]`` form.
+_LOCATOR = re.compile(r"(?P<path>[A-Za-z0-9_./+-]+):(?P<start>\d+)(?:-(?P<end>\d+))?")
+# The evidence predicate whose location is a claim's primary site (the sink / affected construct). Citations with
+# any other predicate (attacker_input_control entry points, reachability, guards, impact) are context, never a match.
+PRIMARY_PREDICATE = "affected_construct"
+SITE_SOURCES = ("relations", "dossier", "title", "none", "dependency")
 _IDENTIFIER_SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,}$")
 # Entity kinds whose location is a whole file (or a file-level ranking row): they never cite a planted span.
 FILE_LEVEL_KINDS = frozenset({"source_file", "priority_item", "review_context_file", "component", "project"})
@@ -520,6 +531,17 @@ class RunData:
     def finding_packages(self) -> list[Mapping[str, Any]]:
         found = self.attempt_json(REVIEW_JOB, "steps/publication/tasks/*/findings/*.json", "finding package")
         return [value for _, value in found if isinstance(value, Mapping) and value.get("claim_id")]
+
+    def dossiers_by_claim(self) -> dict[str, Mapping[str, Any]]:
+        """Published dossier documents by claim id (``finding.claim_id``), from the dossier job's attempt."""
+        found = self.attempt_json(DOSSIER_JOB, "steps/dossiers/tasks/*/items/*/dossier.json", "dossier")
+        result: dict[str, Mapping[str, Any]] = {}
+        for _path, document in found:
+            finding = document.get("finding") if isinstance(document, Mapping) and isinstance(document.get("finding"), Mapping) else {}
+            claim_id = _string(finding.get("claim_id")) or _string(document.get("claim_id"))
+            if claim_id and isinstance(document.get("sources"), list):
+                result.setdefault(claim_id, document)
+        return result
 
     def gate_document(self) -> Mapping[str, Any] | None:
         found = self.attempt_json(GATE_JOB, "steps/*/tasks/*/final-publication-gate.json", "final publication gate")
@@ -990,6 +1012,56 @@ def _technical_severity(finding: Mapping[str, Any]) -> str | None:
     return rating.lower() if rating else None
 
 
+def _locator_location(locator: Any, entity_id: Any, kind: Any) -> Location | None:
+    found = _LOCATOR.match(locator) if isinstance(locator, str) else None
+    if found is None:
+        return None
+    start = int(found.group("start"))
+    end = int(found.group("end") or start)
+    return Location(found.group("path"), start, max(start, end), str(entity_id or "locator"), _string(kind))
+
+
+def primary_sites(claim: Mapping[str, Any], relations: Mapping[str, Any], dossier: Mapping[str, Any] | None,
+                  titles: Iterable[str]) -> tuple[list[Location], str]:
+    """The claim's primary site(s) and where they came from.
+
+    In order: the locations of the claim's evidence relations with predicate ``affected_construct`` (whole-file
+    entities never count); else the dossier ``sources`` rows whose entity carries that predicate in the dossier's
+    evidence; else a ``path:line[-line]`` locator in a finding title. Entry points, reachability, guards and
+    impact citations are context and never a site.
+    """
+    sites: list[Location] = []
+    for relation in relations.get(str(claim.get("claim_id")), ()) or ():
+        if not isinstance(relation, Mapping) or relation.get("predicate") != PRIMARY_PREDICATE:
+            continue
+        if _string(relation.get("entity_kind")) in FILE_LEVEL_KINDS:
+            continue
+        location = _locator_location(relation.get("locator"), relation.get("entity_id"), relation.get("entity_kind"))
+        if location is not None and location not in sites:
+            sites.append(location)
+    if sites:
+        return sites, "relations"
+    if dossier is not None:
+        wanted = {str(row.get("entity_id")) for row in dossier.get("evidence", ()) if isinstance(row, Mapping)
+                  and row.get("predicate") == PRIMARY_PREDICATE and _string(row.get("entity_kind")) not in FILE_LEVEL_KINDS}
+        for row in dossier.get("sources", ()):
+            if not isinstance(row, Mapping) or str(row.get("entity_id")) not in wanted:
+                continue
+            try:
+                location = Location(str(row["path"]), int(row["start_line"]), int(row["end_line"]), str(row["entity_id"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if location not in sites:
+                sites.append(location)
+        if sites:
+            return sites, "dossier"
+    for title in titles:
+        location = _locator_location(_LOCATOR.search(title).group(0) if _LOCATOR.search(title) else None, "title", None)
+        if location is not None and location not in sites:
+            sites.append(location)
+    return (sites, "title") if sites else ([], "none")
+
+
 def _claim_entities(claim: Mapping[str, Any], relations: Mapping[str, Any]) -> list[str]:
     entities = [str(x) for x in claim.get("affected_entities", ())]
     for relation in relations.get(str(claim.get("claim_id")), ()) or ():
@@ -1023,7 +1095,17 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
         for finding in report.get("findings", ()):
             if isinstance(finding, Mapping) and isinstance(finding.get("claim_id"), str):
                 reported_claims.add(finding["claim_id"])
-    located = run.locate(entity for claim in claims for entity in _claim_entities(claim, relations))
+    dossiers = run.dossiers_by_claim()
+    titles_by_claim: dict[str, list[str]] = defaultdict(list)
+    for finding in findings:
+        if _string(finding.get("title")):
+            titles_by_claim[str(finding["claim_id"])].append(str(finding["title"]))
+    for finding in (report or {}).get("findings", ()) if report is not None else ():
+        if isinstance(finding, Mapping) and _string(finding.get("title")) and isinstance(finding.get("claim_id"), str):
+            titles_by_claim[finding["claim_id"]].append(str(finding["title"]))
+    sites_by_claim = {str(claim.get("claim_id")): primary_sites(claim, relations, dossiers.get(str(claim.get("claim_id"))),
+                                                               titles_by_claim.get(str(claim.get("claim_id")), ()))
+                      for claim in claims}
     packages_by_lead: dict[str, list[dict[str, Any]]] = defaultdict(list)
     packages_by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for package in (assembly or {}).get("packages", ()):
@@ -1065,24 +1147,29 @@ def keyed_scoring(run: RunData, key: Mapping[str, Any]) -> dict[str, Any]:
         citing: list[Location] = []
         for claim in claims:
             claim_id = str(claim.get("claim_id"))
-            entities = _claim_entities(claim, relations)
             matched = False
-            for entity in entities:
-                if entity in hit_ids or entity in dependency_rows:
-                    matched = True
-                for location in located.get(entity, ()):
-                    # A whole-file citation (the source_file entity itself) names no planted span.
-                    if item.path and not location.file_level and location.overlaps(item.path, item.start, item.end):
+            site_source = "none"
+            if item.klass in DEPENDENCY_CLASSES:
+                # A dependency item has no span: the claim is on it when it names the advisory lead or the
+                # component row, or was raised from the finding-lead package that carries that lead.
+                entities = _claim_entities(claim, relations)
+                proposing = {str(x) for x in proposal_packages.get(claim_id, ())} | {str(claim.get("package_id"))}
+                matched = any(entity in hit_ids or entity in dependency_rows for entity in entities) or any(
+                    package_id in packages and packages[package_id]["via"] == "lead"
+                    and packages[package_id]["kind"] == "finding_lead" for package_id in proposing)
+                site_source = "dependency"
+            elif item.path:
+                # Only the claim's primary site (the affected construct) can fall inside the planted span; a
+                # citation of an entry point or a dataflow context inside the span is never a match.
+                sites, site_source = sites_by_claim[claim_id]
+                for location in sites:
+                    if location.overlaps(item.path, item.start, item.end):
                         matched = True
                         citing.append(location)
-            proposing = {str(x) for x in proposal_packages.get(claim_id, ())} | {str(claim.get("package_id"))}
-            # Only a finding-lead package names the one lead a claim was raised from; a hunt menu lists many.
-            if any(package_id in packages and packages[package_id]["via"] == "lead"
-                   and packages[package_id]["kind"] == "finding_lead" for package_id in proposing):
-                matched = True
             if matched:
                 matched_claims.append({"claim_id": claim_id, "state": _string(claim.get("state")),
-                                       "lane": _string(claim.get("lane")), "package_id": _string(claim.get("package_id"))})
+                                       "lane": _string(claim.get("lane")), "package_id": _string(claim.get("package_id")),
+                                       "site_source": site_source})
         matched_claim_ids = {claim["claim_id"] for claim in matched_claims}
         matched_claims_by_item[item.item_id] = matched_claim_ids
         verdicts = [{"claim_id": claim_id, "verdict": _string(verdict.get("verdict")), "cell_id": _string(verdict.get("cell_id"))}
@@ -1559,5 +1646,5 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = ["AXES", "AXIS_IDS", "SCHEMA", "STAGES", "RunData", "SmokeScoreError", "axis_metrics", "axis_of",
-           "keyed_scoring", "load_answer_key", "main", "render_summary", "score_run", "stage_of", "validate_document",
-           "write_outputs"]
+           "keyed_scoring", "load_answer_key", "main", "primary_sites", "render_summary", "score_run", "stage_of",
+           "validate_document", "write_outputs"]

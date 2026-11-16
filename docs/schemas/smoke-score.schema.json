@@ -259,12 +259,13 @@
           "type": "array",
           "items": {
             "type": "object", "additionalProperties": false,
-            "required": ["claim_id", "state", "lane", "package_id"],
+            "required": ["claim_id", "state", "lane", "package_id", "site_source"],
             "properties": {
               "claim_id": {"type": "string"},
               "state": {"type": ["string", "null"]},
               "lane": {"type": ["string", "null"]},
-              "package_id": {"type": ["string", "null"]}
+              "package_id": {"type": ["string", "null"]},
+              "site_source": {"enum": ["relations", "dossier", "title", "none", "dependency"]}
             }
           }
         },

@@ -47,6 +47,19 @@ timeout, an invalid PDF) is a named gap in the receipt (`smoke_scorecard_rendere
 re-render removes the previous `.pdf`, log and receipt first, so an older PDF never sits beside a newer
 `.tex`. The staging directory for the container run lives under `data/verification/` and is removed.
 
+**How a claim is matched to an item.** A claim is on a code item only when the claim's *primary site*
+falls inside the item's span (or the function range the key names when it gives no span). The primary
+site is the location of the claim's evidence relations with predicate `affected_construct` (the sink or
+affected construct; whole-file entities never count); when the claim has none, the dossier `sources` rows
+whose entity carries that predicate in the dossier's evidence; and finally a `path:line[-line]` locator in
+the finding title. Citations with any other predicate (`attacker_input_control` entry points,
+`source_to_sink_reachability`, guards, impact) are context and never a match, so a command-injection claim
+whose entry point is cited at `serve_once` does not land on the item that owns `serve_once`'s lines. A
+lead matches by its own location only. The claim row's `site_source` says which rule applied
+(`relations`, `dossier`, `title`, `none`; `dependency` for dependency items, which match by advisory
+lead, component row or the finding-lead package that carries the lead). The matching `citing_lines` are
+the primary sites inside the span.
+
 **The key is never read by a job.** No job, prompt, runtime skill, configuration or guidance bundle reads
 the answer key or the score; the scorer reads the run, not the other way round. The key stays where the
 user keeps it (never under `targets/`, never in the repository) and is read only when the user names it
