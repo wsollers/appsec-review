@@ -355,8 +355,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
                                  manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
                                  manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+            collection = triaged_collection(unit, scope)
             assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
-                                         collection=triaged_collection(unit, scope), cwe_reference=reference,
+                                         collection=collection, cwe_reference=reference,
                                          slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core)
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly", run_root=unit.job.run_root)
             excluded = _excluded(scope)
@@ -419,8 +420,19 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 gaps.insert(0, f"cwe_reference: {reference.gap}; claim CWEs validate against the "
                                f"{len(cwe_ids)} rule/crosswalk CWE ids only")
             unit.job.events.write("INFERENCE_REVIEW_PACKAGES_ASSEMBLED", lane=lane.value, package_count=len(records))
-            return {"artifact": _write(unit, f"{lane.value}-packages.json", document),
-                    "package_count": len(records), "gaps": gaps[:200], "terminal_status": _status(gaps)}
+            result = {"artifact": _write(unit, f"{lane.value}-packages.json", document),
+                      "package_count": len(records), "gaps": gaps[:200], "terminal_status": _status(gaps)}
+            if lane is Lane.LEAD:
+                # Every lead lane A leaves out, with its reason, in one readable artifact (T-5029).
+                from appsec_review.review.excluded_leads import excluded_leads_document
+                result["excluded_leads"] = _write(unit, "excluded-leads.json", excluded_leads_document(
+                    collection, assembly, run_id=unit.job.run_id,
+                    manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
+                    policy={"lead_admission": list(settings.lanes.lead_admission),
+                            "lead_admission_kev": settings.lanes.lead_admission_kev,
+                            "exploration_enabled": settings.lanes.exploration_enabled,
+                            "exploration_reserve": settings.lanes.exploration_reserve}))
+            return result
         return handler
 
     # lanes --------------------------------------------------------------------------------------

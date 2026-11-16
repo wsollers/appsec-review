@@ -252,6 +252,13 @@ Package assembly creates three bounded package kinds. The inference job's own as
 builds the first two; the document hunt package comes only from the separate
 `job_review_package_assembly` and is not yet consumed by this job:
 
+The lead-lane assembly task also publishes `excluded-leads.json` beside `lead-packages.json`
+(`review/excluded_leads.py`, `inference-review-excluded-leads/1`): every lead the manifest did not admit to
+lane A, with its scanner, rule, location, reported and effective severity, the reason (a scope exclusion such
+as `vendored` or `stylistic`, `outside_admission_policy`, `unassessed_unknown`, or the exploration cutoff),
+and whether a lane B hunt menu still lists it. Messages are omitted so a secret lead's literal never leaves
+the redacted projections.
+
 - A **finding package** groups one normalized upstream lead with its source/artifact identities,
   original evidence, known supporting and contradicting relations, proof obligations, coverage,
   and allowed retrieval scope.

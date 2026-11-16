@@ -326,6 +326,35 @@ def test_an_unassessed_unknown_lead_is_a_named_gap_under_the_critical_high_polic
     assert not [item for item in loose.manifest["gaps"] if item["producer"] == "lead_admission"]
 
 
+def test_excluded_leads_artifact_lists_every_lead_lane_a_left_out_with_its_reason(fixture, scope) -> None:
+    """Every observation the manifest did not admit appears once, with scanner, rule, location, severities, reason
+    and lane B coverage; admitted leads do not; messages (which may carry a secret) are not copied."""
+    from appsec_review.review.excluded_leads import SCHEMA, excluded_leads_document
+    collection = collect_leads(scope)
+    assembly = assemble_packages(scope, PackageSettings(admit_severities=("critical", "high")), collection=collection)
+    document = excluded_leads_document(collection, assembly, run_id=scope.run_id, manifest_sha256=scope.manifest_sha256,
+                                       policy={"lead_admission": ["critical", "high"]})
+    assert document["schema"] == SCHEMA and document["policy"] == {"lead_admission": ["critical", "high"]}
+    rows = {row["lead_id"]: row for row in document["leads"]}
+    admitted = {entry["lead_id"] for entry in assembly.manifest["admission"] if entry["status"] == "admitted"}
+    not_admitted = {entry["lead_id"] for entry in assembly.manifest["admission"] if entry["status"] != "admitted"}
+    assert set(rows) == not_admitted and not set(rows) & admitted and len(document["leads"]) == len(not_admitted)
+    unknown = rows[fixture.ids["sast_unknown"]]
+    assert (unknown["scanner"], unknown["rule_id"], unknown["path"], unknown["start_line"]) == (
+        "tool-semgrep", "c.weird", "native/src/io.c", 1)
+    assert (unknown["reported_severity"], unknown["effective_severity"], unknown["residual_coverage"]) == (
+        "unknown", "unknown", "unassessed_unknown")
+    assert unknown["hunted"] is True            # lane B still sees it on its unit's hunt menu
+    medium = rows[fixture.ids["sast_medium"]]
+    assert medium["residual_coverage"] == "outside_admission_policy" and medium["effective_severity"] == "medium"
+    assert "message" not in unknown
+    counts = document["counts"]
+    assert counts["observations"] == len(assembly.manifest["admission"]) and counts["excluded"] == len(rows)
+    assert counts["admitted"] == len(admitted) and counts["by_residual_coverage"]["unassessed_unknown"] == 1
+    assert document["leads"] == sorted(document["leads"], key=lambda row: (
+        row["residual_coverage"], row["exclusion"] or "", row["path"] or "", row["start_line"] or 0, row["lead_id"]))
+
+
 def test_settings_are_typed_and_reject_unknown_keys() -> None:
     assert PackageSettings.from_mapping({"admit_severities": ["unknown", "critical"]}).admit_severities == (
         "critical", "unknown")
