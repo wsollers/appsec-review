@@ -388,3 +388,25 @@ def test_attachments_filtering_poc_handoff_withheld_and_rendering_branches() -> 
     )
     assert only_refuted_report["attack_chains"]["status"] == "none_available"
     assert only_refuted_report["attack_chains"]["items"] == []
+    # "none available" is explained: the refuted candidate is counted, and the gate's accounting is relayed.
+    assert only_refuted_report["attack_chains"]["status_counts"] == {
+        "admitted": 1, "confirmed": 0, "qualified_supported": 0, "refuted": 1, "insufficient_evidence": 0}
+    assert only_refuted_report["attack_chains"]["reason"].startswith(
+        "1 candidate chain(s) proposed, 1 admitted: 0 confirmed, 0 qualified_supported, 1 refuted, "
+        "0 insufficient_evidence. Only confirmed and qualified_supported chains are listed. ")
+    counted_gate = deepcopy(only_refuted_gate)
+    counted_gate["capabilities"]["attack_chains"]["status_counts"] = {
+        "proposed": 4, "admitted": 1, "assessed": 1, "capped": 0, "rejected": 2, "deduplicated": 1,
+        "confirmed": 0, "qualified_supported": 0, "refuted": 1, "insufficient_evidence": 0}
+    counted = build_report(counted_gate, gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
+                           gate_document={"path": "data/gate.json", "sha256": HASH})
+    _validator("final-report").validate(counted)
+    assert counted["attack_chains"]["reason"].startswith(
+        "4 candidate chain(s) proposed, 1 admitted: 0 confirmed, 0 qualified_supported, 1 refuted, "
+        "0 insufficient_evidence; 2 rejected, 1 deduplicated, 0 capped by max_attack_chains. ")
+    assert counted["attack_chains"]["status_counts"]["proposed"] == 4
+    empty_gate = deepcopy(only_refuted_gate)
+    empty_gate["attachments"]["attack_chains"] = []
+    empty = build_report(empty_gate, gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
+                         gate_document={"path": "data/gate.json", "sha256": HASH})
+    assert empty["attack_chains"]["reason"].startswith("No candidate attack chain was proposed")

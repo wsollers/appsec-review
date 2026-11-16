@@ -216,6 +216,11 @@ def test_attachments_cover_poc_compile_files_language_pin_and_corrupt_handoff_er
     chain_fx.review["packages"].append(unrelated)
     chain_out = chain_fx.verify("attack_chains")
     assert len(chain_out["attachments"]["attack_chains"]) == 1
+    # The capability says what became of every proposed candidate, so a report can explain "none available".
+    assert chain_out["capabilities"]["attack_chains"]["status_counts"] == {
+        "proposed": 1, "admitted": 1, "assessed": 1, "capped": 0, "rejected": 0, "deduplicated": 0,
+        "confirmed": 0, "qualified_supported": 1, "refuted": 0, "insufficient_evidence": 0}
+    assert "status_counts" not in chain_out["capabilities"]["poc_generation"]
 
     # ValueError from accepted_handoff in verify_attachments and reverify_snapshot becomes IntegrityError.
     def raise_corrupt(_root, _job):

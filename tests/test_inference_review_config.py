@@ -739,3 +739,14 @@ def test_only_the_judge_may_carry_judge_keys_and_it_cannot_name_itself(tmp_path:
         _variant(tmp_path / "b", ('require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", '
                                   '"blue_team_refuter"]\nmax_why_chars',
                                   'require_distinct_from_roles = ["adjudication_judge"]\nmax_why_chars'))
+
+
+def test_derived_continuity_is_typed_configured_and_part_of_the_semantic_settings_identity() -> None:
+    from dataclasses import replace
+    from appsec_review.config import load_config
+    from appsec_review.config.inference_review import semantic_settings_sha256
+    settings = load_config(ROOT / "appsec-review.toml").job("job_inference_security_review").typed_settings
+    assert settings.attack_chains.derived_continuity == ("same_native_executable",)
+    assert settings.as_document()["attack_chains"]["derived_continuity"] == ["same_native_executable"]
+    disabled = replace(settings, attack_chains=replace(settings.attack_chains, derived_continuity=()))
+    assert semantic_settings_sha256(disabled) != semantic_settings_sha256(settings)

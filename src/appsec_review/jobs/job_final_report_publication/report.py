@@ -5,6 +5,7 @@ the gate's limitations. It does not look at the target, a model or any artifact 
 """
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Mapping
 
 from appsec_review.jobs.engineering_contracts import FINAL_REPORT_SCHEMA
@@ -32,6 +33,36 @@ POC_REASON = ("Compile-only PoC generation outcomes for accepted review candidat
               "A failed or unavailable PoC does not contradict its finding.")
 
 
+CHAIN_STATUSES = ("confirmed", "qualified_supported", "refuted", "insufficient_evidence")
+
+
+def chain_status_counts(record: Mapping[str, Any], items: Mapping[str, Any] | list) -> dict[str, int]:
+    """Per-status chain counts from the gate's attachments, plus the gate's candidate accounting when present."""
+    by_status = Counter(row["status"] for row in items)
+    counts = {status: by_status.get(status, 0) for status in CHAIN_STATUSES}
+    extra = record.get("status_counts")
+    if isinstance(extra, Mapping):
+        counts.update({key: int(value) for key, value in extra.items() if key not in CHAIN_STATUSES})
+    counts.setdefault("admitted", len(items))
+    return counts
+
+
+def chain_reason(record: Mapping[str, Any], counts: Mapping[str, int]) -> str:
+    """Why the listed chains are all there is: every proposed candidate is accounted for by status."""
+    admitted = counts.get("admitted", 0)
+    proposed = counts.get("proposed", admitted)
+    if not proposed and not admitted:
+        lead = "No candidate attack chain was proposed by the accepted review"
+    else:
+        lead = (f"{proposed} candidate chain(s) proposed, {admitted} admitted: {counts['confirmed']} confirmed, "
+                f"{counts['qualified_supported']} qualified_supported, {counts['refuted']} refuted, "
+                f"{counts['insufficient_evidence']} insufficient_evidence")
+        if "rejected" in counts:
+            lead += (f"; {counts['rejected']} rejected, {counts['deduplicated']} deduplicated, "
+                     f"{counts['capped']} capped by max_attack_chains")
+    return f"{lead}. Only confirmed and qualified_supported chains are listed. {record['reason']}"
+
+
 def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
                  gate_document: Mapping[str, str], configuration_profile: Mapping[str, Any] | None = None) -> dict[str, Any]:
     packages = gate["packages"]
@@ -46,9 +77,13 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
     def section(name: str) -> dict[str, Any]:
         record = gate["capabilities"][name]
         items = gate["attachments"][name]
+        result = {"status": "available" if items else "none_available", "reason": record["reason"], "items": items}
         if name == "attack_chains":
-            items = [row for row in items if row["status"] in {"confirmed", "qualified_supported"}]
-        return {"status": "available" if items else "none_available", "reason": record["reason"], "items": items}
+            listed = [row for row in items if row["status"] in {"confirmed", "qualified_supported"}]
+            counts = chain_status_counts(record, items)
+            result.update(status="available" if listed else "none_available", items=listed,
+                          reason=chain_reason(record, counts), status_counts=counts)
+        return result
 
     outcomes = section("poc_generation")
     if outcomes["items"]:

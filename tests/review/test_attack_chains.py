@@ -313,3 +313,69 @@ def test_chain_guidance_is_bounded_question_data_not_new_authority():
     for name in ("chain_composer", "chain_refuter", "chain_weakest_link_verifier"):
         path = ROOT / "pipeline" / "guidance" / "tasks" / "inference-security-review" / f"{name}.md"
         assert parse_task(path.read_text(encoding="utf-8"), tools=load_tool_names(ROOT), expected_id=name)
+
+
+def test_order_pairs_puts_seed_hints_then_chaining_predicates_then_the_rest():
+    ids = ["claim-a", "claim-b", "claim-c", "claim-d"]
+    predicates = {"claim-a": "memory_corruption", "claim-b": "info_disclosure", "claim-c": "path_traversal",
+                  "claim-d": "memory_corruption"}
+    ordered = chain.order_pairs(ids, predicates, [["claim-d", "claim-a"], ["claim-d", "claim-zzz"]])
+    assert ordered[0] == ("claim-d", "claim-a")                       # the admitted seed hint first
+    chaining = {("claim-b", "claim-a"), ("claim-b", "claim-d"),      # leak into memory corruption
+                ("claim-c", "claim-a"), ("claim-c", "claim-b"), ("claim-c", "claim-d")}   # file control into anything
+    assert set(ordered[1:1 + len(chaining)]) == chaining
+    assert len(ordered) == len(set(ordered)) == 12 and all(left != right for left, right in ordered)
+
+
+def _derived_proposal(tmp_path, right_path: str):
+    from tests.review.test_native_continuity import facts
+    item = proposal(accepted_core(tmp_path), producers=())
+    edge = item.edges[0]
+    assert all(obligation.outcome is Outcome.UNRESOLVED for obligation in edge.obligations)
+    derived = chain.derived_evidence(edge, facts().derive("src/request.cpp", right_path))
+    return replace(item, edges=(chain.with_derived(edge, derived),))
+
+
+def test_derived_same_native_executable_counts_for_identity_and_privilege_only(tmp_path):
+    item = _derived_proposal(tmp_path, "src/session.cpp")
+    outcomes = {obligation.dimension: obligation.outcome for obligation in item.edges[0].obligations}
+    assert outcomes[Dimension.IDENTITY] is Outcome.SATISFIED and outcomes[Dimension.PRIVILEGE] is Outcome.SATISFIED
+    assert all(outcomes[dimension] is Outcome.UNRESOLVED for dimension in
+               (Dimension.TRUST_BOUNDARY, Dimension.ARTIFACT_DEPLOYMENT, Dimension.TEMPORAL))
+    row = item.edges[0].obligations[0].evidence[0]
+    assert row.index == "derived:same_native_executable" and row.shard_id == "build-unit-fixture"
+    assert row.derivation["link"]["output_path"] == "build/smoke_server"
+    assert item.edges[0].obligations[2].evidence[0].reason.endswith("no_zone_or_enforcement_facts")
+    SCHEMAS.validate("attack-chain", {
+        "schema": chain.CHAIN_SCHEMA, "run_id": "2026-10-28-0001", "proposal": chain.document(item), "challenges": [],
+        "status": "qualified_supported", "limitations": [], "assessment": {
+            "objective": item.objective, "path_confidence": "qualified", "prerequisites": [],
+            "boundary_exposure": "unresolved", "remediation_choke_points": [],
+            "shipment_decision": "not_assessed_by_chain_policy"}})
+    assert chain.proposal_from_json(chain.document(item)) == item
+    # The derivation does not move the chain identity: it is evidence, not a different path.
+    assert item.chain_id == proposal(accepted_core(tmp_path / "again"), producers=()).chain_id
+    status, limitations = chain.decide(item, [challenge(item)])
+    assert status is ChainStatus.QUALIFIED_SUPPORTED
+    assert {"edge:0:trust_boundary:unresolved", "edge:0:artifact_deployment:unresolved",
+            "edge:0:temporal:unresolved"} <= set(limitations)
+    assert not any(limitation.startswith(("edge:0:identity", "edge:0:privilege")) for limitation in limitations)
+
+
+def test_two_different_binaries_leave_the_chain_insufficient_not_refuted(tmp_path):
+    item = _derived_proposal(tmp_path, "src/synthetic.cpp")
+    assert all(obligation.outcome is Outcome.UNRESOLVED for obligation in item.edges[0].obligations)
+    assert item.edges[0].obligations[0].evidence[0].reason == "objects_not_linked_into_one_accepted_executable"
+    status, limitations = chain.decide(item, [challenge(item)])
+    assert status is ChainStatus.INSUFFICIENT_EVIDENCE and "no_meaningful_accepted_continuity_evidence" in limitations
+
+
+@pytest.mark.parametrize("values", [{"derived_continuity": ["unknown_derivation"]},
+                                   {"derived_continuity": ["same_native_executable", "same_native_executable"]},
+                                   {"derived_continuity": "same_native_executable"}])
+def test_derived_continuity_is_a_closed_vocabulary(values):
+    with pytest.raises(ValueError, match="derived_continuity"):
+        AttackChainSettings.from_mapping(values)
+    assert AttackChainSettings.from_mapping({"derived_continuity": []}).derived_continuity == ()
+    assert AttackChainSettings.from_mapping(
+        {"derived_continuity": ["same_native_executable"]}).derived_continuity == ("same_native_executable",)

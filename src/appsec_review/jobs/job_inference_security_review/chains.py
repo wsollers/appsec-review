@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import itertools
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -18,6 +17,7 @@ from appsec_review.review.models import (
     CellStatus, ChainStatus, ClaimState, ContinuityDimension, ContinuityOutcome, GapClass, IntegrityError, Lane, Role,
     make_gap,
 )
+from appsec_review.review.native_continuity import NativeLinkFacts
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from .teams import ReviewContext, _Cell, _actor, _not_launched, _run
@@ -114,15 +114,45 @@ class _BoundedResolutionCore:
         return self._query("find", **parameters)
 
 
+def _native_facts(ctx: ReviewContext) -> NativeLinkFacts | None:
+    """The run's accepted native link facts (loaded once per context); ``None`` without an accepted native build."""
+    with ctx._lock:
+        if ctx._native_continuity_loaded:
+            return ctx.native_continuity
+    facts = ctx.native_continuity
+    if facts is None and policy.SAME_NATIVE_EXECUTABLE in ctx.settings.attack_chains.derived_continuity:
+        facts = NativeLinkFacts.from_run(ctx.run_root)
+    with ctx._lock:
+        ctx.native_continuity, ctx._native_continuity_loaded = facts, True
+    return facts
+
+
+def _derive(ctx: ReviewContext, edge: policy.Edge) -> policy.Edge:
+    """Merge the configured deterministic derivations into ``edge``; the same facts for every caller."""
+    if policy.SAME_NATIVE_EXECUTABLE not in ctx.settings.attack_chains.derived_continuity:
+        return edge
+    facts = _native_facts(ctx)
+    if facts is None:
+        return edge
+    paths = []
+    for identity in (edge.output_entity, edge.input_entity):
+        location = ctx.location(identity) or {}
+        path = location.get("path")
+        paths.append(path if isinstance(path, str) and path else None)
+    return policy.with_derived(edge, policy.derived_evidence(edge, facts.derive(paths[0], paths[1])))
+
+
 def _resolve(ctx: ReviewContext, edge: policy.Edge, environment: str, *, cites=None):
+    """Accepted index facts (bounded, charged) plus deterministic derived facts (free); every caller gets both."""
     settings = ctx.settings.attack_chains
     try:
-        return policy.resolve_edge(
+        resolved, gaps = policy.resolve_edge(
             _BoundedResolutionCore(ctx), edge, environment, producers=settings.continuity_producers,
             limit=ctx.max_page_size, evidence_limit=settings.max_evidence_per_obligation, cited_relations=cites)
     except _ResolutionBudgetExceeded:
-        empty = replace(edge, obligations=tuple(policy.Obligation(dimension) for dimension in ContinuityDimension))
-        return empty, ("continuity_resolution:query_or_job_budget_exhausted",)
+        resolved = replace(edge, obligations=tuple(policy.Obligation(dimension) for dimension in ContinuityDimension))
+        gaps = ("continuity_resolution:query_or_job_budget_exhausted",)
+    return _derive(ctx, resolved), gaps
 
 
 def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[Mapping[str, Any]], *,
@@ -155,10 +185,13 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
         # Strip original seed prose/edges: it cannot become a continuity fact.
         hints.append({"component_claim_ids": ids})
     ids = sorted(components)
-    pairs = list(itertools.islice(((left, right) for left in ids for right in ids if left != right),
-                                 bounds.max_expansions + 1))
+    # Seed-hint pairs first, then pairs whose predicates plausibly chain, then the rest (C14-F10): the
+    # expansion cap admits the pairs most likely to compose, not the lowest claim-id hashes.
+    predicates = {claim_id: projection.claims[claim_id].claim.security_predicate.value for claim_id in ids}
+    pairs = policy.order_pairs(ids, predicates, [hint["component_claim_ids"] for hint in hints])
     admitted_pairs = pairs[:bounds.max_expansions]
-    frontier = [{"from_claim_id": left, "to_claim_id": right} for left, right in pairs[bounds.max_expansions:]]
+    frontier = [{"from_claim_id": left, "to_claim_id": right}
+                for left, right in pairs[bounds.max_expansions:bounds.max_expansions + 1]]
     exploration = {"expanded": len(admitted_pairs), "limit": bounds.max_expansions,
                    "frontier": frontier, "frontier_truncated": bool(frontier)}
     if frontier:
@@ -166,10 +199,20 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
     records: list[dict[str, Any]] = []
     expected: dict[str, str] = {}
     max_chains = ctx.settings.rounds.max_attack_chains
+    # Continuity sources that can count: commissioned index producers and configured deterministic derivations.
+    # Without one, every candidate is structurally insufficient_evidence, so no model cell is launched.
+    sources = ["continuity_producers"] if bounds.continuity_producers else []
+    if policy.SAME_NATIVE_EXECUTABLE in bounds.derived_continuity:
+        if _native_facts(ctx) is None:
+            gaps.append("derived_continuity:same_native_executable:unavailable:no_accepted_native_build")
+        else:
+            sources.append("derived_continuity:same_native_executable")
     if len(components) < 2:
         gaps.append("fewer_than_two_adjudicated_chain_components")
     elif max_chains == 0:
         gaps.append("attack_chain_composition_disabled_by_max_attack_chains")
+    elif not sources:
+        gaps.append("no_continuity_source_configured_or_available; composition_not_launched")
     else:
         entities = tuple(sorted({ref for claim_id in ids for ref in projection.claims[claim_id].claim.affected_entities}))
         inputs = {
@@ -320,8 +363,10 @@ def challenge(ctx: ReviewContext, composition: Mapping[str, Any], previous: Mapp
                 obligations = []
                 for obligation in resolved.obligations:
                     refs = next(check["cites"] for check in checks if check["dimension"] == obligation.dimension.value)
+                    # Derived rows are deterministic facts both sides see; a challenger neither cites nor drops them.
                     obligations.append(policy.Obligation(obligation.dimension, tuple(
-                        ref for ref in obligation.evidence if ref.relation_id in refs)))
+                        ref for ref in obligation.evidence
+                        if ref.relation_id in refs or ref.index.startswith(policy.DERIVED_INDEX_PREFIX))))
                 resolved_edges.append(replace(resolved, obligations=tuple(obligations)))
                 gaps.extend(resolution_gaps)
             edges = tuple(resolved_edges)

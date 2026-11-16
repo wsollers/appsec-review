@@ -237,7 +237,7 @@ def _published(tmp_path: Path, document: dict, monkeypatch) -> Path:
     path.write_text(json.dumps(document), encoding="utf-8")
     identity = {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path)}
     handoff = {"outputs": {"acceptance.publish_handoff": {"artifact": identity}}}
-    monkeypatch.setattr(consume, "accepted_upstream", lambda root, job_id: SimpleNamespace(
+    monkeypatch.setattr(consume, "accepted_upstream", lambda root, job_id, required=True: SimpleNamespace(
         job_id=job_id, handoff=handoff, sha256="h" * 64, path="x", pinned=True))
     return run_root
 
@@ -262,7 +262,7 @@ def test_load_accepted_language_build_refuses_a_changed_or_foreign_document(tmp_
     artifact.write_text(json.dumps({"schema": SCHEMA, "receipts": [], "extra": 1}), encoding="utf-8")
     with pytest.raises(ValueError, match="artifact identity changed"):
         load_accepted_language_build(run_root)
-    monkeypatch.setattr(consume, "accepted_upstream", lambda root, job_id: SimpleNamespace(
+    monkeypatch.setattr(consume, "accepted_upstream", lambda root, job_id, required=True: SimpleNamespace(
         handoff={"outputs": {"acceptance.publish_handoff": {}}}, sha256="h" * 64))
     with pytest.raises(ValueError, match="does not publish its receipt set"):
         load_accepted_language_build(run_root)

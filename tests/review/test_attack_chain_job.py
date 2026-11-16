@@ -63,11 +63,11 @@ class ChainInfer:
                            input_tokens=100, output_tokens=100)
 
 
-def context(tmp_path, *, extra=False, bounds=None, model=None):
+def context(tmp_path, *, extra=False, bounds=None, model=None, producers=(PRODUCER,)):
     core = accepted_core(tmp_path / "accepted")
     settings = load_config(ROOT / "appsec-review.toml").job(JOB).typed_settings
     settings = replace(settings, attack_chains=replace(
-        settings.attack_chains, continuity_producers=(PRODUCER,), **(bounds or {})))
+        settings.attack_chains, continuity_producers=producers, **(bounds or {})))
     if extra:
         settings = replace(settings, models=MappingProxyType({
             **settings.models, "chain_verifier": replace(settings.models["default"], model="chain-distinct-verifier")}),
@@ -150,9 +150,9 @@ def test_caps_seeds_and_unexplored_frontier_are_exact_without_affecting_base_com
     _before, projection, manifest, paths, documents = workflow(ctx, seeds=seeds)
     assert manifest["accounting"] == {"proposed": 4, "admitted": 2, "assessed": 1, "capped": 1,
                                       "rejected": 1, "deduplicated": 1, "seeds_received": 3, "seeds_rejected": 2}
-    ordered = sorted((left.claim_id, right.claim_id))
+    # The admitted seed hint (left -> right) is explored first; the reverse pair is the truncated frontier.
     assert manifest["exploration"] == {"expanded": 1, "limit": 1, "frontier": [{
-        "from_claim_id": ordered[1], "to_claim_id": ordered[0]}], "frontier_truncated": True}
+        "from_claim_id": right.claim_id, "to_claim_id": left.claim_id}], "frontier_truncated": True}
     capped = next(item for item in manifest["items"] if item["disposition"] == "capped")
     assert capped["status"] == "insufficient_evidence"
     assert "UNTRUSTED SEED SUCCESS" not in json.dumps(ctx.infer.requests[0].task_input)
@@ -195,3 +195,60 @@ def test_chain_challenge_cell_cap_is_explicit_and_never_promoted_to_confirmation
     assert any("not_launched" in limitation for limitation in manifest["items"][0]["limitations"])
     assert [request.task_input["task"] for request in ctx.infer.requests] == ["chain_composer"]
 
+
+def _with_native_facts(ctx, right_path: str):
+    from tests.review.test_native_continuity import facts
+    left, right = claims()
+    ctx.native_continuity = facts()
+    ctx._locations[left.affected_entities[0]] = {"path": "src/request.cpp", "start_line": 10, "end_line": 12}
+    ctx._locations[right.affected_entities[0]] = {"path": right_path, "start_line": 20, "end_line": 22}
+    return ctx
+
+
+def test_derived_same_native_executable_reaches_qualified_supported_without_a_producer(tmp_path):
+    ctx = _with_native_facts(context(tmp_path, producers=(), bounds={"derived_continuity": ("same_native_executable",)}),
+                             "src/session.cpp")
+    _before, projection, manifest, _paths, documents = workflow(ctx)
+    [item] = manifest["items"]
+    assert item["status"] == "qualified_supported"
+    assert {"edge:0:trust_boundary:unresolved", "edge:0:artifact_deployment:unresolved",
+            "edge:0:temporal:unresolved"} <= set(item["limitations"])
+    assert not any(limitation.startswith(("edge:0:identity", "edge:0:privilege")) for limitation in item["limitations"])
+    artifact = chains.read_artifact(ctx.run_root, item["artifact"])
+    identity = artifact["proposal"]["edges"][0]["obligations"][0]
+    assert identity["dimension"] == "identity" and identity["evidence"][0]["outcome"] == "satisfied"
+    assert identity["evidence"][0]["derivation"]["link"]["output_path"] == "build/smoke_server"
+    assert identity["evidence"][0]["derivation"]["basis"] == "accepted_native_build_facts_not_model_prose"
+    # The refuter re-resolution sees the same derived rows; it can neither cite nor drop them.
+    [view] = projection.attack_chains.values()
+    refuter = next(record for record in view.challenges if record.kind == "refuter")
+    assert refuter.edges[0].obligations[0].evidence[0].derivation == identity["evidence"][0]["derivation"]
+    assert "no_commissioned_native_continuity_producer" in " ".join(manifest["gaps"])
+    assert not any("unavailable" in gap for gap in manifest["gaps"])
+
+
+def test_two_binaries_leave_derived_continuity_unresolved_and_the_chain_insufficient(tmp_path):
+    ctx = _with_native_facts(context(tmp_path, producers=(), bounds={"derived_continuity": ("same_native_executable",)}),
+                             "src/synthetic.cpp")
+    _before, _projection, manifest, _paths, _documents = workflow(ctx)
+    [item] = manifest["items"]
+    assert item["status"] == "insufficient_evidence"
+    assert "no_meaningful_accepted_continuity_evidence" in item["limitations"]
+    artifact = chains.read_artifact(ctx.run_root, item["artifact"])
+    assert artifact["proposal"]["edges"][0]["obligations"][0]["evidence"][0]["reason"] == (
+        "objects_not_linked_into_one_accepted_executable")
+
+
+def test_without_any_continuity_source_the_composer_cell_is_not_launched(tmp_path):
+    ctx = context(tmp_path, producers=(), bounds={"derived_continuity": ()})
+    _before, _projection, manifest, _paths, documents = workflow(ctx)
+    assert manifest["items"] == [] and ctx.infer.requests == []
+    assert "no_continuity_source_configured_or_available; composition_not_launched" in manifest["gaps"]
+    assert manifest["accounting"]["proposed"] == 0 and documents[0]["expected_cells"] == {}
+
+
+def test_derived_continuity_without_an_accepted_native_build_is_a_named_gap_not_an_error(tmp_path):
+    ctx = context(tmp_path, bounds={"derived_continuity": ("same_native_executable",)})
+    _before, _projection, manifest, _paths, _documents = workflow(ctx)
+    assert manifest["items"][0]["status"] == "confirmed"      # the commissioned producer still counts
+    assert "derived_continuity:same_native_executable:unavailable:no_accepted_native_build" in manifest["gaps"]

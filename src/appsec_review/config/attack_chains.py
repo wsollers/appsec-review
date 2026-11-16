@@ -5,6 +5,12 @@ from dataclasses import dataclass, fields
 import re
 from typing import Any, Mapping
 
+#: Deterministic continuity derivations the stage may count (closed vocabulary; see
+#: ``review/native_continuity.py``). ``same_native_executable``: identity and privilege continuity hold
+#: across an edge whose two source files the accepted native build links into one executable or shared
+#: library. Every derivation reads run-owned build facts only, never model prose.
+DERIVED_CONTINUITY = frozenset({"same_native_executable"})
+
 
 @dataclass(frozen=True, slots=True)
 class AttackChainSettings:
@@ -19,6 +25,8 @@ class AttackChainSettings:
     # Only commissioned deterministic producers may supply counted continuity facts.
     # Entries are exact "job_id/rule_id" identities from accepted shard provenance.
     continuity_producers: tuple[str, ...] = ()
+    # Deterministic derivations from accepted build facts (``DERIVED_CONTINUITY``); empty disables them.
+    derived_continuity: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         bounds = {"max_links": (2, 8), "max_expansions": (1, 10000),
@@ -36,6 +44,11 @@ class AttackChainSettings:
                        for item in values)
                 or len(set(values)) != len(values)):
             raise ValueError("attack_chains.continuity_producers must be distinct producer/rule identities")
+        derived = self.derived_continuity
+        if (not isinstance(derived, tuple) or len(set(derived)) != len(derived)
+                or any(item not in DERIVED_CONTINUITY for item in derived)):
+            raise ValueError("attack_chains.derived_continuity must be distinct names from "
+                             + ", ".join(sorted(DERIVED_CONTINUITY)))
 
     @classmethod
     def from_mapping(cls, value: Any) -> "AttackChainSettings":
@@ -44,6 +57,7 @@ class AttackChainSettings:
         if not isinstance(value, Mapping) or set(value) - {item.name for item in fields(cls)}:
             raise ValueError("attack_chains must be a table containing only known settings")
         document = dict(value)
-        if isinstance(document.get("continuity_producers"), list):
-            document["continuity_producers"] = tuple(document["continuity_producers"])
+        for name in ("continuity_producers", "derived_continuity"):
+            if isinstance(document.get(name), list):
+                document[name] = tuple(document[name])
         return cls(**document)

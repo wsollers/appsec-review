@@ -21,7 +21,25 @@
         "gap_count": {"type": "integer", "minimum": 0},
         "execution": {"const": "not_performed_by_policy"},
         "runtime_verified": {"const": false},
-        "result_id": {"type": "null"}
+        "result_id": {"type": "null"},
+        "status_counts": {"$ref": "#/$defs/chain_status_counts"}
+      }
+    },
+    "chain_status_counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["proposed", "admitted", "assessed", "capped", "rejected", "deduplicated",
+                   "confirmed", "qualified_supported", "refuted", "insufficient_evidence"],
+      "properties": {
+        "proposed": {"type": "integer", "minimum": 0},
+        "admitted": {"type": "integer", "minimum": 0},
+        "assessed": {"type": "integer", "minimum": 0},
+        "capped": {"type": "integer", "minimum": 0},
+        "rejected": {"type": "integer", "minimum": 0},
+        "deduplicated": {"type": "integer", "minimum": 0},
+        "confirmed": {"type": "integer", "minimum": 0},
+        "qualified_supported": {"type": "integer", "minimum": 0},
+        "refuted": {"type": "integer", "minimum": 0},
+        "insufficient_evidence": {"type": "integer", "minimum": 0}
       }
     },
     "capabilities": {

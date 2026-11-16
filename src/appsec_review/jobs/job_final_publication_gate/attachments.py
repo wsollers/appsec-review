@@ -39,6 +39,11 @@ def require(condition: bool, message: str) -> None:
         raise IntegrityError(message)
 
 
+#: The attack-chain capability's ``status_counts``: candidate accounting plus a count per chain status.
+CHAIN_ACCOUNTING_KEYS = ("proposed", "admitted", "assessed", "capped", "rejected", "deduplicated")
+CHAIN_STATUSES = ("confirmed", "qualified_supported", "refuted", "insufficient_evidence")
+
+
 def reference(value: Any) -> dict[str, str]:
     require(isinstance(value, Mapping) and set(value) >= {"path", "sha256"}, "attachment reference is malformed")
     return {"path": value["path"], "sha256": value["sha256"]}
@@ -60,7 +65,7 @@ def bind_tree(run_root: Path, value: Any, bindings: list[dict[str, str]]) -> Non
 
 def capability(enabled: bool, *, handoff: dict[str, str] | None = None,
                summary: dict[str, str] | None = None, count: int = 0, omitted: int = 0,
-               gaps: int = 0) -> dict[str, Any]:
+               gaps: int = 0, status_counts: Mapping[str, int] | None = None) -> dict[str, Any]:
     disposition = (Disposition.SKIPPED_POLICY if not enabled else Disposition.GAP if summary is None or gaps or omitted
                    else Disposition.SKIPPED_NA if not count else Disposition.SUCCEEDED)
     reason = {
@@ -69,9 +74,13 @@ def capability(enabled: bool, *, handoff: dict[str, str] | None = None,
         Disposition.SKIPPED_NA: "The accepted producer accounted for an empty eligible scope; this is not clean coverage.",
         Disposition.SUCCEEDED: "Accepted outcomes and all artifact bindings were verified; no runtime proof is implied.",
     }[disposition]
-    return {"enabled": enabled, "disposition": disposition.value, "reason": reason, "handoff": handoff,
-            "summary": summary, "item_count": count, "omitted_count": omitted, "gap_count": gaps,
-            **contracts.nonexecution_assurance()}
+    record = {"enabled": enabled, "disposition": disposition.value, "reason": reason, "handoff": handoff,
+              "summary": summary, "item_count": count, "omitted_count": omitted, "gap_count": gaps,
+              **contracts.nonexecution_assurance()}
+    if status_counts is not None:
+        # Attack chains: how many candidates were proposed and what became of each, so "none available" is explained.
+        record["status_counts"] = {key: int(value) for key, value in sorted(status_counts.items())}
+    return record
 
 
 def _finding(binding: Any, findings: Mapping[str, Mapping[str, Any]], *, confirmed: bool = False) -> dict[str, str]:
@@ -356,10 +365,13 @@ def verify_attachments(run_root: Path, review: Mapping[str, Any], *, repository_
         bind_tree(run_root, manifest, bindings)
         bindings.append(reference(chain_ref))
         attachments["attack_chains"] = sorted(projected, key=lambda row: row["chain_id"])
+        status_counts = {**{key: accounting[key] for key in CHAIN_ACCOUNTING_KEYS},
+                         **{status: sum(row["status"] == status for row in rows) for status in CHAIN_STATUSES}}
         capabilities["attack_chains"] = capability(True, summary=reference(chain_ref),
                                                    count=len(rows), omitted=accounting["capped"],
                                                    gaps=max(len(manifest["gaps"]), sum(
-                                                       row["status"] == "insufficient_evidence" for row in rows)))
+                                                       row["status"] == "insufficient_evidence" for row in rows)),
+                                                   status_counts=status_counts)
     unique = {(row["path"], row["sha256"]) for row in bindings}
     return {"capabilities": capabilities, "attachments": attachments,
             "bindings": [{"path": path, "sha256": digest} for path, digest in sorted(unique)]}
