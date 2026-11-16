@@ -3303,7 +3303,15 @@ Former `docs/TODO.md` sections, verbatim, with ids. State: open unless noted.
   affected-only OpenVEX v0.2.0 statement/companion/result canonical projection, historical and
   latest acceptance reproof, stale upstream/release/gate invalidation, and semantic metric
   aggregation; 1,877/1,939 job-package lines [96.80%] and 623/678 branches [91.89%] covered
-  across all 10 modules).
+  across all 10 modules);
+  job_poc_generation (43/47; 6 unit files, 189 cases: pinned 7-unit `load.verify_inputs` ->
+  `plan.briefs` -> `write.poc_writer` -> `validate.policy` -> `compile.build_check` ->
+  `record.candidates` -> `publish.publish_handoff` DAG topology, `PocGenerationSettings` bounds,
+  verified upstream review/finding/package/language-build input bindings, brief expectation and
+  source assembly, Clang AST reduction and policy/buildcheck compile-only enforcement, writer
+  decline/failure/answer normalization, and relocated multi-job `JobRunner` chain suite to
+  `tests/integration/job_poc_generation/test_poc_generation_job.py`; 2,261/2,360 job-package lines
+  [95.81%] and 741/826 branches [89.71%] covered across all 15 modules).
   Bounded repair Waves 1a–5 are complete and sequential certification has resumed across the
   remaining jobs. Wave 1a (`9c41d5e45`) corrected acquisition/debug-symbol declarations and
   consumer parity (T-114 done).

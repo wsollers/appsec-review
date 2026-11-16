@@ -27,7 +27,7 @@ from tests.final_report_support import GATE, REPORT
 from tests.fixtures.poc_generation import relay
 from tests.poc_chain import BASIS, POC, Writer, build_chain, generated_text, ast_by_source
 
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 CLAIM_DIR = f"data/jobs/{POC}/attempts"
 
 

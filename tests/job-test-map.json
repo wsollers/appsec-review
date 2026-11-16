@@ -510,8 +510,18 @@
       "live": []
     },
     "job_poc_generation": {
-      "unit": ["tests/test_poc_generation_units.py"],
-      "integration": ["tests/integration/test_authentic_poc_contract.py"],
+      "unit": [
+        "tests/test_poc_generation_contracts.py",
+        "tests/test_poc_generation_units.py",
+        "tests/test_poc_policy.py",
+        "tests/test_poc_writer.py",
+        "tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py",
+        "tests/unit/job_poc_generation/test_job_units.py"
+      ],
+      "integration": [
+        "tests/integration/job_poc_generation/test_poc_generation_job.py",
+        "tests/integration/test_authentic_poc_contract.py"
+      ],
       "acceptance": [],
       "live": ["tests/integration/test_poc_live_compile.py"]
     },

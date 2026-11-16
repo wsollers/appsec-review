@@ -332,10 +332,11 @@ def test_poc_precedes_the_gate_and_the_report_reads_only_the_gate() -> None:
     assert on["job_final_report_publication"] == ("job_final_publication_gate",)
     order = list(on)
     assert order.index(JOB_ID) < order.index("job_final_publication_gate") < order.index("job_final_report_publication")
-    # one terminal job in both graphs
+    # terminal leaf jobs in both graphs (final report + OpenVEX export when enabled)
+    expected_leaves = {"job_final_report_publication", *({"job_openvex_export"} if "job_openvex_export" in enabled else set())}
     for graph in (off, on):
         depended = {dependency for values in graph.values() for dependency in values}
-        assert set(graph) - depended == {"job_final_report_publication"}
+        assert set(graph) - depended == expected_leaves
 
 
 def test_a_disabled_poc_job_still_gets_its_upstream_handoffs_for_a_manual_run() -> None:
@@ -361,12 +362,19 @@ def test_direct_dispatch_refuses_other_disabled_jobs_but_not_the_manual_poc_job(
 
 
 def test_the_dataset_declarations_are_valid_and_name_the_real_steps_and_consumers() -> None:
+    from appsec_review.jobs.bound_artifacts import source_context_inputs
+
     validate_declarations(JOB_ID, DATASETS)
     config = load_config(ROOT / "appsec-review.toml")
     steps = set(config.job(JOB_ID).steps)
     assert {item.step for item in DATASETS} <= steps
     assert {item.disposition for item in DATASETS} == {"artifact_only", "protected"}
-    assert set(CONSUMES) == {"job_inference_security_review", "job_language_build"}
+    expected_consumes = {
+        *(req.producer for req in source_context_inputs()),
+        "job_inference_security_review",
+        "job_language_build",
+    }
+    assert set(CONSUMES) == expected_consumes
     assert "job_poc_generation" in __import__(
         "appsec_review.jobs.job_final_publication_gate.datasets", fromlist=["CONSUMES"]).CONSUMES
 
