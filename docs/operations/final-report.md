@@ -278,6 +278,20 @@ It contains, in plain language:
   review may be presented as complete (and, from `limitations`, why not), the ship-block counts in
   words, and what "not performed by policy" means (generated PoCs and regressions were compiled only,
   never executed; compilation is not runtime proof);
+- review coverage by security dimension: a radar chart whose nine axes group the closed
+  `security_predicate` vocabulary (memory safety; numeric handling; control and injection; parsing and
+  data; access control; secrets and crypto; concurrency; resource exhaustion; configuration and supply
+  chain) and whose two series are the confirmed findings and the claims examined (confirmed, verification
+  backlog and withheld packages) per axis, each scaled to its own largest axis; a key under the chart
+  names each series (colour swatch plus a distinct line style, so it reads in greyscale) and each axis
+  code with what counts there and the raw counts, and a table repeats the counts with a one-line
+  reading per axis. The counts come from `appsec_review.reporting.dimensions` (a confirmed finding's
+  gate-bound dossier predicate, otherwise the package title `<predicate> (<CWE>)`; a title that names
+  no vocabulary member is counted as unclassified, never guessed), and `final-report.md` carries the
+  same table so the two agree. A short spoke means little was found or examined in that dimension,
+  never that it is clean; an axis with no claims is uncovered. Scanner leads admitted and observed
+  per axis are shown as "not bound": the gate does not bind the review's excluded-leads record to
+  this job, so the report cannot read it;
 - one entry per confirmed finding: what the weakness is (the dossier statement and CWE), where it is
   (file and line range), what an attacker gains (the accepted security predicate and preconditions),
   the technical severity in words, whether an independent verifier confirmed it (state, label,

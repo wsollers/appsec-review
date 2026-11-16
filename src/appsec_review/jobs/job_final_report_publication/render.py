@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
+from appsec_review.reporting.dimensions import dimension_counts
+
 from .report import RENDERER
 
 DIMENSION_LABELS = (("technical_severity", "Technical severity"),
@@ -126,6 +128,20 @@ def _section(title: str, items: Iterable[Mapping[str, Any]], settings: Mapping[s
     return lines
 
 
+def _dimensions(report: Mapping[str, Any]) -> list[str]:
+    """The same per-axis counts the executive PDF charts (``appsec_review.reporting.dimensions``), as a table."""
+    rows, unclassified = dimension_counts(report)
+    lines = ["## Coverage by security dimension", "",
+             "| Key | Dimension | Confirmed findings | Claims examined | Scanner leads admitted / observed |",
+             "|---|---|---:|---:|---|"]
+    lines += [f"| {row.key} | {plain(row.label)} | {row.findings} | {row.claims} | not bound |" for row in rows]
+    lines += ["", f"Counts come from the accepted packages' titles (`<predicate> (<CWE>)`); {unclassified} package(s) "
+              "named no member of the vocabulary and are counted in no dimension. A short row means little was found "
+              "or examined there, never that the dimension is clean; a dimension with no claims is uncovered. The "
+              "excluded-leads record is not bound by the gate, so lead admission per dimension is not shown.", ""]
+    return lines
+
+
 def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: int) -> str:
     settings = {"evidence": evidence_ids, "gaps": gap_ids}
     status, summary = report["status"], report["summary"]
@@ -152,6 +168,7 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
                 if block["by_status"]["decision_pending"] else []),
               f"- gap ratio {accounting['gap_ratio']:.3f} (incomplete above {accounting['incomplete_gap_ratio']:.3f}); "
               f"gaps by class: {_counts({k: v for k, v in accounting['gaps_by_class'].items() if v})}", ""]
+    lines += _dimensions(report)
     lines += _section("Findings (confirmed)", report["findings"], settings, "No confirmed finding packages are publishable.")
     lines += ["## Attack chains", "", f"Status {code(report['attack_chains']['status'])}: {plain(report['attack_chains']['reason'])}"]
     lines += [f"- {code(item['chain_id'])}: {code(item['status'])}; "

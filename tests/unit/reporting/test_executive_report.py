@@ -14,8 +14,9 @@ from appsec_review.jobs.job_final_report_publication.report import build_report
 from appsec_review.reporting.executive_report import (
     NOT_CLEAN, POLICY_STATEMENT, RENDERER, BoundDossier, executive_document, words,
 )
+from appsec_review.reporting.dimensions import DIMENSIONS, dimension_counts
 from appsec_review.reporting.latex import render_latex
-from appsec_review.reporting.model import Box, Document, Heading
+from appsec_review.reporting.model import Box, Document, Heading, RadarChart
 from appsec_review.review.identity import sha256_hex
 from tests.unit.review_decision_audit_wiring.helpers import verified_document
 
@@ -120,7 +121,8 @@ def test_none_available_sections_name_their_reason_and_never_read_as_clean() -> 
     tex = tex_of(report)
     assert tex.count(NOT_CLEAN.replace("-", "{-}")) >= 5
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
-    assert headings == ["Executive summary", "Confirmed findings", "Attack chains", "Proof-of-trigger outcomes",
+    assert headings == ["Executive summary", "Review coverage by security dimension", "Confirmed findings",
+                        "Attack chains", "Proof-of-trigger outcomes",
                         "Remediation", "Verification backlog and withheld packages", "Limitations and coverage",
                         "Appendix: provenance"]
 
@@ -192,3 +194,79 @@ def test_connected_line_ranges_of_one_file_collapse_to_their_union() -> None:
                            {"path": "src/other.cpp", "start_line": 4, "end_line": None}]}
     assert E._locations(dossier) == ["src/request.cpp, lines 26-30", "src/request.cpp, lines 65-83",
                                      "src/other.cpp, line range not recorded"]
+
+
+def dimension_report() -> dict[str, Any]:
+    """The wiring fixture with pipeline-shaped titles: one confirmed command injection, one backlog use after free."""
+    report = report_document()
+    report["findings"][0]["title"] = "command_injection (CWE-78)"
+    report["verification_backlog"][0]["title"] = "use_after_free (CWE-416)"
+    return report
+
+
+def _chart_of(document: Document) -> RadarChart:
+    return next(block for block in document.blocks if isinstance(block, RadarChart))
+
+
+def _by_axis(chart: RadarChart, series_index: int) -> dict[str, float]:
+    return dict(zip((axis.key for axis in chart.axes), chart.series[series_index].values))
+
+
+def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_with_markdown() -> None:
+    from appsec_review.jobs.job_final_report_publication.render import render_markdown
+    from appsec_review.review.models import SecurityPredicate
+    report = dimension_report()
+    finding = report["findings"][0]
+    dossier = dossier_for(finding, security_predicate="command_injection", weakness_cwe="CWE-78", title=finding["title"])
+    document = executive_document(report, (bound(dossier),))
+    chart = _chart_of(document)
+    assert [axis.key for axis in chart.axes] == ["M", "N", "C", "P", "A", "S", "R", "X", "K"]
+    assert [series.label for series in chart.series] == ["Confirmed findings", "Claims examined"]
+    confirmed, examined = _by_axis(chart, 0), _by_axis(chart, 1)
+    assert confirmed["C"] == 1.0 and sum(confirmed.values()) == 1.0
+    assert examined["C"] == 1.0 and examined["M"] == 1.0 and sum(examined.values()) == 2.0
+    assert chart.series[0].displays[2] == "1" and chart.series[1].displays[0] == "1" and chart.clamped == 0
+    headings = [block.text for block in document.blocks if isinstance(block, Heading)]
+    assert headings[:3] == ["Executive summary", "Review coverage by security dimension", "Confirmed findings"]
+    tex = tex_of(report, (bound(dossier),))
+    assert r"\radarkeyrow{C}{Control and injection}" in tex and "Confirmed findings 1; Claims examined 1" in tex
+    assert r"\draw[verdict-confirmed,radarline,solid]" in tex and r"\draw[verdict-proposed,radarline,dashed]" in tex
+    assert "never that the dimension is clean" in tex and "not bound" in tex
+    assert "Uncovered: no claim was examined here." in tex and "1 claim examined, none confirmed. Not a clearance." in tex
+    assert "1 confirmed finding of 1 claim examined." in tex
+    assert "Every accepted package names a member of the vocabulary" in tex
+    # Markdown parity: the same counts from the same function, without dossiers.
+    markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
+    assert "## Coverage by security dimension" in markdown
+    assert "| C | Control and injection | 1 | 1 | not bound |" in markdown
+    assert "| M | Memory safety | 0 | 1 | not bound |" in markdown
+    rows, unclassified = dimension_counts(report)
+    assert unclassified == 0 and [(row.key, row.findings, row.claims) for row in rows if row.claims] == [("M", 0, 1), ("C", 1, 1)]
+    # Every member of the closed vocabulary except "other" lies in exactly one dimension.
+    members = [predicate for dimension in DIMENSIONS for predicate in dimension.predicates]
+    assert sorted(members) == sorted({predicate.value for predicate in SecurityPredicate} - {"other"})
+
+
+def test_dossier_predicate_is_used_and_unparseable_titles_are_unclassified_never_guessed() -> None:
+    report = report_document()                     # titles "Synthetic finding n" name no predicate
+    dossier = dossier_for(report["findings"][0])   # the dossier says memory_corruption
+    document = executive_document(report, (bound(dossier),))
+    assert _by_axis(_chart_of(document), 0)["M"] == 1.0 and _by_axis(_chart_of(document), 1)["M"] == 1.0
+    tex = tex_of(report, (bound(dossier),))
+    assert "1 package named no member of the vocabulary and is counted in no dimension" in tex
+    # Without the dossier nothing is classified: the chart says so instead of drawing a guess.
+    tex = tex_of(report)
+    assert r"\chartempty{No data}" in tex
+    assert "2 packages named no member of the vocabulary and are counted in no dimension" in tex
+
+
+def test_dimension_section_with_nothing_bound_reads_as_uncovered_not_clean() -> None:
+    from appsec_review.reporting import executive_report as E
+    blocks = E._dimension_blocks({"findings": [], "verification_backlog": [], "withheld": []}, ())
+    chart = blocks[1]
+    assert isinstance(chart, RadarChart) and all(value == 0 for series in chart.series for value in series.values)
+    document = Document(title="x", run_id="r", subtitle="", status_badge="EMPTY", status_tone="unresolved",
+                        source_date_epoch=0, ledger_head="ab" * 32, blocks=tuple(blocks))
+    tex = render_latex(document, TEMPLATE)
+    assert r"\chartempty{No data}" in tex and tex.count("Uncovered: no claim was examined here.") == len(DIMENSIONS)
+    assert NOT_CLEAN.replace("-", "{-}") in tex
