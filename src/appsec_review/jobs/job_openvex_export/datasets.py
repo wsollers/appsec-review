@@ -49,6 +49,22 @@ CONTRACT = JobContract(
                          "appsec-review/attack-chain-manifest/1", authority=EvidenceAuthority.PROVISIONAL),
         InputRequirement("job_inference_security_review", "scores_and_findings",
                          "appsec-review/finding-package/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        # The export recomputes the gate's classification from the same audited document the gate classified, so
+        # it reads the decision audit exactly as job_final_publication_gate declares it. Run 2026-11-16-0004 failed
+        # its last job on "undeclared consumption ... review_audit_metadata" without these rows.
+        InputRequirement("job_inference_security_review", "review_audit_metadata",
+                         "appsec-review/review-audit-publication/1", authority=EvidenceAuthority.OPERATIONAL,
+                         availability=Availability.WHEN_DECLARED, missing=MissingPolicy.GAP),
+        *(InputRequirement("job_inference_security_review", kind, schema,
+                           authority=EvidenceAuthority.OPERATIONAL, availability=Availability.WHEN_DECLARED,
+                           missing=MissingPolicy.NOT_APPLICABLE)
+          for kind, schema in (
+              ("review_decision_audit", "appsec-review/review-audit-manifest/1"),
+              ("review_decisions", "appsec-review/review-decision/1"),
+              ("review_verification_coverage", "appsec-review/verification-coverage/1"),
+              ("review_decision_bases", "appsec-review/decision-basis/1"),
+              ("review_audit_continuations", "application/x-ndjson"),
+          )),
     ),
     schedule_after=('job_final_publication_gate',),
     dispatch=DispatchClass.REVIEW_GRAPH,

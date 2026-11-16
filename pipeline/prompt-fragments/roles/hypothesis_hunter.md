@@ -54,14 +54,45 @@ function text, S2 the `Header` struct, K1 the `memcpy` sink, R1 its length range
 (line 8 `size < 4`, line 13 `size < 4u + out.length`), F1 the call from `relay`, E1 the entry point, X1 a material
 gap. Labels are only valid in your own cell; cite them, never type an identity or prose in their place.
 
-A hypothesis for a unit is a claim that names the leads it develops, or none when it is new:
+A hypothesis for a unit is a claim that names the leads it develops, or none when it is new. When you can say how
+the defect is triggered, give a `poc_basis` (entry and path labels, input format, trigger rows, preconditions,
+expected observation, unknowns): a later job builds a compile-only proof-of-trigger from it, and a confirmed claim
+without one gets no proof-of-trigger at all.
 
 ```json
 {"action": "final", "result": {"claims": [{"id": "h1", "leads": [], "cwe": "CWE-787",
   "security_predicate": "memory_corruption", "statement": "relay::parse_header copies an attacker length into out.name.",
   "support": {"affected_construct": ["K1"], "attacker_input_control": ["E1"],
               "missing_or_ineffective_guard": ["G2", "S1", "S2"]}, "counter": {},
-  "missing": ["X1"]}], "no_claim": [{"lead": "L1", "why": "covered by h1"}], "blocked": []}}
+  "missing": ["X1"],
+  "poc_basis": {"entry": ["E1"], "path": ["F1"], "input_format": "4-byte header, then name bytes",
+    "trigger": [{"field": "header.length", "where": "bytes 2..3", "constraint": "greater than 16",
+                 "why": "G2 compares the size with the length field, not with the 16-byte capacity"}],
+    "preconditions": ["attacker_controls_file_content"],
+    "expected_observation": "a stack-buffer-overflow write in memcpy under a sanitizer", "unknowns": ["X1"]}}],
+  "no_claim": [{"lead": "L1", "why": "covered by h1"}], "blocked": []}}
+```
+
+A chain seed, when one claim's outcome is what another step needs (a leak that defeats a mitigation, a write that
+a later step relies on): `chain_seeds` is a top-level list beside `claims`, at most 4 seeds, each with an
+`objective`, 2 to 8 `steps` (`id`, `claim` naming one of your claim ids or null, `description`, `prerequisite`,
+`resulting_state`, `anchors` labels) and `links` between steps (`from`, `to`, `continuity_dimensions`, `cites`,
+`questions`). A seed is a hypothesis for the attack-chain analyst, never a claim; without a seed no chain is composed.
+
+```json
+{"action": "final", "result": {"claims": [{"id": "c1", "leads": ["L1"], "cwe": "CWE-125",
+  "security_predicate": "out_of_bounds_read",
+  "statement": "parse_header echoes 8 bytes past out.name, including the saved return address.",
+  "support": {"affected_construct": ["K1", "S1"], "attacker_input_control": ["E1"]}}],
+  "chain_seeds": [{"objective": "Turn the stack leak into control of the saved return address under ASLR.",
+    "steps": [{"id": "s1", "claim": "c1", "description": "Read the stack address through the over-read.",
+               "prerequisite": "The attacker reaches E1 with a crafted header.",
+               "resulting_state": "The attacker knows the stack layout.", "anchors": ["K1"]},
+              {"id": "s2", "claim": null, "description": "Overwrite the saved return address through the memcpy at K1.",
+               "prerequisite": "The state of s1.", "resulting_state": "Attacker-chosen control flow.", "anchors": ["K1", "G2"]}],
+    "links": [{"from": "s1", "to": "s2", "continuity_dimensions": ["identity", "temporal"], "cites": ["E1"],
+               "questions": ["Does the same connection stay open between the two requests?"]}]}],
+  "no_claim": [], "blocked": []}}
 ```
 
 An unresolved lead is accounted for with a reason, and more is asked with the tool shape of the catalog:

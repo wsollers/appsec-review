@@ -48,7 +48,7 @@ def test_shipped_configuration_is_valid_and_declares_the_steps() -> None:
     assert type(settings.enabled) is bool
     assert tuple(job["steps"]) == ("load", "plan", "write", "validate", "compile", "package", "publish")
     assert settings.writer.provider == "claude-cli" and settings.writer_profile == "default"
-    assert settings.accepted_judge_verdicts == ("red_correct",)
+    assert settings.accepted_judge_verdicts == ("red_correct", "not_convened")
     assert settings.policy.project_calls == "sink_and_path"
     assert "system" in settings.policy.call_denylist["shell"] and "system" not in settings.policy.call_allowlist
 

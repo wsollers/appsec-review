@@ -266,7 +266,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
   },
   "roles": {
     "adjudication_judge": {
-      "enabled": false,
+      "enabled": true,
       "judges_per_claim": 1,
       "max_cited_row_chars": 400,
       "max_cited_rows_per_side": 12,
@@ -291,7 +291,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
     }
   },
   "teams": {
-    "blue_per_team": 0,
+    "blue_per_team": 1,
     "red_per_team": 1,
     "review_teams": 3,
     "verifier_per_team": 1

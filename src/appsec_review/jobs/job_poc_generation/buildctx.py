@@ -106,6 +106,11 @@ def language_of(path: str) -> str | None:
     return "cxx" if suffix in HEADER_SUFFIXES else None
 
 
+#: Receipt terminal statuses whose build products the lookup may use. A gap on an accepted build is a named
+#: limit of that build, not the absence of a build; FAILED, BLOCKED and NOT_APPLICABLE receipts have no products.
+ACCEPTED_BUILD_STATUSES = frozenset({"SUCCEEDED", "COMPLETED_WITH_GAPS"})
+
+
 class MissingBuild(ValueError):
     """The run has no accepted language build at all (a gap about the run, not an integrity failure)."""
 
@@ -169,8 +174,13 @@ class AcceptedBuilds:
             accepted = self.accepted
         except MissingBuild as exc:
             return Located(None, str(exc), "no_native_build")
+        # ``COMPLETED_WITH_GAPS`` is an accepted build whose products exist (compile database, workspace manifest,
+        # image) but which recorded named gaps, such as output-classification heuristics or unknown delivery facts.
+        # Run 2026-11-16-0003 lost every remediation plan and PoC to "no_native_build" because its only native
+        # build carried 17 such gaps; the bound products are verified below and a missing one is still refused.
         receipts = sorted((item for item in accepted.get("receipts", ()) if isinstance(item, Mapping)
-                           and item.get("family") == "native" and item.get("terminal_status") == "SUCCEEDED"),
+                           and item.get("family") == "native"
+                           and item.get("terminal_status") in ACCEPTED_BUILD_STATUSES),
                           key=lambda item: str(item["build_unit_id"]))
         if not receipts:
             return Located(None, "the run has no successful accepted native build", "no_native_build")

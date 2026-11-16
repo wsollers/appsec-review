@@ -52,6 +52,8 @@ TOPOLOGY = {"load": ("verify_inputs",), "plan": ("briefs",), "write": ("poc_writ
             "compile": ("build_check",), "package": ("files",), "publish": ("publish_handoff",)}
 IMPLEMENTATION = "appsec-review/poc-generation/1"
 GAP_STATUSES = frozenset({COMPILE_FAILED, ARTIFACT_GENERATED, POLICY_DENIED, INSUFFICIENT_EVIDENCE, "unsafe_to_attempt"})
+COMPILE_CHECK_DISABLED = ("the compile check is disabled by configuration (build.compile_check = false); the "
+                          "function passed the validators but was not compiled against the project")
 
 ExecutorFactory = Callable[[UnitContext, BuildProfile], Any]
 
@@ -313,6 +315,10 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
             entry = validated[claim]
             if entry.get("terminal") is not None:
                 return claim, {"terminal": entry["terminal"], "record": None}
+            if not settings.build.compile_check:
+                # Validation without compilation (build.compile_check = false): the validated text is published as
+                # generated, with the reason recorded; nothing touches the build image here.
+                return claim, {"terminal": _terminal(ARTIFACT_GENERATED, COMPILE_CHECK_DISABLED), "record": None}
             return claim, _compile_candidate(unit, settings, services, builds, executors, claim, planned[claim], entry)
 
         results = dict(_pool(settings, list(validated), one))

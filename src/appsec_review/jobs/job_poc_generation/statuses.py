@@ -22,5 +22,6 @@ DECLINES = (INSUFFICIENT_EVIDENCE, NOT_APPLICABLE, UNSAFE_TO_ATTEMPT)
 GAP_NO_CANDIDATES = "no_poc_candidates"
 GAP_CANDIDATE_BOUND = "candidate_bound_reached"
 
-JUDGE_VERDICTS = ("red_correct", "blue_correct", "partly", "neither", "unresolved")
+#: ``not_convened``: the review listed the candidate on the verifier's confirmation alone; no judge saw the claim.
+JUDGE_VERDICTS = ("red_correct", "blue_correct", "partly", "neither", "unresolved", "not_convened")
 CLAIM_STATES = ("supported", "confirmed")

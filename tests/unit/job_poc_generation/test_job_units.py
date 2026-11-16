@@ -179,11 +179,19 @@ def test_validate_and_terminal_guards(tmp_path: Path) -> None:
         poc_job._terminal("not_a_valid_status", "bad")
 
 
+def _compiling_config():
+    """The repository default leaves the compile replay off (build.compile_check = false); these flows exercise it."""
+    base_cfg = load_config(ROOT / "appsec-review.toml").job(poc_job.JOB_ID)
+    settings = dict(base_cfg.settings)
+    settings["build"] = {**settings["build"], "compile_check": True}
+    return replace(base_cfg, settings=settings)
+
+
 def test_full_job_handler_happy_path_via_injected_fakes(tmp_path: Path) -> None:
     workspace, manifest = _fast_workspace(tmp_path / "ws")
     unit = relay_unit(workspace, manifest)
     fake_exec = FakeExecutor(ast=ast_document("good"))
-    ctx = _job_context(tmp_path)
+    ctx = _job_context(tmp_path, config=_compiling_config())
 
     cd = _candidate_dict(1)
     pkg = {
@@ -219,11 +227,47 @@ def test_full_job_handler_happy_path_via_injected_fakes(tmp_path: Path) -> None:
     assert pub["counts"]["by_status"][COMPILE_VERIFIED] == 1
 
 
+def test_compile_check_disabled_publishes_validated_candidates_as_generated(tmp_path: Path) -> None:
+    """build.compile_check = false: validators run, the compile command is never replayed, the status says why."""
+    workspace, manifest = _fast_workspace(tmp_path / "ws")
+    unit = relay_unit(workspace, manifest)
+    fake_exec = FakeExecutor(ast=ast_document("good"))
+    base_cfg = load_config(ROOT / "appsec-review.toml").job(poc_job.JOB_ID)
+    settings = dict(base_cfg.settings)
+    settings["build"] = {**settings["build"], "compile_check": False}
+    ctx = _job_context(tmp_path, config=replace(base_cfg, settings=settings))
+    cd = _candidate_dict(1)
+    pkg = {"package_id": cd["package_id"],
+           "neighborhood": {"function": {"name": relay.SINK, "path": "src/packet.cpp", "start_line": 8, "end_line": 20}}}
+    ver = _verified_inputs(ctx.run_root, [cd], {1: pkg})
+    fake_builds = AcceptedBuilds(unit.workspace.parent, loader=lambda _r: {"receipts": [], "language_build_handoff_sha256": "b" * 64})
+    fake_builds.locate = lambda _p: SimpleNamespace(unit=unit, reason="", code="found")  # type: ignore[method-assign]
+    writer_out = WriterOutcome("answered", dict(relay.answer()["result"], claim=cd["claim_id"]), "ok", ())
+    job = poc_job.build_job(infer=lambda *_a, **_kw: None, executor_factory=lambda _u, _p: fake_exec,
+                            builds_factory=lambda _r: fake_builds, core_factory=lambda _r, _m: SimpleNamespace(),
+                            view_factory=lambda *_a, **_kw: _view_with_resolved_labels(), repository_root=ROOT)
+    with (
+        patch("appsec_review.jobs.job_poc_generation.inputs.verify_inputs", return_value=ver),
+        patch("appsec_review.jobs.job_poc_generation.job.accepted_handoff", return_value=accepted_ptr_for(cd)),
+        patch("appsec_review.jobs.job_poc_generation.job.run_writer", return_value=writer_out),
+    ):
+        result = job.handler(ctx)
+    pub = result["outputs"]["publish.publish_handoff"]
+    assert pub["counts"]["by_status"][ARTIFACT_GENERATED] == 1
+    assert pub["terminal_status"] == "COMPLETED_WITH_GAPS"                   # generated-not-compiled is a named gap
+    assert any("compile_check = false" in gap for gap in pub["gaps"])
+    assert not any("-fsanitize" in " ".join(map(str, call["argv"])) for call in fake_exec.calls)   # no compile replay
+
+
+def accepted_ptr_for(_candidate: dict[str, Any]) -> SimpleNamespace:
+    return SimpleNamespace(path="jobs/rev/latest.json", sha256="a" * 64)
+
+
 def test_unit_branches_for_plan_write_validate_compile_and_publish_errors(tmp_path: Path) -> None:
     workspace, manifest = _fast_workspace(tmp_path / "ws")
     unit = relay_unit(workspace, manifest)
 
-    base_cfg = load_config(ROOT / "appsec-review.toml").job(poc_job.JOB_ID)
+    base_cfg = _compiling_config()
     wide_settings = dict(base_cfg.settings)
     wide_settings["max_candidates"] = 13  # 14th candidate triggers omitted/max_candidates gap!
     wide_cfg = replace(base_cfg, settings=wide_settings)
