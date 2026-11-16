@@ -180,7 +180,10 @@ not counted; they appear as off-CPU time in the `index.sqlite_*` phases and as D
 
 Every progress interval the sampler writes `OPERATION_PROGRESS` for each
 registered span open for at least one interval. It uses the span's `EventLog`, so the last record is
-fsynced in `pipeline.jsonl` and survives SIGKILL of the worker as the span's last known state. The
+written through to `pipeline.jsonl` at once and survives SIGKILL of the worker as the span's last known
+state. Only error, failure and stop records are fsynced as they are written; everything else is fsynced at
+interpreter exit (`sync_all`), so a machine crash can lose the records since the last synced one, a
+killed process cannot (T-5027). The
 record carries the span correlation, `progress_sequence`, `progress_interval_ms`, `elapsed_ms`, and
 cumulative `resources`, `work`, `expected`, `phases` and `thread_states`, plus the instantaneous
 `thread_state_now` and `wait_channel_now`.

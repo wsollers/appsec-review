@@ -221,7 +221,8 @@ first with `appsec-review metrics --run-id <id>`; it is safe while the run is ac
    stopped for three intervals; the worker likely died (for example, SIGKILL or OOM). For a
    completed but slow step, start from `operation_hotspots` instead.
 2. **Last known state.** Read the latest `OPERATION_PROGRESS` record for the `span_id` in
-   `runs/<run-id>/data/logs/pipeline.jsonl`. It is fsynced, so it survives a killed worker. Compare
+   `runs/<run-id>/data/logs/pipeline.jsonl`. It is written through as it is recorded, so it survives a
+   killed worker. Compare
    `work` with `expected` (`completion_ratio`) to see how far the unit progressed and its rate per
    minute, and read `thread_state_now` and `wait_channel_now`.
 3. **On CPU or blocked?** A high `thread_off_cpu_ratio` (or `thread_off_cpu_seconds` close to wall)

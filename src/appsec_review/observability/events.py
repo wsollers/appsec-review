@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from functools import lru_cache
+import atexit
 import hashlib
 import json
 import os
@@ -135,8 +136,44 @@ def _anchor(stream: Any, offset: int) -> str:
     return hashlib.sha256(stream.read(min(offset, MAX_RECORD_BYTES))).hexdigest()
 
 
+_SYNC_LEVELS = frozenset({"ERROR", "CRITICAL"})
+_TOUCHED: set[Path] = set()
+_TOUCHED_LOCK = threading.Lock()
+
+
+def _needs_sync(level: str, event_type: str) -> bool:
+    """Only an error, a failure or a stop is worth a synchronous disk flush of its own.
+
+    Every other record is written through to the kernel at once (other processes read the log as control
+    state, so visibility is immediate) and reaches the disk with the exit flush or the next synced record.
+    Run ``2026-11-15-0005`` spent 1,303 s of one lane unit's 109 minutes in 22,903 per-record fsyncs (T-5027).
+    """
+    return level in _SYNC_LEVELS or event_type.endswith("FAILED") or event_type == "STOP"
+
+
+def sync_all() -> None:
+    """fsync every pipeline log this process wrote to; registered at exit, callable at a unit's end."""
+    with _TOUCHED_LOCK:
+        paths = sorted(_TOUCHED)
+        _TOUCHED.clear()
+    for path in paths:
+        try:
+            with path.open("rb") as stream:
+                os.fsync(stream.fileno())
+        except OSError:
+            continue
+
+
+atexit.register(sync_all)
+
+
 class PipelineLog:
-    """One crash-recovering, process-safe JSONL stream for an application run."""
+    """One crash-recovering, process-safe JSONL stream for an application run.
+
+    Every record is appended under the kernel lock and written through at once; the file is fsynced for
+    error, failure and stop records and once at interpreter exit (``sync_all``), so a killed worker loses
+    nothing and a machine crash loses at most the records since the last synced one.
+    """
 
     def __init__(self, run_root: Path):
         self.path = Path(run_root) / "data" / "logs" / "pipeline.jsonl"
@@ -211,8 +248,12 @@ class PipelineLog:
             with self.path.open("ab") as stream:
                 stream.write(line)
                 stream.flush()
-                with operation_phase("telemetry.fsync"):
-                    os.fsync(stream.fileno())
+                if _needs_sync(record["level"], event_type):
+                    with operation_phase("telemetry.fsync"):
+                        os.fsync(stream.fileno())
+                else:
+                    with _TOUCHED_LOCK:
+                        _TOUCHED.add(self.path)
             return record
         finally:
             lock.__exit__(None, None, None)
