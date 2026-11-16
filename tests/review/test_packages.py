@@ -53,8 +53,11 @@ def _menu(document: dict, lead_id: str) -> dict:
 
 
 # sast_critical and its opengrep duplicate sit on native/src/parse.c:3 and codeql_high on line 5 of the same
-# file: one defect site, one package, three menu entries.
+# file: one defect site, one package, three menu entries. sast_unknown (io.c:1) and sast_suppressed (io.c:3)
+# form the fixture's second cluster.
 CLUSTER = ("sast_critical", "sast_duplicate", "codeql_high")
+CLUSTERS = (CLUSTER, ("sast_unknown", "sast_suppressed"))
+CLUSTERED_PACKAGES = len(ADMITTED) - sum(len(group) for group in CLUSTERS) + len(CLUSTERS)
 
 
 def test_lane_a_admits_exactly_critical_high_and_unknown_across_families(fixture, assembly) -> None:
@@ -80,10 +83,10 @@ def test_lane_a_admits_exactly_critical_high_and_unknown_across_families(fixture
 
 
 def test_suppressed_and_duplicate_leads_keep_their_packages_and_identity(fixture, assembly) -> None:
-    suppressed = _finding(assembly, fixture, "sast_suppressed")
-    assert suppressed["lead_menu"][0]["suppression_status"] == "suppressed"
-    assert suppressed["lead_menu"][0]["observation_id"] == fixture.ids["sast_suppressed"]
-    assert suppressed["lead_menu"][0]["rule_cwe"] == ["CWE-78"]
+    suppressed = _menu(_finding(assembly, fixture, "sast_suppressed"), fixture.ids["sast_suppressed"])
+    assert suppressed["suppression_status"] == "suppressed"
+    assert suppressed["observation_id"] == fixture.ids["sast_suppressed"]
+    assert suppressed["rule_cwe"] == ["CWE-78"]
     duplicate = _finding(assembly, fixture, "sast_duplicate")
     assert _menu(duplicate, fixture.ids["sast_duplicate"])["duplicate_of"] == fixture.ids["sast_critical"]
     assert {"id": fixture.ids["sast_critical"], "kind": "tool_observation", "role": "duplicate_of"} in \
@@ -195,7 +198,7 @@ def test_manifest_lists_every_package_hash_input_gap_and_count(tmp_path: Path, f
     assert [item["package_id"] for item in manifest["packages"]] == [item.package_id for item in assembly.packages]
     assert {item["sha256"] for item in manifest["packages"]} == {item.sha256 for item in assembly.packages}
     assert len(manifest["inputs"]) == len(accept_manifest(fixture.run_root).shards)
-    assert manifest["counts"]["packages"]["finding_lead"] == len(ADMITTED) - len(CLUSTER) + 1
+    assert manifest["counts"]["packages"]["finding_lead"] == CLUSTERED_PACKAGES
     assert manifest["counts"]["leads"]["dependency_advisory"]["low"] == 1
     out = tmp_path / "review"
     path = publish_packages(assembly, out)

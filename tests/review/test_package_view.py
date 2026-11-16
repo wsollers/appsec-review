@@ -10,10 +10,12 @@ from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.neighborhood import function_extent, type_names
 from appsec_review.review.package_view import ViewLimits, build_view, file_bytes, is_material_gap
-from appsec_review.review.packages import assemble_packages
+from appsec_review.review.packages import PackageSettings, assemble_packages
 from appsec_review.review.scope import accept_manifest
 from tests.fixtures.inference_review.builder import build_accepted_index_set
 from tests.review.test_packages_graph_context import attach_graph
+
+ALONE = PackageSettings(lead_cluster_lines=0)   # per-lead context: leads of one site do not share a package here
 
 LIMITS = ViewLimits(48 * 1024, 160, 6)
 
@@ -22,7 +24,7 @@ LIMITS = ViewLimits(48 * 1024, 160, 6)
 def graph(tmp_path_factory):
     fixture = build_accepted_index_set(tmp_path_factory.mktemp("viewpkg"))
     ids = attach_graph(fixture)
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     core = RetrievalCore(fixture.runs_dir, fixture.run_id)
     return fixture, ids, assembly, core
 
@@ -160,7 +162,7 @@ def scoped(tmp_path_factory):
         ("graph", "cpp-native-scoped", {"job": "job_code_graph_index", "family": "call_site",
                                         "build_unit_id": "native-main"},
          [sink, into_p, out_of_p, entry_q], [], ("graph:native:call_site", "complete", None))])
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     return fixture, assembly, RetrievalCore(fixture.runs_dir, fixture.run_id), {
         "p": p.identity.value, "q": q.identity.value, "sink": sink.identity.value, "into_p": into_p.identity.value,
         "out_of_p": out_of_p.identity.value, "entry_q": entry_q.identity.value, "entry_n": graph_ids["entry_n"],

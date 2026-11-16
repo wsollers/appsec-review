@@ -31,6 +31,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.review.neighborhood import NEIGHBORHOOD_RULE
 from appsec_review.review.package_view import VIEW_RULE, VIEW_SCHEMA, ViewLimits, build_view
 from appsec_review.review.packages import (
+    PackageSettings,
     ASSEMBLY_RULE, MANIFEST_SCHEMA, PACKAGE_SCHEMA, GraphContext, GraphSettings, assemble_packages,
     publish_packages, slice_gap, trim_slice, verify_package_manifest,
 )
@@ -43,6 +44,8 @@ from appsec_review.review.slicing.sources import AcceptedSliceSources, Unavailab
 from tests.fixtures.inference_review.builder import SNAPSHOT, build_accepted_index_set
 from tests.review.test_graph_admissibility import SCOPE_ID, graph_entity, results_for
 from tests.review.test_packages_graph_context import PARSE, SCHEMA, _location, _span
+
+ALONE = PackageSettings(lead_cluster_lines=0)   # per-lead context: leads of one site do not share a package here
 from tests.review.test_packages_memory_context import _publish
 
 LIMITS = ViewLimits(48 * 1024, 160, 6)
@@ -112,7 +115,7 @@ def dataflow(tmp_path_factory):
     fixture = build_accepted_index_set(tmp_path_factory.mktemp("dfbound"))
     ids = publish_dataflow(fixture)
     scope = accept_manifest(fixture.run_root)
-    return fixture, ids, scope, assemble_packages(scope), RetrievalCore(fixture.runs_dir, fixture.run_id)
+    return fixture, ids, scope, assemble_packages(scope, ALONE), RetrievalCore(fixture.runs_dir, fixture.run_id)
 
 
 def _package(assembly, fixture, key: str) -> dict[str, Any]:
@@ -230,7 +233,7 @@ class _RaisingSource(AcceptedSliceSources):
 
 def test_a_failing_strategy_is_isolated_and_the_package_stays_valid(dataflow) -> None:
     fixture, _ids, scope, _assembly, _core = dataflow
-    assembly = assemble_packages(scope, slice_sources=_RaisingSyntax(scope))
+    assembly = assemble_packages(scope, ALONE, slice_sources=_RaisingSyntax(scope))
     package = _package(assembly, fixture, "sast_critical")
     jsonschema.Draft202012Validator(SCHEMA).validate(package)
     found = package["neighborhood"]["slice"]
@@ -245,7 +248,7 @@ def test_a_failing_strategy_is_isolated_and_the_package_stays_valid(dataflow) ->
 
 def test_a_failing_source_facade_never_fails_assembly(dataflow) -> None:
     fixture, ids, scope, _assembly, _core = dataflow
-    assembly = assemble_packages(scope, slice_sources=_RaisingSource(scope))
+    assembly = assemble_packages(scope, ALONE, slice_sources=_RaisingSource(scope))
     package = _package(assembly, fixture, "sast_critical")
     jsonschema.Draft202012Validator(SCHEMA).validate(package)
     found = package["neighborhood"]["slice"]
@@ -257,7 +260,7 @@ def test_a_failing_source_facade_never_fails_assembly(dataflow) -> None:
 
 def test_without_sources_a_slice_keeps_no_text_and_names_the_gap(dataflow) -> None:
     fixture, _ids, scope, _assembly, _core = dataflow
-    assembly = assemble_packages(scope, slice_sources=UnavailableSliceSources("slice sources unavailable: test"))
+    assembly = assemble_packages(scope, ALONE, slice_sources=UnavailableSliceSources("slice sources unavailable: test"))
     package = _package(assembly, fixture, "sast_critical")
     jsonschema.Draft202012Validator(SCHEMA).validate(package)
     assert package["neighborhood"]["slice"]["functions"] == []

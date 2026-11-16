@@ -21,6 +21,8 @@ from tests.fixtures.inference_review.builder import SNAPSHOT, FixtureRun, build_
 from tests.review.test_graph_admissibility import graph_entity
 from tests.review.test_packages_graph_context import PARSE, _location, attach_graph
 
+ALONE = PackageSettings(lead_cluster_lines=0)   # per-lead context: leads of one site do not share a package here
+
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "docs" / "schemas" / "review-packages.schema.json").read_text(encoding="utf-8"))
 IO = "native/src/io.c"
@@ -151,7 +153,7 @@ def _gaps(document: dict, producer: str) -> list[dict]:
 
 def test_any_scanners_cpp_lead_gets_the_svf_records_at_its_line_and_their_objects(memory_fixture) -> None:
     fixture, ids = memory_fixture
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     document = _lead(assembly, fixture, "sast_critical")   # a Semgrep strcpy lead at parse.c:3
     assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/7"
     assert _roles(document, MEMORY_ROLES) == {"points_to": {ids["dst"], ids["src"]}, "memory_object": {ids["obj"]}}
@@ -162,14 +164,14 @@ def test_any_scanners_cpp_lead_gets_the_svf_records_at_its_line_and_their_object
 
 def test_callers_follow_the_enclosing_function_to_the_configured_depth(memory_fixture) -> None:
     fixture, ids = memory_fixture
-    deep = assemble_packages(accept_manifest(fixture.run_root))
+    deep = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     callers = _roles(_lead(deep, fixture, "sast_critical"), {"caller"})["caller"]
     assert callers == {ids["depth_one"], ids["depth_two"]}
     gaps = _gaps(_lead(deep, fixture, "sast_critical"), "code_graph_callers")
     assert any(gap["state"] == "ambiguous" and "unqualified function name" in gap["reason"] for gap in gaps)
-    shallow = assemble_packages(accept_manifest(fixture.run_root), PackageSettings(caller_depth=1))
+    shallow = assemble_packages(accept_manifest(fixture.run_root), PackageSettings(lead_cluster_lines=0, caller_depth=1))
     assert _roles(_lead(shallow, fixture, "sast_critical"), {"caller"})["caller"] == {ids["depth_one"]}
-    capped = assemble_packages(accept_manifest(fixture.run_root), PackageSettings(max_callers=1))
+    capped = assemble_packages(accept_manifest(fixture.run_root), PackageSettings(lead_cluster_lines=0, max_callers=1))
     document = _lead(capped, fixture, "sast_critical")
     assert _roles(document, {"caller"})["caller"] == {ids["depth_one"]}
     assert any(gap["state"] == "truncated" and "max_callers=1" in gap["reason"]
@@ -178,7 +180,7 @@ def test_callers_follow_the_enclosing_function_to_the_configured_depth(memory_fi
 
 def test_a_line_without_pointer_sites_and_non_c_leads_are_handled_honestly(memory_fixture) -> None:
     fixture, _ids = memory_fixture
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     codeql = _lead(assembly, fixture, "codeql_high")         # parse.c:5 holds no SVF record
     assert not _roles(codeql, MEMORY_ROLES)
     [gap] = _gaps(codeql, SVF_PRODUCER)
@@ -191,7 +193,7 @@ def test_a_line_without_pointer_sites_and_non_c_leads_are_handled_honestly(memor
 
 def test_memory_context_bound_keeps_objects_first_and_names_the_truncation(memory_fixture) -> None:
     fixture, ids = memory_fixture
-    assembly = assemble_packages(accept_manifest(fixture.run_root), PackageSettings(max_memory_context_entries=1))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), PackageSettings(lead_cluster_lines=0, max_memory_context_entries=1))
     document = _lead(assembly, fixture, "sast_critical")
     assert _roles(document, MEMORY_ROLES) == {"memory_object": {ids["obj"]}}
     assert any(gap["state"] == "truncated" and "max_memory_context_entries=1" in gap["reason"]
@@ -200,14 +202,14 @@ def test_memory_context_bound_keeps_objects_first_and_names_the_truncation(memor
 
 def test_reassembly_is_byte_identical(memory_fixture) -> None:
     fixture, _ids = memory_fixture
-    first = assemble_packages(accept_manifest(fixture.run_root))
-    second = assemble_packages(accept_manifest(fixture.run_root))
+    first = assemble_packages(accept_manifest(fixture.run_root), ALONE)
+    second = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     assert [item.body for item in first.packages] == [item.body for item in second.packages]
 
 
 def test_without_svf_shards_a_cpp_lead_names_the_missing_producer(tmp_path_factory) -> None:
     fixture = build_accepted_index_set(tmp_path_factory.mktemp("nosvf"))
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     [gap] = _gaps(_lead(assembly, fixture, "sast_critical"), SVF_PRODUCER)
     assert gap["state"] == "missing" and "opt-in" in gap["reason"]
 
@@ -216,7 +218,7 @@ def test_open_world_records_are_kept_with_a_partial_gap(tmp_path_factory) -> Non
     fixture = build_accepted_index_set(tmp_path_factory.mktemp("openw"))
     svf, ids = svf_shard(fixture, open_world=True)
     _publish(fixture, [svf])
-    document = _lead(assemble_packages(accept_manifest(fixture.run_root)), fixture, "sast_critical")
+    document = _lead(assemble_packages(accept_manifest(fixture.run_root), ALONE), fixture, "sast_critical")
     assert _roles(document, {"points_to"})["points_to"] == {ids["dst"], ids["src"]}
     [gap] = _gaps(document, SVF_PRODUCER)
     assert gap["state"] == "partial" and "dynamic_loading" in gap["reason"] and "never rule out" in gap["reason"]

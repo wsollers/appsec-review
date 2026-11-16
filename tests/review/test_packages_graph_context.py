@@ -29,6 +29,8 @@ from appsec_review.storage import atomic_json, file_sha256
 from tests.fixtures.inference_review.builder import SNAPSHOT, FixtureRun, build_accepted_index_set, point_latest_handoff
 from tests.review.test_graph_admissibility import graph_entity, results_for
 
+ALONE = PackageSettings(lead_cluster_lines=0)   # per-lead context: leads of one site do not share a package here
+
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "docs" / "schemas" / "review-packages.schema.json").read_text(encoding="utf-8"))
 PARSE = "native/src/parse.c"
@@ -180,7 +182,7 @@ def graph_fixture(tmp_path_factory) -> tuple[FixtureRun, dict[str, str]]:
 @pytest.fixture(scope="module")
 def graph_assembly(graph_fixture):
     fixture, _ids = graph_fixture
-    return assemble_packages(accept_manifest(fixture.run_root))
+    return assemble_packages(accept_manifest(fixture.run_root), ALONE)
 
 
 def _lead(assembly, fixture: FixtureRun, key: str) -> dict:
@@ -259,16 +261,42 @@ def test_codeql_lead_embeds_its_correlated_path_sink_guards_and_ranges(graph_fix
     assert any(gap["producer"] == "code_graph" and gap["state"] == "unavailable" for gap in python["coverage_gaps"])
 
 
+def test_leads_of_one_site_merge_their_neighborhoods_into_the_shared_package(graph_fixture) -> None:
+    """T-5025: sast_critical (parse.c:3, call-depth bound) and codeql_high (parse.c:5, path bound) share a package;
+    the merged neighborhood carries the sink, guard and range facts of both, is bounded by the correlated path,
+    recomposes the slice over it, and never embeds the broken correlation."""
+    fixture, ids = graph_fixture
+    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    [package] = [item for item in assembly.packages
+                 if item.kind == "finding_lead" and fixture.ids["codeql_high"] in item.lead_ids]
+    assert fixture.ids["sast_critical"] in package.lead_ids
+    document = package.document()
+    entries = {(entry["id"], entry["role"]) for entry in _graph_entries(document)}
+    assert {(ids["path_bridged"], "path"), (ids["sink_multiply"], "sink"), (ids["guard_multiply"], "guard"),
+            (ids["range_multiply"], "range"), (ids["entry_n"], "entry_point")} <= entries
+    # The broken correlation may appear as a flow the call-depth side touches, never as the package's path.
+    assert (ids["path_broken"], "path") not in entries
+    neighborhood = document["neighborhood"]
+    assert neighborhood["bound"]["kind"] == "dataflow_path" and ids["path_bridged"] in neighborhood["bound"]["paths"]
+    assert {ids["sink_strcpy"], ids["sink_multiply"]} <= {row["ref"] for row in neighborhood["sinks"]}
+    assert {ids["guard_strcpy"], ids["guard_multiply"]} <= {row["ref"] for row in neighborhood["guards"]}
+    assert neighborhood["slice"] is not None and neighborhood["slice"]["paths"] == sorted(neighborhood["bound"]["paths"])
+    assert not {row["ref"] for row in neighborhood["corroboration"]} & set(package.lead_ids)
+    assert all(row["ref"] in document["retrieval"]["entity_ids"]
+               for name in ("sinks", "guards", "ranges") for row in neighborhood[name])
+    jsonschema.Draft202012Validator(SCHEMA).validate(document)
+
+
 def test_hunt_graph_context_is_bounded_round_robin_by_class(graph_fixture) -> None:
     fixture, ids = graph_fixture
     scope = accept_manifest(fixture.run_root)
-    wide = _native_hunt(assemble_packages(scope))
+    wide = _native_hunt(assemble_packages(scope, ALONE))
     every = _graph_entries(wide)
     assert {entry["id"] for entry in every} == {ids[key] for key in ids if key.startswith(("sink_", "entry_"))}
     assert all(entry["role"] in {"sink", "entry_point"} for entry in every)
     non_graph = len(wide["context"]) - len(every)
     bound = non_graph + 3
-    narrow = _native_hunt(assemble_packages(scope, PackageSettings(max_context_entries=bound)))
+    narrow = _native_hunt(assemble_packages(scope, PackageSettings(lead_cluster_lines=0, max_context_entries=bound)))
     chosen = _graph_entries(narrow)
     assert len(narrow["context"]) == bound and len(chosen) == 3
     # Buckets in (role, class) order: entry_point/argv, entry_point/remote, sink/integer_conversion, ...
@@ -276,7 +304,7 @@ def test_hunt_graph_context_is_bounded_round_robin_by_class(graph_fixture) -> No
     assert narrow["truncation"]["omitted_context"] == len(every) - 3
     truncated = [gap for gap in narrow["coverage_gaps"] if gap["producer"] == "code_graph" and gap["state"] == "truncated"]
     assert len(truncated) == 1 and f"{len(every) - 3} graph context entries" in truncated[0]["reason"]
-    again = _native_hunt(assemble_packages(scope, PackageSettings(max_context_entries=bound)))
+    again = _native_hunt(assemble_packages(scope, PackageSettings(lead_cluster_lines=0, max_context_entries=bound)))
     assert again == narrow
 
 
@@ -291,13 +319,13 @@ def test_package_ids_are_stable_under_shuffled_graph_input(graph_fixture, graph_
         return tuple(values)
     collection = collect_leads(scope)
     scrambled = replace(scope, shards=shuffled(scope.shards))
-    again = assemble_packages(scrambled, collection=replace(collection, leads=shuffled(collection.leads)))
+    again = assemble_packages(scrambled, ALONE, collection=replace(collection, leads=shuffled(collection.leads)))
     assert [item.package_id for item in again.packages] == [item.package_id for item in graph_assembly.packages]
     assert again.manifest_bytes == graph_assembly.manifest_bytes
     # The same facts inserted in reverse order in another run give the same graph context.
     other = build_accepted_index_set(tmp_path / "reversed")
     attach_graph(other, reverse=True)
-    rebuilt = assemble_packages(accept_manifest(other.run_root))
+    rebuilt = assemble_packages(accept_manifest(other.run_root), ALONE)
     volatile = {"package_id", "manifest_sha256", "input_fingerprint"}
     left = sorted(json.dumps({key: value for key, value in item.document().items() if key not in volatile},
                              sort_keys=True) for item in rebuilt.packages)
@@ -327,7 +355,7 @@ def _route(document: dict, available: tuple[str, ...]) -> dict:
 
 def test_entry_down_launches_only_when_the_unit_has_an_accepted_entry_point_family(graph_fixture, tmp_path) -> None:
     fixture, _ids = graph_fixture
-    hunt = _native_hunt(assemble_packages(accept_manifest(fixture.run_root)))
+    hunt = _native_hunt(assemble_packages(accept_manifest(fixture.run_root), ALONE))
     families = hunt["retrieval"]["graph_families"]
     sources = review_job.available_sources(hunt["retrieval"]["query_sets"], families)
     assert {"source_sink_facts", "entry_point_catalog"} <= set(sources) and "symbol_links" not in sources
@@ -338,7 +366,7 @@ def test_entry_down_launches_only_when_the_unit_has_an_accepted_entry_point_fami
     # The same unit whose entry-point export is unavailable keeps sink_up and falls back for entry_down.
     degraded = build_accepted_index_set(tmp_path / "no-entry")
     attach_graph(degraded, entry_points=False)
-    hunt = _native_hunt(assemble_packages(accept_manifest(degraded.run_root)))
+    hunt = _native_hunt(assemble_packages(accept_manifest(degraded.run_root), ALONE))
     families = hunt["retrieval"]["graph_families"]
     assert "entry_point" not in families and "sink_site" in families
     sources = review_job.available_sources(hunt["retrieval"]["query_sets"], families)
@@ -356,7 +384,7 @@ def test_entry_down_launches_only_when_the_unit_has_an_accepted_entry_point_fami
 
 def test_without_a_graph_index_packages_name_the_gap_and_unlock_nothing(tmp_path) -> None:
     fixture = build_accepted_index_set(tmp_path)
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
+    assembly = assemble_packages(accept_manifest(fixture.run_root), ALONE)
     assert any(gap["producer"] == "code_graph" and gap["scope"] == "run" and gap["state"] == "missing"
                for gap in assembly.manifest["gaps"])
     for package in assembly.packages:

@@ -1447,6 +1447,46 @@ class _Assembler:
                                  "unknown for it, not absent"))
         return record, entries, gaps
 
+    def merged_neighborhood(self, built: Sequence[tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]],
+                            members: set[str], subject: str
+                            ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
+        """One neighborhood for the leads of one defect site: the anchor lead's record, with every other
+        member's rows, entries and gaps folded in.
+
+        Rows merge by identity per section and the omitted counts add up. A member with correlated dataflow
+        paths makes the merged bound ``dataflow_path`` over the union of the paths, and the slice is then
+        recomposed over that union. The anchor keeps its function and chain unless it has none and a member
+        does. Members are menu entries, so they leave the corroboration rows.
+        """
+        record, entries, gaps = built[0]
+        entries = list(entries)
+        gaps = list(gaps)
+        paths_before = list(record["bound"]["paths"])
+        for other, other_entries, other_gaps in built[1:]:
+            for section in NEIGHBORHOOD_SECTIONS:
+                seen = {row["ref"] for row in record[section]}
+                record[section].extend(row for row in other[section] if row["ref"] not in seen)
+                record["omitted"][section] = record["omitted"].get(section, 0) + other["omitted"].get(section, 0)
+            if other["bound"]["kind"] == "dataflow_path":
+                if record["bound"]["kind"] != "dataflow_path":
+                    record["bound"] = {"kind": "dataflow_path", "paths": list(other["bound"]["paths"]), "call_depth": None}
+                else:
+                    record["bound"]["paths"] = sorted({*record["bound"]["paths"], *other["bound"]["paths"]})
+            if not record["chain"]["reached"] and other["chain"]["reached"]:
+                record["chain"] = other["chain"]
+            for key in ("function", "build"):
+                if record.get(key) is None and other.get(key) is not None:
+                    record[key] = other[key]
+            known = {(item.role, item.id) for item in entries}
+            entries.extend(item for item in other_entries if (item.role, item.id) not in known)
+            gaps.extend(other_gaps)
+        record["corroboration"] = [row for row in record["corroboration"] if row["ref"] not in members]
+        entries = [item for item in entries if not (item.role == "corroboration" and item.id in members)]
+        if record["bound"]["kind"] == "dataflow_path" and list(record["bound"]["paths"]) != paths_before:
+            record["slice"], slice_gaps = self.lead_slice(list(record["bound"]["paths"]))
+            gaps.extend(slice_gap(reason, subject) for reason in slice_gaps)
+        return record, entries, gaps
+
     def lead_slice(self, paths: list[str]) -> tuple[dict[str, Any], list[str]]:
         """The ``package-slice/2`` record composed from ``paths`` and the slice gaps (record order).
 
@@ -1713,7 +1753,8 @@ class _Assembler:
         families, graph_shards, graph_gaps = (self.graph.families(unit_id, paths, partition_key)
                                               if not binary_only else ([], [], []))
         capped, omitted, gaps = self._cap(context, partition_key, lead.family)
-        neighborhood, nb_entries, nb_gaps = self.lead_neighborhood(lead, partition_key, unit_id)
+        neighborhood, nb_entries, nb_gaps = self.merged_neighborhood(
+            [self.lead_neighborhood(member, partition_key, unit_id) for member in leads], members, partition_key)
         self.bound_counts[neighborhood["bound"]["kind"]] += 1
         gaps.extend(nb_gaps)
         gaps.extend(graph_gaps)
