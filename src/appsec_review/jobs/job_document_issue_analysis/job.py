@@ -1,4 +1,4 @@
-"""Accepted document hunts to bounded, private candidate ledger."""
+"""Accepted document hunts and multi-language API spec drift to bounded candidate artifacts."""
 
 from __future__ import annotations
 
@@ -11,7 +11,13 @@ from jsonschema import Draft202012Validator
 
 from appsec_review.application_paths import application_asset
 from appsec_review.document_issues import (
-    SCHEMA, analyze_document_hunts, verify_document_issue_inputs, verify_document_issue_ledger,
+    DRIFT_SCHEMA,
+    SCHEMA,
+    analyze_api_spec_drift,
+    analyze_document_hunts,
+    verify_document_drift_issues,
+    verify_document_issue_inputs,
+    verify_document_issue_ledger,
 )
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.observability.spans import count_work
@@ -19,20 +25,22 @@ from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import canonical_json, file_sha256
-from appsec_review.storage.shared import SharedArtifacts, put_bytes, verify_reference
+from appsec_review.storage.shared import SharedArtifacts, immutable_bytes, put_bytes, verify_reference
 
 from .datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_document_issue_analysis"
-# The ledger holds private candidates only; until independent review publishes findings the job's
-# coverage is always partial, and this names why so an empty ledger never reads as clean.
 UNADJUDICATED_GAP = ("document issue candidates are not adjudicated: finding publication is not "
                      "implemented, so an empty ledger says nothing about target security")
 
 
 def _schema_path() -> Path:
     return application_asset("docs/schemas/document-issue-ledger.schema.json")
+
+
+def _drift_schema_path() -> Path:
+    return application_asset("docs/schemas/document-issues/document-drift-issue.schema.json")
 
 
 def _validate_config(context, _result) -> None:
@@ -57,6 +65,11 @@ def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> Non
     ledger = verify_document_issue_ledger(core, path)
     if ledger["counts"] != result["counts"]:
         raise ValueError("document issue ledger counts differ from receipt")
+    if "drift_artifact" in result:
+        drift_path = (unit.job.run_root / result["drift_artifact"]["path"]).resolve()
+        if unit.job.run_root.resolve() not in drift_path.parents or file_sha256(drift_path) != result["drift_artifact"]["sha256"]:
+            raise ValueError("document drift report receipt failed verification")
+        verify_document_drift_issues(core, drift_path)
 
 
 def build_job() -> Job:
@@ -102,31 +115,60 @@ def build_job() -> Job:
         unit.job.events.write("CHECKPOINT_REUSED" if hit is not None else "CHECKPOINT_MISSED",
                               unit_id=unit.unit_id, action="document-issues", fingerprint=fingerprint,
                               reason=None if hit is not None else (miss_reason or "missing"))
+        max_files = unit.job.config.settings["max_source_files"]
+        max_bytes = unit.job.config.settings["max_source_file_bytes"]
         if hit is None:
-            ledger = analyze_document_hunts(core, directory,
-                max_files=unit.job.config.settings["max_source_files"],
-                max_file_bytes=unit.job.config.settings["max_source_file_bytes"])
+            ledger = analyze_document_hunts(core, directory, max_files=max_files, max_file_bytes=max_bytes)
         else:
             value, receipt = hit
-            verify_document_issue_inputs(
-                core, directory, max_files=unit.job.config.settings["max_source_files"],
-                max_file_bytes=unit.job.config.settings["max_source_file_bytes"])
+            verify_document_issue_inputs(core, directory, max_files=max_files, max_file_bytes=max_bytes)
             ledger = verify_document_issue_ledger(core, verify_reference(run_root, value["object"]))
-        schema_path = _schema_path()
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        schema = json.loads(_schema_path().read_text(encoding="utf-8"))
         Draft202012Validator(schema).validate(ledger)
         if hit is None:
             artifact = put_bytes(run_root, canonical_json(ledger))
             receipt = shared.computed("document-issues", fingerprint, artifact, computation=computation)
         else:
             artifact = value["object"]
+
+        drift_report = analyze_api_spec_drift(core, max_files=max_files, max_file_bytes=max_bytes)
+        drift_schema = json.loads(_drift_schema_path().read_text(encoding="utf-8"))
+        Draft202012Validator(drift_schema).validate(drift_report)
+        drift_artifact = immutable_bytes(
+            run_root,
+            f"data/document-issues/{unit.job.attempt_id}/drift-issues.json",
+            canonical_json(drift_report),
+        )
+
         unit.job.events.write("DOCUMENT_ISSUES_PUBLISHED", **ledger["counts"])
-        return {"schema": SCHEMA, "artifact": artifact, "artifacts": [artifact],
-                "shared_receipt": receipt, "reused": hit is not None,
-                "counts": ledger["counts"],
-                "gaps": [UNADJUDICATED_GAP, *(gap["gap_id"] for candidate in ledger["candidates"]
-                                              for gap in candidate["coverage_gaps"])],
-                "terminal_status": "COMPLETED_WITH_GAPS"}
+        unit.job.events.write(
+            "DOCUMENT_DRIFT_PUBLISHED",
+            specs_parsed=drift_report["specs_parsed"],
+            handler_mismatches_found=len(drift_report["mismatches"]),
+            telemetry=drift_report["telemetry"],
+        )
+        return {
+            "schema": SCHEMA,
+            "drift_schema": DRIFT_SCHEMA,
+            "artifact": artifact,
+            "drift_artifact": drift_artifact,
+            "artifacts": [artifact, drift_artifact],
+            "shared_receipt": receipt,
+            "reused": hit is not None,
+            "counts": ledger["counts"],
+            "drift_counts": {
+                "specs_parsed": drift_report["specs_parsed"],
+                "handlers_scanned": drift_report["handlers_scanned"],
+                "mismatches": len(drift_report["mismatches"]),
+            },
+            "telemetry": drift_report["telemetry"],
+            "gaps": [
+                UNADJUDICATED_GAP,
+                *(gap["gap_id"] for candidate in ledger["candidates"] for gap in candidate["coverage_gaps"]),
+                *drift_report["gaps"],
+            ],
+            "terminal_status": "COMPLETED_WITH_GAPS",
+        }
 
     units = (Unit("analysis.map_and_adjudicate", analyze, output_validators=(_validate_output,)),)
     return Job(JOB_ID, "document_issue_analysis", UnitExecutor(units).execute,

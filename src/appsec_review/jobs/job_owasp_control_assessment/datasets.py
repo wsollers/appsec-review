@@ -29,6 +29,10 @@ DATASETS = (
                   "Workbench source documents and the accepted result.",
                   artifacts=(_A + "/artifacts/owasp-workbench/*.json",),
                   reason="same records as the accepted workbench shards"),
+    artifact_only("owasp_control_gaps", "publication", "owasp", "appsec-review/owasp-control-gap/2",
+                  "Verified absent or weak OWASP control gaps bound to concrete source/evidence spans.",
+                  artifacts=(_A + "/artifacts/owasp-control-gaps/*.json",),
+                  reason="curated gap projection of accepted control-result shards"),
 )
 
 from appsec_review.runtime.contracts import (

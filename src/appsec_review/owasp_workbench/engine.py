@@ -799,3 +799,136 @@ def fingerprint_inputs(*, standards: Mapping[str, Any], selection: Mapping[str, 
     return {"schema": "appsec-review/workbench-fingerprints/1",
             "global": _hash(global_inputs), "global_inputs": global_inputs,
             "components": component_values}
+
+
+OWASP_GAP_SCHEMA = "appsec-review/owasp-control-gap/2"
+
+
+def verified_control_gap_candidate(record: Mapping[str, Any]) -> bool:
+    """True only for assessed, applicable control rows with a verified not_satisfied verdict."""
+    if str(record.get("assessment_mode") or "") != "assessment":
+        return False
+    if str(record.get("applicability") or "") not in {"applicable", "conditional"}:
+        return False
+    if str(record.get("control_status") or "") != "not_satisfied":
+        return False
+    if str(record.get("verification_status") or "") in {"qualification_only", "not_required", ""}:
+        return False
+    return True
+
+
+def _control_gap_verdict(record: Mapping[str, Any]) -> str:
+    obligations = [item for item in record.get("obligations", ()) if isinstance(item, Mapping)]
+    if obligations:
+        statuses = {str(item.get("status") or "") for item in obligations}
+        if "satisfied" in statuses and "not_satisfied" in statuses:
+            return "weak"
+    for obs in record.get("observations", ()):
+        if isinstance(obs, Mapping):
+            summary = str(obs.get("summary") or obs.get("finding") or "").lower()
+            if any(tok in summary for tok in ("partial", "weak", "bypass", "incomplete")):
+                return "weak"
+    return "absent"
+
+
+def _extract_subject_spans(record: Mapping[str, Any]) -> list[dict[str, Any]]:
+    spans: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str | None, int | None]] = set()
+    citations = list(record.get("evidence_used") or ())
+    for obl in record.get("obligations", ()):
+        if isinstance(obl, Mapping):
+            citations.extend(obl.get("citations") or ())
+    for item in citations:
+        if not isinstance(item, Mapping):
+            continue
+        cite = item.get("citation") if isinstance(item.get("citation"), Mapping) else item
+        ctype = str(cite.get("type") or cite.get("kind") or "evidence")
+        ref = str(
+            cite.get("source_id")
+            or cite.get("observation_id")
+            or cite.get("entity_id")
+            or cite.get("evidence_id")
+            or item.get("evidence_id")
+            or ""
+        )
+        if not ref:
+            continue
+        path = str(cite.get("path") or "") or None
+        start_line = int(cite["start_line"]) if isinstance(cite.get("start_line"), int) and cite["start_line"] >= 1 else None
+        end_line = int(cite["end_line"]) if isinstance(cite.get("end_line"), int) and cite["end_line"] >= 1 else start_line
+        key = (ctype, ref, path, start_line)
+        if key in seen:
+            continue
+        seen.add(key)
+        spans.append({
+            "citation_type": ctype,
+            "ref": ref,
+            "path": path,
+            "start_line": start_line,
+            "end_line": end_line,
+        })
+    return spans
+
+
+def extract_verified_control_gaps(
+    run_id: str,
+    assessment_mode: str,
+    results: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Build schema-validated appsec-review/owasp-control-gap/2 summary of verified absent/weak controls."""
+    controls_assessed = sum(
+        1 for row in results
+        if str(row.get("assessment_mode") or "") == "assessment"
+        and str(row.get("control_status") or "") in {"satisfied", "not_satisfied"}
+    )
+    gaps: list[dict[str, Any]] = []
+    counts = {"absent": 0, "weak": 0}
+    for row in sorted(results, key=lambda r: (str(r.get("component_id") or ""), str(r.get("control_identity") or ""))):
+        if not verified_control_gap_candidate(row):
+            continue
+        verdict = _control_gap_verdict(row)
+        counts[verdict] += 1
+        control_identity = str(row.get("control_identity") or "")
+        asvs_id = control_identity.split(":")[-1] if ":" in control_identity else control_identity
+        cwe_ids: set[str] = set()
+        mechanisms: set[str] = set()
+        for obs in row.get("observations", ()):
+            if isinstance(obs, Mapping):
+                for cwe in obs.get("cwe_ids") or ():
+                    cwe_ids.add(str(cwe))
+                if obs.get("mechanism"):
+                    mechanisms.add(str(obs["mechanism"]))
+        for obl in row.get("obligations", ()):
+            if isinstance(obl, Mapping):
+                if obl.get("procedure_id"):
+                    mechanisms.add(str(obl["procedure_id"]))
+                if obl.get("family"):
+                    mechanisms.add(str(obl["family"]))
+        row_id = str(row["row_id"])
+        gaps.append({
+            "gap_id": f"owasp-gap:{row_id[:24]}",
+            "row_id": row_id,
+            "component_id": str(row.get("component_id") or "unknown"),
+            "control_identity": control_identity,
+            "asvs_id": asvs_id,
+            "verdict": verdict,
+            "control_status": "not_satisfied",
+            "verification_status": str(row.get("verification_status") or "independently_assessed"),
+            "lead_eligible": bool(row.get("lead_eligible", False)),
+            "cwe_ids": sorted(cwe_ids),
+            "mechanisms": sorted(mechanisms),
+            "subject_spans": _extract_subject_spans(row),
+        })
+    return {
+        "schema": OWASP_GAP_SCHEMA,
+        "run_id": str(run_id),
+        "assessment_mode": str(assessment_mode),
+        "controls_assessed": controls_assessed,
+        "verified_gaps_indexed": len(gaps),
+        "gaps_by_verdict": counts,
+        "control_gaps": gaps,
+        "telemetry": {
+            "owasp.controls_assessed": controls_assessed,
+            "owasp.verified_gaps_indexed": len(gaps),
+        },
+    }

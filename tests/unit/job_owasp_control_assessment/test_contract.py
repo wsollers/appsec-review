@@ -32,7 +32,7 @@ def test_job_contract_datasets_and_registry_parity() -> None:
     assert job.contract == CONTRACT
     assert job.external_input_identity is feed_input_identity
     assert {dataset.output_kind for dataset in DATASETS} == {
-        "owasp_model_receipts", "owasp_workbench", "owasp_documents",
+        "owasp_model_receipts", "owasp_workbench", "owasp_documents", "owasp_control_gaps",
     }
     expected_units = tuple(
         f"{step}.{task}"

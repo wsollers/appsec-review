@@ -47,7 +47,7 @@ SCHEMA = "appsec-review/review-data-indexing/1"
 INVENTORY_RULE = "appsec-review/dataset-inventory-index/2"
 PRODUCT_SETS = ("build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation",
                 "ci_trust", "history_context", "control_evidence", "reference_intelligence", "symbol_links",
-                "document_context")
+                "document_context", "threat_boundaries")
 TOPOLOGY = {"load": ("accepted_inputs",), "links": ("cross_domain",), "precompute": PRODUCT_SETS,
             "fts": ("image_validation",), "audit": ("inventory",), "matrix": ("coverage",),
             "publish": ("inventory_index",)}
@@ -194,6 +194,49 @@ def owasp_status(run_root: Path) -> dict[str, Any]:
             "shards": list(manifest.get("shards", ()))}
 
 
+def threat_model_status(run_root: Path) -> dict[str, Any]:
+    """Load and hash-verify accepted job_threat_model_generation artifacts when present."""
+    accepted = accepted_handoff(run_root, "job_threat_model_generation")
+    if accepted is None:
+        return {"status": "unavailable", "reason": "job_threat_model_generation has no accepted handoff in this run"}
+    outputs = accepted.handoff.get("outputs") or {}
+    pub_out = outputs.get("publication.publish_handoff") or {}
+    named_artifacts = dict(pub_out.get("artifacts") or {})
+    top_artifacts = {Path(str(ref.get("path", ""))).name: ref
+                     for ref in (accepted.handoff.get("artifacts") or ())
+                     if isinstance(ref, Mapping) and isinstance(ref.get("path"), str)}
+    from appsec_review.runtime.inputs import observe_output
+    loaded: dict[str, Any] = {}
+    kind_map = {
+        "dfd": ("dfd.json", "generated_dfd"),
+        "threat_model": ("threat-model.json", "generated_threat_model"),
+        "result": ("result.json", "threat_model_documents"),
+    }
+    for key, (filename, output_kind) in kind_map.items():
+        ref = named_artifacts.get(filename) or top_artifacts.get(filename)
+        if not isinstance(ref, Mapping) or not isinstance(ref.get("path"), str) or not isinstance(ref.get("sha256"), str):
+            continue
+        data = _read(run_root, ref)
+        observe_output(run_root, "job_threat_model_generation", output_kind,
+                       {"path": ref["path"], "sha256": ref["sha256"]})
+        loaded[key] = data
+    if not loaded.get("dfd") and not loaded.get("threat_model"):
+        return {"status": "unavailable", "reason": "job_threat_model_generation handoff carries no dfd.json or threat-model.json"}
+    raw_gaps = (loaded.get("result") or {}).get("gaps") or ()
+    gap_summaries = [
+        str(g.get("summary") or g.get("detail") or g.get("code") or g) if isinstance(g, Mapping) else str(g)
+        for g in raw_gaps[:10]
+    ]
+    return {
+        "status": "accepted",
+        "handoff_sha256": accepted.sha256,
+        "dfd": loaded.get("dfd") or {},
+        "threat_model": loaded.get("threat_model") or {},
+        "counts": dict((loaded.get("result") or {}).get("counts") or pub_out.get("counts") or {}),
+        "gaps": gap_summaries,
+    }
+
+
 def _unit_statuses(run_root: Path, handoff: AcceptedHandoff) -> dict[str, str]:
     attempt = (run_root / handoff.path).parent
     statuses: dict[str, str] = {}
@@ -305,7 +348,7 @@ def build_job(*, providers: Providers = registry_providers,
             "handoffs": {job_id: None if value is None else {
                 "sha256": value.sha256, "path": value.path, "attempt_id": value.handoff.get("attempt_id"),
                 "completion_status": value.handoff.get("completion_status")} for job_id, value in handoffs.items()},
-            "feeds": feeds, "owasp": owasp_status(run_root),
+            "feeds": feeds, "owasp": owasp_status(run_root), "threat_model": threat_model_status(run_root),
             "unit_statuses": {job_id: _unit_statuses(run_root, value) for job_id, value in handoffs.items()
                               if value is not None},
         }
@@ -348,12 +391,13 @@ def build_job(*, providers: Providers = registry_providers,
             store = ShardSet(run_root, [*view.shards, *link_identities.values()])
             osv_version_matching = osv_matching.parse_mode(
                 settings.get("osv_version_matching", "disabled"), f"jobs.{JOB_ID}.settings.osv_version_matching")
+            tm_doc = document.get("threat_model") or {}
             context = products.ProductContext(
                 run_root, snapshot, store, {family: link_identities[family] for family in rule.links
                                             if family in link_identities},
                 {feed: document["feeds"].get(feed, {"status": "unavailable", "reason": "feed is not configured"})
                  for feed in rule.feeds}, document["owasp"] if rule.owasp else {}, max_facts, version,
-                osv_version_matching)
+                osv_version_matching, threat_model=tm_doc if rule.threat_model else {})
             selected = rule.select(store)
             inputs: dict[str, Any] = {
                 "shards": ShardSet.identities(selected), "max_facts": max_facts,
@@ -362,6 +406,8 @@ def build_job(*, providers: Providers = registry_providers,
                                                                                            "stale")}
                           for feed in rule.feeds},
                 "owasp": document["owasp"].get("manifest_sha256") if rule.owasp else None}
+            if rule.threat_model:
+                inputs["threat_model"] = tm_doc.get("handoff_sha256")
             if query_set == "dependency_advisories" and osv_version_matching != "disabled":
                 # Only a non-default mode enters the reuse identity, so default checkpoints keep theirs.
                 inputs["osv_version_matching"] = {"mode": osv_version_matching, "matcher": osv_matching.SCHEMA}
@@ -618,6 +664,19 @@ def build_job(*, providers: Providers = registry_providers,
                              for item in link_outputs}}
         unit.job.events.write("DATASET_INVENTORY_PUBLISHED", row_count=len(rows),
                               product_count=len(product_outputs), audit_status=inventory["audit"]["status"])
+        unit.job.events.write(
+            "INDEXING_TELEMETRY_RECORDED",
+            unit_id=unit.unit_id,
+            metrics={
+                "indexing.shards_built": len(link_outputs) + len(product_outputs) + 1,
+                "indexing.entities_indexed": sum(int(item.get("fact_count", 0)) for item in product_outputs) + len(rows),
+                "indexing.threat_boundaries_indexed": next(
+                    (int(item.get("fact_count", 0)) for item in product_outputs if item["query_set"] == "threat_boundaries"),
+                    0,
+                ),
+                "build_security.sanitizer_readiness_indexed": 1 if (document.get("handoffs") or {}).get("job_sanitizer_build") else 0,
+            },
+        )
         gaps = [f"{item['query_set']}: {item['status']}" for item in product_outputs if item["status"] != "complete"]
         return {"schema": SCHEMA, "index_manifest": _artifact(run_root, manifest_path),
                 "index_identity": published["index_identity"], "item_count": len(rows), "summary": summary,

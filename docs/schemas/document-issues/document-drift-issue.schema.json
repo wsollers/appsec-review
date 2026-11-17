@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/document-drift-issue/2",
+  "title": "Document vs Handler API Spec Drift Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "target_snapshot",
+    "accepted_manifest_sha256",
+    "authority",
+    "specs_parsed",
+    "handlers_scanned",
+    "mismatches",
+    "gaps",
+    "telemetry"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/document-drift-issue/2"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_snapshot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "accepted_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "authority": {
+      "const": "provisional_navigation_lead"
+    },
+    "specs_parsed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "handlers_scanned": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "mismatches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "drift_id",
+          "drift_kind",
+          "method",
+          "route",
+          "authority",
+          "auth_mismatch",
+          "declared_security",
+          "observed_guards"
+        ],
+        "properties": {
+          "drift_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "drift_kind": {
+            "type": "string",
+            "enum": [
+              "missing_auth_middleware",
+              "undocumented_route",
+              "unmapped_declared_operation",
+              "parameter_constraint_drift",
+              "role_or_scope_mismatch"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "route": {
+            "type": "string",
+            "minLength": 1
+          },
+          "spec_format": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spec_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spec_source_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "handler_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "handler_line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "handler_language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "handler_source_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "authority": {
+            "const": "provisional_navigation_lead"
+          },
+          "auth_mismatch": {
+            "type": "boolean"
+          },
+          "declared_security": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observed_guards": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc_drift.specs_parsed",
+        "doc_drift.handler_mismatches_found"
+      ],
+      "properties": {
+        "doc_drift.specs_parsed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "doc_drift.handler_mismatches_found": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

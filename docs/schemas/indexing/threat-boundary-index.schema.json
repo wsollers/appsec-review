@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/threat-boundary-index/1",
+  "title": "Indexed Threat Boundary Projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "boundary_id",
+    "name",
+    "trust_level",
+    "origin",
+    "element_ids",
+    "component_ids",
+    "source_paths",
+    "entry_points",
+    "cross_boundary_flows",
+    "threats",
+    "threat_count",
+    "flow_count",
+    "entry_point_count",
+    "evidence_refs",
+    "authority"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/threat-boundary-index/1"
+    },
+    "boundary_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust_level": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "generated_threat_model",
+        "target_document",
+        "generated_and_documented"
+      ]
+    },
+    "element_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "component_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "entry_points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entry_point_id",
+          "name",
+          "kind"
+        ],
+        "properties": {
+          "entry_point_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "element_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "cross_boundary_flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "flow_id",
+          "source",
+          "target",
+          "protocol"
+        ],
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "threats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "threat_id",
+          "category",
+          "title",
+          "severity"
+        ],
+        "properties": {
+          "threat_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "threat_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "flow_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "entry_point_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "authority": {
+      "const": "routing_context"
+    }
+  }
+}

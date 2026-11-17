@@ -1700,7 +1700,14 @@ class _Assembler:
             return None
         order = {role: number for number, role in enumerate(_Assembler.CONTEXT_TRIM_ORDER)}
         default = order["caller"]
-        index = min(range(len(capped)), key=lambda number: (order.get(capped[number].role, default), capped[number].id))
+        index = min(
+            range(len(capped)),
+            key=lambda number: (
+                order.get(capped[number].role, default),
+                -_Assembler._context_order(capped[number])[1],
+                capped[number].id,
+            ),
+        )
         role = capped[index].role
         del capped[index]
         return role
@@ -1814,11 +1821,18 @@ class _Assembler:
     @staticmethod
     def _context_order(entry: ContextEntry) -> tuple[str, int, str, str]:
         assessment = entry.control_assessment or {}
-        assessed = assessment.get("control_status") in {"satisfied", "not_satisfied"} or any(
-            item.get("resolved") is True and item.get("locator", {}).get("kind") == "source"
-            for item in assessment.get("evidence", ()))
-        return (entry.role, int(bool(assessment) and not assessed),
-                str(assessment.get("control_identity", "")), entry.id)
+        if not assessment:
+            tier = 0
+        elif assessment.get("control_status") in {"not_satisfied", "absent", "weak"}:
+            tier = 0
+        elif assessment.get("control_status") == "satisfied":
+            tier = 1
+        elif any(item.get("resolved") is True and item.get("locator", {}).get("kind") == "source"
+                 for item in assessment.get("evidence", ())):
+            tier = 2
+        else:
+            tier = 3
+        return (entry.role, tier, str(assessment.get("control_identity", "")), entry.id)
 
     def _cap(self, context: Iterable[ContextEntry], subject: str, producer: str
              ) -> tuple[list[ContextEntry], int, list[ScopeGap]]:

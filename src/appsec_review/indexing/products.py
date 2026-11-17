@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import re
@@ -32,6 +32,7 @@ from appsec_review.storage import file_sha256
 FIRST_STAGE_SETS = (
     "build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation", "ci_trust",
     "history_context", "control_evidence", "reference_intelligence", "symbol_links", "document_context",
+    "threat_boundaries",
 )
 _CWE = re.compile(r"(?i)\bcwe[-_/ ]?0*(\d{1,5})\b")
 # A pinned reference feed older than its freshness bound makes the whole product's coverage stale.
@@ -50,6 +51,7 @@ class ProductContext:
     rule_version: str = ""
     # "index" decides inventory OSV matches against affected versions and ranges (osv_matching).
     osv_version_matching: str = "disabled"
+    threat_model: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def link_context(self) -> LinkContext:
@@ -65,6 +67,7 @@ class ProductRule:
     links: tuple[str, ...] = ()
     feeds: tuple[str, ...] = ()
     owasp: bool = False
+    threat_model: bool = False
 
 
 def _upstream(selected: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
@@ -1208,6 +1211,16 @@ def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any
         "applicability": record.get("applicability"), "control_status": record.get("control_status"),
         "verification_status": record.get("verification_status"), "assessment_mode": mode,
         "lead_eligible": eligible, "production_eligible": eligible, "provisional": True,
+        **(
+            {"verified_gap": True}
+            if (
+                mode == "assessment"
+                and record.get("applicability") in {"applicable", "conditional"}
+                and record.get("control_status") in {"not_satisfied", "absent", "weak"}
+                and evidence and not unresolved
+            )
+            else {}
+        ),
         "execution_completion": record.get("execution_completion"),
         "worker_attempt_count": record.get("worker_attempt_count"),
         "reviewer_attempt_count": record.get("reviewer_attempt_count"),
@@ -1444,6 +1457,280 @@ def _build_symbol_links(context: ProductContext, selected: tuple[Mapping[str, An
     return _finish(derived, name)
 
 
+def _select_threat_boundaries(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
+    return (
+        *shards.select(index="documents", job=CATALOG),
+        *shards.select(index="components", job=CATALOG),
+        *shards.select(index="source", job=CATALOG),
+    )
+
+
+def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
+    """Index generated DFD/threat-model trust boundaries, cross-boundary flows, entry points, and threats."""
+    name = "threat_boundaries"
+    derived = Derived()
+    shards = context.shards
+    tm_state = context.threat_model or {}
+    tm_accepted = tm_state.get("status") == "accepted"
+
+    doc_shards = shards.select(index="documents", job=CATALOG)
+    doc_rows = [
+        row for row in shards.entities(doc_shards, kinds=("document_record",))
+        if row.get("payload", {}).get("record_type") == "target_document"
+        and row.get("payload", {}).get("document_kind") in {"dfd", "threat_model"}
+    ]
+    if not tm_accepted and not doc_rows:
+        reason = str(tm_state.get("reason") or "job_threat_model_generation has no accepted output and no target DFD/threat-model documents were catalogued")
+        return _finish(derived, name, unavailable=f"threat boundaries are unavailable: {reason}")
+
+    components_by_native = {
+        str(row["native_id"]): row["identity"]
+        for row in shards.entities(shards.select(index="components", job=CATALOG), kinds=("component",))
+    }
+    sources_by_path = {
+        str((row.get("location") or {}).get("path")): row["identity"]
+        for row in shards.entities(shards.select(index="source", job=CATALOG), kinds=("source_file",))
+        if (row.get("location") or {}).get("path")
+    }
+
+    boundaries: dict[str, dict[str, Any]] = {}
+    dfd_doc = tm_state.get("dfd") if isinstance(tm_state.get("dfd"), Mapping) else {}
+    tm_doc = tm_state.get("threat_model") if isinstance(tm_state.get("threat_model"), Mapping) else {}
+
+    elements_by_id: dict[str, Mapping[str, Any]] = {}
+    for elem in (dfd_doc.get("elements") or dfd_doc.get("nodes") or ()):
+        if isinstance(elem, Mapping) and isinstance(elem.get("id"), str):
+            elements_by_id[elem["id"]] = elem
+
+    def _ensure_boundary(bid: str, *, label: str | None = None, trust_level: str = "boundary", origin: str = "generated_threat_model") -> dict[str, Any]:
+        entry = boundaries.get(bid)
+        if entry is None:
+            entry = {
+                "boundary_id": bid,
+                "name": (label or bid)[:256],
+                "trust_level": trust_level[:64],
+                "origin": origin,
+                "element_ids": set(),
+                "component_ids": set(),
+                "entry_points": [],
+                "cross_boundary_flows": [],
+                "threats": [],
+                "source_paths": set(),
+                "evidence_refs": set(),
+                "doc_identities": set(),
+            }
+            boundaries[bid] = entry
+        return entry
+
+    def _collect_evidence(items: Any, bucket: dict[str, Any]) -> None:
+        if not isinstance(items, (list, tuple)):
+            return
+        for item in items[:32]:
+            if isinstance(item, Mapping):
+                ref = item.get("ref") or item.get("source_identity")
+                if isinstance(ref, str) and ref:
+                    bucket["evidence_refs"].add(ref)
+                path = item.get("path")
+                if isinstance(path, str) and path:
+                    bucket["source_paths"].add(path)
+
+    element_to_boundary: dict[str, str] = {}
+    for raw_b in (dfd_doc.get("boundaries") or dfd_doc.get("trust_boundaries") or ()):
+        if not isinstance(raw_b, Mapping) or not isinstance(raw_b.get("id"), str):
+            continue
+        bid = raw_b["id"]
+        trust = str(raw_b.get("kind") or raw_b.get("trust_level") or raw_b.get("zone") or "trust_boundary")
+        b_entry = _ensure_boundary(bid, label=str(raw_b.get("name") or bid), trust_level=trust, origin="generated_threat_model")
+        for member_id in (raw_b.get("elements") or raw_b.get("element_ids") or raw_b.get("node_ids") or raw_b.get("members") or ()):
+            if isinstance(member_id, str):
+                b_entry["element_ids"].add(member_id)
+                element_to_boundary[member_id] = bid
+                elem = elements_by_id.get(member_id) or {}
+                comp_id = elem.get("component_id")
+                if isinstance(comp_id, str) and comp_id:
+                    b_entry["component_ids"].add(comp_id)
+        _collect_evidence(raw_b.get("evidence"), b_entry)
+
+    for flow in dfd_doc.get("flows") or ():
+        if not isinstance(flow, Mapping) or not isinstance(flow.get("id"), str):
+            continue
+        crossed = list(flow.get("crosses") or flow.get("boundaries") or ())
+        src_el = str(flow.get("source") or flow.get("source_id") or flow.get("from") or "")
+        dst_el = str(flow.get("target") or flow.get("target_id") or flow.get("to") or "")
+        if not crossed:
+            b_src = element_to_boundary.get(src_el)
+            b_dst = element_to_boundary.get(dst_el)
+            if b_src and b_dst and b_src != b_dst:
+                crossed = [b_dst]
+            elif b_dst:
+                crossed = [b_dst]
+            elif b_src:
+                crossed = [b_src]
+        for bid in crossed:
+            if not isinstance(bid, str) or not bid:
+                continue
+            b_entry = _ensure_boundary(bid)
+            if len(b_entry["cross_boundary_flows"]) < 32:
+                b_entry["cross_boundary_flows"].append({
+                    "flow_id": flow["id"],
+                    "source": src_el,
+                    "target": dst_el,
+                    "protocol": str(flow.get("protocol") or flow.get("channel") or "unspecified")[:64],
+                })
+            _collect_evidence(flow.get("evidence"), b_entry)
+
+    for ep in (list(tm_doc.get("entry_points") or ()) + list(dfd_doc.get("entry_points") or ())):
+        if not isinstance(ep, Mapping) or not isinstance(ep.get("id"), str):
+            continue
+        target_bid = str(ep.get("boundary_id") or element_to_boundary.get(str(ep.get("element_id") or ep.get("node_id") or "")) or "boundary:entry_surface")
+        b_entry = _ensure_boundary(target_bid, label="Entry Surface" if target_bid == "boundary:entry_surface" else None,
+                                   trust_level=str(ep.get("trust_level") or "untrusted_entry"))
+        if len(b_entry["entry_points"]) < 32:
+            b_entry["entry_points"].append({
+                "entry_point_id": ep["id"],
+                "name": str(ep.get("name") or ep["id"])[:200],
+                "kind": str(ep.get("kind") or "entry_point")[:64],
+                "element_id": ep.get("element_id") or ep.get("node_id"),
+            })
+        _collect_evidence(ep.get("evidence"), b_entry)
+
+    for threat in tm_doc.get("threats") or ():
+        if not isinstance(threat, Mapping) or not isinstance(threat.get("id"), str):
+            continue
+        t_bids = list(threat.get("boundaries") or ())
+        if not t_bids and isinstance(threat.get("boundary_id"), str):
+            t_bids = [threat["boundary_id"]]
+        if not t_bids:
+            subj = str(threat.get("subject_id") or threat.get("target_id") or threat.get("target") or threat.get("element_id") or "")
+            if subj in element_to_boundary:
+                t_bids = [element_to_boundary[subj]]
+            elif boundaries:
+                t_bids = [sorted(boundaries)[0]]
+            else:
+                t_bids = ["boundary:entry_surface"]
+        for bid in t_bids:
+            if not isinstance(bid, str) or not bid:
+                continue
+            b_entry = _ensure_boundary(bid)
+            if len(b_entry["threats"]) < 32:
+                b_entry["threats"].append({
+                    "threat_id": threat["id"],
+                    "category": str(threat.get("category") or threat.get("stride") or "unspecified")[:64],
+                    "title": str(threat.get("title") or threat.get("statement") or threat["id"])[:240],
+                    "severity": str(threat.get("severity") or "medium")[:32],
+                })
+            _collect_evidence(threat.get("evidence"), b_entry)
+
+    for row in doc_rows:
+        payload = row.get("payload") or {}
+        fields = payload.get("fields") or {}
+        kind, subtype = payload.get("document_kind"), payload.get("subtype")
+        loc_path = (row.get("location") or {}).get("path")
+        if kind == "dfd" and subtype == "boundary" and isinstance(fields.get("boundary_id"), str):
+            bid = fields["boundary_id"]
+            b_entry = _ensure_boundary(bid, label=str(fields.get("name") or bid),
+                                       trust_level=str(fields.get("trust_level") or "documented_boundary"),
+                                       origin="target_document" if not tm_accepted else "generated_and_documented")
+            b_entry["doc_identities"].add(row["identity"])
+            if isinstance(loc_path, str):
+                b_entry["source_paths"].add(loc_path)
+        elif kind == "threat_model" and subtype == "threat":
+            for bid in fields.get("boundaries") or ():
+                if isinstance(bid, str) and bid:
+                    b_entry = _ensure_boundary(bid, origin="target_document" if not tm_accepted else "generated_and_documented")
+                    b_entry["doc_identities"].add(row["identity"])
+                    if len(b_entry["threats"]) < 32:
+                        b_entry["threats"].append({
+                            "threat_id": str(fields.get("threat_id") or row["name"])[:120],
+                            "category": str(fields.get("category") or "documented")[:64],
+                            "title": str(row["name"])[:240],
+                            "severity": str(fields.get("severity") or "medium")[:32],
+                        })
+                    if isinstance(loc_path, str):
+                        b_entry["source_paths"].add(loc_path)
+
+    upstream = _upstream(selected)
+    if tm_accepted and isinstance(tm_state.get("handoff_sha256"), str):
+        upstream = [*upstream, {"name": "threat_model/generated", "shard_id": "dfd-threat-model",
+                                "sha256": tm_state["handoff_sha256"]}]
+    tm_gaps = list(tm_state.get("gaps") or ())[:5]
+    ordered_ids = sorted(boundaries)
+    for bid in ordered_ids[:context.max_facts]:
+        b_entry = boundaries[bid]
+        comp_ids = sorted(b_entry["component_ids"])[:16]
+        src_paths = sorted(b_entry["source_paths"])[:16]
+        ev_refs = sorted(b_entry["evidence_refs"])[:24]
+        doc_ids = sorted(b_entry["doc_identities"])[:16]
+        subj_id = next((components_by_native[cid] for cid in comp_ids if cid in components_by_native), None)
+        if subj_id is None:
+            subj_id = next((sources_by_path[p] for p in src_paths if p in sources_by_path), None)
+        if subj_id is None and doc_ids:
+            subj_id = doc_ids[0]
+        subj_path = src_paths[0] if src_paths else None
+        row_gaps: list[str] = []
+        if not b_entry["threats"]:
+            row_gaps.append("no candidate threats enumerated for this trust boundary")
+        if tm_gaps:
+            row_gaps.extend(tm_gaps[:2])
+        record_fact = fact(
+            context.snapshot, name, context.rule_version,
+            {"boundary_id": bid},
+            name=f"boundary {bid} {b_entry['name']}"[:256],
+            text=(f"threat boundary {bid} {b_entry['name']} {b_entry['trust_level']} "
+                  + " ".join(src_paths) + " "
+                  + " ".join(t["category"] for t in b_entry["threats"])),
+            subject_identity=subj_id,
+            subject_path=subj_path,
+            status="partial" if row_gaps else "complete",
+            gaps=row_gaps,
+            basis="accepted generated DFD/threat-model artifacts and catalogued target boundary documents; routing context only",
+            upstream=upstream[:16],
+            fact_type="threat_boundary",
+            result={
+                "schema": "appsec-review/threat-boundary-index/1",
+                "boundary_id": bid,
+                "name": b_entry["name"],
+                "trust_level": b_entry["trust_level"],
+                "origin": b_entry["origin"],
+                "element_ids": sorted(b_entry["element_ids"])[:32],
+                "component_ids": comp_ids,
+                "source_paths": src_paths,
+                "entry_points": b_entry["entry_points"][:16],
+                "cross_boundary_flows": b_entry["cross_boundary_flows"][:16],
+                "threats": b_entry["threats"][:16],
+                "threat_count": len(b_entry["threats"]),
+                "flow_count": len(b_entry["cross_boundary_flows"]),
+                "entry_point_count": len(b_entry["entry_points"]),
+                "evidence_refs": ev_refs,
+                "authority": "routing_context",
+            },
+        )
+        derived.entities.append(record_fact)
+        linked_targets: list[str] = []
+        for cid in comp_ids:
+            if cid in components_by_native:
+                linked_targets.append(components_by_native[cid])
+        for sp in src_paths:
+            if sp in sources_by_path:
+                linked_targets.append(sources_by_path[sp])
+        linked_targets.extend(doc_ids)
+        for ref in ev_refs:
+            if ref.startswith("asr:"):
+                linked_targets.append(ref)
+        for target_id in list(dict.fromkeys(linked_targets))[:16]:
+            derived.relations.append(
+                RelationRecord(RelationKind.DERIVED_FROM, record_fact.identity.value, target_id,
+                               True, 1.0, None, {"query_set": name})
+            )
+    if len(ordered_ids) > context.max_facts:
+        derived.gap(f"truncated: {len(ordered_ids) - context.max_facts} trust boundary record(s) exceeded the fact bound")
+    for g in tm_gaps:
+        derived.gap(f"threat_model: {g}")
+    for gap in _coverage_gaps(shards, doc_shards):
+        derived.gap(gap)
+    return _finish(derived, name)
+
+
 def _select_document_context(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
     return shards.select(index="documents", job=CATALOG)
 
@@ -1467,7 +1754,7 @@ def _build_document_context(context: ProductContext, selected: tuple[Mapping[str
         payload = row["payload"]
         fields = payload.get("fields") or {}
         kind, subtype = payload.get("document_kind"), payload.get("subtype")
-        if subtype in {"operation", "request"} and kind in {"openapi", "postman", "unit_test"}:
+        if subtype in {"operation", "request", "rpc", "field"} and kind in {"openapi", "postman", "unit_test", "graphql", "protobuf"}:
             method, route = fields.get("method"), fields.get("route")
             if isinstance(method, str) and isinstance(route, str) and route.startswith("/"):
                 routes[(method, route)][str(kind)].append(row)
@@ -1536,7 +1823,9 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
                 _build_reference_intelligence, feeds=("mitre",)),
     ProductRule("symbol_links", "symbol-links/1", _select_symbol_links, _build_symbol_links,
                 links=("symbol_syntax",)),
-    ProductRule("document_context", "document-context/1", _select_document_context, _build_document_context),
+    ProductRule("document_context", "document-context/2", _select_document_context, _build_document_context),
+    ProductRule("threat_boundaries", "threat-boundaries/1", _select_threat_boundaries, _build_threat_boundaries,
+                threat_model=True),
 )
 assert tuple(rule.query_set for rule in PRODUCT_RULES) == FIRST_STAGE_SETS
 # Stage-1 sets are live query sets; no retired graph set may come back as a product.

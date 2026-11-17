@@ -342,7 +342,7 @@ def test_analyze_handler_computes_and_reuses_private_candidate_ledger(
     assert out1["gaps"][0] == UNADJUDICATED_GAP
     assert len(out1["gaps"]) > 1
     assert out1["counts"] == {"candidates": 2, "supported": 0, "unmapped": 1, "ambiguous": 0}
-    assert out1["artifacts"] == [out1["artifact"]]
+    assert out1["artifacts"] == [out1["artifact"], out1["drift_artifact"]]
 
     receipt1 = verify_receipt(run_root, out1["shared_receipt"])
     assert receipt1["mode"] == "computed"

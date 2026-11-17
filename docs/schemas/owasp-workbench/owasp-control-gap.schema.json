@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/owasp-control-gap/2",
+  "title": "Verified OWASP Control Gap Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "assessment_mode",
+    "controls_assessed",
+    "verified_gaps_indexed",
+    "gaps_by_verdict",
+    "control_gaps",
+    "telemetry"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/owasp-control-gap/2"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "assessment_mode": {
+      "type": "string",
+      "enum": ["qualification", "assessment"]
+    },
+    "controls_assessed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "verified_gaps_indexed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gaps_by_verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["absent", "weak"],
+      "properties": {
+        "absent": { "type": "integer", "minimum": 0 },
+        "weak": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "control_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gap_id",
+          "row_id",
+          "component_id",
+          "control_identity",
+          "asvs_id",
+          "verdict",
+          "control_status",
+          "verification_status",
+          "lead_eligible",
+          "cwe_ids",
+          "mechanisms",
+          "subject_spans"
+        ],
+        "properties": {
+          "gap_id": { "type": "string", "minLength": 1 },
+          "row_id": { "type": "string", "minLength": 1 },
+          "component_id": { "type": "string", "minLength": 1 },
+          "control_identity": { "type": "string", "minLength": 1 },
+          "asvs_id": { "type": "string", "minLength": 1 },
+          "verdict": { "type": "string", "enum": ["absent", "weak"] },
+          "control_status": { "const": "not_satisfied" },
+          "verification_status": { "type": "string", "minLength": 1 },
+          "lead_eligible": { "type": "boolean" },
+          "cwe_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "mechanisms": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "subject_spans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["citation_type", "ref"],
+              "properties": {
+                "citation_type": { "type": "string" },
+                "ref": { "type": "string" },
+                "path": { "type": ["string", "null"] },
+                "start_line": { "type": ["integer", "null"], "minimum": 1 },
+                "end_line": { "type": ["integer", "null"], "minimum": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owasp.controls_assessed",
+        "owasp.verified_gaps_indexed"
+      ],
+      "properties": {
+        "owasp.controls_assessed": { "type": "integer", "minimum": 0 },
+        "owasp.verified_gaps_indexed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

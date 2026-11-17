@@ -422,10 +422,43 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         # D5: the typed coverage disposition is part of the recorded result and of its receipt.
         disposition = coverage_disposition(results, gaps=bool(value["gaps"]), failed=any(validation.values()))
         value["coverage_disposition"] = disposition
+        from jsonschema import Draft202012Validator
+        from appsec_review.application_paths import application_asset
+        from appsec_review.owasp_workbench.engine import extract_verified_control_gaps
+        gap_summary = extract_verified_control_gaps(
+            unit.job.run_id,
+            parse_settings(unit.job.config.settings).mode.value,
+            results,
+        )
+        gap_schema = json.loads(
+            application_asset("docs/schemas/owasp-workbench/owasp-control-gap.schema.json").read_text(encoding="utf-8")
+        )
+        Draft202012Validator(gap_schema).validate(gap_summary)
+        gap_path = unit.job.attempt_root / "artifacts" / "owasp-control-gaps" / "owasp-control-gaps.json"
+        atomic_json(gap_path, gap_summary)
+        gap_artifact = {
+            "path": gap_path.relative_to(unit.job.run_root).as_posix(),
+            "sha256": file_sha256(gap_path),
+            "size_bytes": gap_path.stat().st_size,
+        }
+        value["control_gap_summary"] = {
+            "controls_assessed": gap_summary["controls_assessed"],
+            "verified_gaps_indexed": gap_summary["verified_gaps_indexed"],
+            "gaps_by_verdict": gap_summary["gaps_by_verdict"],
+            "artifact": gap_artifact,
+        }
         artifact = _artifact(unit, "owasp-workbench-result.json", value)
         unit.job.events.write("OWASP_ASSESSMENT_RECORDED", unit_id=unit.unit_id,
                               metrics_receipt=artifact)
-        return {"artifact": artifact,
+        unit.job.events.write(
+            "OWASP_CONTROL_GAPS_INDEXED",
+            unit_id=unit.unit_id,
+            controls_assessed=gap_summary["controls_assessed"],
+            verified_gaps_indexed=gap_summary["verified_gaps_indexed"],
+            telemetry=gap_summary["telemetry"],
+        )
+        return {"artifact": artifact, "gap_summary_artifact": gap_artifact,
+                "telemetry": gap_summary["telemetry"],
                 "index_manifest": value["index_manifest"], "accounting": value["accounting"],
                 "gap_count": len(value["gaps"]), "coverage_disposition": disposition, "terminal_status":
                 "COMPLETED_WITH_GAPS" if value["gaps"] or any(validation.values()) else "SUCCEEDED"}

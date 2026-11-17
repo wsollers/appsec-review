@@ -20,7 +20,7 @@ QUERY_SETS = (
     "build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation",
     "ci_trust", "redacted_secret_exposure", "history_context", "control_evidence",
     "reference_intelligence", "contract_enforcement", "deployment_exposure", "test_intent",
-    "review_package", "document_context",
+    "review_package", "document_context", "threat_boundaries",
 )
 # Retired graph set names, kept only so tests and the indexing job can assert they stay retired.
 RETIRED_GRAPH_SETS = (

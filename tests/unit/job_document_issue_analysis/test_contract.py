@@ -43,7 +43,8 @@ def test_job_contract_datasets_and_registry_parity() -> None:
     assert _schema_path().is_file()
     assert "not adjudicated" in UNADJUDICATED_GAP
 
-    assert len(DATASETS) == 1
+    assert len(DATASETS) == 2
+    assert {item.output_kind for item in DATASETS} == {"document_issue_ledger", "document_drift_issues"}
     ds = DATASETS[0]
     assert ds.output_kind == "document_issue_ledger"
     assert ds.step == "analysis"

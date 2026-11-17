@@ -53,7 +53,7 @@ def test_datasets_and_contract_match_registry_and_central_configuration() -> Non
     assert tuple(job_config.steps) == tuple(TOPOLOGY)
     for step, tasks in TOPOLOGY.items():
         assert tuple(job_config.step(step).tasks) == tasks
-    assert len(PRODUCT_SETS) == 10
+    assert len(PRODUCT_SETS) == 11
 
     registry = builtin_registry()
     built = registry.build(JOB_ID)
