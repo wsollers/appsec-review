@@ -250,8 +250,12 @@ completion under different contention and exhausted budgets.
 
 [`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
 raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts; the checked-in
-default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
-The overlay leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
+default stays at one slot. [`test/acceptance/WSOLLERS1-capacity-overlay.toml`](../../test/acceptance/WSOLLERS1-capacity-overlay.toml)
+sizes `review_teams` (`6`), `io_slots` (`4`) and Dagster pools (`scanner = 4`, `cpp_build = 2`,
+`cpp_analysis = 4`, `inference_teams = 2`) for the `WSOLLERS1` systemd cgroup-v2 envelope
+documented in [`deploy/dagster/README.md`](../../deploy/dagster/README.md#native-wsl-review-host-limits).
+See [performance assurance](performance-assurance.md) for its limits.
+`prod-capacity-overlay.toml` leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
 7 review teams.
 
 `max_output_tokens` is a per-call cap checked after the reply has been received and parsed, so the reply

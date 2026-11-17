@@ -54,7 +54,7 @@ def box(tmp_path: Path, dagster: FakeDagster) -> Sandbox:
     sandbox = SubmissionSandbox(tmp_path, dagster)
     (sandbox.repo / "targets" / "appsec-multi-vuln").mkdir()
     (sandbox.repo / "profiles").mkdir()
-    for profile in ("prod", "copilot-dev", "copilot-prod"):
+    for profile in ("prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod"):
         (sandbox.repo / "profiles" / f"{profile}.toml").write_text("# test profile\n", encoding="utf-8")
     git = sandbox.bin / "git"
     git.write_text(
@@ -1765,14 +1765,16 @@ def test_stack_status_shows_the_profile(box: Sandbox) -> None:
     assert "profile: prod" in box.run("stack-status").stdout
 
 
-@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod"])
+@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod", "copilot-carbon-prod"])
 def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, profile: str) -> None:
     box.stack(settings={ops.PROFILE_VARIABLE: profile},
               files=[str(box.deploy / "compose.yaml"), str(box.deploy / "compose.copilot.yaml")])
     box.dagster.runs()
     result = box.run("stack-start", "--profile", profile)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert ("more capable models" in result.stdout) == (profile == "copilot-prod")
+    assert ("more capable models" in result.stdout) == (profile in {"copilot-prod", "copilot-carbon-prod"})
+    if profile == "copilot-carbon-prod":
+        assert "Gemini 4 Carbon high across all roles" in result.stdout
     assert "model catalog  ok" in result.stdout
     assert box.lifecycle_calls()[-1]["env"][ops.PROFILE_VARIABLE] == profile
     assert ops.image_tag(profile).endswith("-copilot")
@@ -1783,7 +1785,7 @@ def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, p
 
 @pytest.mark.parametrize("name", ["stack-start", "stack-restart", "stack-rebuild", "review-start"])
 def test_powershell_twins_take_a_profile_parameter(name: str) -> None:
-    assert "[ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
+    assert "[ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod', 'copilot-carbon-prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
     assert "--profile" in real(name, "--help").stdout
 
 

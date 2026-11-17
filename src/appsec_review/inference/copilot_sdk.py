@@ -275,15 +275,17 @@ def models(names: Sequence[str], *, timeout_seconds: int) -> dict[str, Any]:
     return _run(_models(names), timeout_seconds)
 
 
-def verify() -> dict[str, Any]:
+def verify(profile: str | None = None) -> dict[str, Any]:
     """Check the selected profile's account/model catalog without running a review or inference."""
     from appsec_review.config import load_config
     from appsec_review.jobs.job_review_intake.job import configured_models
 
-    config = load_config(os.environ.get("APPSEC_REVIEW_CONFIG") or "appsec-review.toml")
+    config = load_config(os.environ.get("APPSEC_REVIEW_CONFIG") or "appsec-review.toml", profile=profile)
     required = configured_models(json.loads(config.resolved_json))
     if not required or any(item["provider"] != "copilot-sdk" for item in required):
-        raise RuntimeError("select the copilot-dev or copilot-prod profile before checking Copilot worker authentication")
+        raise RuntimeError(
+            "select the copilot-dev, copilot-prod or copilot-carbon-prod profile before checking Copilot worker authentication"
+        )
     names = sorted({item["model"] for item in required})
     report = models(names, timeout_seconds=120)
     unavailable = [name for name in names if not report["models"][name]["available"]]

@@ -27,8 +27,8 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import (IMAGE_VARIABLE, actual_platform, dagster_url, deployment_profile, image_tag as host_image_tag, project_name,
-                  provider_overlay, read_environment, reject_native_environment)
+from host import (COPILOT_PROFILES, IMAGE_VARIABLE, RUNTIME_PROFILES, actual_platform, dagster_url, deployment_profile,
+                  image_tag as host_image_tag, project_name, provider_overlay, read_environment, reject_native_environment)
 from image_signing import IMAGE_ID
 
 
@@ -50,14 +50,23 @@ OVERLAY_VARIABLE = "APPSEC_REVIEW_CONFIG_OVERLAY"
 RECORDING_VARIABLE = "APPSEC_REVIEW_MODEL_RECORDING"
 PROFILE_VARIABLE = "APPSEC_REVIEW_PROFILE"
 DEFAULT_PROFILE = "dev"
-PROFILES = ("dev", "prod", "copilot-dev", "copilot-prod")
+PROFILES = RUNTIME_PROFILES
+PROD_PROFILES = {"prod", "copilot-prod", "copilot-carbon-prod"}
 PROFILE_TAG = "appsec/profile"
 OVERLAY_TAG = "appsec/overlay"
 COMPILER_TARGET_TAG = "appsec/compiler_target"
 NO_OVERLAY = "none"
 DEPLOY_VARIABLES = (TARGET_VARIABLE, OVERLAY_VARIABLE, RECORDING_VARIABLE, PROFILE_VARIABLE)
-PROFILE_NOTICE = ("profile {profile} uses the more capable models (Sonnet 5.5, Opus 5.5 verifier) and larger token limits; "
+PROFILE_NOTICE = ("profile {profile} uses the more capable models ({models}) and larger token limits; "
                   "see docs/operations/model-profiles.md")
+PROFILE_NOTICE_MODELS = {
+    "copilot-carbon-prod": "Gemini 4 Carbon high across all roles",
+}
+
+
+def profile_notice(profile: str) -> str:
+    models = PROFILE_NOTICE_MODELS.get(profile, "Sonnet 5.5, Opus 5.5 verifier")
+    return PROFILE_NOTICE.format(profile=profile, models=models)
 OK, FAILED, USAGE, REFUSED, NOT_FOUND = 0, 1, 2, 3, 4
 APP_RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{4}$")
 DAGSTER_RUN_ID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
@@ -339,7 +348,7 @@ def add_deploy_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--target", help="review target: a name under targets/ or a container path")
     parser.add_argument("--overlay", help="capacity overlay file under test/acceptance, or 'none'")
     parser.add_argument("--recording", choices=("record", "replay", "off"), help="model recording mode")
-    parser.add_argument("--profile", choices=("dev", "prod", "copilot-dev", "copilot-prod"),
+    parser.add_argument("--profile", choices=PROFILES,
                         help="runtime profile (Copilot profiles use a separate login; prod profiles use production limits)")
 
 
@@ -349,7 +358,7 @@ def add_review_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--recording", choices=("record", "replay", "off"), help=f"model recording mode; {fixed}")
     parser.add_argument("--profile", choices=PROFILES,
                         help="runtime profile for this run only (default: a resumed run's recorded profile, else the "
-                             "container's); must keep the container's provider: dev/prod or copilot-dev/copilot-prod")
+                             "container's); must keep the container's provider: dev/prod or copilot-*")
     parser.add_argument("--overlay", help="capacity overlay under test/acceptance for this run only, or 'none' "
                                           "(default: a resumed run's recorded overlay, else the container's)")
     parser.add_argument("--compiler-target", choices=("clang", "msvc"),
@@ -419,9 +428,11 @@ def model_probe_failure(containers: list[Container], timeout: float = 180, profi
     if code is None or code.state != "running":
         say("  model probe    skipped: code-location is not running")
         return "code-location is not running"
-    if (profile or running_value(code, PROFILE_VARIABLE)) in {"copilot-dev", "copilot-prod"}:
+    selected = profile or running_value(code, PROFILE_VARIABLE)
+    if selected in COPILOT_PROFILES:
+        call = f"verify({profile!r})" if profile else "verify()"
         result = docker("exec", code.id, "python", "-c",
-                        "from appsec_review.inference.copilot_sdk import verify; verify()", timeout=timeout)
+                        f"from appsec_review.inference.copilot_sdk import verify; {call}", timeout=timeout)
         if result.returncode == 0:
             say("  model catalog  ok (dedicated Copilot login; configured models enabled)")
             return None
@@ -475,8 +486,8 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
         guard_active_runs(url, containers, args.force, action)
     profile = settings.get(PROFILE_VARIABLE) or deployment_profile(DEPLOYMENT / ".env")
     say(f"profile: {profile}")
-    if profile in {"prod", "copilot-prod"}:
-        say(PROFILE_NOTICE.format(profile=profile))
+    if profile in PROD_PROFILES:
+        say(profile_notice(profile))
     for key, value in settings.items():
         say(f"setting {key}={value or '(empty)'}{'' if key in requested else '  (carried over from the running stack)'}")
     recorded = read_environment(DEPLOYMENT / ".env")
@@ -873,8 +884,8 @@ def _review_start(args: argparse.Namespace) -> int:
         command += ["--config-json", json.dumps(
             {"execution": {"config": {"safety": safety_policy}}}, sort_keys=True)]
     say(f"profile:   {profile} ({profile_source})")
-    if profile in {"prod", "copilot-prod"}:
-        say(PROFILE_NOTICE.format(profile=profile))
+    if profile in PROD_PROFILES:
+        say(profile_notice(profile))
     say(f"target:    {code.settings.get(TARGET_VARIABLE) or '(default)'}")
     say(f"overlay:   {overlay or '(none)'} ({overlay_source})")
     say(f"compiler:  {compiler_target}")

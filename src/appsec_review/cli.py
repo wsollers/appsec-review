@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 from typing import Sequence
 
-from appsec_review.config import load_config
+from appsec_review.config import PROFILES, load_config
 from appsec_review.orchestration.topology import wave1_dependencies
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
@@ -48,7 +48,7 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="appsec-review")
     root.add_argument("--config", default="appsec-review.toml",
                       help="optional local path or file URI (defaults to repository configuration)")
-    root.add_argument("--profile", choices=("dev", "prod", "copilot-dev", "copilot-prod"), default=None,
+    root.add_argument("--profile", choices=PROFILES, default=None,
                       help="runtime profile (default: APPSEC_REVIEW_PROFILE, else dev; Copilot profiles use a separate login)")
     commands = root.add_subparsers(dest="command", required=True)
 

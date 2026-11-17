@@ -1,0 +1,43 @@
+# WSOLLERS1 host capacity overlay: production concurrency and resource sizing for WSOLLERS1
+# (48 CPUs, 31.2 GiB RAM, native WSL ext4 SSD, systemd cgroup-v2 slices; deploy/dagster/README.md).
+#
+# Select with:
+#   scripts/stack-restart.sh --profile copilot-carbon-prod --overlay WSOLLERS1-capacity-overlay.toml
+#   scripts/review-start.sh --profile copilot-carbon-prod --overlay WSOLLERS1-capacity-overlay.toml
+#
+# An overlay is capacity only (loader.py:overlay_capacity_keys). Models, reasoning and budgets belong
+# to the runtime profile (docs/operations/model-profiles.md). Capacity is excluded from cell
+# fingerprints, so runs with and without this overlay reuse each other's cells.
+#
+# Slice and container envelope on WSOLLERS1:
+# - appsecreview.slice:          16 CPUs, 20 GiB swap-less RAM, 8192 PIDs
+# - appsecreview-actions.slice:   8 CPUs, 10 GiB swap-less RAM, 2048 PIDs (Docker tool/CodeQL containers)
+# - appsecreview-services.slice:  6 CPUs,  8 GiB swap-less RAM, 4096 PIDs (code-location: 4 CPUs, 5 GiB)
+# - appsecreview-engine.slice:    2 CPUs,  2 GiB swap-less RAM, 2048 PIDs
+
+[jobs.job_inference_security_review.settings.teams]
+# Keeps concurrent headless CopilotClient runtimes (~100-150 MiB RSS each) plus Python/LanceDB well
+# inside code-location's 4-CPU / 5 GiB swap-less limit while driving parallel review cells.
+review_teams = 6
+
+[orchestration.dagster.pools]
+# Match Dagster step concurrency to the 8-CPU / 10 GiB actions slice and 4-slot SSD I/O budget so
+# queued steps wait in Dagster rather than spending their tool timeout in admission.
+scanner = 4
+index = 4
+lifecycle = 1
+cpp_build = 2
+cpp_analysis = 4
+owasp_validator = 4
+owasp_verification = 2
+ci_linter = 4
+inference_teams = 2
+inference_score = 4
+
+[review_policy.resources]
+# Retain cpu = 8 and memory_mb = 10240 so the largest CodeQL compile reservation (8 CPUs, 9728 MiB)
+# fits within ResourceAdmission; raise io_slots to 4 for native WSL ext4 SSD throughput.
+cpu = 8
+memory_mb = 10240
+io_slots = 4
+staging_memory_mb = 512

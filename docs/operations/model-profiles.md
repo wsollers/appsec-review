@@ -51,6 +51,7 @@ prod stack to dev the same way.
 | `prod` | `profiles/prod.toml` merged over `appsec-review.toml` | Sonnet 5.5, with Opus 5.5 for the independent verifier | large token limits and budgets for real reviews |
 | `copilot-dev` | `profiles/copilot-dev.toml` merged over `appsec-review.toml` | Haiku 5.5 through Copilot (`claude-haiku-5.5`) | exactly the dev reasoning settings, limits, roles and budgets |
 | `copilot-prod` | `profiles/copilot-prod.toml` merged over `appsec-review.toml` | Sonnet 5.5 through Copilot (`claude-sonnet-5.5`), Opus 5.5 verifier and judge (`claude-opus-5.5`) | exactly the prod reasoning settings, limits, roles and budgets |
+| `copilot-carbon-prod` | `profiles/copilot-carbon-prod.toml` merged over `appsec-review.toml` | Gemini 4 Carbon through Copilot (`gemini-4-carbon`) at `high` reasoning across all jobs and roles | production budgets, exploration lane and active-claim cap, with output token caps sized within `gemini-4-carbon`'s 64k output limit |
 
 ## Copilot production
 

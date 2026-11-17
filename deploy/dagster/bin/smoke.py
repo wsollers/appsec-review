@@ -16,8 +16,8 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import (IMAGE_SERVICES, IMAGE_VARIABLE, LAUNCH_COMMAND, SELF_CHECK_COMMAND, SELF_CHECK_SERVICE, actual_platform,
-                  deployment_profile, non_launching_environment, project_name, provider_overlay,
+from host import (COPILOT_PROFILES, IMAGE_SERVICES, IMAGE_VARIABLE, LAUNCH_COMMAND, SELF_CHECK_COMMAND, SELF_CHECK_SERVICE,
+                  actual_platform, deployment_profile, non_launching_environment, project_name, provider_overlay,
                   reject_other_deployments, url_or_default, validate_deployment)
 
 
@@ -108,7 +108,7 @@ def check_config(platform: str) -> dict:
         expected = str(ROOT / target.rsplit("/", 1)[-1])
         if os.path.normcase(os.path.normpath(source)) != os.path.normcase(os.path.normpath(expected)):
             raise RuntimeError(f"{target} must bind this host's checkout: {expected}")
-    if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}:
+    if deployment_profile(DEPLOYMENT / ".env") in COPILOT_PROFILES:
         mount = mounts.get("/var/copilot-home")
         if not mount or not Path(mount["source"]).is_dir():
             raise RuntimeError("Copilot requires the dedicated worker login directory")
@@ -135,7 +135,7 @@ def check_config(platform: str) -> dict:
             if platform == "wsl" and not source.resolve().is_relative_to(Path.home().resolve()):
                 raise RuntimeError(f"{target} must be stored in the WSL home filesystem")
     return {"platform": platform, "services": sorted(services),
-            "cli": ("copilot-sdk" if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}
+            "cli": ("copilot-sdk" if deployment_profile(DEPLOYMENT / ".env") in COPILOT_PROFILES
                     else "container" if platform == "windows" else "host-bind")}
 
 
@@ -177,7 +177,7 @@ def reject_contention(url: str, platform: str) -> None:
 
 def check_cli(platform: str) -> None:
     prefix = compose(platform) + ["exec", "-T", "code-location"]
-    if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}:
+    if deployment_profile(DEPLOYMENT / ".env") in COPILOT_PROFILES:
         run(prefix + ["python", "-c",
                       "from appsec_review.inference.copilot_sdk import verify; verify()"], capture=True)
         return

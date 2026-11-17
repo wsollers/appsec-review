@@ -128,7 +128,7 @@ several sessions share one Docker daemon and one Dagster stack.
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod]` | Build if asked (or if no image is pinned and the first image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
+| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod\|copilot-carbon-prod]` | Build if asked (or if no image is pinned and the first image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
 | `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`, which verifies the image and recreates `code-location`, `webserver` and `daemon` without restarting PostgreSQL. |
 | `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` (build, sign, verify and select the tooling image) then `start` with that new ID, signing mounted modules and recreating containers whose image changed. |

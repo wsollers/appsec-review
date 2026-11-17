@@ -754,6 +754,7 @@ provider family (Claude or Copilot) for one run, and a family switch needs a sta
 | `prod` | [Production profile](profiles/prod.toml) | Explicit production model, reasoning and budget selections |
 | `copilot-dev` | [Copilot development profile](profiles/copilot-dev.toml) | Opt-in Copilot provider; Git and inference accounts stay separate |
 | `copilot-prod` | [Copilot production profile](profiles/copilot-prod.toml) | Opt-in production selections through the Copilot provider |
+| `copilot-carbon-prod` | [Copilot Gemini 4 Carbon production profile](profiles/copilot-carbon-prod.toml) | Opt-in production selections targeting `gemini-4-carbon` (`high` reasoning) across all model-calling jobs |
 
 For Copilot installation, separate-account login, catalog verification and deployment commands, see
 [Copilot with a separate GitHub identity](docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).

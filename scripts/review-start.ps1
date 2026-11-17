@@ -15,7 +15,7 @@ param(
     [string]$Target,
     [string]$Overlay,
     [ValidateSet('record', 'replay', 'off')][string]$Recording,
-    [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile,
+    [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod', 'copilot-carbon-prod')][string]$Profile,
     [ValidateSet('clang', 'msvc')][string]$CompilerTarget,
     [string]$RunId,
     [double]$IdWait,

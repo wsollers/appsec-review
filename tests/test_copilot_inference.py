@@ -261,6 +261,18 @@ def test_verification_uses_selected_configuration_without_inference(sdk, monkeyp
         copilot_sdk.verify()
 
 
+def test_carbon_production_verification_checks_gemini_carbon_without_inference(sdk, monkeypatch):
+    monkeypatch.setenv("APPSEC_REVIEW_PROFILE", "copilot-dev")
+    sdk.models = ["gemini-4-carbon"]
+    sdk.reasoning = ["low", "medium", "high"]
+    assert copilot_sdk.verify("copilot-carbon-prod") == {
+        "provider": "copilot-sdk",
+        "method": "catalog",
+        "models": ["gemini-4-carbon"],
+    }
+    assert sdk.options is None
+
+
 def test_timeout_aborts_and_disconnects_session(sdk):
     sdk.delay = 10
     with pytest.raises(TimeoutError):

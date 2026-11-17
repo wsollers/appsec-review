@@ -301,7 +301,7 @@ def test_capacity_overlay_sets_the_resource_budget(tmp_path: Path) -> None:
     assert resolved["configuration_overlay"]["keys"] == ["review_policy.resources.io_slots"]
 
 
-@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod", "copilot-carbon-prod"])
 def test_checked_in_prod_capacity_overlay_loads(profile: str) -> None:
     base = load_config(ROOT / "appsec-review.toml", profile=profile)
     config = load_config(ROOT / "appsec-review.toml", overlay=ROOT / "test/acceptance/prod-capacity-overlay.toml",
@@ -310,6 +310,56 @@ def test_checked_in_prod_capacity_overlay_loads(profile: str) -> None:
     assert config.dagster.pool_limits["scanner"] == 4
     assert _settings(config).teams.review_teams == _settings(base).teams.review_teams == 7
     assert config.profile == profile
+
+
+def test_checked_in_wsollers1_capacity_overlay_and_copilot_carbon_prod_profile() -> None:
+    import tomllib
+    from appsec_review.jobs.job_review_intake.job import configured_models
+
+    overlay_path = ROOT / "test/acceptance/WSOLLERS1-capacity-overlay.toml"
+    overlay_doc = tomllib.loads(overlay_path.read_text(encoding="utf-8"))
+    keys = overlay_capacity_keys(overlay_doc)
+    assert f"jobs.{JOB}.settings.teams.review_teams" in keys
+    assert "review_policy.resources.io_slots" in keys
+
+    base = load_config(ROOT / "appsec-review.toml", profile="copilot-carbon-prod")
+    overlaid = load_config(ROOT / "appsec-review.toml", profile="copilot-carbon-prod", overlay=overlay_path)
+    assert base.profile == overlaid.profile == "copilot-carbon-prod"
+
+    # Capacity overlay stays strictly non-semantic so cell fingerprints reuse across overlays.
+    assert semantic_settings_sha256(_settings(overlaid)) == semantic_settings_sha256(_settings(base))
+
+    # Every model slot across all model-bearing jobs targets Gemini 4 Carbon at high reasoning via Copilot SDK.
+    resolved = json.loads(overlaid.resolved_json)
+    models = configured_models(resolved)
+    assert len(models) >= 13
+    for entry in models:
+        model_cfg = resolved["jobs"][entry["job_id"]]
+        for part in entry["setting"].split("."):
+            model_cfg = model_cfg[part]
+        assert entry["provider"] == model_cfg["provider"] == "copilot-sdk"
+        assert entry["model"] == model_cfg["model"] == "gemini-4-carbon"
+        assert model_cfg["reasoning"] == "high"
+        assert model_cfg["max_output_tokens"] <= 64000
+
+    review = _settings(overlaid)
+    assert review.models["strong"].model == "gemini-4-carbon"
+    assert review.models["strong"].reasoning == "high"
+    assert review.budgets.budget_team_packages == "all"
+    assert review.rounds.max_active_claims == 1000
+    assert review.lanes.exploration_enabled is True and review.lanes.exploration_reserve == 20
+    assert review.verifier_distinctness()["distinct"] is False
+
+    # WSOLLERS1 cgroup-v2 capacity sizing.
+    assert review.teams.review_teams == 6
+    assert overlaid.review_policy.resources.cpu == 8
+    assert overlaid.review_policy.resources.memory_mb == 10240
+    assert overlaid.review_policy.resources.io_slots == 4
+    assert overlaid.review_policy.resources.staging_memory_mb == 512
+    assert overlaid.dagster.pool_limits["scanner"] == 4
+    assert overlaid.dagster.pool_limits["cpp_build"] == 2
+    assert overlaid.dagster.pool_limits["cpp_analysis"] == 4
+    assert overlaid.dagster.pool_limits["inference_teams"] == 2
 
 
 def test_capacity_key_allowlist_is_exposed() -> None:

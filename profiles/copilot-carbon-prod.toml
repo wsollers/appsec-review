@@ -1,0 +1,167 @@
+# Opt-in Copilot production profile targeting Gemini 4 Carbon (gemini-4-carbon) at "high" reasoning
+# across every model-calling job and inference role.
+#
+# Selected on request (APPSEC_REVIEW_PROFILE=copilot-carbon-prod, load_config(profile="copilot-carbon-prod"),
+# scripts --profile copilot-carbon-prod); host concurrency and resource budgets stay in a separate
+# capacity overlay under test/acceptance/ (for example WSOLLERS1-capacity-overlay.toml).
+#
+# Catalog bounds for gemini-4-carbon: 936k prompt tokens, 64k output tokens, 1M context window,
+# supported reasoning efforts = ["low", "medium", "high"]. Output caps keep >=32k tokens on short
+# calls so high-reasoning thinking tokens do not starve structured JSON output.
+#
+# Single-model verification note (T-5055): because all roles use gemini-4-carbon,
+# verification.require_distinct_model_for_ship_blocking records a single-model warning, labels
+# confirmed ship-blocking findings ship_blocking_pending_distinct_verification, and skips the
+# chain weakest-link verifier until a distinct verifier model is configured.
+
+[jobs.job_target_analysis_plan.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+timeout_seconds = 900
+
+[jobs.job_post_build_security_assessment.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+timeout_seconds = 900
+
+[jobs.job_dependency_intelligence.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+timeout_seconds = 900
+
+[jobs.job_owasp_control_assessment.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+timeout_seconds = 900
+
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+timeout_seconds = 900
+
+[jobs.job_project_build.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 128000
+max_output_tokens = 32000
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.models.default]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 60
+max_turns = 16
+timeout_seconds = 1800
+
+[jobs.job_inference_security_review.settings.models.triage]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 64000
+max_output_tokens = 32000
+max_queries = 0
+max_turns = 1
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.models.planner]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 0
+max_turns = 2
+timeout_seconds = 1200
+
+[jobs.job_inference_security_review.settings.models.verifier]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 40
+max_turns = 4
+timeout_seconds = 900
+
+[jobs.job_inference_security_review.settings.models.strong]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 60
+max_turns = 16
+timeout_seconds = 2400
+
+[jobs.job_inference_security_review.settings.roles.independent_verifier]
+model_profile = "strong"
+
+[jobs.job_inference_security_review.settings.roles.adjudication_judge]
+model_profile = "strong"
+
+[jobs.job_inference_security_review.settings.lanes]
+exploration_enabled = true
+exploration_reserve = 20
+
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 7
+
+[jobs.job_inference_security_review.settings.rounds]
+max_active_claims = 1000
+
+[jobs.job_poc_generation.settings.models.default]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 8
+max_turns = 6
+timeout_seconds = 900
+
+[jobs.job_remediation_planning.settings.writer]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_turns = 6
+max_queries = 4
+timeout_seconds = 900
+
+[jobs.job_remediation_validation.settings.reviewer]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+max_turns = 2
+max_queries = 0
+timeout_seconds = 900
+
+[jobs.job_inference_security_review.settings.budgets]
+budget_team_packages = "all"
+max_model_turns = 60000
+max_input_tokens = 600000000
+max_output_tokens = 60000000
+max_retrieval_queries = 200000
+timeout_seconds = 86400

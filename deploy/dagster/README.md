@@ -92,6 +92,20 @@ scripts/review-start.sh --profile copilot-prod --target freeciv \
   --overlay freeciv-instrumented/capacity-overlay.toml --stop-on-first-error
 ```
 
+For full production concurrency on `WSOLLERS1` paired with the Gemini 4 Carbon (`high` reasoning)
+runtime profile (`profiles/copilot-carbon-prod.toml`), select
+[`test/acceptance/WSOLLERS1-capacity-overlay.toml`](../../test/acceptance/WSOLLERS1-capacity-overlay.toml),
+which sets `review_teams = 6`, `io_slots = 4` (retaining `cpu = 8` and `memory_mb = 10240` for
+CodeQL reservations) and cgroup-matched Dagster step pools (`scanner = 4`, `cpp_build = 2`,
+`cpp_analysis = 4`, `inference_teams = 2`):
+
+```bash
+scripts/stack-restart.sh --profile copilot-carbon-prod --target appsec-review-smoke-cpp \
+  --overlay WSOLLERS1-capacity-overlay.toml --no-probe
+scripts/review-start.sh --profile copilot-carbon-prod --target appsec-review-smoke-cpp \
+  --overlay WSOLLERS1-capacity-overlay.toml
+```
+
 The start command alone does not establish authentication or launch safety. Complete the separate
 non-inference authentication checks before submission. The overlay is mounted read-only under
 `/opt/app/test/acceptance` and inherited by the application workers. It needs no image rebuild.
