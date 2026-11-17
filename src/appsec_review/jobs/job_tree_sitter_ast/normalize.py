@@ -17,6 +17,11 @@ from .projection import DEFINITIONS, project
 from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 from appsec_review.retrieval.syntax_contract import SCHEMA as PROJECTION_SCHEMA
 
+# Per-file records of non-first-party files the node budget did not cover (``counts.excluded_files``), so a
+# consumer can name the exclusion instead of reporting the file as ``ast_unavailable``. The disposition
+# counts stay authoritative; the record list is bounded.
+MAX_EXCLUDED_FILE_RECORDS = 10000
+
 
 NORMALIZER_SCHEMA = "appsec-review/tree-sitter-normalizer/1"
 
@@ -91,6 +96,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
     files_by_disposition: dict[str, int] = {}
     nodes_by_disposition: dict[str, int] = {}
     excluded_by_disposition: dict[str, int] = {}
+    excluded_files: list[dict[str, str]] = []
     lines: list[bytes] = []
     gaps = [f"{item.get('path')}: {item.get('reason')}" for item in scope.exclusions]
     diagnostics = files_parsed = bytes_parsed = nodes_parsed = 0
@@ -116,6 +122,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                 builder.add_coverage(path, "partial", gaps[-1])
             else:
                 excluded_by_disposition[kind] = excluded_by_disposition.get(kind, 0) + 1
+                excluded_files.append({"path": path, "disposition": kind, "reason": reason})
                 builder.add_coverage(path, "partial", f"{path}: {reason}; {kind} file, the budget is spent on "
                                                       "first-party files first (counted, not a gap)")
             continue
@@ -208,6 +215,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                 file_gaps.append(f"{path}: node limit reached")
             else:
                 excluded_by_disposition[kind] = excluded_by_disposition.get(kind, 0) + 1
+                excluded_files.append({"path": path, "disposition": kind, "reason": "node limit reached"})
                 file_gaps.append(f"{path}: node limit reached; {kind} file, the budget is spent on first-party "
                                  "files first (counted, not a gap)")
         builder.add_coverage(path, "partial" if file_gaps else "complete", "; ".join(file_gaps) or None)
@@ -233,5 +241,6 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
               "gap_count": len(gaps),
               "dispositions": {"files": dict(sorted(files_by_disposition.items())),
                                "nodes": dict(sorted(nodes_by_disposition.items())),
-                               "excluded_files": dict(sorted(excluded_by_disposition.items()))}}
+                               "excluded_files": dict(sorted(excluded_by_disposition.items()))},
+              "excluded_files": sorted(excluded_files, key=lambda item: item["path"])[:MAX_EXCLUDED_FILE_RECORDS]}
     return artifact, identity, counts

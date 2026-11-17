@@ -71,6 +71,26 @@ def is_unit(node: Node, spec: LanguageSpec) -> bool:
     return node.child("body") is not None
 
 
+def _macro_wrapped_name(source: SourceFile, declarator: Node) -> str | None:
+    """``BZ_API(BZ2_bzCompressInit)(bz_stream *strm)``: the declarator chain ends in a macro call.
+
+    Tree-sitter parses the macro call as an inner ``function_declarator`` whose declarator is the macro
+    name and whose parameter list holds the real function name. Only a single-identifier argument is
+    taken; anything else keeps the generic naming so no name is invented.
+    """
+    parent = declarator.parent
+    if (declarator.type != "function_declarator" or parent is None or parent.type != "function_declarator"
+            or parent.child("declarator") is not declarator):
+        return None
+    parameters = declarator.child("parameters")
+    if parameters is None:
+        return None
+    names = [item for item in parameters.walk() if item.type in _NAME_TYPES]
+    if len(names) != 1:
+        return None
+    return source.text(names[0], 256).strip() or None
+
+
 def _last_name(source: SourceFile, node: Node | None) -> str | None:
     if node is None:
         return None
@@ -79,6 +99,10 @@ def _last_name(source: SourceFile, node: Node | None) -> str | None:
         nested = current.child("declarator") or current.child("name")
         if nested is None or nested is current:
             break
+        if nested.type in _NAME_TYPES:
+            wrapped = _macro_wrapped_name(source, current)
+            if wrapped is not None:
+                return wrapped
         current = nested
     if current.type in _NAME_TYPES or not current.children:
         text = source.text(current, 256).strip()

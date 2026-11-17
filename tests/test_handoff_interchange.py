@@ -975,3 +975,37 @@ def test_handoff_outputs_retain_producer_gaps_for_consumers(tmp_path):
     """Consumers such as the publication gate compare a producer's named gaps with its summary."""
     _, _, _, outcome, _ = publish(tmp_path, lambda unit: {"gaps": ["bounded coverage gap"]})
     assert outcome["handoff"]["outputs"]["work.only"]["gaps"] == ["bounded coverage gap"]
+
+
+def _write_unit_results(root: Path, results: dict[str, dict]) -> None:
+    for unit_id, payload in results.items():
+        step, task = unit_id.split(".")
+        base = root / f"data/jobs/job_fixture/attempts/attempt_0001/steps/{step}/tasks/{task}"
+        atomic_json(base / "result.json", payload)
+        atomic_json(base / "status.json", {"unit_id": unit_id, "step_id": step, "task_id": task,
+                                           "status": "SUCCEEDED", "result_sha256": file_sha256(base / "result.json")})
+
+
+def test_publish_units_carrying_aggregated_gaps_give_one_gap_record_per_distinct_reason(tmp_path):
+    """A publish unit that repeats upstream reasons under ``gaps`` mints a second record per reason."""
+    reasons = ["src/a.c: ast_unavailable (no accepted Tree-sitter rows)", "language_not_scored:Python (1 files)"]
+    units = ["extract.syntax_metrics", "publish.publish_handoff"]
+    honest = tmp_path / "honest"
+    _write_unit_results(honest, {
+        "extract.syntax_metrics": {"gaps": reasons, "terminal_status": "PARTIAL"},
+        "publish.publish_handoff": {"gaps": [], "aggregated_gaps": reasons, "terminal_status": "SUCCEEDED"}})
+    with validation_scope(honest):
+        outcomes = build_outcomes(honest, run_id=honest.name, job_id="job_fixture", attempt_id="attempt_0001",
+                                  target_snapshot="snapshot", unit_ids=units)
+    assert outcomes["coverage"]["gap_count"] == len(set(reasons)) == len(outcomes["gaps"])
+    assert sorted(gap["reason"] for gap in outcomes["gaps"]) == sorted(reasons)
+    assert outcomes["coverage"]["disposition"] == "partial"
+
+    repeating = tmp_path / "repeating"
+    _write_unit_results(repeating, {
+        "extract.syntax_metrics": {"gaps": reasons, "terminal_status": "PARTIAL"},
+        "publish.publish_handoff": {"gaps": reasons, "terminal_status": "PARTIAL"}})
+    with validation_scope(repeating):
+        doubled = build_outcomes(repeating, run_id=repeating.name, job_id="job_fixture", attempt_id="attempt_0001",
+                                 target_snapshot="snapshot", unit_ids=units)
+    assert doubled["coverage"]["gap_count"] == 2 * len(set(reasons))

@@ -89,7 +89,7 @@ def native_severity_of(payload: Mapping[str, Any]) -> str:
     common = common_of(payload)
     if common is not None:
         return common.reported_severity["native"]
-    for key in ("native_severity", "producer_level", "level", "severity"):
+    for key in ("native_severity", "producer_level", "level", "severity", "reported_severity"):
         value = payload.get(key)
         if value not in (None, ""):
             return str(value)[:128]

@@ -90,6 +90,22 @@ def _message(value: object, fallback: str) -> str:
     return fallback[:8192]
 
 
+def _default_level(rule: Mapping[str, Any]) -> str | None:
+    """SARIF omits ``result.level`` when the rule's ``defaultConfiguration.level`` applies."""
+    configuration = rule.get("defaultConfiguration")
+    level = configuration.get("level") if isinstance(configuration, Mapping) else None
+    return str(level)[:32] if isinstance(level, str) and level else None
+
+
+def _security_severity(rule: Mapping[str, Any]) -> str | None:
+    """The CodeQL ``security-severity`` CVSS score (a decimal string) carried by the rule."""
+    properties = rule.get("properties")
+    value = properties.get("security-severity") if isinstance(properties, Mapping) else None
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None
+    return str(value).strip()[:16] or None
+
+
 def scope_first_party(records: Sequence[Mapping[str, Any]],
                       dispositions: "SourceDispositions") -> tuple[list[Mapping[str, Any]], dict[str, int]]:
     """Keep the normalized results whose primary location is first-party; count the rest (T-5016).
@@ -177,7 +193,11 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
             ]
             payload = sanitize_producer_data({
                 "producer": "codeql", "query_identity": query_identity, "rule_id": rule_id,
-                "rule": rule, "help_uri": rule.get("helpUri"), "producer_level": result.get("level"),
+                "rule": rule, "help_uri": rule.get("helpUri"),
+                # ``level`` is absent when the rule default applies; the default level and the rule's
+                # ``security-severity`` keep the reported severity from collapsing to ``unknown``.
+                "producer_level": result.get("level") or _default_level(rule),
+                "security_severity": _security_severity(rule),
                 "kind": result.get("kind"), "message": _message(result.get("message"), rule_id),
                 "partial_fingerprints": result.get("partialFingerprints", {}),
                 "properties": result.get("properties", {}), "baseline_state": result.get("baselineState"),

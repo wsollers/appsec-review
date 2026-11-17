@@ -170,3 +170,47 @@ def test_normalize_sarif_rejects_bad_contract_and_records_malformed_run_and_flow
     assert "CodeQL flow step for 2:1 was unmapped or ambiguous" in gaps
     assert "CodeQL result 2:1 had no uniquely mapped source location" in gaps
     assert "CodeQL normalized result count reached its configured bound" in gaps
+
+
+def test_normalize_sarif_takes_the_rule_default_level_and_security_severity_when_level_is_omitted() -> None:
+    """CodeQL SARIF omits ``result.level`` when the rule default applies; the lead must not become unknown."""
+    from appsec_review.retrieval.observations import normalize_reported_severity
+
+    doc = {
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {"driver": {"rules": [
+                {"id": "cpp/command-line-injection", "defaultConfiguration": {"level": "error"},
+                 "properties": {"security-severity": "9.8"}},
+                {"id": "cpp/path-injection", "defaultConfiguration": {"level": "error"},
+                 "properties": {"security-severity": "7.5"}},
+                {"id": "cpp/no-default", "properties": {}},
+            ]}},
+            "results": [
+                {"ruleId": "cpp/command-line-injection", "message": {"text": "a"},
+                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": "services/api/handler.py"},
+                                                     "region": {"startLine": 3}}}]},
+                {"ruleId": "cpp/path-injection", "message": {"text": "b"}, "level": "warning",
+                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": "services/api/handler.py"},
+                                                     "region": {"startLine": 4}}}]},
+                {"ruleId": "cpp/no-default", "message": {"text": "c"},
+                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": "services/api/handler.py"},
+                                                     "region": {"startLine": 5}}}]},
+            ],
+        }],
+    }
+    observations, gaps = normalize_sarif(doc, files=FILES, root=".", query_identity="q", result_limit=10)
+    assert gaps == []
+    by_rule = {item["rule_id"]: item["payload"] for item in observations}
+    assert by_rule["cpp/command-line-injection"]["producer_level"] == "error"
+    assert by_rule["cpp/command-line-injection"]["security_severity"] == "9.8"
+    assert normalize_reported_severity(by_rule["cpp/command-line-injection"]) == {
+        "value": "critical", "native": "error", "basis": "security-severity-cvss-band",
+        "rule": "appsec-review/reported-severity/1"}
+    # An explicit result level wins over the default; the CVSS band still orders the lead.
+    assert by_rule["cpp/path-injection"]["producer_level"] == "warning"
+    assert normalize_reported_severity(by_rule["cpp/path-injection"])["value"] == "high"
+    # No level anywhere and no score stays unknown; nothing is invented.
+    assert by_rule["cpp/no-default"]["producer_level"] is None
+    assert by_rule["cpp/no-default"]["security_severity"] is None
+    assert normalize_reported_severity(by_rule["cpp/no-default"])["value"] == "unknown"

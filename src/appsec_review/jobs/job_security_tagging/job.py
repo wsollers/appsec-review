@@ -106,6 +106,18 @@ def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
     return {"path": _rel(run_root, path), "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
 
 
+def handoff_gaps(collector_gaps: Iterable[str], rollup_gaps: Iterable[str]) -> tuple[list[str], list[str]]:
+    """Split the publish unit's own gaps from the job-wide aggregate.
+
+    Collector and collation units declared their gaps when they ran; repeating them under this unit's
+    ``gaps`` mints a second producer-gap record per reason. The publish unit declares the standing
+    limitations and the tag-cloud rollup gaps as its own and carries the merged list separately.
+    """
+    own = list(dict.fromkeys([*STANDING_GAPS, *rollup_gaps]))
+    aggregated = list(dict.fromkeys([*own, *collector_gaps]))
+    return own, aggregated
+
+
 def _write(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
     path = unit.job.attempt_root / "artifacts" / "security-tagging" / name
     atomic_json(path, dict(value))
@@ -426,8 +438,7 @@ def build_job(*, infer=None) -> Job:
         gap_tags = sorted({record["tag"] for record in records if record["family"] == "gap"})
         collector_gaps = [gap for unit_id in ("scope.resolve_inputs", *COLLECTORS, *COLLATION_UNITS)
                           for gap in unit.output(unit_id)["gaps"]]
-        gaps = list(dict.fromkeys([*STANDING_GAPS, *collector_gaps,
-                                   *unit.output("publication.publish_tag_cloud")["rollup_gaps"]]))
+        gaps, aggregated = handoff_gaps(collector_gaps, unit.output("publication.publish_tag_cloud")["rollup_gaps"])
         document = {"schema": SCHEMA, "target_snapshot": _scope(unit).target_snapshot,
                     "taxonomy": unit.output("taxonomy.load_taxonomy")["identities"],
                     "accepted_upstream_manifest": unit.output("scope.resolve_inputs")["accepted_manifest"],
@@ -437,12 +448,12 @@ def build_job(*, infer=None) -> Job:
                     "basis_counts": validated["basis_counts"], "family_counts": validated["family_counts"],
                     "tag_cloud": unit.output("publication.publish_tag_cloud")["artifact"],
                     "index_manifest": unit.output("publication.publish_index")["index_manifest"],
-                    "gap_tags": gap_tags, "gaps": gaps,
+                    "gap_tags": gap_tags, "gaps": gaps, "aggregated_gaps": aggregated,
                     "claim_policy": "Tags are review routing facts. A derived tag means applicable, never present "
                                     "or satisfied; only reported or confirmed weakness tags cite findings.",
                     "security_findings": []}
         return {**document, "artifact": _write(unit, "handoff.json", document),
-                "terminal_status": "COMPLETED_WITH_GAPS" if gaps or gap_tags else "SUCCEEDED"}
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     u = Unit
     units = (

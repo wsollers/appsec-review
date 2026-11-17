@@ -94,6 +94,9 @@ class IndexBuilder:
         self.entities: list[EntityRecord] = []
         self.relations: list[RelationRecord] = []
         self.coverage: list[tuple[str, str, str | None]] = []
+        # Set by build(): identical records a producer emitted more than once, and the entities written.
+        self.collapsed_identical_records = 0
+        self.entity_count = 0
 
     def add_entity(self, value: EntityRecord) -> None:
         self.entities.append(value)
@@ -115,6 +118,8 @@ class IndexBuilder:
             if previous != record:
                 raise ValueError(f"index shard {self.name}/{self.shard_id} has conflicting entities "
                                  f"for identity {record.identity.value}")
+        self.collapsed_identical_records = len(self.entities) - len(unique)
+        self.entity_count = len(unique)
         return [unique[key] for key in sorted(unique)]
 
     def _unique_relations(self) -> tuple[list[RelationRecord], int]:

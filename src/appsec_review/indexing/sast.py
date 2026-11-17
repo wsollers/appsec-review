@@ -26,6 +26,12 @@ from appsec_review.indexing.products_base import AcceptedShards, Fact, Product
 RULE_VERSION = "appsec-review/scanner-correlation/2"
 SUPPRESSION_RULE = "appsec-review/inline-suppression-match/1"
 DUPLICATE_RULE = "appsec-review/same-location-lead-correlation/1"
+# Scanners that run the same rule pack: the same rule at the same exact line is one lead with two
+# members, not two independent leads. Both members stay; one is the canonical lead.
+SHARED_RULE_PACK_FAMILIES = {"tool-semgrep": "semgrep-rule-pack", "tool-opengrep": "semgrep-rule-pack"}
+METHOD_SAME_CWE = "same-location-same-cwe"
+METHOD_SAME_RULE = "same-location-same-rule"
+METHOD_SHARED_PACK = "same-location-same-rule-shared-pack"
 MENU_KINDS = ("high_critical", "unknown")
 # Suppression directives name tools; map them to the observation scanners they silence.
 _SUPPRESSION_TOOLS = {
@@ -159,22 +165,26 @@ def build_scanner_correlation(shards: AcceptedShards, syntax: Mapping[str, Any] 
         if lead["cwe"]:
             groups[("cwe", location["source_path"], location["start_line"], tuple(lead["cwe"]))].append(lead)
         else:
-            groups[("rule", location["source_path"], location["start_line"], lead["scanner"], lead["rule_id"])].append(lead)
+            family = SHARED_RULE_PACK_FAMILIES.get(lead["scanner"], lead["scanner"])
+            groups[("rule", location["source_path"], location["start_line"], family, lead["rule_id"])].append(lead)
     for key, members in sorted(groups.items(), key=lambda pair: repr(pair[0])):
         ordered = sorted(members, key=lambda item: (SEVERITY_ORDER[item["normalized_reported_severity"]],
                                                     item["observation_id"]))
+        scanners = sorted({item["scanner"] for item in ordered})
+        method = (METHOD_SAME_CWE if key[0] == "cwe" else
+                  METHOD_SHARED_PACK if len(scanners) > 1 else METHOD_SAME_RULE)
         canonical = ordered[0]
         canonical["duplicate_of"] = None
         for member in ordered[1:]:
             member["duplicate_of"] = canonical["observation_id"]
-            member["duplicate_method"] = "same-location-same-cwe" if key[0] == "cwe" else "same-location-same-rule"
+            member["duplicate_method"] = method
         if len(members) > 1:
             product.facts.append(Fact(
                 "correlation", canonical["observation_id"],
                 {"canonical_observation_id": canonical["observation_id"],
                  "member_observation_ids": [item["observation_id"] for item in ordered],
-                 "scanners": sorted({item["scanner"] for item in ordered}),
-                 "method": "same-location-same-cwe" if key[0] == "cwe" else "same-location-same-rule",
+                 "scanners": scanners,
+                 "method": method,
                  "duplicate_rule": DUPLICATE_RULE},
                 "independent observations at the same exact source line", canonical["observation_id"],
                 canonical["location"].get("source_path"), tuple(item["observation_id"] for item in ordered)))

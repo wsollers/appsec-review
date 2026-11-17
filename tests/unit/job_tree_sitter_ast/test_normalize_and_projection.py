@@ -232,6 +232,11 @@ def test_vendored_budget_exclusion_omitted_file_and_unmapped_grammar_coverage(tm
         "nodes": {"first_party": 1, "vendored": 1},
         "excluded_files": {"vendored": 2},
     }
+    # The excluded files are named per path so a consumer reports the exclusion, not ``ast_unavailable``.
+    assert counts["excluded_files"] == [
+        {"path": "third_party/y.sh", "disposition": "vendored", "reason": "scope_node_limit"},
+        {"path": "third_party/z.sh", "disposition": "vendored", "reason": "node limit reached"},
+    ]
     assert identity.gaps == ("omitted.sh: container omitted accepted file",)
 
     # First-party TRUNCATED file becomes an explicit gap

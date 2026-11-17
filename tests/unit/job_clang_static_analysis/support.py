@@ -62,11 +62,13 @@ def _unit(tmp_path: Path) -> UnitContext:
 
 class FakeExecutor:
     def __init__(self, run_root: Path, *, fail: str | None = None,
-                 malformed: str | None = None, too_many: str | None = None):
+                 malformed: str | None = None, too_many: str | None = None,
+                 duplicate: str | None = None):
         self.run_root = run_root
         self.fail = fail
         self.malformed = malformed
         self.too_many = too_many
+        self.duplicate = duplicate
         self.calls: list[str] = []
 
     def execute(self, request):
@@ -84,7 +86,7 @@ class FakeExecutor:
         if engine == self.malformed:
             output.write_text("{", encoding="utf-8")
         else:
-            count = 21 if engine == self.too_many else 1
+            count = 21 if engine == self.too_many else 2 if engine == self.duplicate else 1
             output.write_text(json.dumps({
                 "schema": OUTPUT_SCHEMA, "engine": engine, "truncated": False,
                 "diagnostics": [{"rule_id": "bugprone-use-after-move" if action == "tidy" else "core.NullDereference",

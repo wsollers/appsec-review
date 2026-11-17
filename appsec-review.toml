@@ -2857,9 +2857,9 @@ max_assignments = 500000
 
 [jobs.job_security_tagging.settings.taxonomy]
 vocabulary_path = "data/reference/taxonomy/vocabulary.json"
-vocabulary_sha256 = "bfea6cad747373d089a690a1a13692c5b424ae773f77a88e18ab6bfd0ec56382"
+vocabulary_sha256 = "e932c7620531525d262991c47e406a4f9f9ee3c027388bc982309a403a36da4d"
 capability_rules_path = "data/reference/taxonomy/capability-rules.json"
-capability_rules_sha256 = "d171bd524478f0ba748fbd8f90b5a952556f166bafc589fa8c078f04d0ff000b"
+capability_rules_sha256 = "a5ac8ae4fc163533cf86965ab0104135a24b447d7d49a12e8bc7ad4740bf8080"
 crosswalk_path = "data/reference/taxonomy/crosswalk.json"
 crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
 

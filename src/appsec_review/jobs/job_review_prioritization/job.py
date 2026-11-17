@@ -277,12 +277,20 @@ def build_job() -> Job:
         observe_output(unit.job.run_root, "job_tree_sitter_ast", "tree_sitter_acceptance", tree_artifact)
         tree = read_json(unit.job.run_root, tree_artifact)
         reasons: dict[str, list[str]] = defaultdict(list)
+        # Non-first-party files the AST job's node budget did not cover: named exclusions, not ``ast_unavailable``.
+        excluded: dict[str, str] = {}
         shard_rows: list[Mapping[str, Any]] = []
         for disposition in tree.get("dispositions", ()):
             for gap in disposition.get("gaps", ()):
                 path, _, reason = str(gap).partition(": ")
                 if path in files:
                     reasons[path].append(reason)
+            for item in (disposition.get("counts") or {}).get("excluded_files", ()):
+                path = str(item.get("path", "")) if isinstance(item, Mapping) else ""
+                if path in files:
+                    reason = str(item.get("reason") or "node budget")
+                    excluded[path] = (f"excluded ({'node budget' if 'limit' in reason else reason}, "
+                                      f"{item.get('disposition') or 'non-first-party'})")
             if "artifact" not in disposition:
                 language = str(disposition.get("language"))
                 for path, value in files.items():
@@ -328,7 +336,8 @@ def build_job() -> Job:
                     value = files[path]
                     file_gaps = sorted(set(reasons.get(path, ())))
                     if not index.has_rows(path):
-                        path_gaps.append((path, f"ast_unavailable ({'; '.join(file_gaps) or 'no accepted Tree-sitter rows'})"))
+                        path_gaps.append((path, excluded[path]) if path in excluded else
+                                         (path, f"ast_unavailable ({'; '.join(file_gaps) or 'no accepted Tree-sitter rows'})"))
                         continue
                     if any("node limit" in reason or "limit" in reason for reason in file_gaps):
                         path_gaps.append((path, f"ast_truncated ({'; '.join(file_gaps)})"))
@@ -710,8 +719,11 @@ def build_job() -> Job:
             parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
             mapping_identity=GRAPH_IDENTITY)
         path = unit.job.run_root / "data" / "indices" / "priority" / SHARD_ID / f"{fingerprint}.sqlite"
-        gaps = sorted(set([*syntax_output["gaps"], *graph_output["gaps"], *semantic_output["gaps"],
-                           *ranking_output["gaps"]]))
+        # Upstream units declared their own gaps already; this unit declares only its own and carries the
+        # merged list as ``aggregated_gaps`` so the job outcome holds one gap record per distinct reason.
+        upstream_gaps = sorted(set([*syntax_output["gaps"], *graph_output["gaps"], *semantic_output["gaps"],
+                                    *ranking_output["gaps"]]))
+        gaps: list[str] = []
         data_cache: dict[str, bytes] = {}
 
         def data_of(file_path: str) -> bytes:
@@ -887,13 +899,14 @@ def build_job() -> Job:
             builder.add_coverage("history-hotspots", "complete" if history_status == "EXACT" else
                                  "partial" if history_status == "PARTIAL" else "unavailable",
                                  "; ".join(ranking_output["gaps"][:10]) or history_status)
-            builder.add_coverage("prioritization", "partial" if gaps else "complete",
+            builder.add_coverage("prioritization", "partial" if gaps or upstream_gaps else "complete",
                                  f"indexed {len(selected_files)} of {len(ranking['files'])} files and "
                                  f"{len(selected_functions)} of {len(ranking['functions'])} functions")
             builder.build()
+        aggregated = list(dict.fromkeys([*upstream_gaps, *gaps]))
         identity = IndexIdentity("priority", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
                                  _rel(unit.job.run_root, path), {"job": JOB_ID, "unit": unit.unit_id},
-                                 tuple(gaps[:200]), SHARD_ID)
+                                 tuple(aggregated[:200]), SHARD_ID)
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
@@ -905,7 +918,7 @@ def build_job() -> Job:
                        upstream_manifests=({"path": _rel(unit.job.run_root, upstream_path), "sha256": upstream_sha},))
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
         return {"index_identity": asdict(identity), "manifest": _artifact(unit.job.run_root, manifest_path),
-                "gaps": gaps, "terminal_status": _status(gaps)}
+                "gaps": gaps, "aggregated_gaps": aggregated, "terminal_status": _status(gaps)}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit.job)
@@ -921,7 +934,9 @@ def build_job() -> Job:
             return {key: item.get(key) for key in ("item_id", "scope", "path", "function_id", "name", "language",
                                                    "start_line", "rank", "score", "feature_coverage", "missing_features")}
 
-        gaps = list(indexed["gaps"])
+        # The index unit declared its own gaps; this unit has none of its own and carries the aggregate.
+        gaps: list[str] = []
+        aggregated = list(indexed["aggregated_gaps"])
         document = {
             "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint,
             "authority": "metrics and signals prioritize review; a high score means review first and is never a "
@@ -948,14 +963,14 @@ def build_job() -> Job:
             "artifacts": {"syntax": syntax_output["artifact"],
                           "dependency_graph": unit.output("extract.dependency_graph")["artifact"],
                           "semantic": semantic_output["artifact"], "ranking": ranking_output["artifact"]},
-            "gaps": gaps, "index_manifest": indexed["manifest"],
+            "gaps": gaps, "aggregated_gaps": aggregated, "index_manifest": indexed["manifest"],
         }
         artifact = _write(unit, "review-prioritization.json", document)
         unit.job.events.write("REVIEW_PRIORITIZATION_COMPLETED", file_count=ranking_output["file_count"],
-                              function_count=ranking_output["function_count"], gap_count=len(gaps))
+                              function_count=ranking_output["function_count"], gap_count=len(aggregated))
         return {"schema": SCHEMA, "artifact": artifact, "index_manifest": indexed["manifest"],
                 "item_count": ranking_output["file_count"] + ranking_output["function_count"], "gaps": gaps,
-                "terminal_status": _status(gaps)}
+                "aggregated_gaps": aggregated, "terminal_status": _status(gaps)}
 
     units = (
         Unit("load.accepted_inputs", load),

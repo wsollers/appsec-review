@@ -27,7 +27,12 @@ MAPPINGS = (
     ("sink_site", "regex_injection", "func:data:regex"),
     ("sink_site", "url_redirect", "func:net:redirect"),
     ("sink_site", "log_output", "func:telemetry:app-log"),
+    ("sink_site", "format_string", "func:data:format-string"),
+    ("sink_site", "allocation_size", "func:exec:unmanaged-memory"),
+    ("sink_site", "network_output", "func:net:raw-socket"),
+    ("sink_site", "path_access", "func:fs:path-access"),
 )
+NATIVE_CLASSES = {"memory_read", "memory_write", "allocation_size"}
 
 
 def collect(rows=(), *, indexes=None, components=None, rules=None, limit=100, **kwargs):
@@ -38,7 +43,7 @@ def collect(rows=(), *, indexes=None, components=None, rules=None, limit=100, **
 
 @pytest.mark.parametrize("family,klass,tag", MAPPINGS, ids=[item[1] for item in MAPPINGS])
 def test_supported_mapping_preserves_exact_evidence(family, klass, tag):
-    row = fact(klass, family=family, language="cpp" if klass.startswith("memory_") else "python")
+    row = fact(klass, family=family, language="cpp" if klass in NATIVE_CLASSES else "python")
     records, gaps = collect([row])
     assert not gaps
     assert len(records) == 1
@@ -60,8 +65,7 @@ def test_supported_mapping_preserves_exact_evidence(family, klass, tag):
 
 @pytest.mark.parametrize("klass,family", [
     ("new-producer-class", "sink_site"), ("local_user", "entry_point"), ("database", "entry_point"),
-    ("internal", "entry_point"), ("path_access", "sink_site"), ("allocation_size", "sink_site"),
-    ("format_string", "sink_site"), ("integer_conversion", "sink_site"), ("crypto_misuse", "sink_site"),
+    ("internal", "entry_point"), ("integer_conversion", "sink_site"), ("crypto_misuse", "sink_site"),
     ("server_side_request", "sink_site"), ("code_injection", "sink_site"),
     ("deserialization", "sink_site"), ("html_output", "sink_site"), ("header_injection", "sink_site"),
     ("xpath_query", "sink_site"), ("unsafe_reflection", "sink_site"),
@@ -135,7 +139,11 @@ def test_malformed_facts_have_named_gaps(case):
         location["path"] = "../outside"
     records, gaps = collect([replace(row, payload=payload, location=location)])
     assert not records
-    assert len(gaps) == 1 and "malformed_fact" in gaps[0]
+    # A well-formed span the producer recorded as inexact is a distinct, aggregated gap, not a malformed fact.
+    expected = "inexact_location" if case in {"confidence", "empty-span"} else "malformed_fact"
+    assert len(gaps) == 1 and expected in gaps[0]
+    if case == "foreign-snapshot":
+        assert "belongs to another snapshot" in gaps[0]
 
 
 def test_remote_input_never_implies_http_or_deployment():
@@ -265,3 +273,28 @@ def test_partial_producer_coverage_does_not_hide_eligible_scoped_operations():
     assert len(records) == 1 and records[0]["basis"] == "invoked"
     assert any("producer_coverage" in gap and "truncated" in gap for gap in gaps)
     assert any("producer_fact_gap" in gap and "incomplete" in gap for gap in gaps)
+
+
+def test_analyzer_diagnostic_points_are_one_aggregated_inexact_location_gap_per_shard():
+    """215 clang analyzer points with confidence 0.5 and zero width are not 215 malformed facts."""
+    rows = []
+    for offset in (0, 4, 9):
+        row = fact("memory_write", language="cpp", start=offset, end=offset + 3)
+        rows.append(replace(row, location={**row.location, "confidence": 0.5, "end_byte": row.location["start_byte"],
+                                           "mapping_method": "analyzer-diagnostic-point"}))
+    foreign = fact("sql_query")
+    rows.append(replace(foreign, location={**foreign.location, "target_snapshot": "foreign"}))
+    records, gaps = collect(rows)
+    assert not records
+    inexact = [gap for gap in gaps if "inexact_location" in gap]
+    assert len(inexact) == 1
+    assert inexact[0] == ("graph-capability:inexact_location: scope: 3 sink_site fact(s) carry an inexact source "
+                          "location (analyzer-diagnostic-point); the sites are not tagged")
+    malformed = [gap for gap in gaps if "malformed_fact" in gap]
+    assert len(malformed) == 1 and "belongs to another snapshot" in malformed[0]
+    assert len(gaps) == 2
+
+
+def test_allocation_size_mapping_is_native_only():
+    records, gaps = collect([fact("allocation_size", language="python")])
+    assert not records and len(gaps) == 1 and "unmapped_class" in gaps[0]

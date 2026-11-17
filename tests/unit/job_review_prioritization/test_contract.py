@@ -143,6 +143,7 @@ def _seed_upstream_run(
     extra_catalog_files: list[dict[str, Any]] | None = None,
     extra_dispositions: list[dict[str, Any]] | None = None,
     generated_sources: list[dict[str, Any]] | None = None,
+    main_disposition_extra: dict[str, Any] | None = None,
 ) -> tuple[Path, Path, str, dict[str, str]]:
     runs_dir = tmp_path / "runs"
     run_id = "2026-01-01-0001"
@@ -226,7 +227,7 @@ def _seed_upstream_run(
     shard_ref = _artifact_ref(run_root, shard_path)
     dispositions = [
         {"scope_id": "scope-main", "language": "Go", "terminal_status": "SUCCEEDED",
-         "artifact": shard_ref, "gaps": []},
+         "artifact": shard_ref, "gaps": [], **(main_disposition_extra or {})},
         *(extra_dispositions or ()),
     ]
     ts_ref = _artifact_ref(run_root, run_root / "fixture" / "tree-sitter.json", {
@@ -689,6 +690,8 @@ def test_full_unit_executor_with_disabled_sources_bounds_and_shard_reuse(tmp_pat
          "generated": False, "delivery_role": "production", "first_party": True, "vendored": False},
         {"path": "ruby/failed.rb", "sha256": "6" * 64, "size_bytes": 30, "language": "Ruby",
          "generated": False, "delivery_role": "production", "first_party": True, "vendored": False},
+        {"path": "third_party/vendor.go", "sha256": "7" * 64, "size_bytes": 30, "language": "Go",
+         "generated": False, "delivery_role": "production", "first_party": False, "vendored": True},
     ]
     extra_dispositions = [
         {"scope_id": "scope-rb", "language": "Ruby", "terminal_status": "FAILED", "reason": "crash", "gaps": []},
@@ -709,6 +712,8 @@ def test_full_unit_executor_with_disabled_sources_bounds_and_shard_reuse(tmp_pat
         ),
         extra_catalog_files=extra_files,
         extra_dispositions=extra_dispositions,
+        main_disposition_extra={"counts": {"excluded_files": [
+            {"path": "third_party/vendor.go", "disposition": "vendored", "reason": "node limit reached"}]}},
     )
     built = build_job()
     settings_override = {
@@ -726,10 +731,19 @@ def test_full_unit_executor_with_disabled_sources_bounds_and_shard_reuse(tmp_pat
     result1 = built.execute(ctx1)
     pub1 = result1["outputs"]["publish.publish_handoff"]
     assert pub1["schema"] == SCHEMA
-    assert pub1["terminal_status"] == "PARTIAL"
-    gaps = "\n".join(pub1["gaps"])
+    # The publish unit declares no gaps of its own; the upstream units declared theirs. The merged list is
+    # carried as aggregated_gaps, so each reason is one producer-gap record in the job outcome.
+    assert pub1["terminal_status"] == "SUCCEEDED" and pub1["gaps"] == []
+    index_out = result1["outputs"]["publish.index_priority"]
+    assert index_out["gaps"] == ["dependency_graph_context_bound_reached"]
+    assert set(result1["outputs"]["extract.syntax_metrics"]["gaps"]) <= set(pub1["aggregated_gaps"])
+    assert set(index_out["gaps"]) <= set(pub1["aggregated_gaps"]) == set(index_out["aggregated_gaps"])
+    gaps = "\n".join(pub1["aggregated_gaps"])
     assert "go/huge.go: file_byte_bound_reached" in gaps
     assert "go/no_rows.go: ast_unavailable" in gaps
+    # A vendored file the AST node budget excluded is a named exclusion, never ``ast_unavailable``.
+    assert "third_party/vendor.go: excluded (node budget, vendored)" in gaps
+    assert "third_party/vendor.go: ast_unavailable" not in gaps
     assert "ruby/failed.rb: ast_unavailable (tree-sitter scope FAILED: crash)" in gaps
     assert "java/src/main/java/com/example/web/UserController.java: ast_truncated" in gaps
     assert "language_not_scored:Python (1 files)" in gaps
@@ -864,7 +878,8 @@ def test_full_unit_executor_with_semantic_paths_semgrep_history_and_loader_guard
     assert loaded["sources"] == {
         "tree_sitter": "PARTIAL", "semgrep": "SUCCEEDED", "codeql": "SUCCEEDED", "history": "PARTIAL",
     }
-    gaps_joined = "\n".join(loaded["gaps"])
+    assert loaded["gaps"] == []          # the publish unit declares no gaps of its own
+    gaps_joined = "\n".join(loaded["aggregated_gaps"])
     assert "unbound.java: semgrep_signal_not_bound_to_accepted_file" in gaps_joined
     assert "is not bound to accepted files" in gaps_joined
     assert "subrepo history decision SKIPPED_SHALLOW" in gaps_joined

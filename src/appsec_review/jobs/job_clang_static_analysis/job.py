@@ -22,12 +22,14 @@ from appsec_review.jobs.cpp_index_scopes import (
     publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
 )
 from appsec_review.jobs.engineering_contracts import CLANG_STATIC_HANDOFF_SCHEMA
+from appsec_review.provenance import common_metadata, json_selector, retain_native_output, select_native
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import current as current_owner
 from . import seeded
 from .datasets import CONTRACT, DATASETS
 
@@ -35,7 +37,7 @@ from .datasets import CONTRACT, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/4"
+ADAPTER = "clang-static-adapter/5"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 _CHECKER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
@@ -123,8 +125,29 @@ def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: in
             "end_line": max(int(item.get("end_line", item["line"])), int(item["line"])),
             "end_column": max(int(item.get("end_column", item["column"])), int(item["column"])),
             "notes": notes, "fix_it": item.get("fix_it") is True,
+            # Underscore keys address the retained native output and never enter the evidence identity.
+            "_native_selector": json_selector("diagnostics", index).as_dict(),
         })
     return records, gaps
+
+
+def _retain_output(unit: UnitContext, output_path: Path, execution: Mapping[str, Any],
+                   parsed: list[dict[str, Any]], parse_gaps: list[str]) -> dict[str, Any] | None:
+    """Retain the bounded wrapper document so each observation's ``common`` record cites it.
+
+    Outside a run-owned publication attempt (direct handler calls) there is no retention owner; the
+    observation then carries ``provenance_unavailable`` in its common record instead of a reference.
+    """
+    owner = current_owner()
+    if owner is None or owner.run_root != unit.job.run_root:
+        return None
+    receipt = execution.get("receipt")
+    reference = retain_native_output(
+        unit.job.run_root, output_path, parser_identity=ADAPTER,
+        complete=not any("truncated" in gap for gap in parse_gaps), native_result_count=len(parsed),
+        execution_reference=receipt if isinstance(receipt, Mapping) and {"path", "sha256"} <= set(receipt) else None,
+        events=getattr(unit.job, "events", None), unit_id=unit.unit_id)
+    return reference.as_dict()
 
 
 def _location(scope: IndexScope, record: Mapping[str, Any]) -> tuple[SourceLocation | None, Mapping[str, Any] | None]:
@@ -218,6 +241,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             engines = ()
     engine_failed: set[str] = set()
     failed_units: dict[tuple[str, str], str] = {}
+    retained: dict[str, dict[str, Any]] = {}
     for engine in engines:
         scratch = root / ("tidy" if engine == "clang-tidy" else "analyze")
         try:
@@ -273,6 +297,10 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             engine_failed.add(engine)
         if output_path.is_file() and not output_path.is_symlink() and output_path.stat().st_size <= settings["max_output_bytes"]:
             raw_artifacts.append(artifact(unit.job.run_root, output_path))
+            if parsed:
+                native = _retain_output(unit, output_path, execution, parsed, parse_gaps)
+                if native is not None:
+                    retained[engine] = native
         records.extend(parsed)
 
     section = ledger = compact = None
@@ -313,7 +341,9 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         if location is None or accepted is None:
             gaps.append(f"{record['engine']} diagnostic path did not resolve to accepted source: {record['path']}")
             continue
-        evidence_id = hashlib.sha256(canonical_json({"scope": scope.scope_id, **record})).hexdigest()
+        selector = record.get("_native_selector")
+        hashed = {key: value for key, value in record.items() if not key.startswith("_")}
+        evidence_id = hashlib.sha256(canonical_json({"scope": scope.scope_id, **hashed})).hexdigest()
         observation = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, scope.case_snapshot,
                                              {"producer": record["engine"], "evidence_id": evidence_id})
         source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, scope.case_snapshot,
@@ -325,11 +355,20 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                 {"sha256": accepted["sha256"], "scope_id": scope.scope_id}, location,
             ))
             source_entities.add(source_id.value)
+        # ``native_severity`` is the key retrieval normalizes (clang ``warning`` -> medium, ``error`` -> high);
+        # ``reported_severity`` stays for readers of the previous adapter's payloads.
         payload = {"tool_id": TOOL_ID, "scanner": record["engine"], "category": "source_sast",
                    "native_rule_id": record["rule_id"],
-                   "message": record["message"], "reported_severity": record["severity"],
+                   "message": record["message"], "native_severity": record["severity"],
+                   "reported_severity": record["severity"],
                    "project_id": scope.project_id, "trace": record["notes"], "evidence_id": evidence_id,
                    "trace_length": len(record["notes"]), "fix_it": bool(record.get("fix_it"))}
+        native_output = retained.get(record["engine"])
+        payload["common"] = common_metadata(
+            payload,
+            evidence_refs=((select_native(native_output, selector).as_dict(),)
+                           if native_output is not None and selector is not None else ()),
+            payload_schema=ADAPTER)
         if run is not None:
             relative = str(accepted["scratch_path"])[len("source/"):]
             placement = seeded.classify(relative, int(record["line"]), run.scope_seeds, run.hood)
@@ -358,9 +397,12 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                           path.relative_to(unit.job.run_root).as_posix(), producer,
                           tuple(gaps), shard)
     status = "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS"
+    # Identical diagnostics collapse to one observation entity in the shard; the count is the entity count.
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "accepted_compile_database": dict(scope.compile_database), "executions": executions,
-              "observation_count": accepted_count, "index_identity": asdict(index),
+              "observation_count": accepted_count - builder.collapsed_identical_records,
+              "collapsed_identical_records": builder.collapsed_identical_records,
+              "index_identity": asdict(index),
               "gaps": gaps, "terminal_status": status,
               "not_applicable_inputs": scope.not_applicable_inputs()}
     if run is not None:
