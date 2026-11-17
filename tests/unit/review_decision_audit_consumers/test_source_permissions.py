@@ -177,6 +177,14 @@ def test_source_selection_is_exact_canonical_and_dossier_duplicates_are_not_wide
     from appsec_review.review.lead_families import OBSERVATION_PRODUCERS
     observation_jobs = {row.job for row in OBSERVATION_PRODUCERS if row.family is not None}
     assert observation_jobs <= {producer for producer, _ in ORIGINAL_AUDIT_SOURCES}
+    # Run 2026-11-17-0005: every lead-producing observation shard family must be in the table, not only its job.
+    for job in sorted(observation_jobs):
+        declarations = import_module(f"appsec_review.jobs.{job}.datasets").DATASETS
+        shard_kinds = {row.output_kind for row in declarations
+                       if row.disposition == "indexed" and "observations" in (row.indexes or ())
+                       and not row.output_kind.endswith("_coverage")}
+        assert shard_kinds <= set(dict(ORIGINAL_AUDIT_SOURCES)[job]), (job, sorted(shard_kinds))
+    assert ("job_dependency_intelligence", ("native_advisory_observations",)) in ORIGINAL_AUDIT_SOURCES
     assert ("job_review_data_indexing", ("precomputed_products",)) in ORIGINAL_AUDIT_SOURCES
 
 
@@ -211,7 +219,7 @@ importlib.import_module(sys.argv[1])
 from appsec_review.jobs.decision_audit_inputs import original_audit_source_inputs
 from appsec_review.jobs.job_dossier_publication.datasets import CONTRACT
 inputs = original_audit_source_inputs()
-assert len(inputs) == 16
+assert len(inputs) == 18
 assert len({row.key for row in CONTRACT.inputs}) == len(CONTRACT.inputs)
 assert "job_post_build_security_assessment" in CONTRACT.consumes
 """, module], capture_output=True, text=True, timeout=8, check=False)

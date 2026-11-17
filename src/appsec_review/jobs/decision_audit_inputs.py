@@ -14,6 +14,7 @@ from appsec_review.jobs.job_ci_configuration_analysis import datasets as _ci_con
 from appsec_review.jobs.job_clang_static_analysis import datasets as _clang_static
 from appsec_review.jobs.job_codeql_analysis import datasets as _codeql
 from appsec_review.jobs.job_cpp_compiled_analysis import datasets as _cpp_compiled
+from appsec_review.jobs.job_dependency_intelligence import datasets as _dependency_intelligence
 from appsec_review.jobs.job_evidence_collection import datasets as _evidence_collection
 from appsec_review.jobs.job_post_build_security_assessment import datasets as _post_build_security
 from appsec_review.jobs.job_review_data_indexing import datasets as _review_data_indexing
@@ -28,6 +29,9 @@ ORIGINAL_AUDIT_SOURCES = (
     ("job_clang_static_analysis", ("clang_static_observations",)),
     ("job_codeql_analysis", ("codeql_observations",)),
     ("job_cpp_compiled_analysis", ("infer_observations",)),
+    # Run 2026-11-17-0005: job_dossier_publication failed on "undeclared consumption ... native_advisory_observations"
+    # because the native-advisory lead family (review.lead_families) cites this shard and the table lagged it.
+    ("job_dependency_intelligence", ("native_advisory_observations",)),
     ("job_evidence_collection", ("static_tool_observations",)),
     ("job_post_build_security_assessment", ("build_security",)),
     ("job_review_data_indexing", ("precomputed_products",)),
@@ -38,6 +42,7 @@ _DATASETS = {
     "job_clang_static_analysis": _clang_static.DATASETS,
     "job_codeql_analysis": _codeql.DATASETS,
     "job_cpp_compiled_analysis": _cpp_compiled.DATASETS,
+    "job_dependency_intelligence": _dependency_intelligence.DATASETS,
     "job_evidence_collection": _evidence_collection.DATASETS,
     "job_post_build_security_assessment": _post_build_security.DATASETS,
     "job_review_data_indexing": _review_data_indexing.DATASETS,
