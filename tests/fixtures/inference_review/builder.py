@@ -368,7 +368,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
           [observed("sast_duplicate", "native/src/parse.c")])
     shard("codeql", "observations", "codeql-cpp-native", {"job": "job_codeql_analysis", "language": "cpp",
                                                           "build_unit_id": "native-main"},
-          [observation("codeql_high", "codeql", "cpp/integer-overflow", None, "native/src/parse.c", 5,
+          [observation("codeql_high", "codeql", "cpp/unbounded-write", None, "native/src/parse.c", 5,
                        producer="codeql", producer_level="warning", security_severity="8.1", language="C")])
 
     def advisory(key: str, advisory_id: str, **extra: Any) -> EntityRecord:

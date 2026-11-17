@@ -354,11 +354,16 @@ def _operation_units(scope: AcceptedScope, units: list[ReviewUnit], operations: 
         remaining = [row for row in signal_rows["tag_density"]
                      if row["path"] in unit.paths]
         sites = opportunity_sites(remaining) - covered_sites
+        remaining_leads = tuple(lead for lead in unit.leads if lead.observation_id not in assigned)
+        # Both per-lead signals follow the leads that stay: a fallback unit that kept the hint points of leads
+        # allocated to an operation outranked that operation once high leads earned lead_hint_high.
         signals = tuple(Signal("tag_density", min(weights.tag_density,
                         len(sites) * weights.tag_density // weights.tag_density_full_tags_per_file), None)
-                        if signal.signal == "tag_density" and signal.value is not None else signal for signal in unit.signals)
-        result.append(replace(unit, leads=tuple(lead for lead in unit.leads if lead.observation_id not in assigned),
-                              signals=signals))
+                        if signal.signal == "tag_density" and signal.value is not None
+                        else lead_hints(remaining_leads, weights)
+                        if signal.signal == "lead_hints" and signal.value is not None
+                        else signal for signal in unit.signals)
+        result.append(replace(unit, leads=remaining_leads, signals=signals))
     return result
 
 
@@ -381,8 +386,9 @@ def _rank_key(unit: ReviewUnit) -> tuple:
     and the popen site fell below the cutoff)."""
     operation = unit.operation or {}
     line = operation.get("start_line") if isinstance(operation, Mapping) else None
+    # An operation unit precedes the whole-file fallback it was cut from when everything else ties.
     return (-unit.score, -unit.known_signals, -len(unit.leads), -len({lead.scanner for lead in unit.leads}),
-            unit.paths[0] if unit.paths else "", int(line) if isinstance(line, int) else 0, unit.key)
+            unit.paths[0] if unit.paths else "", (0, int(line)) if isinstance(line, int) else (1, 0), unit.key)
 
 
 def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead],

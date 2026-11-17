@@ -8,6 +8,7 @@ import pytest
 
 from appsec_review.config.inference_review import parse_inference_review_settings
 from appsec_review.jobs.job_inference_security_review import job
+from appsec_review.review import hunt_plan
 from appsec_review.review.lead_families import LeadCollection
 from appsec_review.review.packages import Assembly
 
@@ -59,7 +60,13 @@ def test_real_assembly_handler_supplies_original_core_and_preserves_cutoff_sourc
     monkeypatch.setattr(job, "assemble_packages", assemble)
     monkeypatch.setattr(job, "publish_packages", publish)
     monkeypatch.setattr(job, "collect_leads", collect)
-    monkeypatch.setattr(job, "_read", lambda *a: {"enabled": False})
+    # The handler reads two upstream artifacts: the triage document and the hunting campaign plan (T-5030).
+    def read(_root, ref):
+        if ref["name"] == "packages.plan_hunt_campaign":
+            return hunt_plan.disabled_document(settings.hunting)
+        return {"enabled": False}
+
+    monkeypatch.setattr(job, "_read", read)
     monkeypatch.setattr(job, "_excluded", lambda _: set())
     monkeypatch.setattr(job, "_membership", lambda *a: {})
     monkeypatch.setattr(job, "_taxonomy", lambda _: (None, None))
@@ -69,11 +76,13 @@ def test_real_assembly_handler_supplies_original_core_and_preserves_cutoff_sourc
         unit_id=unit_id, unit_root=unit_root,
         job=SimpleNamespace(run_root=root, run_id="run", events=SimpleNamespace(
             write=lambda name, **details: events.append((name, details)))),
-        output=lambda _: {"artifact": {}, "manifest_path": "manifest.json", "manifest_sha256": "b" * 64})
+        output=lambda name: {"artifact": {"name": name}, "manifest_path": "manifest.json", "manifest_sha256": "b" * 64})
     handler = next(item.handler for item in job.build_job(repository_root=ROOT).units if item.unit_id == unit_id)
     result = handler(unit)
     output = json.loads((root / result["artifact"]["path"]).read_bytes())
-    assert output["units"] == manifest["units"]
+    # The lane document adds the campaign fields to every unit row (none under a disabled plan).
+    assert output["units"] == [{**row, "hunt_area": None, "hunt_gap": None} for row in manifest["units"]]
     assert output["lane"] == lane and result["terminal_status"] == "SUCCEEDED"
+    assert output["hunt_plan"]["status"] == "disabled" and output["hunt_plan"]["plan_id"] is None
     assert events == [("INFERENCE_REVIEW_PACKAGES_ASSEMBLED", {"lane": lane, "package_count": 0})]
     assert set(observed) == {"collect", "assembly", "publication"}

@@ -53,7 +53,8 @@ def _menu(document: dict, lead_id: str) -> dict:
 
 
 # sast_critical and its opengrep duplicate sit on native/src/parse.c:3 and codeql_high on line 5 of the same
-# file: one defect site, one package, three menu entries. sast_unknown (io.c:1) and sast_suppressed (io.c:3)
+# file, all of the memory-corruption class (CWE-120 and cpp/unbounded-write): one defect site, one package, three
+# menu entries. A rule of another class in the window would be a distinct defect (see the run-0005 split test). sast_unknown (io.c:1) and sast_suppressed (io.c:3)
 # form the fixture's second cluster.
 CLUSTER = ("sast_critical", "sast_duplicate", "codeql_high")
 CLUSTERS = (CLUSTER, ("sast_unknown", "sast_suppressed"))
