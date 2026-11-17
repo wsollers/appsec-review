@@ -1,11 +1,20 @@
-"""Bounded syntax-only navigation; reads accepted indices, never target trees or parsers."""
+"""Bounded syntax-only navigation and intra-procedural CFG queries; reads accepted indices only."""
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any, Mapping
 
-from .syntax_contract import MAX_NAME_BYTES, MODES, SCHEMA
-from .model import EntityKind, LogicalIdentity
+from .model import EntityKind, LogicalIdentity, normalize_relative_path
+from .syntax_contract import (
+    CFG_SCHEMA,
+    GUARD_POLARITIES,
+    MAX_NAME_BYTES,
+    MODES,
+    QUERY_CFG_FUNCTION,
+    QUERY_GUARD_DOMINATORS,
+    SCHEMA,
+)
 
 if TYPE_CHECKING:
     from .core import RetrievalCore
@@ -110,3 +119,304 @@ def query_syntax(core: "RetrievalCore", *, mode: str, subject: str, name: str | 
         return ordered[offset:offset + limit], gaps, len(ordered) > offset + limit, offset
 
     return core._execute(QUERY_SYNTAX, parameters, operation)
+
+
+def _sanitize_cfg_function_record(
+    raw_payload: Mapping[str, Any],
+    *,
+    ast_identity: str,
+    rel_path: str,
+    file_sha256: str,
+    shard_id: str,
+) -> dict[str, Any]:
+    cfg = dict(raw_payload.get("cfg") or {})
+    nodes = [dict(n) for n in (raw_payload.get("cfg_nodes") or ())]
+    edges = [dict(e) for e in (raw_payload.get("cfg_edges") or ())]
+    for node in nodes:
+        node["path"] = rel_path
+        node["file_sha256"] = file_sha256
+    for edge in edges:
+        edge["path"] = rel_path
+    nodes.sort(key=lambda n: (int(n.get("start_line", 0)), int(n.get("start_byte", 0)), str(n.get("node_id", ""))))
+    edges.sort(key=lambda e: str(e.get("edge_id", "")))
+    return {
+        "schema": CFG_SCHEMA,
+        "ast_identity": ast_identity,
+        "function_id": str(cfg.get("function_id", "")),
+        "function_name": str(cfg.get("function_name", "")),
+        "qualified_name": str(cfg.get("qualified_name", cfg.get("function_name", ""))),
+        "language": str(cfg.get("language", "")),
+        "source_identity": str(cfg.get("source_identity", "")),
+        "path": rel_path,
+        "file_sha256": file_sha256,
+        "start_line": int(cfg.get("start_line", 1)),
+        "end_line": int(cfg.get("end_line", 1)),
+        "start_byte": int(cfg.get("start_byte", 0)),
+        "end_byte": int(cfg.get("end_byte", 0)),
+        "entry_node_id": str(cfg.get("entry_node_id", "")),
+        "exit_node_id": str(cfg.get("exit_node_id", "")),
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "guard_count": int(cfg.get("guard_count", 0)),
+        "parameters": list(cfg.get("parameters") or ()),
+        "decorators": list(cfg.get("decorators") or ()),
+        "is_entrypoint_candidate": bool(cfg.get("is_entrypoint_candidate", False)),
+        "entrypoint_route": cfg.get("entrypoint_route"),
+        "shard_id": shard_id,
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def query_cfg_function(
+    core: "RetrievalCore",
+    *,
+    subject: str | None = None,
+    function_name: str | None = None,
+    path: str | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Return bounded intra-procedural CFGs (nodes, edges, guard polarities) from accepted analysis shards."""
+    if subject is None and function_name is None and path is None:
+        raise ValueError("query_cfg_function requires at least one of subject, function_name, or path")
+    norm_path = normalize_relative_path(path) if path is not None else None
+    if function_name is not None and (
+        not isinstance(function_name, str) or not function_name or len(function_name.encode("utf-8")) > MAX_NAME_BYTES
+    ):
+        raise ValueError("function_name exceeds bound")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= min(100, core.limits.max_results):
+        raise ValueError("CFG result limit exceeds bound")
+
+    subject_kind: str | None = None
+    if subject is not None:
+        if not isinstance(subject, str) or not subject:
+            raise ValueError("CFG subject must be a non-empty string")
+        if subject.startswith("cfgfn:"):
+            subject_kind = "cfgfn"
+        else:
+            parsed = LogicalIdentity.parse(subject)
+            if parsed.kind not in {EntityKind.SOURCE_FILE, EntityKind.AST_NODE}:
+                raise ValueError("CFG subject must be source_file, ast_node, or cfgfn:<id>")
+            subject_kind = parsed.kind.value
+
+    parameters = {
+        "subject": subject,
+        "function_name": function_name,
+        "path": norm_path,
+        "limit": limit,
+        "cursor": cursor,
+    }
+    offset = core._offset(cursor, core._request_hash(QUERY_CFG_FUNCTION, parameters))
+
+    def operation(deadline: float):
+        found: dict[str, dict[str, Any]] = {}
+        gaps: list[str] = []
+        any_ts_shard = False
+        for shard in core.indexes.get("analysis", ()):
+            if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
+                continue
+            any_ts_shard = True
+            with core._database(shard, deadline) as database:
+                clauses = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.cfg.schema')=?"]
+                values: list[Any] = [CFG_SCHEMA]
+                if subject_kind == "source_file":
+                    clauses.append("json_extract(e.payload_json, '$.cfg.source_identity')=?")
+                    values.append(subject)
+                elif subject_kind == "ast_node":
+                    clauses.append("e.identity=?")
+                    values.append(subject)
+                elif subject_kind == "cfgfn":
+                    clauses.append("json_extract(e.payload_json, '$.cfg.function_id')=?")
+                    values.append(subject)
+                if norm_path is not None:
+                    clauses.append("l.path=?")
+                    values.append(norm_path)
+                if function_name is not None:
+                    clauses.append(
+                        "(json_extract(e.payload_json, '$.cfg.function_name')=? "
+                        "OR json_extract(e.payload_json, '$.cfg.qualified_name')=?)"
+                    )
+                    values.extend([function_name, function_name])
+                sql = (
+                    "SELECT e.identity, e.payload_json, l.path, l.file_sha256 "
+                    "FROM entities e JOIN locations l ON l.entity_id=e.identity "
+                    "WHERE " + " AND ".join(clauses) + " ORDER BY l.path, l.start_byte, e.identity"
+                )
+                for row in database.execute(sql, values):
+                    rel_p = normalize_relative_path(str(row["path"]))
+                    raw_payload = json.loads(row["payload_json"])
+                    rec = _sanitize_cfg_function_record(
+                        raw_payload,
+                        ast_identity=str(row["identity"]),
+                        rel_path=rel_p,
+                        file_sha256=str(row["file_sha256"]),
+                        shard_id=str(shard.get("shard_id", "default")),
+                    )
+                    found.setdefault(rec["function_id"], rec)
+        if not any_ts_shard:
+            gaps.append("no accepted job_tree_sitter_ast analysis shards available")
+        elif not found:
+            gaps.append("no matching intra-procedural CFG function in accepted analysis shards; absence is not evidence")
+        ordered = sorted(
+            found.values(),
+            key=lambda r: (r["path"], r["start_line"], r["end_line"], r["function_id"]),
+        )
+        return ordered[offset:offset + limit], gaps, len(ordered) > offset + limit, offset
+
+    return core._execute(QUERY_CFG_FUNCTION, parameters, operation)
+
+
+def query_guard_dominators(
+    core: "RetrievalCore",
+    *,
+    subject: str | None = None,
+    path: str | None = None,
+    line: int | None = None,
+    node_id: str | None = None,
+    polarity: str | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Return ordered branch guard dominators controlling a statement, line, AST node, or CFG block."""
+    if subject is None and path is None and node_id is None:
+        raise ValueError("query_guard_dominators requires subject, path, or node_id")
+    norm_path = normalize_relative_path(path) if path is not None else None
+    if line is not None and (isinstance(line, bool) or not isinstance(line, int) or line < 1):
+        raise ValueError("line must be a positive 1-based integer")
+    if polarity is not None and polarity not in GUARD_POLARITIES:
+        raise ValueError("guard polarity is not in the closed set")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= min(100, core.limits.max_results):
+        raise ValueError("guard dominator result limit exceeds bound")
+
+    subject_kind: str | None = None
+    if subject is not None:
+        parsed = LogicalIdentity.parse(subject)
+        if parsed.kind not in {EntityKind.SOURCE_FILE, EntityKind.AST_NODE}:
+            raise ValueError("subject must be source_file or ast_node")
+        subject_kind = parsed.kind.value
+
+    parameters = {
+        "subject": subject,
+        "path": norm_path,
+        "line": line,
+        "node_id": node_id,
+        "polarity": polarity,
+        "limit": limit,
+        "cursor": cursor,
+    }
+    offset = core._offset(cursor, core._request_hash(QUERY_GUARD_DOMINATORS, parameters))
+
+    def operation(deadline: float):
+        matches: dict[str, dict[str, Any]] = {}
+        gaps: list[str] = []
+        any_ts_shard = False
+        target_block_id = node_id
+        target_source_id: str | None = subject if subject_kind == "source_file" else None
+        target_line = line
+
+        for shard in core.indexes.get("analysis", ()):
+            if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
+                continue
+            any_ts_shard = True
+            with core._database(shard, deadline) as database:
+                if subject_kind == "ast_node" and target_block_id is None:
+                    ast_row = database.execute(
+                        "SELECT e.payload_json, l.path, l.file_sha256, l.start_line "
+                        "FROM entities e JOIN locations l ON l.entity_id=e.identity WHERE e.identity=?",
+                        (subject,),
+                    ).fetchone()
+                    if ast_row is not None:
+                        ast_payload = json.loads(ast_row["payload_json"])
+                        target_block_id = ast_payload.get("cfg_block_id")
+                        if target_line is None:
+                            target_line = int(ast_row["start_line"])
+                        target_source_id = LogicalIdentity.derive(
+                            EntityKind.SOURCE_FILE,
+                            core.manifest["target_snapshot"],
+                            {"path": normalize_relative_path(str(ast_row["path"])), "sha256": str(ast_row["file_sha256"])},
+                        ).value
+
+                clauses = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.cfg.schema')=?"]
+                values: list[Any] = [CFG_SCHEMA]
+                if target_source_id is not None:
+                    clauses.append("json_extract(e.payload_json, '$.cfg.source_identity')=?")
+                    values.append(target_source_id)
+                if norm_path is not None:
+                    clauses.append("l.path=?")
+                    values.append(norm_path)
+                if target_line is not None:
+                    clauses.append("l.start_line<=? AND l.end_line>=?")
+                    values.extend([target_line, target_line])
+
+                sql = (
+                    "SELECT e.identity, e.payload_json, l.path, l.file_sha256 "
+                    "FROM entities e JOIN locations l ON l.entity_id=e.identity "
+                    "WHERE " + " AND ".join(clauses) + " ORDER BY l.path, l.start_byte, e.identity"
+                )
+                for row in database.execute(sql, values):
+                    rel_p = normalize_relative_path(str(row["path"]))
+                    raw_payload = json.loads(row["payload_json"])
+                    rec = _sanitize_cfg_function_record(
+                        raw_payload,
+                        ast_identity=str(row["identity"]),
+                        rel_path=rel_p,
+                        file_sha256=str(row["file_sha256"]),
+                        shard_id=str(shard.get("shard_id", "default")),
+                    )
+                    candidates = rec["nodes"]
+                    if target_block_id is not None:
+                        candidates = [n for n in candidates if n.get("node_id") == target_block_id]
+                    elif target_line is not None:
+                        spanning = [
+                            n for n in candidates
+                            if n.get("kind") not in {"entry", "exit"}
+                            and int(n.get("start_line", 0)) <= target_line <= int(n.get("end_line", 0))
+                        ]
+                        if spanning:
+                            # Most narrow spanning block first
+                            spanning.sort(key=lambda n: (int(n["end_line"]) - int(n["start_line"]), str(n["node_id"])))
+                            candidates = [spanning[0]]
+                        else:
+                            candidates = []
+                    else:
+                        candidates = [n for n in candidates if n.get("guard_dominators")]
+
+                    for cnode in candidates:
+                        gdoms = list(cnode.get("guard_dominators") or ())
+                        if polarity is not None:
+                            gdoms = [g for g in gdoms if g.get("guard_polarity") == polarity]
+                            if not gdoms:
+                                continue
+                        nid = str(cnode["node_id"])
+                        matches.setdefault(
+                            nid,
+                            {
+                                "schema": CFG_SCHEMA,
+                                "function_id": rec["function_id"],
+                                "function_name": rec["function_name"],
+                                "node_id": nid,
+                                "ast_identity": cnode.get("ast_identity"),
+                                "kind": cnode.get("kind"),
+                                "language": rec["language"],
+                                "source_identity": rec["source_identity"],
+                                "path": rel_p,
+                                "file_sha256": rec["file_sha256"],
+                                "start_line": int(cnode.get("start_line", 1)),
+                                "end_line": int(cnode.get("end_line", 1)),
+                                "statement_text": str(cnode.get("statement_text", "")),
+                                "guard_dominators": gdoms,
+                            },
+                        )
+
+        if not any_ts_shard:
+            gaps.append("no accepted job_tree_sitter_ast analysis shards available")
+        elif not matches:
+            gaps.append("no matching CFG guard-dominated block found; absence of guards is only established within parsed functions")
+        ordered = sorted(
+            matches.values(),
+            key=lambda m: (m["path"], m["start_line"], m["end_line"], m["node_id"]),
+        )
+        return ordered[offset:offset + limit], gaps, len(ordered) > offset + limit, offset
+
+    return core._execute(QUERY_GUARD_DOMINATORS, parameters, operation)

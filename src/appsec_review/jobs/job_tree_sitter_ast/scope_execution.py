@@ -140,12 +140,16 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
             path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
             for item in scope.files if any(record.get("path") == item["path"]
                 and record.get("status") != "TRUNCATED" for record in container_output.get("records", ()))},
-        dispositions=job_dispositions(settings))
+        dispositions=job_dispositions(settings),
+        cfg_dir=unit.job.run_root / "data" / "treesitter" / "cfg" / fingerprint)
+    counts_dict = dict(counts)
+    cfg_artifacts = counts_dict.pop("cfg_artifacts", None)
     measurement.record_output(unit.job.run_root, container_output)
     result = {"schema": SCHEMA, "scope_id": scope.scope_id, "project_id": scope.project_id,
               "translation_scope_id": scope.translation_scope_id, "language": scope.language,
               "fingerprint": fingerprint, "grammar": asdict(grammar), "artifact": artifact,
-              "index_identity": asdict(identity), "counts": counts, "execution": asdict(execution),
+              "cfg_artifacts": cfg_artifacts,
+              "index_identity": asdict(identity), "counts": counts_dict, "execution": asdict(execution),
               "gaps": list(identity.gaps), "truncated": any("limit" in gap for gap in identity.gaps),
               "terminal_status": "PARTIAL" if identity.gaps else "SUCCEEDED", "index_reused": False,
               "tree_sitter_invocation_id": measurement.invocation_id}

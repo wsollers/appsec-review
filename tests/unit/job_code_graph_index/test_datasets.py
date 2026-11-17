@@ -19,6 +19,10 @@ OBSERVED = [
     f"{S}/work/normalized.json",
     f"{S}/work/crosschecked.json",
     f"{S}/checkpoint.json",
+    f"{A}/acceptance/tasks/publish_handoff/alternate-cpg-summary.json",
+    "data/code-graph/alternate-cpg/cpg-nodes.jsonl",
+    "data/code-graph/alternate-cpg/cpg-edges.jsonl",
+    "data/code-graph/alternate-cpg/cpg-paths.jsonl",
 ]
 
 

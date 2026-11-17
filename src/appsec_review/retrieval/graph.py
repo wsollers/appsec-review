@@ -449,4 +449,220 @@ def query_code_graph(core: "RetrievalCore", settings: GraphSettings, *, mode: st
     return core._execute(QUERY_CODE_GRAPH, parameters, lambda deadline: query.run(deadline, offset, limit))
 
 
-__all__ = ["TOOL_RULE", "query_code_graph", "request_error"]
+QUERY_CPG_SLICE = "query_cpg_slice"
+QUERY_CALL_PATHS = "query_call_paths"
+
+
+def _load_accepted_alternate_cpg(
+    core: "RetrievalCore",
+    deadline: float,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    from appsec_review.jobs.job_code_graph_index.alternate_cpg import (
+        ALTERNATE_CPG_SHARD_ID,
+        load_cpg_from_sqlite,
+    )
+
+    gaps: list[str] = []
+    shards = [
+        shard
+        for shard in core.indexes.get("analysis", ())
+        if str(shard.get("shard_id", "")) == ALTERNATE_CPG_SHARD_ID
+        or (shard.get("producer") or {}).get("kind") == "alternate_cpg"
+    ]
+    if not shards:
+        gaps.append("accepted analysis/alternate-cpg shard is unavailable")
+        return None, gaps
+
+    merged_nodes: dict[str, dict[str, Any]] = {}
+    merged_edges: dict[str, dict[str, Any]] = {}
+    merged_paths: dict[str, dict[str, Any]] = {}
+    with ExitStack() as stack:
+        for shard in shards:
+            core._check_deadline(deadline)
+            database = stack.enter_context(closing(core._database(shard, deadline)))
+            shard_id = str(shard.get("shard_id", ALTERNATE_CPG_SHARD_ID))
+            for row in database.execute("SELECT area, status, gap FROM coverage ORDER BY area, status, gap"):
+                if row["status"] != "complete" or row["gap"]:
+                    gaps.append(
+                        f"analysis/{shard_id}: coverage {row['area']}: {row['status']}"
+                        + (f": {row['gap']}" if row["gap"] else "")
+                    )
+            gaps.extend(f"analysis/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
+            loaded = load_cpg_from_sqlite(database)
+            for node in loaded["nodes"]:
+                merged_nodes.setdefault(str(node["node_id"]), node)
+            for edge in loaded["edges"]:
+                merged_edges.setdefault(str(edge["edge_id"]), edge)
+            for path_rec in loaded["paths"]:
+                merged_paths.setdefault(str(path_rec["path_id"]), path_rec)
+
+    return (
+        {
+            "nodes": [merged_nodes[k] for k in sorted(merged_nodes)],
+            "edges": [merged_edges[k] for k in sorted(merged_edges)],
+            "paths": [merged_paths[k] for k in sorted(merged_paths)],
+        },
+        gaps,
+    )
+
+
+def query_cpg_slice(
+    core: "RetrievalCore",
+    *,
+    criterion_node_id: str | None = None,
+    path: str | None = None,
+    line: int | None = None,
+    function_name: str | None = None,
+    direction: str = "backward",
+    max_depth: int = 8,
+    edge_kinds: Iterable[str] | None = None,
+    limit: int = 50,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Run a bounded backward or forward slice against the accepted ``alternate-cpg`` shard."""
+    from appsec_review.jobs.job_code_graph_index.alternate_cpg import CPG_EDGE_KINDS, compute_cpg_slice
+
+    if direction not in {"backward", "forward"}:
+        raise ValueError("schema_violation: direction must be 'backward' or 'forward'")
+    if isinstance(max_depth, bool) or not isinstance(max_depth, int) or not 1 <= max_depth <= 16:
+        raise ValueError("schema_violation: max_depth must be an integer between 1 and 16")
+    if criterion_node_id is None and path is None and line is None and function_name is None:
+        raise ValueError(
+            "schema_violation: query_cpg_slice requires criterion_node_id, path, line, or function_name"
+        )
+    if line is not None and (isinstance(line, bool) or not isinstance(line, int) or line < 1):
+        raise ValueError("schema_violation: line must be an integer >= 1")
+    norm_path = normalize_relative_path(path) if path is not None else None
+    kinds_tuple = tuple(sorted({str(k) for k in edge_kinds})) if edge_kinds is not None else None
+    if kinds_tuple is not None:
+        bad = [k for k in kinds_tuple if k not in CPG_EDGE_KINDS]
+        if bad:
+            raise ValueError("schema_violation: unknown edge_kinds: " + ", ".join(bad))
+    cap = min(MAX_TOOL_LIMIT, core.limits.max_results)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= cap:
+        raise ValueError("result limit exceeds bound")
+
+    parameters = {
+        "criterion_node_id": criterion_node_id,
+        "path": norm_path,
+        "line": line,
+        "function_name": function_name,
+        "direction": direction,
+        "max_depth": max_depth,
+        "edge_kinds": list(kinds_tuple) if kinds_tuple is not None else None,
+        "limit": limit,
+        "cursor": cursor,
+    }
+    request_hash = core._request_hash(QUERY_CPG_SLICE, parameters)
+    offset = core._offset(cursor, request_hash)
+
+    def operation(deadline: float) -> tuple[list[dict[str, Any]], list[str], bool, int, bool]:
+        cpg, gaps = _load_accepted_alternate_cpg(core, deadline)
+        if cpg is None:
+            return [], gaps, False, offset, False
+        core._check_deadline(deadline)
+        slice_doc = compute_cpg_slice(
+            cpg,
+            criterion_node_id=criterion_node_id,
+            path=norm_path,
+            line=line,
+            function_name=function_name,
+            direction=direction,
+            max_depth=max_depth,
+            edge_kinds=kinds_tuple,
+            max_nodes=max(offset + limit + 1, 100),
+        )
+        nodes = slice_doc["nodes"]
+        if not nodes:
+            gaps.append("no Alternate CPG node matched the slice criterion")
+            return [], gaps, False, offset, False
+        edges_by_endpoint: dict[str, list[dict[str, Any]]] = {}
+        for edge in slice_doc["edges"]:
+            for endpoint in (str(edge["source_id"]), str(edge["target_id"])):
+                edges_by_endpoint.setdefault(endpoint, []).append(edge)
+        enriched = [
+            {
+                **node,
+                "direction": direction,
+                "criterion_ids": slice_doc["criterion_ids"],
+                "incident_edges": edges_by_endpoint.get(str(node["node_id"]), []),
+                "slice_guard_dominators": slice_doc["guard_dominators"],
+                "slice_resolution_tiers": slice_doc["resolution_tiers"],
+            }
+            for node in nodes
+        ]
+        has_more = len(enriched) > offset + limit
+        return enriched[offset : offset + limit], gaps, has_more, offset, bool(has_more or slice_doc["truncated"])
+
+    return core._execute(QUERY_CPG_SLICE, parameters, operation)
+
+
+def query_call_paths(
+    core: "RetrievalCore",
+    *,
+    source: str | None = None,
+    sink: str | None = None,
+    sink_class: str | None = None,
+    entrypoint_only: bool = False,
+    language: str | None = None,
+    max_hops: int = 10,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Find bounded inter-procedural call/dataflow paths in the accepted ``alternate-cpg`` shard."""
+    from appsec_review.jobs.job_code_graph_index.alternate_cpg import find_interprocedural_paths
+
+    if isinstance(max_hops, bool) or not isinstance(max_hops, int) or not 1 <= max_hops <= 16:
+        raise ValueError("schema_violation: max_hops must be an integer between 1 and 16")
+    cap = min(MAX_TOOL_LIMIT, core.limits.max_results)
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= cap:
+        raise ValueError("result limit exceeds bound")
+
+    parameters = {
+        "source": source,
+        "sink": sink,
+        "sink_class": sink_class,
+        "entrypoint_only": bool(entrypoint_only),
+        "language": language,
+        "max_hops": max_hops,
+        "limit": limit,
+        "cursor": cursor,
+    }
+    request_hash = core._request_hash(QUERY_CALL_PATHS, parameters)
+    offset = core._offset(cursor, request_hash)
+
+    def operation(deadline: float) -> tuple[list[dict[str, Any]], list[str], bool, int]:
+        cpg, gaps = _load_accepted_alternate_cpg(core, deadline)
+        if cpg is None:
+            return [], gaps, False, offset
+        core._check_deadline(deadline)
+        paths = find_interprocedural_paths(
+            cpg,
+            source=source,
+            sink=sink,
+            sink_class=sink_class,
+            entrypoint_only=bool(entrypoint_only),
+            language=language,
+            max_hops=max_hops,
+            max_paths=max(offset + limit + 1, 50),
+        )
+        if not paths:
+            gaps.append(
+                f"no Alternate CPG inter-procedural path matched within max_hops={max_hops}; "
+                "absence beyond the hop bound or unresolved dynamic dispatch is not excluded"
+            )
+        has_more = len(paths) > offset + limit
+        return paths[offset : offset + limit], gaps, has_more, offset
+
+    return core._execute(QUERY_CALL_PATHS, parameters, operation)
+
+
+__all__ = [
+    "QUERY_CALL_PATHS",
+    "QUERY_CPG_SLICE",
+    "TOOL_RULE",
+    "query_call_paths",
+    "query_code_graph",
+    "query_cpg_slice",
+    "request_error",
+]

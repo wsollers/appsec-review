@@ -47,6 +47,17 @@ DATASETS = (
                   artifacts=(_A + "/acceptance/tasks/publish_handoff/graph-quality-scorecard.json",
                              _A + "/acceptance/tasks/publish_handoff/graph-quality-scorecard.txt"),
                   reason="a measurement of the published graph shards, read by the report renderer; not evidence"),
+    indexed("alternate_cpg_index", "acceptance", "graph", "appsec-review/alternate-cpg/1",
+            "Universal multi-language Alternate CPG and inter-procedural CFG index shard "
+            "(Tree-sitter AST/CFG + CodeQL + clangd + syntactic fallback across all 9 target languages).",
+            indexes=("analysis",), prefixes=("alternate-cpg",),
+            route="query_cpg_slice; query_call_paths"),
+    artifact_only("alternate_cpg", "acceptance", "graph", "appsec-review/alternate-cpg/1",
+                  "Portable universal Alternate CPG node, edge, precomputed inter-procedural path JSONL "
+                  "artifacts and attempt summary.",
+                  artifacts=("data/code-graph/alternate-cpg/**",
+                             _A + "/acceptance/tasks/publish_handoff/alternate-cpg-summary.json"),
+                  reason="same Alternate CPG nodes, edges and paths as the accepted alternate-cpg analysis shard"),
 )
 
 from appsec_review.runtime.contracts import (
@@ -157,6 +168,8 @@ CONTRACT = JobContract(
                          "appsec-review/tree-sitter-ast/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "tree_sitter_node_shards",
                          "appsec-review/tree-sitter-normalizer/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_tree_sitter_ast", "tree_sitter_cfg",
+                         "appsec-review/tree-sitter-cfg/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "generated_source_backing",
                          "appsec-review/generated-source-backing/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "tree_sitter_tool_io",

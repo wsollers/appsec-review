@@ -28,7 +28,17 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_package_exports_and_registry_topology_parity() -> None:
-    assert set(cpg_pkg.__all__) == {"JOB_ID", "JOERN_DISABLED", "JOERN_GAP", "build_job"}
+    assert set(cpg_pkg.__all__) == {
+        "JOB_ID", "JOERN_DISABLED", "JOERN_GAP", "RETIREMENT_REASON", "build_job", "retirement_metadata",
+    }
+    assert cpg_pkg.RETIREMENT_REASON == "retired_by_policy_oom_replaced_by_alternate_cpg"
+    assert cpg_pkg.retirement_metadata() == {
+        "retired": True,
+        "reason": "retired_by_policy_oom_replaced_by_alternate_cpg",
+        "tool_id": "tool-joern",
+        "manual_only": True,
+        "replacement": "alternate_cpg",
+    }
     assert JOB_ID == "job_cpg_analysis"
     assert JOERN_GAP.startswith("BLOCKED:")
     assert JOERN_DISABLED.startswith("DISABLED:")

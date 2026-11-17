@@ -17,6 +17,7 @@ from appsec_review.jobs.job_code_graph_index.job import (
     TOPOLOGY,
     _status,
     _validate,
+    alternate_cpg_settings,
     graph_settings,
     verify_catalog_pin,
 )
@@ -38,15 +39,22 @@ def test_build_job_contract_units_and_dataset_dispositions() -> None:
         "code_graph_checkpoints": "artifact_only",
         "code_graph_summary": "artifact_only",
         "code_graph_scorecard": "artifact_only",
+        "alternate_cpg_index": "indexed",
+        "alternate_cpg": "artifact_only",
     }
     assert _status([], empty=True) == "NOT_APPLICABLE"
     assert _status(["g1"], empty=False) == "COMPLETED_WITH_GAPS"
     assert _status([], empty=False) == "SUCCEEDED"
 
     unit_stub = SimpleNamespace(
-        job=SimpleNamespace(config=SimpleNamespace(settings={"graph": {"max_call_depth": 4}}))
+        job=SimpleNamespace(
+            config=SimpleNamespace(
+                settings={"graph": {"max_call_depth": 4}, "alternate_cpg": {"max_hops": 12}}
+            )
+        )
     )
     assert graph_settings(unit_stub).max_call_depth == 4
+    assert alternate_cpg_settings(unit_stub).max_hops == 12
     assert job_dispositions({}).record()
 
 
@@ -73,6 +81,10 @@ def test_input_validator_accepts_configured_job_and_rejects_bad_step_task_or_set
     bad_settings = replace(cfg, settings=MappingProxyType({**cfg.settings, "unexpected_knob": 1}))
     with pytest.raises(ValueError, match="unknown settings: unexpected_knob"):
         _validate(SimpleNamespace(config=bad_settings), None)
+
+    bad_alt = replace(cfg, settings=MappingProxyType({**cfg.settings, "alternate_cpg": {"max_hops": 99}}))
+    with pytest.raises(ValueError, match="max_hops"):
+        _validate(SimpleNamespace(config=bad_alt), None)
 
 
 def test_verify_catalog_pin_handles_no_succeeded_missing_invalid_or_mismatched_config(

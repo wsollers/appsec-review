@@ -1,0 +1,551 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/code-graph-index/alternate-cpg-1.json",
+  "title": "appsec-review/alternate-cpg/1",
+  "description": "Universal multi-language Alternate CPG and inter-procedural CFG/dataflow synthesis fusing Tree-sitter AST/CFG, CodeQL semantic exports/SARIF, symbol declarations, framework entrypoints, and clangd across all 9 target languages (T-169).",
+  "$defs": {
+    "resolution_tier": {
+      "type": "string",
+      "enum": [
+        "codeql_semantic",
+        "clangd_semantic",
+        "hybrid_fused",
+        "syntactic_fallback"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "cpp",
+        "java",
+        "javascript",
+        "python",
+        "ruby",
+        "go",
+        "csharp",
+        "rust",
+        "php",
+        "unknown"
+      ]
+    },
+    "guard_dominator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_id",
+        "branch",
+        "guard_expression",
+        "guard_polarity"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branch": {
+          "type": "string",
+          "enum": [
+            "true_branch",
+            "false_branch",
+            "guards"
+          ]
+        },
+        "guard_expression": {
+          "type": "string"
+        },
+        "guard_polarity": {
+          "type": "string",
+          "enum": [
+            "null_check",
+            "bounds_check",
+            "auth_or_role_check",
+            "error_return_guard",
+            "sanitization_guard",
+            "general_condition"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "function_name": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "required": [
+    "schema",
+    "record_type"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/alternate-cpg/1"
+    },
+    "record_type": {
+      "enum": [
+        "alternate_cpg_summary",
+        "cpg_node",
+        "cpg_edge",
+        "cpg_path"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "run_id",
+        "target_snapshot",
+        "languages",
+        "max_hops",
+        "counts",
+        "resolution_breakdown",
+        "artifacts"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/alternate-cpg/1"
+        },
+        "record_type": {
+          "const": "alternate_cpg_summary"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_snapshot": {
+          "type": "string",
+          "minLength": 1
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/language"
+          }
+        },
+        "max_hops": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "alternate_cpg_nodes",
+            "alternate_cpg_edges",
+            "semantic_edges_count",
+            "syntactic_fallback_edges_count",
+            "entrypoints_linked",
+            "reachable_sink_paths_precomputed"
+          ],
+          "properties": {
+            "alternate_cpg_nodes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "alternate_cpg_edges": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "semantic_edges_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "syntactic_fallback_edges_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "entrypoints_linked": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reachable_sink_paths_precomputed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "resolution_breakdown": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "node_id",
+        "node_kind",
+        "name",
+        "language",
+        "path",
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/alternate-cpg/1"
+        },
+        "record_type": {
+          "const": "cpg_node"
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "node_kind": {
+          "type": "string",
+          "enum": [
+            "function",
+            "cfg_block",
+            "call_site",
+            "entrypoint",
+            "sink"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "qualified_name": {
+          "type": "string"
+        },
+        "language": {
+          "$ref": "#/$defs/language"
+        },
+        "path": {
+          "type": "string"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "function_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "block_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guard_expression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guard_polarity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guard_dominators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guard_dominator"
+          }
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "defs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "is_entrypoint": {
+          "type": "boolean"
+        },
+        "entrypoint_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sink_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution_tier": {
+          "$ref": "#/$defs/resolution_tier"
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "edge_id",
+        "edge_kind",
+        "source_id",
+        "target_id",
+        "resolution_tier"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/alternate-cpg/1"
+        },
+        "record_type": {
+          "const": "cpg_edge"
+        },
+        "edge_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "edge_kind": {
+          "type": "string",
+          "enum": [
+            "CALLS",
+            "FLOWS_TO",
+            "GUARDS",
+            "DEF_USE",
+            "ARG_TO_PARAM",
+            "TAINT_STEP",
+            "ENTRYPOINT_TO_FN",
+            "FN_TO_SINK"
+          ]
+        },
+        "edge_subtype": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "$ref": "#/$defs/language"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "variable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "callee_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution_tier": {
+          "$ref": "#/$defs/resolution_tier"
+        },
+        "guard_dominators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guard_dominator"
+          }
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "path_id",
+        "source_id",
+        "sink_id",
+        "hop_count",
+        "resolution_tier",
+        "hops",
+        "guard_dominators"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/alternate-cpg/1"
+        },
+        "record_type": {
+          "const": "cpg_path"
+        },
+        "path_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_name": {
+          "type": "string"
+        },
+        "sink_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sink_name": {
+          "type": "string"
+        },
+        "sink_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language": {
+          "$ref": "#/$defs/language"
+        },
+        "hop_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "entrypoint_linked": {
+          "type": "boolean"
+        },
+        "resolution_tier": {
+          "$ref": "#/$defs/resolution_tier"
+        },
+        "guard_polarities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "guard_dominators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guard_dominator"
+          }
+        },
+        "hops": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "step_index",
+              "source_id",
+              "target_id",
+              "edge_kind",
+              "resolution_tier"
+            ],
+            "properties": {
+              "step_index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "source_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_name": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "target_name": {
+                "type": "string"
+              },
+              "edge_kind": {
+                "type": "string"
+              },
+              "resolution_tier": {
+                "$ref": "#/$defs/resolution_tier"
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "line": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

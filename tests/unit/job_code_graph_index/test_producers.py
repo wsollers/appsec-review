@@ -231,8 +231,14 @@ def test_diagnostic_rows_empty_filtering_sorting_and_truncation(
 
 
 def test_cpg_rows_empty_unavailable_and_truncated(tmp_path: Path, monkeypatch) -> None:
+    # When alternate CPG synthesis succeeds (default), missing Joern CPG records ZERO degradation penalty.
+    alt_ok_out = ProducerRows()
+    _cpg_rows(ShardSet(tmp_path, []), [], SCOPE, SNAP, alt_ok_out)
+    assert alt_ok_out.gaps == []
+
+    # Only when alternate CPG did not succeed does missing Joern CPG record a producer_not_run gap.
     empty_out = ProducerRows()
-    _cpg_rows(ShardSet(tmp_path, []), [], SCOPE, SNAP, empty_out)
+    _cpg_rows(ShardSet(tmp_path, []), [], SCOPE, SNAP, empty_out, alternate_cpg_succeeded=False)
     assert any("no accepted joern-cpg output" in g for g in empty_out.gaps)
 
     other_ast = _write_index_shard(

@@ -55,17 +55,27 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
 from . import scopes as s
+from .alternate_cpg import (
+    ALTERNATE_CPG_SCHEMA,
+    AlternateCpgSettings,
+    build_run_alternate_cpg,
+    publish_alternate_cpg,
+)
 from .datasets import CONTRACT, DATASETS
 
 JOB_ID = s.JOB_ID
 SCHEMA = "appsec-review/code-graph-index/1"
 TOPOLOGY = (("load", "accepted_inputs"), ("normalize", "scopes"), ("crosscheck", "scopes"),
             ("correlate", "scopes"), ("acceptance", "publish_handoff"))
-_SETTING_KEYS = frozenset({"workers", "graph", "source_dispositions"})
+_SETTING_KEYS = frozenset({"workers", "graph", "alternate_cpg", "source_dispositions"})
 
 
 def graph_settings(unit: UnitContext) -> GraphSettings:
     return GraphSettings.from_mapping(unit.job.config.settings.get("graph"))
+
+
+def alternate_cpg_settings(unit: UnitContext) -> AlternateCpgSettings:
+    return AlternateCpgSettings.from_mapping(unit.job.config.settings.get("alternate_cpg"))
 
 
 def _workers(unit: UnitContext) -> int:
@@ -97,6 +107,7 @@ def _validate(context, _result) -> None:
     if unknown:
         raise ValueError("jobs.job_code_graph_index.settings has unknown settings: " + ", ".join(sorted(unknown)))
     GraphSettings.from_mapping(context.config.settings.get("graph"))
+    AlternateCpgSettings.from_mapping(context.config.settings.get("alternate_cpg"))
     job_dispositions(context.config.settings)
 
 
@@ -397,11 +408,28 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                  + ", ".join(f"{name}/{shard_id}" for name, shard_id, _ in missing[:10]))
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
                 for item in (*upstream["indexes"], *restored) if (item.get("producer") or {}).get("job") != JOB_ID]
+        raw_graph_shards = [shard for scope in published["scopes"] for shard in scope["shards"]]
         indexes = [IndexIdentity(**{**shard, "gaps": tuple(shard.get("gaps", ()))})
-                   for scope in published["scopes"] for shard in scope["shards"]]
+                   for shard in raw_graph_shards]
+        alt_cpg, alt_file_shas = build_run_alternate_cpg(
+            run_root,
+            run_id=unit.job.run_id,
+            target_snapshot=unit.job.source_fingerprint,
+            upstream_shards=[*upstream["indexes"], *restored],
+            graph_shards=raw_graph_shards,
+            settings=alternate_cpg_settings(unit),
+        )
+        alt_summary, alt_shard = publish_alternate_cpg(
+            run_root,
+            unit.unit_root,
+            alt_cpg,
+            job_id=JOB_ID,
+            unit_id=unit.unit_id,
+            file_shas=alt_file_shas,
+        )
         manifest_path = run_root / "data" / "indices" / "manifests" / f"code-graph-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
-                       target_root=unit.job.target_root or Path(), indexes=[*base, *indexes],
+                       target_root=unit.job.target_root or Path(), indexes=[*base, *indexes, alt_shard],
                        upstream_manifests=({"path": upstream_path.relative_to(run_root).as_posix(),
                                             "sha256": upstream_sha},))
         load_verified_manifest(run_root, manifest_path, file_sha256(manifest_path))
@@ -417,12 +445,19 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         atomic_json(scorecard_path, scorecard)
         rendering_path = unit.unit_root / "graph-quality-scorecard.txt"
         rendering_path.write_text(render_scorecard(scorecard), encoding="utf-8", newline="\n")
+        alt_counts = alt_summary["counts"]
         counts = {"scopes": len(published["scopes"]), "databases": len(published["scopes"]), "shards": len(indexes),
                   "reused_scopes": published["reused_count"],
                   "facts": sum(int(scope["counts"]["facts"]) for scope in published["scopes"]),
                   "first_party_functions": int(scorecard["totals"]["first_party_functions"]),
                   "call_sites_agreed": int(scorecard["totals"]["call_sites_agreed"]),
-                  "paths_eligible": int(scorecard["totals"]["paths_eligible"])}
+                  "paths_eligible": int(scorecard["totals"]["paths_eligible"]),
+                  "alternate_cpg_nodes": int(alt_counts["alternate_cpg_nodes"]),
+                  "alternate_cpg_edges": int(alt_counts["alternate_cpg_edges"]),
+                  "semantic_edges_count": int(alt_counts["semantic_edges_count"]),
+                  "syntactic_fallback_edges_count": int(alt_counts["syntactic_fallback_edges_count"]),
+                  "entrypoints_linked": int(alt_counts["entrypoints_linked"]),
+                  "reachable_sink_paths_precomputed": int(alt_counts["reachable_sink_paths_precomputed"])}
         summary_path = unit.unit_root / "code-graph-summary.json"
         atomic_json(summary_path, {"schema": SCHEMA, "codeql_handoff": loaded["codeql_handoff"],
                                    "catalog": loaded["catalog"], "counts": counts, "families": families,
@@ -435,6 +470,10 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 "index_manifest": s.artifact(run_root, manifest_path), "item_count": counts["facts"],
                 "scorecard": {"document": s.artifact(run_root, scorecard_path),
                               "rendering": s.artifact(run_root, rendering_path), "totals": scorecard["totals"]},
+                "alternate_cpg": {"schema": ALTERNATE_CPG_SCHEMA,
+                                  "summary": s.artifact(run_root, unit.unit_root / "alternate-cpg-summary.json"),
+                                  "counts": dict(alt_counts),
+                                  "resolution_breakdown": dict(alt_summary["resolution_breakdown"])},
                 "counts": counts, "families": families, "gaps": published["gaps"],
                 "terminal_status": published["terminal_status"]}
 

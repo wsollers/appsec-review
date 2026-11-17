@@ -12,6 +12,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.storage import atomic_bytes, file_sha256
 
+from .cfg import CFG_SCHEMA, FileCfgResult, GuardDominator, synthesize_file_cfg, write_scope_cfg_artifacts
 from .model import GrammarLock, Scope
 from .projection import DEFINITIONS, project
 from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
@@ -37,6 +38,16 @@ def reusable_shard(metadata_path: Path, artifact_path: Path, index_path: Path, f
         file_sha256(artifact_path) != metadata.get("artifact", {}).get("sha256") or
         file_sha256(index_path) != metadata.get("index_identity", {}).get("sha256")):
         return None
+    cfg_refs = metadata.get("cfg_artifacts")
+    if isinstance(cfg_refs, Mapping) and len(metadata_path.parents) >= 3:
+        run_root_guess = metadata_path.parents[3]
+        for key in ("manifest", "nodes", "edges"):
+            ref = cfg_refs.get(key)
+            if not isinstance(ref, Mapping):
+                return None
+            ref_path = run_root_guess / str(ref.get("path", ""))
+            if not ref_path.is_file() or file_sha256(ref_path) != ref.get("sha256"):
+                return None
     return metadata
 
 
@@ -69,6 +80,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                     artifact_path: Path, index_path: Path,
                     source_bytes: Mapping[str, bytes] | None = None,
                     dispositions: SourceDispositions | None = None,
+                    cfg_dir: Path | None = None,
                     ) -> tuple[Mapping[str, Any], IndexIdentity, Mapping[str, Any]]:
     """Normalize one scope's container output into its ``analysis`` shard.
 
@@ -100,8 +112,10 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
     lines: list[bytes] = []
     gaps = [f"{item.get('path')}: {item.get('reason')}" for item in scope.exclusions]
     diagnostics = files_parsed = bytes_parsed = nodes_parsed = 0
+    cfg_file_results: list[FileCfgResult] = []
     builder = IndexBuilder(index_path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=target_snapshot, shard_id=scope.scope_id)
+    producer = {**producer, "tree_sitter_cfg": CFG_SCHEMA}
     if source_bytes is not None:
         producer = {**producer, "syntax_projection": PROJECTION_SCHEMA}
     seen_files: set[str] = set()
@@ -149,6 +163,29 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             projection = project(nodes, data, grammar=grammar.grammar, source_identity=source_id.value,
                                  identities={key: value.value for key, value in ids.items()},
                                  limitations=projection_limitations)
+        raw_file_bytes = source_bytes[path] if (source_bytes is not None and path in source_bytes) else None
+        file_cfg = synthesize_file_cfg(
+            nodes,
+            raw_file_bytes,
+            language=grammar.grammar,
+            path=path,
+            file_sha256=accepted[path],
+            source_identity=source_id.value,
+            ast_identities={key: value.value for key, value in ids.items()},
+        )
+        cfg_file_results.append(file_cfg)
+        fn_by_ord = {fn.ordinal_path: fn for fn in file_cfg.functions}
+        branch_by_ord = {
+            cnode.ordinal_path: cnode
+            for fn in file_cfg.functions
+            for cnode in fn.nodes
+            if cnode.guard_polarity is not None and cnode.ordinal_path
+        }
+        ord_to_block: dict[tuple[int, ...], str] = {}
+        ord_to_guards: dict[tuple[int, ...], tuple[GuardDominator, ...]] = {}
+        for fn in sorted(file_cfg.functions, key=lambda f: len(f.ordinal_path)):
+            ord_to_block.update(fn.ordinal_to_node_id)
+            ord_to_guards.update(fn.ordinal_guard_dominators)
         for node in nodes:
             if sources[path].get("source_backing") and not (
                     0 <= int(node["start_byte"]) <= int(node["end_byte"]) <= sources[path]["size_bytes"]):
@@ -178,8 +215,29 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                 payload["syntax"] = projection[ordinal]
             searchable = str(node["type"]) + (
                 " " + str(projection[ordinal]["written_name"]) if ordinal in projection else "")
+            entity_payload = dict(payload)
+            if ordinal in fn_by_ord:
+                fn_cfg = fn_by_ord[ordinal]
+                entity_payload["cfg"] = {"schema": CFG_SCHEMA, **fn_cfg.to_summary()}
+                entity_payload["cfg_nodes"] = [n.to_jsonl_record() for n in fn_cfg.nodes]
+                entity_payload["cfg_edges"] = [e.to_jsonl_record() for e in fn_cfg.edges]
+                if fn_cfg.function_name not in searchable:
+                    searchable = f"{searchable} {fn_cfg.function_name}"
+            if ordinal in branch_by_ord:
+                bnode = branch_by_ord[ordinal]
+                entity_payload["cfg_guard"] = {
+                    "node_id": bnode.node_id,
+                    "guard_expression": bnode.guard_expression,
+                    "guard_polarity": bnode.guard_polarity,
+                    "early_exit": bnode.early_exit,
+                }
+            if ordinal in ord_to_block:
+                entity_payload["cfg_block_id"] = ord_to_block[ordinal]
+                dom_guards = ord_to_guards.get(ordinal, ())
+                if dom_guards:
+                    entity_payload["cfg_guard_dominators"] = [g.to_dict() for g in dom_guards]
             builder.add_entity(EntityRecord(identity, "/".join(map(str, ordinal)) or "root",
-                                             str(node["type"]), searchable, payload, location))
+                                             str(node["type"]), searchable, entity_payload, location))
             normalized = {"identity": identity.value, "path": path, "file_sha256": accepted[path],
                           "location": asdict(location), **payload}
             lines.append(json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode() + b"\n")
@@ -206,6 +264,25 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                 builder.add_relation(RelationRecord(RelationKind.CONTAINS, source_id.value,
                                                      ids[ordinal].value, True, 1.0,
                                                      payload={"syntax_relation": True}))
+        for fn_cfg in file_cfg.functions:
+            node_ast_by_id = {n.node_id: n.ast_identity for n in fn_cfg.nodes if n.ast_identity}
+            for cedge in fn_cfg.edges:
+                s_ast = node_ast_by_id.get(cedge.source_node_id)
+                t_ast = node_ast_by_id.get(cedge.target_node_id)
+                if s_ast and t_ast and s_ast != t_ast:
+                    builder.add_relation(RelationRecord(
+                        RelationKind.FLOWS_TO, s_ast, t_ast, True, 1.0,
+                        payload={"edge_kind": cedge.edge_kind, "guard_polarity": cedge.guard_polarity, "syntax_relation": True},
+                    ))
+            for cnode in fn_cfg.nodes:
+                if not cnode.ast_identity:
+                    continue
+                for gdom in cnode.guard_dominators:
+                    if gdom.branch_ast_identity and gdom.branch_ast_identity != cnode.ast_identity:
+                        builder.add_relation(RelationRecord(
+                            RelationKind.GUARDS, gdom.branch_ast_identity, cnode.ast_identity, True, 1.0,
+                            payload={"guard_polarity": gdom.guard_polarity, "branch_arm": gdom.branch_arm, "syntax_relation": True},
+                        ))
         if record.get("root_has_error"):
             gaps.append(f"{path}: parse diagnostics present")
         file_gaps = [f"{path}: parse diagnostics present"] if record.get("root_has_error") else []
@@ -236,11 +313,36 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
         index_path.relative_to(run_root).as_posix(), producer, tuple(gaps), scope.scope_id)
     artifact = {"path": artifact_path.relative_to(run_root).as_posix(),
                 "sha256": file_sha256(artifact_path), "size_bytes": artifact_path.stat().st_size}
-    counts = {"files_parsed": files_parsed, "bytes_parsed": bytes_parsed,
-              "nodes_parsed": nodes_parsed, "diagnostic_count": diagnostics,
-              "gap_count": len(gaps),
-              "dispositions": {"files": dict(sorted(files_by_disposition.items())),
-                               "nodes": dict(sorted(nodes_by_disposition.items())),
-                               "excluded_files": dict(sorted(excluded_by_disposition.items()))},
-              "excluded_files": sorted(excluded_files, key=lambda item: item["path"])[:MAX_EXCLUDED_FILE_RECORDS]}
+    cfg_functions_built = sum(len(r.functions) for r in cfg_file_results)
+    cfg_nodes_emitted = sum(r.total_nodes for r in cfg_file_results)
+    cfg_edges_emitted = sum(r.total_edges for r in cfg_file_results)
+    cfg_guards_classified = sum(r.total_guards for r in cfg_file_results)
+    cfg_languages = sorted({r.language for r in cfg_file_results if r.functions})
+    cfg_artifacts: dict[str, Any] | None = None
+    if cfg_dir is not None:
+        cfg_artifacts, _ = write_scope_cfg_artifacts(
+            run_root=run_root,
+            cfg_dir=cfg_dir,
+            scope_id=scope.scope_id,
+            language=scope.language,
+            grammar=grammar.grammar,
+            target_snapshot=target_snapshot,
+            file_results=cfg_file_results,
+        )
+    counts: dict[str, Any] = {
+        "files_parsed": files_parsed, "bytes_parsed": bytes_parsed,
+        "nodes_parsed": nodes_parsed, "diagnostic_count": diagnostics,
+        "gap_count": len(gaps),
+        "cfg_functions_built": cfg_functions_built,
+        "cfg_nodes_emitted": cfg_nodes_emitted,
+        "cfg_edges_emitted": cfg_edges_emitted,
+        "cfg_guards_classified": cfg_guards_classified,
+        "cfg_languages": cfg_languages,
+        "dispositions": {"files": dict(sorted(files_by_disposition.items())),
+                         "nodes": dict(sorted(nodes_by_disposition.items())),
+                         "excluded_files": dict(sorted(excluded_by_disposition.items()))},
+        "excluded_files": sorted(excluded_files, key=lambda item: item["path"])[:MAX_EXCLUDED_FILE_RECORDS],
+    }
+    if cfg_artifacts is not None:
+        counts["cfg_artifacts"] = cfg_artifacts
     return artifact, identity, counts
