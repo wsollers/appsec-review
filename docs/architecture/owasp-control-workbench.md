@@ -72,7 +72,13 @@ does not imply full assessment coverage.**
 
 ## Proof obligations and actual supported scope
 
-`owasp-proof-obligations/2` implements exactly four reviewed Python static subject procedures:
+`owasp-proof-obligations/3` implements reviewed static subject procedures for two source languages.
+Each procedure names one control, one recogniser and the language it reads (`Procedure.language`);
+`procedure_for(control, languages=...)` admits only the procedures whose language is among the
+component's accepted source languages (`source_support.languages`), so a Python component is never
+dispatched a C/C++ control and vice versa. Runtime procedures are language-independent.
+
+Python (`subject_selection.py`, AST sites):
 
 | ASVS control | Recognized subject |
 |---|---|
@@ -81,10 +87,37 @@ does not imply full assessment coverage.**
 | `V8.2.1` | Explicit function-level authorization over a literal implemented HTTP route |
 | `V8.3.1` | Trusted-service authorization enforcement over a literal implemented HTTP route |
 
-These are narrow site recognizers and analyst questions, not general SQL/password/authorization
-analyzers. Python excerpts must be parseable, unredacted and materially complete for the named
-site. A complete narrowed site can retain its identity while omitted material remains explicit
-unresolved coverage. Unsupported languages, unrecognized constructs and other controls stay named
+C and C++ (`c_subjects.py` recogniser families, `c_procedures.py` procedures; T-5013). The subject is
+one complete function definition (or one named `*session*`/`*token*`/`*cookie*` type) with the
+recognised call lines and the input-entry lines inside it (`subject.sites`), so the worker sees the
+entry and the sink of the same function. The scanner blanks comments, literals and preprocessor
+lines, matches brace blocks and takes a block whose head ends in a parameter list as a function; it
+needs no compiler at inference time, and accepted tree-sitter `function_definition` spans prioritise
+the same subjects during discovery. Recognition is lexical (a call is a name followed by a
+parenthesis); macro bodies, K&R definitions and unbalanced braces are named scanner gaps.
+
+| Family | Recognised in a function | Controls |
+|---|---|---|
+| `c_input_entry/1` | `recv`/`read`/`fgets`/`fread`/`getenv`/`argv[...]` and the other input calls | `V1.3.3`, `V2.2.1` |
+| `c_command_sink/1` | `popen`/`system`/`exec*`/`posix_spawn` | `V1.2.5` |
+| `c_format_sink/1` | printf-family call whose format argument is not a literal | `V1.3.10` |
+| `c_copy_sink/1` | `strcpy`/`strcat`/`sprintf`/`memcpy`/`memmove`-family copies | `V1.4.1` |
+| `c_allocation_size/1` | `malloc`/`calloc`/`realloc`/`alloca`/`new[]` with a computed size | `V1.4.2` |
+| `c_memory_release/1` | `free`/`delete` | `V1.4.3` |
+| `c_file_path/1` | `fopen`/`open`/`realpath`/`stat`/`unlink`-family and `fstream` on a non-literal path | `V5.3.2` |
+| `c_session_state/1` | functions and types named `*session*`/`*token*`/`*cookie*`, their callers and users | `V7.2.2`, `V7.2.3`, `V7.3.1`, `V7.3.2`, `V7.4.1` |
+| `c_log_sink/1` | `syslog`, `fprintf(stderr, ...)`, `std::cerr`, output calls in `log*`/`audit*` functions and calls to them | `V16.2.1`, `V16.2.5`, `V16.4.1` |
+| `c_error_path/1` | error returns (`-1`, `NULL`, `false`, `EXIT_FAILURE`), `exit`/`abort`, `throw`, `errno`/`perror` | `V16.3.4`, `V16.5.1`, `V16.5.3` |
+
+An admitted control with no procedure for the component's languages is
+`unsupported_missing_evidence` with the reason "no reviewed versioned proof procedure for this
+selected control: no C/C++ recogniser for this control" (or "no Python recogniser"); the other
+controls of the admitted chapters (documentation, business-logic, upload and federated-session
+controls) stay named that way rather than silent. These are narrow site recognizers and analyst
+questions, not general injection/memory/session analyzers. Excerpts must be parseable (Python) or
+scannable (C/C++), unredacted and materially complete for the named definition. A complete narrowed
+site can retain its identity while omitted material remains explicit unresolved coverage.
+Unsupported languages, unrecognized constructs and other controls stay named
 `not_assessed`/unresolved work; a lexical match or documentation declaration cannot satisfy them.
 
 T-146 selects complete original Python subjects rather than the first 120 lines of each file.
@@ -98,8 +131,8 @@ Complete short HTTP modules retain their policy context; a route function extrac
 oversized module cannot establish external middleware/authorization prerequisites. Evidence
 projection and obligation construction use the same configured evidence set, including settings
 above the former hard-coded 100-reference cut. The binding and acceptance identities are
-`owasp-evidence-binding/3` and `owasp-assessment-acceptance/3`; no additional control procedure or
-runtime adapter is implied. See the [design and unit record](../tasks/2026-11-13-behavior-oriented-review.md).
+`owasp-evidence-binding/4` and `owasp-assessment-acceptance/4` (subject selection
+`owasp-complete-source-subjects/2` carries the subject `language`); no runtime adapter is implied. See the [design and unit record](../tasks/2026-11-13-behavior-oriented-review.md).
 
 The `MASVS-NETWORK-1` obligation records what runtime evidence would require, but **has no accepted
 runtime adapter**. It remains unsupported even with `dynamic_authorized = true`. Static TLS/HTTPS
@@ -118,14 +151,34 @@ separately capped context list (`graph_context`), so a large graph shard cannot 
 (run `2026-11-16-0005` lost `target:cli` that way). A component-level target or facet record the
 cap drops is a **gap** ("target class not read: routing cap omitted tag records"), never a
 limitation. A control family applies only to a component whose class admits it
-(`applicability-rules/3`): ASVS fully for `target:web-api`, and for `target:network-service` (a
+(`applicability-rules/4`): ASVS fully for `target:web-api`, and for `target:network-service` (a
 non-HTTP listener) only the transport-agnostic ASVS 5.0 chapters V1, V2, V5, V7 and V16 (V1.4 holds
 the memory-safety controls); the web-only chapters stay `not_applicable` citing the class, and the
 ledger verdict is `partially_applicable` with `admitted_chapters`. MASVS needs `target:mobile`; any
 other class is a not-applicable ledger line, not a gap. A component whose accepted sources no
-recogniser reads (Python only until T-5011/T-5013) gets `unsupported_missing_evidence` with the
+recogniser reads (Python and C/C++ are read; T-5013) gets `unsupported_missing_evidence` with the
 reason "no supported source language for this component" on every admitted row. A component with
-no class is `cannot_determine`, not N/A, and is not dispatched. `select_profiles` records a
+no class is `cannot_determine`, not N/A, and is not dispatched.
+
+Control roles are derived, not ingested: the upstream ASVS 5.0 JSON and MASVS Markdown carry no
+component-role metadata, so the normalizer stores `component_roles: []` and the pinned
+normalized-records hash forbids editing the catalogs. `standards.control_records` fills empty roles
+from `ASVS_CHAPTER_ROLES` (`asvs-chapter-roles/1`, the `engine.COMPONENT_ROLES` vocabulary; `network`
+is on every chapter a non-HTTP listener is admitted to) and the two mobile roles for MASVS, recording
+`component_roles_basis` on each record. Roles route; they never decide an assessment. A control
+whose chapter no map covers is `unsupported_missing_evidence` ("no control role is derivable for this
+control"), never hidden as `not_applicable`. A failed or unlaunched validation cell leaves its rows
+`cannot_verify` with the named gap, never a silent `not_assessed`.
+
+Each package carries the evidence its obligations cite first, then other accepted records of the
+component until a per-request byte budget (half the worker's `max_input_tokens`, four bytes per
+token, shared by the batch's packages); every accepted record of the component stays reachable
+through bounded expansion by identity (`expansion_identities`), and the omitted count is a package
+limitation. Before this a package repeated the whole component evidence set, so a 12-row C/C++ batch
+never fitted the input budget. The pinned guidance task names the obligations (rule version, row,
+ids) rather than embedding them, which keeps the composed prompt under its 48 KiB bound. A row's
+verification status is decided on its supported obligations: an unsupported coverage obligation is a
+gap on the row, not a missing independent review. `select_profiles` records a
 `reasons` list per family, and `deterministic_join` and the handoff publish a typed
 `coverage_disposition` (`partial` while any row is unresolved) beside `terminal_status`. The TOML
 `parser_versions` must equal the versions the code implements (`owasp_workbench/versions.py`); the

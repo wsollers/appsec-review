@@ -202,15 +202,24 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         classifications = unit.output("characterization.classify_components")["classifications"]
         rows = unit.output("applicability.build_matrix")["rows"]
         output = {}
+        # T-5013: half the worker's input budget (4 bytes per token) is shared by the batch's packages' evidence;
+        # the obligations' own records come first and the rest stays reachable through expansion.
+        input_bytes = int(unit.job.config.settings["model"]["max_input_tokens"]) * 4
         for batch in unit.output("batching.partition_work")["work"]["batches"]:
             values = list(build_finding_packages(batch, rows, controls, classifications,
                 loaded["evidence"], retrieval_manifest=loaded["retrieval_manifest"],
                 assessment_mode=loaded["assessment_mode"],
                 max_subjects=parse_settings(unit.job.config.settings).max_subjects_per_control,
-                max_evidence=parse_settings(unit.job.config.settings).max_evidence_per_component))
+                max_evidence=parse_settings(unit.job.config.settings).max_evidence_per_component,
+                max_evidence_bytes=max(1, input_bytes // 2 // max(1, len(batch["row_ids"])))))
             task = {"task_id": batch["batch_id"],
                     "question": "Assess only the supplied control-component proof obligations.",
-                    "proof_obligations": [item["proof_obligations"] for item in values],
+                    # T-5013: name the obligations (rule version, row, ids); the packages carry the full objects.
+                    "proof_obligations": [{
+                        "row_id": item["row_id"], "control": item["control"]["identity"],
+                        "rule_version": sorted({str(obligation.get("rule_version")) for obligation in item["proof_obligations"]}),
+                        "obligation_ids": [obligation["obligation_id"] for obligation in item["proof_obligations"]],
+                    } for item in values],
                     "prohibited_claims": values[0]["prohibited_claims"] if values else []}
             bundle = compose(unit.job.repository_root, role=batch["assignment"]["role"],
                              persona=batch["assignment"]["persona"], task=task)

@@ -2757,11 +2757,11 @@ retries = 1
 # versions its code implements (owasp_workbench/versions.py), key for key.
 [jobs.job_owasp_control_assessment.settings.parser_versions]
 component_rules = "2"
-applicability_rules = "3"
+applicability_rules = "4"
 batching_rules = "1"
-evidence_binding = "3"
-subject_selection = "1"
-result_validator = "3"
+evidence_binding = "4"
+subject_selection = "2"
+result_validator = "4"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
 catalog_path = "data/reference/owasp/catalogs/asvs-5.0.0.json"

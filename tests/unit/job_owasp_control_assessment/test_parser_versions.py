@@ -22,12 +22,14 @@ def declared_versions() -> dict:
 def test_central_toml_declares_exactly_the_implemented_parser_versions() -> None:
     implemented = implemented_parser_versions()
     assert declared_versions() == implemented
-    assert implemented == {"component_rules": "2", "applicability_rules": "3", "batching_rules": "1",
-                           "evidence_binding": "3", "subject_selection": "1", "result_validator": "3"}
+    # T-5013: C/C++ recognisers (subject selection 2, evidence binding 4), language-aware procedure lookup and
+    # derived control roles (applicability 4), C/C++ subject acceptance (result validator 4).
+    assert implemented == {"component_rules": "2", "applicability_rules": "4", "batching_rules": "1",
+                           "evidence_binding": "4", "subject_selection": "2", "result_validator": "4"}
 
 
 @pytest.mark.parametrize("change", [
-    {"applicability_rules": "2"}, {"evidence_binding": "2"}, {"component_rules": "1"},
+    {"applicability_rules": "3"}, {"evidence_binding": "3"}, {"component_rules": "1"},
     {"extra_rule": "1"}, "drop",
 ])
 def test_input_validation_refuses_a_stale_or_foreign_declared_version(change) -> None:

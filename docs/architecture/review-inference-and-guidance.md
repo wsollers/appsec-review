@@ -49,7 +49,7 @@ Several producers help decide where to look without deciding what is vulnerable:
 - OWASP assessment investigates supported, named source-subject obligations after gating ASVS
   (`target:web-api`, or `target:network-service` for the transport-agnostic chapters) and MASVS
   (`target:mobile`) on accepted `target:*` and facet tags
-  (`component-classification/2`, `applicability-rules/3`, `target-class-ledger/1`); when neither
+  (`component-classification/2`, `applicability-rules/4`, `target-class-ledger/1`); when neither
   class applies, it finishes `SUCCEEDED` with zero worker batches and zero `control_evidence` rows.
   Its deterministic citation checks and fresh independent reviewer can support scoped analyst
   assessments. Catalog completeness, routing tags and a satisfied subject do not establish
