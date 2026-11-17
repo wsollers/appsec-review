@@ -1948,7 +1948,7 @@
         },
         "rule": {
           "enum": ["appsec-review/review-unit-rank/2", "appsec-review/review-unit-rank/3",
-                   "appsec-review/review-unit-rank/4"]
+                   "appsec-review/review-unit-rank/4", "appsec-review/review-unit-rank/5"]
         },
         "basis": {
           "type": "array",
@@ -2150,7 +2150,7 @@
         },
         "assembly_rule": {
           "enum": ["appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13",
-                   "appsec-review/assemble-review-packages/15"]
+                   "appsec-review/assemble-review-packages/15", "appsec-review/assemble-review-packages/16"]
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

@@ -448,6 +448,48 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
       },
       {
         "basis": "rule_semantics",
+        "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+        "rule": "*cpp-banned-function-high",
+        "scanner": "semgrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+        "rule": "*cpp-banned-function-high",
+        "scanner": "opengrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+        "scanner": "semgrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+        "scanner": "opengrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+        "scanner": "semgrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+        "scanner": "opengrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
         "reason": "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced.",
         "rule": "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded",
         "scanner": "semgrep",
@@ -1458,7 +1500,7 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
    ([review scope](inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
 2. Bind bounded source slices, lead-family admission, operation questions and any admitted
    generated model context. Routing context does not replace original source/tool evidence.
-3. Rank lead packages by effective severity and hunt packages by unit position (`review-unit-rank/4`,
+3. Rank lead packages by effective severity and hunt packages by unit position (`review-unit-rank/5`,
    including `exposure:client-facing` and `trust:user-tainted` facet weights); retain caps,
    exclusions, missing strategy/specialist inputs and fallback scope.
 4. Bind package content, dependency shard identities, assembly/admissibility/predicate-policy

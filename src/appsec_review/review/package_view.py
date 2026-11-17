@@ -49,6 +49,7 @@ MAX_INLINE_GAPS = 12
 MAX_INLINE_CORROBORATION = 5
 MAX_LINE_CHARS = 200
 WINDOW_LINES = 12
+MAX_MEMBER_WINDOWS = 4
 MAX_TYPE_LINES = 30
 SANITIZED_KEYS = frozenset({"package_id", "manifest_sha256", "input_fingerprint", "run_id"})
 DECLARATION_KINDS = frozenset({"CXXRecordDecl", "RecordDecl", "EnumDecl", "TypedefDecl", "TypeAliasDecl",
@@ -173,11 +174,13 @@ class _Builder:
     def leads(self) -> list[dict[str, Any]]:
         rows = []
         function = self.neighborhood.get("function") or {}
-        for lead in self.package.get("lead_menu", ()):
+        # The first menu entry is the anchor lead (highest effective severity): the neighborhood's function is its own.
+        # A member's line may lie in another function; it is shown with its source window, not named here.
+        for number, lead in enumerate(self.package.get("lead_menu", ())):
             ref = str(lead["observation_id"])
             location = self.location(ref) or {}
             where = {"path": location.get("path"), "line": location.get("start_line"),
-                     "function": function.get("name") if len(self.package.get("lead_menu", ())) == 1 else None}
+                     "function": function.get("name") if number == 0 else None}
             if location.get("path"):
                 self.locator_paths.add(str(location["path"]))
                 if lead.get("lead_family") == "secret" and location.get("start_line"):
@@ -205,13 +208,20 @@ class _Builder:
         return rows
 
     def source_rows(self, leads: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
-        """The lead's function span and the declarations of the types it mentions, plus the gaps found."""
+        """The anchor lead's function span (or dataflow slice) and the declarations of the types it mentions, plus
+        the gaps found.
+
+        A clustered package (several leads of one defect site) renders its source from the anchor, the first
+        menu entry: the member leads' lines join the slice as ``lead`` reasons, and a member whose line lies
+        outside the shown span gets a ``member`` window of its own. Run 2026-11-16-0005 rendered no source at all
+        for six of eight clustered packages and reported no gap; unavailable source is now a named local gap.
+        """
         operation = (self.package.get("scope") or {}).get("operation")
         if self.package.get("kind") == "hunt" and operation:
             return self.operation_source_rows(operation)
-        if self.package.get("kind") != "finding_lead" or len(leads) != 1:
+        if self.package.get("kind") != "finding_lead" or not leads:
             return [], []
-        lead = leads[0]
+        lead, members = leads[0], list(leads[1:])
         if lead.get("control_assessment"):
             return self.control_source_rows(lead["control_assessment"])
         if lead.get("artifacts") and not lead["where"].get("path"):
@@ -223,9 +233,11 @@ class _Builder:
             return [], [f"no source text for the lead: {reason}"]
         location, lines = located["location"], located["lines"]
         path, line = str(location["path"]), int(location["start_line"])
+        member_lines = {int(item["where"]["line"]): str(item["ref"]) for item in members
+                        if item["where"].get("path") == path and item["where"].get("line")}
         bound, record = self.neighborhood.get("bound") or {}, self.neighborhood.get("slice")
         if bound.get("kind") == "dataflow_path" and isinstance(record, Mapping) and record.get("functions"):
-            rows, slice_gaps = self.slice_rows(str(lead["ref"]), location, lines, record)
+            rows, slice_gaps = self.slice_rows(str(lead["ref"]), location, lines, record, member_lines=member_lines)
             gaps.extend(slice_gaps)
             if rows:
                 self.locator_paths.add(path)
@@ -237,6 +249,7 @@ class _Builder:
                             rows.append(row)
                         if gap:
                             gaps.append(gap)
+                rows.extend(self.member_rows(members, path, shown, gaps))
                 return rows, gaps
 
         if function and function.get("path") == path and function.get("file_sha256") not in (None, location["file_sha256"]):
@@ -263,7 +276,33 @@ class _Builder:
                 rows.append(row)
             if gap:
                 gaps.append(gap)
+        rows.extend(self.member_rows(members, path, list(range(first, last + 1)), gaps))
         return rows, gaps
+
+    def member_rows(self, members: Sequence[Mapping[str, Any]], anchor_path: str, shown: Sequence[int],
+                    gaps: list[str]) -> list[dict[str, Any]]:
+        """A ``member`` window for every clustered lead whose line the anchor's span does not show (bounded by
+        ``MAX_MEMBER_WINDOWS``); a member whose source cannot be read is a named gap."""
+        rows: list[dict[str, Any]] = []
+        visible = set(shown)
+        for member in members:
+            where = member.get("where") or {}
+            if where.get("path") == anchor_path and where.get("line") in visible:
+                continue
+            if len(rows) >= MAX_MEMBER_WINDOWS:
+                gaps.append(f"{len(members)} clustered leads: only {MAX_MEMBER_WINDOWS} member windows are shown; "
+                            "the rest share the anchor's site")
+                break
+            located, reason = self.source(str(member["ref"]))
+            if located is None:
+                gaps.append(f"no source text for clustered lead {member['ref'][:40]}: {reason}")
+                continue
+            location, lines = located["location"], located["lines"]
+            path, line = str(location["path"]), int(location["start_line"])
+            first, last = max(1, line - WINDOW_LINES), min(len(lines), line + WINDOW_LINES)
+            rows.append(self._span(str(member["ref"]), path, location["file_sha256"], lines, first, last, "member", False))
+            self.locator_paths.add(path)
+        return rows
 
     def operation_source_rows(self, operation: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
         located, reason = self.source(operation["source_id"])
@@ -319,14 +358,17 @@ class _Builder:
         return rows, gaps
 
     def slice_rows(self, lead_ref: str, location: Mapping[str, Any], lines: Sequence[str],
-                   record: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+                   record: Mapping[str, Any], *, member_lines: Mapping[int, str] | None = None
+                   ) -> tuple[list[dict[str, Any]], list[str]]:
         """Only the dataflow slice's lines, one row per slice function, with elision markers between runs.
 
         Returns no rows (so the caller falls back to the whole function extent) when the lead file's slice
         names another file hash. A slice function in another file is shown only when an identity on it reads
-        back at the slice's hash; otherwise it is a named gap. The lead's own line is always shown.
+        back at the slice's hash; otherwise it is a named gap. The lead's own line is always shown, and the
+        ``member_lines`` of clustered leads in the lead's file join every slice function whose extent holds them.
         """
         path, sha, line = str(location["path"]), str(location["file_sha256"]), int(location["start_line"])
+        member_lines = dict(member_lines or {})
         rows: list[dict[str, Any]] = []
         gaps: list[str] = []
         remaining = self.limits.max_source_lines
@@ -350,6 +392,10 @@ class _Builder:
             if fpath == path and int(function["first"]) <= line <= int(function["last"]):
                 reasons.setdefault(line, "lead")
                 lead_shown = True
+            if fpath == path:
+                for member_line in member_lines:
+                    if int(function["first"]) <= member_line <= int(function["last"]):
+                        reasons.setdefault(member_line, "lead")
             numbers = sorted(number for number in reasons if 1 <= number <= len(file_lines))
             if remaining <= 0 or not numbers:
                 if numbers:

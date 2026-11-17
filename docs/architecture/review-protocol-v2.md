@@ -73,7 +73,7 @@ The package keeps its hash-pinned identity and reuse basis. Its model-facing vie
 labelled sections. Ids are shortened here. Every built view is validated against
 [review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/5`).
 The illustrative JSON below retains the original protocol sketch, not the current stored
-package envelope. Current assembly is `review-package/7` with `assemble-review-packages/14`
+package envelope. Current assembly is `review-package/7` with `assemble-review-packages/16`
 (hunt packages reference their unit context document, T-5000); bounded operation and
 generated-model context remain routing data, as described in the
 [package contract](review-package-contract.md).

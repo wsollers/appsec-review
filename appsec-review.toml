@@ -3004,6 +3004,7 @@ sii = 1000                           # full source-history instability (SII) sco
 hotspot = 1000                       # full hotspot score
 tag_density = 1000                   # retained key: distinct evidenced security-operation sites, not tag counts
 tag_density_full_tags_per_file = 4    # retained key: distinct sites for full points, no file-count multiplier
+lead_hint_high = 250                 # per critical or high lead hint (effective severity)
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -3281,6 +3282,16 @@ rules = [
   # whose catalog class would rank every unchecked conversion high; the row keeps the clang-tidy judgement.
   { scanner = "semgrep", rule = "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
   { scanner = "opengrep", rule = "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
+  # The banned-function and ENV33-C review signals (run 2026-11-16-0005): a call to strcpy, sprintf or system with
+  # constant arguments is not attacker input, so the rule is a review signal, not a severity; the pack reports them
+  # medium and this row keeps triage on the assessed severity (the CWE-120 catalog class still ranks a strcpy of
+  # attacker-reached data high through the scanner that reports that CWE).
+  { scanner = "semgrep", rule = "*cpp-banned-function-high", severity = "medium", basis = "rule_semantics", reason = "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced." },
+  { scanner = "opengrep", rule = "*cpp-banned-function-high", severity = "medium", basis = "rule_semantics", reason = "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced." },
+  { scanner = "semgrep", rule = "appsec-review.sei-cert.c.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "opengrep", rule = "appsec-review.sei-cert.c.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "semgrep", rule = "appsec-review.sei-cert.cpp.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "opengrep", rule = "appsec-review.sei-cert.cpp.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
   # Review-signal sink rules carry no CWE, so the catalog cannot rank them; an unbounded copy length is CWE-120.
   { scanner = "semgrep", rule = "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded", severity = "high", basis = "rule_semantics", reason = "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced." },
   { scanner = "opengrep", rule = "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded", severity = "high", basis = "rule_semantics", reason = "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced." },
@@ -3861,6 +3872,9 @@ max_pdf_bytes = 16777216
 # rules/semgrep/banned-functions.yml is generated from this table, never edited by hand. After editing:
 #   python -m appsec_review.rulepacks.banned_functions --write
 # A test fails if the file drifts and the evidence job refuses to run a file that does not match.
+# A tier names the function's contract, not a severity: every tier is a review signal. `high` and `warning`
+# report WARNING (medium) and `review` INFO, because a call with constant arguments is not attacker input;
+# the triage table (settings.triage.rules) ranks the lead on its assessed severity.
 [banned_functions]
 source = "https://github.com/microsoft/ChakraCore/blob/master/lib/Common/Banned.h"
 reference = "https://msdn.microsoft.com/en-us/library/bb288454.aspx"

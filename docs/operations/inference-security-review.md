@@ -284,7 +284,7 @@ target class and facet-derived hunt obligations; `route_stack` reads `mechanism:
 managed-language scope with an HTTP or RPC listener selects its service stack without a
 `component:*` tag; personas may cover facets; `hunt_panel` tries `entry_down` first on a
 `trust:user-tainted` unit; and `ranking.facet_exposure`/`ranking.facet_trust` weight exposed,
-tainted units (`review-unit-rank/4`). All of these are implemented; the hunt view shows the facets,
+tainted units (`review-unit-rank/5`). All of these are implemented; the hunt view shows the facets,
 target classes and derived obligations under `facets` as closed ids.
 
 Teams run package-local follow-up rounds up to `rounds.max_rounds`. Each round applies the existing
@@ -768,6 +768,7 @@ sii = 1000                           # full source-history instability (SII) sco
 hotspot = 1000                       # full hotspot score
 tag_density = 1000                   # retained key: distinct evidenced security-operation sites
 tag_density_full_tags_per_file = 4    # retained key: sites for full points, no file-count multiplier
+lead_hint_high = 250                 # per critical or high lead hint (effective severity)
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -779,15 +780,17 @@ advisory_epss = 250                  # times the unit's highest EPSS percentile
 Every weight is an integer in `[0, 1000]`, except `tag_density_full_tags_per_file`, which is
 `[1, 1000]`. Unknown keys are rejected, and an omitted key keeps its default. A weight of `0`
 removes that signal's points from the score. The signal still counts as known for the tie-break
-and stays in each unit's rank basis. An unknown
+and stays in each unit's rank basis. Equal scores and known-signal counts are ordered by the unit's
+lead count, distinct scanners, first path and operation line before the unit key. An unknown
 signal (a missing producer or feed) still contributes nothing, whatever its weight.
 
 The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
 and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
-which reassembles hunt packages. `review-unit-rank/4` replaces raw tag counting: language, gap,
+which reassembles hunt packages. `review-unit-rank/5` weighs high leads and breaks ties by the
+unit's own weight; `/4` replaced raw tag counting: language, gap,
 reported and derived tags do not add operation points; multiple labels/producers at one physical
 site count once. Missing or partial evidence remains unknown rather than proving absence.
-Fresh packages use `assemble-review-packages/14` and the model-facing `package-view/6`.
+Fresh packages use `assemble-review-packages/16` and the model-facing `package-view/6`.
 Preceding publications remain readable without being reused as the new semantic output.
 Generated-map bytes remain bound through final certification. Role counts, verifier independence,
 judge policy and execution authority are unchanged; see the

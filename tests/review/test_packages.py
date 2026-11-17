@@ -465,3 +465,102 @@ def test_schema_role_enum_covers_every_context_role_the_assembler_emits() -> Non
                                                  "$defs": SCHEMA["$defs"]})
     for role in sorted(SIGNAL_CONTEXT_ROLES):
         assert not list(validator.iter_errors({"id": identity, "kind": "coverage_cell", "role": role}))
+
+
+# -- item 3: a same-site cluster needs the same weakness class or a shared sink_site fact -------------------------
+
+def _site_lead(number: int, line: int, cwes: tuple[str, ...], *, scanner: str = "tool-semgrep", rule: str = "r") -> Lead:
+    return Lead("asr:tool_observation:" + f"{number:064x}", "source_sast", scanner, rule, "ERROR", "high",
+                "native-label", None, cwes, "src/request.cpp", line, True, "observations", "default", "b" * 64)
+
+
+def test_clustering_splits_distinct_weakness_classes_within_the_window_and_merges_the_same_class() -> None:
+    """Run 2026-11-16-0005 merged the CWE-134 format string at request.cpp:130 with the CWE-78 popen at :137 into one
+    package anchored on the format string, and lead_max_claims_per_package then capped both defects."""
+    from appsec_review.review.packages import cluster_leads
+    no_functions = lambda _path, _line: set()  # noqa: E731
+    format_string = _site_lead(1, 130, ("CWE-134",))
+    popen = _site_lead(2, 137, ("CWE-78",))
+    assert cluster_leads([format_string, popen], no_functions, 8) == [(format_string,), (popen,)]
+    system = _site_lead(3, 136, ("CWE-78",), scanner="tool-opengrep")
+    assert cluster_leads([popen, system], no_functions, 8) == [(system, popen)]
+    # A lead whose class is unknown (no rule CWE that rolls up, no classified sink) never splits a group ...
+    unknown = _site_lead(4, 133, ())
+    assert cluster_leads([format_string, unknown], no_functions, 8) == [(format_string, unknown)]
+    # ... and a shared sink_site fact on the lead's line is one defect whatever the CWEs say.
+    shared_sink = "asr:sink_site:" + "9" * 64
+
+    def site(lead: Lead):
+        from appsec_review.review.packages import weakness_classes
+        return weakness_classes(lead.rule_cwe), frozenset({shared_sink}) if lead.start_line in (130, 131) else frozenset()
+    memory = _site_lead(5, 131, ("CWE-120",))
+    assert cluster_leads([format_string, memory, popen], no_functions, 8, site=site) == [(format_string, memory), (popen,)]
+    # Deterministic: the same groups whatever the input order.
+    assert cluster_leads([popen, memory, format_string], no_functions, 8, site=site) == [(format_string, memory), (popen,)]
+
+
+def test_lead_site_classes_come_from_the_rule_cwe_then_the_sink_class_on_the_line() -> None:
+    from appsec_review.review.packages import SINK_CLASS_PREDICATES, GraphContext, _Fact
+    graph = object.__new__(GraphContext)
+    sink = _Fact("asr:sink_site:" + "a" * 64, "sink_site", "src/request.cpp", "command_execution", None, None, "s" * 64, 137)
+    graph.at_line = {("src/request.cpp", 137): [sink]}
+    classes, sinks = GraphContext.lead_site(graph, _site_lead(1, 137, ()))
+    assert classes == {"command_injection"} and sinks == {sink.identity}
+    assert GraphContext.lead_site(graph, _site_lead(2, 137, ("CWE-134",)))[0] == {"memory_corruption"}
+    # A CWE-less CodeQL, clang or cppcheck rule id decides before the sink on the line (run 0005: CodeQL rows carry no CWE).
+    assert GraphContext.lead_site(graph, _site_lead(6, 137, (), scanner="codeql", rule="cpp/tainted-format-string"))[0] == {
+        "memory_corruption"}
+    from appsec_review.review.packages import rule_classes
+    assert rule_classes("clang-analyzer-unix.Malloc") == rule_classes("deallocuse") == {"use_after_free"}
+    assert rule_classes("rules.appsec-review.review-signal.sink.cpp-banned-function-high") == {"memory_corruption"}
+    assert rule_classes("appsec-review.sei-cert.cpp.env33-c.command-processor-call") == {"command_injection"}
+    assert rule_classes("bugprone-branch-clone") == frozenset()
+    assert GraphContext.lead_site(graph, _site_lead(3, 999, ())) == (frozenset(), frozenset())
+    assert set(SINK_CLASS_PREDICATES) == {"memory_write", "memory_read", "format_string", "integer_conversion",
+                                          "allocation_size", "command_execution", "path_access", "sql_query",
+                                          "code_injection", "deserialization", "crypto_misuse", "log_output",
+                                          "network_output"}
+
+
+# -- item 6: a banned-function review signal admits on the assessed severity, not the rule's label ----------------
+
+def _repository_triage_rules():
+    import tomllib
+    from appsec_review.review.lead_triage_settings import TriageSettings
+    document = tomllib.loads((Path(__file__).resolve().parents[2] / "appsec-review.toml").read_text(encoding="utf-8"))
+    return TriageSettings.from_mapping(document["jobs"]["job_inference_security_review"]["settings"]["triage"],
+                                       "settings.triage").rules
+
+
+def test_a_constant_banned_function_call_is_not_admitted_while_an_attacker_reached_strcpy_still_is() -> None:
+    """util.c:10 strcpy(f->data, "ready"), :29 sprintf and :39 system("/bin/true") were admitted on the reported high
+    of cpp-banned-function-high and ENV33-C (run 2026-11-16-0005). The rules now report medium and the table keeps
+    triage on the assessed severity; a strcpy of a socket-read buffer is still admitted through CWE-120."""
+    from appsec_review.review.lead_families import AssessedSeverity
+    from appsec_review.review.lead_triage import rule_table_decision
+    from appsec_review.review.packages import admission_reasons
+    rules = _repository_triage_rules()
+    policy = PackageSettings(admit_severities=("critical", "high"), admission_basis="either")
+    constant = Lead("asr:tool_observation:" + "c" * 64, "source_sast", "tool-semgrep",
+                    "rules.appsec-review.review-signal.sink.cpp-banned-function-high", "WARNING", "medium",
+                    "native-label", 'strcpy(f->data, "ready")', (), "src/util.c", 10, True, "observations", "default",
+                    "b" * 64)
+    decision = rule_table_decision(constant, rules)
+    assert decision is not None and decision.value == "medium" and "banned" in decision.reason.lower()
+    assessed = replace(constant, assessed_severity=AssessedSeverity("medium", "rule_table", decision.basis, decision.reason,
+                                                                      decision.version, "triage-" + "0" * 64),
+                       triage_state="assessed")
+    assert admission_reasons(assessed, policy) == []
+    for scanner, rule in (("tool-opengrep", "appsec-review.sei-cert.c.env33-c.command-processor-call"),
+                          ("tool-semgrep", "appsec-review.sei-cert.cpp.env33-c.command-processor-call")):
+        system = replace(constant, scanner=scanner, rule_id=rule, rule_cwe=("CWE-78", "CWE-88"), start_line=39)
+        assert rule_table_decision(system, rules).value == "medium"
+    # The same strcpy fed by recv: the scanner that reports CWE-120 is assessed high by the catalog class.
+    tainted = Lead("asr:tool_observation:" + "d" * 64, "source_sast", "tool-clang-static-analysis",
+                   "security.insecureAPI.strcpy", None, "medium", "native-label", "strcpy(reply, line)",
+                   ("CWE-120",), "src/request.cpp", 60, True, "observations", "default", "b" * 64,
+                   assessed_severity=AssessedSeverity("high", "cwe_catalog", "cwe_catalog", "CWE-120: catalog impact high",
+                                                      "cwe-impact-derivation/1", "triage-" + "1" * 64),
+                   triage_state="assessed")
+    assert rule_table_decision(tainted, rules) is None
+    assert admission_reasons(tainted, policy) == ["assessed_severity"]

@@ -400,3 +400,18 @@ def test_deterministic_steps_assess_every_lead_and_the_model_sees_only_the_still
         "medium (reported; assessed high by cwe_catalog)")
     summary = lead_triage.handoff_summary(outcome.document, None)
     assert (summary["assessed_leads"], summary["reported_known_assessed"], summary["unknown_leads"]) == (3, 2, 1)
+
+
+def test_a_rule_id_glob_row_matches_however_the_engine_prefixes_the_rule_path() -> None:
+    """Semgrep reports ``rules.appsec-review.review-signal.sink.cpp-banned-function-high``, Opengrep may prefix the
+    path differently: ``*cpp-banned-function-high`` decides both, at scanner-and-rule specificity, and never the
+    ``-review`` or ``-warning`` tiers."""
+    row = TriageRule("semgrep", "medium", "rule_semantics", "banned call, review signal", rule="*cpp-banned-function-high")
+    assert row.matches("tool-semgrep", "rules.appsec-review.review-signal.sink.cpp-banned-function-high", ()) == 3
+    assert row.matches("tool-semgrep", "appsec-review.review-signal.sink.CPP-Banned-Function-High", ()) == 3
+    assert row.matches("tool-semgrep", "rules.appsec-review.review-signal.sink.cpp-banned-function-review", ()) == 0
+    assert row.matches("tool-opengrep", "rules.appsec-review.review-signal.sink.cpp-banned-function-high", ()) == 0
+    exact = TriageRule("semgrep", "low", "rule_semantics", "exact row", rule="rules.appsec-review.review-signal.sink.cpp-banned-function-high")
+    assert exact.matches("tool-semgrep", "rules.appsec-review.review-signal.sink.cpp-banned-function-high", ()) == 3
+    assert exact.matches("tool-semgrep", "rules.appsec-review.review-signal.sink.cpp-banned-function-high-x", ()) == 0
+    assert row.key != exact.key
