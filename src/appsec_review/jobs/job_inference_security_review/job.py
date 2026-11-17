@@ -63,6 +63,7 @@ from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import audit, chains, stages
+from .evidence_fulfillment import ensure_thinking_profile_floor
 from .datasets import CONTRACT, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
 from .teams import WARRANTS_SCHEMA, PackageWork, ReviewContext, lane_failure, run_lane
@@ -325,7 +326,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             return (located["lines"] if located is not None else None), reason
 
         outcome = run_triage(
-            collection.leads, settings=settings.triage, profile=settings.models[settings.triage.model_profile],
+            collection.leads, settings=settings.triage,
+            profile=ensure_thinking_profile_floor(settings.models[settings.triage.model_profile]),
             infer=infer or _default_infer(), read_excerpt=read_excerpt, reference=reference, guidance=guidance,
             schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY), cache_dir=job_data(unit) / "triage-cache",
             shared=SharedArtifacts.for_job(unit.job))
@@ -377,7 +379,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         guidance = hunt_plan.load_planner_guidance(repo(unit))
         pin_bundle(unit.job.run_root, guidance.bundle, files={"prompt.md": guidance.text})
         outcome = hunt_plan.run_planner(
-            brief, settings=settings.hunting, profile=settings.models[settings.hunting.planner_profile],
+            brief, settings=settings.hunting,
+            profile=ensure_thinking_profile_floor(settings.models[settings.hunting.planner_profile]),
             infer=infer or _default_infer(), guidance=guidance, schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
             cell_id=f"hunt-planner-{unit.job.run_id}")
         document = {**outcome.document, "run_id": unit.job.run_id, "manifest_sha256": scope.manifest_sha256,
@@ -672,11 +675,14 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         references = stages.claim_references(merged, documents)
         families = stages.claim_lead_families(merged, documents)
         extra: set[str] = set()
+        component_severities: dict[str, str] = {}
         for record in adjudications:
             claim_id = record["claim_id"]
             inputs, _display = stages._ship_block_inputs(
                 ClaimState(record["state"]), [item for item in scores if item["claim_id"] == claim_id],
                 references.get(claim_id, {}), families.get(claim_id, ()), False)
+            if inputs.technical_severity:
+                component_severities[claim_id] = inputs.technical_severity
             decision = ship_block.decide(inputs, ctx.settings.ship_block,
                                           require_distinct_model=ctx.settings.verification.require_distinct_model_for_ship_blocking)
             if (decision.conditions["technical_severity_qualifies"]
@@ -686,7 +692,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                  for seed in _read(unit.job.run_root, lane["chain_seeds"])["seeds"]]
         ledger_path = unit.unit_root / "ledger.jsonl"
         document = chains.compose(ctx, projection, adjudications, extra_verifier_claims=extra, seeds=seeds,
-                                  out_dir=unit.unit_root / "proposals", ledger_path=ledger_path, stream=unit.unit_id)
+                                  out_dir=unit.unit_root / "proposals", ledger_path=ledger_path, stream=unit.unit_id,
+                                  component_severities=component_severities)
         unit.job.events.write("INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED",
                               **document["accounting"], expanded=document["exploration"]["expanded"],
                               frontier_truncated=document["exploration"]["frontier_truncated"],
@@ -814,6 +821,10 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         scores = _read(unit.job.run_root, unit.output("scoring.score_claims")["artifact"])["scores"]
         accepted = _read(unit.job.run_root, unit.output("scope.accept_manifest")["artifact"])
         documents = package_documents(unit)
+        chain_manifest = unit.output("attack_chains.verify_weakest_links")["attack_chain_manifest"]
+        verified_chain_manifest = chains.verify_publication(
+            unit.job.run_root, projection, chain_manifest, schemas, unit.job.run_id
+        )
         require_distinct = settings.verification.require_distinct_model_for_ship_blocking
         findings = stages.finding_packages(projection, adjudications, merged_doc, scores,
                                            manifest_sha256=accepted["manifest_sha256"],
@@ -822,7 +833,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                            lead_families=stages.claim_lead_families(merged_doc, documents),
                                            lead_severities=stages.claim_lead_severities(merged_doc, documents),
                                            ship_block_settings=settings.ship_block,
-                                           require_distinct_model=require_distinct)
+                                           require_distinct_model=require_distinct,
+                                           chain_records=verified_chain_manifest["items"])
         verification = settings.verifier_distinctness()
         if verification["warning"]:
             unit.job.events.write("INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT", warning=verification["warning"])
@@ -836,8 +848,6 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         briefs = [entry for document in lane_documents(unit) if document.get("poc_basis")
                   for entry in _read(unit.job.run_root, document["poc_basis"])["briefs"]]
         candidates = stages.poc_candidates(findings, briefs, settings.poc_candidates)
-        chain_manifest = unit.output("attack_chains.verify_weakest_links")["attack_chain_manifest"]
-        chains.verify_publication(unit.job.run_root, projection, chain_manifest, schemas, unit.job.run_id)
         handoff = stages.build_handoff(
             run_id=unit.job.run_id, manifest_sha256=accepted["manifest_sha256"],
             configuration_sha256=semantic_settings_sha256(settings), projection=projection, accounting=accounting,

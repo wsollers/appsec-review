@@ -15,11 +15,12 @@ discovery roles proposed: search suggestions, never evidence. `candidate_limit` 
 how many candidates you may return and how long each may be.
 
 **How to compose.** First the seed hints: a hint whose consecutive pairs are admitted is a candidate
-unless its predicates make it implausible. Then the admitted pairs whose predicates chain:
+unless its predicates make it implausible. Then the admitted pairs whose predicates chain across up to six steps, including cross-unit and
+cross-trust-boundary combinations where standalone moderate findings compose into a severe path:
 `info_disclosure` or `out_of_bounds_read` into `memory_corruption` or `use_after_free` (a leak
-defeats a mitigation such as ASLR or a canary); `path_traversal` or `command_injection` into any step
-that needs file or command control; `authn_bypass` or `authz_bypass` into everything behind the
-check. Pick each edge's entities from the given `affected_entities`; never invent an id. Retrieval
+defeats ASLR or a canary); `ssrf`, `info_disclosure`, or spec-versus-handler drift into internal
+admin or service sinks; `path_traversal` or `command_injection` into file or command control;
+`authn_bypass` or `authz_bypass` into privileged operations behind the boundary. Pick each edge's entities from the given `affected_entities`; never invent an id. Retrieval
 (`find`, `read_excerpt`, `trace`, `resolve_evidence`) checks one doubt, such as whether two entities
 are the same construct; never survey the target and never spend the budget before writing a
 candidate. Continuity (identity, privilege, trust boundary, artifact/deployment, temporal) is

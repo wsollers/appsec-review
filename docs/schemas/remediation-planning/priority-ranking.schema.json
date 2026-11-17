@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/remediation-planning/priority-ranking.schema.json",
+  "title": "Risk-first remediation candidate priority ranking record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "max_candidates", "total_confirmed", "selected_count", "capped_count", "items"],
+  "properties": {
+    "schema": {"const": "appsec-review/remediation-priority-ranking/1"},
+    "max_candidates": {"type": "integer", "minimum": 1},
+    "total_confirmed": {"type": "integer", "minimum": 0},
+    "selected_count": {"type": "integer", "minimum": 0},
+    "capped_count": {"type": "integer", "minimum": 0},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank",
+          "finding_package_id",
+          "claim_id",
+          "severity",
+          "composed_severity",
+          "chain_elevated",
+          "reachable",
+          "score",
+          "selected"
+        ],
+        "properties": {
+          "rank": {"type": "integer", "minimum": 1},
+          "finding_package_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "claim_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "severity": {"$ref": "common.schema.json#/$defs/severity"},
+          "composed_severity": {
+            "oneOf": [{"$ref": "common.schema.json#/$defs/severity"}, {"type": "null"}]
+          },
+          "chain_elevated": {"type": "boolean"},
+          "reachable": {"type": "boolean"},
+          "score": {"type": "number", "minimum": 0, "maximum": 100},
+          "selected": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

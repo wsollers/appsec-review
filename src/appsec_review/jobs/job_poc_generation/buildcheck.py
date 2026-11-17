@@ -28,6 +28,7 @@ from appsec_review.indexing.build_facts import classify_command
 
 from .ast_reduce import SCHEMA as AST_SCHEMA
 from .buildctx import CONTAINER_ROOT, AcceptedBuilds, BuildUnit
+from .poc_execution_gate import guard_command_against_poc_execution
 from .settings import PocGenerationSettings
 from .statuses import ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED
 
@@ -200,6 +201,7 @@ class Step:
 
 def run_step(executor: Executor, name: str, argv: Sequence[str], workspace: Path, working_directory: str
              ) -> Step:
+    guard_command_against_poc_execution(argv)
     step = Step(name, list(argv), working_directory)
     started = time.monotonic()
     try:

@@ -28,6 +28,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from .compiler import compare_build
 from .datasets import CONTRACT, DATASETS
 from .inputs import load_planning
+from .static_validator import validate_remediation_patch_set
 from .workspace import WorkspaceLimit, cleanup, manifest, materialize
 
 JOB_ID = REMEDIATION_VALIDATION_JOB
@@ -183,6 +184,7 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             raise IntegrityError("scratch patch produced undeclared edits")
         checks["patch_applicability"] = _check("passed", "exact baseline hashes, absence proofs and byte edits match")
         new_conflicts = []
+        file_entries = []
         for name in patch.paths:
             path = scratch / "patched" / name
             data = path.read_bytes()
@@ -191,13 +193,32 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             if b"\x00" in data or any(data.count(marker) > old.count(marker) for marker in (
                     b"<<<<<<<", b"=======", b">>>>>>>")):
                 new_conflicts.append(name)
+            file_entries.append({
+                "path": name,
+                "before_text": old.decode("utf-8", "replace"),
+                "after_text": data.decode("utf-8", "replace"),
+            })
+        static_patch_res = validate_remediation_patch_set(file_entries)
+        static_failed = bool(new_conflicts) or not static_patch_res.ok
         static_ref = write_json(unit, f"{index}/static-checks.json", {
-            "checks": ["utf8_source", "no_nul_bytes", "no_new_merge_markers", "exact_declared_edit_set"],
-            "baseline": "accepted_utf8_source", "patched": "failed" if new_conflicts else "passed",
-            "diagnostics": new_conflicts})
-        checks["static_checks"] = _check("failed" if new_conflicts else "passed",
-                                         "bounded text and declared-edit checks; not vulnerability proof", static_ref)
-        if new_conflicts:
+            "checks": [
+                "utf8_source",
+                "no_nul_bytes",
+                "no_new_merge_markers",
+                "exact_declared_edit_set",
+                "balanced_syntax_and_ast",
+                "signature_preserved",
+                "guard_or_sink_hardening",
+            ],
+            "baseline": "accepted_utf8_source",
+            "patched": "failed" if static_failed else "passed",
+            "diagnostics": new_conflicts,
+            "static_patch_validation": static_patch_res.record(),
+        })
+        checks["static_checks"] = _check("failed" if static_failed else "passed",
+                                         "bounded text, balanced syntax/AST, function preservation and declared-edit checks",
+                                         static_ref)
+        if static_failed:
             result.update(status=Status.REJECTED.value, reason="static_patch_policy_failed")
             return
         role_text, guidance_sha = guidance(repo(unit), root, "remediation_reviewer", job_id=unit.job.config.job_id)
@@ -324,9 +345,36 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
                    "items": rows, "gaps": gaps}
         schemas.validate("validations", summary)
         reference = write_json(unit, "remediation-validations.json", summary)
+        tier_counts: dict[str, int] = {}
+        ast_by_lang: dict[str, int] = {}
+        guard_verified_count = 0
+        signature_preserved_count = 0
+        for row in rows:
+            if row["validation"] is None:
+                continue
+            val_rec = read_bound_json(root, row["validation"])
+            sc_art = val_rec["checks"].get("static_checks", {}).get("artifact")
+            if sc_art is None:
+                continue
+            sc_doc = read_bound_json(root, sc_art)
+            spv = sc_doc.get("static_patch_validation")
+            if isinstance(spv, dict):
+                eff_tier = "build_checked" if row["status"] == Status.BUILD_CHECKED.value else str(spv.get("validation_tier", "static_checked"))
+                tier_counts[eff_tier] = tier_counts.get(eff_tier, 0) + 1
+                if spv.get("ast_parse_clean"):
+                    for lang in spv.get("languages", ()):
+                        ast_by_lang[str(lang)] = ast_by_lang.get(str(lang), 0) + 1
+                if spv.get("dominating_guard_verified"):
+                    guard_verified_count += 1
+                if spv.get("signature_preserved"):
+                    signature_preserved_count += 1
         unit.job.events.write("REMEDIATION_VALIDATION_PUBLISHED", item_count=len(rows), gap_count=len(gaps),
                               outcome_counts={status.value: sum(row["status"] == status.value for row in rows)
                                               for status in Status},
+                              validation_tier_counts=tier_counts,
+                              ast_verified_by_language=ast_by_lang,
+                              guard_verified_count=guard_verified_count,
+                              signature_preserved_count=signature_preserved_count,
                               output_bytes=(root / reference["path"]).stat().st_size)
         return {"schema": REMEDIATION_VALIDATION_HANDOFF_SCHEMA,
                 "artifact": reference, "item_count": len(rows),

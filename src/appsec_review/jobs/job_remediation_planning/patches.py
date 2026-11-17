@@ -145,18 +145,32 @@ def patched_bytes(patch: ExactPatch, root: Path, manifest: Mapping[str, str],
 
 
 _BUILD_NAMES = frozenset({"cmakelists.txt", "makefile", "gnumakefile", "dockerfile", "meson.build",
-                          "meson_options.txt", "package.json", "package-lock.json", "pyproject.toml",
-                          "setup.py", "setup.cfg", "cargo.toml", "cargo.lock", "build.rs", ".clang-tidy",
-                          ".clangd", ".clang-format", "compile_commands.json", "conftest.py"})
-_BUILD_SUFFIXES = frozenset({".cmake", ".mk", ".sh", ".bat", ".cmd", ".ps1", ".py", ".js", ".mjs",
-                             ".cjs", ".so", ".dll", ".exe", ".cfg", ".rsp", ".pth", ".targets", ".props"})
+                          "meson_options.txt", "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+                          "pyproject.toml", "setup.py", "setup.cfg", "cargo.toml", "cargo.lock", "build.rs",
+                          "pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts",
+                          "gemfile", "gemfile.lock", "rakefile", "composer.json", "composer.lock",
+                          "directory.build.props", "directory.build.targets", "tsconfig.json",
+                          ".clang-tidy", ".clangd", ".clang-format", "compile_commands.json", "conftest.py"})
+_BUILD_SUFFIXES = frozenset({".cmake", ".mk", ".sh", ".bat", ".cmd", ".ps1", ".gradle", ".csproj",
+                             ".fsproj", ".vbproj", ".sln", ".gemspec",
+                             ".so", ".dll", ".exe", ".cfg", ".rsp", ".pth", ".targets", ".props"})
+_BUILD_CONFIG_PATTERNS = (".config.js", ".config.mjs", ".config.cjs", ".config.ts")
 
 
 def unsafe_build_changes(patch: ExactPatch) -> list[str]:
     """Changes to tool loading or executable build configuration are never automatically replayed."""
-    return [name for name in patch.paths if PurePosixPath(name).name.casefold() in _BUILD_NAMES
-            or PurePosixPath(name).suffix.casefold() in _BUILD_SUFFIXES
-            or any(part.casefold() in {".git", ".github", ".config", "cmake"} for part in PurePosixPath(name).parts)]
+    flagged: list[str] = []
+    for name in patch.paths:
+        p = PurePosixPath(name)
+        lower_name = p.name.casefold()
+        if (
+            lower_name in _BUILD_NAMES
+            or p.suffix.casefold() in _BUILD_SUFFIXES
+            or lower_name.endswith(_BUILD_CONFIG_PATTERNS)
+            or any(part.casefold() in {".git", ".github", ".config", "cmake"} for part in p.parts)
+        ):
+            flagged.append(name)
+    return flagged
 
 
 def apply_exact(patch: ExactPatch, root: Path, manifest: Mapping[str, str], bounds: RemediationBounds) -> None:

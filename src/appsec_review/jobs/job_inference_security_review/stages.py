@@ -36,6 +36,8 @@ from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
 from appsec_review.review.warrants import PredicateWarrant
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
+from appsec_review.jobs.job_finding_adjudication import resolve_finding_chain_severity
+
 from .datasets import PLANNED_CONSUMERS
 from .schemas import SchemaSet
 
@@ -638,7 +640,8 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                      lead_families: Mapping[str, Sequence[str]] | None = None,
                      lead_severities: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
                      ship_block_settings: ShipBlockSettings = ShipBlockSettings(),
-                     require_distinct_model: bool = True) -> list[dict[str, Any]]:
+                     require_distinct_model: bool = True,
+                     chain_records: Sequence[Mapping[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Confirmed and supported claims only; supported is labelled not independently confirmed.
 
     Each package carries its ``ship-block-policy/1`` decision with the inputs and citations that
@@ -676,6 +679,15 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         decision = ship_block.decide(inputs, ship_block_settings, require_distinct_model=require_distinct_model)
         judged = projection.judge_verdicts.get(claim.claim_id, ())
         judge = finding_judge(judged)
+        active_chains = sorted(chain_id for chain_id, chain in projection.attack_chains.items()
+                               if chain.decision is not None and chain.decision.status.value in (
+                                   "confirmed", "qualified_supported") and claim.claim_id in (
+                                       item.claim_id for item in chain.proposal.components))
+        chain_sev = resolve_finding_chain_severity(
+            claim.claim_id,
+            standalone_severity=inputs.technical_severity,
+            chain_records=chain_records or (),
+        ) if chain_records else None
         body = {
             "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "lane": claim.lane.value, "state": state.value,
             "label": "confirmed" if state is ClaimState.CONFIRMED else "not_independently_confirmed",
@@ -685,10 +697,7 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "missing_predicates": missing,
             "verification_review_id": review_id,
             "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None,
-            "attack_chains": sorted(chain_id for chain_id, chain in projection.attack_chains.items()
-                                    if chain.decision is not None and chain.decision.status.value in (
-                                        "confirmed", "qualified_supported") and claim.claim_id in (
-                                            item.claim_id for item in chain.proposal.components)),
+            "attack_chains": active_chains,
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
                              "provider_distinct": any(item["provider_distinct"] for item in verifiers),
@@ -701,17 +710,24 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "gaps": sorted(set(claim_gaps.get(claim.claim_id, ())) | set(record["gap_ids"]))[:256],
             "provenance": {"run_manifest_sha256": manifest_sha256, "ledger_head_sha256": projection.head},
         }
+        if active_chains and chain_sev is not None and chain_sev.composed_severity is not None:
+            body["composed_severity"] = chain_sev.composed_severity
+            body["chain_boundary_crossings"] = [dict(item) for item in chain_sev.chain_boundary_crossings]
         package = {**body, "finding_package_id": make_id("finding_package", 1, body)}
         schemas.validate("finding-package", package)
         path = Path(out_dir) / f"{package['finding_package_id']}.json"
         atomic_bytes(path, canonical_json(package))
-        written.append({"finding_package_id": package["finding_package_id"], "sha256": file_sha256(path),
-                        "claim_id": claim.claim_id, "state": state.value, "lane": claim.lane.value,
-                        "ship_block_status": decision.status.value, "missing_predicates": missing,
-                        "gaps": package["gaps"], "file": path.name,
-                        # Inputs of poc_candidates; not part of the handoff\'s finding_packages list.
-                        "judge_verdict": judge["verdict"] if judge else None,
-                        "technical_severity": inputs.technical_severity, "direct_evidence": list(supporting[:256])})
+        entry_meta = {"finding_package_id": package["finding_package_id"], "sha256": file_sha256(path),
+                      "claim_id": claim.claim_id, "state": state.value, "lane": claim.lane.value,
+                      "ship_block_status": decision.status.value, "missing_predicates": missing,
+                      "gaps": package["gaps"], "file": path.name,
+                      # Inputs of poc_candidates; not part of the handoff\'s finding_packages list.
+                      "judge_verdict": judge["verdict"] if judge else None,
+                      "technical_severity": inputs.technical_severity, "direct_evidence": list(supporting[:256])}
+        if active_chains and chain_sev is not None and chain_sev.composed_severity is not None:
+            entry_meta["composed_severity"] = chain_sev.composed_severity
+            entry_meta["chain_boundary_crossings"] = [dict(item) for item in chain_sev.chain_boundary_crossings]
+        written.append(entry_meta)
     return sorted(written, key=lambda item: item["finding_package_id"])
 
 

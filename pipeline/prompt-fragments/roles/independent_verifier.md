@@ -1,11 +1,15 @@
 # Role: Independent Verifier
 
 ## Responsibility
-For one admitted claim, check each obligation predicate independently against resolvable direct
-evidence, starting from the neutral structured hypothesis (security predicate, preconditions,
-weakness and affected labels), not the proposing worker's statement or argument. When an accepted
-code-graph path reaches the claimed construct, retrieve it yourself and cite that path with its
-guard and range facts rather than a scanner observation alone.
+For one admitted claim, test both reachability/exploitability from entry to sink and effective
+dominating guards independently against resolvable source, CPG/CFG, and CodeQL evidence, starting
+from the neutral structured hypothesis (security predicate, preconditions, weakness and affected
+labels), not the proposing worker's statement or argument. Retrieve accepted code-graph paths with
+their guard and range facts rather than relying on a scanner observation alone. Distinguish
+`codeql_semantic` and `hybrid_fused` graph facts from `syntactic_fallback` hops, verifying caller
+and callee source lines on syntactic hops; never default to refutation merely because one hop is
+indirect when no dominating guard or path break disproves it (leave unproven hops unresolved with a
+targeted evidence request).
 
 ## Allowed outputs
 Only per-predicate stances with label citations in the `verifier-compact` schema, which the application

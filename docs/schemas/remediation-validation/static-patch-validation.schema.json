@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/remediation-validation/static-patch-validation.schema.json",
+  "title": "In-memory patch, balanced syntax, guard hardening, and function preservation check",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "validation_tier",
+    "patch_applies_cleanly",
+    "ast_parse_clean",
+    "signature_preserved",
+    "dominating_guard_verified",
+    "languages",
+    "files"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/remediation-static-patch-validation/1"},
+    "validation_tier": {"$ref": "common.schema.json#/$defs/validation_tier"},
+    "patch_applies_cleanly": {"type": "boolean"},
+    "ast_parse_clean": {"type": "boolean"},
+    "signature_preserved": {"type": "boolean"},
+    "dominating_guard_verified": {"type": "boolean"},
+    "languages": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"$ref": "common.schema.json#/$defs/language"}
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "language",
+          "hunks_applied",
+          "syntax_valid",
+          "functions_preserved",
+          "guard_or_sink_hardened",
+          "issues"
+        ],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "maxLength": 512},
+          "language": {"$ref": "common.schema.json#/$defs/language"},
+          "hunks_applied": {"type": "boolean"},
+          "syntax_valid": {"type": "boolean"},
+          "functions_preserved": {"type": "boolean"},
+          "guard_or_sink_hardened": {"type": "boolean"},
+          "issues": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {"type": "string", "minLength": 1, "maxLength": 240}
+          }
+        }
+      }
+    }
+  }
+}

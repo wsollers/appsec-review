@@ -86,7 +86,8 @@ def test_candidate_consumer_uses_resolved_review_basis_and_checks_its_digest() -
 
 def test_every_schema_is_a_valid_draft_2020_12_document_with_a_unique_id() -> None:
     assert set(DOCUMENTS) == {"common.schema.json", "writer-answer.schema.json", "poc-candidate.schema.json",
-                              "poc-generation.schema.json", "compile-record.schema.json", "provenance.schema.json"}
+                              "poc-generation.schema.json", "compile-record.schema.json", "provenance.schema.json",
+                              "poc-compile-check.schema.json"}
     for document in DOCUMENTS.values():
         Draft202012Validator.check_schema(document)
     assert len({document["$id"] for document in DOCUMENTS.values()}) == len(DOCUMENTS)
@@ -390,3 +391,37 @@ def test_the_committed_reproducer_file_is_exactly_what_the_job_assembles_from_th
     text = assemble(answer, SETTINGS, claim_id="claim-" + "0" * 64, package_id="finding_lead-" + "0" * 64)
     assert (poc_support.FIXTURES / "relay_overflow.cpp").read_text(encoding="utf-8") == text
     assert "int main" not in text and "main(" not in text
+
+
+def test_poc_compile_check_schema_and_execution_gate_contracts() -> None:
+    from appsec_review.jobs.job_poc_generation import (
+        POC_EXECUTION_BLOCKED_CODE,
+        PocExecutionBlockedByPolicyError,
+        SUPPORTED_POC_LANGUAGES,
+        enforce_poc_non_execution,
+        validate_static_poc_harness,
+    )
+
+    assert len(SUPPORTED_POC_LANGUAGES) == 9
+    py_res = validate_static_poc_harness(
+        "import pytest\n\ndef poc_sql_injection(client):\n    resp = handle_login(\"' OR 1=1--\")\n    assert resp.status_code == 400\n",
+        language="python",
+        target_symbols=["handle_login"],
+        claim_id=CLAIM,
+    )
+    assert py_res.ok
+    record = py_res.record()
+    agree(
+        "poc-compile-check",
+        record,
+        [
+            mutated(deepcopy(record), (("generated_code_execution",), "executed")),
+            mutated(deepcopy(record), (("runtime_verified",), True)),
+            mutated(deepcopy(record), (("language",), "cobol")),
+            mutated(deepcopy(record), (("extra",), 1)),
+        ],
+    )
+    with pytest.raises(PocExecutionBlockedByPolicyError, match=POC_EXECUTION_BLOCKED_CODE):
+        enforce_poc_non_execution(execute_poc=True)
+    with pytest.raises(PocExecutionBlockedByPolicyError, match=POC_EXECUTION_BLOCKED_CODE):
+        enforce_poc_non_execution(generated_code_execution="sandbox")

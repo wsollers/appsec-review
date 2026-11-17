@@ -25,6 +25,7 @@ from .inputs import (
 )
 from .model import emit_model_event, guidance, run_model
 from .patches import PatchError
+from .prioritization import build_priority_ranking_record
 
 JOB_ID = REMEDIATION_PLANNING_JOB
 TOPOLOGY = {"load": ("verify_inputs",), "assess": ("propose",), "acceptance": ("publish_handoff",)}
@@ -61,11 +62,13 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
         configured = settings(unit)
         review = load_review(unit.job.run_root, repo(unit), configured.bounds)
         candidates = confirmed_findings(review)
+        priority_ranking = build_priority_ranking_record(candidates, max_candidates=configured.bounds.max_candidates)
+        priority_ref = write_json(unit, "priority-ranking.json", priority_ranking)
         unit.job.events.write("REMEDIATION_PLANNING_INPUTS_VERIFIED", confirmed_count=len(candidates),
                               admitted_count=min(len(candidates), configured.bounds.max_candidates),
                               omitted_count=max(0, len(candidates) - configured.bounds.max_candidates),
                               supported_excluded_count=len(review["partition"]["supported"]))
-        return {"artifact": write_json(unit, "inputs.json", {"review": review, "candidates": candidates}),
+        return {"artifact": write_json(unit, "inputs.json", {"review": review, "candidates": candidates, "priority_ranking": priority_ref}),
                 "item_count": len(candidates), "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def assess(unit: UnitContext) -> Mapping[str, Any]:
@@ -174,6 +177,7 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
         reference = write_json(unit, "remediation-planning.json", summary)
         unit.job.events.write("REMEDIATION_PLANNING_PUBLISHED", item_count=len(rows), gap_count=len(gaps),
                               outcome_counts={status: sum(row["status"] == status for row in rows) for status in STATUSES},
+                              capped_count=sum(row["status"] == "capped" for row in rows),
                               output_bytes=(unit.job.run_root / reference["path"]).stat().st_size)
         return {"schema": REMEDIATION_PLANNING_HANDOFF_SCHEMA,
                 "artifact": reference, "item_count": len(rows),

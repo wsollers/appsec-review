@@ -217,11 +217,34 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["observation_id", "severity_record"],
+        "required": [
+          "observation_id",
+          "severity_record"
+        ],
         "properties": {
-          "observation_id": {"$ref": "common.schema.json#/$defs/entity_id"},
-          "severity_record": {"$ref": "common.schema.json#/$defs/lead_severity_record"}
+          "observation_id": {
+            "$ref": "common.schema.json#/$defs/entity_id"
+          },
+          "severity_record": {
+            "$ref": "common.schema.json#/$defs/lead_severity_record"
+          }
         }
+      }
+    },
+    "composed_severity": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical",
+        null
+      ]
+    },
+    "chain_boundary_crossings": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "chain-records.schema.json#/$defs/boundary_crossing"
       }
     }
   },

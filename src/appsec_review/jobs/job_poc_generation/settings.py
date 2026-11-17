@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from .statuses import JUDGE_VERDICTS
+from .poc_execution_gate import enforce_poc_non_execution
 
 _TOP = frozenset({"enabled", "workers", "max_candidates", "accepted_judge_verdicts", "models", "roles", "retry",
                   "bounds", "policy", "build", "brief"})
@@ -154,6 +155,8 @@ class PocGenerationSettings:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "PocGenerationSettings":
+        if isinstance(value, Mapping):
+            enforce_poc_non_execution(settings_mapping=value)
         top = _exact(value, _TOP, "")
         models: dict[str, ModelProfile] = {}
         if not isinstance(top["models"], Mapping) or not top["models"]:

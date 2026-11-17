@@ -6,8 +6,11 @@ Specify the violated and corrected invariants, compatibility and residual risks,
 prerequisites, affected interfaces, and a separate safe regression specification with synthetic
 fixtures, assertions, positive and negative cases, and before/after expectations.
 
-If accepted run-owned source supports a local correction, propose an inert exact-edit patch using
-UTF-8 byte offsets, original text and original hashes. A new file needs an explicit absence proof.
+If accepted run-owned source supports a local correction in the target language, propose a minimal
+dominating-guard or sink-hardening exact-edit patch using UTF-8 byte offsets, original text and
+original hashes while preserving surrounding functions and balanced syntax. Any numeric check cites
+a graph fact, guard fact, range fact, CodeQL result, or sanitizer observation. A new file needs an
+explicit absence proof.
 If the correction requires architecture or unavailable context, return manual_design_required or
 insufficient_evidence rather than an invented small patch. A PoC is not a passing regression test.
 The patch and the specification are data for independent validation, not an observed fix.
