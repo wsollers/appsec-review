@@ -244,6 +244,13 @@ until each is rewritten into the entry format when it is next touched.
 | T-5069 | [Correct the cpp smoke answer key: cjson 1.7.17 is affected and FX-C2 overlaps TP-C3](#t-5069-correct-the-cpp-smoke-answer-key-cjson-1717-is-affected-and-fx-c2-overlaps-tp-c3) | testing | open |
 | T-5070 | [Cover secret leads and the budget clock in unit tests](#t-5070-cover-secret-leads-and-the-budget-clock-in-unit-tests) | testing | open |
 | T-5071 | [Grow the cpp smoke corpus with vulnerabilities and look-alikes across the radar dimensions](#t-5071-grow-the-cpp-smoke-corpus-with-vulnerabilities-and-look-alikes-across-the-radar-dimensions) | testing | open |
+| T-5072 | [Retain provider stderr on cli_exit review-lane failures](#t-5072-retain-provider-stderr-on-cli-exit-review-lane-failures) | review | open |
+| T-5073 | [Bound OWASP part multiplication after request batching](#t-5073-bound-owasp-part-multiplication-after-request-batching) | review | open |
+| T-5074 | [Reject a renamed library per candidate, not per curation batch](#t-5074-reject-a-renamed-library-per-candidate-not-per-curation-batch) | native | open |
+| T-5075 | [Collapse duplicate native dependency candidates before curation](#t-5075-collapse-duplicate-native-dependency-candidates-before-curation) | native | open |
+| T-5076 | [Fix the failing benign-source counterevidence OWASP test](#t-5076-fix-the-failing-benign-source-counterevidence-owasp-test) | testing | open |
+| T-5077 | [Validate common-reference namespaces once, at retention time](#t-5077-validate-common-reference-namespaces-once-at-retention-time) | evidence | open |
+| T-5078 | [Resolve the misleading-output items of the run 0003 and 0004 audits](#t-5078-resolve-the-misleading-output-items-of-the-run-0003-and-0004-audits) | pipeline | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3405,6 +3412,69 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** corpus v1.1.0: two plants and two look-alikes per axis with key metadata (axis, CWE, primary site, exploitability); authorship of deliberately vulnerable code is the owner's decision (the model safeguards declined to write it), the key stays unreadable to jobs.
 - **Done when:** the scorecard radar shows every axis with at least two plants and two controls.
 - **Refs:** review host `~/smoke-work/cpp/`, `scripts/smoke-score.py`, `src/appsec_review/reporting/dimensions.py`.
+
+### T-5072 — Retain provider stderr on cli_exit review-lane failures
+
+- **State:** open
+- **Area:** review
+- **Why:** runs 2026-11-17-0003 and 0004: review-lane cells failed with provider `cli_exit` receipts carrying no stderr, so the cause (an expired Claude OAuth token on the host) was recoverable only from the host shell, not from the run evidence.
+- **Scope:** the model-call receipt for a non-zero CLI exit retains the bounded, redacted stderr tail and exit code; the lane gap names them; a focused unit test fakes the CLI boundary only.
+- **Done when:** a `cli_exit` receipt in a run explains the exit without host access, and the unit test asserts the retained tail.
+- **Refs:** `src/appsec_review/review/cells.py`, provider adapters under `src/appsec_review/models/`, `docs/walks/run-2026-11-17-0004-output-audit.md` (host-local).
+
+### T-5073 — Bound OWASP part multiplication after request batching
+
+- **State:** open
+- **Area:** review
+- **Why:** run 2026-11-17-0004: the batching introduced in d2feb2f2 splits oversized component requests down to single-row parts, multiplying model calls three to six times for the larger components because the shared component context is repeated in every part.
+- **Scope:** trim the shared component context before splitting (per-package evidence bound, drop repeated card text), and cap parts per component with a named gap when the cap is hit.
+- **Done when:** the largest smoke component needs at most two parts and the per-component call count is asserted in `tests/unit/job_owasp_control_assessment/test_request_batching.py`.
+- **Refs:** `src/appsec_review/owasp_workbench/batching.py`, `assessment.py`, `config/owasp.py`.
+
+### T-5074 — Reject a renamed library per candidate, not per curation batch
+
+- **State:** open
+- **Area:** native
+- **Why:** run 2026-11-17-0004 offline replay: 56 of 80 curation candidates validate after 34cb847f; the remaining 24 are two batches the validator rejects whole because the model renamed one library in each.
+- **Scope:** validate curation output per library: keep the candidates whose names and paths resolve, record the renamed one as a named gap, never drop the batch.
+- **Done when:** the replay fixture `tests/fixtures/dependency_intelligence/run-2026-11-17-0004-curation-batch.json` validates every resolvable candidate and names the renamed one.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/curation.py`, `tests/unit/job_dependency_intelligence/test_native_component_curation.py`.
+
+### T-5075 — Collapse duplicate native dependency candidates before curation
+
+- **State:** open
+- **Area:** native
+- **Why:** run 2026-11-17-0004 audit (D-dependency_intelligence-2/-3): 80 candidates for 15 distinct library names, and the target's own `smoke-*` link names are presented as separate third-party components.
+- **Scope:** merge candidates by resolved library identity before curation and exclude link names that resolve to first-party build products of the target.
+- **Done when:** the smoke run shows one candidate per distinct library and no first-party link name among the components; a unit test covers both.
+- **Refs:** `src/appsec_review/jobs/job_dependency_intelligence/`, `docs/walks/run-2026-11-17-0004-output-audit.md` (host-local).
+
+### T-5076 — Fix the failing benign-source counterevidence OWASP test
+
+- **State:** open
+- **Area:** testing
+- **Why:** `tests/test_owasp_assessment_job.py::test_benign_source_is_scoped_counterevidence_not_component_safety` fails on origin/main (asserts an empty list) since the T-5056 first-party scoping family landed; it is carried as a baseline failure in every integration.
+- **Scope:** determine whether the scoped-counterevidence behaviour or the assertion is stale, fix the one that is wrong.
+- **Done when:** the test passes on main without weakening the counterevidence rule.
+- **Refs:** `tests/test_owasp_assessment_job.py`, `src/appsec_review/owasp_workbench/evidence.py`, T-5056.
+
+### T-5077 — Validate common-reference namespaces once, at retention time
+
+- **State:** open
+- **Area:** evidence
+- **Why:** run 2026-11-17-0004 ran for 118 minutes before both review lanes failed on a clang observation whose execution reference lay outside the retrieval allowlist (fixed by admitting it in 361bb147); the allowlist lives only in `RetrievalCore._safe_common` and is enforced only when a lane first reads the row.
+- **Scope:** move the per-field namespace allowlist into `appsec_review.interchange` next to the reference records, have `retain_native_output` refuse an out-of-namespace reference when the producer writes it, and keep the retrieval check as defence in depth calling the same table.
+- **Done when:** a producer writing a stray execution reference fails its own job with a named gap; the retrieval and retention checks share one definition and one test.
+- **Refs:** `src/appsec_review/retrieval/core.py`, `src/appsec_review/interchange.py`, `tests/test_retrieval_core.py`.
+
+### T-5078 — Resolve the misleading-output items of the run 0003 and 0004 audits
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** the output audits behind runs 2026-11-17-0003 and 0004 list 23 misleading and 6 blocking items (wording that overstates coverage, gaps reported as results, counts that do not match evidence) beyond the defects already fixed.
+- **Scope:** triage each item into fix, document or close with reason; fix the ones that misstate coverage or evidence first.
+- **Done when:** every item in both audit files carries a disposition and the fixed ones have a regression test.
+- **Refs:** `docs/walks/run-2026-11-17-0003-output-audit.md`, `docs/walks/run-2026-11-17-0004-output-audit.md` (host-local on HAL5000).
 
 ## Legacy backlog
 
