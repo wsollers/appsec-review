@@ -379,3 +379,17 @@ def test_derived_continuity_is_a_closed_vocabulary(values):
     assert AttackChainSettings.from_mapping({"derived_continuity": []}).derived_continuity == ()
     assert AttackChainSettings.from_mapping(
         {"derived_continuity": ["same_native_executable"]}).derived_continuity == ("same_native_executable",)
+
+
+def test_a_succeeded_independent_challenge_with_caveats_qualifies_instead_of_failing_the_chain(tmp_path):
+    """Run 2026-11-16-0007: refuter and weakest-link verifier both succeeded independently on derived continuity but
+    each recorded a caveat as a gap, which decided insufficient_evidence; a caveat limits a supported chain."""
+    from dataclasses import replace as _replace
+    item = proposal(accepted_core(tmp_path))
+    caveated = _replace(challenge(item), gaps=("prerequisites outside the five dimensions are not re-resolved",))
+    status, limitations = chain.decide(item, [caveated])
+    assert status is ChainStatus.QUALIFIED_SUPPORTED
+    assert "refuter:prerequisites outside the five dimensions are not re-resolved" in limitations
+    # A failed challenge is still insufficient evidence, caveat or not.
+    failed = _replace(challenge(item, status="failed"), gaps=("x",))
+    assert chain.decide(item, [failed])[0] is ChainStatus.INSUFFICIENT_EVIDENCE

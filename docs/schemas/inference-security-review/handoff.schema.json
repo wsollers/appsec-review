@@ -32,7 +32,9 @@
     "schema": {
       "const": "appsec-review/inference-review-handoff/3"
     },
-    "attack_chain_manifest": {"$ref": "chain-records.schema.json#/$defs/artifact"},
+    "attack_chain_manifest": {
+      "$ref": "chain-records.schema.json#/$defs/artifact"
+    },
     "run_id": {
       "$ref": "common.schema.json#/$defs/short_text"
     },
@@ -601,27 +603,78 @@
     },
     "lead_severity_triage": {
       "oneOf": [
-        {"type": "null"},
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "rule_table_version", "unknown_leads", "rule_table", "cwe_catalog", "model_triage", "unresolved", "model_calls", "artifact"],
+          "required": [
+            "enabled",
+            "rule_table_version",
+            "unknown_leads",
+            "rule_table",
+            "cwe_catalog",
+            "model_triage",
+            "unresolved",
+            "model_calls",
+            "artifact"
+          ],
           "properties": {
-            "enabled": {"const": true},
-            "rule_table_version": {"const": "lead-severity-rules/1"},
-            "unknown_leads": {"type": "integer", "minimum": 0},
-            "rule_table": {"type": "integer", "minimum": 0},
-            "cwe_catalog": {"type": "integer", "minimum": 0},
-            "model_triage": {"type": "integer", "minimum": 0},
-            "unresolved": {"type": "integer", "minimum": 0},
-            "model_calls": {"type": "integer", "minimum": 0},
+            "enabled": {
+              "const": true
+            },
+            "rule_table_version": {
+              "const": "lead-severity-rules/1"
+            },
+            "unknown_leads": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "assessed_leads": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reported_known_assessed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rule_table": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cwe_catalog": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "model_triage": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unresolved": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "model_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
             "artifact": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["path", "sha256"],
+              "required": [
+                "path",
+                "sha256"
+              ],
               "properties": {
-                "path": {"type": "string", "minLength": 1, "maxLength": 512},
-                "sha256": {"$ref": "common.schema.json#/$defs/sha256"}
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "sha256": {
+                  "$ref": "common.schema.json#/$defs/sha256"
+                }
               }
             }
           }

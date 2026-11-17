@@ -362,6 +362,7 @@ def decide(proposal: Proposal, challenges: Sequence[Challenge]) -> tuple[ChainSt
         return ChainStatus.REFUTED, tuple(sorted(set(defeated)))
     required = ("refuter", "weakest_link_verifier") if proposal.requires_extra_verifier else ("refuter",)
     failures: list[str] = []
+    caveats: list[str] = []
     for kind in required:
         challenge = by_kind.get(kind)
         others = [proposal.composer]
@@ -375,11 +376,16 @@ def decide(proposal: Proposal, challenges: Sequence[Challenge]) -> tuple[ChainSt
                 challenge.actor, others, distinct_model=kind == "weakest_link_verifier"):
             failures.append(f"{kind}:independence_not_established")
         elif challenge.gaps:
-            failures.extend(f"{kind}:{gap}" for gap in challenge.gaps)
+            # Run 2026-11-16-0007: both challengers succeeded independently and their gaps were their own caveats
+            # ("prerequisites outside the five dimensions", "no deployment facts"); such statements qualify the
+            # chain, they do not make the challenge missing. Continuity itself is decided by the obligations below,
+            # never by the challenger's prose, so a caveat can only lower the outcome to qualified_supported.
+            caveats.extend(f"{kind}:{gap}" for gap in challenge.gaps)
     if failures:
         return ChainStatus.INSUFFICIENT_EVIDENCE, tuple(sorted(set(failures)))
     limitations = [f"component:{item.claim_id}:supported:{','.join(item.missing_predicates)}"
                    for item in proposal.components if item.state is ClaimState.SUPPORTED]
+    limitations.extend(caveats)
     meaningful = False
     for index, edge in enumerate(proposal.edges):
         for item in edge.obligations:

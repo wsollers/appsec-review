@@ -399,6 +399,13 @@ def test_deterministic_steps_assess_every_lead_and_the_model_sees_only_the_still
     assert lead_triage.display_severity({"reported_severity": "medium", "severity_record": record}) == (
         "medium (reported; assessed high by cwe_catalog)")
     summary = lead_triage.handoff_summary(outcome.document, None)
+    # Run 2026-11-16-0007 failed publication: the handoff schema refused the assessed_leads and
+    # reported_known_assessed counters the summary carries. Every key of the summary is a property of the
+    # schema's triage object and every required counter is present.
+    branch = SchemaSet(Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-security-review").documents["handoff.schema.json"]["properties"]["lead_severity_triage"]["oneOf"][1]
+    assert branch["additionalProperties"] is False
+    assert set(summary) <= set(branch["properties"]), sorted(set(summary) - set(branch["properties"]))
+    assert set(branch["required"]) - {"artifact"} <= set(summary)
     assert (summary["assessed_leads"], summary["reported_known_assessed"], summary["unknown_leads"]) == (3, 2, 1)
 
 
