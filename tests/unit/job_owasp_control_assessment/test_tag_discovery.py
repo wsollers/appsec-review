@@ -75,7 +75,9 @@ def test_target_class_is_read_behind_a_graph_shard_larger_than_the_context_scan(
     assert result["gaps"] == [] and component["gaps"] == [] and component["tag_scan_complete"] is True
     assert any("routing index scan cap reached" in item for item in result["limitations"])
     assert component["source_support"]["supported_files"] == 1 and component["source_support"]["unsupported_files"] == 0
-    assert set(component["source_support"]) == {"supported_files", "unsupported_files", "evidence_count", "recognisers"}
+    assert set(component["source_support"]) == {"supported_files", "unsupported_files", "evidence_count", "recognisers",
+                                                "languages"}
+    assert component["source_support"]["languages"] == ["python"]
     [classification] = classify_components(result["components"], assessment_mode="assessment")
     assert classification["target_classes"] == ["target:cli"] and classification["confidence"] == "high"
     assert classification["facets"] == ["mechanism:cli"] and classification["gaps"] == []

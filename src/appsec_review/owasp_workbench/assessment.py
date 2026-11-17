@@ -25,7 +25,7 @@ from .standards import digest
 
 TURN_SCHEMA = "appsec-review/owasp-assessment-turn/1"
 OUTCOMES = {"satisfied", "not_satisfied", "cannot_verify"}
-RESULT_RULE = "owasp-assessment-acceptance/3"
+RESULT_RULE = "owasp-assessment-acceptance/4"
 
 
 def _clean(value: Any) -> Any:
@@ -194,6 +194,9 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
     attempts: list[dict[str, Any]] = []
     allowed = {item["reference"]["source_identity"]: package["component"]["component_id"]
                for package in packages for item in package["evidence_references"]}
+    for package in packages:
+        for identity in package.get("expansion_identities", ()):
+            allowed.setdefault(identity, package["component"]["component_id"])
     queries = 0
     terminal = "turn_limit"
     policy = RetryPolicy(int(profile["retries"]) + 1, True, True, True)
@@ -454,8 +457,9 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
                 })
         status = ("not_satisfied" if "not_satisfied" in states else "satisfied"
                   if states and all(item == "satisfied" for item in states) else "cannot_verify")
+        supported_items = [item for item in assessed if item["obligation"].get("supported")]
         verification = ("dissent" if disagreements else "independently_assessed"
-                        if assessed and all(item["disposition"] == "independently_assessed" for item in assessed)
+                        if supported_items and all(item["disposition"] == "independently_assessed" for item in supported_items)
                         else "pending" if row_reviewer["proposal"] is None else "unresolved")
         if status == "cannot_verify":
             gaps.append("material obligations remain unresolved; no safe/unsafe conclusion")

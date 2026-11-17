@@ -20,6 +20,43 @@ SUPPORTED_FAMILIES = {
     "OWASP_TOP_10": "routing_context",
 }
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+# T-5013: the upstream ASVS 5.0 JSON and the MASVS Markdown carry no component-role metadata, so the
+# normalizer stores ``component_roles: []`` and the pinned records cannot gain roles without a
+# re-acquisition. Roles are routing, not proof, so ``control_records`` derives them per ASVS chapter
+# from the ``engine.COMPONENT_ROLES`` vocabulary and records the basis. ``network`` is on every chapter
+# a non-HTTP listener is admitted to (V1, V2, V5, V7, V16) and on the transport chapters.
+ROLE_MAP_RULE = "asvs-chapter-roles/1"
+ASVS_CHAPTER_ROLES: Mapping[str, tuple[str, ...]] = {
+    "V1": ("application_api_server", "web_frontend", "network"),
+    "V2": ("application_api_server", "web_frontend", "network"),
+    "V3": ("web_frontend", "application_api_server"),
+    "V4": ("application_api_server",),
+    "V5": ("application_api_server", "storage", "network"),
+    "V6": ("authentication_identity", "application_api_server"),
+    "V7": ("authentication_identity", "application_api_server", "network"),
+    "V8": ("authentication_identity", "application_api_server"),
+    "V9": ("authentication_identity", "cryptography_data_protection"),
+    "V10": ("authentication_identity",),
+    "V11": ("cryptography_data_protection",),
+    "V12": ("network", "application_api_server"),
+    "V13": ("deployment_operations", "application_api_server"),
+    "V14": ("cryptography_data_protection", "storage", "application_api_server"),
+    "V15": ("application_api_server", "build_supply_chain"),
+    "V16": ("application_api_server", "network", "deployment_operations"),
+    "V17": ("network", "application_api_server"),
+}
+MASVS_ROLES: tuple[str, ...] = ("android_mobile", "ios_mobile")
+
+
+def derived_roles(family: str, control_id: str) -> tuple[list[str], str]:
+    """``(component_roles, basis)`` for a record whose catalog names no roles."""
+    if family == "ASVS":
+        chapter = str(control_id).split(".", 1)[0]
+        roles = ASVS_CHAPTER_ROLES.get(chapter)
+        return (list(roles), f"derived:{ROLE_MAP_RULE}") if roles else ([], "none")
+    if family == "MASVS":
+        return list(MASVS_ROLES), "derived:masvs-roles/1"
+    return [], "none"
 
 
 def digest(value: Any) -> str:
@@ -190,6 +227,12 @@ def control_records(catalogs: Mapping[str, StandardCatalog], *, asvs_level: int,
             record.update({"family": family, "version": catalog.version,
                            "control_identity": catalog.identity(str(raw["id"])),
                            "catalog_sha256": catalog.catalog_sha256, "fixture": catalog.fixture})
+            roles = [str(item) for item in raw.get("component_roles") or ()]
+            basis = "catalog"
+            if not roles:
+                roles, basis = derived_roles(family, str(raw["id"]))
+            record["component_roles"] = roles
+            record["component_roles_basis"] = basis
             if family == "MASVS":
                 record["supporting_tests"] = sorted(
                     catalogs["MASTG"].identity(str(test["id"]))

@@ -13,7 +13,9 @@ from appsec_review.retrieval.source_resolution import read_source_bytes
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.secret_redaction import REDACTION_RULE, placeholder
 from .standards import digest
-from .subject_selection import SELECTION_RULE, SourceSubject, parse_subjects, select_subjects
+from .subject_selection import (
+    LANGUAGE_LABELS, SELECTION_RULE, SourceSubject, parse_gaps, parse_subjects, select_subjects, subject_language,
+)
 
 
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT
@@ -44,7 +46,7 @@ _AUTHORITATIVE_INDEX = {
     "build_action": "build", "tool_observation": "observations", "tag_assignment": "tags",
     "priority_item": "priority",
 }
-EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/3"
+EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/4"
 
 
 def redact(text: str) -> tuple[str, bool]:
@@ -252,9 +254,9 @@ class EvidenceResolver:
             raise ValueError("accepted source span is outside verified content")
         return data
 
-    def _subjects(self, data: bytes, sha: str) -> tuple[SourceSubject, ...]:
+    def _subjects(self, data: bytes, sha: str, language: str) -> tuple[SourceSubject, ...]:
         if sha not in self._subject_cache:
-            self._subject_cache[sha] = parse_subjects(data.decode("utf-8"))
+            self._subject_cache[sha] = parse_subjects(data.decode("utf-8"), language=language)
         return self._subject_cache[sha]
 
     def materialize(self, identity: str, *, component_id: str,
@@ -294,9 +296,10 @@ class EvidenceResolver:
                 expected["lines"] = span
                 start, end = span
             raw = "\n".join(lines[start - 1:end])
-            if location["path"].endswith(".py") and entity["kind"] in _SOURCE_KINDS:
+            language = subject_language(location["path"])
+            if language is not None and entity["kind"] in _SOURCE_KINDS:
                 try:
-                    complete = [item for item in self._subjects(data, location["file_sha256"])
+                    complete = [item for item in self._subjects(data, location["file_sha256"], language)
                                 if (item.first, item.last) == (start, end)]
                 except (SyntaxError, ValueError, RecursionError):
                     complete = []
@@ -384,9 +387,8 @@ class EvidenceResolver:
 
 
 def supported_source(source: Any) -> bool:
-    """The subject recognisers read Python only (T-5011/T-5013); every other language is a named gap."""
-    return source.path.endswith(".py") and (
-        not source.language or source.language.lower() in {"python", "python3"})
+    """A recogniser reads Python and C/C++ sources (T-5013); every other language is a named gap."""
+    return subject_language(source.path, source.language) is not None
 
 
 def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any,
@@ -424,8 +426,11 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
                             "source evidence is selected through the bounded source inventory")
             else:
                 extras.append(row["identity"])
+    # Supported first-party sources precede vendored trees, then indexed files, so the evidence cap is spent on
+    # the target's own code before third_party/ (run 2026-11-16-0005 spent it on cJSON and bzip2 otherwise).
     ordered = sorted({(source.path, source.identity): source for source in files}.values(),
-                     key=lambda source: (not supported(source), source.path not in hints, source.path, source.identity))
+                     key=lambda source: (not supported(source), getattr(source, "disposition", "first_party") != "first_party",
+                                         source.path not in hints, source.path, source.identity))
     omitted_files = max(0, len(ordered) - settings.max_discovery_files)
     if omitted_files:
         gaps.append(f"max_discovery_files reached; {omitted_files} accepted files omitted (subject count unknown)")
@@ -456,19 +461,22 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
             gaps.append(f"{source.path}: max_discovery_bytes reached; 1 file omitted (subject count unknown)")
             continue
         remaining -= len(data)
+        language = subject_language(source.path, source.language)
         try:
             text = data.decode("utf-8")
-            parsed = resolver._subjects(data, location["file_sha256"])
+            parsed = resolver._subjects(data, location["file_sha256"], language)
         except (UnicodeError, SyntaxError, ValueError, RecursionError):
-            gaps.append(f"{source.path}: accepted Python source parse failure; 1 file omitted (subject count unknown)")
+            gaps.append(f"{source.path}: accepted {LANGUAGE_LABELS[language]} source parse failure; "
+                        "1 file omitted (subject count unknown)")
             continue
+        gaps.extend(f"{source.path}: {gap}" for gap in parse_gaps(text, language=language))
         verified_hints = [hint for hint in hints.get(source.path, ())
                           if hint["file_sha256"] == location["file_sha256"]
                           and hint["end_line"] <= len(text.splitlines())]
         if len(verified_hints) != len(hints.get(source.path, ())):
             raise ValueError("accepted subject index location disagrees with original source")
         selected, omitted = select_subjects(parsed, text, max_lines=settings.max_source_lines,
-                                           hints=verified_hints)
+                                           hints=verified_hints, language=language)
         gaps.extend(f"{source.path}: {gap}" for gap in omitted)
         for subject in selected:
             if len(evidence) >= settings.max_evidence_per_component:
@@ -610,8 +618,10 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         # D2: a component whose accepted sources no recogniser reads has no subjects to assess; the
         # applicability rows name that cause instead of an unresolved class (T-5011/T-5013).
         supported_files = sum(1 for source in files if supported_source(source))
+        languages = sorted({subject_language(source.path, source.language) for source in files} - {None})
         source_support = {"supported_files": supported_files, "unsupported_files": len(files) - supported_files,
-                          "evidence_count": len(selected), "recognisers": "python-only (T-5011/T-5013)"}
+                          "evidence_count": len(selected), "languages": languages,
+                          "recognisers": "python, c-cpp (T-5013)"}
         tag_subjects: dict[str, set[str]] = {}
         for item in routing:
             if isinstance(item["tag"], str):

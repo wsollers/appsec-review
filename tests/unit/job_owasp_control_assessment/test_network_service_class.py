@@ -45,8 +45,8 @@ NETWORK_SERVICE = [routing("lang:cpp", "declared"), routing("mechanism:cli", "de
                    routing("mechanism:networked-listener", "declared"), routing("trust:user-tainted"),
                    routing("exposure:client-facing"), routing("role:session"), routing("state:session"),
                    routing("target:cli"), routing("target:network-service")]
-NO_SUPPORTED_SOURCE = {"supported_files": 0, "unsupported_files": 134, "evidence_count": 0,
-                       "recognisers": "python-only (T-5011/T-5013)"}
+NO_SUPPORTED_SOURCE = {"supported_files": 0, "unsupported_files": 134, "evidence_count": 0, "languages": [],
+                       "recognisers": "python, c-cpp (T-5013)"}
 
 
 def component(component_id: str, records: list[dict], **extra) -> dict:

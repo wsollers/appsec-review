@@ -469,9 +469,21 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             ("native/src/parse.c", "component:0002", "declared", "component:android-mobile"),
             (None, "component:0002", "derived", "target:mobile"),
         ]
+        # facets="native-network-service": the C/C++ component is the raw-socket listener (T-5013), as the
+        # smoke-cpp request server of run 2026-11-16-0005; the svc handler stays an HTTP route.
+        native_network = [
+            ("native/src/parse.c", "component:0002", "declared", "mechanism:cli"),
+            ("native/src/parse.c", "component:0002", "declared", "mechanism:networked-listener"),
+            ("native/src/parse.c", "component:0002", "declared", "role:session"),
+            ("native/src/parse.c", "component:0002", "derived", "trust:user-tainted"),
+            ("native/src/parse.c", "component:0002", "derived", "exposure:client-facing"),
+            (None, "component:0002", "derived", "target:cli"),
+            (None, "component:0002", "derived", "target:network-service"),
+        ]
         facet_specs = [
             *(svc_cli if facets == "cli" else svc_network if facets == "network-service" else svc_web),
-            *(native_android if facets == "android" else native_cli),
+            *(native_android if facets == "android" else native_network if facets == "native-network-service"
+              else native_cli),
         ]
         for number, (path, component_id, basis, tag) in enumerate(facet_specs):
             assignment_id = "tag:" + hashlib.sha256(f"facet-{number}-{tag}".encode()).hexdigest()
