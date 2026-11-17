@@ -63,7 +63,7 @@
         },
         "target_classes": {
           "type": "array", "uniqueItems": true,
-          "items": {"enum": ["target:web-api", "target:mobile", "target:cli", "target:library", "target:build-tooling", "target:test-only"]}
+          "items": {"enum": ["target:web-api", "target:mobile", "target:cli", "target:network-service", "target:library", "target:build-tooling", "target:test-only"]}
         },
         "obligations": {
           "description": "hunt-facet-obligations/1: the closed hunt obligations the unit's facets derive, each naming the facet tags it rests on. Bounded questions for the hunt, never findings.",

@@ -261,3 +261,29 @@ def test_cell_request_for_a_hunt_package_is_smaller_and_still_validates(views, t
     assert smaller < larger
     assert larger - smaller >= 0.5 * len(canonical_json(inline.files.get(UNIT_CONTEXT_FILE, ()) or
                                                          [*inline.document["tags"], *inline.document["other_context"]]))
+
+
+def test_unit_context_schema_admits_every_target_class_of_the_tagging_vocabulary() -> None:
+    """Run 2026-11-17-0003: both assembly lanes failed on `target:network-service`, a class the vocabulary defines
+    and security tagging assigned, because the schema enum listed six of the seven classes."""
+    import json
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    vocabulary = json.loads((repo / "data" / "reference" / "taxonomy" / "vocabulary.json").read_text(encoding="utf-8"))
+    schema = json.loads((repo / "docs" / "schemas" / "review-package-unit-context.schema.json").read_text(encoding="utf-8"))
+
+    def target_lists(node):
+        if isinstance(node, list) and node and all(isinstance(item, str) and item.startswith("target:") for item in node):
+            yield node
+        elif isinstance(node, dict):
+            for value in node.values():
+                yield from target_lists(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from target_lists(value)
+
+    classes = {item for group in target_lists(vocabulary) for item in group}
+    assert "target:network-service" in classes
+    enum = set(schema["properties"]["facets"]["properties"]["target_classes"]["items"]["enum"])
+    assert enum == classes, sorted(enum ^ classes)
