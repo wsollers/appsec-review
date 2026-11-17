@@ -129,9 +129,11 @@ def _core(unit: UnitContext) -> tuple[RetrievalCore, Path]:
 
 def _resolver(unit: UnitContext) -> EvidenceResolver:
     core, path = _core(unit)
+    typed = parse_settings(unit.job.config.settings)
     return EvidenceResolver(core, accept_manifest(unit.job.run_root, manifest_path=path,
-                                                  manifest_sha256=core.manifest_sha256),
-                            max_source_lines=parse_settings(unit.job.config.settings).max_source_lines)
+                                                  manifest_sha256=core.manifest_sha256,
+                                                  dispositions=typed.source_dispositions),
+                            max_source_lines=typed.max_source_lines)
 
 
 def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Job:

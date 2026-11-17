@@ -110,7 +110,12 @@ class ScriptedAssessment:
         self.calls.append(request)
         if self.error is not None:
             raise self.error
-        packages = request.task_input["packages"]
+        # The assembled request carries each evidence record once (owasp_workbench/batching.py); rows cite
+        # it by evidence_ids. The double re-joins them without mutating the request.
+        shared = request.task_input["evidence"]
+        packages = [{**package, "evidence_references": [shared[identity] for identity in package["evidence_ids"]]}
+                    for package in request.task_input["packages"]]
+        assert all("evidence_references" not in package for package in request.task_input["packages"])
         if self.retrieve and not request.transcript:
             reference = packages[0]["evidence_references"][0]["reference"]
             return ModelResult({"schema": TURN_SCHEMA, "action": "retrieve", "requests": [{
@@ -125,8 +130,19 @@ class ScriptedAssessment:
             for obligation in package["proof_obligations"]:
                 if not obligation.get("supported"):
                     continue
-                evidence = next(item for item in package["evidence_references"]
-                                if obligation["subject_id"] in subjects(rule, item))
+                evidence = next((item for item in package["evidence_references"]
+                                 if "excerpt" in item and obligation["subject_id"] in subjects(rule, item)), None)
+                if evidence is None:
+                    # The subject's record is outside this request (package evidence bound or budget trim);
+                    # an honest bounded worker does not cite unrelated evidence for it.
+                    obligations.append({
+                        "obligation_id": obligation["obligation_id"], "subject_id": obligation["subject_id"],
+                        "outcome": "cannot_verify", "rationale": "The named subject's source is not in the request.",
+                        "supporting": [], "contradictory": [], "assumptions": [],
+                        "evidence_requests": ["Resolve the named subject's source by identity"],
+                        "hypotheses": [], "limitations": ["Static subject only; no exploitation claim."],
+                    })
+                    continue
                 reference = deepcopy(evidence["reference"])
                 if self.corrupt:
                     self.corrupt(reference, package, request)
