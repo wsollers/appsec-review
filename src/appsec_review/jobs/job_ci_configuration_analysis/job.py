@@ -24,7 +24,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.tool_inputs import not_applicable_summary, partition_paths
 
 from .discovery import PROVIDERS, discover
-from .static_rules import RULESET_IDENTITY, hierarchy, scan_text
+from .static_rules import RULESET_IDENTITY, classify_ci_lead_promotion, hierarchy, scan_text
 from appsec_review.jobs.job_ci_configuration_analysis.datasets import CONTRACT, DATASETS
 
 
@@ -470,6 +470,7 @@ def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
         value["start_column"] = max(1, int(value["start_column"] or 1))
         value["end_column"] = max(1, int(value["end_column"] or value["start_column"]))
         value["observation_id"] = "cio:" + hashlib.sha256(canonical_json(value)).hexdigest()
+        value.update(classify_ci_lead_promotion(record))
         records.append(value)
     unique = {record["observation_id"]: record for record in records}
     document = {"schema": "appsec-review/ci-normalized-observations/1", "provider": raw["provider"],
@@ -596,12 +597,23 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
     findings = []
     for key, observations in sorted(grouped.items(), key=lambda item: repr(item[0])):
         finding_id = "cif:" + hashlib.sha256(canonical_json(key)).hexdigest()
+        promotions = [classify_ci_lead_promotion(item) for item in observations]
+        lead_promotions = [p for p in promotions if p["lead_candidate"]]
+        sev_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        chosen_promo = (
+            max(lead_promotions, key=lambda p: sev_rank.get(str(p["severity_hint"]), 0))
+            if lead_promotions else promotions[0]
+        )
         finding = {
             "finding_id": finding_id, "provider": key[0], "path": key[1], "start_line": key[2],
             "end_line": key[3], "start_column": key[4], "end_column": key[5], "category": key[6],
             "message": key[7], "observation_ids": sorted(item["observation_id"] for item in observations),
             "tools": sorted({item["tool_id"] for item in observations}),
+            "native_rule_ids": sorted({str(item.get("native_rule_id") or "") for item in observations if item.get("native_rule_id")}),
             "exact_duplicate_count": len(observations),
+            "lead_candidate": chosen_promo["lead_candidate"],
+            "attack_class": chosen_promo["attack_class"],
+            "severity_hint": chosen_promo["severity_hint"],
         }
         if observations[0].get("ambiguous"):
             finding.update({field: observations[0][field]
@@ -761,7 +773,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                     "index_manifest": _artifact(unit.job.run_root, combined),
                     "finding_count": correlation["finding_count"], "gaps": _reasons(coverage["gap_records"]),
                     "gap_count": len(coverage["gap_records"]),
-                    "coverage_status": coverage["coverage_status"], "security_findings": []}
+                    "coverage_status": coverage["coverage_status"],
+                    "security_findings": [f for f in correlation["findings"] if f.get("lead_candidate")]}
         artifact = _write(unit, "handoff.json", document)
         unit.job.events.write("CI_ANALYSIS_PUBLISHED", unit_id=unit.unit_id, finding_count=correlation["finding_count"],
                               coverage_status=coverage["coverage_status"], gap_count=len(coverage["gap_records"]),

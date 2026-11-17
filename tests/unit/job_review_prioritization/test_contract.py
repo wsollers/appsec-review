@@ -302,6 +302,7 @@ def test_contract_datasets_and_registry_parity() -> None:
     assert {item.output_kind for item in DATASETS} == {
         "priority_items",
         "prioritization_documents",
+        "prioritization_signals",
     }
     assert tuple(u.unit_id for u in built.units) == (
         "load.accepted_inputs",

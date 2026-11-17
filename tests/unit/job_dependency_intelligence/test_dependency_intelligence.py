@@ -316,7 +316,7 @@ def test_guidance_and_job_public_api_are_registered() -> None:
         "native_discovery", "native_spdx", "native_sbom_provenance", "native_sbom_metrics",
         "native_component_curation", "native_metadata_investigation", "native_inference_metrics",
         "native_inputs", "unity_inventory", "native_inference_inputs", "native_inference_io",
-        "native_sbom_conversion", "native_advisory_observations", "native_advisory_lookup",
+        "native_sbom_conversion", "native_advisory_observations", "native_advisory_lookup", "sca_reachability",
     }
 
 

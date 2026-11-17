@@ -27,7 +27,7 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     semgrep_rule_languages,
     semgrep_unscanned_inputs,
 )
-from appsec_review.jobs.job_evidence_collection.evidence import NORMALIZER_IDENTITY, build_envelope
+from appsec_review.jobs.job_evidence_collection.evidence import NORMALIZER_IDENTITY, build_envelope, corroborate_sast_records
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -1191,6 +1191,7 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
                              {"job": "job_evidence_collection", "producer": producer},
                              tuple(dict.fromkeys(output.get("gaps", ()))), shard_id)
     value = {"artifact": _artifact(unit.job.run_root, index_path),
+             "evidence_artifact": output["normalized_artifact"],
              "index_identity": __import__("dataclasses").asdict(identity), "index_reused": False,
              "tool_id": producer, "terminal_status": output["terminal_status"],
              "checkpoint_reused": output.get("checkpoint_reused", False),
@@ -1238,10 +1239,12 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
     dispositions: list[dict[str, Any]] = []
     shards: list[IndexIdentity] = []
     not_applicable: list[Mapping[str, Any]] = []
+    sast_envelopes: dict[str, Mapping[str, Any]] = {}
     for unit_id in index_units:
         output = unit.output(unit_id)
+        tool_id = str(output["tool_id"])
         skipped = output.get("not_applicable_inputs") or not_applicable_summary(())
-        dispositions.append({"tool_id": output["tool_id"], "terminal_status": output["terminal_status"],
+        dispositions.append({"tool_id": tool_id, "terminal_status": output["terminal_status"],
                              "checkpoint_reused": output["checkpoint_reused"], "record_count": output["record_count"],
                              "index_reused": output.get("index_reused", False),
                              "shard_id": output["index_identity"]["shard_id"],
@@ -1251,6 +1254,21 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
         gaps.extend(str(item) for item in output.get("gaps", []))
         shards.append(IndexIdentity(**{**output["index_identity"],
                                        "gaps": tuple(output["index_identity"].get("gaps", ()))}))
+        ev_ref = output.get("evidence_artifact")
+        if tool_id in SOURCE_ANALYZERS and isinstance(ev_ref, Mapping) and ev_ref.get("path"):
+            ev_path = unit.job.run_root / str(ev_ref["path"])
+            if ev_path.is_file():
+                sast_envelopes[tool_id] = _read_artifact(unit.job.run_root, ev_ref)
+    max_per_scope = int(unit.job.config.settings.get("max_findings_per_scope", 5_000))
+    corroborated = corroborate_sast_records(
+        sast_envelopes, target_fingerprint=unit.job.source_fingerprint, max_findings_per_scope=max_per_scope
+    )
+    corroborated_path = unit.unit_root / "corroborated-sast-evidence.json"
+    corroborated_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_json(corroborated_path, corroborated)
+    corroborated_artifact = _artifact(unit.job.run_root, corroborated_path)
+    telemetry = dict(corroborated["telemetry"])
+    unit.job.events.write("SAST_CORROBORATION_COMPLETED", unit_id=unit.unit_id, **telemetry)
     unsupported = unsupported_source_coverage(load_target_catalog(unit.job.run_root))
     if unsupported["count"]:
         # No declared source analyzer supports these files: a named coverage gap, never clean.
@@ -1266,6 +1284,8 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
                                         "sha256": manifest_sha},))
     load_verified_manifest(unit.job.run_root, combined_manifest, file_sha256(combined_manifest))
     return {"index_manifest": _artifact(unit.job.run_root, combined_manifest),
+            "corroborated_sast_evidence": corroborated_artifact,
+            "telemetry": telemetry,
             "shards": [__import__("dataclasses").asdict(item) for item in shards],
             "item_count": sum(item["record_count"] for item in dispositions),
             "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps)),
@@ -1349,6 +1369,10 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         index = unit.output("evidence_publication.assemble_manifest")
+        telemetry = index.get("telemetry") or {
+            "raw_scanner_findings": 0, "corroborated_clusters": 0,
+            "taint_traces_preserved": 0, "post_dedupe_capped_count": 0,
+        }
         document = {
             "schema": "appsec-review/evidence-collection-handoff/1",
             "target_fingerprint": unit.job.source_fingerprint,
@@ -1356,12 +1380,16 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
             "gaps": index["gaps"], "security_findings": [],
             "not_applicable_inputs": index.get("not_applicable_inputs"),
             "unsupported_coverage": index.get("unsupported_coverage"),
+            "corroborated_sast_evidence": index.get("corroborated_sast_evidence"),
+            "telemetry": telemetry,
         }
         path = unit.unit_root / "handoff.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_json(path, document)
         return {"schema": document["schema"], "artifact": _artifact(unit.job.run_root, path),
                 "index_manifest": index["index_manifest"],
+                "corroborated_sast_evidence": index.get("corroborated_sast_evidence"),
+                "telemetry": telemetry,
                 "item_count": index["item_count"], "gaps": document["gaps"],
                 "dispositions": document["dispositions"],
                 "not_applicable_inputs": document["not_applicable_inputs"],

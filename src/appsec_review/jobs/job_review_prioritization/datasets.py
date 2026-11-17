@@ -6,29 +6,55 @@ A declaration is a contract; it is not evidence that the output was produced.
 
 from __future__ import annotations
 
-from appsec_review.runtime.datasets import EvidenceAuthority
-from appsec_review.runtime.datasets import artifact_only, indexed, protected
+from appsec_review.runtime.contracts import (
+    DispatchClass, EvidenceAuthority, InputRequirement,
+    JobContract, TargetAccess,
+)
+from appsec_review.runtime.datasets import artifact_only, indexed
 
 
 _A = "data/jobs/job_review_prioritization/attempts/*"
 DATASETS = (
     indexed("priority_items", "publish", "priority", "appsec-review/retrieval-index/2",
             "Ranked review-priority items, review signals, ordered flow steps and dependency context.",
-            indexes=("priority",), route="query_hotspots; find/trace index=priority", required=True, authority=EvidenceAuthority.ROUTING_CONTEXT),
+            indexes=("priority",), route="query_hotspots; find/trace index=priority", required=True,
+            authority=EvidenceAuthority.ROUTING_CONTEXT),
     artifact_only("prioritization_documents", "publish", "priority", "appsec-review/review-prioritization/1",
                   "Syntax facts, dependency graph, semantic evidence and the full ranking.",
                   artifacts=(_A + "/steps/*/tasks/*/artifacts/*.json",),
                   reason="full unselected ranking and per-file syntax facts exceed retrieval bounds; selected "
                          "items are indexed", authority=EvidenceAuthority.ROUTING_CONTEXT),
-)
-
-from appsec_review.runtime.contracts import (
-    Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
-    JobContract, MissingPolicy, TargetAccess,
+    artifact_only("prioritization_signals", "publish", "priority",
+                  "appsec-review/review-prioritization-signals/1",
+                  "Composite engineering modifiers, promoted CI/artifact/SCA leads, SAST-silence hunt queue and telemetry.",
+                  artifacts=(_A + "/artifacts/prioritization-signals.json",),
+                  reason="promoted leads and hunt candidates are also indexed in priority; full telemetry document "
+                         "is retained for audit", authority=EvidenceAuthority.ROUTING_CONTEXT),
 )
 
 CONTRACT = JobContract(
     inputs=(
+        InputRequirement("job_artifact_security_analysis", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_artifact_security_analysis", "artifact_security_observations",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_artifact_security_analysis", "artifact_security_results",
+                         "appsec-review/artifact-security-observation/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_change_context_analysis", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.ROUTING_CONTEXT),
+        InputRequirement("job_change_context_analysis", "change_context",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.ROUTING_CONTEXT),
+        InputRequirement("job_change_context_analysis", "change_context_documents",
+                         "appsec-review/change-context-analysis/1", authority=EvidenceAuthority.ROUTING_CONTEXT),
+        InputRequirement("job_ci_configuration_analysis", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_ci_configuration_analysis", "ci_observations",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_ci_configuration_analysis", "ci_findings",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_ci_configuration_analysis", "ci_documents",
+                         "appsec-review/ci-configuration-analysis-handoff/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_codeql_analysis", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_codeql_analysis", "codeql_predecessor_import",
@@ -41,14 +67,32 @@ CONTRACT = JobContract(
                          "appsec-review/codeql-analysis-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_codeql_analysis", "codeql_scope_material",
                          "application/octet-stream", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_dependency_intelligence", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_dependency_intelligence", "dependency_context",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_dependency_intelligence", "dependency_intelligence_handoff",
+                         "appsec-review/dependency-intelligence-handoff/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_dependency_intelligence", "sca_reachability",
+                         "appsec-review/sca-reachability/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_evidence_collection", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_evidence_collection", "static_tool_observations",
                          "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_evidence_collection", "static_tool_evidence",
                          "appsec-review/static-tool-evidence/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_evidence_collection", "corroborated_sast_evidence",
+                         "appsec-review/corroborated-sast-evidence/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_evidence_collection", "static_tool_io",
                          "appsec-review/container-execution/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_profile_data", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_profile_data", "profile_data",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_profile_data", "profile_data_handoff",
+                         "appsec-review/profile-data-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_review_intake", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_review_intake", "model_preflight",
@@ -83,6 +127,12 @@ CONTRACT = JobContract(
                          "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_target_catalog", "catalog_documents",
                          "appsec-review/target-catalog/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_test_coverage", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_test_coverage", "test_coverage",
+                         "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_test_coverage", "test_coverage_handoff",
+                         "appsec-review/test-coverage-handoff/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "tree_sitter_ast",
@@ -98,7 +148,7 @@ CONTRACT = JobContract(
         InputRequirement("job_tree_sitter_ast", "tree_sitter_tool_io",
                          "appsec-review/container-execution/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
     ),
-    schedule_after=('job_codeql_analysis',),
+    schedule_after=("job_codeql_analysis",),
     dispatch=DispatchClass.REVIEW_GRAPH,
     target_access=TargetAccess.CHECKOUT,
     always_execute=False,

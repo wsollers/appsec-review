@@ -385,3 +385,156 @@ def builtin_observation(path: Path, classification: Mapping[str, Any], capabilit
         if classification.get("container"): value["archive"] = inspect_archive(path, limits)
         return value, ["SBOM/dependency vulnerability matching requires available pinned Syft and vulnerability data"]
     return {}, [f"unsupported format for {capability}: {fmt}"]
+
+
+import re as _re
+
+_PACKAGED_SECRET_RULES: tuple[tuple[str, _re.Pattern[str], str], ...] = (
+    ("SECRET_PRIVATE_KEY", _re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----"),
+     "Packaged configuration embeds a PEM private key header."),
+    ("SECRET_AWS_ACCESS_KEY", _re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+     "Packaged configuration embeds an AWS access key identifier."),
+    ("SECRET_GITHUB_TOKEN", _re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{36,}\b"),
+     "Packaged configuration embeds a GitHub personal/server token."),
+    ("SECRET_HARDCODED_CREDENTIAL", _re.compile(
+        r"(?i)\b(?:jwt[_-]?secret|api[_-]?secret|client[_-]?secret|private[_-]?key|db[_-]?password)\s*[:=]\s*['\"]?[A-Za-z0-9+/=_-]{12,}['\"]?"
+    ), "Packaged configuration assigns a hardcoded secret or credential value."),
+)
+
+_CONTAINER_RISK_RULES: tuple[tuple[str, _re.Pattern[str], str, str], ...] = (
+    ("CONTAINER_PRIVILEGED_MODE", _re.compile(r"(?i)\bprivileged\s*:\s*true\b|--privileged\b"),
+     "critical", "Container configuration enables privileged execution."),
+    ("CONTAINER_ROOT_USER", _re.compile(r"(?im)(?:^\s*USER\s+(?:root|0(?::0)?)\s*$|\buser\s*:\s*['\"]?(?:root|0)['\"]?\s*$)"),
+     "high", "Container runs explicitly as root (UID 0)."),
+    ("CONTAINER_DEBUG_PORT", _re.compile(r"(?im)(?:^\s*EXPOSE\s+[^\n]*\b(2375|5005|5678|9229|2345|40000)\b|\bports\s*:\s*(?:\n\s*-\s*['\"]?(?:\d+:)?(2375|5005|5678|9229|2345|40000)\b))"),
+     "high", "Container exposes a sensitive remote debug or daemon port."),
+    ("CONTAINER_HOST_NETWORK", _re.compile(r"(?i)\b(?:network_mode\s*:\s*['\"]?host['\"]?|hostNetwork\s*:\s*true)\b"),
+     "high", "Container shares the host network namespace."),
+)
+
+
+def inspect_packaged_text_risks(text: str, *, member_path: str) -> list[dict[str, Any]]:
+    """Bounded, redacted check for hardcoded secrets and dangerous container directives in packaged configs."""
+    risks: list[dict[str, Any]] = []
+    for check_id, pattern, message in _PACKAGED_SECRET_RULES:
+        if pattern.search(text):
+            risks.append({
+                "check_id": check_id,
+                "category": "packaged_secret",
+                "severity": "critical",
+                "subject": member_path,
+                "member_path": member_path,
+                "message": f"{message} ({member_path})",
+                "lead_candidate": True,
+                "attack_class": "packaged_hardcoded_secret",
+                "severity_hint": "critical",
+            })
+    for check_id, pattern, sev, message in _CONTAINER_RISK_RULES:
+        m = pattern.search(text)
+        if m:
+            port = next((g for g in m.groups() if g), None) if m.groups() else None
+            effective_sev = "critical" if (check_id == "CONTAINER_PRIVILEGED_MODE" or port == "2375") else sev
+            entry: dict[str, Any] = {
+                "check_id": check_id,
+                "category": "container_security",
+                "severity": effective_sev,
+                "subject": member_path,
+                "member_path": member_path,
+                "message": f"{message} ({member_path})",
+                "lead_candidate": True,
+                "attack_class": "dangerous_container_configuration",
+                "severity_hint": effective_sev,
+            }
+            if port:
+                entry["port"] = port
+            risks.append(entry)
+    return risks
+
+
+def inspect_elf_hardening_indicators(data: bytes, *, binary_name: str) -> list[dict[str, Any]]:
+    """Bounded ELF header/program-header check for missing NX/PIE/RELRO/canary indicators."""
+    if len(data) < 64 or not data.startswith(b"\x7fELF"):
+        return []
+    is_64 = data[4] == 2
+    endian = "<" if data[5] == 1 else (">" if data[5] == 2 else None)
+    if endian is None:
+        return []
+    e_type = struct.unpack_from(endian + "H", data, 16)[0]
+    risks: list[dict[str, Any]] = []
+    # ET_EXEC (2) instead of ET_DYN (3) indicates a non-PIE fixed-address executable.
+    if e_type == 2:
+        risks.append({
+            "check_id": "CHECK_PIE",
+            "category": "binary_hardening",
+            "severity": "high",
+            "subject": binary_name,
+            "binary": binary_name,
+            "indicator": "ET_EXEC",
+            "message": f"ELF executable {binary_name} is non-PIE (ET_EXEC).",
+            "lead_candidate": True,
+            "attack_class": "binary_missing_hardening",
+            "severity_hint": "high",
+        })
+    # Parse bounded program headers for PT_GNU_STACK (0x6474e551) and PT_GNU_RELRO (0x6474e552).
+    try:
+        if is_64:
+            e_phoff = struct.unpack_from(endian + "Q", data, 32)[0]
+            e_phentsize, e_phnum = struct.unpack_from(endian + "HH", data, 54)
+        else:
+            e_phoff = struct.unpack_from(endian + "I", data, 28)[0]
+            e_phentsize, e_phnum = struct.unpack_from(endian + "HH", data, 42)
+        has_relro = False
+        exec_stack = False
+        if e_phoff > 0 and e_phentsize >= (56 if is_64 else 32) and 0 < e_phnum <= 128:
+            for idx in range(e_phnum):
+                off = e_phoff + idx * e_phentsize
+                if off + e_phentsize > len(data):
+                    break
+                p_type = struct.unpack_from(endian + "I", data, off)[0]
+                p_flags = struct.unpack_from(endian + "I", data, off + (4 if is_64 else 24))[0]
+                if p_type == 0x6474E551 and (p_flags & 0x1):  # PF_X on PT_GNU_STACK
+                    exec_stack = True
+                if p_type == 0x6474E552:
+                    has_relro = True
+            if exec_stack:
+                risks.append({
+                    "check_id": "CHECK_NX",
+                    "category": "binary_hardening",
+                    "severity": "critical",
+                    "subject": binary_name,
+                    "binary": binary_name,
+                    "indicator": "PT_GNU_STACK_RWE",
+                    "message": f"ELF binary {binary_name} has an executable stack (NX disabled).",
+                    "lead_candidate": True,
+                    "attack_class": "binary_missing_hardening",
+                    "severity_hint": "critical",
+                })
+            if e_type in {2, 3} and not has_relro:
+                risks.append({
+                    "check_id": "CHECK_RELRO",
+                    "category": "binary_hardening",
+                    "severity": "high",
+                    "subject": binary_name,
+                    "binary": binary_name,
+                    "indicator": "MISSING_PT_GNU_RELRO",
+                    "message": f"ELF binary {binary_name} lacks PT_GNU_RELRO segment protection.",
+                    "lead_candidate": True,
+                    "attack_class": "binary_missing_hardening",
+                    "severity_hint": "high",
+                })
+    except struct.error:
+        pass
+    if e_type in {2, 3} and b"__stack_chk_fail" not in data:
+        risks.append({
+            "check_id": "CHECK_CANARY",
+            "category": "binary_hardening",
+            "severity": "high",
+            "subject": binary_name,
+            "binary": binary_name,
+            "indicator": "MISSING_STACK_CHK_FAIL",
+            "message": f"ELF binary {binary_name} lacks __stack_chk_fail stack canary symbol.",
+            "lead_candidate": True,
+            "attack_class": "binary_missing_hardening",
+            "severity_hint": "high",
+        })
+    return risks

@@ -35,6 +35,7 @@ OBSERVED = [
     f"{A}/steps/publication/tasks/publish_sbom/native-sbom-metrics.json",
     f"{A}/steps/publication/tasks/publish_sbom/baseline.spdx.json",
     f"{A}/steps/publication/tasks/native_advisory_lookup/native-advisory-lookup.json",
+    f"{A}/steps/publication/tasks/publish_context/sca-reachability.json",
     f"{A}/steps/acceptance/tasks/publish_handoff/dependency-intelligence.json",
 ]
 
