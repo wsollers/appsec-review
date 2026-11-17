@@ -38,7 +38,7 @@ from tests.fixtures.inference_review.fake_infer import NARRATIVES
 # A tampered upstream handoff is refused either when the attempt binds it or when a unit re-verifies it.
 INTEGRITY = (IntegrityError, RetrievalIntegrityError)
 SCHEMAS = ROOT / "docs" / "schemas" / "final-report"
-NAMES = ("common", "final-publication-gate", "final-report")
+NAMES = ("common", "final-publication-gate", "final-report", "final-report-pdf-receipt", "security-radar-tracker")
 GATE_DOC = ("acceptance.publish_handoff", "final-publication-gate.json")
 REPORT_DOC = ("report.assemble", "final-report.json")
 REPORT_MD = ("report.render", "final-report.md")

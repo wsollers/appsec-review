@@ -1,7 +1,9 @@
 """Build ``final-report.json`` from the accepted final publication gate document.
 
-The report only projects the gate: it selects the packages the gate placed in each bucket and carries
-the gate's limitations. It does not look at the target, a model or any artifact the gate does not bind.
+The report only projects the gate: it selects the packages the gate placed in each bucket, carries
+the gate's limitations, and computes the deterministic 12-axis / 4-series security radar tracker,
+executive risk posture, attack-chain cards, prioritized remediation roadmap, and explicit named
+coverage gaps. It does not look at the target, a model or any artifact the gate does not bind.
 """
 from __future__ import annotations
 
@@ -9,8 +11,16 @@ from collections import Counter
 from typing import Any, Mapping
 
 from appsec_review.jobs.engineering_contracts import FINAL_REPORT_SCHEMA
+from appsec_review.reporting.dimensions import build_radar_tracker
+from appsec_review.reporting.executive_posture import (
+    build_attack_chain_cards,
+    build_executive_posture,
+    build_named_coverage_gaps,
+    build_remediation_roadmap,
+)
 
 RENDERER = "final-report-markdown/2"
+HTML_RENDERER = "appsec-review/executive-report/1"
 PDF_REASON = ("The executive PDF (final-report.pdf) is rendered after this document is assembled, by "
               "report.render_pdf, from this JSON and the gate-bound dossier JSON; its outcome, file and receipt "
               "are reported in the publish handoff's pdf field. Protected finding and PoC dossier PDFs are "
@@ -29,11 +39,9 @@ NOTICES = (
     "A named limitation is a limit of the review or of the pipeline, never evidence that the target is clean.",
 )
 
-
 POC_REASON = ("Compile-only PoC generation outcomes for accepted review candidates. Each status distinguishes "
               "successful compilation, failures, policy refusals and unavailable work. Nothing was linked or run. "
               "A failed or unavailable PoC does not contradict its finding.")
-
 
 CHAIN_STATUSES = ("confirmed", "qualified_supported", "refuted", "insufficient_evidence")
 
@@ -76,6 +84,7 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
     review = gate["review"]
     complete = (review["status"] == "COMPLETE" and not review["review_incomplete"]
                 and not any(item["kind"] == "gap" for item in limitations))
+
     def section(name: str) -> dict[str, Any]:
         record = gate["capabilities"][name]
         items = gate["attachments"][name]
@@ -103,7 +112,8 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
         "ship_block_policy_sha256": review["ship_block_policy_sha256"]}
     if poc_reference is not None:
         provenance["poc_handoff"] = poc_reference
-    return {
+
+    report: dict[str, Any] = {
         "schema": FINAL_REPORT_SCHEMA, "run_id": gate["run_id"],
         "provenance": provenance,
         "status": {"review": review["status"], "review_incomplete": review["review_incomplete"],
@@ -125,3 +135,27 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
                       "pdf": {"state": "not_rendered", "reason": PDF_REASON}},
         "notices": list(NOTICES),
     }
+    radar = build_radar_tracker(report)
+    report["radar_tracker"] = radar
+    report["executive_posture"] = build_executive_posture(report, radar)
+    report["attack_chain_cards"] = build_attack_chain_cards(report)
+    report["remediation_roadmap"] = build_remediation_roadmap(report)
+    report["named_coverage_gaps"] = build_named_coverage_gaps(report, radar)
+    return report
+
+
+__all__ = [
+    "CHAIN_STATUSES",
+    "HTML_RENDERER",
+    "NOTICES",
+    "PDF_REASON",
+    "POC_REASON",
+    "RENDERER",
+    "build_attack_chain_cards",
+    "build_executive_posture",
+    "build_named_coverage_gaps",
+    "build_remediation_roadmap",
+    "build_report",
+    "chain_reason",
+    "chain_status_counts",
+]

@@ -121,7 +121,8 @@ def test_none_available_sections_name_their_reason_and_never_read_as_clean() -> 
     tex = tex_of(report)
     assert tex.count(NOT_CLEAN.replace("-", "{-}")) >= 5
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
-    assert headings == ["Executive summary", "Review coverage by security dimension", "Confirmed findings",
+    assert headings == ["Executive summary", "Review coverage by security dimension",
+                        "Prioritized remediation roadmap", "Confirmed findings",
                         "Attack chains", "Proof-of-trigger outcomes",
                         "Remediation", "Verification backlog and withheld packages", "Limitations and coverage",
                         "Appendix: provenance"]
@@ -220,28 +221,39 @@ def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_wi
     dossier = dossier_for(finding, security_predicate="command_injection", weakness_cwe="CWE-78", title=finding["title"])
     document = executive_document(report, (bound(dossier),))
     chart = _chart_of(document)
-    assert [axis.key for axis in chart.axes] == ["M", "N", "C", "P", "A", "S", "R", "X", "K"]
-    assert [series.label for series in chart.series] == ["Confirmed findings", "Claims examined"]
-    confirmed, examined = _by_axis(chart, 0), _by_axis(chart, 1)
-    assert confirmed["C"] == 1.0 and sum(confirmed.values()) == 1.0
-    assert examined["C"] == 1.0 and examined["M"] == 1.0 and sum(examined.values()) == 2.0
-    assert chart.series[0].displays[2] == "1" and chart.series[1].displays[0] == "1" and chart.clamped == 0
+    assert len(DIMENSIONS) == 12
+    assert [axis.key for axis in chart.axes] == [
+        "Auth", "AzZ", "Inj", "Mem", "Pars", "Cryp", "API", "Path", "Logi", "Deps", "CICD", "Hard"
+    ]
+    assert [series.label for series in chart.series] == [
+        "Surface exposure", "Verified coverage", "Corroborated leads", "Confirmed High/Critical"
+    ]
+    surface, verified_cov, leads, confirmed_hc = (_by_axis(chart, idx) for idx in range(4))
+    assert confirmed_hc["Inj"] == 1.0 and sum(confirmed_hc.values()) == 1.0
+    assert leads["Inj"] == 1.0 and leads["Mem"] == 1.0 and sum(leads.values()) == 2.0
+    assert surface["Inj"] == 1.0 and surface["Mem"] == 1.0
+    assert verified_cov["Inj"] > 0.0 and chart.clamped == 0
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
-    assert headings[:3] == ["Executive summary", "Review coverage by security dimension", "Confirmed findings"]
+    assert headings[:4] == [
+        "Executive summary",
+        "Review coverage by security dimension",
+        "Prioritized remediation roadmap",
+        "Confirmed findings",
+    ]
     tex = tex_of(report, (bound(dossier),))
-    assert r"\radarkeyrow{C}{Control and injection}" in tex and "Confirmed findings 1; Claims examined 1" in tex
-    assert r"\draw[verdict-confirmed,radarline,solid]" in tex and r"\draw[verdict-proposed,radarline,dashed]" in tex
-    assert "never that the dimension is clean" in tex and "not bound" in tex
+    assert r"\radarkeyrow{Inj}{Injection \& Command/\allowbreak{}SQL/\allowbreak{}Template}" in tex
+    assert r"\draw[verdict-contradicted,radarline,densely dashdotted]" in tex
+    assert "NEVER evidence that a security domain is clean" in tex
     assert "Uncovered: no claim was examined here." in tex and "1 claim examined, none confirmed. Not a clearance." in tex
-    assert "1 confirmed finding of 1 claim examined." in tex
+    assert r"1 confirmed finding (1 high/\allowbreak{}critical) of 1 claim examined." in tex
     assert "Every accepted package names a member of the vocabulary" in tex
-    # Markdown parity: the same counts from the same function, without dossiers.
+    # Markdown parity: 12-axis security radar & verification funnel agrees with dimension_counts.
     markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
     assert "## Coverage by security dimension" in markdown
-    assert "| C | Control and injection | 1 | 1 | not bound |" in markdown
-    assert "| M | Memory safety | 0 | 1 | not bound |" in markdown
+    assert "| Inj | Injection & Command/SQL/Template |" in markdown
+    assert "| Mem | Memory & Native Safety |" in markdown
     rows, unclassified = dimension_counts(report)
-    assert unclassified == 0 and [(row.key, row.findings, row.claims) for row in rows if row.claims] == [("M", 0, 1), ("C", 1, 1)]
+    assert unclassified == 0 and [(row.key, row.findings, row.claims) for row in rows if row.claims] == [("Inj", 1, 1), ("Mem", 0, 1)]
     # Every member of the closed vocabulary except "other" lies in exactly one dimension.
     members = [predicate for dimension in DIMENSIONS for predicate in dimension.predicates]
     assert sorted(members) == sorted({predicate.value for predicate in SecurityPredicate} - {"other"})
@@ -251,7 +263,7 @@ def test_dossier_predicate_is_used_and_unparseable_titles_are_unclassified_never
     report = report_document()                     # titles "Synthetic finding n" name no predicate
     dossier = dossier_for(report["findings"][0])   # the dossier says memory_corruption
     document = executive_document(report, (bound(dossier),))
-    assert _by_axis(_chart_of(document), 0)["M"] == 1.0 and _by_axis(_chart_of(document), 1)["M"] == 1.0
+    assert _by_axis(_chart_of(document), 3)["Mem"] == 1.0 and _by_axis(_chart_of(document), 2)["Mem"] == 1.0
     tex = tex_of(report, (bound(dossier),))
     assert "1 package named no member of the vocabulary and is counted in no dimension" in tex
     # Without the dossier nothing is classified: the chart says so instead of drawing a guess.

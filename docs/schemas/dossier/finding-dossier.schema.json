@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/dossier/finding-dossier.schema.json",
+  "title": "Protected Developer Finding Dossier",
+  "description": "Deterministic, secret-redacted developer dossier for a confirmed finding or compile-only PoC outcome.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "dossier_id",
+    "run_id",
+    "kind",
+    "finding",
+    "visibility",
+    "renderer",
+    "title",
+    "state",
+    "lane",
+    "statement",
+    "weakness_cwe",
+    "security_predicate",
+    "preconditions",
+    "ship_block",
+    "missing_predicates",
+    "classification_badge",
+    "taint_path_timeline",
+    "adjudication_summary",
+    "poc_harness_summary",
+    "remediation_guide",
+    "evidence",
+    "sources",
+    "scores",
+    "chains",
+    "poc",
+    "remediation",
+    "notices",
+    "gaps",
+    "truncations",
+    "provenance"
+  ],
+  "properties": {
+    "schema": {
+      "enum": [
+        "appsec-review/dossier/1",
+        "appsec-review/finding-dossier/1"
+      ]
+    },
+    "dossier_id": {
+      "type": "string",
+      "pattern": "^dossier-[0-9a-f]{64}$"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "confirmed_finding",
+        "poc"
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "finding_package_id",
+        "sha256"
+      ],
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_package_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "visibility": {
+      "const": "protected_developer"
+    },
+    "renderer": {
+      "const": "appsec-review/dossier-renderer/1"
+    },
+    "title": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lane": {
+      "type": "string"
+    },
+    "statement": {
+      "type": "string"
+    },
+    "weakness_cwe": {
+      "type": "string"
+    },
+    "security_predicate": {
+      "type": "string"
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ship_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "status",
+        "technical_severity"
+      ],
+      "properties": {
+        "policy": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "technical_severity": {
+          "type": "string"
+        }
+      }
+    },
+    "missing_predicates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "classification_badge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "weakness_cwe",
+        "owasp_2025",
+        "radar_domain_id",
+        "radar_domain_label",
+        "reachability_badge",
+        "resolution_tier",
+        "corroborating_scanners",
+        "ship_block_status"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "weakness_cwe": {
+          "type": "string"
+        },
+        "owasp_2025": {
+          "type": "string",
+          "minLength": 1
+        },
+        "radar_domain_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "radar_domain_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reachability_badge": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolution_tier": {
+          "type": "string",
+          "minLength": 1
+        },
+        "corroborating_scanners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ship_block_status": {
+          "type": "string"
+        }
+      }
+    },
+    "taint_path_timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "step_index",
+          "role",
+          "location",
+          "path",
+          "start_line",
+          "end_line",
+          "symbol",
+          "taint_transform",
+          "guard_disposition",
+          "entity_id"
+        ],
+        "properties": {
+          "step_index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "role": {
+            "enum": [
+              "source",
+              "hop",
+              "guard_check",
+              "sink"
+            ]
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "end_line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "taint_transform": {
+            "type": "string"
+          },
+          "guard_disposition": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "adjudication_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exploitability_basis",
+        "guard_bypass_summary",
+        "verifier_posture",
+        "counted_direct_citations",
+        "analyst_assessed_citations",
+        "resolving_citations"
+      ],
+      "properties": {
+        "exploitability_basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "guard_bypass_summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verifier_posture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "counted_direct_citations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "analyst_assessed_citations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolving_citations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "relation_id",
+              "locator",
+              "path",
+              "line_span",
+              "content_sha256"
+            ],
+            "properties": {
+              "relation_id": {
+                "type": "string"
+              },
+              "locator": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "line_span": {
+                "type": "string"
+              },
+              "content_sha256": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "poc_harness_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "compile_status",
+        "compile_only_verified",
+        "safety_badge",
+        "generated_code_execution",
+        "runtime_verified",
+        "summary"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "compile_status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compile_only_verified": {
+          "type": "boolean"
+        },
+        "safety_badge": {
+          "const": "not_performed_by_policy"
+        },
+        "generated_code_execution": {
+          "const": "not_performed_by_policy"
+        },
+        "runtime_verified": {
+          "const": false
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "remediation_guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "validation_tier",
+        "violated_invariant",
+        "corrected_invariant",
+        "proposed_diff",
+        "concrete_fix_steps",
+        "verification_checklist"
+      ],
+      "properties": {
+        "validation_tier": {
+          "type": "string",
+          "minLength": 1
+        },
+        "violated_invariant": {
+          "type": "string"
+        },
+        "corrected_invariant": {
+          "type": "string"
+        },
+        "proposed_diff": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "concrete_fix_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verification_checklist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "scores": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "chains": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "poc": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "remediation": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "decision_basis": {
+      "type": "object"
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "truncations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "provenance": {
+      "type": "object"
+    }
+  }
+}

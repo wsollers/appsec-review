@@ -10,7 +10,13 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
-from appsec_review.reporting.dimensions import dimension_counts
+from appsec_review.reporting.dimensions import build_radar_tracker
+from appsec_review.reporting.executive_posture import (
+    build_attack_chain_cards,
+    build_executive_posture,
+    build_named_coverage_gaps,
+    build_remediation_roadmap,
+)
 
 from .report import RENDERER
 
@@ -18,7 +24,7 @@ DIMENSION_LABELS = (("technical_severity", "Technical severity"),
                     ("exploitability_confidence", "Exploitability confidence"),
                     ("environmental_business_impact", "Environmental and business impact"),
                     ("remediation_priority", "Remediation priority"))
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f  ]+")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+")
 
 
 def code(value: Any) -> str:
@@ -128,17 +134,60 @@ def _section(title: str, items: Iterable[Mapping[str, Any]], settings: Mapping[s
     return lines
 
 
-def _dimensions(report: Mapping[str, Any]) -> list[str]:
-    """The same per-axis counts the executive PDF charts (``appsec_review.reporting.dimensions``), as a table."""
-    rows, unclassified = dimension_counts(report)
-    lines = ["## Coverage by security dimension", "",
-             "| Key | Dimension | Confirmed findings | Claims examined | Scanner leads admitted / observed |",
-             "|---|---|---:|---:|---|"]
-    lines += [f"| {row.key} | {plain(row.label)} | {row.findings} | {row.claims} | not bound |" for row in rows]
-    lines += ["", f"Counts come from the accepted packages' titles (`<predicate> (<CWE>)`); {unclassified} package(s) "
-              "named no member of the vocabulary and are counted in no dimension. A short row means little was found "
-              "or examined there, never that the dimension is clean; a dimension with no claims is uncovered. The "
-              "excluded-leads record is not bound by the gate, so lead admission per dimension is not shown.", ""]
+def _dimensions(radar: Mapping[str, Any]) -> list[str]:
+    """The 12-axis, 4-series security radar & verification funnel table."""
+    axes = radar["axes"]
+    unclassified = radar["unclassified_packages"]
+    lines = [
+        "## Coverage by security dimension",
+        "",
+        "| Key | Dimension | Surface exposure | Verified coverage | Corroborated leads | Confirmed High/Crit (All) | Coverage posture |",
+        "|---|---|---:|---:|---:|---:|---|",
+    ]
+    for ax in axes:
+        s = ax["series"]
+        posture = (
+            code("UNVERIFIED_COVERAGE_GAP")
+            if ax["coverage_status"] in {"unverified_gap", "partial_coverage_gap"}
+            else code(ax["coverage_status"])
+        )
+        lines.append(
+            f"| {ax['key']} | {plain(ax['label'])} | {s['surface_exposure']['raw_count']} "
+            f"({s['surface_exposure']['score']:.0f}) | {s['verified_coverage']['score']:.0f}% | "
+            f"{s['corroborated_leads']['raw_count']} | "
+            f"{s['confirmed_high_critical']['raw_count']} ({s['confirmed_high_critical']['all_confirmed_count']}) | "
+            f"{posture} |"
+        )
+    lines += [
+        "",
+        f"Counts come from the accepted packages' titles (`<predicate> (<CWE>)`); {unclassified} package(s) "
+        "named no member of the vocabulary and are counted in no dimension. Missing, skipped or partial coverage "
+        "is explicitly marked as an Unverified Coverage Gap and is never evidence that a security domain is clean.",
+        "",
+    ]
+    return lines
+
+
+def _roadmap(report: Mapping[str, Any]) -> list[str]:
+    roadmap = report.get("remediation_roadmap")
+    if roadmap is None:
+        roadmap = build_remediation_roadmap(report)
+    lines = ["## Prioritized remediation roadmap", ""]
+    if not roadmap:
+        return lines + ["No confirmed finding packages require remediation scheduling.", ""]
+    lines += [
+        "| Rank | Tier | Severity | Domain | Package | Validation status | PoC posture |",
+        "|---:|---|---|---|---|---|---|",
+    ]
+    for row in roadmap:
+        poc = row["poc_posture"]
+        lines.append(
+            f"| {row['rank']} | {code(row['priority_tier'])} | {code(row['technical_severity'])} | "
+            f"{code(row['domain_id'])} | {code(row['finding_package_id'])} | "
+            f"{code(row['validation_status'])} | "
+            f"{code(poc['status'])} ({code(poc['generated_code_execution'])}) |"
+        )
+    lines.append("")
     return lines
 
 
@@ -147,15 +196,27 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
     status, summary = report["status"], report["summary"]
     counts, accounting = summary["package_counts"], summary["accounting"]
     block = summary["ship_block"]
+    radar = report.get("radar_tracker") or build_radar_tracker(report)
+    posture = report.get("executive_posture") or build_executive_posture(report, radar)
+    sev = posture["confirmed_by_severity"]
+    cci = posture["coverage_confidence_index"]
+
     lines = [
         "# Final security review report", "",
         f"- run {code(report['run_id'])}",
-        f"- review status {code(status['review'])}; publication status {code(status['publication'])}",
+        f"- review status {code(status['review'])}; publication status {code(status['publication'])}; "
+        f"release readiness {code(posture['release_readiness'])}",
         f"- review presented as complete: **{'yes' if status['review_complete'] else 'no'}**",
         f"- report renderer {code(RENDERER)}; PDF: {plain(report['renderers']['pdf']['reason'])}", ""]
     if not status["review_complete"]:
         lines += ["> This review is not complete. The limitations section lists why; none of it is a clean verdict.", ""]
     lines += ["## Summary", "",
+              f"- executive risk posture: confirmed critical {sev['critical']}, high {sev['high']}, "
+              f"medium {sev['medium']}, low {sev['low']}, unrated {sev['unrated']}; "
+              f"chain-elevated findings {posture['chain_elevated_findings_count']}; "
+              f"reachable supply-chain advisories {posture['reachable_supply_chain_advisories_count']}",
+              f"- coverage confidence index: {cci['score']}/100 ({cci['verified_axes']}/12 verified domains, "
+              f"{cci['gap_axes']}/12 unverified coverage gap domains)",
               f"- claims reviewed: {accounting['claims_total']} "
               f"({_counts({k: v for k, v in accounting['claims_by_state'].items() if v})})",
               f"- finding packages: {counts['total']} = {counts['publishable']} publishable (confirmed) + "
@@ -168,16 +229,29 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
                 if block["by_status"]["decision_pending"] else []),
               f"- gap ratio {accounting['gap_ratio']:.3f} (incomplete above {accounting['incomplete_gap_ratio']:.3f}); "
               f"gaps by class: {_counts({k: v for k, v in accounting['gaps_by_class'].items() if v})}", ""]
-    lines += _dimensions(report)
+    lines += _dimensions(radar)
+    lines += _roadmap(report)
     lines += _section("Findings (confirmed)", report["findings"], settings, "No confirmed finding packages are publishable.")
     lines += ["## Attack chains", "", f"Status {code(report['attack_chains']['status'])}: {plain(report['attack_chains']['reason'])}"]
-    lines += [f"- {code(item['chain_id'])}: {code(item['status'])}; "
-              f"artifact {code(item['artifact']['path'])}" for item in report["attack_chains"]["items"]] + [""]
+    chain_cards = report.get("attack_chain_cards")
+    if chain_cards is None:
+        chain_cards = build_attack_chain_cards(report)
+    card_by_id = {c["chain_id"]: c for c in chain_cards}
+    for item in report["attack_chains"]["items"]:
+        lines.append(f"- {code(item['chain_id'])}: {code(item['status'])}; artifact {code(item['artifact']['path'])}")
+        card = card_by_id.get(item["chain_id"])
+        if card:
+            lines.append(
+                f"  - composed severity {code(card['composed_severity'])}; "
+                f"trust boundary crossed {code(card['trust_boundary_crossed'])}; "
+                f"steps: " + " -> ".join(f"{s['role']}:{code(s['claim_id'])}" for s in card["steps"])
+            )
+    lines += [""]
     lines += ["## Proof-of-trigger outcomes", "",
               f"Status {code(report['poc_outcomes']['status'])}: {plain(report['poc_outcomes']['reason'])}"]
     for item in report["poc_outcomes"]["items"]:
         lines.append(f"- {code(item['finding_package_id'])}: {code(item['status'])}")
-        if "claim_id" in item:                                        # outcomes of job_poc_generation
+        if "claim_id" in item:
             lines.append(f"  - claim {code(item['claim_id'])}: {plain(item['description'])}")
             if item.get("functions"):
                 lines.append(f"  - test function {code(item['functions']['test_function'])}, negative control "
@@ -220,6 +294,20 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
     lines += ["## Limitations and gaps", ""]
     for item in report["limitations"]:
         lines.append(f"- {code(item['limitation_id'])} ({item['kind']}): {plain(item['statement'])}")
+    named_gaps = report.get("named_coverage_gaps")
+    if named_gaps is None:
+        named_gaps = build_named_coverage_gaps(report, radar)
+    if named_gaps:
+        lines += [
+            "",
+            "| Gap ID | Category | Scope | Disposition |",
+            "|---|---|---|---|",
+        ]
+        for ng in named_gaps:
+            lines.append(
+                f"| {code(ng['gap_id'])} | {code(ng['category'])} | "
+                f"{plain(ng['affected_scope'])} | {code(ng['disposition'])} |"
+            )
     lines += ["", f"Recorded gap identifiers ({len(report['gap_ids'])}): {_ids(report['gap_ids'], gap_ids)}", ""]
     lines += ["## Notices", ""] + [f"- {plain(text)}" for text in report["notices"]] + [""]
     provenance = report["provenance"]

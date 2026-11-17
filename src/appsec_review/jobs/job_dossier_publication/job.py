@@ -76,7 +76,8 @@ def _remediation(root: Path, document: Mapping[str, Any], finding_id: str,
                            "artifact": ref, **{name: attachment.get(name) for name in (
                                "violated_invariant", "corrected_invariant", "compatibility_effects",
                                "affected_interfaces", "residual_risks", "deployment_prerequisites",
-                               "regression_spec", "validation_checks", "scope_limitations", "checks")}})
+                               "regression_spec", "validation_checks", "scope_limitations", "checks",
+                               "proposed_patch", "unified_diff")}})
     return result
 
 
@@ -273,6 +274,7 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
         if expected != actual or summary["upstream"] != document["upstream"]:
             raise IntegrityError("dossier publication does not partition its accepted upstream candidates")
         unit.job.events.write("DOSSIER_PUBLICATION_PUBLISHED", item_count=len(summary["items"]),
+                              dossiers_rendered=len(summary["items"]),
                               omitted_count=len(summary["omitted"]), gap_count=len(summary["gaps"]),
                               artifact_sha256=created["artifact"]["sha256"],
                               **{status + "_count": count for status, count in summary["counts"]["by_status"].items()})

@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/security-radar-tracker.schema.json",
+  "title": "Security Radar Tracker",
+  "description": "12-axis, 4-series verification funnel projection distinguishing verified coverage from unverified coverage gaps.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "axis_count",
+    "series_ids",
+    "unclassified_packages",
+    "coverage_confidence",
+    "axes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/security-radar-tracker/1"
+    },
+    "axis_count": {
+      "const": 12
+    },
+    "series_ids": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "enum": [
+          "surface_exposure",
+          "verified_coverage",
+          "corroborated_leads",
+          "confirmed_high_critical"
+        ]
+      }
+    },
+    "unclassified_packages": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "coverage_confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified_axes",
+        "gap_axes",
+        "confidence_score",
+        "review_complete",
+        "global_gap_ids",
+        "summary_statement"
+      ],
+      "properties": {
+        "verified_axes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12
+        },
+        "gap_axes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12
+        },
+        "confidence_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "review_complete": {
+          "type": "boolean"
+        },
+        "global_gap_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "summary_statement": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "axes": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain_id",
+          "key",
+          "label",
+          "owasp_2025",
+          "predicates",
+          "coverage_status",
+          "gap_reasons",
+          "series"
+        ],
+        "properties": {
+          "domain_id": {
+            "enum": [
+              "authentication_session",
+              "authorization_access_control",
+              "injection_interpreters",
+              "memory_safety_native",
+              "parsing_deserialization",
+              "cryptography_secrets",
+              "network_api_surface",
+              "filesystem_path_resources",
+              "business_logic_state",
+              "supply_chain_dependencies",
+              "ci_cd_build_integrity",
+              "container_deployment_hardening"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owasp_2025": {
+            "type": "string",
+            "minLength": 1
+          },
+          "predicates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverage_status": {
+            "enum": [
+              "verified_no_findings",
+              "verified_findings",
+              "partial_coverage_gap",
+              "unverified_gap"
+            ]
+          },
+          "gap_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "series": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "surface_exposure",
+              "verified_coverage",
+              "corroborated_leads",
+              "confirmed_high_critical"
+            ],
+            "properties": {
+              "surface_exposure": {
+                "$ref": "#/$defs/series_metric"
+              },
+              "verified_coverage": {
+                "$ref": "#/$defs/coverage_metric"
+              },
+              "corroborated_leads": {
+                "$ref": "#/$defs/series_metric"
+              },
+              "confirmed_high_critical": {
+                "$ref": "#/$defs/confirmed_metric"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "series_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_count",
+        "score",
+        "unit"
+      ],
+      "properties": {
+        "raw_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "unit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "coverage_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_count",
+        "score",
+        "unit",
+        "is_gap"
+      ],
+      "properties": {
+        "raw_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "unit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "is_gap": {
+          "type": "boolean"
+        }
+      }
+    },
+    "confirmed_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_count",
+        "all_confirmed_count",
+        "chain_elevated_count",
+        "score",
+        "unit"
+      ],
+      "properties": {
+        "raw_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "all_confirmed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chain_elevated_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "unit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}
