@@ -274,10 +274,13 @@ def test_cppcheck_compile_database_validation_and_pmd_shellcheck_php_spotbugs_pa
         b"<results><errors>"
         b"<error id='nullPointer' severity='error' msg='null deref'><location file='/target/src/a.cpp' line='4'/></error>"
         b"<error id='missingIncludeSystem' severity='information' msg='no header'><location file='/target/src/a.cpp' line='1'/></error>"
+        b"<error id='deallocuse' severity='error' msg='used after free' cwe='416'><location file='/target/src/a.cpp' line='9'/></error>"
         b"</errors></results>"
     )
-    assert cpp_records[0]["rule_id"] == "nullPointer"
+    assert cpp_records[0]["rule_id"] == "nullPointer" and "rule_mapping" not in cpp_records[0]
     assert cpp_records[1]["gap_only"] is True
+    # The raw ``cwe`` attribute reaches the lead as rule_mapping.cwe so correlation and routing can use it.
+    assert cpp_records[2]["rule_mapping"] == {"cwe": "CWE-416"}
 
     # PMD processingErrors -> gap_only; configurationErrors -> raises ValueError
     pmd_records = ADAPTERS["tool-pmd"].parse(
