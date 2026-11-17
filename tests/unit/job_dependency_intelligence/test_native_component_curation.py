@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -28,9 +29,18 @@ DISCOVERY_BOUNDS = NativeBounds(
     field_bytes=4096, path_chars=512,
 )
 REF = {"path": "data/catalog.json", "sha256": "a" * 64, "size_bytes": 100}
+FIXTURES = Path(__file__).parents[2] / "fixtures" / "dependency_intelligence"
 
 
-def discover(contents, *, domain="target", root_id="target"):
+def command(argv, *, root_id="unit-a", command_id="cmd-1", row=0):
+    """One accepted link command; its evidence is run-owned (domain run) and names REF's path."""
+    return {"root_id": root_id, "directory": ".", "argv": argv,
+            "argv_sha256": hashlib.sha256(canonical_json(argv)).hexdigest(),
+            "command_id": command_id, "path_mappings": {"/target": "."},
+            "evidence_source": {"artifact": dict(REF), "json_pointer": f"/rows/{row}"}}
+
+
+def discover(contents, *, domain="target", root_id="target", invocations=()):
     data = {path: value.encode() for path, value in contents.items()}
     files = [
         {"domain": domain, "root_id": root_id, "path": path,
@@ -41,7 +51,7 @@ def discover(contents, *, domain="target", root_id="target"):
         for path, value in data.items()
     ]
     result = discover_native_dependencies(
-        source_fingerprint="snapshot-1", files=files, invocations=[], artifacts=[],
+        source_fingerprint="snapshot-1", files=files, invocations=list(invocations), artifacts=[],
         read_file=lambda file, limit: data[file["path"]][:limit], bounds=DISCOVERY_BOUNDS,
     )
     return result, files
@@ -799,3 +809,163 @@ def test_curation_batches_are_sized_to_the_output_token_cap():
     unbounded = run(inputs, propose, max_output_tokens=None)
     assert sizes[3:] == [5]
     assert unbounded["components"] == result["components"]
+
+
+def test_link_command_candidates_cite_their_run_evidence_paths_as_context():
+    """Run 2026-11-17-0004 (D-dependency_intelligence-5): a candidate known only from a link command has
+    run-owned evidence (domain run) at its build root; keying context by the candidate's domain left
+    context_paths empty, and the reply citing the evidence path the request showed was rejected."""
+    inputs = discover({}, invocations=[command(["cc", "-o", "app", "main.o", "-lfoo"])])
+    candidate, = inputs[0]["candidates"]
+    assert candidate["package_root"].startswith("@command/") and candidate["root_id"] == "unit-a"
+    assert {row["domain"] for row in inputs[0]["evidence"]} == {"run"}
+    seen = []
+
+    def propose(stage, payload):
+        seen.extend(payload["candidates"])
+        return retain(stage, payload)
+
+    result = run(inputs, propose)
+    assert [row["context_paths"] for row in seen] == [[REF["path"]]]
+    assert {row["decision"] for row in result["decisions"]} == {"selected"}
+    assert result["metrics"]["uncertain_candidates"] == 0 and not result["gaps"]
+    assert component(result, "foo")["supporting_paths"] == [REF["path"]]
+    effective, = result["discovery"]["candidates"]
+    assert effective["metadata"]["curation"]["supporting_paths"] == [REF["path"]]
+    assert set(effective["evidence_ids"]) == set(candidate["evidence_ids"])
+
+
+def test_request_rules_name_context_paths_as_the_exact_supporting_paths():
+    inputs = discover({}, invocations=[command(["cc", "-o", "app", "main.o", "-lfoo"])])
+    rules = []
+
+    def propose(stage, payload):
+        rules.append(payload["rules"])
+        return retain(stage, payload)
+
+    run(inputs, propose)
+    rules_text, = rules
+    assert "a candidate's context_paths are exactly the supporting_paths" in rules_text
+    assert "one library entry listing every candidate_id" in rules_text
+
+
+@pytest.mark.parametrize("shape", ["one-entry", "one-entry-per-candidate"])
+def test_same_named_candidates_from_several_commands_become_one_library(shape):
+    inputs = discover({}, invocations=[
+        command(["cc", "-o", "app", "main.o", "-lfoo"], command_id="cmd-1"),
+        command(["cc", "-o", "tool", "tool.o", "-lfoo"], command_id="cmd-2", row=1),
+        command(["cc", "-o", "other", "other.o", "-lfoo"], root_id="unit-b", command_id="cmd-3", row=2),
+    ])
+    candidates = inputs[0]["candidates"]
+    assert len(candidates) == 3 and {row["native_name"] for row in candidates} == {"foo"}
+    assert len({row["package_root"] for row in candidates}) == 3
+    assert {row["root_id"] for row in candidates} == {"unit-a", "unit-b"}
+
+    def propose(stage, payload):
+        rows = payload["candidates"]
+        if shape == "one-entry":
+            libraries = [library("foo", [row["candidate_id"] for row in rows],
+                                 {path for row in rows for path in row["context_paths"]})]
+        else:
+            libraries = [library("foo", [row["candidate_id"]], row["context_paths"]) for row in rows]
+        return proposal(payload, libraries)
+
+    result = run(inputs, propose)
+    assert {row["decision"] for row in result["decisions"]} == {"selected"}
+    assert result["metrics"]["uncertain_candidates"] == 0 and not result["gaps"]
+    foo = component(result, "foo")
+    assert sorted(foo["source_candidate_ids"]) == sorted(row["candidate_id"] for row in candidates)
+    assert len(foo["candidate_ids"]) == 3 and foo["supporting_paths"] == [REF["path"]]
+
+
+def test_same_named_entries_with_conflicting_kinds_are_rejected_by_name():
+    inputs = discover({}, invocations=[
+        command(["cc", "-o", "app", "main.o", "-lfoo"], command_id="cmd-1"),
+        command(["cc", "-o", "tool", "tool.o", "-lfoo"], command_id="cmd-2", row=1),
+    ])
+
+    def propose(stage, payload):
+        rows = payload["candidates"]
+        return proposal(payload, [
+            library("foo", [rows[0]["candidate_id"]], rows[0]["context_paths"]),
+            library("foo", [rows[1]["candidate_id"]], rows[1]["context_paths"], kind="sdk-component"),
+        ])
+
+    result = run(inputs, propose)
+    assert result["metrics"]["uncertain_candidates"] == 2
+    assert "duplicate library name foo with conflicting kinds" in reasons(result)
+
+
+def test_path_outside_every_candidate_context_is_rejected_and_named():
+    inputs = discover({"vendor/alpha/alpha.h": "// alpha"})
+    identifier = inputs[0]["candidates"][0]["candidate_id"]
+
+    def propose(stage, payload):
+        row, = payload["candidates"]
+        return proposal(payload, [library("alpha", [row["candidate_id"]],
+                                          [*row["context_paths"], "fabricated/evil.h"])])
+
+    result = run(inputs, propose)
+    assert result["metrics"]["uncertain_candidates"] == 1
+    gap, = [row for row in result["gaps"] if row["kind"] == "unsupported_metadata"]
+    assert gap["scope"] == identifier
+    assert "library alpha paths are not exact accepted context for its IDs" in gap["detail"]
+    assert "outside every referenced candidate's context_paths: fabricated/evil.h" in gap["detail"]
+    assert "no cited context path" not in gap["detail"]
+
+
+def test_candidate_without_a_cited_context_path_is_named_in_the_gap():
+    inputs = discover({"vendor/alpha/alpha.h": "// alpha", "vendor/beta/beta.h": "// beta"})
+    by_name = {row["native_name"]: row["candidate_id"] for row in inputs[0]["candidates"]}
+
+    def propose(stage, payload):
+        rows = {row["native_name"]: row for row in payload["candidates"]}
+        return proposal(payload, [library("alpha", [by_name["alpha"], by_name["beta"]],
+                                          rows["alpha"]["context_paths"])])
+
+    result = run(inputs, propose)
+    assert result["metrics"]["uncertain_candidates"] == 2
+    detail = reasons(result)
+    assert f"referenced candidates with no cited context path: {by_name['beta']}" in detail
+    assert "outside every referenced" not in detail
+
+
+def test_long_offender_lists_are_truncated_with_a_count():
+    inputs = discover({"vendor/alpha/alpha.h": "// alpha"})
+
+    def propose(stage, payload):
+        row, = payload["candidates"]
+        return proposal(payload, [library("alpha", [row["candidate_id"]],
+                                          [*row["context_paths"], *(f"fake/{index}.h" for index in range(7))])])
+
+    result = run(inputs, propose)
+    detail = reasons(result)
+    assert "fake/0.h, fake/1.h, fake/2.h, fake/3.h, fake/4.h (+2 more)" in detail
+
+
+def test_run_0004_recorded_curation_batch_passes_validation_after_the_fix():
+    """Three candidates of one recorded curate reply of run 2026-11-17-0004 (identifiers, evidence and
+    reply entries verbatim): two gcc-s link-flag candidates from different commands and smoke-lz4, each
+    cited with the run object path the request showed, which the validator rejected as outside context."""
+    fixture = json.loads((FIXTURES / "run-2026-11-17-0004-curation-batch.json").read_text())
+    object_path = "data/shared/objects/ef838f97bd3f2d67cf4c79834300ce9ca6475e7e8d34951529d45d8e1eac859c"
+    assert all(row["domain"] == "run" and row["path"] == object_path for row in fixture["discovery"]["evidence"])
+    assert [row["name"] for row in fixture["proposal"]["libraries"]] == ["gcc-s", "gcc-s", "smoke-lz4"]
+    seen = []
+
+    def propose(stage, payload):
+        assert stage == "curate"
+        seen.extend(payload["candidates"])
+        return deepcopy(fixture["proposal"])
+
+    result = run((fixture["discovery"], fixture["files"]), propose)
+    assert all(row["context_paths"] == [object_path] for row in seen)
+    assert {row["candidate_id"]: row["decision"] for row in result["decisions"]} == {
+        row["candidate_id"]: "selected" for row in fixture["discovery"]["candidates"]}
+    assert result["metrics"]["uncertain_candidates"] == 0 and not result["gaps"]
+    assert sorted(component(result, "gcc-s")["source_candidate_ids"]) == [
+        "native-dependency-876e3e0ab9ff1fb6b46106abe2354abd",
+        "native-dependency-8e99190ffe22f12941c2a4d67475d9b2"]
+    assert component(result, "gcc-s")["supporting_paths"] == [object_path]
+    assert component(result, "smoke-lz4")["source_candidate_ids"] == [
+        "native-dependency-874022ed01b63797c993ce561fb28ad4"]
