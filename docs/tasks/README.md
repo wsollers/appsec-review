@@ -40,6 +40,16 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [Behavior-oriented review and subject-complete OWASP evidence](2026-11-13-behavior-oriented-review.md) | review inference and guidance | current |
 | [Documentation program: generated inventory, authored job pages, subsystem dives](2026-11-13-docs-program-prompt.md) | testing and operations | historical |
 | [Smoke targets: one minimal buildable repository per language, plus the guide](2026-11-13-smoke-targets-prompt.md) | testing and operations | historical |
+| [Task plan T-168: Retire Joern and SVF active paths and standardize universal Tree-sitter CFG extraction](2026-11-17-t168-retire-joern-svf-universal-treesitter-cfg.md) | code intelligence | current |
+| [Task plan T-169: Synthesize universal alternate CPG and CFG from Tree-sitter and CodeQL](2026-11-17-t169-universal-alternate-cpg-cfg-synthesis.md) | code intelligence | current |
+| [Task plan T-170: Preserve Semgrep codeFlows deduplicate scanner leads and verify SCA reachability](2026-11-17-t170-sast-flows-dedupe-and-sca-reachability.md) | scanners and evidence collection | current |
+| [Task plan T-171: Rewire change context test coverage and profile data into review prioritization](2026-11-17-t171-rewire-engineering-signals-prioritization.md) | review inference and guidance | current |
+| [Task plan T-172: Index threat models OWASP control gaps document drift and build mitigations](2026-11-17-t172-index-threat-owasp-doc-build-signals.md) | scanners and evidence collection | current |
+| [Task plan T-173: Publish common querying skills rebalance frontier prompts and widen attack chains](2026-11-17-t173-querying-skills-frontier-prompts-chains.md) | review inference and guidance | current |
+| [Task plan T-174: Unify compile-only PoC harnesses and add multi-language remediation validation](2026-11-17-t174-compile-only-poc-and-validated-remediation.md) | review inference and guidance | current |
+| [Task plan T-175: Gate dynamic PoC and sanitizer execution on sandboxing architecture review](2026-11-17-t175-poc-sandboxing-gate-and-non-execution.md) | testing and operations | current |
+| [Task plan T-176: Expand radar dimensions to 12 axes and redesign executive reports and dossiers](2026-11-17-t176-expanded-radar-executive-dossier-redesign.md) | reporting and metrics | current |
+| [Task plan T-177: Rebuild and register container images compile CodeQL packs and refresh Dagster pins](2026-11-17-t177-wsl-container-dagster-smoke-readiness.md) | images and deployment | current |
 | [Implementation prompt: comprehensive review-data indexing](review-data-indexing-prompt.md) | runtime interchange | historical |
 | [Implementation prompt: source graphs and reusable review queries](review-graph-precomputation-prompt.md) | code intelligence | historical |
 | [Implementation prompt: seeded neighborhoods for the Clang, LLVM IR, AST and CPG producers](seeded-clang-neighborhoods-prompt.md) | code intelligence | historical |

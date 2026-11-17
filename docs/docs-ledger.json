@@ -196,6 +196,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "operations",
+      "path": "containers/tools/cve-bin-tool/README.md",
+      "reason": "Pinned cve-bin-tool container documentation.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
       "path": "containers/tools/ghidra/README.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "images and deployment"
@@ -745,6 +753,14 @@
       "subsystem": "runtime interchange"
     },
     {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/querying-and-indexing-skills.md",
+      "reason": "Canonical specification for Hosted querying and indexing skills architecture.",
+      "subsystem": "code intelligence"
+    },
+    {
       "decision_record": false,
       "disposition": "keep",
       "kind": "architecture",
@@ -806,6 +822,14 @@
       "kind": "architecture",
       "path": "docs/architecture/review-protocol-v2.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/review-protocol-v3.md",
+      "reason": "Decision record for the two-intake, one-review redesign decided 2026-11-16 from runs 0005 and 0006; describes the target state while review-protocol-v2 describes the code as it runs.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -2612,6 +2636,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/final-report/final-report-pdf-receipt.schema.json",
+      "reason": "Schema for final report PDF publication receipt.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/final-report/final-report.schema.json",
       "reason": "Keep final-report.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "reporting and metrics"
@@ -2766,6 +2798,14 @@
       "kind": "schema",
       "path": "docs/schemas/inference-security-review/handoff.schema.json",
       "reason": "Keep handoff.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/hunting-campaign-plan.schema.json",
+      "reason": "Schema for hunting campaign plans.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -3450,6 +3490,86 @@
     },
     {
       "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t168-retire-joern-svf-universal-treesitter-cfg.md",
+      "reason": "Canonical specification for Task plan T-168: Retire Joern and SVF active paths and standardize universal Tree-sitter CFG extraction.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t169-universal-alternate-cpg-cfg-synthesis.md",
+      "reason": "Canonical specification for Task plan T-169: Synthesize universal alternate CPG and CFG from Tree-sitter and CodeQL.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t170-sast-flows-dedupe-and-sca-reachability.md",
+      "reason": "Canonical specification for Task plan T-170: Preserve Semgrep codeFlows deduplicate scanner leads and verify SCA reachability.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t171-rewire-engineering-signals-prioritization.md",
+      "reason": "Canonical specification for Task plan T-171: Rewire change context test coverage and profile data into review prioritization.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t172-index-threat-owasp-doc-build-signals.md",
+      "reason": "Canonical specification for Task plan T-172: Index threat models OWASP control gaps document drift and build mitigations.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t173-querying-skills-frontier-prompts-chains.md",
+      "reason": "Canonical specification for Task plan T-173: Publish common querying skills rebalance frontier prompts and widen attack chains.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md",
+      "reason": "Canonical specification for Task plan T-174: Unify compile-only PoC harnesses and add multi-language remediation validation.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t175-poc-sandboxing-gate-and-non-execution.md",
+      "reason": "Canonical specification for Task plan T-175: Gate dynamic PoC and sanitizer execution on sandboxing architecture review.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t176-expanded-radar-executive-dossier-redesign.md",
+      "reason": "Canonical specification for Task plan T-176: Expand radar dimensions to 12 axes and redesign executive reports and dossiers.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "task",
+      "path": "docs/tasks/2026-11-17-t177-wsl-container-dagster-smoke-readiness.md",
+      "reason": "Canonical specification for Task plan T-177: Rebuild and register container images compile CodeQL packs and refresh Dagster pins.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
       "disposition": "generated",
       "kind": "generated",
       "path": "docs/tasks/README.md",
@@ -3487,14 +3607,6 @@
       "path": "scripts/README.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "testing and operations"
-    },
-    {
-      "decision_record": true,
-      "disposition": "keep",
-      "kind": "architecture",
-      "path": "docs/architecture/review-protocol-v3.md",
-      "reason": "Decision record for the two-intake, one-review redesign decided 2026-11-16 from runs 0005 and 0006; describes the target state while review-protocol-v2 describes the code as it runs.",
-      "subsystem": "review inference and guidance"
     }
   ],
   "schema": "appsec-review/docs-ledger/1",

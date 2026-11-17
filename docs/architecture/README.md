@@ -52,6 +52,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [OWASP control-assessment workbench](owasp-control-workbench.md) | scanners and evidence collection | current |
 | [Profile-data ingestion](profile-data.md) | scanners and evidence collection | current |
 | [Python and retrieval architecture](python-and-retrieval.md) | runtime interchange | current |
+| [Hosted querying and indexing skills architecture](querying-and-indexing-skills.md) | code intelligence | current |
 | [Red discovery output contract](red-discovery-output.md) | review inference and guidance | current |
 | [Reporting and metrics](reporting-and-metrics.md) | reporting and metrics | current |
 | [Retrieval surfaces: tools, MCP, review cells, and skills](retrieval-surfaces.md) | code intelligence | current |
