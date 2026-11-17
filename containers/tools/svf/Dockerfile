@@ -30,9 +30,9 @@ RUN touch /src/svf/svf-llvm/tools/AppsecAliasExport/svf-alias-export.cpp \
     && cmake -S /src/svf -B /src/build -G "Unix Makefiles" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
         -DBUILD_SHARED_LIBS=OFF -DSVF_WARN_AS_ERROR=OFF -DSVF_ENABLE_ASSERTIONS=OFF \
-    && cmake --build /src/build --target SvfLLVM gen_extapi_ir -j"$(nproc)"
+    && cmake --build /src/build --target SvfLLVM gen_extapi_ir -j2
 COPY driver/svf-alias-export.cpp /src/svf/svf-llvm/tools/AppsecAliasExport/svf-alias-export.cpp
-RUN cmake --build /src/build --target svf-alias-export -j"$(nproc)" \
+RUN cmake --build /src/build --target svf-alias-export -j2 \
     && mkdir -p /opt/svf/bin /opt/svf/lib \
     && cp /src/build/bin/svf-alias-export /opt/svf/bin/ \
     && cp /opt/llvm21/bin/llvm-link /opt/svf/bin/llvm-link-21 \

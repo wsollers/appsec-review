@@ -81,3 +81,28 @@ Telemetry & metrics recorded:
    pack compilation timings in this task record upon completion.
 7. **Proper schema versioning & live-run gate:** Verify `host-pins.toml` signature and stop cleanly
    **before** launching a live Dagster review or executing any PoCs, awaiting explicit user command.
+
+## Recorded verification results (2026-11-17)
+
+- **Catalog build & smoke (`runs/container-builds/20261117T204749Z-60611/summary.json`):**
+  - Updated `containers/build.py` (`selected_ids`) so `--all` excludes `manual = true` images
+    (`tool-svf`, `tool-joern`, `tool-report-latex`) unless `--include-manual` is set, and bounded
+    `containers/tools/svf/Dockerfile` CMake parallelism to `-j2` to fit `appsecreview-engine.slice`
+    (`CPUQuota=200%`, `MemoryMax=2G`, `MemorySwapMax=0`).
+  - Built and startup-smoked all **44** non-manual enabled images (`passed=44`, `wall=1368.4s`,
+    `build=1353.6s`, `fetch=12.0s`, `cached_steps=140`, `executed_steps=426`, `size=12110MB`,
+    `critical_path=340.5s`: `base-ubuntu -> buildenv-native-toolchain -> audit-buildenv-rust-wasm`),
+    plus verified `PASSED tool-report-latex startup`.
+- **Host pins & image signatures (`runs/run-readiness/20261117T204749Z/`):**
+  - Updated `deploy/dagster/host-pins.toml` (`sha256: e63e36fb0894a82bc8e5a39ca248487e2bd78135e5e786f34eb48e5b6c23253f`,
+    `checked=48`, `edits=0`, `failures=0`) and signed all 48 image digests under
+    `/var/lib/appsec-review/signing/images/`.
+- **CodeQL pack compilation:**
+  - Compiled all **8** active `graph-export-*` packs (`cpp` 101s, `java` 7s, `javascript` 7s,
+    `python` 6s, `ruby` 7s, `go` 6s, `csharp` 8s, `rust` 7s; `summary=packs=15 failed=0`) into
+    `appsec-codeql-compile-68c7e693d38170f016750452`.
+- **Dagster stack rebuild & health:**
+  - Ran `deploy/dagster/bin/bootstrap.py` and `scripts/stack-rebuild.sh --no-probe --target appsec-review-smoke-cpp`;
+    rebuilt and signed the Dagster application image, reloaded the signed mounted source tree, and
+    verified `postgres`, `code-location`, `daemon`, `webserver`, and `result-cache` all
+    `running (healthy)`. No live review run or PoC execution was launched.

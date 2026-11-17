@@ -192,7 +192,12 @@ def validate(catalog: dict[str, Any]) -> list[str]:
 
 def selected_ids(args: argparse.Namespace, catalog: dict[str, Any]) -> list[str]:
     if getattr(args, "all", False):
-        return [item["id"] for item in catalog["images"] if item.get("state") == "enabled"]
+        include_manual = bool(getattr(args, "include_manual", False))
+        return [
+            item["id"]
+            for item in catalog["images"]
+            if item.get("state") == "enabled" and (include_manual or not item.get("manual"))
+        ]
     ids = list(getattr(args, "ids", []) or [])
     if not ids:
         raise ValueError("select image ids or pass --all")
@@ -1230,6 +1235,8 @@ def parser() -> argparse.ArgumentParser:
         command = sub.add_parser(name)
         command.add_argument("ids", nargs="*")
         command.add_argument("--all", action="store_true")
+        command.add_argument("--include-manual", action="store_true",
+                             help="include manual = true images when --all is set")
         if name == "build":
             command.add_argument("--continue-on-error", action="store_true")
             command.add_argument("--jobs", type=int, default=2)

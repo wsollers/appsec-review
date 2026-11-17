@@ -535,3 +535,29 @@ def test_the_tree_sitter_lock_names_its_wheels_and_grammars_as_local_files() -> 
     for image in ("tool-tree-sitter", "tool-native-cpp", "tool-report-latex", "tool-svf"):
         helper = ROOT / catalog[image]["acquire"]
         assert helper.is_file() and helper.stat().st_mode & 0o111, image
+
+
+def test_selected_ids_skips_manual_images_on_all_unless_include_manual() -> None:
+    catalog = container_build.load_catalog()
+    default_all = set(
+        container_build.selected_ids(
+            container_build.parser().parse_args(["build", "--all"]), catalog
+        )
+    )
+    with_manual = set(
+        container_build.selected_ids(
+            container_build.parser().parse_args(["build", "--all", "--include-manual"]), catalog
+        )
+    )
+    manual_enabled = {
+        item["id"]
+        for item in catalog["images"]
+        if item.get("state") == "enabled" and item.get("manual")
+    }
+    assert {"tool-report-latex", "tool-svf", "tool-joern"} <= manual_enabled
+    assert default_all.isdisjoint(manual_enabled)
+    assert with_manual - default_all == manual_enabled
+    explicit = container_build.selected_ids(
+        container_build.parser().parse_args(["build", "tool-svf"]), catalog
+    )
+    assert explicit == ["tool-svf"]

@@ -63,7 +63,7 @@ containers/build-all.ps1 smoke --all
 containers/build-all.ps1 security --all
 ```
 
-Running either launcher with no arguments means `build --all`. `list <ids>` restricts the listing
+Running either launcher with no arguments means `build --all` (`--all` skips images marked `manual = true` unless `--include-manual` is passed; explicit `<id>` arguments still target manual images directly). `list <ids>` restricts the listing
 and `list --json` prints machine-readable id, state, tag, and dependencies. `smoke` runs the startup
 version check; `smoke --functional` adds the fixture-based functional checks. Set
 `APPSEC_DOCKER_BIN` to use a Docker-compatible client other than `docker` for the engine's build,

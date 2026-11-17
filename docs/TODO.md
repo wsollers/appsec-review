@@ -181,7 +181,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-174 | [Unify compile-only PoC harnesses and add multi-language remediation validation](#t-174-unify-compile-only-poc-harnesses-and-add-multi-language-remediation-validation) | review | done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md) |
 | T-175 | [Gate dynamic PoC and sanitizer execution on sandboxing architecture review](#t-175-gate-dynamic-poc-and-sanitizer-execution-on-sandboxing-architecture-review) | testing | blocked |
 | T-176 | [Expand radar dimensions to 12 axes and redesign executive reports and dossiers](#t-176-expand-radar-dimensions-to-12-axes-and-redesign-executive-reports-and-dossiers) | review | done (2026-11-17, 4c9cb5ef2, docs/tasks/2026-11-17-t176-executive-report-dossier-and-12axis-radar.md) |
-| T-177 | [Rebuild and register container images compile CodeQL packs and refresh Dagster pins](#t-177-rebuild-and-register-container-images-compile-codeql-packs-and-refresh-dagster-pins) | images | in-progress |
+| T-177 | [Rebuild and register container images compile CodeQL packs and refresh Dagster pins](#t-177-rebuild-and-register-container-images-compile-codeql-packs-and-refresh-dagster-pins) | images | done (2026-11-17, docs/tasks/2026-11-17-t177-wsl-container-dagster-smoke-readiness.md) |
 | T-5000 | [Hunt packages reference their unit's context once](#t-5000-hunt-packages-reference-their-units-context-once) | review | in-progress |
 | T-5001 | [Bound the run-wide pipeline log and stream its reporting consumers](#t-5001-bound-the-run-wide-pipeline-log-and-stream-its-reporting-consumers) | pipeline | open |
 | T-5002 | [Bind OWASP finding packages to their obligations so a batch fits the model input budget](#t-5002-bind-owasp-finding-packages-to-their-obligations-so-a-batch-fits-the-model-input-budget) | review | open |
@@ -2853,7 +2853,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-177 — Rebuild and register container images compile CodeQL packs and refresh Dagster pins
 
-- **State:** in-progress
+- **State:** done (2026-11-17, docs/tasks/2026-11-17-t177-wsl-container-dagster-smoke-readiness.md)
 - **Area:** images
 - **Why:** Preparing WSL (`WSOLLERS1`) for an end-to-end smoke run against `targets/appsec-review-smoke-cpp` (`v1.0.0`) after retiring Joern/SVF and landing the updated CodeQL queries, container catalog and application code requires rebuilding and smoking all active container images, compiling custom/graph-export CodeQL query packs, rebuilding the Dagster application image, and updating/signing `deploy/dagster/host-pins.toml`.
 - **Scope:** in WSL `/home/wsollers/projects/appsec-review` (`ssh wsl-ubuntu`), verify the 9 smoke targets (`targets/appsec-review-smoke-<lang>` at `v1.0.0`) and external `appsec-review-smoke-guide`, rebuild and smoke all enabled non-manual catalog images plus `tool-report-latex`, run `scripts/compile-codeql-queries.sh`, rebuild the Dagster stack image (`scripts/stack-rebuild.sh`), refresh and operator-sign `deploy/dagster/host-pins.toml`, and verify `job_image_pin_verification` readiness without starting an unauthorized live review run.
