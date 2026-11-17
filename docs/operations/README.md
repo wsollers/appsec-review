@@ -35,6 +35,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [tool-clangd-indexer: pinned clangd static indexer](../../containers/tools/clangd-indexer/README.md) | images and deployment | current |
 | [CodeQL images](../../containers/tools/codeql/README.md) | images and deployment | current |
 | [cppcheck tool image](../../containers/tools/cppcheck/README.md) | images and deployment | current |
+| [cve-bin-tool tool image](../../containers/tools/cve-bin-tool/README.md) | images and deployment | current |
 | [tool-ghidra: pinned Ghidra headless decompilation closure](../../containers/tools/ghidra/README.md) | images and deployment | current |
 | [git tool image](../../containers/tools/git/README.md) | images and deployment | current |
 | [gitleaks tool image](../../containers/tools/gitleaks/README.md) | images and deployment | current |

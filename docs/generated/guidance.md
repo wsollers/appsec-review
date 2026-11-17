@@ -1099,6 +1099,22 @@ Jobs: `job_inference_security_review`, `job_owasp_control_assessment`.
 }
 ```
 
+## runtime_skills evidence-and-graph-querying
+
+Jobs: `job_inference_security_review`, `job_poc_generation`, `job_remediation_planning`, `job_threat_model_generation`.
+
+```json
+{
+  "jobs": [
+    "job_inference_security_review",
+    "job_poc_generation",
+    "job_remediation_planning",
+    "job_threat_model_generation"
+  ],
+  "path": "pipeline/skills/evidence-and-graph-querying/SKILL.md"
+}
+```
+
 ## runtime_skills generative-investigation
 
 Jobs: `job_inference_security_review`.

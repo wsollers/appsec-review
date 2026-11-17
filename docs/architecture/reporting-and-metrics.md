@@ -220,18 +220,36 @@ Exact contracts, failure branches and acceptance checks stay on the job pages.
 [Review inference and guidance](review-inference-and-guidance.md) owns the model/evidence decision
 boundary; this subsystem observes and projects it rather than widening it.
 
+### Executive report v2, 12-axis security radar, finding dossiers, SARIF 2.1.0 & CVE-bound OpenVEX (T-176)
+
+- **12-axis Security Posture Radar (`appsec-review/security-radar-tracker/1`)**: Projects 12
+  security dimensions across four funnel series (`Detected`, `Corroborated`, `Reachable`,
+  `Remediated`) with deterministic inline SVG rendering (`reporting/radar_svg.py`) and longitudinal
+  baseline delta support.
+- **Executive Report (`appsec-review/final-report/2`) & Finding Dossiers (`appsec-review/dossier/1`)**:
+  `job_final_report_publication` renders an executive risk narrative, exploitability funnel,
+  multi-step attack-chain summaries, top remediation choke-points, OWASP/CWE posture matrix, and
+  named coverage gaps. `job_dossier_publication` emits self-contained per-finding engineering
+  dossiers with source-to-sink slices, guard analysis, compile-only PoC verification status (with
+  explicit non-execution banner), and remediation diffs.
+- **Enriched SARIF 2.1.0 & CVE-bound OpenVEX**: SARIF exports populate `codeFlows[].threadFlows` and
+  `fixes[]`, while `job_openvex_export` binds third-party CVEs from `appsec-review/sca-reachability/1`
+  to evidence-backed `affected` and `not_affected` (`vulnerable_code_not_in_execute_path` /
+  `vulnerable_code_not_present`) VEX statements.
+
 ## Dataflow
 
 ```mermaid
 flowchart TD
-  review["job_inference_security_review: accepted review"] --> engineering["job_poc_generation / job_remediation_planning / job_remediation_validation"]
-  review --> dossiers["job_dossier_publication"]
+  review["job_inference_security_review: accepted findings + attack chains"] --> engineering["job_poc_generation (compile-only) / job_remediation_planning / job_remediation_validation"]
+  review --> dossiers["job_dossier_publication: appsec-review/dossier/1"]
   engineering --> dossiers
   review --> gate["job_final_publication_gate"]
   engineering --> gate
   dossiers --> gate
-  gate --> report["job_final_report_publication: JSON and Markdown"]
-  gate --> vex["job_openvex_export: affected-only statements and accounting"]
+  gate --> report["job_final_report_publication: appsec-review/final-report/2 + SARIF 2.1.0"]
+  report --> radar["appsec-review/security-radar-tracker/1: 12-axis 4-series SVG radar"]
+  gate --> vex["job_openvex_export: CVE-bound affected & justified not_affected VEX"]
   report --> snapshot["finding-snapshot/1"]
   snapshot --> scorecard["finding-metrics/1"]
   independent["Independent labels / prior snapshots / corpus results"] --> scorecard

@@ -3,7 +3,7 @@ title: "Role-selected review procedures"
 kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
-jobs: ["job_inference_security_review", "job_owasp_control_assessment"]
+jobs: ["job_inference_security_review", "job_owasp_control_assessment", "job_poc_generation", "job_remediation_planning", "job_threat_model_generation"]
 last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Role-selected review procedures
@@ -129,3 +129,12 @@ Technical reference points:
   binders cannot make it safe for untrusted input.
 - [GitHub Actions secure use](https://docs.github.com/en/actions/reference/security/secure-use):
   token permissions and action pinning require the actual trust and configuration context.
+
+## Hosted evidence and graph querying procedure (T-173)
+
+`pipeline/skills/evidence-and-graph-querying/SKILL.md` (`evidence-and-graph-querying` in
+`pipeline/guidance/registry.json`) provides deterministic decision trees for invoking bounded
+`RetrievalCore` graph, slice, guard-dominator, corroborated-cluster, SCA-reachability,
+threat-boundary, OWASP-gap, and API-drift queries across `job_inference_security_review`,
+`job_poc_generation`, `job_remediation_planning`, and `job_threat_model_generation`. See
+[Hosted querying and indexing skills](querying-and-indexing-skills.md).

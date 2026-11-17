@@ -29,7 +29,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `analysis` | `analysis.map_and_adjudicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_document_issue_analysis/job.py#L63) |
+| `analysis` | `analysis.map_and_adjudicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_document_issue_analysis/job.py#L76) |
 
 ### Accepted input declarations
 
@@ -182,6 +182,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
+| `document_drift_issues` | `analysis` | `appsec-review/document-drift-issue/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `document_issue_ledger` | `analysis` | `appsec-review/document-issue-ledger/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -920,10 +921,14 @@ flowchart LR
   input_schema141["appsec-review/container-execution/1"]
   producer141 --> input141 --> job
   input141 -. schema .-> input_schema141
-  output0["document_issue_ledger"]
-  output_schema0["appsec-review/document-issue-ledger/1"]
+  output0["document_drift_issues"]
+  output_schema0["appsec-review/document-drift-issue/2"]
   job --> output0
   output0 -. schema .-> output_schema0
+  output1["document_issue_ledger"]
+  output_schema1["appsec-review/document-issue-ledger/1"]
+  job --> output1
+  output1 -. schema .-> output_schema1
 ```
 
 <!-- generated:end -->

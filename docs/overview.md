@@ -27,6 +27,58 @@ auditable; they do not prove every claim is correct or every relevant behavior w
 | 5 AI review | Bounded model roles investigate hypotheses against admitted evidence. Predicate-specific verification, scoring and triage preserve missing support and unconfirmed outcomes rather than treating every candidate as proved. | Structured decisions, citations, limitations and receipts. Full raw conversations are not retained by default. | [Inference security review](operations/job_inference_security_review.md), [Review architecture](architecture/review-inference-and-guidance.md) |
 | 6 Report | The final gate binds findings, scoped evidence, available remediation outputs and recorded coverage limitations. Reports render that frozen input rather than discovering later evidence. | A report and dossier with explicit evidence and availability boundaries. | [Final report](operations/job_final_report_publication.md), [Dossier publication](operations/job_dossier_publication.md), [Reporting architecture](architecture/reporting-and-metrics.md) |
 
+## End-to-end architecture dataflow
+
+```mermaid
+flowchart TB
+  subgraph S12["Stages 1-2: Acquire, Catalog & Build"]
+    acq["job_target_acquisition / job_review_intake"] --> cat["job_target_catalog / job_target_analysis_plan"]
+    cat --> bld["job_project_build / job_language_build"]
+  end
+  subgraph S3["Stage 3: Static, Graph & Supply-Chain Producers"]
+    cat --> ts["job_tree_sitter_ast: AST + appsec-review/tree-sitter-cfg/1"]
+    cat --> cql["job_codeql_analysis: SARIF + graph exports"]
+    bld --> cql
+    bld --> cpp["job_cpp_compiled_analysis / job_cpp_symbol_index / job_clang_static_analysis"]
+    ts --> cgi["job_code_graph_index: appsec-review/alternate-cpg/1"]
+    cql --> cgi
+    cpp --> cgi
+    cat --> ev["job_evidence_collection: corroborated SAST + OSV index"]
+    cat --> dep["job_dependency_intelligence: appsec-review/sca-reachability/1"]
+    ev --> dep
+    cat --> ctx["job_ci_configuration_analysis / job_source_history_analysis / job_artifact_security_analysis"]
+    retired["job_cpg_analysis / job_svf_alias_analysis: disabled by default; manual = true"]
+  end
+  subgraph S4["Stage 4: Unified Indexing & Prioritization"]
+    cgi --> prio["job_review_prioritization: appsec-review/review-prioritization-signals/1"]
+    ev --> prio
+    dep --> prio
+    ctx --> prio
+    cgi --> idx["job_review_data_indexing: RetrievalCore shards"]
+    ev --> idx
+    dep --> idx
+    prio --> idx
+    owasp["job_owasp_control_assessment / job_threat_model_generation"] --> idx
+  end
+  subgraph S5["Stage 5: Dual-Lane AI Review, Chains & Static Validation"]
+    idx --> pkg["job_review_package_assembly"]
+    pkg --> inf["job_inference_security_review: Lane A reachability + Lane B hunt + Round 2 RetrievalCore + chains"]
+    inf --> poc["job_poc_generation: appsec-review/poc-compile-check/1 (compile-only; execution blocked)"]
+    inf --> rem["job_remediation_planning / job_remediation_validation: 9-lang static verification"]
+  end
+  subgraph S6["Stage 6: Gate, Executive Report, Dossiers & Exports"]
+    inf --> dos["job_dossier_publication: appsec-review/dossier/1"]
+    poc --> dos
+    rem --> dos
+    dos --> gate["job_final_publication_gate"]
+    inf --> gate
+    poc --> gate
+    rem --> gate
+    gate --> rep["job_final_report_publication: appsec-review/final-report/2 + 12-axis SVG radar + SARIF 2.1.0"]
+    gate --> vex["job_openvex_export: CVE-bound reachability VEX"]
+  end
+```
+
 ## What makes the result trustworthy
 
 - **Explicit execution policy.** Tool identities, isolation, network and signing policy have

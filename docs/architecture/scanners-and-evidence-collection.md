@@ -218,6 +218,20 @@ CodeQL meet this subsystem at observation semantics; their build, graph and retr
 are described in [code intelligence](code-intelligence.md). Shared interchange, runtime and guidance
 mechanisms remain in their linked canonical homes.
 
+### Pre-cap SAST corroboration, taint-flow retention, and SCA reachability (T-170)
+
+- **Taint-flow retention & pre-cap corroboration**: `job_evidence_collection` preserves native
+  Semgrep/Opengrep `dataflow_trace` and SARIF `codeFlows` hops (`source -> intermediate -> sink`)
+  and performs cross-scanner corroboration (`appsec-review/corroborated-sast-evidence/1`) across
+  Semgrep, Opengrep, Bandit, Gosec, Brakeman, Clippy, DevSkim, Cppcheck, Clang-Tidy, and CodeQL
+  *before* per-adapter truncation caps are applied.
+- **Indexed OSV matching & FFI/symbol SCA reachability**: `osv_version_matching = "index"` enables
+  offline advisory matching against pre-built ecosystem snapshots, and `job_dependency_intelligence`
+  combines OSV/Grype CVEs with Alternate CPG call paths, Tree-sitter imports, and binary symbol/FFI
+  tables (`ctypes`, `cgo`, JNI, P/Invoke, Rust `extern "C"`, Ruby `Fiddle`, PHP `FFI`) to publish
+  `appsec-review/sca-reachability/1` (`reachable_from_entrypoint`, `imported_not_called`,
+  `present_not_imported`, `native_ffi_loaded`, `unknown_dynamic`).
+
 ## Dataflow
 
 ```mermaid
@@ -230,15 +244,15 @@ flowchart LR
   compiled["accepted compiled-analysis catalogs"] --> post
   build --> imported["job_test_coverage + job_profile_data"]
   artifacts --> imported
-  source --> syft["accepted source Syft + observations"]
-  syft --> deps["job_dependency_intelligence"]
+  source --> syft["accepted source Syft + pre-cap appsec-review/corroborated-sast-evidence/1"]
+  syft --> deps["job_dependency_intelligence: appsec-review/sca-reachability/1"]
   catalog --> deps
   build --> deps
   artifacts --> deps
-  feeds["verified offline feeds"] --> source
+  feeds["verified offline feeds + OSV index"] --> source
   feeds --> artifactscan
   public["bounded public Scorecard / repository cache"] --> deps
-  source --> normalized["native references + normalized scanner judgments"]
+  source --> normalized["native taint traces + corroborated scanner judgments"]
   ci --> normalized
   artifactscan --> normalized
   post --> context["build checks + optional validated model observations"]
@@ -247,7 +261,7 @@ flowchart LR
   normalized --> manifest["accepted retrieval manifests + canonical outcomes"]
   context --> manifest
   artifacts --> manifest
-  manifest --> review["bounded reads for downstream review; not automatic findings"]
+  manifest --> review["bounded RetrievalCore reads for downstream prioritization and review"]
   source -. "failed / disabled / unsupported / bounded" .-> gaps["coverage dispositions and reasons"]
   artifactscan -. "delivery / package / scanner omissions" .-> gaps
   deps -. "unknown / conflicted / unavailable" .-> gaps

@@ -2588,9 +2588,25 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/code-graph-index/alternate-cpg.schema.json",
+      "reason": "Keep alternate-cpg.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/cpp-compiled-analysis.schema.json",
       "reason": "Keep cpp-compiled-analysis.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/dependency-intelligence/sca-reachability.schema.json",
+      "reason": "Keep sca-reachability.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
@@ -2606,6 +2622,30 @@
       "kind": "schema",
       "path": "docs/schemas/document-issue-ledger.schema.json",
       "reason": "Keep document-issue-ledger.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/document-issues/document-drift-issue.schema.json",
+      "reason": "Keep document-drift-issue.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/dossier/finding-dossier.schema.json",
+      "reason": "Keep finding-dossier.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/evidence-collection/corroborated-sast-evidence.schema.json",
+      "reason": "Keep corroborated-sast-evidence.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -2652,6 +2692,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/final-report/security-radar-tracker.schema.json",
+      "reason": "Keep security-radar-tracker.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/graph-quality-scorecard.schema.json",
       "reason": "Keep graph-quality-scorecard.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "code intelligence"
@@ -2663,6 +2711,14 @@
       "path": "docs/schemas/history-hotspots.schema.json",
       "reason": "Keep history-hotspots.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/indexing/threat-boundary-index.schema.json",
+      "reason": "Keep threat-boundary-index.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
@@ -2980,6 +3036,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/owasp-workbench/owasp-control-gap.schema.json",
+      "reason": "Keep owasp-control-gap.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "scanners and evidence collection"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/poc-generation/common.schema.json",
       "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "review inference and guidance"
@@ -2998,6 +3062,14 @@
       "kind": "schema",
       "path": "docs/schemas/poc-generation/poc-candidate.schema.json",
       "reason": "Keep poc-candidate.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/poc-generation/poc-compile-check.schema.json",
+      "reason": "Keep poc-compile-check.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -3039,6 +3111,38 @@
       "path": "docs/schemas/predicate-warrant.schema.json",
       "reason": "Keep predicate-warrant.schema.json as the closed machine-readable contract for opt-in TRI-B predicate warrants and lane warrant sidecars.",
       "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation-planning/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation-planning/priority-ranking.schema.json",
+      "reason": "Keep priority-ranking.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation-validation/common.schema.json",
+      "reason": "Keep common.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/remediation-validation/static-patch-validation.schema.json",
+      "reason": "Keep static-patch-validation.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
@@ -3172,6 +3276,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/review-prioritization/prioritization-signals.schema.json",
+      "reason": "Keep prioritization-signals.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/sei-cert-mapping.schema.json",
       "reason": "Keep sei-cert-mapping.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "scanners and evidence collection"
@@ -3263,6 +3375,14 @@
       "path": "docs/schemas/topology-fixture-expectations.schema.json",
       "reason": "Keep topology-fixture-expectations.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/tree-sitter-ast/tree-sitter-cfg.schema.json",
+      "reason": "Keep tree-sitter-cfg.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": true,

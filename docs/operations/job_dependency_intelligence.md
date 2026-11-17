@@ -30,17 +30,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L570) |
-| `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L263) |
-| `publication` | `publication.native_advisory_lookup` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L414) |
-| `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L495) |
-| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L613) |
-| `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L341) |
-| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L605) |
-| `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L281) |
-| `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L312) |
-| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L607) |
-| `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L349) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L682) |
+| `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L314) |
+| `publication` | `publication.native_advisory_lookup` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L465) |
+| `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L546) |
+| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L730) |
+| `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L392) |
+| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L722) |
+| `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L332) |
+| `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L363) |
+| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L724) |
+| `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L400) |
 
 ### Accepted input declarations
 
@@ -99,6 +99,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `native_sbom_metrics` | `publication` | `appsec-review/native-sbom-metrics/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_sbom_provenance` | `publication` | `appsec-review/native-sbom-provenance/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `native_spdx` | `publication` | `SPDX-2.3` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `sca_reachability` | `publication` | `appsec-review/sca-reachability/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `scorecard_responses` | `scorecards` | `application/json` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `unity_inventory` | `inputs` | `appsec-review/unity-inventory/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
@@ -385,14 +386,18 @@ flowchart LR
   output_schema14["SPDX-2.3"]
   job --> output14
   output14 -. schema .-> output_schema14
-  output15["scorecard_responses"]
-  output_schema15["application/json"]
+  output15["sca_reachability"]
+  output_schema15["appsec-review/sca-reachability/1"]
   job --> output15
   output15 -. schema .-> output_schema15
-  output16["unity_inventory"]
-  output_schema16["appsec-review/unity-inventory/1"]
+  output16["scorecard_responses"]
+  output_schema16["application/json"]
   job --> output16
   output16 -. schema .-> output_schema16
+  output17["unity_inventory"]
+  output_schema17["appsec-review/unity-inventory/1"]
+  job --> output17
+  output17 -. schema .-> output_schema17
 ```
 
 <!-- generated:end -->

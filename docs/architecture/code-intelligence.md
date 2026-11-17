@@ -217,34 +217,49 @@ repaired by this document.
 [Scanners and evidence collection](scanners-and-evidence-collection.md) owns the broader scanner,
 artifact, dependency and imported execution-evidence story; shared mechanisms remain linked above.
 
+### Universal Alternate CPG/CFG and retirement of Joern/SVF from default runs (T-168, T-169)
+
+`job_cpg_analysis` (`tool-joern`) and `job_svf_alias_analysis` (`tool-svf`) are disabled in default
+runs (`enabled = false` in `appsec-review.toml`, `manual = true` in `containers/catalog.toml`) to
+eliminate whole-program OOM failures on large targets while preserving explicit operator opt-in.
+
+Instead, every run synthesizes a bounded, queryable Alternate CPG/CFG (`appsec-review/alternate-cpg/1`)
+in `job_code_graph_index` by fusing `job_tree_sitter_ast` (`appsec-review/tree-sitter-cfg/1`),
+`job_codeql_analysis` graph exports, and (for C/C++ builds) `job_cpp_compiled_analysis`,
+`job_cpp_symbol_index`, and `job_clang_static_analysis`. Each function/call edge records its exact
+`resolution_tier` (`codeql_clang`, `codeql_treesitter`, `clang_treesitter`, or `treesitter_only`),
+precomputes bounded 8?12 hop entry-to-sink paths and backward/forward program slices, and exposes
+`query_cfg_function`, `query_guard_dominators`, `query_cpg_slice`, and `query_call_paths` through
+`RetrievalCore`.
+
 ## Dataflow
 
 ```mermaid
 flowchart LR
-  source["accepted intake / catalog / generated-source backing"] --> syntax["job_tree_sitter_ast"]
+  source["accepted intake / catalog / generated-source backing"] --> syntax["job_tree_sitter_ast: AST + appsec-review/tree-sitter-cfg/1"]
   builds["accepted language builds + compile/source custody"] --> compiled["job_cpp_compiled_analysis"]
   compiled --> symbols["job_cpp_symbol_index"]
   compiled --> clang["job_clang_static_analysis"]
-  compiled --> svf["job_svf_alias_analysis"]
-  compiled --> cpg["job_cpg_analysis: optional"]
+  compiled -. "manual opt-in only" .-> svf["job_svf_alias_analysis: disabled by default"]
+  compiled -. "manual opt-in only" .-> cpg["job_cpg_analysis: disabled by default"]
   source --> codeql["job_codeql_analysis"]
   builds --> codeql
   codeql --> sarif["native SARIF + scanner observations"]
   codeql --> exports["raw bounded graph exports + seed ledger"]
-  exports --> graph["job_code_graph_index"]
+  syntax -->|intra-procedural CFG + guards| graph["job_code_graph_index: appsec-review/alternate-cpg/1"]
+  exports --> graph
   compiled -->|AST / IR cross-check| graph
   symbols --> graph
   clang -->|diagnostics / sink corroboration| graph
-  svf -->|qualified alias cross-check| graph
-  cpg -->|bounded seeded function context| graph
+  svf -. "optional alias cross-check" .-> graph
+  cpg -. "optional seeded CPG context" .-> graph
   sarif -->|flow correlation| graph
   binary["intake-frozen decompilation publication"] --> binindex["job_binary_evidence_indexing"]
   syntax --> manifest["accepted immutable retrieval manifests"]
   graph --> manifest
   binindex --> manifest
-  manifest --> queries["bounded syntax / graph / neighborhood / observation reads"]
-  exports -. "absent / failed / seeded / truncated" .-> coverage["coverage-only rows + explicit gaps"]
-  svf -. "module coverage distinct from root status" .-> coverage
+  manifest --> queries["RetrievalCore: query_cfg_function / query_guard_dominators / query_cpg_slice / query_call_paths"]
+  exports -. "absent / failed / seeded / truncated" .-> coverage["tiered resolution_tier + explicit gaps"]
   coverage --> manifest
   builds -. "changed accepted identity" .-> stop["integrity failure; not clean coverage"]
   raw["protected commands / raw databases / retained CPG bytes"] -. "not automatic payload access" .-> manifest

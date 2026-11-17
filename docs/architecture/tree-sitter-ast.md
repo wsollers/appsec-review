@@ -99,3 +99,18 @@ drives the syntax language matrix; component-prefixed scope names are never pars
 Syntax nodes retain their existing evidence-admission rules: direct evidence for an affected
 construct, never direct dataflow, input control or guard sufficiency. A successful syntax fallback
 does not repair missing CodeQL coverage. Projection version changes invalidate scope reuse.
+
+## Universal intra-procedural CFG and guard polarity (T-169)
+
+In addition to structural AST projection, `job_tree_sitter_ast` deterministically builds an
+intra-procedural control-flow graph (`cfg.jsonl`, schema `appsec-review/tree-sitter-cfg/1`) across
+all nine target languages (`cpp`, `java`, `javascript`, `python`, `ruby`, `go`, `csharp`, `rust`,
+`php`):
+
+- Basic blocks and typed edges (`fallthrough`, `true_branch`, `false_branch`, `loop_back`,
+  `loop_exit`, `return`, `throw`, `switch_case`, `try_edge`, `catch_edge`, `finally_edge`).
+- Guard polarity extraction (`null_check`, `bounds_check`, `auth_check`, `type_check`,
+  `error_return`, `sanitizer_call`) with explicit protected vs. unprotected branch targets, Rust `?`
+  and Go `if err != nil` early-exit lowering, and explicit `unmodeled_constructs` accounting.
+- `job_code_graph_index` fuses `cfg.jsonl` with CodeQL graph exports and optional Clang/LLVM
+  compiled analysis into `appsec-review/alternate-cpg/1` without depending on Joern or SVF.

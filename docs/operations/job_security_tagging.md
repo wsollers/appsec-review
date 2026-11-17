@@ -209,7 +209,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 
 Dispatch: `review_graph`. Review graph member: **true**. Enabled graph member: **true**.
 
-Declared predecessors: `job_code_graph_index`, `job_binary_evidence_indexing`, `job_dependency_intelligence`, `job_profile_data`, `job_test_coverage`.
+Declared predecessors: `job_code_graph_index`, `job_binary_evidence_indexing`.
 
 ### Declared dataflow
 

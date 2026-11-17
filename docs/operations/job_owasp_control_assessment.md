@@ -198,6 +198,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
+| `owasp_control_gaps` | `publication` | `appsec-review/owasp-control-gap/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `owasp_documents` | `publication` | `appsec-review/owasp-workbench-result/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `owasp_model_receipts` | `verification` | `appsec-review/owasp-model-receipt/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `owasp_workbench` | `publication` | `appsec-review/owasp-index-shard/1` | indexed | `standards`, `component-classification`, `applicability`, `validation-work`, `control-result`, `finding-package` | `query_owasp_workbench`, `query_precomputed` |
@@ -971,18 +972,22 @@ flowchart LR
   input_schema142["appsec-review/public-feed-use/1"]
   producer142 --> input142 --> job
   input142 -. schema .-> input_schema142
-  output0["owasp_documents"]
-  output_schema0["appsec-review/owasp-workbench-result/1"]
+  output0["owasp_control_gaps"]
+  output_schema0["appsec-review/owasp-control-gap/2"]
   job --> output0
   output0 -. schema .-> output_schema0
-  output1["owasp_model_receipts"]
-  output_schema1["appsec-review/owasp-model-receipt/1"]
+  output1["owasp_documents"]
+  output_schema1["appsec-review/owasp-workbench-result/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["owasp_workbench"]
-  output_schema2["appsec-review/owasp-index-shard/1"]
+  output2["owasp_model_receipts"]
+  output_schema2["appsec-review/owasp-model-receipt/1"]
   job --> output2
   output2 -. schema .-> output_schema2
+  output3["owasp_workbench"]
+  output_schema3["appsec-review/owasp-index-shard/1"]
+  job --> output3
+  output3 -. schema .-> output_schema3
 ```
 
 <!-- generated:end -->

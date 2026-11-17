@@ -172,15 +172,15 @@ until each is rewritten into the entry format when it is next touched.
 | T-165 | [Review only first-party code: vendored, SDK and generated paths leave the review lanes](#t-165-review-only-first-party-code-vendored-sdk-and-generated-paths-leave-the-review-lanes) | review | in-progress |
 | T-166 | [Verify whether first-party code uses vendored code named by a CVE or finding](#t-166-verify-whether-first-party-code-uses-vendored-code-named-by-a-cve-or-finding) | evidence | open |
 | T-167 | [Stylistic observations are not security leads](#t-167-stylistic-observations-are-not-security-leads) | review | in-progress |
-| T-168 | [Retire Joern and SVF active paths and standardize universal Tree-sitter CFG extraction](#t-168-retire-joern-and-svf-active-paths-and-standardize-universal-tree-sitter-cfg-extraction) | graph | in-progress |
-| T-169 | [Synthesize universal alternate CPG and CFG from Tree-sitter and CodeQL](#t-169-synthesize-universal-alternate-cpg-and-cfg-from-tree-sitter-and-codeql) | graph | in-progress |
-| T-170 | [Preserve Semgrep codeFlows deduplicate scanner leads and verify SCA reachability](#t-170-preserve-semgrep-codeflows-deduplicate-scanner-leads-and-verify-sca-reachability) | scanners | in-progress |
-| T-171 | [Rewire change context test coverage and profile data into review prioritization](#t-171-rewire-change-context-test-coverage-and-profile-data-into-review-prioritization) | review | in-progress |
-| T-172 | [Index threat models OWASP control gaps document drift and build mitigations](#t-172-index-threat-models-owasp-control-gaps-document-drift-and-build-mitigations) | evidence | in-progress |
-| T-173 | [Publish common querying skills rebalance frontier prompts and widen attack chains](#t-173-publish-common-querying-skills-rebalance-frontier-prompts-and-widen-attack-chains) | review | in-progress |
-| T-174 | [Unify compile-only PoC harnesses and add multi-language remediation validation](#t-174-unify-compile-only-poc-harnesses-and-add-multi-language-remediation-validation) | review | in-progress |
+| T-168 | [Retire Joern and SVF active paths and standardize universal Tree-sitter CFG extraction](#t-168-retire-joern-and-svf-active-paths-and-standardize-universal-tree-sitter-cfg-extraction) | graph | done (2026-11-17, a26c79f13, docs/tasks/2026-11-17-t168-retire-joern-svf-universal-treesitter-cfg.md) |
+| T-169 | [Synthesize universal alternate CPG and CFG from Tree-sitter and CodeQL](#t-169-synthesize-universal-alternate-cpg-and-cfg-from-tree-sitter-and-codeql) | graph | done (2026-11-17, a26c79f13, docs/tasks/2026-11-17-t169-universal-alternate-cpg-cfg-synthesis.md) |
+| T-170 | [Preserve Semgrep codeFlows deduplicate scanner leads and verify SCA reachability](#t-170-preserve-semgrep-codeflows-deduplicate-scanner-leads-and-verify-sca-reachability) | scanners | done (2026-11-17, 3c76b820e, docs/tasks/2026-11-17-t170-sast-taint-preservation-sca-reachability.md) |
+| T-171 | [Rewire change context test coverage and profile data into review prioritization](#t-171-rewire-change-context-test-coverage-and-profile-data-into-review-prioritization) | review | done (2026-11-17, 3c76b820e, docs/tasks/2026-11-17-t171-rewire-engineering-signals-prioritization.md) |
+| T-172 | [Index threat models OWASP control gaps document drift and build mitigations](#t-172-index-threat-models-owasp-control-gaps-document-drift-and-build-mitigations) | evidence | done (2026-11-17, 748b7a06b, docs/tasks/2026-11-17-t172-unified-evidence-indexing-retrieval-skills.md) |
+| T-173 | [Publish common querying skills rebalance frontier prompts and widen attack chains](#t-173-publish-common-querying-skills-rebalance-frontier-prompts-and-widen-attack-chains) | review | done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t173-frontier-prompt-role-skill-overhaul.md) |
+| T-174 | [Unify compile-only PoC harnesses and add multi-language remediation validation](#t-174-unify-compile-only-poc-harnesses-and-add-multi-language-remediation-validation) | review | done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md) |
 | T-175 | [Gate dynamic PoC and sanitizer execution on sandboxing architecture review](#t-175-gate-dynamic-poc-and-sanitizer-execution-on-sandboxing-architecture-review) | testing | blocked |
-| T-176 | [Expand radar dimensions to 12 axes and redesign executive reports and dossiers](#t-176-expand-radar-dimensions-to-12-axes-and-redesign-executive-reports-and-dossiers) | review | in-progress |
+| T-176 | [Expand radar dimensions to 12 axes and redesign executive reports and dossiers](#t-176-expand-radar-dimensions-to-12-axes-and-redesign-executive-reports-and-dossiers) | review | done (2026-11-17, 4c9cb5ef2, docs/tasks/2026-11-17-t176-executive-report-dossier-and-12axis-radar.md) |
 | T-177 | [Rebuild and register container images compile CodeQL packs and refresh Dagster pins](#t-177-rebuild-and-register-container-images-compile-codeql-packs-and-refresh-dagster-pins) | images | in-progress |
 | T-5000 | [Hunt packages reference their unit's context once](#t-5000-hunt-packages-reference-their-units-context-once) | review | in-progress |
 | T-5001 | [Bound the run-wide pipeline log and stream its reporting consumers](#t-5001-bound-the-run-wide-pipeline-log-and-stream-its-reporting-consumers) | pipeline | open |
@@ -2766,7 +2766,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-168 — Retire Joern and SVF active paths and standardize universal Tree-sitter CFG extraction
 
-- **State:** in-progress
+- **State:** done (2026-11-17, a26c79f13, docs/tasks/2026-11-17-t168-retire-joern-svf-universal-treesitter-cfg.md)
 - **Area:** graph
 - **Blocks:** T-169
 - **Why:** Joern (`job_cpg_analysis`, `tool-joern`) and SVF (`job_svf_alias_analysis`, `tool-svf`) repeatedly hit whole-program JVM and LLVM bitcode out-of-memory failures on large codebases, while `job_tree_sitter_ast` currently extracts flat definitions, imports and call tokens without basic-block control flow, branch guard conditions, exception scopes or loop bounds.
@@ -2776,7 +2776,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-169 — Synthesize universal alternate CPG and CFG from Tree-sitter and CodeQL
 
-- **State:** in-progress
+- **State:** done (2026-11-17, a26c79f13, docs/tasks/2026-11-17-t169-universal-alternate-cpg-cfg-synthesis.md)
 - **Area:** graph
 - **Blocked by:** T-168
 - **Blocks:** T-173
@@ -2787,7 +2787,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-170 — Preserve Semgrep codeFlows deduplicate scanner leads and verify SCA reachability
 
-- **State:** in-progress
+- **State:** done (2026-11-17, 3c76b820e, docs/tasks/2026-11-17-t170-sast-taint-preservation-sca-reachability.md)
 - **Area:** scanners
 - **Why:** `job_evidence_collection` drops Semgrep SARIF `codeFlows`/`threadFlows` taint steps, per-scanner caps truncate distinct vulnerabilities behind duplicate overlapping rules, `job_ci_configuration_analysis` and `job_artifact_security_analysis` observations lack promotion paths for high-impact supply-chain defects, and `job_dependency_intelligence` defaults to sequential OSV directory walks (`osv_version_matching = "scan"`) without joining vulnerable library symbols to first-party call graphs.
 - **Scope:** preserve SARIF `codeFlows` step chains on normalized observations (`appsec-review/scanner-observation/2`), deduplicate cross-scanner observations on `(source_id, line_band, cwe_family)` into multi-tool corroborated clusters before applying caps, add Rust/Ruby/PHP/C# first-party review-signal rules, switch `osv_version_matching` default to `"index"` in `job_dependency_intelligence`, join `job_artifact_indexing` + `job_debug_symbol_indexing` + `code_graph` to compute vulnerable-symbol FFI/import reachability (`used`, `not_used`, `unknown`), and promote high-impact exploitable CI workflow (`pull_request_target` + untrusted checkout, unpinned privileged actions) and container/artifact findings into structured review leads.
@@ -2796,7 +2796,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-171 — Rewire change context test coverage and profile data into review prioritization
 
-- **State:** in-progress
+- **State:** done (2026-11-17, 3c76b820e, docs/tasks/2026-11-17-t171-rewire-engineering-signals-prioritization.md)
 - **Area:** review
 - **Why:** `job_change_context_analysis`, `job_test_coverage` and `job_profile_data` execute and publish datasets without being consumed by `job_review_prioritization`, `job_source_history_analysis` uses a fixed `max_hotspots = 250` cap regardless of repository size, and high-exposure entry-point files with zero SAST hits receive no hunt-priority boost when scanners miss logic or custom-API flaws.
 - **Scope:** wire `job_change_context_analysis` (auth/crypto/validation guard removals and risky PR/commit deltas), `job_test_coverage` (uncovered high-exposure lines) and `job_profile_data` (hot execution paths) into `job_review_prioritization`'s typed `Job.contract` via `accepted_upstream`, replace fixed hotspot caps with repository-proportional scaling (`min(max(250, ceil(0.05 * first_party_files)), 2000)`), and add an explicit **SAST-silence hunt boost** (`high_exposure_entry_point + dangerous_api_or_auth_surface + zero_sast_leads + low_test_coverage`) under versioned prioritization schema `appsec-review/review-prioritization/2`, indexed into `job_review_data_indexing`.
@@ -2805,7 +2805,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-172 — Index threat models OWASP control gaps document drift and build mitigations
 
-- **State:** in-progress
+- **State:** done (2026-11-17, 748b7a06b, docs/tasks/2026-11-17-t172-unified-evidence-indexing-retrieval-skills.md)
 - **Area:** evidence
 - **Blocks:** T-173
 - **Why:** `job_threat_model_generation` publishes trust boundaries, assets and attacker profiles after review without indexing them for inference; `job_document_issue_analysis` has no downstream consumer (`CONSUMED BY: none`); `job_owasp_control_assessment` projects unassessed rows into context instead of routing verified `absent`/`weak` control gaps as hunt leads; and `job_post_build_security_assessment` binary hardening deficits (missing NX, PIE, RELRO, canary, CFI) and sanitizer readiness metadata are under-exposed to exploitability scoring and retrieval.
@@ -2815,7 +2815,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-173 — Publish common querying skills rebalance frontier prompts and widen attack chains
 
-- **State:** in-progress
+- **State:** done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t173-frontier-prompt-role-skill-overhaul.md)
 - **Area:** review
 - **Blocked by:** T-169, T-172
 - **Why:** Frontier review cells lack a unified reference procedure for querying the hosted multi-dataset index and alternate CPG/CFG; `independent_verifier` and `blue` prompts exhibit defensive dismissal bias on circumstantial multi-hop paths; Round 2 `requests_evidence` lacks automated index fulfillment between rounds; thinking-enabled models hit `model_token_cap` on tight output caps (T-5079); and `attack_chain_analyst` restricts chaining to `critical`/`high` findings inside a single unit (`max_steps = 4`), missing medium-to-medium privilege escalation chains across service boundaries.
@@ -2825,7 +2825,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-174 — Unify compile-only PoC harnesses and add multi-language remediation validation
 
-- **State:** in-progress
+- **State:** done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md)
 - **Area:** review
 - **Why:** `job_poc_generation` splits eligibility across mismatched `confirmed` vs `corroborated` status predicates and supports syntax checking for only Python/JS/C/Java/Go/Rust/sh, leaving Ruby, C# and PHP smoke targets without tailored compile/AST validation; meanwhile `job_remediation_planning` orders items alphabetically instead of by risk/exploitability and `job_remediation_validation` parses patches with Python `ast.parse` only.
 - **Scope:** unify PoC eligibility across `confirmed` and high-confidence `corroborated` findings (`critical`/`high` plus chain-participating `medium`), add static AST/syntax/typecheck-only PoC harness templates and Tree-sitter syntax verification across all nine smoke languages (C/C++, Java, JavaScript, Python, Ruby, Go, C#, Rust, PHP) while strictly preserving `generated_code_execution = "not_performed_by_policy"` (**zero execution of generated PoCs**), rank `job_remediation_planning` backlogs by severity, exploitability, blast radius and shared root-cause fix leverage, and upgrade `job_remediation_validation` to run Tree-sitter AST syntax checks, post-patch sink/barrier re-checks and symbol-preservation checks across all nine languages.
@@ -2844,7 +2844,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-176 — Expand radar dimensions to 12 axes and redesign executive reports and dossiers
 
-- **State:** in-progress
+- **State:** done (2026-11-17, 4c9cb5ef2, docs/tasks/2026-11-17-t176-executive-report-dossier-and-12axis-radar.md)
 - **Area:** review
 - **Why:** `reporting/dimensions.py` covers 9 axes with 2 series (`discovered`, `verified`), omitting Secrets/Credentials, Supply-Chain/SCA and CI/Artifact/Hardening posture and hiding stage-by-stage funnel conversion; `executive_report.py` mixes low-level mechanics into leadership summaries while omitting ship/no-ship risk posture, attack-chain narratives, OWASP compliance matrices and prioritized remediation roadmaps; `dossiers.py`/`dossier_render.py` lack structured attacker-to-sink trace tables, barrier failures, concrete unified diff sketches and verification checklists; SARIF drops `codeFlows` and `fixes`; and OpenVEX matches package names without CVE IDs.
 - **Scope:** expand `reporting/dimensions.py` (`appsec-review/security-dimensions/2`) to 12 security axes (`M` Memory/Native, `N` Injection/Interpreter, `I` Input/Deserialization, `W` Web/Client Surface, `F` Filesystem/Path, `P` AuthN/AuthZ/Session, `A` Cryptography/Trust, `S` Secrets/Credentials, `R` Concurrency/Resource, `X` Logic/State/API Drift, `D` Supply-Chain/Dependencies, `K` Build/CI/Hardening) with 4 funnel series (`discovered`, `admitted`, `corroborated`, `verified_actionable`) and interactive/print SVG radar charts. Redesign `executive_report.py` (`appsec-review/executive-report/2`), `dossiers.py`/`dossier_render.py` (`appsec-review/finding-dossier/2`), `html.py`, SARIF 2.1.0 (`codeFlows`, `relatedLocations`, `fixes`, CWE/CVSS properties) and CVE-bound OpenVEX (`job_openvex_export`).

@@ -47,7 +47,7 @@ _CLOSING_TO_OPENING = {")": "(", "]": "[", "}": "{"}
 _OPENING_DELIMITERS = frozenset(_CLOSING_TO_OPENING.values())
 
 _STUB_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("todo_marker", re.compile(r"\b(?:TODO|FIXME|XXX|TBD)\b")),
+    ("todo_marker", re.compile(r"\b(?:TODO|FIXME|XXX|TBD)\b")),  # T-175
     ("not_implemented", re.compile(r"\b(?:NotImplementedError|UnsupportedOperationException|NotImplementedException)\b")),
     ("rust_todo_macro", re.compile(r"\b(?:todo|unimplemented)\s*!")),
 )

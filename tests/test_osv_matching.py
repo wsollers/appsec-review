@@ -328,10 +328,10 @@ def test_the_mode_setting_rejects_anything_but_its_two_values(value) -> None:
         osv_matching.parse_mode(value, "field")
 
 
-def test_the_shipped_configuration_keeps_version_matching_disabled() -> None:
+def test_the_shipped_configuration_enables_index_version_matching() -> None:
     jobs = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))["jobs"]
 
-    assert jobs["job_review_data_indexing"]["settings"]["osv_version_matching"] == "disabled"
+    assert jobs["job_review_data_indexing"]["settings"]["osv_version_matching"] == "index"
 
 
 def test_only_tested_orderings_are_in_the_ecosystem_table() -> None:

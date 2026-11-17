@@ -225,6 +225,8 @@
         "gaps": [],
         "state": "declared",
         "values": [
+          "alternate_cpg",
+          "alternate_cpg_index",
           "code_graph_checkpoints",
           "code_graph_facts",
           "code_graph_scorecard",
@@ -243,12 +245,15 @@
       },
       "definition": "Graph, alias and flow representations describe possible propagation and reachability while retaining each producer's precision and coverage limits.",
       "gap": [
+        "T-147",
         "T-157"
       ],
       "mcp_tools": {
         "basis": "union of detailed declaration rows",
-        "gaps": [],
-        "state": "declared",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "partial",
         "values": [
           "coverage",
           "find",
@@ -304,8 +309,10 @@
       },
       "review_roles": {
         "basis": "union of detailed declaration rows",
-        "gaps": [],
-        "state": "declared",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "partial",
         "values": [
           "adjudication_judge",
           "attack_chain_analyst",
@@ -349,6 +356,7 @@
           "native_sbom_conversion",
           "native_sbom_provenance",
           "native_spdx",
+          "sca_reachability",
           "scorecard_responses",
           "unity_inventory"
         ]
@@ -435,6 +443,7 @@
           "dataset_audit_report",
           "dataset_inventory",
           "derived_checkpoints",
+          "document_drift_issues",
           "fts_image_validation",
           "precomputed_products",
           "target_documents"
@@ -472,6 +481,7 @@
         "gaps": [],
         "state": "declared",
         "values": [
+          "job_document_issue_analysis",
           "job_review_data_indexing",
           "job_target_catalog"
         ]
@@ -701,6 +711,7 @@
           "openvex_documents",
           "openvex_export_accounting",
           "openvex_verified_inputs",
+          "owasp_control_gaps",
           "owasp_documents",
           "owasp_model_receipts",
           "owasp_workbench",
@@ -708,6 +719,7 @@
           "poc_reproducers",
           "poc_writer_cells",
           "prioritization_documents",
+          "prioritization_signals",
           "priority_items",
           "publication_gate_decisions",
           "remediation_planning_summary",
@@ -842,6 +854,7 @@
           "codeql_plan_and_summary",
           "codeql_predecessor_import",
           "codeql_scope_material",
+          "corroborated_sast_evidence",
           "infer_observations",
           "static_tool_evidence",
           "static_tool_io",
@@ -1133,6 +1146,7 @@
           "generated_source_backing",
           "tree_sitter_acceptance",
           "tree_sitter_ast",
+          "tree_sitter_cfg",
           "tree_sitter_coverage",
           "tree_sitter_node_shards",
           "tree_sitter_scope_results",
@@ -3054,6 +3068,108 @@
       "access": "sanitized_metadata_only",
       "authority": "producer_evidence",
       "bucket": "dataflow",
+      "dataset": "alternate_cpg",
+      "description": "Portable universal Alternate CPG node, edge, precomputed inter-procedural path JSONL artifacts and attempt summary.",
+      "family": "graph",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_code_graph_index",
+      "producer_languages": {
+        "basis": "job_code_graph_index: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/alternate-cpg/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_code_graph_index.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "indexed_evidence",
+      "authority": "producer_evidence",
+      "bucket": "dataflow",
+      "dataset": "alternate_cpg_index",
+      "description": "Universal multi-language Alternate CPG and inter-procedural CFG index shard (Tree-sitter AST/CFG + CodeQL + clangd + syntactic fallback across all 9 target languages).",
+      "family": "graph",
+      "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_cpg_slice; query_call_paths",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "producer": "job_code_graph_index",
+      "producer_languages": {
+        "basis": "job_code_graph_index: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.indexes",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "analysis"
+        ]
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "schema": "appsec-review/alternate-cpg/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_code_graph_index.datasets",
+      "stage": "indexed",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dataflow",
       "dataset": "code_graph_checkpoints",
       "description": "Per-scope reuse checkpoints binding every input identity to the published shards.",
       "family": "graph",
@@ -4456,6 +4572,56 @@
       "access": "sanitized_metadata_only",
       "authority": "producer_evidence",
       "bucket": "dependencies_and_advisories",
+      "dataset": "sca_reachability",
+      "description": "Indexed OSV version matching and deterministic import, symbol, and native FFI reachability.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_dependency_intelligence",
+      "producer_languages": {
+        "basis": "job_dependency_intelligence: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/sca-reachability/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_dependency_intelligence.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "dependencies_and_advisories",
       "dataset": "scorecard_responses",
       "description": "Exact bounded OpenSSF Scorecard responses retained with hashes.",
       "family": "inventory",
@@ -4597,6 +4763,56 @@
       "stage": "protected",
       "store": "retrieval",
       "target_access": "none"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "provisional",
+      "bucket": "documents_and_retrieval",
+      "dataset": "document_drift_issues",
+      "description": "Structured API/spec-vs-handler route and auth-middleware drift leads across 9 target languages.",
+      "family": "documents",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_document_issue_analysis",
+      "producer_languages": {
+        "basis": "job_document_issue_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/document-drift-issue/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_document_issue_analysis.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
     },
     {
       "access": "sanitized_metadata_only",
@@ -6887,6 +7103,56 @@
       "access": "sanitized_metadata_only",
       "authority": "producer_evidence",
       "bucket": "review_products",
+      "dataset": "owasp_control_gaps",
+      "description": "Verified absent or weak OWASP control gaps bound to concrete source/evidence spans.",
+      "family": "owasp",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_owasp_control_assessment",
+      "producer_languages": {
+        "basis": "job_owasp_control_assessment: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/owasp-control-gap/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_owasp_control_assessment.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "review_products",
       "dataset": "owasp_documents",
       "description": "Workbench source documents and the accepted result.",
       "family": "owasp",
@@ -7484,6 +7750,56 @@
         ]
       },
       "schema": "appsec-review/review-prioritization/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_review_prioritization.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "routing_context",
+      "bucket": "review_products",
+      "dataset": "prioritization_signals",
+      "description": "Composite engineering modifiers, promoted CI/artifact/SCA leads, SAST-silence hunt queue and telemetry.",
+      "family": "priority",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_review_prioritization",
+      "producer_languages": {
+        "basis": "job_review_prioritization: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/review-prioritization-signals/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_review_prioritization.datasets",
       "stage": "artifact_only",
@@ -8831,6 +9147,56 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_cpp_compiled_analysis.datasets",
       "stage": "indexed",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "corroborated_sast_evidence",
+      "description": "Pre-cap cross-scanner corroborated SAST clusters and preserved taint traces.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_evidence_collection",
+      "producer_languages": {
+        "basis": "job_evidence_collection: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/corroborated-sast-evidence/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_evidence_collection.datasets",
+      "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -10310,6 +10676,56 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_tree_sitter_ast.datasets",
       "stage": "indexed",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "syntax",
+      "dataset": "tree_sitter_cfg",
+      "description": "Deterministic intra-procedural Tree-sitter CFG basic blocks, control-flow edges and branch guard polarities.",
+      "family": "syntax",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_tree_sitter_ast",
+      "producer_languages": {
+        "basis": "job_tree_sitter_ast: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/tree-sitter-cfg/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_tree_sitter_ast.datasets",
+      "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -13509,6 +13925,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -13588,6 +14006,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -13667,6 +14087,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -13746,6 +14168,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -13825,6 +14249,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -13904,6 +14330,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -13983,6 +14411,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14062,6 +14492,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14141,6 +14573,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14217,6 +14651,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14293,6 +14729,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14372,6 +14810,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14451,6 +14891,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14530,6 +14972,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14606,6 +15050,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14682,6 +15128,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14761,6 +15209,8 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_code_graph_index/alternate_cpg",
+        "job_code_graph_index/alternate_cpg_index",
         "job_code_graph_index/code_graph_checkpoints",
         "job_code_graph_index/code_graph_facts",
         "job_code_graph_index/code_graph_scorecard",
@@ -14855,6 +15305,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -14936,6 +15387,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15017,6 +15469,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15098,6 +15551,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15179,6 +15633,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15260,6 +15715,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15341,6 +15797,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15422,6 +15879,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15503,6 +15961,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15584,6 +16043,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15665,6 +16125,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15746,6 +16207,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15827,6 +16289,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15908,6 +16371,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -15989,6 +16453,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -16070,6 +16535,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -16151,6 +16617,7 @@
         "job_dependency_intelligence/native_sbom_conversion",
         "job_dependency_intelligence/native_sbom_provenance",
         "job_dependency_intelligence/native_spdx",
+        "job_dependency_intelligence/sca_reachability",
         "job_dependency_intelligence/scorecard_responses",
         "job_dependency_intelligence/unity_inventory"
       ],
@@ -16214,6 +16681,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16225,6 +16693,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16285,6 +16754,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16296,6 +16766,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16356,6 +16827,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16367,6 +16839,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16427,6 +16900,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16438,6 +16912,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16498,6 +16973,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16509,6 +16985,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16569,6 +17046,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16580,6 +17058,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16640,6 +17119,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16651,6 +17131,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16711,6 +17192,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16722,6 +17204,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16782,6 +17265,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16793,6 +17277,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16853,6 +17338,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16864,6 +17350,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16924,6 +17411,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16935,6 +17423,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -16995,6 +17484,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17006,6 +17496,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -17066,6 +17557,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17077,6 +17569,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -17137,6 +17630,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17148,6 +17642,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -17208,6 +17703,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17219,6 +17715,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -17279,6 +17776,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17290,6 +17788,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -17350,6 +17849,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_document_issue_analysis/document_drift_issues",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17361,6 +17861,7 @@
         "job_target_catalog/target_documents"
       ],
       "unbound_producers": [
+        "job_document_issue_analysis",
         "job_review_data_indexing",
         "job_target_catalog"
       ]
@@ -19923,6 +20424,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -19935,6 +20437,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20037,6 +20540,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20049,6 +20553,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20151,6 +20656,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20163,6 +20669,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20265,6 +20772,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20277,6 +20785,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20379,6 +20888,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20391,6 +20901,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20493,6 +21004,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20505,6 +21017,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20607,6 +21120,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20619,6 +21133,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20721,6 +21236,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20733,6 +21249,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20835,6 +21352,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20847,6 +21365,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -20949,6 +21468,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -20961,6 +21481,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21063,6 +21584,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21075,6 +21597,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21177,6 +21700,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21189,6 +21713,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21291,6 +21816,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21303,6 +21829,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21405,6 +21932,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21417,6 +21945,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21519,6 +22048,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21531,6 +22061,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21633,6 +22164,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21645,6 +22177,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21747,6 +22280,7 @@
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
+        "job_owasp_control_assessment/owasp_control_gaps",
         "job_owasp_control_assessment/owasp_documents",
         "job_owasp_control_assessment/owasp_model_receipts",
         "job_owasp_control_assessment/owasp_workbench",
@@ -21759,6 +22293,7 @@
         "job_remediation_validation/remediation_validation_summary",
         "job_review_package_assembly/review_packages",
         "job_review_prioritization/prioritization_documents",
+        "job_review_prioritization/prioritization_signals",
         "job_review_prioritization/priority_items",
         "job_security_tagging/tag_assignments",
         "job_security_tagging/tagging_documents",
@@ -21868,6 +22403,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -21963,6 +22499,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22058,6 +22595,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22153,6 +22691,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22248,6 +22787,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22343,6 +22883,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22438,6 +22979,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22533,6 +23075,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22628,6 +23171,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22709,6 +23253,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22790,6 +23335,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22885,6 +23431,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -22980,6 +23527,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -23075,6 +23623,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -23156,6 +23705,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -23237,6 +23787,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -23332,6 +23883,7 @@
         "job_clang_static_analysis/clang_static_scope_coverage",
         "job_clang_static_analysis/clang_static_summary",
         "job_cpp_compiled_analysis/infer_observations",
+        "job_evidence_collection/corroborated_sast_evidence",
         "job_evidence_collection/static_tool_evidence",
         "job_evidence_collection/static_tool_io",
         "job_evidence_collection/static_tool_observations"
@@ -25971,6 +26523,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26041,6 +26594,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26111,6 +26665,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26181,6 +26736,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26251,6 +26807,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26321,6 +26878,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26391,6 +26949,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26461,6 +27020,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26531,6 +27091,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26601,6 +27162,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26671,6 +27233,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26741,6 +27304,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26811,6 +27375,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26881,6 +27446,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -26951,6 +27517,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -27021,6 +27588,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",
@@ -27091,6 +27659,7 @@
         "job_tree_sitter_ast/generated_source_backing",
         "job_tree_sitter_ast/tree_sitter_acceptance",
         "job_tree_sitter_ast/tree_sitter_ast",
+        "job_tree_sitter_ast/tree_sitter_cfg",
         "job_tree_sitter_ast/tree_sitter_coverage",
         "job_tree_sitter_ast/tree_sitter_node_shards",
         "job_tree_sitter_ast/tree_sitter_scope_results",

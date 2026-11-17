@@ -270,31 +270,52 @@ are indexed in [generated guidance](../generated/guidance.md); use the
 Image-backed engineering follows [host pins](../operations/image-pin-verification.md) and
 [configured signing enforcement](../operations/signing.md), not prompt authorization.
 
+### Dual-lane retrieval fulfillment, multi-step chains, and static compile-only PoC/remediation (T-171..T-175)
+
+- **Prioritization & SAST-silence hunt boost (`T-171`)**: `job_review_prioritization` emits
+  `appsec-review/review-prioritization-signals/1`, incorporating Alternate CPG reachability,
+  proportional repository-churn hotspots, CI/artifact lead promotion, 9-language danger signals,
+  and a Hunt-lane boost for high-risk attack surfaces with zero SAST hits.
+- **Round 2 evidence fulfillment & frontier prompt contracts (`T-173`, `T-174`)**: When Round 1
+  investigators emit bounded `requests_evidence` queries, the orchestrator executes them against
+  `RetrievalCore` and supplies the resolved slices, guard dominators, or index records into Round 2
+  verification before adjudication. Thinking-capable models enforce an explicit output-token floor
+  above reasoning budgets. Multi-step attack-chain composition (`max_steps = 6`) admits chains
+  across trust boundaries, including `medium + medium -> high/critical` escalations.
+- **Static compile-only PoC & 9-language remediation verification (`T-174`, `T-175`)**:
+  `job_poc_generation` validates generated harnesses purely via syntax/AST/compile-only checks
+  (`appsec-review/poc-compile-check/1`) across all nine languages; runtime PoC execution is hard-blocked
+  (`PocExecutionBlockedByPolicyError`) pending user-approved sandboxing (`T-175`).
+  `job_remediation_planning` prioritizes Critical/High reachable findings and multi-step chain
+  choke-points, and `job_remediation_validation` performs 9-language static syntax, guard-insertion,
+  and sink-removal checks.
+
 ## Dataflow
 
 ```mermaid
 flowchart TD
-  evidence["Accepted original source and producer artifacts"] --> indexing["job_review_data_indexing"]
-  routing["job_review_prioritization / job_security_tagging"] --> indexing
-  owasp["job_owasp_control_assessment"] --> indexing
-  indexing --> upstream["job_review_package_assembly"]
+  evidence["Accepted original source, Alternate CPG/CFG, SAST & SCA shards"] --> indexing["job_review_data_indexing: RetrievalCore"]
+  routing["job_review_prioritization: SAST-silence hunt boost / job_security_tagging"] --> indexing
+  owasp["job_owasp_control_assessment: verified control gaps"] --> indexing
+  model["job_threat_model_generation: DFD trust boundaries"] --> indexing
+  indexing --> upstream["job_review_package_assembly: priority-preserving context"]
   upstream --> private["job_document_issue_analysis: private candidates"]
-  indexing --> packages["job_inference_security_review: lane packages"]
-  model["job_threat_model_generation"] -. "verified routing context only" .-> packages
-  registry["Registry + typed configuration + selected guidance"] --> bundle["Verified immutable guidance bundle"]
-  bundle --> cells["Lead and hunt teams"]
+  upstream --> packages["job_inference_security_review: Lane A & Lane B packages"]
+  registry["Registry + typed config + evidence-and-graph-querying skill"] --> bundle["Verified immutable guidance bundle"]
+  bundle --> cells["Round 1 & Round 2 lead/hunt cells"]
   packages --> cells
-  cells --> retrieve["Application-mediated capability checks"]
-  evidence --> retrieve
-  retrieve --> cells
+  cells -->|requests_evidence| retrieve["Application-mediated RetrievalCore fulfillment"]
+  indexing --> retrieve
+  retrieve -->|resolved slices, guards & shards| cells
   cells --> ledger["Normalized claims, relations, receipts and gaps"]
-  ledger --> decide["Deterministic adjudication"]
-  decide --> score["Evidence-bound scoring and shipment policy"]
-  score --> chains["Bounded chain challenges"]
+  ledger --> decide["Deterministic adjudication & calibrated scoring"]
+  decide --> chains["Multi-step attack chains (up to 6 hops; medium+medium escalation)"]
   chains --> published["Sealed review handoff"]
-  published --> engineering["Compile-only PoC / inert remediation"]
+  published --> poc["job_poc_generation: appsec-review/poc-compile-check/1 (compile-only; execution blocked)"]
+  published --> rem["job_remediation_planning / job_remediation_validation: risk-first + 9-lang static verify"]
   published --> reporting["Gate-certified reporting"]
-  engineering --> reporting
+  poc --> reporting
+  rem --> reporting
   retrieve -. "denied / missing evidence" .-> gaps["Named unresolved coverage"]
   gaps --> ledger
   published -. "integrity or accounting failure" .-> reject["Reject publication"]
@@ -302,4 +323,4 @@ flowchart TD
 
 Arrows show data responsibilities, not additional grants or every scheduling edge. Private document
 candidates have no implied finding-promotion edge. Guidance and derived routing context never
-replace the original evidence route.
+replace the original evidence route, and generated PoCs are never executed.

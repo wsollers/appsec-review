@@ -240,10 +240,9 @@ def test_inference_tasks_request_cell_local_citations_not_raw_identities():
 
 @pytest.mark.parametrize("allowed_job", [
     "job_inference_security_review",
-    "job_attack_chain_composition",
-    "job_finding_adjudication",
     "job_poc_generation",
     "job_remediation_planning",
+    "job_threat_model_generation",
 ])
 def test_evidence_and_graph_querying_runtime_skill_allowed_jobs(repo, allowed_job):
     skill = load_runtime_skill(repo, "evidence-and-graph-querying", job_id=allowed_job, fallback_to_package=False)

@@ -50,7 +50,7 @@ _HIGH_IMPACT_CWES = _CRITICAL_SINK_CWES | frozenset({
 })
 
 
-def load_chain_querying_skill(repository_root: Path, *, job_id: str = "job_attack_chain_composition") -> RuntimeSkill:
+def load_chain_querying_skill(repository_root: Path, *, job_id: str = "job_inference_security_review") -> RuntimeSkill:
     """Load the hash-pinned ``evidence-and-graph-querying`` runtime skill for chain workers."""
     return load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id)
 

@@ -564,3 +564,25 @@ Remaining gaps after this batch:
   source mappings are rejected.
 - Re-running an unchanged input reuses immutable shards; changes invalidate only dependent
   products. MCP queries read the accepted set and report missing sets truthfully.
+
+## Second indexing batch: unified threat boundaries, OWASP gaps, 9-language API drift & RetrievalCore (T-172)
+
+`job_review_data_indexing` and `RetrievalCore` (`src/appsec_review/retrieval/core.py`) now index and
+expose every upstream structural, supply-chain, architecture, and binary producer so downstream
+inference jobs never scan raw target trees:
+
+- `threat_boundaries.jsonl` (`appsec-review/threat-boundary-index/1`): DFD trust boundaries, data
+  flows, entrypoints, and threat-hypothesis pointers from `job_threat_model_generation`.
+- `owasp_gaps.jsonl` (`appsec-review/owasp-control-gap/2`): verified `not_satisfied` and `partial`
+  ASVS control gaps from `job_owasp_control_assessment` (retained ahead of unverified
+  `cannot_verify` rows under `job_review_package_assembly` byte-budget trimming).
+- `api_drift.jsonl` (`appsec-review/document-drift-issue/2`): undocumented routes, auth-annotation
+  mismatches, and schema-less body parameters across Python, JS/TS, Java, Go, C#, Ruby, Rust, PHP,
+  and C++ HTTP frameworks.
+- `sca_reachability.jsonl` (`appsec-review/sca-reachability/1`), `corroborated_clusters.jsonl`
+  (`appsec-review/corroborated-sast-evidence/1`), and `binary_pseudo_c.jsonl` from
+  `job_binary_evidence_indexing`.
+- Bounded `RetrievalCore` methods (`query_cfg_function`, `query_guard_dominators`,
+  `query_cpg_slice`, `query_call_paths`, `query_corroborated_clusters`, `query_sca_reachability`,
+  `query_threat_boundaries`, `query_owasp_gaps`, `query_api_drift`, `query_binary_pseudo_c`)
+  documented in [Hosted querying and indexing skills](querying-and-indexing-skills.md).

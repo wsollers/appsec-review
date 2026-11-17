@@ -29,7 +29,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py#L210) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py#L214) |
 | `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py#L123) |
 | `parse` | `parse.dynamic_scopes` | 8 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py#L173) |
 | `plan` | `plan.route_scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py#L136) |
@@ -64,6 +64,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `generated_source_backing` | `load` | `appsec-review/generated-source-backing/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `tree_sitter_acceptance` | `acceptance` | `appsec-review/tree-sitter-ast/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `tree_sitter_ast` | `parse` | `appsec-review/tree-sitter-normalizer/1` | indexed | `analysis` | `find`, `query_syntax`, `search`, `trace` |
+| `tree_sitter_cfg` | `parse` | `appsec-review/tree-sitter-cfg/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `tree_sitter_coverage` | `acceptance` | `appsec-review/tree-sitter-ast/1` | indexed | `analysis` | `coverage` |
 | `tree_sitter_node_shards` | `parse` | `appsec-review/tree-sitter-normalizer/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `tree_sitter_scope_results` | `parse` | `appsec-review/tree-sitter-ast/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
@@ -197,22 +198,26 @@ flowchart LR
   output_schema2["appsec-review/tree-sitter-normalizer/1"]
   job --> output2
   output2 -. schema .-> output_schema2
-  output3["tree_sitter_coverage"]
-  output_schema3["appsec-review/tree-sitter-ast/1"]
+  output3["tree_sitter_cfg"]
+  output_schema3["appsec-review/tree-sitter-cfg/1"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["tree_sitter_node_shards"]
-  output_schema4["appsec-review/tree-sitter-normalizer/1"]
+  output4["tree_sitter_coverage"]
+  output_schema4["appsec-review/tree-sitter-ast/1"]
   job --> output4
   output4 -. schema .-> output_schema4
-  output5["tree_sitter_scope_results"]
-  output_schema5["appsec-review/tree-sitter-ast/1"]
+  output5["tree_sitter_node_shards"]
+  output_schema5["appsec-review/tree-sitter-normalizer/1"]
   job --> output5
   output5 -. schema .-> output_schema5
-  output6["tree_sitter_tool_io"]
-  output_schema6["appsec-review/container-execution/1"]
+  output6["tree_sitter_scope_results"]
+  output_schema6["appsec-review/tree-sitter-ast/1"]
   job --> output6
   output6 -. schema .-> output_schema6
+  output7["tree_sitter_tool_io"]
+  output_schema7["appsec-review/container-execution/1"]
+  job --> output7
+  output7 -. schema .-> output_schema7
 ```
 
 <!-- generated:end -->

@@ -30,11 +30,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L377) |
-| `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L294) |
-| `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L217) |
-| `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L136) |
-| `normalize` | `normalize.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L190) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L388) |
+| `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L305) |
+| `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L228) |
+| `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L147) |
+| `normalize` | `normalize.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L201) |
 
 ### Accepted input declarations
 
@@ -90,6 +90,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_cfg` | `appsec-review/tree-sitter-cfg/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 
@@ -97,6 +98,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
+| `alternate_cpg` | `acceptance` | `appsec-review/alternate-cpg/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `alternate_cpg_index` | `acceptance` | `appsec-review/alternate-cpg/1` | indexed | `analysis` | Undeclared ([T-147](../TODO.md)) |
 | `code_graph_checkpoints` | `correlate` | `appsec-review/code-graph-checkpoint/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `code_graph_facts` | `correlate` | `appsec-review/graph-fact/1` | indexed | `graph` | `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_observations` |
 | `code_graph_scorecard` | `acceptance` | `appsec-review/graph-quality-scorecard/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
@@ -380,35 +383,48 @@ flowchart LR
   producer49 --> input49 --> job
   input49 -. schema .-> input_schema49
   producer50["job_tree_sitter_ast"]
-  input50["generated_source_backing"]
-  input_schema50["appsec-review/generated-source-backing/1"]
+  input50["tree_sitter_cfg"]
+  input_schema50["appsec-review/tree-sitter-cfg/1"]
   producer50 --> input50 --> job
   input50 -. schema .-> input_schema50
   producer51["job_tree_sitter_ast"]
-  input51["tree_sitter_tool_io"]
-  input_schema51["appsec-review/container-execution/1"]
+  input51["generated_source_backing"]
+  input_schema51["appsec-review/generated-source-backing/1"]
   producer51 --> input51 --> job
   input51 -. schema .-> input_schema51
-  output0["code_graph_checkpoints"]
-  output_schema0["appsec-review/code-graph-checkpoint/1"]
+  producer52["job_tree_sitter_ast"]
+  input52["tree_sitter_tool_io"]
+  input_schema52["appsec-review/container-execution/1"]
+  producer52 --> input52 --> job
+  input52 -. schema .-> input_schema52
+  output0["alternate_cpg"]
+  output_schema0["appsec-review/alternate-cpg/1"]
   job --> output0
   output0 -. schema .-> output_schema0
-  output1["code_graph_facts"]
-  output_schema1["appsec-review/graph-fact/1"]
+  output1["alternate_cpg_index"]
+  output_schema1["appsec-review/alternate-cpg/1"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["code_graph_scorecard"]
-  output_schema2["appsec-review/graph-quality-scorecard/1"]
+  output2["code_graph_checkpoints"]
+  output_schema2["appsec-review/code-graph-checkpoint/1"]
   job --> output2
   output2 -. schema .-> output_schema2
-  output3["code_graph_stages"]
-  output_schema3["appsec-review/code-graph-stage/1"]
+  output3["code_graph_facts"]
+  output_schema3["appsec-review/graph-fact/1"]
   job --> output3
   output3 -. schema .-> output_schema3
-  output4["code_graph_summary"]
-  output_schema4["appsec-review/code-graph-index/1"]
+  output4["code_graph_scorecard"]
+  output_schema4["appsec-review/graph-quality-scorecard/1"]
   job --> output4
   output4 -. schema .-> output_schema4
+  output5["code_graph_stages"]
+  output_schema5["appsec-review/code-graph-stage/1"]
+  job --> output5
+  output5 -. schema .-> output_schema5
+  output6["code_graph_summary"]
+  output_schema6["appsec-review/code-graph-index/1"]
+  job --> output6
+  output6 -. schema .-> output_schema6
 ```
 
 <!-- generated:end -->
