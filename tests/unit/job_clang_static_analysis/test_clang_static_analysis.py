@@ -442,3 +442,32 @@ def test_identical_clang_diagnostics_collapse_to_one_counted_observation(tmp_pat
     assert result["terminal_status"] == "SUCCEEDED"
     assert result["collapsed_identical_records"] == 1
     assert result["observation_count"] == 2 == len(_observation_payloads(unit.job.run_root, result))
+
+
+def test_repeated_clang_diagnostics_inside_an_attempt_collapse_to_one_observation_citing_the_first_report(
+        tmp_path: Path) -> None:
+    """Run 2026-11-17-0002: inside a publication attempt each repeat of one diagnostic cited its own native-output
+    selector, so one evidence identity reached the shard builder with two payloads ("conflicting entities")."""
+    from appsec_review.storage import atomic_json
+    from appsec_review.storage.shared import SharedArtifacts, publication_scope_for_owner, reference
+    from appsec_review.jobs.job_clang_static_analysis.datasets import DATASETS
+    from appsec_review.runtime.datasets import dataset_contract
+
+    scope, unit = _scope(tmp_path), _unit(tmp_path)
+    run_root = unit.job.run_root
+    attempt_root = run_root / "data" / "jobs" / JOB_ID / "attempts" / "attempt_0001"
+    actor = {"run_id": run_root.name, "job_id": JOB_ID, "attempt_id": "attempt_0001", "orchestration": {"system": "fixture"}}
+    atomic_json(attempt_root / "claim.json", {
+        **actor, "attempt_path": attempt_root.relative_to(run_root).as_posix(),
+        "dataset_contract": dataset_contract(JOB_ID, ("load", "analyze", "acceptance"), DATASETS)})
+    owner = SharedArtifacts(run_root, attempt_root, {**actor, "claim": reference(run_root, attempt_root / "claim.json")})
+    with publication_scope_for_owner(owner):
+        result = _analyze_scope(unit, scope, lambda _unit: FakeExecutor(run_root, duplicate="clang-tidy"))
+    assert result["terminal_status"] == "SUCCEEDED"
+    assert result["collapsed_identical_records"] == 1
+    payloads = _observation_payloads(run_root, result)
+    assert result["observation_count"] == 2 == len(payloads)
+    tidy = [payload for payload in payloads if payload["scanner"] == "clang-tidy"]
+    assert len(tidy) == 1
+    [ref] = tidy[0]["common"]["evidence_refs"]
+    assert ref["selector"] == {"kind": "json_pointer", "value": "/diagnostics/0"}
