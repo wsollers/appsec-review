@@ -476,6 +476,17 @@ def test_publish_handler_executes_with_gaps_and_lineage_manifest(tmp_path: Path)
     assert pub["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert pub["coverage_gap_count"] > 0
     assert len(pub["gaps"]) == pub["coverage_gap_count"]
+    # Opaque gap ids are not a cause: every gap is a producer-gap/1 record naming the manifest's reason.
+    manifest = json.loads((fixture.run_root / pub["package_directory"] / "manifest.json").read_text(encoding="utf-8"))
+    by_manifest_id = {item["gap_id"]: item for item in manifest["coverage_gaps"]}
+    assert len(by_manifest_id) == pub["coverage_gap_count"]
+    for gap in pub["gaps"]:
+        assert gap["schema"] == "appsec-review/producer-gap/1" and gap["code"] == "producer_reported_gap"
+        assert gap["unit_id"] == "publication.publish_packages"
+        source = next(item for item in by_manifest_id.values() if f"[{item['gap_id']}]" in gap["reason"])
+        assert source["reason"] in gap["reason"] and source["producer"] in gap["reason"]
+        assert gap["scope_id"] == source["scope"]
+    assert len({gap["gap_id"] for gap in pub["gaps"]}) == pub["coverage_gap_count"]
     assert pub["package_count"] > 0
     assert pub["artifacts"]
 

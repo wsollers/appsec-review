@@ -18,7 +18,7 @@ LEGACY_FREE_TEXT_GAPS = frozenset({
     "job_inference_security_review", "job_language_build", "job_openvex_export",
     "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment",
     "job_profile_data", "job_remediation_planning", "job_remediation_validation",
-    "job_review_data_indexing", "job_review_package_assembly",
+    "job_review_data_indexing",
     "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis",
     "job_svf_alias_analysis", "job_target_analysis_plan",
     "job_test_coverage", "job_tree_sitter_ast",
@@ -36,6 +36,6 @@ def test_every_registered_job_is_strict_or_explicitly_listed_as_legacy() -> None
 @pytest.mark.parametrize("job_id", sorted({"job_image_pin_verification", "job_model_connectivity",
                                           "job_build_iteration", "job_third_party_data_sync",
                                           "job_build_environment_analysis", "job_ci_configuration_analysis",
-                                          "job_target_catalog"}))
+                                          "job_target_catalog", "job_review_package_assembly"}))
 def test_converted_jobs_reject_free_text_gaps(job_id: str) -> None:
     assert builtin_registry().build(job_id).strict_gaps is True
