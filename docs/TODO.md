@@ -227,9 +227,23 @@ until each is rewritten into the entry format when it is next touched.
 | T-5052 | [Carry claim re-homing on the finding package and list unit symbols as package entities](#t-5052-carry-claim-re-homing-on-the-finding-package-and-list-unit-symbols-as-package-entities) | review | open |
 | T-5053 | [Investigate the budget clock regression flake in the team-handler dispatch tests](#t-5053-investigate-the-budget-clock-regression-flake-in-the-team-handler-dispatch-tests) | testing | open |
 | T-5054 | [Smoke scorecard follow-ups: chains, unmatched reports, key spans, table widths](#t-5054-smoke-scorecard-follow-ups-chains-unmatched-reports-key-spans-table-widths) | testing | open |
-| T-5055 | [Decide a distinct model for independent verification so ship-block and chain verification can complete](#t-5055-decide-a-distinct-model-for-independent-verification-so-ship-block-and-chain-verification-can-complete) | review | open |
+| T-5055 | [Decide a distinct model for independent verification so ship-block and chain verification can complete](#t-5055-decide-a-distinct-model-for-independent-verification-so-ship-block-and-chain-verification-can-complete) | review | done (2026-11-16, 0f849cdb) |
 | T-5056 | [Attribute the remaining pre-existing unit failures outside T-5043](#t-5056-attribute-the-remaining-pre-existing-unit-failures-outside-t-5043) | testing | open |
 | T-5057 | [Make hunters give a usable proof-of-trigger basis on claims they affirm](#t-5057-make-hunters-give-a-usable-proof-of-trigger-basis-on-claims-they-affirm) | review | open |
+| T-5058 | [Record campaign cell runtime and coverage in a hunting ledger](#t-5058-record-campaign-cell-runtime-and-coverage-in-a-hunting-ledger) | review | open |
+| T-5059 | [Give the hunt planner a bounded threat catalog in the attack-surface brief](#t-5059-give-the-hunt-planner-a-bounded-threat-catalog-in-the-attack-surface-brief) | review | open |
+| T-5060 | [Fix the hunt view's labels for unit leads, sinks and entries](#t-5060-fix-the-hunt-views-labels-for-unit-leads-sinks-and-entries) | testing | open |
+| T-5061 | [Derive scanner-rule weakness classes from rule CWE declarations instead of a hand table](#t-5061-derive-scanner-rule-weakness-classes-from-rule-cwe-declarations-instead-of-a-hand-table) | review | open |
+| T-5062 | [Bound the finding package body size and record the trim](#t-5062-bound-the-finding-package-body-size-and-record-the-trim) | review | open |
+| T-5063 | [Declare the OWASP workbench parser identities in the job contract](#t-5063-declare-the-owasp-workbench-parser-identities-in-the-job-contract) | review | open |
+| T-5064 | [Bring the publish-handler lineage test under the 10 s unit budget](#t-5064-bring-the-publish-handler-lineage-test-under-the-10-s-unit-budget) | testing | open |
+| T-5065 | [Make the OWASP evidence budget a setting and narrow the C error-path recogniser](#t-5065-make-the-owasp-evidence-budget-a-setting-and-narrow-the-c-error-path-recogniser) | review | open |
+| T-5066 | [Find the hang in the worker-precomputed downstream test](#t-5066-find-the-hang-in-the-worker-precomputed-downstream-test) | testing | open |
+| T-5067 | [Recognise K&R and macro-wrapped C function definitions in the C/C++ OWASP subjects](#t-5067-recognise-kr-and-macro-wrapped-c-function-definitions-in-the-cc-owasp-subjects) | review | open |
+| T-5068 | [Score attack chains and list unmatched reports in the smoke scorecard](#t-5068-score-attack-chains-and-list-unmatched-reports-in-the-smoke-scorecard) | testing | open |
+| T-5069 | [Correct the cpp smoke answer key: cjson 1.7.17 is affected and FX-C2 overlaps TP-C3](#t-5069-correct-the-cpp-smoke-answer-key-cjson-1717-is-affected-and-fx-c2-overlaps-tp-c3) | testing | open |
+| T-5070 | [Cover secret leads and the budget clock in unit tests](#t-5070-cover-secret-leads-and-the-budget-clock-in-unit-tests) | testing | open |
+| T-5071 | [Grow the cpp smoke corpus with vulnerabilities and look-alikes across the radar dimensions](#t-5071-grow-the-cpp-smoke-corpus-with-vulnerabilities-and-look-alikes-across-the-radar-dimensions) | testing | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3241,7 +3255,7 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-5055 — Decide a distinct model for independent verification so ship-block and chain verification can complete
 
-- **State:** open
+- **State:** done (2026-11-16, 0f849cdb: verifier and planner profiles on claude-sonnet-5-5 in appsec-review.toml; profiles/prod.toml puts every profile on claude-fable-5-2)
 - **Area:** review
 - **Why:** every role resolves to `claude-cli/claude-haiku-5-5`, so `verification.require_distinct_model_for_ship_blocking` publishes every ship-blocking finding as `ship_blocking_pending_distinct_verification`, and the attack-chain weakest-link verifier is never launched (`independence_not_established`), which leaves every chain `insufficient_evidence` (run 2026-11-16-0005: 3 chains composed, 3 refuters succeeded, 0 verifiers launched).
 - **Scope:** owner decision: a second model profile for `independent_verifier` (and the chain weakest-link verifier), or relax the distinct-model requirement for this target class; then one run to confirm the labels change.
@@ -3265,6 +3279,132 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** state in the hunter guidance that `entry` and `path` must cite the package's entry point and call-site labels for any claim the hunter believes exploitable, and validate at expansion that a `poc_basis` without both is recorded as a named gap on the claim rather than silently unusable.
 - **Done when:** a cpp smoke run lists a PoC candidate for a confirmed hunt-lane claim.
 - **Refs:** `pipeline/prompt-fragments/roles/hypothesis_hunter.md`, `src/appsec_review/review/red_discovery.py`, `src/appsec_review/jobs/job_inference_security_review/stages.py` (`poc_candidates`).
+
+### T-5058 — Record campaign cell runtime and coverage in a hunting ledger
+
+- **State:** open
+- **Area:** review
+- **Why:** run 2026-11-16-0007 planned hunting areas (T-5030) but the handoff records only area counts; which functions each hunter actually reached, how long each cell ran and what the plan set aside are not reconstructible from the lane document.
+- **Scope:** a per-area ledger row in the hunt lane handoff: assigned functions and entry points, packages issued, model turns and elapsed time, reached/not-reached with the gap code; no new authority for the planner.
+- **Done when:** a cpp smoke run's hunt handoff lists one ledger row per planned area and the scorecard reads it.
+- **Refs:** `src/appsec_review/review/hunt_plan.py`, `src/appsec_review/jobs/job_inference_security_review/job.py`, `scripts/smoke-score.py`.
+
+### T-5059 — Give the hunt planner a bounded threat catalog in the attack-surface brief
+
+- **State:** open
+- **Area:** review
+- **Why:** the planner brief (T-5030) carries files, functions, entries and leads but no threat statements, so the areas it writes name weakness classes without the target's modelled threats; the planner also leaves no memo of why an area was cut when the budget bound it.
+- **Scope:** add the accepted threat-model records (bounded by `settings.hunting.brief_bounds`) to the brief and a short planner memo field to the plan artifact; keep `max_queries = 0`.
+- **Done when:** the plan artifact of a cpp smoke run cites threat ids in its areas and records a memo for every area set aside.
+- **Refs:** `src/appsec_review/review/hunt_plan.py`, `docs/schemas/inference-security-review/hunting-campaign-plan.schema.json`, `appsec-review.toml` (`settings.hunting`).
+
+### T-5060 — Fix the hunt view's labels for unit leads, sinks and entries
+
+- **State:** open
+- **Area:** testing
+- **Why:** `tests/unit/review_behavior/test_contract_and_view.py::test_hunt_view_labels_the_unit_leads_sinks_and_entries` fails on main since the package-quality merge (acc02fa8): the view's labels no longer match the entry chain that prefers remote/argv/env entries over program-opened streams.
+- **Scope:** attribute whether the view or the expectation is stale and fix that side only.
+- **Done when:** the test passes alone and under `-n 4 --shuffle-seed`.
+- **Refs:** `src/appsec_review/review/packages.py` (entry chain), `tests/unit/review_behavior/test_contract_and_view.py`.
+
+### T-5061 — Derive scanner-rule weakness classes from rule CWE declarations instead of a hand table
+
+- **State:** open
+- **Area:** review
+- **Why:** `RULE_PREDICATES` in `review/packages.py` maps scanner rule-id suffixes to security predicates by hand so CodeQL, clang and cppcheck leads without a CWE can cluster; a new rule or a renamed suffix silently falls out of clustering.
+- **Scope:** read each producer's rule catalog (CodeQL pack metadata `security-severity`/tags, cppcheck CWE, clang check ids) at package assembly and set `rule_cwe` on the lead; keep the table only as a fallback with a gap.
+- **Done when:** a lead with a catalogued rule clusters by its catalogue CWE and the table shrinks to rules with no catalogue CWE.
+- **Refs:** `src/appsec_review/review/packages.py` (`RULE_PREDICATES`, `cluster_leads`), `src/appsec_review/review/lead_families.py`.
+
+### T-5062 — Bound the finding package body size and record the trim
+
+- **State:** open
+- **Area:** review
+- **Why:** after the multi-lead source rows and neighborhood floor (acc02fa8) a clustered finding package can exceed the hunt package size; only hunt packages partition, a finding package has no bound of its own.
+- **Scope:** a `max_finding_package_bytes` setting applied through `CONTEXT_TRIM_ORDER` with a truncation gap, never by dropping a lead from the menu.
+- **Done when:** a unit test assembles a package over the bound and gets a trimmed package with the gap recorded.
+- **Refs:** `src/appsec_review/review/packages.py`, `appsec-review.toml` (`settings.packages`).
+
+### T-5063 — Declare the OWASP workbench parser identities in the job contract
+
+- **State:** open
+- **Area:** review
+- **Why:** `job_owasp_control_assessment` records `parser_versions` for applicability, evidence binding, subject selection and result validation but the versions are module constants, not declared contract inputs, so a parser change does not invalidate a cached assessment.
+- **Scope:** surface each parser identity in the job's `CONTRACT` and in the attempt's recorded implementation identity.
+- **Done when:** `tests/unit/job_owasp_control_assessment/test_parser_versions.py` asserts the contract names every parser.
+- **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/versions.py`, `.../datasets.py`.
+
+### T-5064 — Bring the publish-handler lineage test under the 10 s unit budget
+
+- **State:** open
+- **Area:** testing
+- **Why:** `test_publish_handler_executes_with_gaps_and_lineage_manifest` runs about 10 s on the review host and trips the budget under load; it builds a full accepted index set for one handler call.
+- **Scope:** share the fixture at module scope or cut the index set to the shards the handler reads.
+- **Done when:** the test reports under 5 s in `tests/conftest.py` timings on the review host.
+- **Refs:** `tests/unit/review_behavior/test_publication_bindings.py`, `tests/fixtures/inference_review/builder.py`.
+
+### T-5065 — Make the OWASP evidence budget a setting and narrow the C error-path recogniser
+
+- **State:** open
+- **Area:** review
+- **Why:** the per-package evidence budget of the C/C++ OWASP recognisers (`c_subjects.py`) is a module constant, and the `c_error_path` family matches every `return -1`/`goto fail` site, which floods the evidence of chapters V7 and V16.
+- **Scope:** move the budget to `settings.owasp` and restrict `c_error_path` to sites that handle an external input or a resource acquisition.
+- **Done when:** the owasp-cpp replay issues the same 19 procedures with fewer evidence rows and no chapter over budget.
+- **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/c_subjects.py`, `c_procedures.py`, `appsec-review.toml`.
+
+### T-5066 — Find the hang in the worker-precomputed downstream test
+
+- **State:** open
+- **Area:** testing
+- **Why:** `test_downstream_precomputed...[worker]` hung once during the integration-0008 combined run and had to be killed; it passed alone afterwards, so a timing or lock dependency on another test is likely.
+- **Scope:** reproduce under `-n 4 --shuffle-seed` with a per-test timeout and fix the shared state.
+- **Done when:** ten shuffled parallel runs of the file finish.
+- **Refs:** `tests/unit/review_behavior/`, `tests/conftest.py`.
+
+### T-5067 — Recognise K&R and macro-wrapped C function definitions in the C/C++ OWASP subjects
+
+- **State:** open
+- **Area:** review
+- **Why:** the C recognisers (`c_subjects.py`) find ANSI definitions only; K&R definitions and macro-wrapped names (`_macro_wrapped_name` in package assembly handles the latter) are skipped without a gap.
+- **Scope:** accept both forms or record an `unrecognised_definition` gap per file.
+- **Done when:** a fixture with one K&R and one macro-wrapped definition yields subjects or gaps, never silence.
+- **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/c_subjects.py`.
+
+### T-5068 — Score attack chains and list unmatched reports in the smoke scorecard
+
+- **State:** open
+- **Area:** testing
+- **Why:** `scripts/smoke-score.py` matches claims to the answer key by primary site but does not score chain outcomes, lists no report-side items that matched no key item, and the PDF has overfull boxes on long paths.
+- **Scope:** add a chains stage (proposed/qualified/confirmed per key chain), an unmatched-reports table, and wrap paths.
+- **Done when:** the run-0008 scorecard renders without overfull warnings and shows the chain stage.
+- **Refs:** `scripts/smoke-score.py`, `scripts/smoke_scorecard.py`.
+
+### T-5069 — Correct the cpp smoke answer key: cjson 1.7.17 is affected and FX-C2 overlaps TP-C3
+
+- **State:** open
+- **Area:** testing
+- **Why:** post-run assessment of runs 0005-0007 against the key: the vendored cjson 1.7.17 is inside the CVE range the native advisory lookup reports (the key lists it as a look-alike), and the FX-C2 span overlaps TP-C3 at `request.cpp:28`, so one site scores as both a plant and a false-positive control.
+- **Scope:** the key is user-owned and lives outside the repository; this entry records the two corrections for the owner to apply and the scorecard to re-run.
+- **Done when:** the owner updates the key and the run-0008 comparison no longer double-counts the site.
+- **Refs:** `scripts/smoke-score.py` (primary-site matching); key under the review host's `~/smoke-work/cpp/`.
+
+### T-5070 — Cover secret leads and the budget clock in unit tests
+
+- **State:** open
+- **Area:** testing
+- **Why:** the secret family (gitleaks) has no lane-A admission test since the assessed-severity work, and the model budget clock test flakes under host load (one failure in the integration-0008 run, pass on rerun).
+- **Scope:** a secret-lead admission test on the fixture; a monotonic fake clock in the budget test.
+- **Done when:** both tests pass ten times shuffled in parallel.
+- **Refs:** `tests/review/test_packages.py`, `tests/review/test_lead_triage.py`, `src/appsec_review/inference/`.
+
+### T-5071 — Grow the cpp smoke corpus with vulnerabilities and look-alikes across the radar dimensions
+
+- **State:** open
+- **Area:** testing
+- **Why:** runs 0005-0007 confirm 2-8 of 6 code plants with no false positives; six plants are too few to read the radar chart (memory, numeric, threads, control, injection, path) and there are no look-alikes per axis.
+- **Scope:** corpus v1.1.0: two plants and two look-alikes per axis with key metadata (axis, CWE, primary site, exploitability); authorship of deliberately vulnerable code is the owner's decision (the model safeguards declined to write it), the key stays unreadable to jobs.
+- **Done when:** the scorecard radar shows every axis with at least two plants and two controls.
+- **Refs:** review host `~/smoke-work/cpp/`, `scripts/smoke-score.py`, `src/appsec_review/reporting/dimensions.py`.
 
 ## Legacy backlog
 
