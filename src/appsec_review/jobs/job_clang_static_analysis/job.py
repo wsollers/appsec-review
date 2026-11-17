@@ -336,6 +336,12 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
     accepted_count = 0
     source_entities: set[str] = set()
     labels: dict[str, int] = {}
+    # Evidence identities already written: a diagnostic one engine reports more than once (a header seen from
+    # two translation units) is one observation whose common record cites the first report. Run 2026-11-17-0002
+    # failed because each repeat cited its own native-output selector and the shard builder refused two payloads
+    # for one identity; the underscore keys never enter the identity, so the repeats are identical evidence.
+    seen_evidence: set[str] = set()
+    collapsed_repeats = 0
     for record in records:
         location, accepted = _location(scope, record)
         if location is None or accepted is None:
@@ -344,6 +350,10 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         selector = record.get("_native_selector")
         hashed = {key: value for key, value in record.items() if not key.startswith("_")}
         evidence_id = hashlib.sha256(canonical_json({"scope": scope.scope_id, **hashed})).hexdigest()
+        if evidence_id in seen_evidence:
+            collapsed_repeats += 1
+            continue
+        seen_evidence.add(evidence_id)
         observation = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, scope.case_snapshot,
                                              {"producer": record["engine"], "evidence_id": evidence_id})
         source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, scope.case_snapshot,
@@ -398,10 +408,11 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                           tuple(gaps), shard)
     status = "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS"
     # Identical diagnostics collapse to one observation entity in the shard; the count is the entity count.
+    collapsed = collapsed_repeats + builder.collapsed_identical_records
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "accepted_compile_database": dict(scope.compile_database), "executions": executions,
               "observation_count": accepted_count - builder.collapsed_identical_records,
-              "collapsed_identical_records": builder.collapsed_identical_records,
+              "collapsed_identical_records": collapsed,
               "index_identity": asdict(index),
               "gaps": gaps, "terminal_status": status,
               "not_applicable_inputs": scope.not_applicable_inputs()}
