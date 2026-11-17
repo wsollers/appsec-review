@@ -47,8 +47,9 @@ Several producers help decide where to look without deciding what is vulnerable:
   unadjudicated candidates. The inference job builds its own lead/hunt package manifests; a
   scheduling edge after document analysis is not proof that its candidates became findings.
 - OWASP assessment investigates supported, named source-subject obligations after gating ASVS
-  (`target:web-api`) and MASVS (`target:mobile`) on accepted `target:*` and facet tags
-  (`component-classification/2`, `applicability-rules/2`, `target-class-ledger/1`); when neither
+  (`target:web-api`, or `target:network-service` for the transport-agnostic chapters) and MASVS
+  (`target:mobile`) on accepted `target:*` and facet tags
+  (`component-classification/2`, `applicability-rules/4`, `target-class-ledger/1`); when neither
   class applies, it finishes `SUCCEEDED` with zero worker batches and zero `control_evidence` rows.
   Its deterministic citation checks and fresh independent reviewer can support scoped analyst
   assessments. Catalog completeness, routing tags and a satisfied subject do not establish
@@ -63,7 +64,7 @@ shared POSIX `path_globs`). Operation discovery (`graph_operations`) excludes `e
 `sink_site` facts in non-`first_party` sources (`vendored`, `sdk`, `generated`, `test`) with one
 `skipped` behavior gap per disposition rather than modeling non-first-party operations without a
 fallback unit. Deep hunt unit assembly restricts candidate units to `first_party` sources, ranks
-units with exposure/trust facet weights (`review-unit-rank/4`), writes unit-wide context,
+units with exposure/trust facet weights (`review-unit-rank/5`), writes unit-wide context,
 `unit-facets/2` and `hunt-facet-obligations/1` once per hunted unit under
 `unit-context/<sha256>.json` (`package-unit-context/2`), and references that shared document by
 SHA-256 from each hunt partition (`appsec-review/review-package/7`, `package-view/5`;

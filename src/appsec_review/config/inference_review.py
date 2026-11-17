@@ -21,6 +21,7 @@ from appsec_review.review.ranking import RankWeights
 from appsec_review.review.lead_families import FAMILIES as LEAD_FAMILIES
 from appsec_review.review.dispositions import SourceDispositions
 from appsec_review.review.lead_filters import LeadFilters
+from appsec_review.review.hunt_plan_settings import HuntingSettings
 from appsec_review.review.lead_triage_settings import TriageSettings
 from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLES, RedOutputLimits
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
@@ -481,6 +482,9 @@ class InferenceSecurityReviewSettings:
     verification: VerificationSettings = VerificationSettings()
     # Lead severity triage (``settings.triage``, review/lead_triage.py); semantic. Absent means off.
     triage: TriageSettings = TriageSettings()
+    # Hunting campaign planner (``settings.hunting``, review/hunt_plan.py; T-5030 first piece); semantic. Absent
+    # means the deterministic rank selects hunt units.
+    hunting: HuntingSettings = HuntingSettings()
     # PoC candidates the handoff lists (review-judge-and-poc.md section 4); semantic.
     poc_candidates: PocCandidateSettings = PocCandidateSettings()
     attack_chains: AttackChainSettings = AttackChainSettings()
@@ -765,7 +769,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                        "roles", "routing", "scoring", "poc"},
                       {"ranking", "red_output", "ship_block", "verification", "triage", "poc_candidates",
                        "attack_chains", "result_cache", "decision_audit", "source_dispositions",
-                       "lead_filters", "warrant_policy"})
+                       "lead_filters", "warrant_policy", "hunting"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -907,6 +911,13 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     if triage.enabled and models[triage.model_profile].max_queries != 0:
         raise ValueError(f"{_PREFIX}.models.{triage.model_profile}.max_queries must be 0: lead triage grants no "
                          "retrieval")
+    hunting = HuntingSettings.from_mapping(settings.get("hunting"), f"{_PREFIX}.hunting")
+    if hunting.enabled and hunting.planner_profile not in models:
+        raise ValueError(f"{_PREFIX}.hunting.planner_profile names an unconfigured model profile: "
+                         f"{hunting.planner_profile}")
+    if hunting.enabled and models[hunting.planner_profile].max_queries != 0:
+        raise ValueError(f"{_PREFIX}.models.{hunting.planner_profile}.max_queries must be 0: the hunt planner "
+                         "grants no retrieval")
     return InferenceSecurityReviewSettings(
         rounds=rounds, teams=teams, lanes=lanes, packages=packages, budgets=budgets, retry=retry,
         models=MappingProxyType(models), roles=MappingProxyType(roles), routing=routing,
@@ -917,6 +928,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                                   known_families=LEAD_FAMILIES),
         verification=VerificationSettings.from_mapping(settings.get("verification"), f"{_PREFIX}.verification"),
         triage=triage,
+        hunting=hunting,
         poc_candidates=PocCandidateSettings.from_mapping(settings.get("poc_candidates"), f"{_PREFIX}.poc_candidates"),
         attack_chains=AttackChainSettings.from_mapping(settings.get("attack_chains")),
         source_dispositions=SourceDispositions.from_mapping(settings.get("source_dispositions"),

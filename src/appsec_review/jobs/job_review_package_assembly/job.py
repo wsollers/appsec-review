@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.review_packages import publish_review_packages, verify_review_packages
@@ -92,11 +93,18 @@ def build_job() -> Job:
                 "manifest_sha256": file_sha256(directory / "manifest.json"),
                 "artifacts": artifacts,
                 "counts": manifest["counts"], "package_count": len(manifest["packages"]),
-                "coverage_gap_count": len(gaps), "gaps": [item["gap_id"] for item in gaps],
+                "coverage_gap_count": len(gaps),
+                # Each manifest coverage gap becomes a producer-gap/1 record carrying its cause; the
+                # manifest gap id stays readable in the reason so the two accounts line up.
+                "gaps": [producer_gap(GapCode.PRODUCER_REPORTED_GAP,
+                                      f"{item['producer']}: {item['scope']} ({item['state']}): {item['reason']} "
+                                      f"[{item['gap_id']}]",
+                                      unit_id=unit.unit_id, scope_id=str(item["scope"]))
+                         for item in gaps],
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     units = (Unit("publication.publish_packages", publish, output_validators=(_validate_output,)),)
     return Job(JOB_ID, "review_package_assembly", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               units=units,
+               units=units, strict_gaps=True,
                datasets=DATASETS, contract=CONTRACT)

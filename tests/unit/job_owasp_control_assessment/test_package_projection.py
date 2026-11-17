@@ -47,10 +47,11 @@ def test_projection_bound_is_closed(accepted, maximum):
 
 
 def test_unsupported_indexed_file_cannot_starve_supported_subjects(accepted, settings):
+    # T-5013 reads C, so the unsupported indexed file is Go here.
     fixture = accepted({
-        "a.c": "void service(void) {}\n",
+        "a.go": "func service() {}\n",
         "z.py": "def query(value):\n    return db.execute('SELECT x FROM t WHERE id = ' + value)\n",
-    }, hints=(("a.c", 1, 1),), languages={"a.c": "C", "z.py": "Python"})
+    }, hints=(("a.go", 1, 1),), languages={"a.go": "Go", "z.py": "Python"})
     evidence, gaps = component_evidence(
         fixture.resolver, "api", fixture.files, replace(settings, max_discovery_files=1))
     assert len(evidence) == 1

@@ -6,7 +6,7 @@ rules:
     languages: [c, cpp]
     message: >-
       Call to $FUNC, a function on the banned-function list (high tier): it takes no destination size, has no bounds argument or has an unsafe contract. Prefer a bounded or checked alternative.
-    severity: ERROR
+    severity: WARNING
     metadata:
       list: microsoft-sdl-banned-h
       tier: high

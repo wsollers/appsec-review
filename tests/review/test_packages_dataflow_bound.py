@@ -308,7 +308,8 @@ def test_the_view_and_manifest_schemas_pin_the_emitted_versions() -> None:
     assert set(view["properties"]["rule"]["enum"]) == {"appsec-review/package-view/4", "appsec-review/package-view/5", VIEW_RULE}
     assert manifest["properties"]["schema"]["const"] == MANIFEST_SCHEMA
     assert set(manifest["properties"]["assembly_rule"]["enum"]) == {
-        "appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13", ASSEMBLY_RULE}
+        "appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13",
+        "appsec-review/assemble-review-packages/15", ASSEMBLY_RULE}
     assert manifest["properties"]["package_schema"]["const"] == PACKAGE_SCHEMA
     rules = manifest["properties"]["rules"]["properties"]
     assert rules["neighborhood"]["const"] == NEIGHBORHOOD_RULE and rules["slice"]["const"] == SLICE_RULE

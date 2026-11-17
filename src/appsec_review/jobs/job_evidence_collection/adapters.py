@@ -730,6 +730,10 @@ def _cppcheck_parser(payload: bytes) -> list[dict[str, Any]]:
             "language": "C/C++",
             "_native_selector": selector,
         }
+        cwe = str(error.get("cwe") or "").strip()
+        if cwe.isdigit() and int(cwe) > 0:
+            # Cppcheck reports the CWE id as a bare number (``deallocuse`` carries 416).
+            record["rule_mapping"] = {"cwe": f"CWE-{int(cwe)}"}
         if error.get("id") in gap_ids:
             record["coverage_gap"] = f"Cppcheck {error.get('id')}: {record['message']}"
             record["gap_only"] = True

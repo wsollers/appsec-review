@@ -373,3 +373,72 @@ def test_build_job_load_and_analyze_units_unseeded_and_seeded(monkeypatch, tmp_p
     seeded_res = seeded_analyze(seeded_unit)
     assert seeded_res["scope_count"] == 1
     assert len(seeded_exec.calls) == 2
+
+
+def _observation_payloads(run_root: Path, result: dict) -> list[dict]:
+    shard = run_root / result["index_identity"]["relative_path"]
+    with sqlite3.connect(shard) as database:
+        rows = database.execute("SELECT payload_json FROM entities WHERE kind = 'tool_observation'").fetchall()
+    return [json.loads(row[0]) for row in rows]
+
+
+def test_clang_observations_carry_native_severity_and_a_common_record(tmp_path: Path) -> None:
+    """Clang ``warning`` must order review as medium, not unknown, through the shared normalizer."""
+    from appsec_review.retrieval.observations import normalize_reported_severity
+
+    scope, unit = _scope(tmp_path), _unit(tmp_path)
+    result = _analyze_scope(unit, scope, lambda _unit: FakeExecutor(unit.job.run_root))
+    payloads = _observation_payloads(unit.job.run_root, result)
+    assert len(payloads) == 2 and result["collapsed_identical_records"] == 0
+    for payload in payloads:
+        assert payload["native_severity"] == "warning" == payload["reported_severity"]
+        assert payload["common"]["reported_severity"]["value"] == "medium"
+        assert payload["common"]["reported_severity"]["basis"] == "native-label"
+        assert payload["common"]["scanner"] == TOOL_ID
+        assert payload["common"]["observation_class"] == "source_sast"
+        assert normalize_reported_severity(payload)["value"] == "medium"
+        # Direct handler calls have no retention owner: the record says so instead of citing nothing.
+        assert payload["common"]["evidence_refs"] == [] and len(payload["common"]["gap_ids"]) == 1
+
+
+def test_legacy_clang_payload_reported_severity_is_normalized() -> None:
+    from appsec_review.retrieval.observations import normalize_reported_severity
+
+    legacy = {"tool_id": TOOL_ID, "category": "source_sast", "native_rule_id": "r", "reported_severity": "error"}
+    assert normalize_reported_severity(legacy)["value"] == "high"
+    assert normalize_reported_severity({**legacy, "reported_severity": "warning"})["value"] == "medium"
+
+
+def test_clang_common_record_cites_the_retained_wrapper_output_inside_an_attempt(tmp_path: Path) -> None:
+    from appsec_review.storage import atomic_json
+    from appsec_review.storage.shared import SharedArtifacts, publication_scope_for_owner, reference
+
+    scope, unit = _scope(tmp_path), _unit(tmp_path)
+    run_root = unit.job.run_root
+    attempt_root = run_root / "data" / "jobs" / JOB_ID / "attempts" / "attempt_0001"
+    actor = {"run_id": run_root.name, "job_id": JOB_ID, "attempt_id": "attempt_0001", "orchestration": {"system": "fixture"}}
+    from appsec_review.jobs.job_clang_static_analysis.datasets import DATASETS
+    from appsec_review.runtime.datasets import dataset_contract
+    atomic_json(attempt_root / "claim.json", {
+        **actor, "attempt_path": attempt_root.relative_to(run_root).as_posix(),
+        "dataset_contract": dataset_contract(JOB_ID, ("load", "analyze", "acceptance"), DATASETS)})
+    owner = SharedArtifacts(run_root, attempt_root, {**actor, "claim": reference(run_root, attempt_root / "claim.json")})
+    with publication_scope_for_owner(owner):
+        result = _analyze_scope(unit, scope, lambda _unit: FakeExecutor(run_root))
+    assert result["terminal_status"] == "SUCCEEDED"
+    payloads = _observation_payloads(run_root, result)
+    assert len(payloads) == 2
+    for payload in payloads:
+        refs = payload["common"]["evidence_refs"]
+        assert len(refs) == 1 and refs[0]["selector"] == {"kind": "json_pointer", "value": "/diagnostics/0"}
+        assert refs[0]["parser_identity"] == "clang-static-adapter/5"
+        assert payload["common"]["gap_ids"] == []
+        assert payload["common"]["reported_severity"]["value"] == "medium"
+
+
+def test_identical_clang_diagnostics_collapse_to_one_counted_observation(tmp_path: Path) -> None:
+    scope, unit = _scope(tmp_path), _unit(tmp_path)
+    result = _analyze_scope(unit, scope, lambda _unit: FakeExecutor(unit.job.run_root, duplicate="clang-tidy"))
+    assert result["terminal_status"] == "SUCCEEDED"
+    assert result["collapsed_identical_records"] == 1
+    assert result["observation_count"] == 2 == len(_observation_payloads(unit.job.run_root, result))

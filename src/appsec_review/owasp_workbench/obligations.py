@@ -1,7 +1,8 @@
 """Versioned proof questions for named source sites, not compliance certification.
 
-Recognition is deliberately limited to Python AST sites: calls with visible SQL templates,
-password-length comparisons in validation functions, and literal HTTP route decorators. It
+Recognition is deliberately limited to Python AST sites (calls with visible SQL templates,
+password-length comparisons in validation functions, and literal HTTP route decorators) and, since
+version 3 (T-5013), to the C/C++ recogniser families of ``c_subjects`` bound by ``c_procedures``. It
 neither executes target code nor establishes any predicate. Other languages, hidden query
 builders, implicit policies and the rest of the catalog remain unresolved.
 
@@ -21,10 +22,12 @@ from pathlib import PurePosixPath
 import textwrap
 from typing import Any, Mapping, Sequence
 
+from . import c_subjects
+from .c_procedures import C_PROCEDURE_FIELDS
 from .standards import digest
 
 
-VERSION = "owasp-proof-obligations/2"
+VERSION = "owasp-proof-obligations/3"
 _ASVS_COMMIT = "5cf9b032440be53ce345ab3c130fda46ba1ce7a2"
 _MASVS_COMMIT = "8e133d09f4140518ed04cc254b18be9ff4990ffc"
 _STATIC_LIMITS = (
@@ -58,6 +61,8 @@ class Procedure:
     required_categories: tuple[str, ...] = ("source",)
     evidence_mode: str = "static_source"
     procedure_version: str = VERSION
+    # The source language the recogniser reads; runtime procedures are language-independent.
+    language: str = "python"
 
 
 _UNKNOWN = (
@@ -244,16 +249,29 @@ PROCEDURES = (
                        "platform trust or protection of all network traffic.",),
         required_categories=("runtime_observation", "platform_configuration"),
         evidence_mode="dynamic_runtime",
+        language="runtime",
     ),
+    *(Procedure(**fields) for fields in C_PROCEDURE_FIELDS),
 )
+if len({(rule.family, rule.version, rule.control, rule.language) for rule in PROCEDURES}) != len(PROCEDURES):
+    raise AssertionError("one reviewed procedure per control and language")
 
 
-def procedure_for(control: Mapping[str, Any]) -> Procedure | None:
+def procedure_for(control: Mapping[str, Any], *, languages: Sequence[str] | None = None) -> Procedure | None:
+    """The reviewed procedure for a control; ``languages`` restricts static procedures to those recognisers.
+
+    A control has at most one static procedure per language. With ``languages`` None every language is
+    admitted and the match must still be unique. Runtime procedures are never filtered by language.
+    """
     family = control.get("family", control.get("standard"))
     native = control.get("id", control.get("control_id"))
-    return next((rule for rule in PROCEDURES if (rule.family, rule.version, rule.control)
-                 == (family, control.get("version"), native)
-                 and ("text" not in control or control["text"] == rule.control_text)), None)
+    matches = [rule for rule in PROCEDURES if (rule.family, rule.version, rule.control)
+               == (family, control.get("version"), native)
+               and ("text" not in control or control["text"] == rule.control_text)
+               and (languages is None or rule.evidence_mode != "static_source" or rule.language in languages)]
+    if len(matches) > 1:
+        raise ValueError(f"control {native} has procedures for several languages; name the component languages")
+    return matches[0] if matches else None
 
 
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -352,8 +370,12 @@ def _sites(rule: Procedure, evidence: Mapping[str, Any]) -> tuple[list[dict[str,
             or not 1 <= span[0] <= span[1]
             or any(not ref.get(key) for key in ("run_id", "target_snapshot", "component_id", "source_identity"))):
         return [], ["source evidence has incomplete immutable file/span/scope identity"]
-    if PurePosixPath(path.replace("\\", "/")).suffix != ".py":
-        return [], [f"{path}: reviewed site recognition supports only Python source"]
+    suffix = PurePosixPath(path.replace("\\", "/")).suffix.lower()
+    language = "python" if suffix == ".py" else c_subjects.LANGUAGE if suffix in c_subjects.SUFFIXES else None
+    if language is None:
+        return [], [f"{path}: reviewed site recognition supports only Python and C/C++ source"]
+    if rule.language != language:
+        return [], [f"{path}: procedure {rule.recognizer} does not read {language} source"]
     if (not isinstance(excerpt, str) or not excerpt or len(excerpt) > 16000
             or len(excerpt.splitlines()) != span[1] - span[0] + 1):
         return [], [f"{path}: excerpt does not resolve its complete bounded line span"]
@@ -373,6 +395,8 @@ def _sites(rule: Procedure, evidence: Mapping[str, Any]) -> tuple[list[dict[str,
             or any("ambiguous" in gap.lower() for gap in limitations)):
         return [], [*limitations, f"{path}: clipped, unexplained truncation, redacted or ambiguous "
                     "source cannot define a proof subject"]
+    if language == c_subjects.LANGUAGE:
+        return _c_sites(rule, evidence, ref, locator, path, span, sha, excerpt, limitations)
     source = textwrap.dedent(excerpt)
     try:
         tree = ast.parse(source)
@@ -422,6 +446,46 @@ def _sites(rule: Procedure, evidence: Mapping[str, Any]) -> tuple[list[dict[str,
                           if evidence.get("source_subject") else {}),
                        **({"operation": identity["operation"]} if operation is not None else {})})
     return result, limitations
+
+
+def _c_sites(rule: Procedure, evidence: Mapping[str, Any], ref: Mapping[str, Any], locator: Mapping[str, Any],
+             path: str, span: list[int], sha: str, excerpt: str, limitations: list[str]
+             ) -> tuple[list[dict[str, Any]], list[str]]:
+    """C/C++ sites: each complete function (or named type) the rule's recogniser family marks.
+
+    The subject is the whole definition; ``sites`` names the recognised call lines and the input-entry
+    lines inside it, in absolute file coordinates. Identity binds the procedure, the run/component scope,
+    the definition's span and the exact bytes of the definition.
+    """
+    scan = c_subjects.scan(excerpt)
+    original_lines = excerpt.splitlines()
+    result = []
+    for item in scan.functions:
+        marked = item.families.get(rule.recognizer)
+        if not marked:
+            continue
+        pieces = original_lines[item.first - 1:item.last]
+        site_locator = {"kind": "source", "path": path, "file_sha256": sha,
+                        "source_custody": locator.get("source_custody"),
+                        "lines": [span[0] + item.first - 1, span[0] + item.last - 1],
+                        "columns": [0, len(pieces[-1].encode())],
+                        "column_unit": "zero-based UTF-8 bytes; end exclusive"}
+        content = digest({"source": "\n".join(pieces)})
+        identity = {"rule_version": VERSION, "procedure": asdict(rule),
+                    "scope": {key: ref.get(key) for key in (
+                        "run_id", "target_snapshot", "component_id", "build_unit_id", "environment")},
+                    "locator": site_locator, "content_sha256": content}
+        result.append({"subject_id": digest(identity),
+                       "name": f"{c_subjects.FAMILY_LABELS[rule.recognizer]} in {item.name}",
+                       "source_identity": ref["source_identity"],
+                       **{key: identity[key] for key in ("scope", "locator", "content_sha256")},
+                       "language": c_subjects.LANGUAGE,
+                       "sites": {"recognised_lines": [span[0] + line - 1 for line in marked],
+                                 "entry_lines": [span[0] + line - 1 for line in item.entries],
+                                 "recogniser": rule.recognizer},
+                       **({"source_subject": evidence["source_subject"]}
+                          if evidence.get("source_subject") else {})})
+    return result, [*limitations, *(f"{path}: {gap}" for gap in scan.gaps)]
 
 
 def subjects(rule: Procedure, evidence: Mapping[str, Any]) -> list[str]:

@@ -262,13 +262,25 @@ def test_codeql_lead_embeds_its_correlated_path_sink_guards_and_ranges(graph_fix
 
 
 def test_leads_of_one_site_merge_their_neighborhoods_into_the_shared_package(graph_fixture) -> None:
-    """T-5025: sast_critical (parse.c:3, call-depth bound) and codeql_high (parse.c:5, path bound) share a package;
+    """T-5025: sast_critical (parse.c:3, call-depth bound) and codeql_high (parse.c:5, path bound) in one package;
     the merged neighborhood carries the sink, guard and range facts of both, is bounded by the correlated path,
-    recomposes the slice over it, and never embeds the broken correlation."""
+    recomposes the slice over it, and never embeds the broken correlation.
+
+    With the graph facts the two are distinct weakness classes (CWE-120 memory corruption against the
+    ``integer_conversion`` sink on line 5), so ``cluster_leads`` keeps them apart; the merge itself is exercised on
+    the assembler directly."""
+    from appsec_review.review.lead_families import collect_leads
+    from appsec_review.review.packages import _Assembler
     fixture, ids = graph_fixture
-    assembly = assemble_packages(accept_manifest(fixture.run_root))
-    [package] = [item for item in assembly.packages
-                 if item.kind == "finding_lead" and fixture.ids["codeql_high"] in item.lead_ids]
+    scope = accept_manifest(fixture.run_root)
+    assembly = assemble_packages(scope)
+    by_lead = {lead: item for item in assembly.packages if item.kind == "finding_lead" for lead in item.lead_ids}
+    assert by_lead[fixture.ids["codeql_high"]].lead_ids == (fixture.ids["codeql_high"],)
+    assert set(by_lead[fixture.ids["sast_critical"]].lead_ids) == {fixture.ids["sast_critical"], fixture.ids["sast_duplicate"]}
+    collection = collect_leads(scope)
+    leads = {lead.observation_id: lead for lead in collection.leads}
+    assembler = _Assembler(scope, PackageSettings(), collection)
+    package = assembler.finding_leads((leads[fixture.ids["sast_critical"]], leads[fixture.ids["codeql_high"]]))
     assert fixture.ids["sast_critical"] in package.lead_ids
     document = package.document()
     entries = {(entry["id"], entry["role"]) for entry in _graph_entries(document)}
@@ -395,3 +407,54 @@ def test_without_a_graph_index_packages_name_the_gap_and_unlock_nothing(tmp_path
             assert review_job.available_sources(document["retrieval"]["query_sets"], []) == ()
             routing = _route(document, ())
             assert {item["strategy"] for item in routing["strategy_gaps"]} >= {"sink_up", "entry_down"}
+
+
+# -- item 4: the entry chain prefers a remote entry in a caller over a file read in the lead's own function --------
+
+def _hand_built_graph(*, caller_entry_class: str = "remote", depth_two: bool = False):
+    """handle_request reads a popen pipe with fgets (entry class ``file``); serve_once calls it and reads the socket."""
+    from collections import defaultdict
+    from appsec_review.review.packages import GraphContext, _Call, _Fact, _Symbol
+    graph = object.__new__(GraphContext)
+    handle, serve, main = ("asr:symbol:" + "1" * 64, "asr:symbol:" + "2" * 64, "asr:symbol:" + "3" * 64)
+    fgets = _Fact("asr:entry_point:" + "a" * 64, "entry_point", "src/request.cpp", "file", None, None, "s" * 64, 141, handle,
+                  "fgets output argument [file], L141")
+    recv = _Fact("asr:entry_point:" + "b" * 64, "entry_point", "src/request.cpp", caller_entry_class, None, None, "s" * 64, 169,
+                 main if depth_two else serve, f"recv output argument [{caller_entry_class}], L169")
+    call = _Call("asr:call_site:" + "c" * 64, serve, "serve_once", handle, "handle_request", "src/request.cpp", 175, "s" * 64,
+                 "serve_once -> handle_request (direct)")
+    upper = _Call("asr:call_site:" + "d" * 64, main, "main", serve, "serve_once", "src/main.cpp", 20, "s" * 64,
+                  "main -> serve_once (direct)")
+    graph.facts = {fgets.identity: fgets, recv.identity: recv}
+    graph.calls = [call, upper]
+    graph.symbols = {handle: _Symbol(handle, "handle_request", "src/request.cpp", 100, "f" * 64, "s" * 64),
+                     serve: _Symbol(serve, "serve_once", "src/request.cpp", 165, "f" * 64, "s" * 64),
+                     main: _Symbol(main, "main", "src/main.cpp", 10, "f" * 64, "s" * 64)}
+    graph.by_function = defaultdict(list, {fgets.function: [fgets], recv.function: [recv]})
+    graph.calls_by_callee_symbol = defaultdict(list, {handle: [call], serve: [upper]})
+    graph.calls_by_callee_name = defaultdict(list, {"handle_request": [call], "serve_once": [upper]})
+    graph.calls_by_id = {call.identity: call, upper.identity: upper}
+    return graph, {"handle": handle, "fgets": fgets.identity, "recv": recv.identity, "call": call.identity, "upper": upper.identity}
+
+
+def test_the_entry_chain_prefers_a_remote_entry_in_a_caller_over_a_file_read_in_the_lead_function() -> None:
+    """Run 2026-11-16-0005 showed ``fgets output argument [file], L141`` (the popen pipe) as the chain entry of the
+    handle_request and session_touch packages while ``recv`` in serve_once was the remote entry one call up."""
+    graph, ids = _hand_built_graph()
+    hops, entries, reached, by_name = graph.entry_chain([(ids["handle"], "handle_request")], depth=3)
+    assert reached and not by_name
+    assert [row.ref for row in hops] == [ids["call"]] and hops[0].extra == {"depth": 1}
+    assert [row.ref for row in entries] == [ids["recv"]]
+    # Two levels up still wins over the in-function file read; beyond the depth limit the file read stands.
+    deeper, _ids = _hand_built_graph(depth_two=True)
+    hops, entries, reached, _named = deeper.entry_chain([(ids["handle"], "handle_request")], depth=3)
+    assert reached and [row.extra["depth"] for row in hops] == [1, 2] and entries[0].summary.startswith("recv")
+    hops, entries, reached, _named = deeper.entry_chain([(ids["handle"], "handle_request")], depth=1)
+    assert reached and hops == [] and [row.ref for row in entries] == [ids["fgets"]]
+    # A caller that only reads another file does not replace the lead function's own file read.
+    files_only, _ids = _hand_built_graph(caller_entry_class="file")
+    hops, entries, reached, _named = files_only.entry_chain([(ids["handle"], "handle_request")], depth=3)
+    assert reached and hops == [] and [row.ref for row in entries] == [ids["fgets"]]
+    # Within one function the strongest reach lists first and the file read stays as a secondary entry.
+    ordered = graph.entry_order([graph.facts[ids["fgets"]], graph.facts[ids["recv"]]])
+    assert [fact.identity for fact in ordered] == [ids["recv"], ids["fgets"]]

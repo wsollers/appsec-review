@@ -53,7 +53,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 import hashlib
 from itertools import zip_longest
 import json
@@ -73,7 +73,9 @@ from appsec_review.review.fact_summary import SUMMARY_RULE, summarize_fact
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, LeadCollection, collect_leads
 from appsec_review.review.memory_context import C_FAMILY_SUFFIXES, MEMORY_CONTEXT_RULE, MemoryContext
-from appsec_review.review.models import IntegrityError, Predicate
+from appsec_review.review.models import (
+    SECURITY_PREDICATE_CWE_ROLLUP, IntegrityError, Predicate, SecurityPredicate,
+)
 from appsec_review.review.neighborhood import (
     BUILD_RULE, MAX_FUNCTION_LINES, NEIGHBORHOOD_RULE, SECTIONS as NEIGHBORHOOD_SECTIONS, BuildContext,
     NeighborhoodRow, empty_record,
@@ -97,7 +99,7 @@ from appsec_review.review.slicing.registry import (
 from appsec_review.review.slicing.sources import AcceptedSliceSources, UnavailableSliceSources
 from appsec_review.review.slicing.spans import Header as SpanHeader
 from appsec_review.review.units import (
-    RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
+    CUTOFF_REASON, RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
 )
 from appsec_review.jobs.job_security_tagging.taxonomy import (
     BASIS_RANK, COLLATION_NAMESPACES, TARGET_NAMESPACE,
@@ -107,7 +109,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/7"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/15"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/16"
 UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/2"
 UNIT_FACETS_RULE = "appsec-review/unit-facets/2"
 HUNT_FACET_OBLIGATION_RULE = "appsec-review/hunt-facet-obligations/1"
@@ -139,6 +141,52 @@ MAX_WEAKNESSES = 8
 MAX_CORROBORATION = 16
 # Lead families whose observations name a source line and may therefore share a package (``cluster_leads``).
 CLUSTER_FAMILIES = frozenset({"source_sast", "codeql"})
+# Graph sink classes (``graph.contract.SinkClass``) rolled up to the security predicate their weakness normally
+# implies, so a lead without a rule CWE still has a weakness class for ``cluster_leads``.
+_SP = SecurityPredicate
+SINK_CLASS_PREDICATES: Mapping[str, str] = {
+    "memory_write": _SP.MEMORY_CORRUPTION.value, "memory_read": _SP.OUT_OF_BOUNDS_READ.value,
+    "format_string": _SP.MEMORY_CORRUPTION.value, "integer_conversion": _SP.INTEGER_ERROR.value,
+    "allocation_size": _SP.RESOURCE_EXHAUSTION.value, "command_execution": _SP.COMMAND_INJECTION.value,
+    "path_access": _SP.PATH_TRAVERSAL.value, "sql_query": _SP.SQL_INJECTION.value,
+    "code_injection": _SP.CODE_INJECTION.value, "deserialization": _SP.DESERIALIZATION.value,
+    "crypto_misuse": _SP.CRYPTO_WEAKNESS.value, "log_output": _SP.INFO_DISCLOSURE.value,
+    "network_output": _SP.INFO_DISCLOSURE.value,
+}
+# Scanner rule ids (lower-cased suffixes) rolled up the same way, for leads whose observation carries no CWE
+# (CodeQL, clang and cppcheck rows in run 2026-11-16-0005 carry none). Routing data for ``cluster_leads`` only;
+# a longer suffix wins over a shorter one.
+RULE_PREDICATES: Mapping[str, str] = {
+    "cpp/tainted-format-string": _SP.MEMORY_CORRUPTION.value, "cpp/non-constant-format": _SP.MEMORY_CORRUPTION.value,
+    "cpp/unbounded-write": _SP.MEMORY_CORRUPTION.value, "cpp/overrun-write": _SP.MEMORY_CORRUPTION.value,
+    "cpp/very-likely-overrunning-write": _SP.MEMORY_CORRUPTION.value,
+    "clang-diagnostic-format-security": _SP.MEMORY_CORRUPTION.value,
+    "security.insecureapi.strcpy": _SP.MEMORY_CORRUPTION.value,
+    "security.insecureapi.deprecatedorunsafebufferhandling": _SP.MEMORY_CORRUPTION.value,
+    "alpha.security.arrayboundv2": _SP.MEMORY_CORRUPTION.value, "alpha.unix.cstring.outofbounds": _SP.MEMORY_CORRUPTION.value,
+    "arrayindexoutofbounds": _SP.MEMORY_CORRUPTION.value, "arrayindexoutofboundscond": _SP.MEMORY_CORRUPTION.value,
+    "cpp-banned-function-high": _SP.MEMORY_CORRUPTION.value, "cpp-copy-length-not-bounded": _SP.MEMORY_CORRUPTION.value,
+    "cpp/command-line-injection": _SP.COMMAND_INJECTION.value,
+    "cpp/uncontrolled-process-operation": _SP.COMMAND_INJECTION.value,
+    "cert-env33-c": _SP.COMMAND_INJECTION.value, "env33-c.command-processor-call": _SP.COMMAND_INJECTION.value,
+    "env33-c.exec-shell-command-string": _SP.COMMAND_INJECTION.value,
+    "cpp/path-injection": _SP.PATH_TRAVERSAL.value,
+    "cpp/use-after-free": _SP.USE_AFTER_FREE.value, "cpp/double-free": _SP.USE_AFTER_FREE.value,
+    "unix.malloc": _SP.USE_AFTER_FREE.value, "cplusplus.newdelete": _SP.USE_AFTER_FREE.value,
+    "deallocuse": _SP.USE_AFTER_FREE.value, "doublefree": _SP.USE_AFTER_FREE.value,
+    "cpp/integer-overflow": _SP.INTEGER_ERROR.value, "cpp/uncontrolled-arithmetic": _SP.INTEGER_ERROR.value,
+    "cpp-narrow-size-product": _SP.INTEGER_ERROR.value,
+    "cpp-allocation-size-from-narrow-product": _SP.RESOURCE_EXHAUSTION.value,
+    "cpp/uncontrolled-allocation-size": _SP.RESOURCE_EXHAUSTION.value,
+}
+del _SP
+# Entry-point source classes (``graph.contract.SourceClass``) by attacker reach, strongest first. The entry chain
+# prefers a remote, IPC, local-user, argv or environment entry reached through callers over a read of a stream the
+# program itself opened (``file``) in the lead's own function; unclassified entries sit between the two.
+ENTRY_CLASS_RANK: Mapping[str, int] = {"remote": 0, "ipc": 1, "local_user": 2, "argv": 3, "environment": 4,
+                                       "database": 5, "unclassified": 6, "file": 7, "internal": 8}
+_ENTRY_RANK_DEFAULT = 6
+PROGRAM_STREAM_CLASSES = frozenset({"file", "internal", "database"})
 MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
 OBLIGATION_RULE = "appsec-review/package-obligations/2"
 SUPPRESSION_STATES = ("suppressed", "possibly_suppressed", "not_suppressed", "unknown")
@@ -354,6 +402,11 @@ class Assembly:
     manifest: Mapping[str, Any]
     gaps: tuple[ScopeGap, ...]
     unit_contexts: tuple[UnitContext, ...] = ()
+    # unit_key -> reason a unit received no hunt package (``below_hunt_cutoff`` under the rank; the campaign plan's
+    # ``not_reached:<area>``, ``unassigned``, ``not_in_plan`` or ``beyond_hunt_max_units:<area>`` otherwise).
+    hunt_gaps: Mapping[str, str] = field(default_factory=dict)
+    # unit_key -> campaign area id for every hunted unit under a plan; empty under the rank.
+    hunt_areas: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def manifest_bytes(self) -> bytes:
@@ -754,6 +807,32 @@ class GraphContext:
                 entries.append(context_entry(fact.identity, GRAPH_ROLES[fact.kind], fact.shard_sha256))
         return entries
 
+    def lead_site(self, lead: Lead) -> tuple[frozenset[str], frozenset[str]]:
+        """(weakness classes, ``sink_site`` identities) of a lead for :func:`cluster_leads`.
+
+        The classes are the rule CWEs' predicates, else the rule id's (``RULE_PREDICATES``), else the predicates of
+        the classified sink facts on its line (``SINK_CLASS_PREDICATES``); the sinks are the sink facts on its line.
+        """
+        facts = ([fact for fact in self.at_line.get((str(lead.path), int(lead.start_line)), ()) if fact.kind == "sink_site"]
+                 if lead.path and lead.start_line else [])
+        classes = lead_classes(lead) or frozenset(
+            SINK_CLASS_PREDICATES[fact.klass] for fact in facts if fact.klass in SINK_CLASS_PREDICATES)
+        return classes, frozenset(fact.identity for fact in facts)
+
+    @staticmethod
+    def entry_rank(fact: _Fact) -> int:
+        return ENTRY_CLASS_RANK.get(fact.klass or "unclassified", _ENTRY_RANK_DEFAULT)
+
+    @staticmethod
+    def _attacker_entry(fact: _Fact) -> bool:
+        """An entry an attacker drives directly; a read of a program-opened stream is not one."""
+        return (fact.klass or "unclassified") not in PROGRAM_STREAM_CLASSES
+
+    def entry_order(self, facts: Iterable[_Fact]) -> list[_Fact]:
+        """Entry facts strongest reach first (``ENTRY_CLASS_RANK``), then by line and identity."""
+        return sorted({fact.identity: fact for fact in facts}.values(),
+                      key=lambda fact: (self.entry_rank(fact), fact.line or 0, fact.identity))
+
     def enclosing_functions(self, path: str | None, line: int | None) -> set[tuple[str | None, str]]:
         """(symbol, unqualified name) of the functions graph facts place on one source line."""
         if not path or not line:
@@ -892,24 +971,33 @@ class GraphContext:
 
     def entry_chain(self, functions: Iterable[tuple[str | None, str]], depth: int
                     ) -> tuple[list[NeighborhoodRow], list[NeighborhoodRow], bool, bool]:
-        """The upward call chain from ``functions`` to the nearest function holding an ``entry_point`` fact.
+        """The upward call chain from ``functions`` to the nearest function holding an attacker-driven ``entry_point``.
 
-        Breadth-first over call sites to ``depth`` levels (existing ``CALLS`` edges: ``call_site`` facts), the
-        shallowest level that reaches an entry point wins and ties break by identity, so the chain is
-        deterministic. Returns (hops from the lead\'s function upward, entry points reached, reached, matched by
-        name). ``reached`` is false when no entry point lies within ``depth`` levels; that is a gap, not a finding.
+        Breadth-first over call sites to ``depth`` levels (existing ``CALLS`` edges: ``call_site`` facts). The
+        shallowest level holding an entry an attacker drives directly (remote, IPC, local user, argv, environment;
+        ``ENTRY_CLASS_RANK``) wins and ties break by identity, so the chain is deterministic. A function whose only
+        entries read a stream the program itself opened (``file``) does not stop the search: run 2026-11-16-0005
+        showed ``fgets`` on a ``popen`` pipe as the chain entry of ``handle_request`` while ``recv`` in its caller
+        was the remote entry. Such a weak entry is kept as the fallback when no stronger one lies within ``depth``
+        levels, and it stays listed among the neighborhood's ``entries`` either way. Returns (hops from the lead's
+        function upward, entry points reached strongest first, reached, matched by name). ``reached`` is false when
+        no entry point lies within ``depth`` levels; that is a gap, not a finding.
         """
         start = sorted({(symbol, name) for symbol, name in functions if name}, key=repr)
 
-        def entries_of(nodes: Iterable[tuple[str | None, str]]) -> list[NeighborhoodRow]:
-            facts = {fact.identity: fact for symbol, _name in nodes if symbol
-                     for fact in self.by_function.get(symbol, ()) if fact.kind == "entry_point"}
-            return [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line)
-                    for fact in sorted(facts.values(), key=lambda item: item.identity)]
+        def entries_of(nodes: Iterable[tuple[str | None, str]]) -> list[_Fact]:
+            return self.entry_order(fact for symbol, _name in nodes if symbol
+                                    for fact in self.by_function.get(symbol, ()) if fact.kind == "entry_point")
 
+        def rows(facts: Iterable[_Fact]) -> list[NeighborhoodRow]:
+            return [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line) for fact in facts]
+
+        fallback: tuple[list[NeighborhoodRow], list[_Fact], bool] | None = None
         found = entries_of(start)
         if found:
-            return [], found, True, False
+            if any(self._attacker_entry(fact) for fact in found):
+                return [], rows(found), True, False
+            fallback = ([], found, False)
         parents: dict[tuple[str | None, str], tuple[tuple[str | None, str], _Call]] = {}
         seen = set(start)
         frontier = list(start)
@@ -939,11 +1027,17 @@ class GraphContext:
                         hops.reverse()
                         hops = [NeighborhoodRow(hop.ref, hop.role, hop.summary, hop.line, {"depth": number})
                                 for number, hop in enumerate(hops, start=1)]
-                        return hops, reached, True, by_name
+                        if any(self._attacker_entry(fact) for fact in reached):
+                            return hops, rows(reached), True, by_name
+                        if fallback is None:
+                            fallback = (hops, reached, by_name)
                     following.append(far)
             if not following:
                 break
             frontier = following
+        if fallback is not None:
+            hops, reached, named = fallback
+            return hops, rows(reached), True, named
         return [], [], False, by_name
 
     def neighborhood(self, observation_id: str, path: str | None, line: int | None, settings: GraphSettings,
@@ -1052,8 +1146,7 @@ class GraphContext:
                 rows[section].extend(NeighborhoodRow(fact.identity, role, fact.summary, fact.line)
                                      for fact in members[:settings.max_guards_per_sink])
                 omitted[section] += max(0, len(members) - settings.max_guards_per_sink)
-        entries = sorted({fact.entry: self.facts[fact.entry] for fact in flows if fact.entry in self.facts}.values(),
-                         key=lambda fact: (fact.line or 0, fact.identity))
+        entries = self.entry_order(self.facts[fact.entry] for fact in flows if fact.entry in self.facts)
         rows["entries"] = [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line)
                            for fact in entries[:settings.max_neighbors_per_function]]
         omitted["entries"] = max(0, len(entries) - settings.max_neighbors_per_function)
@@ -1187,7 +1280,7 @@ class GraphContext:
         entry_facts = {fact.identity: fact for fact in self.by_function.get(symbol, ()) if fact.kind == "entry_point"} \
             if symbol else {}
         entry_facts.update((identity, self.facts[identity]) for identity in entry_ids if identity in self.facts)
-        entries = sorted(entry_facts.values(), key=lambda fact: (fact.line or 0, fact.identity))
+        entries = self.entry_order(entry_facts.values())
         rows["entries"] = [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line)
                            for fact in entries[:settings.max_neighbors_per_function]]
         omitted["entries"] = max(0, len(entries) - settings.max_neighbors_per_function)
@@ -1304,24 +1397,62 @@ def _same_function(ours: set[tuple[str | None, str]], theirs: set[tuple[str | No
     return bool(symbols) or bool({name for _s, name in ours} & {name for _s, name in theirs})
 
 
+def weakness_classes(cwes: Iterable[str]) -> frozenset[str]:
+    """The security predicates (``security-predicates/1``) the rule CWEs roll up to; empty when none maps."""
+    return frozenset(SECURITY_PREDICATE_CWE_ROLLUP[cwe].value for cwe in cwes if cwe in SECURITY_PREDICATE_CWE_ROLLUP)
+
+
+def rule_classes(rule_id: str) -> frozenset[str]:
+    """The predicate ``RULE_PREDICATES`` gives a scanner rule id (longest matching suffix); empty when none does."""
+    normalized = str(rule_id or "").strip().lower()
+    for suffix in sorted(RULE_PREDICATES, key=lambda item: (-len(item), item)):
+        if normalized == suffix or normalized.endswith(("/" + suffix, "." + suffix, "-" + suffix, ":" + suffix)) \
+                or (suffix.startswith("cpp-") and normalized.endswith(suffix)):
+            return frozenset({RULE_PREDICATES[suffix]})
+    return frozenset()
+
+
+def lead_classes(lead: Lead) -> frozenset[str]:
+    """A lead's weakness classes without graph facts: the rule CWEs' predicates, else the rule id's."""
+    return weakness_classes(lead.rule_cwe) or rule_classes(lead.rule_id)
+
+
+def _same_defect(classes: frozenset[str], sinks: frozenset[str], group_classes: set[str], group_sinks: set[str]) -> bool:
+    """Leads of one site report one defect when they share a ``sink_site`` fact or a weakness class. A lead whose
+    class is unknown (no rule CWE that rolls up and no classified sink on its line) never splits a group."""
+    if sinks & group_sinks:
+        return True
+    if not classes or not group_classes:
+        return True
+    return bool(classes & group_classes)
+
+
+LeadSite = Callable[[Lead], tuple[frozenset[str], frozenset[str]]]
+
+
 def cluster_leads(leads: Iterable[Lead], enclosing: Callable[[str | None, int | None], set[tuple[str | None, str]]],
-                  window: int) -> list[tuple[Lead, ...]]:
+                  window: int, *, site: LeadSite | None = None) -> list[tuple[Lead, ...]]:
     """Group admitted leads that report one defect site, so one package reviews it once with every tool's view.
 
     Two leads share a group when both belong to a source-location family (``CLUSTER_FAMILIES``), name the same
-    path with an exact line, lie within ``window`` lines of a member of the group and, where the accepted graph
-    facts name the enclosing function of both sides, name the same function. Membership is transitive within a
-    group, so observations spread along one function join it. Leads of other families, unlocated leads and every
-    lead when ``window`` is 0 stay alone. The result depends only on the leads and the facts, never on order.
+    path with an exact line, lie within ``window`` lines of a member of the group, where the accepted graph
+    facts name the enclosing function of both sides name the same function, and report the same defect: they
+    share a ``sink_site`` fact or a weakness class (``site`` gives a lead's classes and the sink facts on its line;
+    without it the rule CWEs' or the rule id's predicates decide). Different classes within the window are distinct defects and
+    become separate packages whose neighborhoods may overlap (run 2026-11-16-0005 merged a CWE-134 format string
+    with the CWE-78 popen seven lines below and the claim cap then covered neither). Membership is transitive
+    within a group, so observations spread along one function join it. Leads of other families, unlocated leads
+    and every lead when ``window`` is 0 stay alone. The result depends only on the leads and the facts, never on order.
     """
     ordered = sorted(leads, key=lambda item: (item.path or "", item.start_line or 0, item.observation_id))
-    groups: list[tuple[bool, list[Lead]]] = []
+    groups: list[tuple[bool, list[Lead], set[str], set[str]]] = []
     for lead in ordered:
         clusterable = (window > 0 and lead.family in CLUSTER_FAMILIES and lead.location_exact
                        and lead.path is not None and lead.start_line is not None)
         if clusterable:
             functions = enclosing(lead.path, lead.start_line)
-            for open_group, members in groups:
+            classes, sinks = site(lead) if site is not None else (lead_classes(lead), frozenset())
+            for open_group, members, group_classes, group_sinks in groups:
                 if not open_group or members[0].path != lead.path:
                     continue
                 if min(abs(int(lead.start_line) - int(member.start_line)) for member in members) > window:
@@ -1331,13 +1462,17 @@ def cluster_leads(leads: Iterable[Lead], enclosing: Callable[[str | None, int | 
                     theirs |= enclosing(member.path, member.start_line)
                 if functions and theirs and not _same_function(functions, theirs):
                     continue
+                if not _same_defect(classes, sinks, group_classes, group_sinks):
+                    continue
                 members.append(lead)
+                group_classes |= classes
+                group_sinks |= sinks
                 break
             else:
-                groups.append((True, [lead]))
+                groups.append((True, [lead], set(classes), set(sinks)))
         else:
-            groups.append((False, [lead]))
-    return [tuple(members) for _open, members in groups]
+            groups.append((False, [lead], set(), set()))
+    return [tuple(members) for _open, members, _classes, _sinks in groups]
 
 
 class _Assembler:
@@ -1545,22 +1680,102 @@ class _Assembler:
                      "omitted": {"lines": 0}, "gaps": [f"{GAP_FAILED}: compose: {type(exc).__name__}"]}
         return found, list(found["gaps"])
 
-    @staticmethod
-    def trim_neighborhood(record: dict[str, Any], entries: list[ContextEntry]) -> bool:
-        """Drop the least valuable neighborhood row to respect ``max_package_bytes``; False when none is left.
+    # Byte-trim order of a finding-lead package (run 2026-11-16-0005 trimmed every neighborhood section to nothing,
+    # the content the package exists to carry, before a single tag or precomputed context entry): capped context
+    # entries go first, tags and precomputed signals before derived graph context and the component last; then
+    # neighborhood rows and slice lines, least valuable first; the anchor floor (``neighborhood_floor``) goes last
+    # of all and only with a named gap.
+    CONTEXT_TRIM_ORDER = ("tag", "control_context", "openssf_scorecard", "dependency", "test_coverage",
+                          "profile_hotspot", "priority", "history", "hotspot", "caller", "flow", "duplicate_of",
+                          "points_to", "indirect_call", "memory_object", "range", "guard", "path", "entry_point",
+                          "sink", "artifact", "source", "build_unit", "component")
+    NEIGHBORHOOD_TRIM_ORDER = ("corroboration", "callees", "callers", "slice", "flows", "ranges", "guards", "entries",
+                               "sinks")
 
-        Non-anchor slice lines go first (lowest precision, then highest line); path anchors stay."""
-        if trim_slice(record):
-            return True
-        for section in ("corroboration", "callees", "callers", "flows", "entries", "guards", "ranges", "sinks"):
-            if record[section]:
-                row = record[section].pop()
-                record["omitted"][section] += 1
-                entries[:] = [item for item in entries if item.id != row["ref"] or item.role == "build"
-                              or any(other["ref"] == row["ref"] for name in NEIGHBORHOOD_SECTIONS
-                                     for other in record[name])]
-                return True
-        return False
+    @staticmethod
+    def trim_context(capped: list[ContextEntry]) -> str | None:
+        """Drop the least valuable capped context entry (``CONTEXT_TRIM_ORDER``: tags and precomputed signals first,
+        the build unit and component last; ties by identity) and return its role, or None when none is left."""
+        if not capped:
+            return None
+        order = {role: number for number, role in enumerate(_Assembler.CONTEXT_TRIM_ORDER)}
+        default = order["caller"]
+        index = min(range(len(capped)), key=lambda number: (order.get(capped[number].role, default), capped[number].id))
+        role = capped[index].role
+        del capped[index]
+        return role
+
+    @staticmethod
+    def trim_neighborhood(record: dict[str, Any], entries: list[ContextEntry],
+                          floor: frozenset[str] = frozenset()) -> str | None:
+        """Drop the least valuable neighborhood row or slice line outside ``floor`` to respect ``max_package_bytes``
+        and return the section trimmed (``slice`` for a slice line), or None when only floor rows remain.
+
+        ``NEIGHBORHOOD_TRIM_ORDER``: corroboration, callees and callers go before the slice's non-anchor lines
+        (lowest precision, then highest line; path anchors stay), then flows, ranges, guards, entries and sinks,
+        the last row of a section first. A context entry stays while any row the view still labels names its
+        identity: the sections and the entry chain (run 2026-11-16-0005 trimmed an ``entries`` row whose entry
+        point the chain still showed as E1, so the cell was denied ``expand`` on a label its own view presented)."""
+        for section in _Assembler.NEIGHBORHOOD_TRIM_ORDER:
+            if section == "slice":
+                if trim_slice(record):
+                    return section
+                continue
+            rows = record[section]
+            index = next((number for number in range(len(rows) - 1, -1, -1) if rows[number]["ref"] not in floor), None)
+            if index is None:
+                continue
+            row = rows.pop(index)
+            record["omitted"][section] += 1
+            chain = record.get("chain") if isinstance(record.get("chain"), Mapping) else {}
+            shown = {other["ref"] for name in NEIGHBORHOOD_SECTIONS for other in record[name]}
+            shown |= {other["ref"] for key in ("hops", "entries") for other in chain.get(key, ())}
+            entries[:] = [item for item in entries if item.id != row["ref"] or item.role == "build"
+                          or item.id in shown]
+            return section
+        return None
+
+    def neighborhood_floor(self, record: Mapping[str, Any], lead: Lead) -> frozenset[str]:
+        """The rows the byte trim keeps while anything else can go: the sink rows on the anchor lead's line (else
+        the nearest sink row), the guard and range rows of those sinks, every entry row and the chain's hops and
+        entries. Cutting into the floor is recorded as a named gap (``trim_gaps``)."""
+        sinks = [row["ref"] for row in record["sinks"]
+                 if lead.start_line is not None and row.get("line") == lead.start_line]
+        if not sinks and record["sinks"]:
+            sinks = [record["sinks"][0]["ref"]]
+        anchored = set(sinks)
+        protected = set(sinks)
+        for section in ("guards", "ranges"):
+            for row in record[section]:
+                fact = self.graph.facts.get(row["ref"])
+                if fact is not None and fact.sink in anchored:
+                    protected.add(row["ref"])
+        protected.update(row["ref"] for row in record["entries"])
+        chain = record.get("chain") if isinstance(record.get("chain"), Mapping) else {}
+        protected.update(row["ref"] for key in ("hops", "entries") for row in chain.get(key, ()))
+        return frozenset(protected)
+
+    @staticmethod
+    def trim_gaps(family: str, subject: str, context: Counter, rows: Counter, breached: Counter) -> list[ScopeGap]:
+        """The package's record of what the byte trim removed and why, one ``truncated`` gap per kind."""
+        def breakdown(counter: Counter) -> str:
+            return ", ".join(f"{key}={counter[key]}" for key in sorted(counter))
+        gaps: list[ScopeGap] = []
+        if context:
+            total = sum(context.values())
+            gaps.append(ScopeGap(family, subject, "truncated",
+                                 f"{total} context entr{'y' if total == 1 else 'ies'} omitted to respect "
+                                 f"max_package_bytes, tags and precomputed signals first (by role: {breakdown(context)})"))
+        if rows:
+            total = sum(rows.values())
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "truncated",
+                                 f"{total} neighborhood row(s) or slice line(s) omitted to respect max_package_bytes "
+                                 f"after the context (by section: {breakdown(rows)})"))
+        if breached:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "truncated",
+                                 "the anchor floor was cut to respect max_package_bytes: the package no longer carries "
+                                 f"the anchor site's full sinks, entries, guards and chain (by section: {breakdown(breached)})"))
+        return gaps
 
     def weaknesses(self, lead: Lead) -> list[dict[str, Any]]:
         """Weakness blocks for the lead's rule CWEs and its advisories' NVD CWEs (bounded)."""
@@ -1635,7 +1850,8 @@ class _Assembler:
                truncation: Mapping[str, Any], graph_families: Iterable[str] = (),
                graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = (),
                neighborhood: Mapping[str, Any] | None = None,
-               unit_context: UnitContext | None = None) -> tuple[str, bytes]:
+               unit_context: UnitContext | None = None,
+               campaign: Mapping[str, Any] | None = None) -> tuple[str, bytes]:
         """Render one package body. With ``unit_context`` (hunt lane) the unit-wide material is referenced,
         not embedded: the body's ``context`` is empty, its ``scope`` omits ``source_ids`` and its
         ``retrieval.entity_ids`` exclude the identities the unit context document lists. The fingerprint
@@ -1711,6 +1927,10 @@ class _Assembler:
             "retrieval": retrieval, "coverage_gaps": [gap.record() for gap in sorted_gaps(gaps)],
             "truncation": dict(truncation),
         }
+        if kind == "hunt" and campaign is not None:
+            # The hunting campaign plan's area record (review/hunt_plan.py): routing context for the hunters, never
+            # evidence. Absent when the rank selected the unit, so those bodies keep their pre-plan identity.
+            body["campaign_area"] = dict(campaign)
         package_id = f"{kind}-{sha256_hex(body)}"
         return package_id, canonical_json({**body, "package_id": package_id})
 
@@ -1818,35 +2038,37 @@ class _Assembler:
                         "partition_key": partition_key, "source_ids": sorted(sources), "artifact_ids": sorted(artifacts)}
         obligations = sorted({predicate for member in leads for predicate in OBLIGATIONS[member.family]},
                              key=lambda item: item.value)
-        trimmed = 0
+        floor = self.neighborhood_floor(neighborhood, lead)
+        trimmed_context: Counter[str] = Counter()
+        trimmed_rows: Counter[str] = Counter()
+        breached: Counter[str] = Counter()
         while True:
             merged = {(item.role, item.id): item for item in (*capped, *nb_entries)}
-            visible = gaps + ([ScopeGap("code_graph_neighborhood", partition_key, "truncated",
-                                        f"{trimmed} neighborhood row(s) or slice line(s) omitted to respect "
-                                        "max_package_bytes")]
-                              if trimmed else [])
+            visible = [*gaps, *self.trim_gaps(lead.family, partition_key, trimmed_context, trimmed_rows, breached)]
             package_id, body = self._build(
                 kind="finding_lead", lead_family=lead.family, scope_record=scope_record, partition=(0, 1), rank=None,
                 menu=[(member, component_id, unit_id) for member in leads],
                 context=[merged[key] for key in sorted(merged)], obligations=obligations,
-                gaps=visible, truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": None},
+                gaps=visible, truncation={"omitted_leads": 0, "omitted_context": omitted + sum(trimmed_context.values()),
+                                          "next_partition": None},
                 graph_families=families, graph_shards=graph_shards,
                 graph_scopes=self.graph.scopes(unit_id, paths) if not binary_only else (),
                 neighborhood=neighborhood)
             if len(body) <= self.settings.max_package_bytes:
                 gaps = visible
                 break
-            if self.trim_neighborhood(neighborhood, nb_entries):
-                trimmed += 1
+            role = self.trim_context(capped)
+            if role is not None:
+                trimmed_context[role] += 1
                 continue
-            if not capped:
-                raise IntegrityError(f"finding-lead package for {partition_key} exceeds max_package_bytes and "
-                                     "cannot be partitioned; the membership gate is blocked")
-            capped = capped[:-1]
-            omitted += 1
-            gaps = [gap for gap in gaps if gap.state != "truncated" or gap.producer == "code_graph_neighborhood"] + [ScopeGap(
-                lead.family, partition_key, "truncated",
-                f"{omitted} context entries omitted to respect max_package_bytes")]
+            section = self.trim_neighborhood(neighborhood, nb_entries, floor)
+            if section is None:
+                section = self.trim_neighborhood(neighborhood, nb_entries)
+                if section is None:
+                    raise IntegrityError(f"finding-lead package for {partition_key} exceeds max_package_bytes and "
+                                         "cannot be partitioned; the membership gate is blocked")
+                breached[section] += 1
+            trimmed_rows[section] += 1
         self.extra_gaps.extend(gap for gap in gaps if gap.state == "truncated")
         return Package(package_id, "finding_lead", "lead", lead.family, partition_key, tuple(sorted(members)),
                        None, body)
@@ -1876,7 +2098,9 @@ class _Assembler:
         validate_schema(UNIT_CONTEXT_SCHEMA_FILE, document, "package unit context")
         return UnitContext(unit.key, document, canonical_json(document))
 
-    def hunts(self, ranked: RankedUnit) -> list[Package]:
+    def hunts(self, ranked: RankedUnit, campaign: Mapping[str, Any] | None = None) -> list[Package]:
+        """The hunt partitions of one unit; ``campaign`` is the hunting campaign plan's area record for the unit
+        (``hunting-campaign/1``, review/hunt_plan.py), carried by every partition as ``campaign_area``."""
         unit = ranked.unit
         menu = [(lead, *self._locate(lead)[:2]) for lead in unit.leads]
         menu.sort(key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
@@ -1928,7 +2152,7 @@ class _Assembler:
                 gaps=[*gaps, *graph_gaps, *missing],
                 truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": following},
                 graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
-                neighborhood=neighborhood, unit_context=unit_context)
+                neighborhood=neighborhood, unit_context=unit_context, campaign=campaign)
 
         def split(chunk: list) -> list[list]:
             _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
@@ -2014,11 +2238,47 @@ def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> di
     return {"status": "passed", "listed_leads": listed}
 
 
+@dataclass(frozen=True, slots=True)
+class HuntCandidates:
+    """The ranked review units of a scope and the gaps of the operations and behaviour model they rest on."""
+
+    ranked: tuple[RankedUnit, ...]
+    gaps: tuple[ScopeGap, ...]
+    model_identity: Any
+
+
+def rank_hunt_candidates(scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection, *,
+                         behavior_core: Any = None) -> HuntCandidates:
+    """Build and rank the review units (``review-unit-rank/4``) exactly as package assembly does.
+
+    The hunting campaign planner (review/hunt_plan.py) reads the same candidates before assembly, so the plan
+    and the packages describe the same units.
+    """
+    from appsec_review.review.behavior import graph_operations, load_model
+    operations, operation_gaps = graph_operations(scope, limit=settings.max_operation_records)
+    model_context, model_gaps, model_identity = {}, (), None
+    if behavior_core is not None:
+        model_context, model_gaps, model_identity = load_model(
+            scope, operations, core=behavior_core, max_bytes=settings.max_behavior_artifact_bytes,
+            limit=settings.max_context_entries)
+    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights,
+                        operations=operations, model_context=model_context)
+    return HuntCandidates(rank_units(units), tuple((*operation_gaps, *model_gaps)), model_identity)
+
+
+def sorted_collection(collection: LeadCollection) -> LeadCollection:
+    """The collection with its leads and exclusions in identity order, as assembly reads it."""
+    return LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
+                          collection.gaps, collection.available, collection.correlation_audit,
+                          collection.correlation_shards, collection.non_lead_counts,
+                          tuple(sorted(collection.excluded, key=lambda item: item.lead.observation_id)))
+
+
 def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = None, *,
                       collection: LeadCollection | None = None,
                       cwe_reference: CweReference | None = None,
                       graph_settings: GraphSettings | None = None, slice_sources: Any = None,
-                      behavior_core: Any = None) -> Assembly:
+                      behavior_core: Any = None, hunt_selection: Any = None) -> Assembly:
     """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
 
     ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
@@ -2026,13 +2286,12 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     ``slice_sources`` (``slicing.contract.SliceSources``) backs the slices of dataflow-bounded leads; by
     default it is ``slicing.sources.AcceptedSliceSources`` over ``scope``. When no facade can be built,
     slices keep their path anchors and name the unavailable sources as gaps.
+    ``hunt_selection`` (``review.hunt_plan.HuntSelection``) replaces the rank cutoff with the hunting campaign
+    plan's unit order and attaches each hunted unit's area record to its packages; without it the top
+    ``hunt_max_units`` units by rank are hunted.
     """
     settings = settings or PackageSettings()
-    collection = collection if collection is not None else collect_leads(scope)
-    collection = LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
-                                collection.gaps, collection.available, collection.correlation_audit,
-                                collection.correlation_shards, collection.non_lead_counts,
-                                tuple(sorted(collection.excluded, key=lambda item: item.lead.observation_id)))
+    collection = sorted_collection(collection if collection is not None else collect_leads(scope))
     graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
     admitted = admitted_leads(collection, settings)
@@ -2045,25 +2304,24 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                  "not reviewed in lane A and reaches lane B only through its unit")
         for lead in collection.leads
         if lead.effective_severity == "unknown" and lead.observation_id not in admitted_ids)
-    groups = cluster_leads(admitted, assembler.graph.enclosing_functions, settings.lead_cluster_lines)
+    groups = cluster_leads(admitted, assembler.graph.enclosing_functions, settings.lead_cluster_lines,
+                           site=assembler.graph.lead_site)
     packages = [assembler.finding_leads(group) for group in groups]
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev,
                              settings.exploration_enabled, settings.exploration_reserve,
                              admission_basis=settings.admission_basis)
 
-    from appsec_review.review.behavior import graph_operations, load_model
-    operations, operation_gaps = graph_operations(scope, limit=settings.max_operation_records)
-    model_context, model_gaps, model_identity = {}, (), None
-    if behavior_core is not None:
-        model_context, model_gaps, model_identity = load_model(
-            scope, operations, core=behavior_core, max_bytes=settings.max_behavior_artifact_bytes,
-            limit=settings.max_context_entries)
-    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights,
-                        operations=operations, model_context=model_context)
-    ranked = rank_units(units)
-    hunted, cutoff_gaps = select_hunts(ranked, settings.hunt_max_units)
+    candidates = rank_hunt_candidates(scope, settings, collection, behavior_core=behavior_core)
+    ranked, model_identity = candidates.ranked, candidates.model_identity
+    if hunt_selection is not None:
+        hunted, cutoff_gaps, hunt_areas, hunt_gaps = hunt_selection.select(ranked, settings.hunt_max_units)
+    else:
+        hunted, cutoff_gaps = select_hunts(ranked, settings.hunt_max_units)
+        hunt_areas = {}
+        hunt_gaps = {gap.scope: CUTOFF_REASON for gap in cutoff_gaps}
     for item in hunted:
-        packages.extend(assembler.hunts(item))
+        packages.extend(assembler.hunts(
+            item, hunt_selection.campaign(item.unit, hunt_areas[item.unit.key]) if hunt_selection is not None else None))
     lane_b = audit_hunts(hunted, packages)
     packages.sort(key=lambda package: package.package_id)
     if len({package.package_id for package in packages}) != len(packages):
@@ -2071,8 +2329,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     scope.verify()
 
     # A missing graph index is already the scope's ``code_graph`` producer gap (review/scope.py).
-    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps,
-                        *operation_gaps, *model_gaps))
+    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps, *candidates.gaps))
     hunted_keys = {item.unit.key for item in hunted}
     unit_packages: dict[str, list[str]] = defaultdict(list)
     for package in packages:
@@ -2113,7 +2370,9 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         "units": [{"unit_key": item.unit.key, **item.rank_record(), "hunted": item.unit.key in hunted_keys,
                    "source_ids": list(item.unit.source_ids), "coverage_scope": "operation" if item.unit.operation else "files",
                    "operation": item.unit.operation,
-                   "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ()))}
+                   "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ())),
+                   # The hunting campaign plan's area for a hunted unit and the named reason an unhunted one was left out.
+                   "hunt_area": hunt_areas.get(item.unit.key), "hunt_gap": hunt_gaps.get(item.unit.key)}
                   for item in ranked],
         "behavior_model": model_identity,
         "gaps": [gap.record() for gap in gaps],
@@ -2134,7 +2393,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     validate_schema(MANIFEST_SCHEMA_FILE, document, "package manifest")
     document["content_sha256"] = sha256_hex(document)
     return Assembly(tuple(packages), document, gaps,
-                    tuple(assembler.unit_contexts[key] for key in sorted(assembler.unit_contexts)))
+                    tuple(assembler.unit_contexts[key] for key in sorted(assembler.unit_contexts)),
+                    dict(sorted(hunt_gaps.items())), dict(sorted(hunt_areas.items())))
 
 
 def _reference_weaknesses(scope: AcceptedScope) -> dict[str, tuple[str | None, str | None]]:

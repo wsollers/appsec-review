@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-sec
 NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn",
          "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff",
          "red-compact", "blue-compact", "verifier-compact", "judge-result-compact", "judge-result",
-         "lead-triage-result", "compact-investigation", "chain-records", "chain-composer-result",
+         "lead-triage-result", "hunting-campaign-plan", "compact-investigation", "chain-records", "chain-composer-result",
          "chain-challenge-result", "chain-continuity-fact", "attack-chain", "attack-chain-manifest")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(

@@ -6,6 +6,7 @@ text is data: it is matched against pinned rules and never interpreted as an ins
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 import hashlib
@@ -262,6 +263,18 @@ def collect_source_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voc
     return records, sorted(set(gaps))
 
 
+class InexactLocation(ValueError):
+    """A well-formed accepted fact whose producer deliberately recorded an inexact span.
+
+    Analyzer diagnostic points (``analyzer-diagnostic-point``, confidence 0.5, zero width) are the
+    common case: they belong to this snapshot and are not malformed, but a tag needs an exact span.
+    """
+
+    def __init__(self, method: str) -> None:
+        super().__init__(f"source location is inexact ({method})")
+        self.method = method
+
+
 def _graph_location(row: Row, snapshot: str) -> SourceLocation:
     """Recheck the graph contract and identity, never trusting a published eligibility flag alone."""
     validate_payload(row.payload)
@@ -271,10 +284,14 @@ def _graph_location(row: Row, snapshot: str) -> SourceLocation:
         raise ValueError("source location is missing")
     location = SourceLocation(**row.location)
     numeric = ("start_byte", "end_byte", "start_line", "end_line", "start_column", "end_column")
-    if (any(type(row.location[key]) is not int for key in numeric)
-            or location.target_snapshot != snapshot or location.ambiguous or location.confidence != 1.0
-            or location.end_byte <= location.start_byte):
-        raise ValueError("source location is not exact or belongs to another snapshot")
+    if any(type(row.location[key]) is not int for key in numeric):
+        raise ValueError("source location coordinates are malformed")
+    if location.target_snapshot != snapshot:
+        raise ValueError("source location belongs to another snapshot")
+    if location.ambiguous:
+        raise ValueError("source location is ambiguous")
+    if location.confidence != 1.0 or location.end_byte <= location.start_byte:
+        raise InexactLocation(str(location.mapping_method))
     result = row.payload["result"]
     scope = row.payload["scope"]
     if (not isinstance(scope["scope_id"], str) or not isinstance(scope["language"], str)
@@ -337,6 +354,7 @@ def collect_graph_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voca
     cached_key: bytes | None = None
     cached_source: SourceFile | None = None
     cached_error: str | None = None
+    inexact: Counter[tuple[str, str, str]] = Counter()
     for row, identity in sorted(pending, key=lambda item: (
             str((item[0].location or {}).get("path", "")), item[0].identity,
             str(item[1].get("shard_id", "default")))):
@@ -348,6 +366,10 @@ def collect_graph_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voca
             continue
         try:
             location = _graph_location(row, scope.target_snapshot)
+        except InexactLocation as exc:
+            # One aggregated gap per shard, family and mapping method, distinct from a real snapshot mismatch.
+            inexact[(str(identity.get("shard_id", "default")), row.kind, exc.method)] += 1
+            continue
         except (ValueError, TypeError, KeyError, AttributeError) as exc:
             gap("malformed_fact", str(exc))
             continue
@@ -414,6 +436,9 @@ def collect_graph_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voca
                     evidence=[evidence],
                     flow_role="sink" if row.kind == "sink_site" and vocabulary.namespace(tag).flow_role else None)
                     for subject in subjects)
+    for (shard_id, family, method), count in sorted(inexact.items()):
+        gaps.append(f"graph-capability:inexact_location: {shard_id}: {count} {family} fact(s) carry an inexact "
+                    f"source location ({method}); the sites are not tagged")
     return merge_assignments(records), sorted(set(gaps))
 
 

@@ -108,9 +108,21 @@ def _obligations(control: dict, evidence: dict, *, max_subjects: int = 8) -> lis
 
 
 def test_procedures_match_actual_pinned_controls_not_fixture_paraphrases(catalogs, controls) -> None:
-    assert VERSION == "owasp-proof-obligations/2"
-    assert {rule.control for rule in PROCEDURES} == {
-        "V1.2.4", "V6.2.1", "V8.2.1", "V8.3.1", "MASVS-NETWORK-1"}
+    assert VERSION == "owasp-proof-obligations/3"
+    assert {rule.control for rule in PROCEDURES if rule.language == "python"} == {"V1.2.4", "V6.2.1", "V8.2.1", "V8.3.1"}
+    assert {rule.control for rule in PROCEDURES if rule.language == "runtime"} == {"MASVS-NETWORK-1"}
+    # T-5013: the C/C++ procedures cover admitted network-service chapters only, one recogniser family each.
+    c_rules = [rule for rule in PROCEDURES if rule.language == "c-cpp"]
+    assert {rule.control for rule in c_rules} == {
+        "V1.2.5", "V1.3.3", "V1.3.10", "V1.4.1", "V1.4.2", "V1.4.3", "V2.2.1", "V5.3.2", "V7.2.2", "V7.2.3",
+        "V7.3.1", "V7.3.2", "V7.4.1", "V16.2.1", "V16.2.5", "V16.3.4", "V16.4.1", "V16.5.1", "V16.5.3"}
+    assert all(rule.control.split(".")[0] in {"V1", "V2", "V5", "V7", "V16"} for rule in c_rules)
+    assert all(rule.recognizer.startswith("c_") and rule.evidence_mode == "static_source" for rule in c_rules)
+    assert len({(rule.control, rule.language) for rule in PROCEDURES}) == len(PROCEDURES)
+    assert procedure_for(controls["V1.2.5"], languages=["python"]) is None
+    assert procedure_for(controls["V1.2.4"], languages=["c-cpp"]) is None
+    assert procedure_for(controls["V1.2.5"], languages=["c-cpp"]).language == "c-cpp"
+    assert procedure_for(controls["MASVS-NETWORK-1"], languages=["c-cpp"]).evidence_mode == "dynamic_runtime"
     for rule in PROCEDURES:
         catalog = catalogs[rule.family]
         control = controls[rule.control]

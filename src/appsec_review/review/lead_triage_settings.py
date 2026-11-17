@@ -10,6 +10,7 @@ Light on purpose (no guidance, retrieval or scoring imports): the central config
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+import fnmatch
 import hashlib
 import json
 import re
@@ -35,8 +36,10 @@ class TriageRule:
     """One row of ``lead-severity-rules/1``: (scanner, rule id) or CWE -> severity, with its basis and reason.
 
     ``scanner = "*"`` with a ``cwe`` matches any scanner's lead carrying that rule CWE; a scanner with
-    ``rule = "*"`` matches every rule of that scanner. The most specific matching row decides: scanner and
-    rule, then scanner alone, then CWE.
+    ``rule = "*"`` matches every rule of that scanner. A ``rule`` holding ``*`` or ``?`` beside other text is a
+    case-insensitive glob over the rule id (``*cpp-banned-function-high`` matches the id however the engine
+    prefixes the rule file path). The most specific matching row decides: scanner and rule, then scanner alone,
+    then CWE.
     """
 
     scanner: str
@@ -76,7 +79,10 @@ class TriageRule:
             return 0
         if self.rule == "*":
             return 2
-        return 3 if rule_id.strip().lower() == self.rule.lower() else 0
+        pattern, candidate = self.rule.lower(), rule_id.strip().lower()
+        if "*" in pattern or "?" in pattern:
+            return 3 if fnmatch.fnmatchcase(candidate, pattern) else 0
+        return 3 if candidate == pattern else 0
 
     def record(self) -> dict[str, Any]:
         return {"key": self.key, "scanner": self.scanner, "rule": self.rule, "cwe": self.cwe,

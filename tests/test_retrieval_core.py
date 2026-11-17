@@ -734,7 +734,10 @@ def test_builder_collapses_identical_entities_and_rejects_conflicting_ones(tmp_p
     entity = EntityRecord(LogicalIdentity.parse(source), "server", "server", "", {"kind": "elf"})
     builder.add_entity(entity)
     builder.add_entity(entity)
+    assert (builder.collapsed_identical_records, builder.entity_count) == (0, 0)
     builder.build()
+    # Producers publish the collapse instead of reporting the raw record count as the entity count.
+    assert (builder.collapsed_identical_records, builder.entity_count) == (1, 1)
     conflicting, _, _ = _builder_fixture(tmp_path / "conflict")
     conflicting.add_entity(entity)
     conflicting.add_entity(EntityRecord(LogicalIdentity.parse(source), "server", "server", "", {"kind": "pe"}))

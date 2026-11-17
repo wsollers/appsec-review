@@ -550,8 +550,8 @@ class _Projector:
                   for index, item in enumerate(package.value.get("lead_menu", ()))}
         group = "no_claim" if row["outcome"] == "no_proposal" else "blocked"
         for item in compact.get(group, ()):
-            token = item if isinstance(item, str) else item["lead"]
-            if labels.get(token, token) == row["observation_id"]:
+            token = item if isinstance(item, str) else item.get("lead") if isinstance(item, Mapping) else None
+            if token is not None and labels.get(token, token) == row["observation_id"]:
                 return None if isinstance(item, str) else item.get("why")
         return None
 

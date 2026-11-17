@@ -69,7 +69,14 @@ class ScriptedInfer:
         step = self.script.pop(0)
         if isinstance(step, BaseException):
             raise step
+        if isinstance(step, ModelResult):
+            return step
         return ModelResult({"schema": TURN_SCHEMA, **step}, input_tokens=100, output_tokens=10)
+
+
+def over_cap(turn: dict[str, Any], output_tokens: int = 9000) -> ModelResult:
+    """A reply whose output usage exceeds the spec's max_output_tokens (8000) after it was parsed."""
+    return ModelResult({"schema": TURN_SCHEMA, **turn}, input_tokens=100, output_tokens=output_tokens)
 
 
 def retrieve(*requests: dict[str, Any]) -> dict[str, Any]:
@@ -322,6 +329,29 @@ def test_query_cap_denies_extra_requests_and_then_requires_final(tmp_path: Path)
     assert infer.requests[1].transcript[1]["final_required"] is True
 
 
+def test_a_rejected_final_answer_keeps_the_compact_document_in_its_receipt(tmp_path: Path) -> None:
+    """Run 2026-11-16-0005: five lane A packages were rejected on shape and the receipts retained nothing of what
+    the model wrote (``compact_result`` null), so the rejections could not be diagnosed after the run."""
+    from appsec_review.review.compact import Expansion
+    sent = {"claims": [{"id": "c1"}], "evidence_requests": [{"question": "q"}]}
+    rejection = "red-compact: $: unexpected property evidence_requests; allowed: blocked, chain_seeds, claims, no_claim, schema"
+
+    def expand(compact, labels):
+        return Expansion(feedback=["red: claim c1 poc_basis did not satisfy the schema and was dropped"], errors=[rejection])
+
+    outcome = run(tmp_path, ScriptedInfer({"action": "final", "result": sent}), cell_spec=spec(expand=expand))
+    assert outcome.record.status is CellStatus.INVALID and outcome.result is None
+    receipt = json.loads(outcome.receipt_paths[0].read_text(encoding="utf-8"))
+    assert receipt["status"] == "invalid" and receipt["reason"] == "final_result_rejected"
+    assert receipt["compact_result"] == sent and receipt["result"] is None
+    assert receipt["repair_errors"] == [rejection]
+    assert receipt["feedback"] == ["red: claim c1 poc_basis did not satisfy the schema and was dropped"]
+    # A direct (unexpanded) answer rejected by the validators is retained the same way.
+    direct = run(tmp_path / "direct", ScriptedInfer(final(SINK)))
+    receipt = json.loads(direct.receipt_paths[0].read_text(encoding="utf-8"))
+    assert receipt["status"] == "invalid" and receipt["compact_result"] == final(SINK)["result"]
+
+
 def test_citing_an_identity_not_seen_in_the_cell_is_a_schema_error(tmp_path: Path) -> None:
     infer = ScriptedInfer(final(SINK))      # in entity scope but never retrieved or packaged
     outcome = run(tmp_path, infer)
@@ -461,6 +491,43 @@ def test_cell_budget_exceeded_times_out_with_a_budget_gap_and_is_never_retried(t
     assert outcome.record.status is CellStatus.TIMED_OUT and outcome.record.attempts == 1
     assert [(gap.gap_class, gap.reason) for gap in outcome.gaps] == [
         (GapClass.BUDGET_GAP, "cell_budget_exceeded:cell_token_cap")]
+
+
+def test_a_final_turn_over_the_output_cap_keeps_its_answer_and_records_a_budget_gap(tmp_path: Path) -> None:
+    """Run 2026-11-16-0005: 5 of 12 hunters ended cell_token_cap after a complete final reply was parsed."""
+    outcome = run(tmp_path, ScriptedInfer(over_cap(final(LEAD))), max_attempts=3, retry_on_timeout=True)
+    assert outcome.record.status is CellStatus.SUCCEEDED and outcome.result == final(LEAD)["result"]
+    assert outcome.record.attempts == 1
+    assert [(gap.gap_class, gap.reason) for gap in outcome.gaps] == [
+        (GapClass.BUDGET_GAP, "model_token_cap: final turn used 9000 of 8000 output tokens")]
+    receipt = json.loads(outcome.receipt_paths[0].read_text(encoding="utf-8"))
+    assert receipt["status"] == "succeeded" and receipt["result"] == final(LEAD)["result"]
+    assert [gap["reason"] for gap in receipt["gaps"]] == ["model_token_cap: final turn used 9000 of 8000 output tokens"]
+    assert receipt["gaps"][0]["gap_class"] == "budget_gap" and receipt["gaps"][0]["gap_id"] == outcome.gaps[0].gap_id
+    [turn] = receipt["turns"]
+    assert turn["output_tokens"] == 9000 and turn["execution"]["failure_category"] is not None
+    assert receipt["counts"]["output_tokens"] == 9000
+
+
+def test_a_final_turn_over_the_output_cap_is_still_validated_like_any_other(tmp_path: Path) -> None:
+    outcome = run(tmp_path, ScriptedInfer(over_cap(final(SINK))))      # in entity scope but never seen: a schema error
+    assert outcome.record.status is CellStatus.INVALID and outcome.result is None
+    assert {(gap.gap_class, gap.reason) for gap in outcome.gaps} == {
+        (GapClass.BUDGET_GAP, "model_token_cap: final turn used 9000 of 8000 output tokens"),
+        (GapClass.SCHEMA_ERROR, "final_result_rejected")}
+
+
+def test_a_retrieve_turn_over_the_output_cap_ends_the_cell_as_a_token_cap_timeout(tmp_path: Path) -> None:
+    infer = ScriptedInfer(over_cap(retrieve({"tool": "search", "parameters": {"query": "memcpy"}})), final(LEAD))
+    outcome = run(tmp_path, infer, max_attempts=3, retry_on_timeout=True, retry_on_invalid_output=True)
+    assert outcome.record.status is CellStatus.TIMED_OUT and outcome.record.attempts == 1 and outcome.result is None
+    assert infer.script == [final(LEAD)]                                 # the cell did not continue
+    assert [(gap.gap_class, gap.reason) for gap in outcome.gaps] == [
+        (GapClass.BUDGET_GAP, "model_token_cap: retrieve turn used 9000 of 8000 output tokens"),
+        (GapClass.BUDGET_GAP, "cell_budget_exceeded:cell_token_cap")]
+    receipt = json.loads(outcome.receipt_paths[0].read_text(encoding="utf-8"))
+    assert receipt["reason"] == "cell_budget_exceeded:cell_token_cap"
+    assert [gap["reason"] for gap in receipt["gaps"]] == [gap.reason for gap in outcome.gaps]
 
 
 def test_reuse_basis_replaces_manifest_and_package_identity_in_the_fingerprint() -> None:

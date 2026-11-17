@@ -90,7 +90,7 @@ provider = "claude-cli"          # claude-cli | anthropic-api
 model = "claude-haiku-5-5"       # development default; upgrade for real reviews
 reasoning = "high"
 max_input_tokens = 128000        # per turn; the request byte bound is 4x this (T-5023)
-max_output_tokens = 32000        # per turn; thinking tokens count
+max_output_tokens = 32000        # per turn; thinking tokens count (a final turn over it is kept, see below)
 max_queries = 40                 # retrieval requests per cell
 max_turns = 12                   # model turns per cell
 timeout_seconds = 600            # per-cell deadline
@@ -162,6 +162,68 @@ red and blue cells are reused. Setting `require_distinct_model_for_ship_blocking
 same-model findings as `ship_blocking` and removes the warning. Do that only on purpose: it gives
 up the decision 2 safeguard.
 
+## The hunting campaign plan
+
+Review protocol v3 section 4 (D20 to D25; T-5030) makes hunting a campaign over **areas** of the attack
+surface. The first piece is implemented: a frontier model defines and divides the hunters' work, and the
+application keeps the partition honest. `packages.plan_hunt_campaign` (`review/hunt_plan.py`) runs before
+both package-assembly tasks:
+
+1. **The brief.** The application builds one bounded, deterministic attack-surface brief from accepted data
+   only: components and stack facts, first-party files with review-prioritization points, hotspot points,
+   lead density (admitted, excluded and other leads), collation facets and threat tags, the function
+   inventory from the accepted graph symbols (names and lines, with sink and entry-point counts), the entry
+   points with their source class, and the hunt units the rank produced (`candidate_units`, with
+   `hunted_by_rank`). Everything is listed under short ids (`F` files, `N` functions, `E` entry points, `U`
+   units); no target text beyond paths, names and lines reaches the planner. `hunting.brief_bounds`
+   (`max_functions`, `max_files`, `max_leads`) cap the lists; the brief counts what it omitted. It is written
+   as `hunt-brief.json` beside the plan.
+2. **The planner.** The `hunt_planner` role (persona `generalist`, model profile `hunting.planner_profile`,
+   `models.planner`: Sonnet in dev, Fable in prod, `max_queries = 0`) answers `hunting-campaign-plan/1` in one
+   tool-free turn plus one repair turn: `areas[]` with `area_id`, `title`, `mission`, `weakness_classes`
+   (the closed `security_predicate` vocabulary), `priority`, `agents`, `files`, `functions`, `entry_points`
+   and `rationale`; `unassigned[]` with a reason each; `gaps[]`.
+3. **Validation.** Every function and entry point of the brief must be in exactly one area or unassigned;
+   an id the brief did not list is refused with feedback and, on the repair turn, dropped from the area
+   (never the area) and recorded in the plan's `notes`; a double assignment keeps the first area; an omitted
+   id joins `unassigned` as `planner_omitted`. Agent counts are clamped to `hunting.agents` in priority
+   order; areas beyond the budget or `hunting.max_areas` stay in the plan as `not_reached`. A plan that
+   assigns nothing, or fails validation on both turns, or hits a model problem, falls back to the rank with
+   the named gap `hunt_plan_unavailable:<code>` (`empty_plan`, `invalid_output`, `timeout`, `budget`,
+   `provider_error`). The result is `hunt-plan.json` (`appsec-review/hunt-plan/1`: status `planned`,
+   `fallback` or `disabled`, `plan_id`, the resolved areas, unassigned identities, attempts and notes).
+4. **Selection.** Both assembly tasks read the plan. A unit belongs to the reached area holding most of its
+   functions and entry points (ties to the higher priority), else to the first area naming one of its
+   files; hunted units are ordered by area priority then rank, and `lanes.hunt_max_units` caps the packages
+   after the plan. Every hunt package carries its area's mission, weakness classes and the functions and
+   entry points of that unit as `campaign_area` (shown to the hunters in the package view as routing
+   context, never evidence); the unit menu shape is unchanged, so hunters, triage and the scorecard keep
+   working. An unhunted unit's gap names the plan's reason: `not_reached:<area>`, `unassigned`,
+   `not_in_plan` or `beyond_hunt_max_units:<area>`; the coverage matrix and the completeness gaps carry the
+   same reason, and `excluded-leads.json`'s `hunted` flags reflect plan membership. The lane documents
+   (`lead-packages.json`, `hunt-packages.json`) record the plan id, status, areas reached and not reached,
+   agents and unassigned count under `hunt_plan`; `scripts/cell-outcomes.py` lists the planner under the
+   `hunt_planner` role.
+
+Settings:
+
+```toml
+[jobs.job_inference_security_review.settings.hunting]
+enabled = true          # false: the rank selects the top lanes.hunt_max_units units as before
+agents = 4              # the agent budget the plan's counts are clamped to
+max_areas = 8           # areas beyond this stay in the plan as not_reached
+planner_profile = "planner"
+[jobs.job_inference_security_review.settings.hunting.brief_bounds]
+max_functions = 400
+max_files = 120
+max_leads = 60
+```
+
+Not implemented yet (the follow-on of T-5030): the campaign cell runtime with a wall deadline and token budget
+in place of the four-turn cap, incremental filing of hypotheses, and the receipt-derived coverage ledger. The
+`agents` count therefore sizes the plan, not a pool of long-running agents; hunt cells still run as today.
+Coverage is derived from hunt cells and their receipts, never from the plan.
+
 ## Capacity and local runs
 
 `[...settings.teams].review_teams` is **3 in dev/copilot-dev and 7 in prod/copilot-prod**.
@@ -191,6 +253,16 @@ raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts;
 default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
 The overlay leaves the selected profile's team count unchanged, so prod and copilot-prod keep their
 7 review teams.
+
+`max_output_tokens` is a per-call cap checked after the reply has been received and parsed, so the reply
+exists when it trips. A **final** turn over the cap is expanded and validated exactly like an in-cap final:
+the cell's status follows the answer's validation, and the cell records a `budget_gap`
+`model_token_cap: final turn used N of M output tokens` on itself, which reaches its attempt receipt and the
+lane ledger. A **retrieve** turn over the cap ends the cell as before (`cell_budget_exceeded:cell_token_cap`,
+never retried) and records the same gap text for the turn. The model-execution receipt of the call still
+records `model_token_cap` as a failed call, and the whole-cell and job budgets are charged the actual usage;
+only the consequence for a reply that already exists changed (run 2026-11-16-0005 lost 5 complete hunter
+finals this way). `max_input_tokens` is unchanged: a request over it is a token-cap timeout.
 [`test/acceptance/smoke-capacity-overlay.toml`](../../test/acceptance/smoke-capacity-overlay.toml) is the
 capacity for a [smoke-target](test-targets.md#smoke-runs) review under `dev`: 8 review teams, the
 `inference_teams` pool at 2 so both lane units run, and prod's four I/O slots and scanner pool of 4.
@@ -212,7 +284,7 @@ target class and facet-derived hunt obligations; `route_stack` reads `mechanism:
 managed-language scope with an HTTP or RPC listener selects its service stack without a
 `component:*` tag; personas may cover facets; `hunt_panel` tries `entry_down` first on a
 `trust:user-tainted` unit; and `ranking.facet_exposure`/`ranking.facet_trust` weight exposed,
-tainted units (`review-unit-rank/4`). All of these are implemented; the hunt view shows the facets,
+tainted units (`review-unit-rank/5`). All of these are implemented; the hunt view shows the facets,
 target classes and derived obligations under `facets` as closed ids.
 
 Teams run package-local follow-up rounds up to `rounds.max_rounds`. Each round applies the existing
@@ -696,6 +768,7 @@ sii = 1000                           # full source-history instability (SII) sco
 hotspot = 1000                       # full hotspot score
 tag_density = 1000                   # retained key: distinct evidenced security-operation sites
 tag_density_full_tags_per_file = 4    # retained key: sites for full points, no file-count multiplier
+lead_hint_high = 250                 # per critical or high lead hint (effective severity)
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -707,15 +780,17 @@ advisory_epss = 250                  # times the unit's highest EPSS percentile
 Every weight is an integer in `[0, 1000]`, except `tag_density_full_tags_per_file`, which is
 `[1, 1000]`. Unknown keys are rejected, and an omitted key keeps its default. A weight of `0`
 removes that signal's points from the score. The signal still counts as known for the tie-break
-and stays in each unit's rank basis. An unknown
+and stays in each unit's rank basis. Equal scores and known-signal counts are ordered by the unit's
+lead count, distinct scanners, first path and operation line before the unit key. An unknown
 signal (a missing producer or feed) still contributes nothing, whatever its weight.
 
 The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
 and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
-which reassembles hunt packages. `review-unit-rank/4` replaces raw tag counting: language, gap,
+which reassembles hunt packages. `review-unit-rank/5` weighs high leads and breaks ties by the
+unit's own weight; `/4` replaced raw tag counting: language, gap,
 reported and derived tags do not add operation points; multiple labels/producers at one physical
 site count once. Missing or partial evidence remains unknown rather than proving absence.
-Fresh packages use `assemble-review-packages/14` and the model-facing `package-view/6`.
+Fresh packages use `assemble-review-packages/16` and the model-facing `package-view/6`.
 Preceding publications remain readable without being reused as the new semantic output.
 Generated-map bytes remain bound through final certification. Role counts, verifier independence,
 judge policy and execution authority are unchanged; see the
@@ -778,7 +853,8 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
   `counts.queries` include it. A cell that repeats an identical denial ends `invalid` with one `authority_error` gap
   `repeated_denial:<code>:<tool> <request>`.
 - **Label feedback.** The cell receipt records `feedback` (labels dropped, stances recorded as unresolved, leads the
-  answer did not account for), `compact_result` (what the model wrote), `result` (the expanded document the
+  answer did not account for, shapes the expansion repaired), `compact_result` (what the model wrote, kept also when
+  the answer was rejected so the rejection can be diagnosed after the run), `result` (the expanded document the
   validators saw), `repair_errors` (why the last attempt was rejected) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
   and validator versions changed.
 - **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` and names it under

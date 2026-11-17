@@ -317,3 +317,66 @@ def test_missing_features_are_excluded_with_coverage_and_ties_break_deterministi
     assert ranked[2]["score"] == 0.333333 and ranked[2]["feature_coverage"] == 1.0
     assert selection_size(10, fraction=0.25, count=0, ceiling=100) == 3
     assert selection_size(10, fraction=0.25, count=7, ceiling=5) == 5
+
+
+def _tree_node(type_: str, field: str | None, start: int, end: int, *children: Any) -> Any:
+    from appsec_review.jobs.job_review_prioritization.syntax import Node
+    node = Node(type_, field, True, False, start, end, 1, 1, start + 1, end + 1)
+    for child in children:
+        child.parent = node
+        node.children.append(child)
+    return node
+
+
+def test_c_macro_wrapped_declarator_names_the_wrapped_function() -> None:
+    """``int BZ_API(BZ2_bzCompressInit)(bz_stream *strm)`` is BZ2_bzCompressInit, not the BZ_API macro."""
+    from appsec_review.jobs.job_review_prioritization.complexity import unit_name
+    from appsec_review.jobs.job_review_prioritization.syntax import SourceFile
+
+    data = b"int BZ_API(BZ2_bzCompressInit) ( bz_stream* strm )\n{\n  return 0;\n}\n"
+    assert data[4:10] == b"BZ_API" and data[11:29] == b"BZ2_bzCompressInit" and data[44:48] == b"strm"
+    wrapped = _tree_node("function_definition", None, 0, 66,
+        _tree_node("primitive_type", "type", 0, 3),
+        _tree_node("function_declarator", "declarator", 4, 50,
+            _tree_node("function_declarator", "declarator", 4, 30,
+                _tree_node("identifier", "declarator", 4, 10),
+                _tree_node("parameter_list", "parameters", 10, 30,
+                    _tree_node("parameter_declaration", None, 11, 29,
+                        _tree_node("type_identifier", "type", 11, 29)))),
+            _tree_node("parameter_list", "parameters", 31, 50,
+                _tree_node("parameter_declaration", None, 33, 48,
+                    _tree_node("type_identifier", "type", 33, 42),
+                    _tree_node("pointer_declarator", "declarator", 42, 48,
+                        _tree_node("identifier", "declarator", 44, 48))))),
+        _tree_node("compound_statement", "body", 51, 66))
+    root = _tree_node("translation_unit", None, 0, len(data), wrapped)
+    source = SourceFile("bzlib.c", hashlib.sha256(data).hexdigest(), "c", "C", data, root, 0)
+    assert unit_name(source, wrapped, SPECS["c"]) == ("BZ2_bzCompressInit", False)
+
+    # A plain declarator chain is unchanged, and a macro taking two identifiers names nothing it cannot know.
+    plain_data = b"int f(int a) { return a; }\n"
+    plain = _tree_node("function_definition", None, 0, 26,
+        _tree_node("primitive_type", "type", 0, 3),
+        _tree_node("function_declarator", "declarator", 4, 12,
+            _tree_node("identifier", "declarator", 4, 5),
+            _tree_node("parameter_list", "parameters", 5, 12,
+                _tree_node("parameter_declaration", None, 6, 11,
+                    _tree_node("primitive_type", "type", 6, 9), _tree_node("identifier", "declarator", 10, 11)))),
+        _tree_node("compound_statement", "body", 13, 26))
+    plain_source = SourceFile("f.c", hashlib.sha256(plain_data).hexdigest(), "c", "C", plain_data,
+                              _tree_node("translation_unit", None, 0, len(plain_data), plain), 0)
+    assert unit_name(plain_source, plain, SPECS["c"]) == ("f", False)
+    two_data = b"int M(a, b)(void) { return 0; }\n"
+    two = _tree_node("function_definition", None, 0, 31,
+        _tree_node("primitive_type", "type", 0, 3),
+        _tree_node("function_declarator", "declarator", 4, 17,
+            _tree_node("function_declarator", "declarator", 4, 11,
+                _tree_node("identifier", "declarator", 4, 5),
+                _tree_node("parameter_list", "parameters", 5, 11,
+                    _tree_node("parameter_declaration", None, 6, 7, _tree_node("type_identifier", "type", 6, 7)),
+                    _tree_node("parameter_declaration", None, 9, 10, _tree_node("type_identifier", "type", 9, 10)))),
+            _tree_node("parameter_list", "parameters", 11, 17)),
+        _tree_node("compound_statement", "body", 18, 31))
+    two_source = SourceFile("m.c", hashlib.sha256(two_data).hexdigest(), "c", "C", two_data,
+                            _tree_node("translation_unit", None, 0, len(two_data), two), 0)
+    assert unit_name(two_source, two, SPECS["c"]) == ("M", False)

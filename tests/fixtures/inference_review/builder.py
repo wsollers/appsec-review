@@ -368,7 +368,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
           [observed("sast_duplicate", "native/src/parse.c")])
     shard("codeql", "observations", "codeql-cpp-native", {"job": "job_codeql_analysis", "language": "cpp",
                                                           "build_unit_id": "native-main"},
-          [observation("codeql_high", "codeql", "cpp/integer-overflow", None, "native/src/parse.c", 5,
+          [observation("codeql_high", "codeql", "cpp/unbounded-write", None, "native/src/parse.c", 5,
                        producer="codeql", producer_level="warning", security_severity="8.1", language="C")])
 
     def advisory(key: str, advisory_id: str, **extra: Any) -> EntityRecord:
@@ -447,6 +447,17 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             ("svc/api/handler.py", "component:0001", "derived", "exposure:operator-only"),
             (None, "component:0001", "derived", "target:cli"),
         ]
+        # facets="network-service": the svc handler is a raw-socket (non-HTTP) listener started from the
+        # command line (run 2026-11-16-0005): ASVS admits its transport-agnostic chapters only.
+        svc_network = [
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:cli"),
+            ("svc/api/handler.py", "component:0001", "declared", "mechanism:networked-listener"),
+            ("svc/api/handler.py", "component:0001", "declared", "role:session"),
+            ("svc/api/handler.py", "component:0001", "derived", "trust:user-tainted"),
+            ("svc/api/handler.py", "component:0001", "derived", "exposure:client-facing"),
+            (None, "component:0001", "derived", "target:cli"),
+            (None, "component:0001", "derived", "target:network-service"),
+        ]
         native_cli = [
             ("native/src/parse.c", "component:0002", "declared", "mechanism:cli"),
             ("native/src/parse.c", "component:0002", "derived", "trust:user-tainted"),
@@ -458,9 +469,21 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
             ("native/src/parse.c", "component:0002", "declared", "component:android-mobile"),
             (None, "component:0002", "derived", "target:mobile"),
         ]
+        # facets="native-network-service": the C/C++ component is the raw-socket listener (T-5013), as the
+        # smoke-cpp request server of run 2026-11-16-0005; the svc handler stays an HTTP route.
+        native_network = [
+            ("native/src/parse.c", "component:0002", "declared", "mechanism:cli"),
+            ("native/src/parse.c", "component:0002", "declared", "mechanism:networked-listener"),
+            ("native/src/parse.c", "component:0002", "declared", "role:session"),
+            ("native/src/parse.c", "component:0002", "derived", "trust:user-tainted"),
+            ("native/src/parse.c", "component:0002", "derived", "exposure:client-facing"),
+            (None, "component:0002", "derived", "target:cli"),
+            (None, "component:0002", "derived", "target:network-service"),
+        ]
         facet_specs = [
-            *(svc_cli if facets == "cli" else svc_web),
-            *(native_android if facets == "android" else native_cli),
+            *(svc_cli if facets == "cli" else svc_network if facets == "network-service" else svc_web),
+            *(native_android if facets == "android" else native_network if facets == "native-network-service"
+              else native_cli),
         ]
         for number, (path, component_id, basis, tag) in enumerate(facet_specs):
             assignment_id = "tag:" + hashlib.sha256(f"facet-{number}-{tag}".encode()).hexdigest()

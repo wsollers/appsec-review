@@ -48,7 +48,25 @@ int main(int argc, char **argv) {
 }
 """
 VENDORED = "#include <sys/socket.h>\nint pull(int s, char *b) { return recv(s, b, 8, 0); }\n"
+SOCKET_SERVER = """#include <sys/socket.h>
+
+int serve(int s) {
+  char buffer[64];
+  listen(s, 4);
+  int c = accept(s, 0, 0);
+  return recv(c, buffer, sizeof buffer, 0);
+}
+"""
 LIMIT = 100
+CJSON_VERSION_ONLY = """#include <stdio.h>
+#include <cJSON.h>
+
+const char *banner(void) { return cJSON_Version(); }
+"""
+CJSON_PARSE = """#include <cJSON.h>
+
+int handle(const char *body) { cJSON *doc = cJSON_Parse(body); return doc != 0; }
+"""
 
 
 def source_row(path: str, text: str, language: str | None) -> tuple[Row, bytes]:
@@ -143,6 +161,26 @@ def test_cli_main_reading_argv_is_operator_only_and_user_tainted() -> None:
     assert "mechanism:http" in operator["evidence"][0]["condition"]["none_of"]
     assert component_tags(records) >= {"target:cli", "mechanism:cli"}
     assert document["components"][0]["target_classes"] == ["target:cli"]
+
+
+def test_non_http_socket_listener_is_a_network_service_class_beside_cli() -> None:
+    """Run 2026-11-16-0005: the smoke-cpp request server is a raw-socket listener, not a CLI alone."""
+    vocabulary, rules, _ = taxonomy()
+    records, gaps, document = collect_facets(
+        canned(("src/server.c", SOCKET_SERVER, "C"), ("tools/main.c", CLI_MAIN, "C")), scope(), vocabulary, rules,
+        settings(), [], LIMIT)
+    assert "mechanism:networked-listener" in file_tags(records, "src/server.c")
+    assert document["components"][0]["target_classes"] == ["target:cli", "target:network-service"]
+    service = next(item for item in by_tag(records)["target:network-service"]
+                   if item["producer"]["rule_id"] == "target-network-service")
+    assert service["basis"] == "derived" and service["confidence"] == "medium"
+    assert service["evidence"][0]["rests_on_absence"] is True
+    assert set(service["evidence"][0]["condition"]["none_of"]) == {"mechanism:http", "mechanism:rpc"}
+    assert not any(gap.startswith("collation:target_class_unresolved") for gap in gaps)
+    # An HTTP listener is a web API, never a network service as well.
+    _, _, http = collect_facets(canned(("app/login.py", HTTP_LOGIN, "Python")), scope(), vocabulary, rules,
+                                settings(), [], LIMIT)
+    assert http["components"][0]["target_classes"] == ["target:web-api"]
 
 
 # (b) -------------------------------------------------------------------------------------- scope, gaps, determinism
@@ -346,3 +384,18 @@ def test_collate_facets_handler_publishes_facets_summary_and_gaps(tmp_path, monk
     assert summary["settings"]["source_dispositions"]["vendored"] == ["**/third_party/**"]
     # The lang tag the source collector declared is an input of the lexical rules, not an output of collation.
     assert "lang:python" not in tags and all(record["namespace"] in COLLATION_NAMESPACES for record in facets["assignments"])
+
+
+def test_serialization_role_needs_a_parse_or_print_call_not_an_include() -> None:
+    """``#include <cJSON.h>`` with only ``cJSON_Version()`` is not serialization; ``cJSON_Parse(`` is."""
+    vocabulary, rules, _ = taxonomy()
+    records, _gaps, _document = collect_facets(
+        canned(("src/banner.c", CJSON_VERSION_ONLY, "C"), ("src/request.c", CJSON_PARSE, "C")),
+        scope(), vocabulary, rules, settings(), [], LIMIT)
+    assert "role:serialization" not in file_tags(records, "src/banner.c")
+    assert "role:serialization" in file_tags(records, "src/request.c")
+    declared = next(item for item in records if item["tag"] == "role:serialization"
+                    and item["subject"].get("path") == "src/request.c" and item["basis"] == "declared")
+    assert declared["confidence"] == "medium"
+    assert declared["evidence"][0]["rule"] == "lex-c-serialization"
+    assert declared["evidence"][0]["span"] == {"start_line": 3, "end_line": 3}

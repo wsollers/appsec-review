@@ -313,3 +313,34 @@ def test_the_observation_vocabulary_is_unchanged_and_every_category_maps_into_it
     for category in ("secret_detection", "shell_lint", "config_lint", "ci_security", "source_sast"):
         assert category in observations._CLASS_BY_CATEGORY
     assert json.dumps(sorted(OBSERVATION_CLASSES))
+
+
+def test_semgrep_and_opengrep_running_the_shared_pack_are_one_lead_per_rule_and_line() -> None:
+    """Both engines run the same rule pack: the same rule at the same line is one lead with two members."""
+    from appsec_review.indexing.sast import METHOD_SAME_RULE, METHOD_SHARED_PACK
+
+    rule = "rules.review-signal.cpp-banned-function-high"
+    rows = [_obs(1, "tool-semgrep", "source_sast", rule, 7, "ERROR"),
+            _obs(2, "tool-opengrep", "source_sast", rule, 7, "ERROR"),
+            _obs(3, "tool-opengrep", "source_sast", "rules.review-signal.cpp-other", 7, "WARNING"),
+            _obs(4, "tool-semgrep", "source_sast", rule, 9, "ERROR"),
+            _obs(5, "tool-psalm", "source_sast", "TaintedSql", 11), _obs(6, "tool-psalm", "source_sast", "TaintedSql", 11),
+            _obs(7, "tool-semgrep", "source_sast", rule, 13, "ERROR"), _obs(8, "tool-psalm", "source_sast", rule, 13)]
+    product = build_scanner_correlation(_Shards(rows), {"files": {}}, [], {"menu_partition_size": 50})
+    leads = {fact.key: fact.result for fact in product.facts if fact.fact_type == "lead"}
+    ident = lambda number: f"asr:tool_observation:{number:064d}"
+    assert leads[ident(1)]["duplicate_of"] is None
+    assert leads[ident(2)]["duplicate_of"] == ident(1)
+    assert leads[ident(2)]["duplicate_method"] == METHOD_SHARED_PACK
+    # A different rule at the same line, or the same rule at another line, stays an independent lead.
+    assert leads[ident(3)]["duplicate_of"] is None and leads[ident(4)]["duplicate_of"] is None
+    # One scanner repeating itself keeps the plain same-rule method.
+    assert leads[ident(6)]["duplicate_of"] == ident(5) and leads[ident(6)]["duplicate_method"] == METHOD_SAME_RULE
+    # A scanner outside the shared pack is never folded into it, even on the same rule id.
+    assert leads[ident(7)]["duplicate_of"] is None and leads[ident(8)]["duplicate_of"] is None
+    correlations = {fact.key: fact.result for fact in product.facts if fact.fact_type == "correlation"}
+    assert set(correlations) == {ident(1), ident(5)}
+    assert correlations[ident(1)]["scanners"] == ["tool-opengrep", "tool-semgrep"]
+    assert correlations[ident(1)]["method"] == METHOD_SHARED_PACK
+    assert correlations[ident(1)]["member_observation_ids"] == [ident(1), ident(2)]
+    assert product.counts["source_sast_observations"] == 8

@@ -2,9 +2,10 @@
 
 An operation unit binds an original source site and its generated boundary context, when supplied.
 Fallback units retain stable sorted source ranges so seeded operations cannot hide unmodeled code.
-Units are ranked by ``review-unit-rank/4`` from the signals that are available: review
+Units are ranked by ``review-unit-rank/5`` from the signals that are available: review
 prioritization (LPS), source-history instability (SII), hotspots, distinct security-operation sites,
-medium/low/info lead hints, and the reference context of the unit's dependency/artifact advisories:
+lead hints weighted by effective severity (high, medium, low, info), and the reference context of the unit's
+dependency/artifact advisories:
 ``advisory_kev`` (``RankWeights.advisory_kev`` points when any advisory is KEV-listed) and
 ``advisory_epss`` (the highest EPSS percentile times ``RankWeights.advisory_epss``). A missing signal,
 including an advisory whose KEV or EPSS feed was unavailable, is recorded as ``unknown``; it is never
@@ -33,7 +34,9 @@ from appsec_review.review.scope import AcceptedScope, ScopeGap
 from appsec_review.review.behavior import Operation, opportunity_sites
 
 
-RANK_RULE = "appsec-review/review-unit-rank/4"
+RANK_RULE = "appsec-review/review-unit-rank/5"
+# Effective severities that earn the ``lead_hint_high`` weight.
+_HIGH_HINTS = frozenset({"critical", "high"})
 SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints", "advisory_kev", "advisory_epss", "facets")
 # Collation facets (T-5008) that weight a unit: the file is reachable by clients or carries their data.
 FACET_SIGNAL_TAGS = {"exposure:client-facing": "facet_exposure", "trust:user-tainted": "facet_trust"}
@@ -288,13 +291,7 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 values = [row["value"] for row in matched if row["value"] is not None]
                 signals.append(Signal(signal, max(values), None) if values else Signal(signal, None, "no_record"))
             if lead_families_available:
-                hints = {severity: sum(1 for lead in leads if lead.reported_severity == severity
-                                      and lead.duplicate_of is None)
-                         for severity in ("medium", "low", "info")}
-                signals.append(Signal("lead_hints", min(weights.lead_hints_max,
-                                                        weights.lead_hint_medium * hints["medium"]
-                                                        + weights.lead_hint_low * hints["low"]
-                                                        + weights.lead_hint_info * hints["info"]), None))
+                signals.append(lead_hints(leads, weights))
             else:
                 signals.append(Signal("lead_hints", None, "producer_unavailable"))
             signals.extend(_advisory_signals(scope, leads, weights))
@@ -343,9 +340,7 @@ def _operation_units(scope: AcceptedScope, units: list[ReviewUnit], operations: 
                     [row for row in signal_rows["facets"] if row["path"] == operation.path], weights), None)
                                if signal.value is not None else signal)
             elif signal.signal == "lead_hints":
-                hints = {"medium": weights.lead_hint_medium, "low": weights.lead_hint_low, "info": weights.lead_hint_info}
-                signals.append(Signal("lead_hints", min(weights.lead_hints_max, sum(
-                    hints.get(lead.reported_severity, 0) for lead in leads if lead.duplicate_of is None)), None))
+                signals.append(lead_hints(leads, weights))
         signals.extend(_advisory_signals(scope, leads, weights))
         result.append(replace(
             base, key=_unit_key(base.component_id, boundary, base.build_unit_id, operation.operation_id),
@@ -359,12 +354,41 @@ def _operation_units(scope: AcceptedScope, units: list[ReviewUnit], operations: 
         remaining = [row for row in signal_rows["tag_density"]
                      if row["path"] in unit.paths]
         sites = opportunity_sites(remaining) - covered_sites
+        remaining_leads = tuple(lead for lead in unit.leads if lead.observation_id not in assigned)
+        # Both per-lead signals follow the leads that stay: a fallback unit that kept the hint points of leads
+        # allocated to an operation outranked that operation once high leads earned lead_hint_high.
         signals = tuple(Signal("tag_density", min(weights.tag_density,
                         len(sites) * weights.tag_density // weights.tag_density_full_tags_per_file), None)
-                        if signal.signal == "tag_density" and signal.value is not None else signal for signal in unit.signals)
-        result.append(replace(unit, leads=tuple(lead for lead in unit.leads if lead.observation_id not in assigned),
-                              signals=signals))
+                        if signal.signal == "tag_density" and signal.value is not None
+                        else lead_hints(remaining_leads, weights)
+                        if signal.signal == "lead_hints" and signal.value is not None
+                        else signal for signal in unit.signals)
+        result.append(replace(unit, leads=remaining_leads, signals=signals))
     return result
+
+
+def lead_hints(leads: Iterable[Lead], weights: RankWeights = DEFAULT_RANK_WEIGHTS) -> Signal:
+    """The ``lead_hints`` signal: non-duplicate leads weighted by *effective* severity (reported when known, else
+    assessed), critical and high at ``lead_hint_high``, the sum capped at ``lead_hints_max``."""
+    points = {"medium": weights.lead_hint_medium, "low": weights.lead_hint_low, "info": weights.lead_hint_info}
+    total = 0
+    for lead in leads:
+        if lead.duplicate_of is not None:
+            continue
+        severity = lead.effective_severity
+        total += weights.lead_hint_high if severity in _HIGH_HINTS else points.get(severity, 0)
+    return Signal("lead_hints", min(weights.lead_hints_max, total), None)
+
+
+def _rank_key(unit: ReviewUnit) -> tuple:
+    """Total points, known signals, then the unit's own weight: lead count, distinct scanners, first path, operation
+    line and finally the unit key, so equal scores never fall to the key alone (run 2026-11-16-0005: units 6-13 tied
+    and the popen site fell below the cutoff)."""
+    operation = unit.operation or {}
+    line = operation.get("start_line") if isinstance(operation, Mapping) else None
+    # An operation unit precedes the whole-file fallback it was cut from when everything else ties.
+    return (-unit.score, -unit.known_signals, -len(unit.leads), -len({lead.scanner for lead in unit.leads}),
+            unit.paths[0] if unit.paths else "", (0, int(line)) if isinstance(line, int) else (1, 0), unit.key)
 
 
 def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead],
@@ -438,8 +462,10 @@ def _signal_rows(scope: AcceptedScope, weights: RankWeights = DEFAULT_RANK_WEIGH
 
 
 def rank_units(units: Iterable[ReviewUnit]) -> tuple[RankedUnit, ...]:
-    """Deterministic rank: total available points, then count of known signals, then unit key."""
-    ordered = sorted(units, key=lambda item: (-item.score, -item.known_signals, item.key))
+    """Deterministic rank: total available points, then count of known signals, then lead count, distinct scanners,
+    first path, operation line and unit key (``_rank_key``). Under a hunting campaign plan the plan's area order
+    stays primary (``review.hunt_plan.HuntSelection``); this rank orders within an area."""
+    ordered = sorted(units, key=_rank_key)
     return tuple(RankedUnit(unit, position, len(ordered)) for position, unit in enumerate(ordered, 1))
 
 

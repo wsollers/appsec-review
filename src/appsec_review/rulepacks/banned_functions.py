@@ -24,7 +24,10 @@ RULES = Path("rules") / "semgrep" / "banned-functions.yml"
 LOCK = Path("rules") / "semgrep" / "rules.lock.json"
 CONFIG = Path("appsec-review.toml")
 RULE_PREFIX = "appsec-review.review-signal.sink.cpp-banned-function-"
-_SEVERITY = {"high": "ERROR", "warning": "WARNING", "review": "INFO"}
+# Every tier is a review signal, never a severity: a banned call with constant arguments is not attacker input, so
+# the ``high`` tier reports WARNING (medium) like ``warning`` and triage ranks the lead on its assessed severity
+# (run 2026-11-16-0005 admitted ``strcpy(f->data, "ready")`` on the rule's reported high).
+_SEVERITY = {"high": "WARNING", "warning": "WARNING", "review": "INFO"}
 _LIST = {"high": "microsoft-sdl-banned-h", "warning": "microsoft-sdl-banned-h", "review": "appsec-review-review-calls"}
 _ADVICE = {
     "high": "it takes no destination size, has no bounds argument or has an unsafe contract",

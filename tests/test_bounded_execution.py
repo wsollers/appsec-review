@@ -209,9 +209,26 @@ def test_deadline_and_provider_overrun_preserve_actual_usage():
         engine.call(slow, request(), timeout_seconds=30)
     assert engine.receipts[0].usage.input_tokens == 10
     engine = Execution(timeout_seconds=20, max_calls=1)
-    with pytest.raises(ExecutionLimit, match="model_token_cap"):
+    with pytest.raises(ExecutionLimit, match="model_token_cap") as caught:
         engine.call(lambda *a, **kw: answer(output_tokens=2000), request(), timeout_seconds=20)
     assert engine.receipts[0].usage.output_tokens == 2000
+
+
+def test_an_output_token_cap_overrun_hands_the_parsed_reply_to_the_caller_and_still_fails_the_call():
+    """Run 2026-11-16-0005 discarded complete final answers whose terminal turn exceeded max_output_tokens: the
+    cap is checked after the reply was parsed, so the reply exists and the caller decides what it is worth."""
+    from appsec_review.inference.errors import ModelTokenCapExceeded
+    engine = Execution(timeout_seconds=20, max_calls=2)
+    with pytest.raises(ModelTokenCapExceeded) as caught:
+        engine.call(lambda *a, **kw: answer(output_tokens=2000), request(), timeout_seconds=20)
+    assert caught.value.code == "model_token_cap" and caught.value.args == ("model_token_cap",)
+    assert caught.value.result.proposal == answer().proposal and (caught.value.tokens, caught.value.cap) == (2000, 1000)
+    receipt = engine.receipts[0]
+    assert receipt.status == "FAILED" and receipt.failure_code == "model_token_cap" and receipt.usage.output_tokens == 2000
+    # An input-token overrun is not a reply worth keeping: it stays a plain limit.
+    with pytest.raises(ExecutionLimit, match="model_token_cap") as plain:
+        engine.call(lambda *a, **kw: answer(input_tokens=20_000), request(), timeout_seconds=20)
+    assert not isinstance(plain.value, ModelTokenCapExceeded)
 
 
 def test_invalid_boundary_result_is_a_contract_error():

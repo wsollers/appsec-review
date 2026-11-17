@@ -9,6 +9,7 @@ from typing import Any
 from appsec_review.config.owasp import AssessmentMode, parse_settings
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.inference import Infer
+from appsec_review.interchange import CoverageDisposition
 from appsec_review.observability import PipelineLog
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -22,7 +23,9 @@ from appsec_review.owasp_workbench import (
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, DATASETS
 from appsec_review.runtime.inputs import feed_input_identity
 from appsec_review.owasp_workbench.assessment import run_batch
+from appsec_review.owasp_workbench.engine import UNRESOLVED_OUTCOMES
 from appsec_review.owasp_workbench.evidence import EvidenceResolver, accepted_inputs
+from appsec_review.owasp_workbench.versions import implemented_parser_versions
 from appsec_review.review.scope import accept_manifest
 
 
@@ -47,6 +50,19 @@ def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[st
             "size_bytes": path.stat().st_size}
 
 
+def coverage_disposition(results, *, gaps: bool = False, failed: bool = False) -> str:
+    """D5: the typed coverage disposition published beside ``terminal_status``.
+
+    ``partial`` when any row is unresolved (``cannot_determine``, ``unsupported_missing_evidence``,
+    unresolved coverage or ``cannot_verify``), when gaps are declared or a cell failed; ``complete``
+    otherwise. Declared gaps always make it partial, so it never contradicts the producer status.
+    """
+    unresolved = any(row["applicability"] in UNRESOLVED_OUTCOMES
+                     or row["coverage_completeness"] == "unresolved"
+                     or row["control_status"] == "cannot_verify" for row in results)
+    return (CoverageDisposition.PARTIAL if unresolved or gaps or failed else CoverageDisposition.COMPLETE).value
+
+
 def _sources(settings: Mapping[str, Any]) -> Mapping[str, Any]:
     value = settings.get("standards")
     if not isinstance(value, Mapping):
@@ -68,6 +84,11 @@ def _validate_config(context, _result) -> None:
     typed = parse_settings(settings)
     if not typed.enabled:
         raise ValueError("OWASP job is disabled by settings.enabled")
+    declared = settings.get("parser_versions")
+    expected = implemented_parser_versions()
+    if not isinstance(declared, Mapping) or dict(declared) != expected:
+        raise ValueError(f"OWASP parser_versions must declare the implemented rule versions {expected}; "
+                         f"declared {dict(declared) if isinstance(declared, Mapping) else declared}")
     catalogs = load_catalogs(context.repository_root, _sources(settings))
     if typed.mode is AssessmentMode.ASSESSMENT:
         from appsec_review.inference import PROVIDERS
@@ -132,8 +153,10 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
 
     def load_inputs(unit: UnitContext) -> Mapping[str, Any]:
         value = _fixture_or_accepted_inputs(unit)
+        gaps = list(value.get("gaps", ()))
         return {**value, "component_count": len(value["components"]),
-                "evidence_count": len(value["evidence"])}
+                "evidence_count": len(value["evidence"]), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def classify(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("characterization.load_inputs")
@@ -179,15 +202,24 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         classifications = unit.output("characterization.classify_components")["classifications"]
         rows = unit.output("applicability.build_matrix")["rows"]
         output = {}
+        # T-5013: half the worker's input budget (4 bytes per token) is shared by the batch's packages' evidence;
+        # the obligations' own records come first and the rest stays reachable through expansion.
+        input_bytes = int(unit.job.config.settings["model"]["max_input_tokens"]) * 4
         for batch in unit.output("batching.partition_work")["work"]["batches"]:
             values = list(build_finding_packages(batch, rows, controls, classifications,
                 loaded["evidence"], retrieval_manifest=loaded["retrieval_manifest"],
                 assessment_mode=loaded["assessment_mode"],
                 max_subjects=parse_settings(unit.job.config.settings).max_subjects_per_control,
-                max_evidence=parse_settings(unit.job.config.settings).max_evidence_per_component))
+                max_evidence=parse_settings(unit.job.config.settings).max_evidence_per_component,
+                max_evidence_bytes=max(1, input_bytes // 2 // max(1, len(batch["row_ids"])))))
             task = {"task_id": batch["batch_id"],
                     "question": "Assess only the supplied control-component proof obligations.",
-                    "proof_obligations": [item["proof_obligations"] for item in values],
+                    # T-5013: name the obligations (rule version, row, ids); the packages carry the full objects.
+                    "proof_obligations": [{
+                        "row_id": item["row_id"], "control": item["control"]["identity"],
+                        "rule_version": sorted({str(obligation.get("rule_version")) for obligation in item["proof_obligations"]}),
+                        "obligation_ids": [obligation["obligation_id"] for obligation in item["proof_obligations"]],
+                    } for item in values],
                     "prohibited_claims": values[0]["prohibited_claims"] if values else []}
             bundle = compose(unit.job.repository_root, role=batch["assignment"]["role"],
                              persona=batch["assignment"]["persona"], task=task)
@@ -292,9 +324,11 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
     def join(unit: UnitContext) -> Mapping[str, Any]:
         joined = deterministic_join(unit.output("applicability.build_matrix")["rows"],
                                     unit.output("verification.independent_review")["verified_results"])
+        gapped = any(item["gaps"] for item in joined["results"])
         return {"joined": joined, "artifact": _artifact(unit, "control-results.json", joined),
-                "result_count": len(joined["results"]), "terminal_status":
-                "COMPLETED_WITH_GAPS" if any(item["gaps"] for item in joined["results"]) else "SUCCEEDED"}
+                "result_count": len(joined["results"]),
+                "coverage_disposition": coverage_disposition(joined["results"], gaps=gapped),
+                "terminal_status": "COMPLETED_WITH_GAPS" if gapped else "SUCCEEDED"}
 
     def publish_indexes(unit: UnitContext) -> Mapping[str, Any]:
         standards = unit.output("standards_selection.ingest_catalogs")["manifest"]
@@ -383,12 +417,15 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         value["target_class_ledger"] = unit.output("applicability.build_matrix")["ledger"]
         value["gaps"] = sorted(set([*value["gaps"],
                                     *unit.output("standards_selection.ingest_catalogs")["manifest"]["gaps"]]))
+        # D5: the typed coverage disposition is part of the recorded result and of its receipt.
+        disposition = coverage_disposition(results, gaps=bool(value["gaps"]), failed=any(validation.values()))
+        value["coverage_disposition"] = disposition
         artifact = _artifact(unit, "owasp-workbench-result.json", value)
         unit.job.events.write("OWASP_ASSESSMENT_RECORDED", unit_id=unit.unit_id,
                               metrics_receipt=artifact)
         return {"artifact": artifact,
                 "index_manifest": value["index_manifest"], "accounting": value["accounting"],
-                "gap_count": len(value["gaps"]), "terminal_status":
+                "gap_count": len(value["gaps"]), "coverage_disposition": disposition, "terminal_status":
                 "COMPLETED_WITH_GAPS" if value["gaps"] or any(validation.values()) else "SUCCEEDED"}
 
     u = Unit

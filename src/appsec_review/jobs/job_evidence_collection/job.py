@@ -1194,7 +1194,10 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
              "index_identity": __import__("dataclasses").asdict(identity), "index_reused": False,
              "tool_id": producer, "terminal_status": output["terminal_status"],
              "checkpoint_reused": output.get("checkpoint_reused", False),
-             "record_count": output.get("record_count", 0), "gaps": output.get("gaps", []),
+             # Identical records collapse to one observation entity; the count is the entity count.
+             "record_count": max(0, int(output.get("record_count", 0)) - builder.collapsed_identical_records),
+             "collapsed_identical_records": builder.collapsed_identical_records,
+             "gaps": output.get("gaps", []),
              "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     atomic_json(checkpoint, value)

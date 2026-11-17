@@ -1,6 +1,6 @@
 {
   "files": {
-    "COVERAGE.md": "e7e1f73baac795b523d2287efd5f2f135be589254f6ad97d1dc8ea91dfbe30bb",
+    "COVERAGE.md": "8c6167216d96af3f02f22207da526ed2743d2b1ee8a8de0e4ef249882b769813",
     "LICENSE.md": "3f50fab789b3609993ded5a70d75b0f7380aba40ecef1c167cdf7ded7b550f9e",
     "README.md": "c4752b23b3649f30f1636039474e105b0f48f4e7c8d9b939e59c87e4461815f4",
     "fixtures/c/con31-c.c": "191c301137b1476d25cd0194ec78997f5d7b57439dc4d7907e0686775f735a4b",
@@ -53,7 +53,7 @@
     "pack.json": "306758374f6c44bc8ab9640c006922431dea825e7259ade0b53c37b03356be04",
     "rules/c/con31-c.yml": "c65edbd8c808309bb953845a81aa57700e110a1fb308b81b13051a107a8bad84",
     "rules/c/con36-c.yml": "97d1b51e6cfd68c410077ec4c9e8d23edae78432f9b29aa843ca582556deba35",
-    "rules/c/env33-c.yml": "4a0b1aeedca73f25fe3bf2f6c0982d53382165494e211d3e93f59440b349b6fd",
+    "rules/c/env33-c.yml": "0eef043e5e53cd6ec0f34b35cbbf51492fbe791080b1ee719871456bb0570328",
     "rules/c/err34-c.yml": "190592a7ef797fd7aab436efb0237557f1f90024ac4834855b15bc0175936d64",
     "rules/c/fio30-c.yml": "6aa3dd2fc82a7b15e579c6ad63e7181f705d6b3a7b426e00f8a6673f3f6f58bd",
     "rules/c/msc30-c.yml": "b50abc29f5aca9dbb21aa9930711dd523da4367a16e9c5674e3f031f55f15697",
@@ -92,8 +92,8 @@
     "sources/cert-source-index.json": "d297724044005baaaf6b0e94d2956eb72a351aec450fc8b57dba0793ee4b589c"
   },
   "pack": "appsec-review/sei-cert",
-  "rule_files_sha256": "2e40d30f012b34e7f7befde60361d799161e1c4170a61db50b41f96a5c855029",
+  "rule_files_sha256": "aac2eb9ebb2408ebd0b8a6dcd25337cc56b93eede7120755480634763eb679c4",
   "schema": "appsec-review/sei-cert-rule-pack-lock/1",
-  "tree_sha256": "8b79d0bf33930107fc9e09003fa7afd740334a5ffe31bbc09363a8dc81d4f6fd",
+  "tree_sha256": "df61aea56a64f2c1236a28b7ea96091acb1688e3439d4b4ae19e88a6ddd71a49",
   "version": "1.0.0"
 }

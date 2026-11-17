@@ -55,9 +55,12 @@ def test_rank_is_deterministic_and_records_its_basis(scope) -> None:
     assert [item.unit.key for item in ranked][:2] == [NATIVE, SVC]
     native = _signals(ranked[0].unit)
     assert (native["lps"].value, native["sii"].value, native["hotspot"].value) == (550, 900, 800)
-    assert native["tag_density"].value == 0 and native["lead_hints"].value == 0
+    # review-unit-rank/5 weighs high leads: three non-duplicate critical/high SAST leads in the native unit
+    # (sast_critical, sast_suppressed, codeql_high is unknown and unassessed here, sast_duplicate is a duplicate).
+    assert native["tag_density"].value == 0 and native["lead_hints"].value == 3 * 250
     svc = _signals(ranked[1].unit)
-    assert svc["lead_hints"].value == 160  # one medium SAST hint, one low SAST and one low advisory hint
+    # one medium SAST hint, one low SAST and one low advisory hint, plus two high leads (sast_high, dep_high)
+    assert svc["lead_hints"].value == 160 + 2 * 250
     assert (svc["sii"].value, svc["sii"].state, svc["sii"].reason) == (None, "unknown", "no_record")
     record = ranked[0].rank_record()
     assert record["position"] == 1 and record["unit_count"] == 4
@@ -157,7 +160,7 @@ def test_operation_rank_invalidates_the_old_label_count_rank(scope, unit_max_fil
     assert all(_signals(unit)["tag_density"].value in (0, None)
                for unit in build_units(scope, collect_leads(scope), unit_max_files=unit_max_files))
     assert (KEV_POINTS, EPSS_POINTS) == (RankWeights().advisory_kev, RankWeights().advisory_epss) == (250, 250)
-    assert RANK_RULE == "appsec-review/review-unit-rank/4"
+    assert RANK_RULE == "appsec-review/review-unit-rank/5"
 
 
 def test_changed_rank_weights_reorder_units_deterministically(scope) -> None:
@@ -179,7 +182,8 @@ def test_changed_rank_weights_reorder_units_deterministically(scope) -> None:
     scaled = signals(NATIVE, RankWeights(lps=500, tag_density_full_tags_per_file=2))
     assert scaled["lps"].value == 275 and scaled["tag_density"].value == 0
     svc = signals(SVC, RankWeights(lead_hint_medium=7, lead_hint_low=1, advisory_epss=1000))
-    assert svc["lead_hints"].value == 7 + 1 + 1 and svc["advisory_epss"].value == 970
+    assert svc["lead_hints"].value == 7 + 1 + 1 + 2 * 250 and svc["advisory_epss"].value == 970
+    assert signals(SVC, RankWeights(lead_hint_high=3, lead_hint_medium=7, lead_hint_low=1))["lead_hints"].value == 7 + 1 + 1 + 2 * 3
     assert signals(SVC, RankWeights(lead_hints_max=50))["lead_hints"].value == 50
 
 
@@ -231,3 +235,55 @@ def test_exposure_and_trust_facets_weight_a_unit_and_their_absence_is_zero_not_u
         assert (facets.value, facets.reason) == (0, None)
     with pytest.raises(ValueError, match="facet_trust"):
         RankWeights(facet_trust=1001)
+
+
+# -- item 5: lead hints weigh effective severity; ties never fall to the unit key alone --------------------------
+
+def _hint_lead(number: int, reported: str, *, scanner: str = "tool-semgrep", assessed: str | None = None,
+               duplicate_of: str | None = None):
+    from appsec_review.review.lead_families import AssessedSeverity, Lead
+    assessment = None if assessed is None else AssessedSeverity(assessed, "rule_table", "rule_semantics", "why",
+                                                                "lead-severity-rules/1#x", "triage-" + "0" * 64)
+    return Lead("asr:tool_observation:" + f"{number:064x}", "source_sast", scanner, "r", None, reported, "native-label",
+                None, (), "src/request.cpp", 137, True, "observations", "default", "b" * 64, duplicate_of=duplicate_of,
+                assessed_severity=assessment, triage_state=None if assessment is None else "assessed")
+
+
+def test_lead_hints_weigh_effective_severity_so_the_popen_site_outranks_a_constant_printf() -> None:
+    """Run 2026-11-16-0005: the popen operation unit (8 leads, 5 high) scored like run_tool's printf("ok %u") because
+    only reported medium/low/info leads counted, and the unit key then decided a thirteen-way tie."""
+    from appsec_review.review.units import lead_hints
+    weights = RankWeights()
+    popen = [*(_hint_lead(n, "high") for n in range(2)), _hint_lead(5, "medium"), _hint_lead(6, "unknown", assessed="high"),
+             _hint_lead(7, "low", duplicate_of="asr:tool_observation:" + "0" * 64)]
+    printf = [_hint_lead(8, "medium")]
+    popen_signal, printf_signal = lead_hints(popen, weights), lead_hints(printf, weights)
+    assert popen_signal.signal == "lead_hints" and popen_signal.value == 3 * 250 + 100 and printf_signal.value == 100
+    assert lead_hints([_hint_lead(n, "high") for n in range(5)], weights).value == weights.lead_hints_max == 1000
+    assert lead_hints([_hint_lead(9, "critical")], weights).value == weights.lead_hint_high == 250
+    assert lead_hints(popen, RankWeights(lead_hints_max=700)).value == 700
+    assert lead_hints(popen, RankWeights(lead_hint_high=0)).value == 100   # the weight is configurable, never implied
+    with pytest.raises(ValueError, match="lead_hint_high"):
+        RankWeights(lead_hint_high=1001)
+
+
+def test_equal_scores_break_by_lead_count_scanners_path_and_line_before_the_unit_key() -> None:
+    from appsec_review.review.units import ReviewUnit, Signal
+    base = dict(component_id="component:0001", trust_boundary_id=None, build_unit_id="b", range_label="op",
+                source_ids=("asr:source_file:" + "1" * 64,), context=(), signals=(Signal("lps", 500, None),))
+
+    def unit(key: str, leads, path: str = "src/request.cpp", line: int = 1) -> ReviewUnit:
+        operation = {"operation_id": key, "path": path, "start_line": line, "end_line": line}
+        return ReviewUnit(key=key, paths=(path,), leads=tuple(leads), operation=operation, **base)
+    popen = unit("unit:z-popen", [_hint_lead(n, "unknown", scanner=("tool-semgrep", "tool-opengrep", "codeql")[n % 3])
+                                  for n in range(8)], line=137)
+    printf = unit("unit:a-printf", [_hint_lead(20, "unknown")], line=89)
+    same_count = unit("unit:m-same", [_hint_lead(30 + n, "unknown") for n in range(8)], line=50)
+    later_line = unit("unit:b-later", [_hint_lead(40 + n, "unknown", scanner=("tool-semgrep", "tool-opengrep", "codeql")[n % 3])
+                                       for n in range(8)], line=161)
+    other_path = unit("unit:c-other", [_hint_lead(50 + n, "unknown", scanner=("tool-semgrep", "tool-opengrep", "codeql")[n % 3])
+                                       for n in range(8)], path="src/util.c", line=10)
+    ranked = rank_units([printf, later_line, other_path, same_count, popen])
+    assert all(item.unit.score == 500 for item in ranked)
+    assert [item.unit.key for item in ranked] == ["unit:z-popen", "unit:b-later", "unit:c-other", "unit:m-same", "unit:a-printf"]
+    assert rank_units(reversed([printf, later_line, other_path, same_count, popen])) == ranked

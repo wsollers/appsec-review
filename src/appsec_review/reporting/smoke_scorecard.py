@@ -59,6 +59,7 @@ STAGE_OWNERS: dict[str, str] = {
     "not_observed": "scanners (no lead at the planted site, and no hunter claim)",
     "not_admitted": "admission policy (leads existed; none admitted; lead-severity triage and exclusions)",
     "no_claim": "analysts (admitted or hunted; no claim proposed)",
+    "answer_rejected": "answer shape contract (every red cell on the item's packages ended invalid with a schema_error gap; the analysis was lost to the validator, not declined)",
     "out_of_scope": "scope rule (every claim decided out_of_scope)",
     "refuted": "verifier and judge (contradicted, not reachable or not exploitable)",
     "unverified": "verifier and judge (supported or insufficient evidence; decision pending)",

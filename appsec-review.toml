@@ -2721,6 +2721,7 @@ max_evidence_per_component = 60
 max_source_lines = 120
 max_discovery_files = 512
 max_discovery_bytes = 8388608
+max_tag_records = 20000
 max_subjects_per_control = 8
 max_batches = 200
 max_turns = 4
@@ -2752,13 +2753,15 @@ max_output_tokens = 6000
 timeout_seconds = 120
 retries = 1
 
+# Declared rule versions; job_owasp_control_assessment refuses to start unless these equal the
+# versions its code implements (owasp_workbench/versions.py), key for key.
 [jobs.job_owasp_control_assessment.settings.parser_versions]
-component_rules = "1"
-applicability_rules = "1"
+component_rules = "2"
+applicability_rules = "4"
 batching_rules = "1"
-evidence_binding = "2"
-subject_selection = "1"
-result_validator = "3"
+evidence_binding = "4"
+subject_selection = "2"
+result_validator = "4"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
 catalog_path = "data/reference/owasp/catalogs/asvs-5.0.0.json"
@@ -2854,9 +2857,9 @@ max_assignments = 500000
 
 [jobs.job_security_tagging.settings.taxonomy]
 vocabulary_path = "data/reference/taxonomy/vocabulary.json"
-vocabulary_sha256 = "546b54f5f09d6c7d554d026b55e91314165daddf82899909b133ea18d64ea6c5"
+vocabulary_sha256 = "e932c7620531525d262991c47e406a4f9f9ee3c027388bc982309a403a36da4d"
 capability_rules_path = "data/reference/taxonomy/capability-rules.json"
-capability_rules_sha256 = "0de983d5be6d178df48a43580f28a34ac42e4b0ae1065cc4a2a72eb85de5a24e"
+capability_rules_sha256 = "a5ac8ae4fc163533cf86965ab0104135a24b447d7d49a12e8bc7ad4740bf8080"
 crosswalk_path = "data/reference/taxonomy/crosswalk.json"
 crosswalk_sha256 = "714688499831def69533d98d798845fdee5a07899cc1c500a18d1e111c952879"
 
@@ -2968,8 +2971,9 @@ exploration_enabled = false
 exploration_reserve = 1
 lead_budget_share = 0.5
 lead_max_claims_per_package = 3
-# Interim hunt budget until the hunting campaign producer (T-5030): run 0005 hunted 50 of 53 units for 45% of the
-# tokens. Ten covers the smoke target's attack surface.
+# Hunt package cap: with settings.hunting enabled the campaign plan selects and orders the hunt units and this caps
+# the packages after the plan (units beyond it are beyond_hunt_max_units gaps); with it disabled the top units by
+# rank are hunted (T-5030: run 0005 hunted 50 of 53 units for 45% of the tokens). Ten covers the smoke target.
 hunt_max_units = 10
 hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
@@ -3000,6 +3004,7 @@ sii = 1000                           # full source-history instability (SII) sco
 hotspot = 1000                       # full hotspot score
 tag_density = 1000                   # retained key: distinct evidenced security-operation sites, not tag counts
 tag_density_full_tags_per_file = 4    # retained key: distinct sites for full points, no file-count multiplier
+lead_hint_high = 250                 # per critical or high lead hint (effective severity)
 lead_hint_medium = 100               # per medium lead hint
 lead_hint_low = 30                   # per low lead hint
 lead_hint_info = 10                  # per info lead hint
@@ -3127,6 +3132,19 @@ max_queries = 40
 max_turns = 4
 timeout_seconds = 600
 
+# Hunting campaign planner (settings.hunting, T-5030): one tool-free turn plus one repair turn over the bounded
+# attack-surface brief, on a frontier model (the plan decides where the hunters go). max_queries must stay 0: the
+# planner retrieves nothing. profiles/prod.toml upgrades the model while keeping these bounded limits.
+[jobs.job_inference_security_review.settings.models.planner]
+provider = "claude-cli"
+model = "claude-sonnet-5-5"
+reasoning = "high"
+max_input_tokens = 128000
+max_output_tokens = 32000
+max_queries = 0
+max_turns = 2
+timeout_seconds = 900
+
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 workers = 4
 model_profile = "verifier"
@@ -3210,6 +3228,29 @@ derived_continuity = ["same_native_executable"]
 # rewritten; the assessed severity only orders and admits leads and never feeds scoring, ship-block or claim
 # states. A lead nothing decides stays unknown with a named gap. enabled = false restores the earlier behaviour.
 # Editing a row, the bounds or the profile changes every triage fingerprint, so cached results are not reused.
+# Hunting campaign plan (review protocol v3 section 4, D20 to D25; T-5030 first piece; review/hunt_plan.py). A
+# hunt_planner cell on models.<planner_profile> receives one bounded, deterministic attack-surface brief (components
+# and stack, first-party files with complexity points, lead density and facets, the function inventory, entry
+# points, the units the rank would hunt) and answers a hunting-campaign-plan/1: areas with a mission, closed
+# weakness classes, a priority, an agent count and the files, functions and entry points assigned. The
+# application keeps the partition honest: every function and entry point of the brief is in exactly one area or
+# unassigned with a reason; unknown ids are refused then dropped; agents are clamped to `agents`; areas beyond the
+# budget or `max_areas` are kept as not_reached; an empty or twice-invalid plan falls back to the rank with the
+# gap hunt_plan_unavailable:<code>. Hunt units are then selected and ordered by the plan (lanes.hunt_max_units caps
+# the packages after the plan) and each hunt package carries its area's mission as campaign_area. Coverage stays
+# derived from cells and receipts, never from the plan. brief_bounds cap what the brief lists; beyond them the
+# brief counts omissions. The campaign cell runtime (wall deadline and token budget, incremental filing, coverage
+# ledger) is the follow-on and is not configured here. Semantic: a change here changes the plan fingerprint.
+[jobs.job_inference_security_review.settings.hunting]
+enabled = true
+agents = 4
+max_areas = 8
+planner_profile = "planner"
+[jobs.job_inference_security_review.settings.hunting.brief_bounds]
+max_functions = 400
+max_files = 120
+max_leads = 60
+
 [jobs.job_inference_security_review.settings.triage]
 enabled = true
 batch_size = 20
@@ -3241,6 +3282,16 @@ rules = [
   # whose catalog class would rank every unchecked conversion high; the row keeps the clang-tidy judgement.
   { scanner = "semgrep", rule = "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
   { scanner = "opengrep", rule = "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
+  # The banned-function and ENV33-C review signals (run 2026-11-16-0005): a call to strcpy, sprintf or system with
+  # constant arguments is not attacker input, so the rule is a review signal, not a severity; the pack reports them
+  # medium and this row keeps triage on the assessed severity (the CWE-120 catalog class still ranks a strcpy of
+  # attacker-reached data high through the scanner that reports that CWE).
+  { scanner = "semgrep", rule = "*cpp-banned-function-high", severity = "medium", basis = "rule_semantics", reason = "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced." },
+  { scanner = "opengrep", rule = "*cpp-banned-function-high", severity = "medium", basis = "rule_semantics", reason = "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced." },
+  { scanner = "semgrep", rule = "appsec-review.sei-cert.c.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "opengrep", rule = "appsec-review.sei-cert.c.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "semgrep", rule = "appsec-review.sei-cert.cpp.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "opengrep", rule = "appsec-review.sei-cert.cpp.env33-c.command-processor-call", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
   # Review-signal sink rules carry no CWE, so the catalog cannot rank them; an unbounded copy length is CWE-120.
   { scanner = "semgrep", rule = "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded", severity = "high", basis = "rule_semantics", reason = "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced." },
   { scanner = "opengrep", rule = "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded", severity = "high", basis = "rule_semantics", reason = "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced." },
@@ -3372,6 +3423,7 @@ workers = 1
 
 [jobs.job_inference_security_review.steps.packages]
 workers = 2
+[jobs.job_inference_security_review.steps.packages.tasks.plan_hunt_campaign]
 [jobs.job_inference_security_review.steps.packages.tasks.assemble_lead_packages]
 [jobs.job_inference_security_review.steps.packages.tasks.assemble_hunt_packages]
 
@@ -3820,6 +3872,9 @@ max_pdf_bytes = 16777216
 # rules/semgrep/banned-functions.yml is generated from this table, never edited by hand. After editing:
 #   python -m appsec_review.rulepacks.banned_functions --write
 # A test fails if the file drifts and the evidence job refuses to run a file that does not match.
+# A tier names the function's contract, not a severity: every tier is a review signal. `high` and `warning`
+# report WARNING (medium) and `review` INFO, because a call with constant arguments is not attacker input;
+# the triage table (settings.triage.rules) ranks the lead on its assessed severity.
 [banned_functions]
 source = "https://github.com/microsoft/ChakraCore/blob/master/lib/Common/Banned.h"
 reference = "https://msdn.microsoft.com/en-us/library/bb288454.aspx"

@@ -8,7 +8,7 @@
   "required": ["schema", "rule", "protocol", "kind", "lane", "lead_family", "persona", "stack_profile", "scope",
                "partition", "rank", "leads", "source", "neighborhood", "build", "corroboration", "tags",
                "other_context", "material_gaps", "gap_counts", "files", "omitted", "proof_obligations",
-               "graph_families", "truncation", "unit_context", "facets"],
+               "graph_families", "truncation", "unit_context", "facets", "campaign_area"],
   "properties": {
     "schema": {"const": "appsec-review/review-package-view/1"},
     "rule": {"enum": ["appsec-review/package-view/4", "appsec-review/package-view/5",
@@ -129,6 +129,37 @@
         }
       ]
     },
+    "campaign_area": {
+      "description": "Hunt packages selected by a hunting campaign plan (hunting-campaign/1, review/hunt_plan.py, T-5030): the area's mission, weakness classes, priority and agents, and the functions and entry points of this unit the plan assigned. Routing context for the hunters, never evidence. null on a finding-lead view or a rank-selected unit.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule", "authority", "plan_id", "area_id", "title", "mission", "weakness_classes", "priority",
+                       "agents", "functions", "entry_points"],
+          "properties": {
+            "rule": {"type": "string", "pattern": "^appsec-review/hunting-campaign/[0-9]+$"},
+            "authority": {"const": "routing_context"},
+            "plan_id": {"type": "string", "pattern": "^plan-[0-9a-f]{64}$"},
+            "area_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$"},
+            "title": {"type": "string", "maxLength": 120},
+            "mission": {"type": "string", "maxLength": 1000},
+            "weakness_classes": {"type": "array", "maxItems": 8, "items": {"type": "string", "pattern": "^[a-z_]+$"}},
+            "priority": {"type": "integer", "minimum": 1},
+            "agents": {"type": "integer", "minimum": 0},
+            "functions": {"type": "array", "maxItems": 400, "items": {"type": "object", "additionalProperties": false,
+                          "required": ["name", "path", "line"],
+                          "properties": {"name": {"type": "string", "maxLength": 160}, "path": {"type": "string", "maxLength": 1024},
+                                         "line": {"type": ["integer", "null"]}}}},
+            "entry_points": {"type": "array", "maxItems": 400, "items": {"type": "object", "additionalProperties": false,
+                             "required": ["path", "line", "display"],
+                             "properties": {"path": {"type": ["string", "null"], "maxLength": 1024}, "line": {"type": ["integer", "null"]},
+                                            "display": {"type": "string", "maxLength": 120}}}}
+          }
+        }
+      ]
+    },
     "graph_families": {"type": "array", "items": {"type": "string"}},
     "truncation": {"type": ["object", "null"]},
     "unit_context": {
@@ -215,7 +246,7 @@
       "properties": {
         "label": {"type": "string", "pattern": "^S[1-9][0-9]*$"},
         "ref": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "pattern": "^(function|slice|cited_source|type:.+)$"},
+        "role": {"type": "string", "pattern": "^(function|slice|cited_source|member|type:.+)$"},
         "path": {"type": "string", "minLength": 1},
         "lines": {"type": "string", "pattern": "^[1-9][0-9]*-[1-9][0-9]*$"},
         "file_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},

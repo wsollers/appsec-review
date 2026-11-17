@@ -8,7 +8,7 @@ import pytest
 
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review import red_discovery
-from appsec_review.review.compact import expand_blue, expand_red, expand_verifier
+from appsec_review.review.compact import Expansion, expand_blue, expand_red, expand_verifier, salvage_red
 from appsec_review.review.evidence import classify, satisfies
 from appsec_review.review.labels import LabelTable
 from appsec_review.review.models import Admissibility, Predicate, Role
@@ -126,6 +126,144 @@ def test_malformed_optional_claim_parts_are_dropped_with_feedback_and_the_claim_
     assert {note.split(" ")[3] for note in dropped} == {"taint_paths", "poc_basis", "evidence_requests"}
     proposal = result["proposals"][0]
     assert proposal["weakness"] == {"namespace": "CWE", "id": "CWE-787"} and "poc_basis" not in proposal
+
+
+# Run 2026-11-16-0005, lane A: eight red cells, zero claims. Every rejection below is the exact repair string the
+# run's receipts recorded; each answer carries a correct claim that the shape contract must not throw away.
+REJECTED_TOP_LEVEL = "red-compact: $: unexpected property evidence_requests; allowed: blocked, chain_seeds, claims, no_claim, schema"
+REQUEST = {"predicate": "source_to_sink_reachability", "requested_kind": "dataflow", "anchors": ["E1", "K1"],
+           "question": "Which fields reach the sink?"}
+
+
+def test_a_top_level_evidence_requests_is_moved_into_the_only_claim() -> None:
+    """Five of eight lane A packages were rejected with the top-level error, twice in a row for the same package."""
+    answer = {"claims": [claim()], "evidence_requests": [REQUEST], "no_claim": [], "blocked": []}
+    assert SCHEMAS.errors("red-compact", answer) == [REJECTED_TOP_LEVEL.split(": ", 1)[1]]   # the run's exact error
+    salvaged = Expansion()
+    _document, ok = salvage_red(answer, SCHEMAS.errors, salvaged)
+    assert ok and len(salvaged.feedback) == 1
+    expansion = red(answer)
+    result = assert_admitted(expansion)
+    assert [item["reason"] for item in result["evidence_requests"]] == [REQUEST["question"]]
+    assert any("top-level evidence_requests belongs inside a claim and was moved into claim c1" in note
+               for note in expansion.feedback)
+    assert not any("was dropped" in note for note in expansion.feedback)
+
+
+def test_a_top_level_stray_with_several_claims_or_an_unknown_name_is_dropped_with_feedback() -> None:
+    two = {"claims": [claim(), claim(id="c2")], "evidence_requests": [REQUEST], "no_claim": [], "blocked": []}
+    expansion = red(two)
+    assert_admitted(expansion)
+    assert any("top-level evidence_requests" in note and "2 claim(s)" in note and "was dropped" in note
+               for note in expansion.feedback)
+    taken = {"claims": [claim(evidence_requests=[REQUEST])], "evidence_requests": [REQUEST], "summary": "prose"}
+    expansion = red(taken)
+    result = assert_admitted(expansion)
+    assert len(result["evidence_requests"]) == 1
+    assert any("unexpected top-level property summary was dropped" in note for note in expansion.feedback)
+    assert any("top-level evidence_requests" in note and "was dropped" in note for note in expansion.feedback)
+
+
+def test_a_poc_basis_entry_or_path_given_as_a_string_is_read_as_a_list() -> None:
+    """The run's feedback: ``claim c1 poc_basis did not satisfy the schema and was dropped (.entry: expected array)``;
+    the role prompt itself said ``entry`` is a single label string."""
+    expansion = red({"claims": [claim(poc_basis=basis(entry="E1", path="F1"))]})
+    result = assert_admitted(expansion)
+    proposal = result["proposals"][0]
+    assert proposal["poc_basis"]["entry"] == [ENTRY] and proposal["poc_basis"]["path"] == [HOP]
+    assert proposal["attacker_entry"]["entity_id"] == ENTRY
+    assert {note for note in expansion.feedback if "bare string" in note} == {
+        "red: claim c1 poc_basis: entry was a bare string and was read as a one-element list",
+        "red: claim c1 poc_basis: path was a bare string and was read as a one-element list"}
+    assert not any("was dropped" in note for note in expansion.feedback)
+
+
+def test_a_poc_basis_missing_entry_or_path_is_kept_with_a_visible_gap() -> None:
+    brief = {key: value for key, value in basis().items() if key not in ("entry", "path")}
+    expansion = red({"claims": [claim(poc_basis=brief)]})
+    result = assert_admitted(expansion)
+    poc = result["proposals"][0]["poc_basis"]
+    assert poc["entry"] == [] and poc["path"] == [] and poc["expected_observation"].startswith("AddressSanitizer")
+    scopes = [item["scope"] for item in result["gaps"]]
+    assert any("no entry point is cited" in scope for scope in scopes)
+    assert any("no call-site path is cited" in scope for scope in scopes)
+    assert any("poc_basis names no entry label" in note for note in expansion.feedback)
+    assert any("poc_basis names no path label" in note for note in expansion.feedback)
+
+
+@pytest.mark.parametrize("group", ["no_claim", "blocked"])
+def test_accounting_entries_with_a_lead_and_another_reason_key_are_reshaped(group: str) -> None:
+    """The run's ``$.blocked[0]: matches 0 oneOf branches`` and ``$.no_claim[0]: matches 0 oneOf branches``."""
+    long_reason = "r" * 1200
+    answer = {"claims": [], "no_claim": [], "blocked": [],
+              group: [{"lead": "L1", "reason": "no sink fact in this function", "severity": "low"},
+                      {"label": "L2", "because": long_reason}, "L1"]}
+    expansion = red(answer, LEAD, OTHER_LEAD)
+    result = assert_admitted(expansion, LEAD, OTHER_LEAD)
+    outcome = "no_proposal" if group == "no_claim" else "blocked"
+    rows = {row["observation_id"]: row for row in result["lead_accounting"]}
+    assert rows[LEAD]["outcome"] == outcome and rows[LEAD]["reason"] == "no sink fact in this function"
+    assert rows[OTHER_LEAD]["outcome"] == outcome and rows[OTHER_LEAD]["reason"] == "r" * 1000
+    assert sum(1 for note in expansion.feedback if f"{group}[" in note and "reshaped" in note) == 2
+
+
+def test_an_accounting_entry_without_a_resolvable_lead_is_dropped_and_the_lead_becomes_a_gap() -> None:
+    answer = {"claims": [], "no_claim": [{"why": "nothing here", "severity": "low"}, 7], "blocked": []}
+    expansion = red(answer)
+    result = assert_admitted(expansion)
+    [row] = result["lead_accounting"]
+    assert row["outcome"] == "blocked" and row["gap_ids"]
+    assert "red: no_claim[0] names no lead label and was dropped (keys: severity, why)" in expansion.feedback
+    assert any("no_claim[1] is neither a label nor an object and was dropped" in note for note in expansion.feedback)
+    assert any("not accounted for" in note for note in expansion.feedback)
+
+
+def test_claim_containers_given_as_bare_strings_are_coerced_when_unambiguous() -> None:
+    answer = {"claims": [claim(leads="L1", missing="X1", affected="K1",
+                               support={"affected_construct": "K1", "attacker_input_control": ["E1"]},
+                               counter={"missing_or_ineffective_guard": "G1"},
+                               evidence_requests=REQUEST)]}
+    expansion = red(answer)
+    result = assert_admitted(expansion)
+    proposal = result["proposals"][0]
+    assert proposal["source_lead_ids"] == [LEAD] and proposal["affected_entities"] == [SINK]
+    assert len(proposal["evidence_ids"]) == 2 and len(proposal["counterevidence_ids"]) == 1
+    assert [item["reason"] for item in result["evidence_requests"]] == [REQUEST["question"]]
+    assert not any("was dropped" in note for note in expansion.feedback)
+    # A list of labels under ``support`` names no predicate: ambiguous, so it is not coerced and the claim fails.
+    rejected = red({"claims": [claim(support=["K1"])]})
+    assert rejected.result is None and any("support" in error for error in rejected.errors)
+
+
+def test_the_whole_answer_is_rejected_only_when_claims_itself_is_unusable() -> None:
+    for broken in ({"claims": "none"}, {"no_claim": ["L1"]}, {"claims": [claim(id=3)]}):
+        expansion = red(broken)
+        assert expansion.result is None and expansion.errors, broken
+    single = red({"claims": claim()})          # one claim object instead of a list of one
+    assert_admitted(single)
+    assert any("claims was a single object" in note for note in single.feedback)
+
+
+def test_blue_and_verifier_containers_are_coerced_but_their_closed_sets_still_reject() -> None:
+    blue = expand_blue({"stance": "contradicts", "predicate": "missing_or_ineffective_guard", "cites": "G1",
+                        "why": "the guard bounds the copy",
+                        "evidence_requests": {"predicate": "security_impact", "requested_kind": "configuration",
+                                              "anchors": ["S1"], "question": "q"}},
+                       table(), claim_id=CLAIM, task="refute", schema_errors=SCHEMAS.errors)
+    assert not blue.errors and blue.result["disposition"] == "contradicts"
+    assert blue.result["citations"] == {"missing_or_ineffective_guard": [GUARD]}
+    assert [item["anchors"] for item in blue.result["evidence_requests"]] == [[FUNCTION]]
+    assert any("cites was a bare string" in note for note in blue.feedback)
+    assert any("evidence_requests was a single object" in note for note in blue.feedback)
+    verifier = expand_verifier({"disposition": "contradicted", "why": "w",
+                                "per_predicate": {"missing_or_ineffective_guard": {"stance": "contradicts", "cites": "G1"}}},
+                               table(), claim_id=CLAIM, schema_errors=SCHEMAS.errors)
+    assert not verifier.errors and verifier.result["proposed_disposition"] == "contradicted"
+    assert verifier.result["citations"] == {"missing_or_ineffective_guard": [GUARD]}
+    # The required parts and the role boundary are never salvaged.
+    assert expand_blue({"stance": "maybe"}, table(), claim_id=CLAIM, task="refute", schema_errors=SCHEMAS.errors).result is None
+    assert expand_blue({"stance": "unresolved", "poc_basis": {}}, table(), claim_id=CLAIM, task="refute",
+                       schema_errors=SCHEMAS.errors).result is None
 
 
 def test_a_malformed_required_claim_field_is_still_rejected() -> None:

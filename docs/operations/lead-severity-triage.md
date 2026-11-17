@@ -18,7 +18,9 @@ weakness class, and lane admission weighs both (`lanes.lead_admission_basis`, be
 The stage chooses an assessed severity in this order:
 
 1. `lead-severity-rules/1`, the typed rules in
-   `jobs.job_inference_security_review.settings.triage.rules` (every lead);
+   `jobs.job_inference_security_review.settings.triage.rules` (every lead); a row's `rule` is an exact
+   id, `*` for every rule of the scanner, or a case-insensitive glob such as `*cpp-banned-function-high`
+   when the engine prefixes the rule file path;
 2. `cwe-impact-derivation/1` over the run-pinned MITRE CWE catalog (every lead with a rule CWE; a
    catalog impact class of `critical` or `high` ranks the lead `high`, `medium` ranks it `medium`, a low
    class decides nothing);

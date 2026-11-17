@@ -1,4 +1,4 @@
-"""Lane B review-unit rank weights (``review-unit-rank/4``), typed and validated.
+"""Lane B review-unit rank weights (``review-unit-rank/5``), typed and validated.
 
 The weights turn each accepted rank signal into integer points on the 0-1000 signal scale. They are
 semantic configuration (``jobs.job_inference_security_review.settings.ranking``): they change which
@@ -23,8 +23,10 @@ class RankWeights:
     - ``tag_density``: retained configuration name for distinct invoked security-operation sites,
       not tag counts. ``tag_density_full_tags_per_file`` is the retained saturation setting:
       multiple labels/producers at one physical site count once, with no file-count multiplier.
-    - ``lead_hint_medium``/``_low``/``_info``: points per medium/low/info lead hint in the unit, the sum
-      capped at ``lead_hints_max``.
+    - ``lead_hint_high``/``_medium``/``_low``/``_info``: points per lead hint in the unit by *effective*
+      severity (critical and high count as high), the sum capped at ``lead_hints_max``. Version 5 adds the
+      high weight: run 2026-11-16-0005 ranked the ``popen`` site (eight leads, five high) level with a
+      ``printf("ok %u")`` because only medium, low and info leads counted.
     - ``advisory_kev``: points when any of the unit's advisories is CISA KEV-listed.
     - ``advisory_epss``: points for an EPSS percentile of 1.0; the unit's highest percentile scales it.
     - ``facet_exposure`` / ``facet_trust``: points when a collation facet (T-5008) marks a file of the
@@ -36,6 +38,7 @@ class RankWeights:
     hotspot: int = 1000
     tag_density: int = 1000
     tag_density_full_tags_per_file: int = 4
+    lead_hint_high: int = 250
     lead_hint_medium: int = 100
     lead_hint_low: int = 30
     lead_hint_info: int = 10

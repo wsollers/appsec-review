@@ -171,7 +171,7 @@ recorded file hash.
 
 ## Package, view and manifest
 
-**Assembly** (`review/packages.py`, `assemble-review-packages/14`) reads the slice inputs through
+**Assembly** (`review/packages.py`, `assemble-review-packages/16`) reads the slice inputs through
 `SliceSources`. `GraphContext.neighborhood` takes the lead's observation identity and picks the bound:
 
 - **`dataflow_path`:** `flows` are the lead's correlated paths, sorted by identity, at most

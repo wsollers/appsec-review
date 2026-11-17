@@ -2,7 +2,8 @@
 
 Units, in dependency order: ``scope.accept_manifest``, ``scope.assemble_scope``,
 ``triage.lead_severity`` (audited severity for leads the scanner left unknown; see
-``review/lead_triage.py``), ``packages.assemble_lead_packages``, ``packages.assemble_hunt_packages``, ``lead_review.teams``,
+``review/lead_triage.py``), ``packages.plan_hunt_campaign`` (the hunting campaign plan; ``review/hunt_plan.py``),
+``packages.assemble_lead_packages``, ``packages.assemble_hunt_packages``, ``lead_review.teams``,
 ``hunt_review.teams``, ``merge.claims``, ``adjudicate.apply_policy``, ``scoring.score_claims``,
 ``attack_chains.compose_candidates``, ``attack_chains.refute_edges``, ``attack_chains.verify_weakest_links``,
 ``completeness.audit``, ``publication.publish_claim_ledger``, ``publication.publish_handoff``.
@@ -32,7 +33,7 @@ from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
-from appsec_review.review import obligations, ship_block, tool_rules
+from appsec_review.review import hunt_plan, obligations, ship_block, tool_rules
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
@@ -48,6 +49,7 @@ from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, resolve_package_document,
     verify_package_manifest,
 )
+from appsec_review.review.packages import GraphContext, admitted_leads, rank_hunt_candidates, sorted_collection
 from appsec_review.review.references import load_cwe_reference
 from appsec_review.review.result_cache import cache_from_settings
 from appsec_review.review.scoring.cwe_impact import ImpactCatalog
@@ -67,7 +69,7 @@ from .teams import WARRANTS_SCHEMA, PackageWork, ReviewContext, lane_failure, ru
 
 SCHEMA = "appsec-review/inference-security-review/1"
 TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"), "triage": ("lead_severity",),
-            "packages": ("assemble_lead_packages", "assemble_hunt_packages"),
+            "packages": ("plan_hunt_campaign", "assemble_lead_packages", "assemble_hunt_packages"),
             "lead_review": ("teams",), "hunt_review": ("teams",), "merge": ("claims",),
             "adjudicate": ("apply_policy",), "scoring": ("score_claims",),
             "attack_chains": ("compose_candidates", "refute_edges", "verify_weakest_links"),
@@ -343,6 +345,50 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         return collect_leads(scope, assessments_from_document(document) if document.get("enabled") else None,
                              filters=_settings(unit).lead_filters)
 
+    # hunting campaign plan ----------------------------------------------------------------------
+    def plan_hunt_campaign(unit: UnitContext) -> Mapping[str, Any]:
+        """The hunting campaign plan (``review/hunt_plan.py``; review protocol v3 section 4, T-5030).
+
+        One bounded, tool-free planner turn over the attack-surface brief the application builds from accepted
+        data; the validated plan orders both lanes' hunt selection. A model problem, an empty plan or a plan
+        that fails validation twice falls back to the rank with the named gap ``hunt_plan_unavailable:<code>``;
+        it never fails the run.
+        """
+        settings = _settings(unit)
+        if not settings.hunting.enabled:
+            document = hunt_plan.disabled_document(settings.hunting)
+            return {"artifact": _write(unit, "hunt-plan.json", document), "enabled": False,
+                    "status": document["status"], "plan_id": None, "summary": document["summary"],
+                    "gaps": [], "terminal_status": "SUCCEEDED"}
+        scope = _scope(unit)
+        core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
+                             manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
+                             manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+        collection = sorted_collection(triaged_collection(unit, scope))
+        package_settings = PackageSettings.from_review_settings(settings)
+        candidates = rank_hunt_candidates(scope, package_settings, collection, behavior_core=core)
+        admitted = {lead.observation_id for lead in admitted_leads(collection, package_settings)}
+        inputs = hunt_plan.gather_inputs(scope, collection, candidates.ranked, GraphContext(scope),
+                                         admitted_ids=admitted, rank_weights=package_settings.rank_weights)
+        brief = hunt_plan.build_brief(inputs, settings.hunting.brief_bounds, agents=settings.hunting.agents,
+                                      max_areas=settings.hunting.max_areas,
+                                      hunt_max_units=settings.lanes.hunt_max_units)
+        brief_artifact = _write(unit, "hunt-brief.json", dict(brief.document))
+        guidance = hunt_plan.load_planner_guidance(repo(unit))
+        pin_bundle(unit.job.run_root, guidance.bundle, files={"prompt.md": guidance.text})
+        outcome = hunt_plan.run_planner(
+            brief, settings=settings.hunting, profile=settings.models[settings.hunting.planner_profile],
+            infer=infer or _default_infer(), guidance=guidance, schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
+            cell_id=f"hunt-planner-{unit.job.run_id}")
+        document = {**outcome.document, "run_id": unit.job.run_id, "manifest_sha256": scope.manifest_sha256,
+                    "brief_artifact": brief_artifact}
+        gaps = [document["gap"]] if document["gap"] else []
+        unit.job.events.write("INFERENCE_REVIEW_HUNT_PLANNED", status=document["status"],
+                              model_calls=outcome.model_calls, gap=document["gap"], **document["summary"])
+        return {"artifact": _write(unit, "hunt-plan.json", document), "enabled": True,
+                "status": document["status"], "plan_id": document["plan_id"], "summary": document["summary"],
+                "brief_artifact": brief_artifact, "gaps": gaps, "terminal_status": _status(gaps)}
+
     # packages -----------------------------------------------------------------------------------
     def assemble(lane: Lane) -> Callable[[UnitContext], Mapping[str, Any]]:
         def handler(unit: UnitContext) -> Mapping[str, Any]:
@@ -356,9 +402,13 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                  manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
                                  manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
             collection = triaged_collection(unit, scope)
+            # The hunting campaign plan orders both lanes' hunt selection (the lead lane's manifest carries the
+            # same hunted flags, so excluded-leads.json agrees); disabled or fallen back, the rank selects.
+            plan_doc = _read(unit.job.run_root, unit.output("packages.plan_hunt_campaign")["artifact"])
             assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
                                          collection=collection, cwe_reference=reference,
-                                         slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core)
+                                         slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core,
+                                         hunt_selection=hunt_plan.selection_from_document(plan_doc))
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly", run_root=unit.job.run_root)
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]
@@ -412,8 +462,11 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "rule_predicates": {lead["observation_id"]: [item.value for item in tool_rules.lead_predicates(lead)]
                                     for lead in sorted(leads, key=lambda item: item["observation_id"])},
                 "units": [{"unit_key": row["unit_key"], "position": row["position"], "hunted": row["hunted"],
-                           "source_ids": row["source_ids"], "coverage_scope": row["coverage_scope"]}
+                           "source_ids": row["source_ids"], "coverage_scope": row["coverage_scope"],
+                           "hunt_area": row.get("hunt_area"), "hunt_gap": row.get("hunt_gap")}
                           for row in assembly.manifest["units"]],
+                # The campaign plan this lane's hunt selection followed: id, status, counts and the gap (T-5030).
+                "hunt_plan": hunt_plan.handoff_summary(plan_doc),
             }
             gaps = [f"{gap.producer}:{gap.scope}: {gap.state}" for gap in assembly.gaps]
             if reference.gap:
@@ -839,8 +892,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         Unit("scope.accept_manifest", accept),
         Unit("scope.assemble_scope", assemble_scope, ("scope.accept_manifest",)),
         Unit("triage.lead_severity", triage_leads, ("scope.assemble_scope",)),
-        Unit("packages.assemble_lead_packages", assemble(Lane.LEAD), ("triage.lead_severity",)),
-        Unit("packages.assemble_hunt_packages", assemble(Lane.HUNT), ("triage.lead_severity",)),
+        Unit("packages.plan_hunt_campaign", plan_hunt_campaign, ("triage.lead_severity",)),
+        Unit("packages.assemble_lead_packages", assemble(Lane.LEAD), ("packages.plan_hunt_campaign",)),
+        Unit("packages.assemble_hunt_packages", assemble(Lane.HUNT), ("packages.plan_hunt_campaign",)),
         Unit("lead_review.teams", review(Lane.LEAD), ("packages.assemble_lead_packages",)),
         Unit("hunt_review.teams", review(Lane.HUNT), ("packages.assemble_hunt_packages",)),
         Unit("merge.claims", merge, ("lead_review.teams", "hunt_review.teams")),

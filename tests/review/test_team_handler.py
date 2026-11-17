@@ -738,6 +738,24 @@ def _rewriting(inner, rewrite):
     return infer
 
 
+def test_a_final_over_the_output_cap_reaches_the_lane_with_its_answer_and_a_budget_gap(prepared) -> None:
+    """The per-call output cap no longer discards a parsed final: the cell succeeds and the gap reaches the lane."""
+    cap = prepared.settings.models["default"].max_output_tokens
+
+    def heavy(request, *, timeout_seconds):
+        response = prepared.infer(request, timeout_seconds=timeout_seconds)
+        if request.role in {"red_team_analyst", "hypothesis_hunter"} and response.proposal.get("action") == "final":
+            return replace(response, output_tokens=cap + 1)
+        return response
+
+    result = run_team(prepared.context(heavy, attempt="over-cap"), prepared.work("lead", "sast_high"), launch=True)
+    reds = [item for item in result.cells if item.role is Role.RED_TEAM_ANALYST]
+    assert reds and {item.status for item in reds} == {CellStatus.SUCCEEDED}
+    reasons = {gap.reason for gap in result.gaps if gap.gap_class is GapClass.BUDGET_GAP}
+    assert reasons == {f"model_token_cap: final turn used {cap + 1} of {cap} output tokens"}
+    assert not any(gap.reason == "cell_budget_exceeded:cell_token_cap" for gap in result.gaps)
+
+
 def test_a_lead_the_answer_omits_is_a_blocked_lead_with_a_named_gap(prepared) -> None:
     def drop(request, result):
         result.pop("no_claim", None)

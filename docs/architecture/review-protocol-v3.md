@@ -77,9 +77,10 @@ Unchanged in shape; two policies decided on 2026-11-15 already apply (T-5029, T-
   catalogued rule CWE, and the model pass covers only leads reported unknown). An unassessed unknown lead is recorded with
   `residual_coverage: unassessed_unknown`, a `lead_admission` skipped gap, and reaches the hunter's unit
   selection (section 4.1) rather than being reviewed blind.
-- Leads of one defect site share one package: same path, within `packages.lead_cluster_lines` of a member and
-  the same enclosing function where graph facts know it. The package's neighborhood is the merge of its
-  members' neighborhoods, bounded by the verified correlated paths.
+- Leads of one defect site share one package: same path, within `packages.lead_cluster_lines` of a member,
+  the same enclosing function where graph facts know it, and the same defect (a shared `sink_site` fact or the
+  same weakness class; different classes within the window are separate packages). The package's neighborhood
+  is the merge of its members' neighborhoods, bounded by the verified correlated paths.
 - `excluded-leads.json` lists every observation the manifest did not admit, with its reason and whether a
   hunt unit still covers it.
 
@@ -90,6 +91,20 @@ given a mission, the code, the indices as tools and a budget, and decides where 
 partition, the budget, the receipts, the coverage computation, dedupe and redaction; everything inside those is
 the agent's judgment. Unit menus and per-item accounting remain the analyst's package shape in Intake A
 (section 3) and are not used for hunting.
+
+**Implemented: the planner (2026-11-16, T-5030 first piece).** `review/hunt_plan.py` and the `hunt_planner` role
+put the plan in front of today's hunt lane: the `packages.plan_hunt_campaign` task builds one bounded,
+deterministic attack-surface brief from accepted data (components and stack, first-party files with complexity
+points, lead density and facets, the function inventory, entry points, the units the rank would hunt), a
+frontier-model planner answers `hunting-campaign-plan/1` (areas with mission, weakness classes, priority, agents
+and assigned files, functions and entry points; the rest unassigned with a reason), and the application validates
+it (every function and entry point in exactly one area or unassigned, unknown ids refused then dropped, agents
+clamped to `hunting.agents`, areas beyond the budget kept as `not_reached`, fallback to the rank with the gap
+`hunt_plan_unavailable:<code>`). Hunt units are selected and ordered by the plan, `lanes.hunt_max_units` caps the
+packages after it, each hunt package carries its area as `campaign_area`, and unreached areas are named coverage
+gaps with their function lists. The campaign cell runtime of 4.1 to 4.3 (wall deadline and token budget instead of
+the turn cap, incremental filing, the receipt-derived coverage ledger) is the follow-on and is not implemented:
+coverage is still derived from hunt cells and their receipts, never from the plan.
 
 ### 4.1 The campaign
 

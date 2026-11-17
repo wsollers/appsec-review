@@ -6,7 +6,7 @@ import pytest
 from appsec_review.review.behavior import graph_operations, opportunity_sites
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.scope import SourceFile
-from appsec_review.review.units import build_units, rank_units, select_hunts
+from appsec_review.review.units import build_units, rank_units, select_hunts, lead_hints
 
 from .support import ENTRY, PATH, SHA, SINK, SOURCE, Scope, collection, graph_row, tag_row
 
@@ -207,3 +207,17 @@ def test_operation_does_not_inherit_an_unrelated_files_priority():
     fallback = next(unit for unit in units if not unit.operation)
     assert next(signal.value for signal in operation.signals if signal.signal == "lps") == 100
     assert next(signal.value for signal in fallback.signals if signal.signal == "lps") == 1000
+
+
+def test_fallback_lead_hints_follow_the_leads_left_after_operation_allocation():
+    """integration-0008: the whole-file fallback kept the hint points of the lead that moved to the operation unit,
+    so with high leads weighted (review-unit-rank/5) the fallback outranked the operation it was cut from."""
+    scope = Scope(graph=[graph_row()], extra_sources=(SourceFile("src/other.py", "asr:source_file:" + "9" * 64, "Python"),))
+    operations, _ = graph_operations(scope, limit=10)
+    units = build_units(scope, collection(20, 40), unit_max_files=10, operations=operations)
+    hints = {unit.key: next(signal.value for signal in unit.signals if signal.signal == "lead_hints") for unit in units}
+    for unit in units:
+        assert hints[unit.key] == lead_hints(unit.leads).value
+    assert len({hints[unit.key] for unit in units}) == 1
+    ranked = rank_units(units)
+    assert ranked[0].unit.operation is not None and ranked[1].unit.operation is None

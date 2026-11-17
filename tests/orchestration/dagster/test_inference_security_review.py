@@ -33,7 +33,7 @@ from tests.fixtures.inference_review.acceptance import (
 from tests.fixtures.inference_review.builder import build_accepted_index_set, shard_path
 from tests.fixtures.inference_review.fake_infer import NARRATIVES
 
-R1_UNITS = ("scope.accept_manifest", "scope.assemble_scope", "packages.assemble_lead_packages",
+R1_UNITS = ("scope.accept_manifest", "scope.assemble_scope", "packages.plan_hunt_campaign", "packages.assemble_lead_packages",
             "packages.assemble_hunt_packages", "lead_review.teams", "hunt_review.teams", "merge.claims",
             "adjudicate.apply_policy", "scoring.score_claims", "completeness.audit",
             "publication.publish_claim_ledger", "publication.publish_handoff")

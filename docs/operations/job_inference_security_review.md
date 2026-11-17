@@ -31,22 +31,23 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `adjudicate` | `adjudicate.apply_policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L554) |
-| `attack_chains` | `attack_chains.compose_candidates` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L611) |
-| `attack_chains` | `attack_chains.refute_edges` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L646) |
-| `attack_chains` | `attack_chains.verify_weakest_links` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L646) |
-| `completeness` | `completeness.audit` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L686) |
-| `hunt_review` | `hunt_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L441) |
-| `lead_review` | `lead_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L441) |
-| `merge` | `merge.claims` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L525) |
-| `packages` | `packages.assemble_hunt_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L348) |
-| `packages` | `packages.assemble_lead_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L348) |
-| `publication` | `publication.publish_claim_ledger` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L721) |
-| `publication` | `publication.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L744) |
-| `scope` | `scope.accept_manifest` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L276) |
-| `scope` | `scope.assemble_scope` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L289) |
-| `scoring` | `scoring.score_claims` | 1 | `inference_score` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L575) |
-| `triage` | `triage.lead_severity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L302) |
+| `adjudicate` | `adjudicate.apply_policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L607) |
+| `attack_chains` | `attack_chains.compose_candidates` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L664) |
+| `attack_chains` | `attack_chains.refute_edges` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L699) |
+| `attack_chains` | `attack_chains.verify_weakest_links` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L699) |
+| `completeness` | `completeness.audit` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L739) |
+| `hunt_review` | `hunt_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L494) |
+| `lead_review` | `lead_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L494) |
+| `merge` | `merge.claims` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L578) |
+| `packages` | `packages.assemble_hunt_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L394) |
+| `packages` | `packages.assemble_lead_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L394) |
+| `packages` | `packages.plan_hunt_campaign` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L349) |
+| `publication` | `publication.publish_claim_ledger` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L774) |
+| `publication` | `publication.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L797) |
+| `scope` | `scope.accept_manifest` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L278) |
+| `scope` | `scope.assemble_scope` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L291) |
+| `scoring` | `scoring.score_claims` | 1 | `inference_score` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L628) |
+| `triage` | `triage.lead_severity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L304) |
 
 ### Accepted input declarations
 
@@ -245,6 +246,16 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
       "reasoning": "high",
       "timeout_seconds": 600
     },
+    "planner": {
+      "max_input_tokens": 128000,
+      "max_output_tokens": 32000,
+      "max_queries": 0,
+      "max_turns": 2,
+      "model": "claude-sonnet-5-5",
+      "provider": "claude-cli",
+      "reasoning": "high",
+      "timeout_seconds": 900
+    },
     "triage": {
       "max_input_tokens": 64000,
       "max_output_tokens": 16000,
@@ -434,6 +445,48 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
         "rule": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
         "scanner": "opengrep",
         "severity": "low"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+        "rule": "*cpp-banned-function-high",
+        "scanner": "semgrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+        "rule": "*cpp-banned-function-high",
+        "scanner": "opengrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+        "scanner": "semgrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+        "scanner": "opengrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+        "scanner": "semgrep",
+        "severity": "medium"
+      },
+      {
+        "basis": "rule_semantics",
+        "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+        "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+        "scanner": "opengrep",
+        "severity": "medium"
       },
       {
         "basis": "rule_semantics",
@@ -1447,7 +1500,7 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
    ([review scope](inference-security-review.md#review-scope-source-dispositions-and-stylistic-observations)).
 2. Bind bounded source slices, lead-family admission, operation questions and any admitted
    generated model context. Routing context does not replace original source/tool evidence.
-3. Rank lead packages by effective severity and hunt packages by unit position (`review-unit-rank/4`,
+3. Rank lead packages by effective severity and hunt packages by unit position (`review-unit-rank/5`,
    including `exposure:client-facing` and `trust:user-tainted` facet weights); retain caps,
    exclusions, missing strategy/specialist inputs and fallback scope.
 4. Bind package content, dependency shard identities, assembly/admissibility/predicate-policy

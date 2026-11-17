@@ -513,7 +513,9 @@ def coverage_matrix(hunt_lane: Mapping[str, Any], units: Iterable[Mapping[str, A
     for unit in units:
         if not unit.get("hunted"):
             rows.append({"unit_key": unit["unit_key"], "package_id": None, "strategy": None, "persona": None,
-                         "status": "gap", "cell_id": None, "reason": "below_hunt_cutoff"})
+                         "status": "gap", "cell_id": None,
+                         # The plan's named reason (not_reached:<area>, unassigned, ...) or the rank cutoff.
+                         "reason": str(unit.get("hunt_gap") or "below_hunt_cutoff")})
     rows.sort(key=lambda row: (str(row["unit_key"]), str(row["package_id"]), str(row["strategy"]),
                                str(row["persona"]), str(row["cell_id"])))
     summary: dict[str, int] = defaultdict(int)
@@ -526,7 +528,7 @@ def coverage_matrix(hunt_lane: Mapping[str, Any], units: Iterable[Mapping[str, A
 def completeness_gaps(units: Iterable[Mapping[str, Any]], scope_gaps: Iterable[Mapping[str, Any]],
                       cwe_reference: Mapping[str, Any] | None = None,
                       admission: Iterable[Mapping[str, Any]] = ()) -> list[Gap]:
-    gaps = [make_gap(GapClass.COVERAGE_GAP, str(unit["unit_key"]), "below_hunt_cutoff")
+    gaps = [make_gap(GapClass.COVERAGE_GAP, str(unit["unit_key"]), str(unit.get("hunt_gap") or "below_hunt_cutoff"))
             for unit in units if not unit.get("hunted")]
     gaps.extend(make_gap(GapClass.COVERAGE_GAP, f"producer:{gap['producer']}:{gap['scope']}",
                          f"{gap['state']}: {gap['reason']}") for gap in scope_gaps)
