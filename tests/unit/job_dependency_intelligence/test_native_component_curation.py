@@ -7,10 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from appsec_review.jobs.job_dependency_intelligence.curation import curate_native_components
+from appsec_review.jobs.job_dependency_intelligence.curation import (
+    DECISION_TOKENS, ENVELOPE_TOKENS, curate_native_components, curation_batch_size,
+)
 from appsec_review.jobs.job_dependency_intelligence.discovery import discover_native_dependencies
 from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import (
     CURATION_SCHEMA, INFERENCE_COUNTERS, NativeInferenceBounds, NativeInferenceError,
+    NativeInferenceOverCap,
 )
 from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import (
     GAP_KINDS, NativeBounds, NativeInputIntegrityError, evidence_identity,
@@ -72,9 +75,10 @@ def retain(stage, payload):
     ])
 
 
-def run(inputs, propose=retain, *, bounds=BOUNDS):
+def run(inputs, propose=retain, *, bounds=BOUNDS, max_output_tokens=None):
     original = deepcopy(inputs)
-    result = curate_native_components(*inputs, propose=propose, bounds=bounds)
+    result = curate_native_components(*inputs, propose=propose, bounds=bounds,
+                                      max_output_tokens=max_output_tokens)
     assert inputs == original
     assert set(result["metrics"]) <= set(INFERENCE_COUNTERS)
     assert not set(result["metrics"]) & {"model_calls", "model_failures", "input_tokens",
@@ -729,3 +733,69 @@ def test_shared_company_namespace_is_not_itself_coherent_sdk_packaging():
     assert not result["sdk_groups"]
     assert result["metrics"]["uncertain_candidates"] == 2
     assert "coherent SDK packaging" in reasons(result)
+
+
+def test_over_cap_reply_that_validates_is_kept_under_a_named_budget_gap():
+    """Run 2026-11-17-0003 (D-dependency_intelligence-1): every curation reply exceeded max_output_tokens and
+    all 80 decisions became conservative originals although each reply was a complete, valid proposal."""
+    inputs = discover({f"vendor/pkg{index}/pkg{index}.h": "// header" for index in range(3)})
+
+    def propose(stage, payload):
+        raise NativeInferenceOverCap(retain(stage, payload), tokens=5029, cap=4000)
+
+    result = run(inputs, propose)
+    assert len(result["components"]) == 3
+    assert result["metrics"]["uncertain_candidates"] == 0
+    assert result["metrics"]["curated_components"] == 3
+    assert {row["decision"] for row in result["decisions"]} == {"selected"}
+    assert not any(row["metadata"]["curation"]["conservative"] for row in result["discovery"]["candidates"])
+    gap, = result["gaps"]
+    assert gap["kind"] == "bounds" and gap["scope"].startswith("native-curation-batch-")
+    assert "model_token_cap" in gap["detail"] and "3 candidates" in gap["detail"]
+    assert "5029 of 4000 output tokens" in gap["detail"]
+    assert gap["evidence_ids"] == sorted({ref for row in inputs[0]["candidates"] for ref in row["evidence_ids"]})
+    assert result["discovery"]["gaps"][-1] == gap
+
+
+def test_over_cap_reply_that_does_not_validate_stays_a_conservative_fallback():
+    inputs = discover({"include/alpha.h": "// header"})
+
+    def propose(stage, payload):
+        broken = retain(stage, payload)
+        broken["input_records"] = 99
+        raise NativeInferenceOverCap(broken, tokens=9143, cap=4000)
+
+    result = run(inputs, propose)
+    assert result["metrics"]["uncertain_candidates"] == 1
+    decision, = result["decisions"]
+    assert decision["decision"] == "uncertain"
+    assert "invalid proposal: proposal schema/input_records mismatch" in decision["reason"]
+    assert "9143 of 4000 output tokens" in decision["reason"]
+    assert all(row["metadata"]["curation"]["conservative"] for row in result["discovery"]["candidates"])
+    assert not any("kept the validated proposal" in gap["detail"] for gap in result["gaps"])
+
+
+def test_curation_batches_are_sized_to_the_output_token_cap():
+    assert curation_batch_size(BOUNDS, None) == BOUNDS.batch_candidates
+    assert curation_batch_size(BOUNDS, 4000) == (4000 - ENVELOPE_TOKENS) // DECISION_TOKENS == 29
+    assert curation_batch_size(BOUNDS, 16000) == BOUNDS.batch_candidates
+    assert curation_batch_size(BOUNDS, ENVELOPE_TOKENS) == 1
+    assert curation_batch_size(replace(BOUNDS, batch_candidates=2), 16000) == 2
+    with pytest.raises(ValueError):
+        curation_batch_size(BOUNDS, 0)
+    with pytest.raises(ValueError):
+        curation_batch_size(BOUNDS, True)
+    inputs = discover({f"vendor/pkg{index}/pkg{index}.h": "// header" for index in range(5)})
+    sizes = []
+
+    def propose(stage, payload):
+        sizes.append(payload["input_records"])
+        assert len(payload["candidates"]) == payload["input_records"]
+        return retain(stage, payload)
+
+    result = run(inputs, propose, max_output_tokens=ENVELOPE_TOKENS + 2 * DECISION_TOKENS)
+    assert sizes == [2, 2, 1]
+    assert not result["gaps"] and len(result["components"]) == 5
+    unbounded = run(inputs, propose, max_output_tokens=None)
+    assert sizes[3:] == [5]
+    assert unbounded["components"] == result["components"]

@@ -118,8 +118,8 @@ def run_native_inference(unit: UnitContext, infer: Infer | None, *, investigate:
                     unit, record, limit, loaded["native_workspace_roots"]),
             )
         else:
-            result = curate_native_components(discovery, loaded["native_files"],
-                                               propose=proposer, bounds=bounds)
+            result = curate_native_components(discovery, loaded["native_files"], propose=proposer,
+                                               bounds=bounds, max_output_tokens=settings["model"]["max_output_tokens"])
         if result["gaps"]:
             span.status = "COMPLETED_WITH_GAPS"
         return _publish(unit, result, proposer, started=started, input_document=discovery)
