@@ -17,6 +17,7 @@ from appsec_review.inference.recording import recorded
 from appsec_review.observability import PipelineLog
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import consume_named, publish_named, safe_path
+from .batching import REQUEST_RULE, Part, estimate_tokens, plan_parts
 from .evidence import EvidenceResolver, redact
 from .guidance import compose, pin_bundle
 from .obligations import VERSION, procedure_for, subjects
@@ -142,16 +143,120 @@ def _rebind(proposal: Mapping[str, Any], resolver: EvidenceResolver,
     return value
 
 
+_CONTRACT = {
+    "schema": TURN_SCHEMA, "actions": ["retrieve", "final"],
+    "retrieve": {"requests": [{"source_identity": "an allowed expansion identity", "locator": None}]},
+    "final": {"results": [{"row_id": "supplied row id", "obligations": [{
+        "obligation_id": "supplied supported obligation id", "subject_id": "supplied subject id",
+        "outcome": "satisfied|not_satisfied|cannot_verify", "rationale": "concise reasoning",
+        "supporting": [], "contradictory": [], "assumptions": [], "evidence_requests": [],
+        "hypotheses": [], "limitations": [],
+    }]}]}, "citation": "Copy a complete typed reference from accepted evidence or expansion.",
+    "hypothesis": {"mechanism": "concrete potential failure mechanism",
+                   "severity": "unknown|info|low|medium|high|critical", "ship_blocking": False},
+}
+
+
+def _request(view: Mapping[str, Any], *, batch: Mapping[str, Any], role: str, guidance: Mapping[str, str],
+             text: str, profile: Mapping[str, Any], settings: OwaspSettings,
+             transcript: Sequence[Mapping[str, Any]], queries: int, turn: int, retry: int,
+             part: int | None) -> ReviewModelRequest:
+    """One worker turn over a batch part's assembled view (batching.assemble); the budget check reads it."""
+    task = {"mode": "assessment", **_clean(view), "contract": _CONTRACT,
+            "capability_limits": {"max_queries": settings.max_queries, "max_turns": settings.max_turns,
+                                  "max_source_lines": settings.max_source_lines},
+            "remaining_budget": {"remaining_queries": max(0, settings.max_queries - queries),
+                                 "remaining_turns": settings.max_turns - turn,
+                                 "final_required": turn + 1 == settings.max_turns
+                                 or queries >= settings.max_queries}}
+    return ReviewModelRequest(
+        TURN_SCHEMA, role, str(batch["assignment"]["persona"] or "general"), "owasp",
+        guidance["bundle_sha256"], text, task, tuple(transcript),
+        str(profile["provider"]), str(profile["model"]), str(profile["reasoning"]),
+        int(profile["max_input_tokens"]), int(profile["max_output_tokens"]),
+        cell_id=f"owasp:{batch['batch_id']}:{role}:{turn}:{retry}" + (f":part{part}" if part is not None else ""))
+
+
+def _merge_status(parts: Sequence[Mapping[str, Any]]) -> str:
+    statuses = [item["status"] for item in parts]
+    if statuses and all(status == "reused" for status in statuses):
+        return "reused"
+    if statuses and all(status in {"succeeded", "reused"} for status in statuses):
+        return "succeeded"
+    return next(status for status in statuses if status not in {"succeeded", "reused"})
+
+
 def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any],
                 packages: Sequence[Mapping[str, Any]], role: str, profile: Mapping[str, Any],
                 settings: OwaspSettings, resolver: EvidenceResolver, infer: Infer,
                 attempt_id: str = "-", unit_id: str = "validation.assessment") -> dict[str, Any]:
+    """Assess a batch in as many request-sized parts as its input budget needs (D-owasp_control_assessment-1).
+
+    Each part is assembled once (shared evidence, component context and procedures by id), estimated
+    with the real request, and split or trimmed by ``batching.plan_parts`` before any model call. Row
+    statuses and gaps are reported per row so a trimmed or undispatched row names its own cause.
+    """
     step_id, task_id = unit_id.split(".")
     log = PipelineLog(run_root)
     correlation = {"run_id": resolver.scope.run_id, "job_id": "job_owasp_control_assessment",
                    "attempt_id": attempt_id, "step_id": step_id, "task_id": task_id}
     guidance, text = _guidance(repository_root, run_root, batch, role)
+    budget = int(profile["max_input_tokens"])
+
+    def estimate(view: Mapping[str, Any]) -> int:
+        return estimate_tokens(asdict(_request(view, batch=batch, role=role, guidance=guidance, text=text,
+                                               profile=profile, settings=settings, transcript=(), queries=0,
+                                               turn=0, retry=0, part=None)))
+
+    parts = plan_parts(packages, estimate=estimate, budget=budget)
+    outcomes: list[dict[str, Any]] = []
+    row_status: dict[str, str] = {}
+    row_gaps: dict[str, list[str]] = {}
+    for number, part in enumerate(parts):
+        for row_id, gaps in part.gaps.items():
+            row_gaps.setdefault(row_id, []).extend(gaps)
+        if not part.dispatch:
+            outcome = {"status": "input_budget", "proposal": None, "attempts": [], "retrieval_requests": 0,
+                       "estimate": part.estimate}
+            log.write("OWASP_MODEL_ATTEMPT", **correlation, details={
+                "batch_id": batch["batch_id"], "role": role, "outcome": "input_budget", "dispatched": False,
+                "input_tokens_estimated": part.estimate, "max_input_tokens": budget, "part": number,
+                "row_ids": list(part.row_ids)})
+        else:
+            outcome = _investigate_part(part, number=number, parts=len(parts), run_root=run_root, batch=batch,
+                                        role=role, profile=profile, settings=settings, resolver=resolver,
+                                        infer=infer, guidance=guidance, text=text, log=log,
+                                        correlation=correlation)
+        outcomes.append(outcome)
+        for row_id in part.row_ids:
+            row_status[row_id] = outcome["status"]
+    results = [row for outcome in outcomes if outcome["proposal"] is not None
+               for row in outcome["proposal"]["results"]]
+    proposal = ({"schema": TURN_SCHEMA, "action": "final", "results": results}
+                if any(outcome["proposal"] is not None for outcome in outcomes) else None)
+    receipts = [outcome["receipt"] for outcome in outcomes if outcome.get("receipt")]
+    value: dict[str, Any] = {
+        "status": _merge_status(outcomes) if outcomes else "succeeded", "proposal": proposal,
+        "attempts": [item for outcome in outcomes for item in outcome["attempts"]],
+        "guidance": guidance, "retrieval_requests": sum(outcome["retrieval_requests"] for outcome in outcomes),
+        "receipt": receipts[0] if len(receipts) == 1 else None, "receipts": receipts,
+        "parts": [{"row_ids": list(part.row_ids), "input_tokens_estimated": part.estimate,
+                   "dispatch": part.dispatch, "trimmed": part.view.get("trimmed"), "status": outcome["status"]}
+                  for part, outcome in zip(parts, outcomes, strict=True)],
+        "row_status": row_status, "row_gaps": {key: sorted(set(item)) for key, item in row_gaps.items()},
+    }
+    if value["status"] == "reused":
+        value["reuse_basis"] = [item for outcome in outcomes for item in outcome.get("reuse_basis", [])]
+    return value
+
+
+def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, batch: Mapping[str, Any],
+                      role: str, profile: Mapping[str, Any], settings: OwaspSettings,
+                      resolver: EvidenceResolver, infer: Infer, guidance: Mapping[str, str], text: str,
+                      log: PipelineLog, correlation: Mapping[str, Any]) -> dict[str, Any]:
+    packages = part.packages
     key = digest({"mode": settings.mode.value, "packages": _semantic(packages),
+                  "request": {"rule": REQUEST_RULE, "trimmed": part.view.get("trimmed")},
                   "guidance": guidance["bundle_sha256"], "model_policy": dict(profile),
                   "rules": RESULT_RULE, "limits": asdict(settings)})
     receipt = safe_path(run_root, f"data/indexes/owasp/receipts/{key}.json")
@@ -174,24 +279,11 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                 "receipt_path": receipt.relative_to(run_root).as_posix(),
                 "guidance_bundle_sha256": guidance["bundle_sha256"], "new_model_calls": 0})
             return {"status": "reused", "proposal": proposal, "attempts": [],
-                    "guidance": guidance, "receipt": receipt.relative_to(run_root).as_posix(),
-                    "retrieval_requests": 0,
-                    "reuse_basis": cached["attempts"]}
-    task = {
-        "mode": "assessment", "packages": _clean(packages),
-        "contract": {"schema": TURN_SCHEMA, "actions": ["retrieve", "final"],
-            "retrieve": {"requests": [{"source_identity": "an allowed expansion identity", "locator": None}]},
-            "final": {"results": [{"row_id": "supplied row id", "obligations": [{
-                "obligation_id": "supplied supported obligation id", "subject_id": "supplied subject id",
-                "outcome": "satisfied|not_satisfied|cannot_verify", "rationale": "concise reasoning",
-                "supporting": [], "contradictory": [], "assumptions": [], "evidence_requests": [],
-                "hypotheses": [], "limitations": [],
-            }]}]}, "citation": "Copy a complete typed reference from accepted evidence or expansion.",
-            "hypothesis": {"mechanism": "concrete potential failure mechanism",
-                           "severity": "unknown|info|low|medium|high|critical", "ship_blocking": False}},
-    }
+                    "receipt": receipt.relative_to(run_root).as_posix(),
+                    "retrieval_requests": 0, "reuse_basis": cached["attempts"]}
     transcript: list[Mapping[str, Any]] = []
     attempts: list[dict[str, Any]] = []
+    # Expansion stays bound to the part's own accepted evidence, including material trimmed from the request.
     allowed = {item["reference"]["source_identity"]: package["component"]["component_id"]
                for package in packages for item in package["evidence_references"]}
     for package in packages:
@@ -207,19 +299,10 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
     for turn in range(settings.max_turns):
         retry_reason = None
         for retry in range(policy.attempts):
-            request = ReviewModelRequest(
-                TURN_SCHEMA, role, str(batch["assignment"]["persona"] or "general"), "owasp",
-                guidance["bundle_sha256"], text, {**task,
-                    "capability_limits": {"max_queries": settings.max_queries, "max_turns": settings.max_turns,
-                                          "max_source_lines": settings.max_source_lines},
-                    "remaining_budget": {"remaining_queries": max(0, settings.max_queries - queries),
-                                         "remaining_turns": settings.max_turns - turn,
-                                         "final_required": turn + 1 == settings.max_turns
-                                         or queries >= settings.max_queries}}, tuple(transcript),
-                str(profile["provider"]), str(profile["model"]), str(profile["reasoning"]),
-                int(profile["max_input_tokens"]), int(profile["max_output_tokens"]),
-                cell_id=f"owasp:{batch['batch_id']}:{role}:{turn}:{retry}")
-            estimate = (len(canonical_json(asdict(request))) + 3) // 4
+            request = _request(part.view, batch=batch, role=role, guidance=guidance, text=text, profile=profile,
+                               settings=settings, transcript=transcript, queries=queries, turn=turn, retry=retry,
+                               part=number if parts > 1 else None)
+            estimate = estimate_tokens(asdict(request))
             if estimate > int(profile["max_input_tokens"]):
                 terminal = "input_budget"
                 break
@@ -294,8 +377,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                 "retrieval_requests": queries,
             }), namespace="owasp-shard", computation={"key": key})
             return {"status": "succeeded", "proposal": safe, "attempts": attempts,
-                    "guidance": guidance, "receipt": receipt.relative_to(run_root).as_posix(),
-                    "retrieval_requests": queries}
+                    "receipt": receipt.relative_to(run_root).as_posix(), "retrieval_requests": queries}
         requests = proposal.get("requests")
         if set(proposal) != {"schema", "action", "requests"} or not isinstance(requests, list) or not 1 <= len(requests) <= 8:
             terminal = "invalid_retrieval"
@@ -338,8 +420,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         if terminal in {"retrieval_budget", "execution_deadline"}:
             break
         terminal = "turn_limit"
-    return {"status": terminal, "proposal": None, "attempts": attempts, "guidance": guidance,
-            "retrieval_requests": queries}
+    return {"status": terminal, "proposal": None, "attempts": attempts, "retrieval_requests": queries}
 
 
 def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] | None,
@@ -463,12 +544,16 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
                         else "pending" if row_reviewer["proposal"] is None else "unresolved")
         if status == "cannot_verify":
             gaps.append("material obligations remain unresolved; no safe/unsafe conclusion")
+        # A batch dispatched in parts (batching.plan_parts) reports each row's own status and budget gaps.
+        row_completion = row_worker.get("row_status", {}).get(package["row_id"], row_worker["status"])
         for role, result in (("worker", row_worker), ("reviewer", row_reviewer)):
-            if result["status"] not in {"succeeded", "reused"}:
-                gaps.append(f"{role}: {result['status']}")
+            role_status = result.get("row_status", {}).get(package["row_id"], result["status"])
+            if role_status not in {"succeeded", "reused"}:
+                gaps.append(f"{role}: {role_status}")
+            gaps.extend(f"{role}: {gap}" for gap in result.get("row_gaps", {}).get(package["row_id"], ()))
         results.append({
             "row_id": package["row_id"], "package_id": package["package_id"],
-            "status": status, "execution_completion": row_worker["status"],
+            "status": status, "execution_completion": row_completion,
             "verification_status": verification, "coverage_completeness": "partial"
             if any(state == "cannot_verify" for state in states) else "scoped",
             "assessment_mode": "assessment", "obligations": assessed,

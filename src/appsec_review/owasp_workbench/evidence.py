@@ -10,6 +10,7 @@ from appsec_review.config.owasp import OwaspSettings
 from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.retrieval.model import LogicalIdentity, normalize_relative_path
 from appsec_review.retrieval.source_resolution import read_source_bytes
+from appsec_review.review.dispositions import FIRST_PARTY
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.secret_redaction import REDACTION_RULE, placeholder
 from .standards import digest
@@ -21,6 +22,8 @@ from .subject_selection import (
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT
 
 UPSTREAM_JOBS = CONTRACT.consumes
+# The phrase that marks the first-party exclusion gap of component_evidence (run 2026-11-17-0003).
+FIRST_PARTY_EXCLUSION = "outside the first-party disposition"
 UPSTREAM_INDEXES = ("source", "components", "build", "artifacts", "build_security", "compiled",
                     "analysis", "evidence", "inventory", "observations", "documents", "tags",
                     "priority", "graph")
@@ -426,11 +429,21 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
                             "source evidence is selected through the bounded source inventory")
             else:
                 extras.append(row["identity"])
-    # Supported first-party sources precede vendored trees, then indexed files, so the evidence cap is spent on
-    # the target's own code before third_party/ (run 2026-11-16-0005 spent it on cJSON and bzip2 otherwise).
-    ordered = sorted({(source.path, source.identity): source for source in files}.values(),
-                     key=lambda source: (not supported(source), getattr(source, "disposition", "first_party") != "first_party",
-                                         source.path not in hints, source.path, source.identity))
+    # First-party review (T-165 dispositions; run 2026-11-17-0003 D-owasp_control_assessment-1): sources the
+    # configured dispositions place outside first_party (vendored, sdk, generated, test) are not subjects.
+    # The exclusion is a named gap with its count; scanners and indexes still cover those trees.
+    distinct = list({(source.path, source.identity): source for source in files}.values())
+    excluded: dict[str, int] = {}
+    for source in distinct:
+        disposition = getattr(source, "disposition", FIRST_PARTY)
+        if disposition != FIRST_PARTY:
+            excluded[disposition] = excluded.get(disposition, 0) + 1
+    if excluded:
+        detail = ", ".join(f"{name} {count}" for name, count in sorted(excluded.items()))
+        gaps.append(f"{sum(excluded.values())} accepted source files {FIRST_PARTY_EXCLUSION} excluded "
+                    f"from subject selection ({detail}); their subjects are unassessed")
+    ordered = sorted((source for source in distinct if getattr(source, "disposition", FIRST_PARTY) == FIRST_PARTY),
+                     key=lambda source: (not supported(source), source.path not in hints, source.path, source.identity))
     omitted_files = max(0, len(ordered) - settings.max_discovery_files)
     if omitted_files:
         gaps.append(f"max_discovery_files reached; {omitted_files} accepted files omitted (subject count unknown)")
@@ -533,7 +546,7 @@ def _classifying(row: Mapping[str, Any]) -> bool:
 
 def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_path: Path) -> dict[str, Any]:
     scope = accept_manifest(core.run_root, manifest_path=manifest_path,
-                            manifest_sha256=core.manifest_sha256)
+                            manifest_sha256=core.manifest_sha256, dispositions=settings.source_dispositions)
     resolver = EvidenceResolver(core, scope, max_source_lines=settings.max_source_lines)
     components, evidence, limitations = [], [], []
     for (index, shard_id), shard in sorted(resolver.shards.items()):
@@ -614,7 +627,9 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
             limitations.append(f"{cid}: routing cap reached; at least 1 priority/graph context record omitted")
         selected, component_gaps = component_evidence(resolver, cid, files, settings)
         evidence.extend(selected)
-        limitations.extend(component_gaps)
+        # Sources outside the first-party disposition are excluded coverage (a gap), not a method limitation.
+        gaps.extend(item for item in component_gaps if FIRST_PARTY_EXCLUSION in item)
+        limitations.extend(item for item in component_gaps if FIRST_PARTY_EXCLUSION not in item)
         # D2: a component whose accepted sources no recogniser reads has no subjects to assess; the
         # applicability rows name that cause instead of an unresolved class (T-5011/T-5013).
         supported_files = sum(1 for source in files if supported_source(source))

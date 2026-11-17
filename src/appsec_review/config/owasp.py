@@ -1,9 +1,11 @@
 """Closed execution and budget settings for the OWASP lane."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Mapping
+
+from appsec_review.review.dispositions import SourceDispositions
 
 
 class AssessmentMode(StrEnum):
@@ -26,6 +28,9 @@ class OwaspSettings:
     max_discovery_bytes: int = 8_388_608
     # D1: the tags-index scan bound for classification; separate from the priority/graph context cap.
     max_tag_records: int = 20_000
+    # T-165 source dispositions the loader copies from the inference review (config/first_party.py); the
+    # workbench selects subjects only from first_party sources. Empty (the default) keeps every file first-party.
+    source_dispositions: SourceDispositions = field(default_factory=SourceDispositions)
 
 
 def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
@@ -35,11 +40,14 @@ def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
         "masvs_profile", "max_batch_size", "max_components_per_batch", "max_components",
         "dynamic_authorized", "model", "models", "standards", "parser_versions",
     }
-    optional = {"max_discovery_files": 512, "max_discovery_bytes": 8_388_608, "max_tag_records": 20_000}
+    optional = {"max_discovery_files": 512, "max_discovery_bytes": 8_388_608, "max_tag_records": 20_000,
+                "source_dispositions": None}
     if not required <= set(value) or set(value) - required - optional.keys():
         raise ValueError(f"OWASP settings missing={sorted(required - set(value))}, "
                          f"unknown={sorted(set(value) - required - optional.keys())}")
     value = {**optional, **value}
+    dispositions = SourceDispositions.from_mapping(
+        value["source_dispositions"], "jobs.job_owasp_control_assessment.settings.source_dispositions")
     for key in ("enabled", "dynamic_authorized"):
         if type(value[key]) is not bool:
             raise ValueError(f"OWASP {key} must be Boolean")
@@ -81,4 +89,4 @@ def parse_settings(value: Mapping[str, Any]) -> OwaspSettings:
     return OwaspSettings(value["enabled"], mode, profile, **{key: value[key] for key in (
         "max_evidence_per_component", "max_source_lines", "max_subjects_per_control",
         "max_batches", "max_turns", "max_queries", "max_discovery_files", "max_discovery_bytes",
-        "max_tag_records")})
+        "max_tag_records")}, source_dispositions=dispositions)

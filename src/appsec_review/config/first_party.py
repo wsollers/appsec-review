@@ -2,7 +2,8 @@
 
 ``job_tree_sitter_ast``, ``job_cpp_symbol_index``, ``job_codeql_analysis`` and ``job_code_graph_index``
 spend their node, symbol and fact budgets on first-party files first and record every non-first-party
-exclusion as a count. They read the T-165 dispositions
+exclusion as a count; ``job_owasp_control_assessment`` selects control subjects only from first-party
+sources and records the excluded files as a gap (run 2026-11-17-0003). They read the T-165 dispositions
 (``[jobs.job_inference_security_review.settings.source_dispositions]``, ``review/dispositions.py``);
 the loader copies that table into each producer's ``settings.source_dispositions`` unless the producer
 names an identical table itself, so a run freezes exactly one classification. A producer table that
@@ -18,7 +19,7 @@ from appsec_review.review.dispositions import SourceDispositions
 
 REVIEW_TABLE = "jobs.job_inference_security_review.settings.source_dispositions"
 FIRST_PARTY_SCOPED_JOBS = ("job_codeql_analysis", "job_code_graph_index", "job_cpp_symbol_index",
-                           "job_tree_sitter_ast")
+                           "job_owasp_control_assessment", "job_tree_sitter_ast")
 
 
 def resolve_job_dispositions(job_id: str, value: object, inherited: object) -> dict[str, list[str]]:

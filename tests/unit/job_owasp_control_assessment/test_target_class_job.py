@@ -208,8 +208,20 @@ def test_cpp_network_service_is_assessed_through_the_worker_pool(tmp_path) -> No
     assert all(request.model == settings["model"]["model"] for request in transport.calls if request.role == "control_assessor")
     joined = outputs["join.deterministic_join"]["joined"]["results"]
     assessed = [row for row in joined if row["component_id"] == "component:0002" and row["control_status"] == "not_satisfied"]
-    assert assessed and all(row["verification_status"] == "independently_assessed" for row in assessed)
+    # Run 2026-11-17-0003: every batch is now dispatched (split into request-sized parts), so the twelve-row
+    # batch's rows reach the worker too. Their per-package evidence bound (half the input budget shared by
+    # twelve packages) can leave a supported obligation without its record in the request; the honest double
+    # answers cannot_verify for that obligation, so the row is adverse on its evidenced subject and unresolved
+    # on the other, never silently independently_assessed.
+    assert assessed and {row["verification_status"] for row in assessed} <= {"independently_assessed", "unresolved"}
+    assert any(row["verification_status"] == "independently_assessed" for row in assessed)
+    for row in assessed:
+        if row["verification_status"] == "unresolved":
+            assert any("package evidence bounded" in note for note in row["limitations"])
+            assert any(item["final_outcome"] == "cannot_verify" for item in row["obligations"])
     assert all(row["evidence_used"] and row["obligations"] for row in assessed)
+    assert all(row["worker_attempt_count"] >= 1 for row in joined if row["component_id"] == "component:0002"
+               and any(item["obligation"].get("supported") for item in row["obligations"]))
     assert outputs["join.deterministic_join"]["joined"]["accounting"]["exactly_once"]
 
 

@@ -243,7 +243,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/acceptance/job_owasp_control_assessment/test_subject_selection.py` |
 | integration | `tests/integration/job_owasp_control_assessment/test_subject_selection.py`<br>`tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py` |
 | live | None declared |
-| unit | `tests/unit/job_owasp_control_assessment/test_contract.py`<br>`tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py`<br>`tests/unit/job_owasp_control_assessment/test_package_projection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_acceptance.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_selection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_settings.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class_job.py`<br>`tests/test_owasp_assessment_job.py`<br>`tests/test_owasp_catalog_integrity.py`<br>`tests/test_owasp_downstream.py`<br>`tests/test_owasp_evidence_binding.py`<br>`tests/test_owasp_indexes.py`<br>`tests/test_owasp_proof_procedures.py`<br>`tests/test_owasp_telemetry.py`<br>`tests/test_owasp_workbench.py`<br>`tests/orchestration/dagster/test_owasp_workbench.py` |
+| unit | `tests/unit/job_owasp_control_assessment/test_contract.py`<br>`tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py`<br>`tests/unit/job_owasp_control_assessment/test_package_projection.py`<br>`tests/unit/job_owasp_control_assessment/test_request_batching.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_acceptance.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_selection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_settings.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class_job.py`<br>`tests/test_owasp_assessment_job.py`<br>`tests/test_owasp_catalog_integrity.py`<br>`tests/test_owasp_downstream.py`<br>`tests/test_owasp_evidence_binding.py`<br>`tests/test_owasp_indexes.py`<br>`tests/test_owasp_proof_procedures.py`<br>`tests/test_owasp_telemetry.py`<br>`tests/test_owasp_workbench.py`<br>`tests/orchestration/dagster/test_owasp_workbench.py` |
 
 ### Dagster placement
 
@@ -1029,6 +1029,17 @@ The [handler](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) 
    and deterministic role/persona assignment under batch/component bounds.
 2. In `batching.build_packages`, assemble subject-bound obligations, original evidence and
    prohibited conclusions. Retain subject/evidence omissions and pin the selected guidance bundle.
+   Subjects come only from first-party sources (the T-165 `source_dispositions` table the loader
+   copies into this job's settings, `config/first_party.py`); excluded vendored, SDK, generated and
+   test files are a counted gap on the component.
+3. At the inference seam (`owasp_workbench/batching.py`, run 2026-11-17-0003), the worker's request
+   carries each evidence record, component context block and proof procedure once per batch, and rows
+   reference them by `evidence_ids` and `procedure`. A request whose estimate exceeds the profile's
+   `max_input_tokens` is split in halves down to one row; a lone row that still does not fit is trimmed
+   tier by tier (`graph_context`, non-classifying `routing_context`, component limitations, uncited
+   evidence, excerpts) with a row gap that names the estimate and the limit. Trimmed material stays
+   reachable only through the existing bounded expansion by identity; a row that cannot fit after every
+   tier is not dispatched and says so (`input_budget`, estimate, limit).
 
 ### `validation`
 

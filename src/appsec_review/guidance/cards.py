@@ -253,8 +253,13 @@ def request_card(request: Any) -> dict[str, Any]:
             rows = [dataset("lead_excerpts", available=bool(task.get("findings")), authority="provisional")]
         elif request.role in WORKBENCH_DISPATCHED:
             citation = "owasp_typed_reference"
-            refs = [item["reference"] for package in task.get("packages", ())
-                    for item in package.get("evidence_references", ())]
+            # The assembled request (owasp_workbench/batching.py) carries each evidence record once under
+            # `evidence`; rows cite it by evidence_ids. Per-package `evidence_references` is the older shape.
+            shared = task.get("evidence", {})
+            refs = [item["reference"] for item in (shared.values() if isinstance(shared, Mapping) else ())
+                    if isinstance(item, Mapping) and isinstance(item.get("reference"), Mapping)]
+            refs += [item["reference"] for package in task.get("packages", ())
+                     for item in package.get("evidence_references", ())]
             scope_ids("identities", [ref.get("source_identity") for ref in refs])
             rows = [dataset("accepted_component_evidence", available=bool(refs))]
             bindings = sorted({ref["publication"]["sha256"] for ref in refs
