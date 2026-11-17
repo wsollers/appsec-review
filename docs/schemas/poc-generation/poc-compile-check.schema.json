@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/poc-generation/poc-compile-check.schema.json",
+  "title": "Static compile-only PoC harness validation record across the 9 target languages",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "language",
+    "status",
+    "syntax_valid",
+    "imports_valid",
+    "harness_entrypoint_valid",
+    "assertion_present",
+    "target_symbol_referenced",
+    "stub_free",
+    "prohibited_primitives",
+    "violations",
+    "generated_code_execution",
+    "runtime_verified"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/poc-compile-check/1"},
+    "claim_id": {"type": ["string", "null"], "maxLength": 128},
+    "language": {
+      "enum": ["cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "php"]
+    },
+    "status": {"enum": ["compile_verified", "compile_failed", "policy_denied"]},
+    "syntax_valid": {"type": "boolean"},
+    "imports_valid": {"type": "boolean"},
+    "harness_entrypoint_valid": {"type": "boolean"},
+    "assertion_present": {"type": "boolean"},
+    "target_symbol_referenced": {"type": "boolean"},
+    "stub_free": {"type": "boolean"},
+    "declared_entrypoints": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 160}
+    },
+    "matched_target_symbols": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 240}
+    },
+    "prohibited_primitives": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 160}
+    },
+    "violations": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "detail"],
+        "properties": {
+          "rule": {"type": "string", "minLength": 1, "maxLength": 64},
+          "detail": {"type": "string", "minLength": 1, "maxLength": 320}
+        }
+      }
+    },
+    "generated_code_execution": {"const": "not_performed_by_policy"},
+    "runtime_verified": {"const": false}
+  }
+}

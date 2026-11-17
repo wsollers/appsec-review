@@ -20,10 +20,53 @@ ROLE_JOBS = {"remediation_writer": "job_remediation_planning",
              "remediation_reviewer": "job_remediation_validation"}
 
 
+QUERYING_SKILL_ID = "evidence-and-graph-querying"
+
+
+def load_remediation_querying_skill(repository_root: Path) -> str | None:
+    from appsec_review.guidance import GuidanceError
+    from appsec_review.guidance.skills import load_runtime_skill
+
+    try:
+        return load_runtime_skill(Path(repository_root), QUERYING_SKILL_ID, job_id="job_remediation_planning").body
+    except GuidanceError:
+        return None
+
+
 def guidance(repository_root: Path, run_root: Path, role: str, *, job_id: str) -> tuple[str, str]:
     if ROLE_JOBS.get(role) != job_id:
         raise IntegrityError("remediation role is not allowed for this job")
-    from appsec_review.guidance.workers import publish_worker_guidance
+    from appsec_review.guidance.compose import compose_selected_bundle, pin_bundle, render_prompt
+    from appsec_review.guidance.skills import load_runtime_skill
+    from appsec_review.guidance.workers import publish_worker_guidance, worker_bundle, worker_root
+
+    if job_id == "job_remediation_planning":
+        root = worker_root(repository_root)
+        base_bundle = worker_bundle(repository_root, role)
+        querying_skill = load_runtime_skill(root, QUERYING_SKILL_ID, job_id=job_id, fallback_to_package=False)
+        sections = []
+        for sec in base_bundle["sections"][1:]:
+            copy_sec = {k: v for k, v in sec.items() if k != "sha256"}
+            if copy_sec["name"] == "procedures":
+                items = list(copy_sec["items"])
+                if not any(item["id"] == querying_skill.name for item in items):
+                    items.append({
+                        "id": querying_skill.name,
+                        "path": querying_skill.path,
+                        "text": querying_skill.text,
+                        "source_sha256": querying_skill.sha256,
+                    })
+                copy_sec["items"] = items
+            sections.append(copy_sec)
+        bundle = compose_selected_bundle(
+            root,
+            job=job_id,
+            role=role,
+            sections=sections,
+            identity=base_bundle.get("identity"),
+        )
+        pinned = pin_bundle(run_root, bundle)
+        return render_prompt(bundle), pinned["bundle_sha256"]
     return publish_worker_guidance(repository_root, run_root, role)
 
 

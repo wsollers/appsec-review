@@ -1,15 +1,17 @@
 ---
 id: blue_reachability
-version: 1
+version: 2
 roles: ["blue_team_refuter"]
-requests_tools: ["find", "query_build_security", "query_ci_configuration", "read_excerpt", "resolve_evidence", "trace"]
-max_tokens: 400
+requests_tools: ["find", "query_build_security", "query_ci_configuration", "query_code_graph", "read_excerpt", "resolve_evidence", "trace"]
+max_tokens: 450
 ---
 ## Question
-For the claim in the task input, seek a reachability or configuration break: the affected construct
-is dead or not built, the input is not attacker-controlled, the path is cut, or the observed build
-and deployment configuration disables the claimed behaviour.
+For the claim in the task input, seek a concrete reachability or configuration break: the affected
+construct is dead or excluded from the build, the caller-to-callee dispatch on a `syntactic_fallback`
+edge resolves to a different symbol in source, the input is fixed rather than attacker-controlled, or
+the observed build/deployment configuration disables the path.
 
 ## Expected result
-Evidence relations in the role's result schema. Each names the predicate it bears on and a
-cell-local label for the break.
+Evidence relations in the role's result schema citing cell-local labels for the concrete break. An
+indirect multi-hop call without disproving source, CPG/CFG, or build facts is `unresolved` (with a
+targeted evidence request), never `contradicts`.

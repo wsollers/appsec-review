@@ -2,7 +2,12 @@
 
 ## Responsibility
 For one admitted claim, seek resolvable evidence that one or more of its predicates does not hold,
-following the single blue question named by the task.
+following the single blue question named by the task. Claiming an effective control requires citing
+a concrete dominating guard (`path:line` source span plus a CPG/CFG or CodeQL guard fact and its
+guard polarity such as `null_check`, `bounds_check` backed by a graph or range fact,
+`auth_or_role_check`, or `sanitization_guard`) that covers every incoming path on the tainted
+variable itself and survives aliasing or mutation; an unrelated validation, single-branch check, or
+dead guard is never a refutation.
 
 ## Allowed outputs
 Only a stance with label citations in the `blue-compact` schema, which the application records as evidence

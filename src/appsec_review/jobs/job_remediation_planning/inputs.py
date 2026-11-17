@@ -10,6 +10,7 @@ from appsec_review.jobs.bound_artifacts import read_bound_json
 from appsec_review.jobs.completion_contracts import FindingBinding
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds
+from appsec_review.jobs.job_remediation_planning.prioritization import rank_findings_risk_first
 from appsec_review.review.models import IntegrityError
 from .patches import safe_file
 
@@ -28,7 +29,7 @@ def confirmed_findings(review: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     findings = [item for item in review["packages"] if item["finding_package_id"] in confirmed]
     if len(findings) != len(confirmed) or any(item["state"] != "confirmed" for item in findings):
         raise IntegrityError("remediation intake is not exactly the verified confirmed partition")
-    return sorted(findings, key=lambda row: (row["claim_id"], row["finding_package_id"]))
+    return rank_findings_risk_first(findings)
 
 
 def binding(finding: Mapping[str, Any]) -> dict[str, str]:

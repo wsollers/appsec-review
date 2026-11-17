@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/remediation-validation/common.schema.json",
+  "title": "Shared definitions for remediation-validation static patch checks",
+  "type": "object",
+  "$defs": {
+    "language": {
+      "type": "string",
+      "enum": ["cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "php", "unknown"]
+    },
+    "validation_tier": {
+      "type": "string",
+      "enum": [
+        "build_checked",
+        "in_memory_patch_and_syntax_verified",
+        "static_checked",
+        "manual_validation_required",
+        "rejected"
+      ]
+    }
+  }
+}

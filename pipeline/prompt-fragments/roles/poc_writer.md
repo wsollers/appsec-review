@@ -1,9 +1,11 @@
 # Role: Proof-of-Concept Writer
 
 ## Responsibility
-For one finding the judge agreed is correct, write one unit-test function with no `main`, and a negative control,
-that a developer can add to a test target to watch the issue in a debugger. The functions use only in-memory
-fixtures and call the sink function named in the brief.
+For one finding the judge agreed is correct, write a benign, compile-only unit-test harness and a
+negative control in the target's language (`cpp`, `java`, `javascript`, `python`, `ruby`, `go`,
+`csharp`, `rust`, or `php`) that calls the exact target symbol or handler named in the brief using
+only deterministic in-memory fixtures and explicit assertion markers, with zero network, filesystem
+destruction, or shell primitives.
 
 ## Allowed outputs
 Only the compact answer of the `poc-writer` skill: two functions with their includes, setup, expected observation

@@ -95,6 +95,13 @@ from appsec_review.review.warrants import PredicateWarrant, WARRANT_RULE_VERSION
 from appsec_review.storage import atomic_json, file_sha256
 
 from .schemas import SchemaSet
+from .evidence_fulfillment import (
+    DEFAULT_MAX_EVIDENCE_REQUESTS,
+    attach_querying_skill_to_bundle,
+    effective_max_output_tokens,
+    ensure_thinking_profile_floor,
+    fulfill_evidence_requests,
+)
 
 LANE_SCHEMA = "appsec-review/inference-review-lane/1"
 VALIDATOR_VERSION = "inference-review-results/4"
@@ -148,6 +155,7 @@ class PackageWork:
     prior_claim_ids: tuple[str, ...] = ()
     active_claim_limit: int | None = None
     pending_requests: tuple[Mapping[str, Any], ...] = ()
+    fulfilled_evidence: tuple[Mapping[str, Any], ...] = ()
 
 
 
@@ -215,6 +223,7 @@ class ReviewContext:
             cached = compose_bundle(self.repository_root, role=role.value, persona=persona, stack=stack, task=task,
                                     task_input={"lane": lane.value}, capability=receipt,
                                     vocabulary=self.vocabulary, crosswalk=self.crosswalk, binary_evidence=binary)
+            cached = attach_querying_skill_to_bundle(self.repository_root, cached, role=role, task=task)
             cached = {"bundle": cached, "text": render_prompt(cached)}
             with self._lock:
                 self._bundles[key] = cached
@@ -433,7 +442,9 @@ class TeamResult:
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
                                                             "cells_memo_reused": 0, "cells_not_launched": 0,
-                                                            "memo_cache_unavailable": 0})
+                                                            "memo_cache_unavailable": 0,
+                                                            "evidence_requests_fulfilled": 0,
+                                                            "evidence_requests_unfulfilled": 0})
 
 
 @dataclass
@@ -546,14 +557,17 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         manifest_sha256=ctx.core.manifest_sha256, lane=work.lane, package_id=work.package_id,
         package_sha256=work.sha256, claim_id=claim.claim_id if claim else None, role=role, persona=persona,
         stack_profile=stack, strategy=strategy, task=task, task_input=dict(task_input), round=work.round_index,
-        round_delta_sha256=sha256_hex({"round": work.round_index, "known_claims": work.known_claims,
-                                       "prior_claim_ids": work.prior_claim_ids,
-                                       "pending_requests": work.pending_requests,
-                                       "active_claim_limit": work.active_claim_limit}),
+        round_delta_sha256=sha256_hex({**{"round": work.round_index, "known_claims": work.known_claims,
+                                          "prior_claim_ids": work.prior_claim_ids,
+                                          "pending_requests": work.pending_requests,
+                                          "active_claim_limit": work.active_claim_limit},
+                                       **({"fulfilled_evidence": work.fulfilled_evidence}
+                                          if work.fulfilled_evidence else {})}),
         evidence_set=tuple(sorted({*work.entities, *extra_entities})),
         guidance_bundle_sha256=guidance["bundle"]["sha256"], guidance_text=guidance["text"],
         provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
-        max_input_tokens=profile.max_input_tokens, max_output_tokens=profile.max_output_tokens,
+        max_input_tokens=profile.max_input_tokens,
+        max_output_tokens=effective_max_output_tokens(profile, budget=ctx.budget),
         timeout_seconds=profile.timeout_seconds, output_schema=OUTPUT_SCHEMAS[schema],
         validator_version=ctx.red_validator_version() if invocation else VALIDATOR_VERSION, reuse_basis=work.basis,
         view=view if view is not None else ctx.package_view(work), expand=expand)
@@ -963,8 +977,15 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
 
 def _red_cells(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]) -> list[_Cell]:
     view = ctx.package_view(work)
+    fulfilled_entities = {
+        str(cit["entity_id"])
+        for item in work.fulfilled_evidence
+        for cit in item.get("resolved_citations", ())
+        if cit.get("entity_id")
+    }
     entities = sorted({identity for seed in work.known_claims for identity in seed["evidence_entities"]}
-                      | {identity for request in work.pending_requests for identity in request["anchors"]})
+                      | {identity for request in work.pending_requests for identity in request["anchors"]}
+                      | fulfilled_entities)
     view, labels = view.with_extra(entities)
     known = [{key: value for key, value in seed.items() if key not in {"evidence_entities", "affected_entities"}}
              | {"affected_labels": [labels.get(identity, "?") for identity in seed["affected_entities"]],
@@ -973,22 +994,34 @@ def _red_cells(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
     requests = [{key: value for key, value in item.items() if key != "anchors"}
                 | {"anchors": [labels[identity] for identity in item["anchors"]]}
                 for item in work.pending_requests]
+    fulfilled = [
+        {**dict(item),
+         "resolved_citations": [
+             {**dict(cit), "label": labels.get(str(cit["entity_id"]), "?")}
+             for cit in item.get("resolved_citations", ())
+         ]}
+        for item in work.fulfilled_evidence
+    ]
+    extra_input = {"fulfilled_evidence": fulfilled} if fulfilled else {}
     if work.lane is Lane.LEAD:
         document = _routed(view, routing, routing["persona"])
         return [_cell(ctx, work, routing, role=Role.RED_TEAM_ANALYST, persona=routing["persona"], task=lens,
-                      kind="red", view=view, task_input={"package": document, "lens": lens, "round": work.round_index,
-                                             "known_claims": known,
-                                             "evidence_requests": requests,
-                                             "prior_claim_ids": list(work.prior_claim_ids)})
+                      kind="red", view=view, extra_entities=tuple(sorted(fulfilled_entities)),
+                      task_input={"package": document, "lens": lens, "round": work.round_index,
+                                  "known_claims": known,
+                                  "evidence_requests": requests,
+                                  "prior_claim_ids": list(work.prior_claim_ids),
+                                  **extra_input})
                 for lens in LEAD_LENSES[:ctx.settings.teams.red_per_team]]
     return [_cell(ctx, work, routing, role=Role.HYPOTHESIS_HUNTER, persona=item["persona"], task=item["strategy"],
-                  kind="red", strategy=item["strategy"], view=view,
+                  kind="red", strategy=item["strategy"], view=view, extra_entities=tuple(sorted(fulfilled_entities)),
                   task_input={"package": _routed(view, routing, item["persona"]), "strategy": item["strategy"],
                               "round": work.round_index, "known_claims": known,
                               "evidence_requests": requests,
                               "prior_claim_ids": list(work.prior_claim_ids),
                               "variant_seeds": [dict(seed) for seed in known
-                                                if seed["state"] == ClaimState.CONFIRMED.value]})
+                                                if seed["state"] == ClaimState.CONFIRMED.value],
+                              **extra_input})
             for item in routing["panel"][:ctx.settings.teams.red_per_team]]
 
 
@@ -1189,9 +1222,29 @@ def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any
         if round_index + 1 >= ctx.settings.rounds.max_rounds:
             break
         previous = fingerprint
+        prior_cutoffs = len(result.cutoff_obligation_ids)
+        pending = _pending_requests(ctx, work, result)
+        new_cutoffs = max(0, len(result.cutoff_obligation_ids) - prior_cutoffs)
+        outside_unfulfilled = sum(
+            1 for req in result.requests
+            if req["claim_id"] not in result.withdrawn_claims
+            and not set(req["anchors"]).issubset(work.entities)
+        )
+        fulfillment = fulfill_evidence_requests(
+            ctx.core,
+            work.entities,
+            pending,
+            unfulfilled_prior=new_cutoffs + outside_unfulfilled,
+            max_requests=min(ctx.settings.red_output.max_evidence_requests, DEFAULT_MAX_EVIDENCE_REQUESTS),
+        )
+        result.counts["evidence_requests_fulfilled"] += fulfillment.fulfilled_count
+        result.counts["evidence_requests_unfulfilled"] += fulfillment.unfulfilled_count
+        result.rounds[-1]["evidence_requests_fulfilled"] = fulfillment.fulfilled_count
+        result.rounds[-1]["evidence_requests_unfulfilled"] = fulfillment.unfulfilled_count
         work = replace(work, round_index=round_index + 1, known_claims=tuple(known),
                        prior_claim_ids=tuple(sorted(item.claim_id for item in result.claims)),
-                       pending_requests=_pending_requests(ctx, work, result))
+                       pending_requests=pending,
+                       fulfilled_evidence=fulfillment.fulfilled_items)
         routing = route(ctx, work)
         result.gaps.extend(routing["gaps"])
         # Keep the outer failure handler pointed at the current round's workers.
@@ -2010,7 +2063,8 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "security_events": [dict(event) for team in teams for event in team.security_events],
         "counts": {key: sum(team.counts[key] for team in teams)
                    for key in ("cells_run", "cells_reused", "cells_memo_reused", "cells_not_launched",
-                               "memo_cache_unavailable")},
+                               "memo_cache_unavailable", "evidence_requests_fulfilled",
+                               "evidence_requests_unfulfilled")},
         "ledger_shard": {"path": str(ledger_path), "stream": stream, "events": receipt.event_count,
                          "sha256": file_sha256(ledger_path)},
     }

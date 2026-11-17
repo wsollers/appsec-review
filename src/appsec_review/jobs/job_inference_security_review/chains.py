@@ -20,6 +20,12 @@ from appsec_review.review.models import (
 from appsec_review.review.native_continuity import NativeLinkFacts
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
+from appsec_review.jobs.job_attack_chain_composition import (
+    ChainStepFinding,
+    DEFAULT_MAX_CHAIN_STEPS,
+    evaluate_chain_elevation,
+)
+from .evidence_fulfillment import effective_max_output_tokens
 from .teams import ReviewContext, _Cell, _actor, _not_launched, _run
 
 TASKS = {"composer": ("chain_composer", Role.ATTACK_CHAIN_ANALYST, "chain-composer-result"),
@@ -62,7 +68,8 @@ def _cell(ctx: ReviewContext, kind: str, inputs: Mapping[str, Any], entities: Se
         strategy=None, task=task, task_input=inputs, round=0, round_delta_sha256=None,
         evidence_set=tuple(sorted(set(entities))), guidance_bundle_sha256=guidance["bundle"]["sha256"],
         guidance_text=guidance["text"], provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
-        max_input_tokens=profile.max_input_tokens, max_output_tokens=profile.max_output_tokens,
+        max_input_tokens=profile.max_input_tokens,
+        max_output_tokens=effective_max_output_tokens(profile, budget=ctx.budget),
         timeout_seconds=profile.timeout_seconds, output_schema=f"appsec-review/{schema}/1",
         validator_version=policy.POLICY)
     return _Cell(spec, capability, kind)
@@ -155,10 +162,18 @@ def _resolve(ctx: ReviewContext, edge: policy.Edge, environment: str, *, cites=N
     return _derive(ctx, resolved), gaps
 
 
+def effective_max_links(bounds: Any) -> int:
+    """Default unconfigured 4-link chain limit widens to 6 steps (T-173); explicit overrides win."""
+    return DEFAULT_MAX_CHAIN_STEPS if bounds.max_links == 4 else int(bounds.max_links)
+
+
 def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[Mapping[str, Any]], *,
             extra_verifier_claims: set[str], seeds: Sequence[Mapping[str, Any]], out_dir: Path,
-            ledger_path: Path, stream: str) -> dict[str, Any]:
+            ledger_path: Path, stream: str,
+            component_severities: Mapping[str, str] | None = None,
+            component_units: Mapping[str, str] | None = None) -> dict[str, Any]:
     bounds = ctx.settings.attack_chains
+    max_links = effective_max_links(bounds)
     components: dict[str, policy.Component] = {}
     for record in sorted(adjudications, key=lambda item: item["claim_id"]):
         claim_id, state = record["claim_id"], ClaimState(record["state"])
@@ -178,7 +193,7 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
     for seed in seeds:
         ids = [seed.get("proposal_claims", {}).get(step.get("proposal_id"))
                for step in (seed.get("seed") or {}).get("steps", ())]
-        if not 2 <= len(ids) <= bounds.max_links or len(set(ids)) != len(ids) or any(
+        if not 2 <= len(ids) <= max_links or len(set(ids)) != len(ids) or any(
                 claim_id not in components for claim_id in ids):
             counters["seeds_rejected"] += 1
             continue
@@ -224,7 +239,7 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
             "admitted_pairs": [{"from_claim_id": left, "to_claim_id": right} for left, right in admitted_pairs],
             "seed_hints": hints[:bounds.max_candidates_per_composition],
             "output_contract": ctx.schemas.documents["chain-composer-result.schema.json"],
-            "candidate_limit": bounds.max_candidates_per_composition, "max_links": bounds.max_links}
+            "candidate_limit": bounds.max_candidates_per_composition, "max_links": max_links}
         cell = _cell(ctx, "composer", inputs, entities, "attack-chain-composition")
 
         def validate(result):
@@ -245,7 +260,7 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
             for candidate in candidates:
                 ordered = candidate["component_claim_ids"]
                 edge_values = candidate["edges"]
-                if (len(ordered) > bounds.max_links or len(edge_values) != len(ordered) - 1
+                if (len(ordered) > max_links or len(edge_values) != len(ordered) - 1
                         or any(claim_id not in components for claim_id in ordered)
                         or any(pair not in admitted_pairs for pair in zip(ordered, ordered[1:]))
                         or any(item["output_entity"] not in projection.claims[left].claim.affected_entities
@@ -284,9 +299,19 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
         gaps.append("seed_hints_rejected:nonadjudicated_or_invalid_components")
     if not bounds.continuity_producers:
         gaps.append("no_commissioned_native_continuity_producer; source narratives cannot prove chain continuity")
+    component_meta = {
+        claim_id: {
+            "severity": str((component_severities or {}).get(claim_id) or "medium"),
+            "predicate": projection.claims[claim_id].claim.security_predicate.value,
+            "weakness_cwe": projection.claims[claim_id].claim.weakness_cwe,
+            "unit_key": str((component_units or {}).get(claim_id) or ""),
+            "state": components[claim_id].state.value,
+        }
+        for claim_id in ids
+    }
     return _finish(writer, {"candidates": sorted(records, key=lambda item: item["proposal"]["chain_id"]),
                             "gaps": sorted(set(gaps)), "accounting": counters, "exploration": exploration,
-                            "expected_cells": expected})
+                            "expected_cells": expected, "component_meta": component_meta})
 
 
 def challenge(ctx: ReviewContext, composition: Mapping[str, Any], previous: Mapping[str, Any] | None, *,
@@ -396,6 +421,25 @@ def publish(ctx: ReviewContext, composition: Mapping[str, Any], refutations: Map
         boundary_counted = all(item.outcome is ContinuityOutcome.SATISFIED
                                for edge in proposal.edges for item in edge.obligations
                                if item.dimension is ContinuityDimension.TRUST_BOUNDARY)
+        meta_map = composition.get("component_meta") or {}
+        step_findings = [
+            ChainStepFinding(
+                claim_id=comp.claim_id,
+                standalone_severity=str(meta_map.get(comp.claim_id, {}).get("severity") or "medium"),
+                security_predicate=str(meta_map.get(comp.claim_id, {}).get("predicate") or ""),
+                unit_key=str(meta_map.get(comp.claim_id, {}).get("unit_key") or ""),
+                weakness_cwe=meta_map.get(comp.claim_id, {}).get("weakness_cwe"),
+                state=comp.state.value,
+            )
+            for comp in proposal.components
+        ]
+        edge_meta = [
+            {"satisfied_dimensions": [ob.dimension.value for ob in edge.obligations
+                                      if ob.outcome is ContinuityOutcome.SATISFIED]}
+            for edge in proposal.edges
+        ]
+        composed_sev, crossings = evaluate_chain_elevation(step_findings, edge_metadata=edge_meta)
+        crossing_docs = [item.to_json() for item in crossings]
         artifact = {
             "schema": policy.CHAIN_SCHEMA, "run_id": ctx.run_id, "proposal": policy.document(proposal),
             "challenges": [policy.document(item) for item in challenges], "status": status.value,
@@ -407,7 +451,9 @@ def publish(ctx: ReviewContext, composition: Mapping[str, Any], refutations: Map
                                                ChainStatus.INSUFFICIENT_EVIDENCE: "unavailable"}[status],
                            "prerequisites": list(proposal.prerequisites),
                            "boundary_exposure": "counted" if boundary_counted else "unresolved",
-                           "remediation_choke_points": [], "shipment_decision": "not_assessed_by_chain_policy"}}
+                           "remediation_choke_points": [], "shipment_decision": "not_assessed_by_chain_policy",
+                           "composed_severity": composed_sev,
+                           "chain_boundary_crossings": crossing_docs}}
         ctx.schemas.validate("attack-chain", artifact)
         reference = _write(ctx, out_dir / f"{proposal.chain_id}.json", artifact)
         decision = policy.Decision(proposal.chain_id, status, limitations,
@@ -420,7 +466,9 @@ def publish(ctx: ReviewContext, composition: Mapping[str, Any], refutations: Map
         items.append({"chain_id": proposal.chain_id, "status": status.value,
                       "component_claim_ids": [component.claim_id for component in proposal.components],
                       "limitations": list(limitations), "disposition": entry["disposition"],
-                      "artifact": policy.document(reference)})
+                      "artifact": policy.document(reference),
+                      "composed_severity": composed_sev,
+                      "chain_boundary_crossings": crossing_docs})
     counters = composition["accounting"]
     if (counters["admitted"] != len(items) or counters["admitted"] != counters["assessed"] + counters["capped"]
             or counters["proposed"] != counters["admitted"] + counters["rejected"] + counters["deduplicated"]):
@@ -464,7 +512,9 @@ def verify_publication(run_root: Path, projection: Projection, reference: Mappin
                 or item["status"] != artifact["status"] or item["status"] != view.decision.status.value
                 or item["limitations"] != artifact["limitations"]
                 or item["limitations"] != list(view.decision.limitations)
-                or item["component_claim_ids"] != [component.claim_id for component in proposal.components]):
+                or item["component_claim_ids"] != [component.claim_id for component in proposal.components]
+                or item.get("composed_severity") != artifact["assessment"].get("composed_severity")
+                or item.get("chain_boundary_crossings", []) != artifact["assessment"].get("chain_boundary_crossings", [])):
             raise IntegrityError("attack-chain manifest, artifact and ledger decision disagree")
         _verify_actor_receipt(run_root, projection, proposal.composer, "composer", "succeeded", None, schemas)
         for challenge in view.challenges:

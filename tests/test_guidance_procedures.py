@@ -236,3 +236,102 @@ def test_inference_tasks_request_cell_local_citations_not_raw_identities():
         text = path.read_text(encoding="utf-8")
         assert "resolvable identities" not in text and "resolvable identity" not in text, path
     assert len(load_runtime_skill(ROOT, "poc-writer", job_id="job_poc_generation").text) < 12500
+
+
+@pytest.mark.parametrize("allowed_job", [
+    "job_inference_security_review",
+    "job_attack_chain_composition",
+    "job_finding_adjudication",
+    "job_poc_generation",
+    "job_remediation_planning",
+])
+def test_evidence_and_graph_querying_runtime_skill_allowed_jobs(repo, allowed_job):
+    skill = load_runtime_skill(repo, "evidence-and-graph-querying", job_id=allowed_job, fallback_to_package=False)
+    assert skill.name == "evidence-and-graph-querying"
+    assert len(skill.text) <= 2400
+    for phrase in (
+        "codeql_semantic",
+        "hybrid_fused",
+        "syntactic_fallback",
+        "null_check",
+        "bounds_check",
+        "auth_or_role_check",
+        "sanitization_guard",
+        "doc_spec_drift",
+    ):
+        assert phrase in skill.body
+
+
+@pytest.mark.parametrize("denied_job", [
+    "job_project_build",
+    "job_remediation_validation",
+    "job_target_catalog",
+])
+def test_evidence_and_graph_querying_runtime_skill_denied_jobs(repo, denied_job):
+    with pytest.raises(GuidanceError):
+        load_runtime_skill(repo, "evidence-and-graph-querying", job_id=denied_job, fallback_to_package=False)
+
+
+def test_evidence_and_graph_querying_runtime_skill_lifecycle(repo, taxonomy, tmp_path):
+    from appsec_review.guidance import pin_bundle
+    from appsec_review.guidance.compose import compose_selected_bundle
+    from appsec_review.guidance.workers import worker_bundle
+    from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
+        EVIDENCE_QUERYING_SKILL_ID,
+        attach_querying_skill_to_bundle,
+    )
+    from appsec_review.review.models import Role
+
+    assert EVIDENCE_QUERYING_SKILL_ID == "evidence-and-graph-querying"
+
+    # Compose standard review bundle and attach evidence-and-graph-querying deterministically
+    red_bundle = _compose(repo, taxonomy, role="red_team_analyst", task="lead_red_stack", capability={"granted_tools": []})
+    red_with_skill = attach_querying_skill_to_bundle(
+        repo,
+        deepcopy(red_bundle),
+        role=Role.RED_TEAM_ANALYST,
+        task="lead_red_stack",
+    )
+    proc_ids = [item["id"] for item in _section(red_with_skill, "procedures")["items"]]
+    assert proc_ids == ["generative-investigation", "evidence-and-graph-querying"]
+    assert verify_bundle(red_with_skill) == red_with_skill["sha256"]
+    rendered_red = render_prompt(red_with_skill)
+    assert "evidence-and-graph-querying" in rendered_red
+    assert "syntactic_fallback" in rendered_red
+    std_pinned = pin_bundle(tmp_path / "run-std", red_with_skill)
+    assert json.loads((tmp_path / "run-std" / std_pinned["path"]).read_text(encoding="utf-8")) == red_with_skill
+
+    # Compose selected worker bundle for remediation_writer with evidence-and-graph-querying
+    skill = load_runtime_skill(repo, "evidence-and-graph-querying", job_id="job_remediation_planning", fallback_to_package=False)
+    base = worker_bundle(repo, "remediation_writer")
+    sections = []
+    for sec in base["sections"][1:]:
+        copy_sec = {k: v for k, v in sec.items() if k != "sha256"}
+        if copy_sec["name"] == "procedures":
+            copy_sec["items"] = [*copy_sec["items"], {
+                "id": skill.name,
+                "path": skill.path,
+                "text": skill.text,
+                "source_sha256": skill.sha256,
+            }]
+        sections.append(copy_sec)
+    sel_bundle = compose_selected_bundle(
+        repo,
+        job="job_remediation_planning",
+        role="remediation_writer",
+        sections=sections,
+        identity=base["identity"],
+    )
+    assert verify_bundle(sel_bundle) == sel_bundle["sha256"]
+    pinned = pin_bundle(tmp_path / "run-sel", sel_bundle)
+    assert json.loads((tmp_path / "run-sel" / pinned["path"]).read_text(encoding="utf-8")) == sel_bundle
+
+    # Tampering with procedure text fails verify_bundle even after outer hash reseal
+    tampered = deepcopy(sel_bundle)
+    proc_sec = _section(tampered, "procedures")
+    proc_sec["items"][-1]["text"] += "\nTampered."
+    proc_sec["sha256"] = section_sha256(proc_sec)
+    tampered["section_sha256"]["procedures"] = proc_sec["sha256"]
+    tampered["sha256"] = bundle_sha256(tampered)
+    with pytest.raises(IntegrityError, match="procedure source hash"):
+        verify_bundle(tampered)

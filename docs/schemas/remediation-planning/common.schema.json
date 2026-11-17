@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/remediation-planning/common.schema.json",
+  "title": "Shared definitions for remediation-planning ranking artifacts",
+  "type": "object",
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "informational"]
+    }
+  }
+}
