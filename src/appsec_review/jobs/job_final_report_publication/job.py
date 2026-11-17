@@ -2,9 +2,9 @@
 
 Units: ``load.accepted_gate`` re-verifies the accepted ``job_final_publication_gate`` handoff, the
 gate document and every artifact the gate binds, ``report.assemble`` writes the schema-validated
-``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON,
-``report.render_pdf`` renders the executive ``final-report.pdf`` (with its ``final-report.tex`` and a
-receipt) from that JSON plus the gate-bound dossier documents, and ``acceptance.publish_handoff``
+``final-report.json``, ``report.render`` renders ``final-report.md`` and ``final-report.html`` from
+that JSON, ``report.render_pdf`` renders the executive ``final-report.pdf`` (with its ``final-report.tex``
+and a receipt) from that JSON plus the gate-bound dossier documents, and ``acceptance.publish_handoff``
 re-proves every file and publishes the hash-pinned handoff. The job calls no model and reads nothing
 the gate does not bind.
 """
@@ -26,6 +26,8 @@ from appsec_review.jobs.job_final_publication_gate.verify import (
     load_accepted_gate, verify_gate_snapshot as _verify_bindings,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+from appsec_review.reporting.dimensions import radar_telemetry
+from appsec_review.reporting.executive_report import render_executive_html
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json
@@ -46,6 +48,7 @@ TOPOLOGY = {"load": ("accepted_gate",), "report": ("assemble", "render", "render
 IMPLEMENTATION = "appsec-review/final-report-publication/1"
 REPORT_JSON = "final-report.json"
 REPORT_MARKDOWN = "final-report.md"
+REPORT_HTML = "final-report.html"
 PDF_RECEIPT = "final-report-pdf-receipt"
 
 
@@ -116,18 +119,33 @@ def build_job(*, repository_root: Path | None = None,
         _check(_schemas(unit), "final-report", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
-        unit.job.events.write("FINAL_REPORT_ASSEMBLED", findings=len(report["findings"]),
-                              publishable_count=len(report["findings"]),
-                              backlog_count=len(report["verification_backlog"]),
-                              withheld_count=len(report["withheld"]),
-                              attachment_count=sum(len(rows) for rows in gate["attachments"].values()),
-                              gap_count=sum(item["kind"] == "gap" for item in report["limitations"]),
-                              duration_ms=max(0, round((time.monotonic() - started) * 1000)),
-                              verification_backlog=len(report["verification_backlog"]),
-                              limitation_count=len(report["limitations"]),
-                              certified_outcome_counts={name: len(gate["attachments"][name])
-                                                         for name in sorted(gate["attachments"])},
-                              runtime_verified=False)
+        tracker = report.get("radar_tracker") or {}
+        radar_conf = tracker.get("coverage_confidence") or {}
+        r_tel = radar_telemetry(tracker)
+        posture = report.get("executive_posture") or {}
+        unit.job.events.write(
+            "FINAL_REPORT_ASSEMBLED",
+            findings=len(report["findings"]),
+            publishable_count=len(report["findings"]),
+            backlog_count=len(report["verification_backlog"]),
+            withheld_count=len(report["withheld"]),
+            attachment_count=sum(len(rows) for rows in gate["attachments"].values()),
+            gap_count=sum(item["kind"] == "gap" for item in report["limitations"]),
+            duration_ms=max(0, round((time.monotonic() - started) * 1000)),
+            verification_backlog=len(report["verification_backlog"]),
+            limitation_count=len(report["limitations"]),
+            certified_outcome_counts={name: len(gate["attachments"][name])
+                                       for name in sorted(gate["attachments"])},
+            radar_verified_axes=int(radar_conf.get("verified_axes", 0)),
+            radar_gap_axes=int(radar_conf.get("gap_axes", 0)),
+            coverage_confidence_score=int(radar_conf.get("confidence_score", 0)),
+            chain_elevated_count=int(posture.get("chain_elevated_findings_count", 0)),
+            remediation_roadmap_count=len(report.get("remediation_roadmap") or ()),
+            named_gap_count=len(report.get("named_coverage_gaps") or ()),
+            radar_counts_by_axis_and_series=r_tel["reporting.radar_counts_by_axis_and_series"],
+            funnel_conversion_rates=r_tel["reporting.funnel_conversion_rates"],
+            runtime_verified=False,
+        )
         return {"artifact": artifact_ref(unit.job.run_root, path), "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def render(unit: UnitContext) -> Mapping[str, Any]:
@@ -136,10 +154,20 @@ def build_job(*, repository_root: Path | None = None,
         text = render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids)
         if text != render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids):
             raise IntegrityError("report rendering is not deterministic")
+        html_text = render_executive_html(report)
+        if html_text != render_executive_html(report):
+            raise IntegrityError("executive HTML rendering is not deterministic")
         path = unit.unit_root / REPORT_MARKDOWN
+        html_path = unit.unit_root / REPORT_HTML
         atomic_bytes(path, text.encode("utf-8"))
-        return {"artifact": artifact_ref(unit.job.run_root, path), "settings": settings.identity(),
-                "gaps": [], "terminal_status": "SUCCEEDED"}
+        atomic_bytes(html_path, html_text.encode("utf-8"))
+        return {
+            "artifact": artifact_ref(unit.job.run_root, path),
+            "html": artifact_ref(unit.job.run_root, html_path),
+            "settings": settings.identity(),
+            "gaps": [],
+            "terminal_status": "SUCCEEDED",
+        }
 
     def render_pdf(unit: UnitContext) -> Mapping[str, Any]:
         started = time.monotonic()
@@ -176,8 +204,10 @@ def build_job(*, repository_root: Path | None = None,
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
-        # Re-prove the executive PDF bytes: the LaTeX is the rendering of the JSON plus the gate-bound dossiers,
-        # the receipt names exactly those bytes, and a rendered PDF is the valid file the receipt hashes.
+        if rendered.get("html") is not None:
+            expected_html = render_executive_html(report).encode("utf-8")
+            if read_bound(run_root, rendered["html"]) != expected_html:
+                raise IntegrityError("final-report.html is not the rendering of final-report.json")
         files = pdf["files"]
         receipt = read_bound_json(run_root, files["receipt"])
         _check(_schemas(unit), PDF_RECEIPT, receipt)
@@ -196,17 +226,32 @@ def build_job(*, repository_root: Path | None = None,
         gaps = [f"{item['limitation_id']}: {item['statement']}"[:300] for item in report["limitations"]
                 if item["kind"] == "gap"] + [gap[:300] for gap in pdf["gaps"]]
         counts = report["summary"]["package_counts"]
-        unit.job.events.write("FINAL_REPORT_PUBLISHED", publication=report["status"]["publication"],
-                              review_complete=report["status"]["review_complete"], findings=counts["publishable"],
-                              verification_backlog=counts["verification_backlog"], withheld=counts["withheld"],
-                              pdf=receipt["status"])
-        return {"schema": FINAL_REPORT_HANDOFF_SCHEMA, "report_schema": FINAL_REPORT_SCHEMA,
-                "artifact": assembled["artifact"], "markdown": rendered["artifact"],
-                "gate_handoff": loaded["gate_handoff"], "status": report["status"],
-                "package_counts": counts, "item_count": counts["publishable"] + counts["verification_backlog"],
-                "pdf": pdf_record(receipt, files), "poc_handoff": report["provenance"].get("poc_handoff"),
-                "gaps": gaps,
-                "terminal_status": "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS"}
+        posture = report.get("executive_posture") or {}
+        unit.job.events.write(
+            "FINAL_REPORT_PUBLISHED",
+            publication=report["status"]["publication"],
+            review_complete=report["status"]["review_complete"],
+            findings=counts["publishable"],
+            verification_backlog=counts["verification_backlog"],
+            withheld=counts["withheld"],
+            release_readiness=posture.get("release_readiness", "UNKNOWN"),
+            pdf=receipt["status"],
+        )
+        return {
+            "schema": FINAL_REPORT_HANDOFF_SCHEMA,
+            "report_schema": FINAL_REPORT_SCHEMA,
+            "artifact": assembled["artifact"],
+            "markdown": rendered["artifact"],
+            **({"html": rendered["html"]} if rendered.get("html") is not None else {}),
+            "gate_handoff": loaded["gate_handoff"],
+            "status": report["status"],
+            "package_counts": counts,
+            "item_count": counts["publishable"] + counts["verification_backlog"],
+            "pdf": pdf_record(receipt, files),
+            "poc_handoff": report["provenance"].get("poc_handoff"),
+            "gaps": gaps,
+            "terminal_status": "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS",
+        }
 
     units = (
         Unit("load.accepted_gate", load),

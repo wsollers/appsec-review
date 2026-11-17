@@ -763,7 +763,7 @@ SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
     "../final-report/final-publication-gate.schema.json":
         "14b45f53dbde7265573137bbe1b458e167f9e298953c67a4510475e9241af252",
     "../final-report/final-report.schema.json":
-        "68e3021ae9680056bf524e950c8fc42943367f4621de12063ef8e43c264f8cde",
+        "5333d5070dc7ac2fc71fb008ce602eb541f98ac671ffd08a13fb2c05e9538747",
     "upstream/openvex-v0.2.0.schema.json": UPSTREAM_SCHEMA_SHA256,
 })
 VALIDATION_PROFILE_SHA256 = domain_sha256("openvex-validation-profile/1", {

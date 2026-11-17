@@ -16,6 +16,8 @@ from typing import Iterable, Sequence
 from .model import (Bar, BarChart, Block, Box, Bullets, Code, Document, Fields, Field, Heading, IdList, Item, Lane, Legend,
                     Note, PageBreak, Para, RadarChart, Segment, Stats, Table, Timeline, Truncation)
 from .text import clean, tex, tex_code_line, tex_mono, token
+
+escape_latex = tex
 from .tokens import badge_text, BOX_STYLES, STYLE_BY_KIND, VERDICT_COLOR, VERDICTS, EXTRA_VERDICTS, BoxKind
 
 SKELETON = "report-skeleton.tex"

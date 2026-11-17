@@ -1,15 +1,16 @@
 """The executive report: ``final-report.json`` plus the gate-bound dossiers, as a renderer-neutral document.
 
-The readers are a project's tech lead and business owner. The document says, in plain words, what each
-confirmed weakness is, where it is, what an attacker gains, how severe it is, whether an independent
-verifier confirmed it and whether it blocks shipping; then the review's status, limits and provenance. After
-the summary, a radar chart and table show the review's coverage by security dimension (``dimensions.py``).
+The readers are a project's tech lead and business owner. The document presents:
+1. Executive Risk Posture Banner & Release Readiness Summary
+2. 12-Axis, 4-Series Security Radar & Verification Funnel
+3. Top Prioritized Remediation Roadmap (risk-first)
+4. Confirmed Findings, Multi-Step Attack Chains & Trust-Boundary Breaches
+5. Proof-of-Trigger Outcomes, Backlog/Withheld Packages, and Explicit Named Coverage Gaps & Provenance
 
 It is a pure function of its inputs: the same report and the same bound dossier documents give an
-equal :class:`Document`, with no clock, locale, environment or file read. Every string that came from
-a review artifact is cleaned and bounded here and escaped by the renderer; nothing is written raw.
-Dossier source excerpts are protected developer content and are never copied: only a path and a
-line range reach this document. The document carries no exploit code, prompt or payload.
+equal :class:`Document`, with no clock, locale, environment or file read. Dossier source excerpts
+are protected developer content and are never copied: only a path and a line range reach this
+document. The document carries no exploit code, prompt or payload.
 """
 from __future__ import annotations
 
@@ -17,9 +18,28 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
 from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
+from .executive_posture import (
+    build_attack_chain_cards,
+    build_executive_posture,
+    build_named_coverage_gaps,
+    build_remediation_roadmap,
+)
 from .digest import bullets, field, table
-from .dimensions import DIMENSIONS, dimension_counts
-from .model import Box, Document, Fields, Heading, Para, RadarAxis, RadarChart, RadarLegendRow, RadarSeries, Stat, Stats
+from .dimensions import DIMENSIONS, build_radar_tracker
+from .html import render_html
+from .model import (
+    Box,
+    Document,
+    Fields,
+    Heading,
+    Para,
+    RadarAxis,
+    RadarChart,
+    RadarLegendRow,
+    RadarSeries,
+    Stat,
+    Stats,
+)
 from .text import bound, clean
 from .tokens import BoxKind, Limits, STATUS_TONES
 
@@ -67,6 +87,43 @@ CAPABILITY_WORDS = {
     "GAP": "ran, but expected work is missing, failed, capped or has recorded gaps",
 }
 
+CONSEQUENCES = {
+    "memory_corruption": "an attacker who reaches this code can corrupt the program's memory, which typically means "
+                         "crashing the service and, with more effort, running code of their choosing inside it.",
+    "out_of_bounds_read": "an attacker who reaches this code can make the program read memory it should not, which "
+                          "leaks data such as secrets or internal addresses and can crash the service.",
+    "use_after_free": "an attacker who reaches this code can make the program use memory after it was released, "
+                      "which can crash the service or let the attacker run code inside it.",
+    "integer_error": "an attacker who reaches this code can make a size or count calculation wrap or overflow, which "
+                     "usually turns into a memory-corruption or logic defect further on.",
+    "injection": "an attacker who reaches this code can smuggle their own instructions into something the program "
+                 "builds from their input.",
+    "command_injection": "an attacker who reaches this code can run operating-system commands of their choosing on "
+                         "the host, with the privileges of the service.",
+    "sql_injection": "an attacker who reaches this code can run their own database queries: reading, changing or "
+                     "deleting data they should not have access to.",
+    "code_injection": "an attacker who reaches this code can have the program execute code they supply.",
+    "path_traversal": "an attacker who reaches this code can read or write files outside the directory the program "
+                      "was meant to use, including configuration and secrets.",
+    "ssrf": "an attacker who reaches this code can make the server send requests on their behalf to internal "
+            "systems it can reach but the attacker cannot.",
+    "deserialization": "an attacker who reaches this code can feed the program crafted serialized data that it "
+                       "turns into objects, which often lets them run code or bypass checks.",
+    "authn_bypass": "an attacker can act as a user without proving who they are.",
+    "authz_bypass": "an attacker can do or see something their account is not allowed to.",
+    "info_disclosure": "an attacker can learn data the program was meant to keep private.",
+    "crypto_weakness": "protection that depends on this cryptography is weaker than intended; data it guards may be "
+                       "readable or forgeable.",
+    "race_condition": "an attacker who times their actions can make two operations interleave in a way the program "
+                      "did not expect, which can bypass a check or corrupt state.",
+    "resource_exhaustion": "an attacker can make the service consume memory, CPU, disk or connections until it "
+                           "stops serving others.",
+    "insecure_configuration": "a setting leaves a protection off or weaker than intended, so other defects or "
+                              "attacks become easier.",
+    "supply_chain_compromise": "a dependency or build input the program trusts can be used to introduce malicious "
+                               "behaviour into what ships.",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class BoundDossier:
@@ -74,7 +131,7 @@ class BoundDossier:
 
     dossier_id: str
     kind: str
-    finding: Mapping[str, Any]            # {claim_id, finding_package_id, sha256}
+    finding: Mapping[str, Any]
     document: Mapping[str, Any] | None
     gap: str | None = None
 
@@ -138,7 +195,6 @@ def _verification(item: Mapping[str, Any]) -> str:
 
 
 def merge_spans(spans: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Union of line spans that overlap or touch: [5,10] and [6,12] become [5,12], [5,10] and [11,12] become [5,12]."""
     merged: list[tuple[int, int]] = []
     for start, end in sorted((min(a, b), max(a, b)) for a, b in spans):
         if merged and start <= merged[-1][1] + 1:
@@ -149,11 +205,6 @@ def merge_spans(spans: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
 
 
 def _locations(dossier: Mapping[str, Any] | None) -> list[str]:
-    """Path and merged line ranges only; the excerpt is protected developer content and never leaves the dossier.
-
-    Several evidence rows of one finding usually resolve to connected lines of the same function; the reader gets
-    one span per connected region, in file order, instead of one row per evidence relation.
-    """
     by_path: dict[str, list[tuple[int, int]]] = {}
     unranged: list[str] = []
     for source in (dossier or {}).get("sources") or ():
@@ -168,46 +219,6 @@ def _locations(dossier: Mapping[str, Any] | None) -> list[str]:
         for start, end in merge_spans(by_path[path]):
             rows.append(f"{path}, lines {start}-{end}" if start != end else f"{path}, line {start}")
     return rows + unranged
-
-
-#: What each accepted consequence class lets an attacker do, for a reader who does not know the CWE. Keyed by the
-#: closed ``security_predicate`` vocabulary of the review; an unlisted value falls back to a generic sentence.
-CONSEQUENCES = {
-    "memory_corruption": "an attacker who reaches this code can corrupt the program's memory, which typically means "
-                         "crashing the service and, with more effort, running code of their choosing inside it.",
-    "out_of_bounds_read": "an attacker who reaches this code can make the program read memory it should not, which "
-                          "leaks data such as secrets or internal addresses and can crash the service.",
-    "use_after_free": "an attacker who reaches this code can make the program use memory after it was released, "
-                      "which can crash the service or let the attacker run code inside it.",
-    "integer_error": "an attacker who reaches this code can make a size or count calculation wrap or overflow, which "
-                     "usually turns into a memory-corruption or logic defect further on.",
-    "injection": "an attacker who reaches this code can smuggle their own instructions into something the program "
-                 "builds from their input.",
-    "command_injection": "an attacker who reaches this code can run operating-system commands of their choosing on "
-                         "the host, with the privileges of the service.",
-    "sql_injection": "an attacker who reaches this code can run their own database queries: reading, changing or "
-                     "deleting data they should not have access to.",
-    "code_injection": "an attacker who reaches this code can have the program execute code they supply.",
-    "path_traversal": "an attacker who reaches this code can read or write files outside the directory the program "
-                      "was meant to use, including configuration and secrets.",
-    "ssrf": "an attacker who reaches this code can make the server send requests on their behalf to internal "
-            "systems it can reach but the attacker cannot.",
-    "deserialization": "an attacker who reaches this code can feed the program crafted serialized data that it "
-                       "turns into objects, which often lets them run code or bypass checks.",
-    "authn_bypass": "an attacker can act as a user without proving who they are.",
-    "authz_bypass": "an attacker can do or see something their account is not allowed to.",
-    "info_disclosure": "an attacker can learn data the program was meant to keep private.",
-    "crypto_weakness": "protection that depends on this cryptography is weaker than intended; data it guards may be "
-                       "readable or forgeable.",
-    "race_condition": "an attacker who times their actions can make two operations interleave in a way the program "
-                      "did not expect, which can bypass a check or corrupt state.",
-    "resource_exhaustion": "an attacker can make the service consume memory, CPU, disk or connections until it "
-                           "stops serving others.",
-    "insecure_configuration": "a setting leaves a protection off or weaker than intended, so other defects or "
-                              "attacks become easier.",
-    "supply_chain_compromise": "a dependency or build input the program trusts can be used to introduce malicious "
-                               "behaviour into what ships.",
-}
 
 
 def _attacker_gain(dossier: Mapping[str, Any] | None, item: Mapping[str, Any]) -> str:
@@ -255,12 +266,16 @@ def _finding_box(index: int, item: Mapping[str, Any], dossier: BoundDossier | No
         field("Finding package", item.get("finding_package_id"), LIMITS, mono=True),
         field("Review lane", words(item.get("lane")), LIMITS),
     ]
-    items: list[Any] = [Para(what), Fields(tuple(rows)),
-                        Para("Where it is", muted=True),
-                        _bullets(locations or ["No resolving source location was available to this report."]),
-                        Para("What an attacker gains", muted=True), Para(_attacker_gain(document, item)),
-                        Para("Remediation", muted=True),
-                        _bullets(_remediation(document) or ["No remediation proposal or validation was available."])]
+    items: list[Any] = [
+        Para(what),
+        Fields(tuple(rows)),
+        Para("Where it is", muted=True),
+        _bullets(locations or ["No resolving source location was available to this report."]),
+        Para("What an attacker gains", muted=True),
+        Para(_attacker_gain(document, item)),
+        Para("Remediation", muted=True),
+        _bullets(_remediation(document) or ["No remediation proposal or validation was available."]),
+    ]
     chains = [f"{clean(row.get('chain_id'))}: {words(row.get('status'))}; {_text(row.get('objective'), 300)}"
               for row in (document or {}).get("chains") or ()]
     if chains:
@@ -274,13 +289,16 @@ def _finding_box(index: int, item: Mapping[str, Any], dossier: BoundDossier | No
                badges=(clean(item.get("state")),) if clean(item.get("state")) else (), items=tuple(items))
 
 
-def _summary_blocks(report: Mapping[str, Any]) -> list[Any]:
+def _summary_blocks(report: Mapping[str, Any], radar: Mapping[str, Any]) -> list[Any]:
     status, summary = report["status"], report["summary"]
     counts, accounting, block = summary["package_counts"], summary["accounting"], summary["ship_block"]
+    posture = build_executive_posture(report, radar)
+    sev = posture["confirmed_by_severity"]
+    cci = posture["coverage_confidence_index"]
     gaps = [row for row in report["limitations"] if row["kind"] == "gap"]
     complete = bool(status.get("review_complete"))
-    standing = (f"The review finished with status {words(status['review'])} and publication status "
-                f"{words(status['publication'])}. ")
+    standing = (f"The review finished with status {words(status['review'])}, publication status "
+                f"{words(status['publication'])}, and release readiness {words(posture['release_readiness'])}. ")
     standing += ("It may be presented as complete." if complete else
                  "It may not be presented as complete: " + (
                      f"{_plural(len(gaps), 'named gap')} limit it, listed below and in the limitations section."
@@ -288,22 +306,48 @@ def _summary_blocks(report: Mapping[str, Any]) -> list[Any]:
     by_status = block.get("by_status") or {}
     release = [f"{_plural(by_status.get(key, 0), 'finding')}: {SHIP_BLOCK_WORDS[key]}"
                for key in SHIP_BLOCK_WORDS if by_status.get(key)]
+    readiness_tone = (
+        "contradicted" if posture["release_readiness"] == "BLOCK_RELEASE"
+        else ("insufficient_evidence" if posture["release_readiness"] == "REVIEW_REQUIRED_GAPS_PRESENT" else "confirmed")
+    )
     return [
-        Stats((Stat("Confirmed findings", str(counts["publishable"]),
-                    "confirmed" if counts["publishable"] else "neutral"),
-               Stat("Verification backlog", str(counts["verification_backlog"]),
-                    "supported" if counts["verification_backlog"] else "neutral"),
-               Stat("Withheld", str(counts["withheld"]), "unresolved" if counts["withheld"] else "neutral"),
-               Stat("Review status", words(status["review"]), STATUS_TONES.get(status["review"], "unresolved")))),
+        Stats((
+            Stat("Release readiness", words(posture["release_readiness"]), readiness_tone),
+            Stat("Critical / High", f"{sev['critical']} / {sev['high']}",
+                 "contradicted" if (sev["critical"] + sev["high"]) else "neutral"),
+            Stat("Medium / Low", f"{sev['medium']} / {sev['low']}",
+                 "insufficient_evidence" if (sev["medium"] + sev["low"]) else "neutral"),
+            Stat("Chain-elevated", str(posture["chain_elevated_findings_count"]),
+                 "contradicted" if posture["chain_elevated_findings_count"] else "neutral"),
+            Stat("Supply-chain", str(posture["reachable_supply_chain_advisories_count"]),
+                 "contradicted" if posture["reachable_supply_chain_advisories_count"] else "neutral"),
+            Stat("Coverage confidence", f"{cci['score']}/100 ({cci['verified_axes']}/12)",
+                 "confirmed" if cci["gap_axes"] == 0 and complete else "coverage_gap"),
+            Stat("Backlog / Withheld", f"{counts['verification_backlog']} / {counts['withheld']}",
+                 "supported" if counts["verification_backlog"] else "neutral"),
+            Stat("Review status", words(status["review"]), STATUS_TONES.get(status["review"], "unresolved")),
+        )),
         Heading(1, "Executive summary", "summary"),
-        Box(BoxKind.RESULT, "Where the review stands", items=(
+        Box(BoxKind.RESULT, "Executive risk posture and release readiness", items=(
             Para(standing),
-            Fields((field("Review complete", "yes" if complete else "no", LIMITS),
-                    field("Claims reviewed", accounting.get("claims_total"), LIMITS),
-                    field("Finding packages", f"{counts['total']} total: {counts['publishable']} confirmed, "
-                          f"{counts['verification_backlog']} awaiting verification, {counts['withheld']} withheld", LIMITS),
-                    field("Gap ratio", f"{accounting.get('gap_ratio', 0):.3f} (incomplete above "
-                          f"{accounting.get('incomplete_gap_ratio', 0):.3f})", LIMITS))),
+            Fields((
+                field("Release readiness", words(posture["release_readiness"]), LIMITS),
+                field("Confirmed by severity",
+                      f"critical {sev['critical']}, high {sev['high']}, medium {sev['medium']}, "
+                      f"low {sev['low']}, unrated {sev['unrated']}", LIMITS),
+                field("Chain-elevated findings", posture["chain_elevated_findings_count"], LIMITS),
+                field("Reachable supply-chain", posture["reachable_supply_chain_advisories_count"], LIMITS),
+                field("Coverage confidence",
+                      f"{cci['score']}/100 ({cci['verified_axes']} verified axes, "
+                      f"{cci['gap_axes']} unverified coverage gap axes)", LIMITS),
+                field("Review complete", "yes" if complete else "no", LIMITS),
+                field("Claims reviewed", accounting.get("claims_total"), LIMITS),
+                field("Finding packages", f"{counts['total']} total: {counts['publishable']} confirmed, "
+                      f"{counts['verification_backlog']} awaiting verification, {counts['withheld']} withheld", LIMITS),
+                field("Gap ratio", f"{accounting.get('gap_ratio', 0):.3f} (incomplete above "
+                      f"{accounting.get('incomplete_gap_ratio', 0):.3f})", LIMITS),
+            )),
+            Para(cci["statement"], muted=True),
             *(() if complete else (Para("Why the review is not complete", muted=True),
                                    _bullets([f"{words(row['limitation_id'])}: {_text(row['statement'])}" for row in gaps]
                                             or ["The review status or incompleteness flag alone withholds completeness."]))))),
@@ -315,63 +359,173 @@ def _summary_blocks(report: Mapping[str, Any]) -> list[Any]:
 
 
 DIMENSION_SCALE_NOTE = (
-    "Each series is scaled to its own largest axis, which is drawn at the rim (1.0); the raw counts are in the key "
-    "and the table. A short spoke means little was found or examined in that dimension, never that the dimension "
-    "is clean. An axis with no claims is uncovered: the review has nothing to say about it. Scanner leads are not "
-    "bound to this report, so lead admission per dimension is not shown.")
-LEADS_NOT_BOUND = "not bound"
+    "Each funnel series is normalized to [0, 1] on its spoke; raw counts and coverage percentages appear in the "
+    "companion table. Missing, skipped or partial domain coverage is explicitly marked as an Unverified Coverage "
+    "Gap and is NEVER evidence that a security domain is clean.")
 
 
-def _dimension_reading(findings: int, claims: int) -> str:
-    if findings:
-        return f"{_plural(findings, 'confirmed finding')} of {_plural(claims, 'claim')} examined."
-    if claims:
-        return f"{_plural(claims, 'claim')} examined, none confirmed. Not a clearance."
-    return "Uncovered: no claim was examined here."
+def _dimension_reading(axis: Mapping[str, Any]) -> str:
+    series = axis["series"]
+    confirmed_all = series["confirmed_high_critical"]["all_confirmed_count"]
+    hc = series["confirmed_high_critical"]["raw_count"]
+    leads = series["corroborated_leads"]["raw_count"]
+    cov_status = axis["coverage_status"]
+    if confirmed_all:
+        base = f"{_plural(confirmed_all, 'confirmed finding')} ({hc} high/critical) of {_plural(leads, 'claim')} examined."
+    elif leads:
+        base = f"{_plural(leads, 'claim')} examined, none confirmed. Not a clearance."
+    else:
+        base = "Unverified coverage gap: Uncovered: no claim was examined here."
+    if cov_status in {"unverified_gap", "partial_coverage_gap"} and "gap" not in base.lower():
+        base += f" Unverified coverage gap ({words(cov_status)})."
+    return base
 
 
-def _dimension_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier]) -> list[Any]:
-    """Review coverage by security dimension: a radar chart over the predicate groups plus the per-axis table."""
-    by_claim = {row.finding["claim_id"]: row.document for row in dossiers
-                if row.kind == "confirmed_finding" and row.document}
-    rows, unclassified = dimension_counts(report, by_claim)
-    top_findings = max((row.findings for row in rows), default=0)
-    top_claims = max((row.claims for row in rows), default=0)
-
-    def scaled(values: Iterable[int], top: int) -> tuple[float, ...]:
-        return tuple(value / top if top else 0.0 for value in values)
+def _dimension_blocks(report: Mapping[str, Any], radar_or_dossiers: Mapping[str, Any] | Sequence[BoundDossier]) -> list[Any]:
+    if isinstance(radar_or_dossiers, Mapping):
+        radar = radar_or_dossiers
+    else:
+        by_claim_doc = {
+            row.finding["claim_id"]: row.document
+            for row in radar_or_dossiers
+            if row.kind == "confirmed_finding" and row.document is not None
+        }
+        radar = build_radar_tracker(report, by_claim_doc)
+    axes_data = radar["axes"]
+    unclassified = int(radar["unclassified_packages"])
+    top_surface = max((ax["series"]["surface_exposure"]["raw_count"] for ax in axes_data), default=0)
+    top_leads = max((ax["series"]["corroborated_leads"]["raw_count"] for ax in axes_data), default=0)
+    top_hc = max((ax["series"]["confirmed_high_critical"]["raw_count"] for ax in axes_data), default=0)
 
     chart = RadarChart(
-        "Confirmed findings and claims examined per dimension",
-        tuple(RadarAxis(row.label, row.key) for row in rows),
-        (RadarSeries("Confirmed findings", "confirmed", scaled((row.findings for row in rows), top_findings),
-                     tuple(str(row.findings) for row in rows)),
-         RadarSeries("Claims examined", "proposed", scaled((row.claims for row in rows), top_claims),
-                     tuple(str(row.claims) for row in rows))),
+        "12-axis security radar and 4-series verification funnel",
+        tuple(RadarAxis(ax["label"], ax["key"]) for ax in axes_data),
+        (
+            RadarSeries(
+                "Surface exposure",
+                "not_reachable",
+                tuple(float(ax["series"]["surface_exposure"]["unit"]) for ax in axes_data),
+                tuple(str(ax["series"]["surface_exposure"]["raw_count"]) for ax in axes_data),
+            ),
+            RadarSeries(
+                "Verified coverage",
+                "supported",
+                tuple(float(ax["series"]["verified_coverage"]["unit"]) for ax in axes_data),
+                tuple(
+                    f"{ax['series']['verified_coverage']['score']:.0f}%"
+                    + (" GAP" if ax["series"]["verified_coverage"]["is_gap"] else "")
+                    for ax in axes_data
+                ),
+            ),
+            RadarSeries(
+                "Corroborated leads",
+                "proposed",
+                tuple(float(ax["series"]["corroborated_leads"]["unit"]) for ax in axes_data),
+                tuple(str(ax["series"]["corroborated_leads"]["raw_count"]) for ax in axes_data),
+            ),
+            RadarSeries(
+                "Confirmed High/Critical",
+                "contradicted",
+                tuple(float(ax["series"]["confirmed_high_critical"]["unit"]) for ax in axes_data),
+                tuple(
+                    f"{ax['series']['confirmed_high_critical']['raw_count']}/{ax['series']['confirmed_high_critical']['all_confirmed_count']}"
+                    for ax in axes_data
+                ),
+            ),
+        ),
         scale_note=DIMENSION_SCALE_NOTE,
-        legend=(RadarLegendRow("series", "Confirmed findings", "Confirmed findings",
-                               f"independently confirmed finding packages per dimension; the rim is {top_findings}"),
-                RadarLegendRow("series", "Claims examined", "Claims examined",
-                               "confirmed, verification-backlog and withheld packages per dimension; the rim is "
-                               f"{top_claims}"),
-                *(RadarLegendRow("axis", dimension.key, dimension.label, dimension.counts) for dimension in DIMENSIONS)))
-    table_rows = [(row.key, row.label, row.findings, row.claims, LEADS_NOT_BOUND,
-                   _dimension_reading(row.findings, row.claims)) for row in rows]
+        legend=(
+            RadarLegendRow("series", "Surface exposure", "Surface exposure",
+                           f"exposed units or candidate density per domain; rim is {top_surface}"),
+            RadarLegendRow("series", "Verified coverage", "Verified coverage",
+                           "percentage of exposed domain scope verified; <100% or unbound is an Unverified Coverage Gap"),
+            RadarLegendRow("series", "Corroborated leads", "Corroborated leads",
+                           f"corroborated claims/packages entering adjudication; rim is {top_leads}"),
+            RadarLegendRow("series", "Confirmed High/Critical", "Confirmed High/Critical",
+                           f"confirmed high/critical or chain-elevated findings (with total confirmed); rim is {top_hc}"),
+            *(
+                RadarLegendRow(
+                    "axis",
+                    dim.key,
+                    dim.label,
+                    f"{dim.counts}" + (
+                        " [Unverified coverage gap]"
+                        if axes_data[idx]["coverage_status"] in {"unverified_gap", "partial_coverage_gap"}
+                        else ""
+                    ),
+                )
+                for idx, dim in enumerate(DIMENSIONS)
+            ),
+        ),
+    )
+    table_rows = [
+        (
+            ax["key"],
+            ax["label"],
+            str(ax["series"]["surface_exposure"]["raw_count"]),
+            f"{ax['series']['verified_coverage']['score']:.0f}%",
+            str(ax["series"]["corroborated_leads"]["raw_count"]),
+            f"{ax['series']['confirmed_high_critical']['raw_count']} ({ax['series']['confirmed_high_critical']['all_confirmed_count']})",
+            _dimension_reading(ax),
+        )
+        for ax in axes_data
+    ]
     items: list[Any] = [
-        Para("Each dimension groups part of the review's closed security-consequence vocabulary. Findings are "
-             "independently confirmed packages; claims examined add the verification backlog and withheld packages. "
-             "Scanner leads admitted and observed per dimension would need the review's excluded-leads record, which "
-             "the gate does not bind to this report."),
-        table(("Key", "Dimension", "Findings", "Claims", "Scanner leads", "Reading"), table_rows, LIMITS,
-              widths=(.05, .22, .09, .09, .13, .38)),
+        Para("The 12 security domains span application, native, API, cryptography, supply-chain, CI/CD and deployment "
+             "surfaces across four funnel series: surface exposure, verified coverage, corroborated leads and "
+             "confirmed high/critical findings."),
+        table(
+            ("Key", "Domain", "Exposure", "Verified", "Leads", "High/Crit (All)", "Posture & Reading"),
+            table_rows,
+            LIMITS,
+            widths=(.06, .20, .08, .09, .07, .12, .34),
+        ),
         Para(f"{_plural(unclassified, 'package')} named no member of the vocabulary and {'is' if unclassified == 1 else 'are'} "
              "counted in no dimension." if unclassified else
-             "Every accepted package names a member of the vocabulary and is counted in exactly one dimension.", muted=True),
-        Para("A short row means little was found or examined there, never that the dimension is clean. " + NOT_CLEAN,
+             "Every accepted package names a member of the vocabulary and is counted in one of the 12 security domains.",
              muted=True),
+        Para("An unverified coverage gap or zero-claim domain means the review did not establish coverage there, "
+             "never that the domain is clean. " + NOT_CLEAN, muted=True),
     ]
-    return [Heading(1, "Review coverage by security dimension", "dimensions"), chart,
-            Box(BoxKind.EVIDENCE, "Coverage by dimension", items=tuple(items))]
+    return [
+        Heading(1, "Review coverage by security dimension", "dimensions"),
+        chart,
+        Box(BoxKind.EVIDENCE, "12-axis verification funnel", items=tuple(items)),
+    ]
+
+
+def _roadmap_blocks(report: Mapping[str, Any]) -> list[Any]:
+    roadmap = build_remediation_roadmap(report)
+    blocks: list[Any] = [Heading(1, "Prioritized remediation roadmap", "roadmap")]
+    if not roadmap:
+        blocks.append(Box(BoxKind.GAP, "No confirmed findings on remediation roadmap", items=(
+            Para("No independently confirmed finding is present to schedule for remediation. " + NOT_CLEAN),
+        )))
+        return blocks
+    rows = [
+        (
+            str(row["rank"]),
+            words(row["priority_tier"]),
+            row["technical_severity"],
+            words(row["domain_id"]),
+            _text(row["title"], 120),
+            words(row["validation_status"]),
+            f"{words(row['poc_posture']['status'])} ({words(row['poc_posture']['generated_code_execution'])})",
+        )
+        for row in roadmap
+    ]
+    blocks.append(Box(BoxKind.RESULT, "Risk-first remediation sequence", items=(
+        Para("Ordered strictly risk-first: critical -> high -> chain-elevated -> quick-win dependency/config -> "
+             "residual confirmed findings. Validation checks are static/build-only; generated code execution is "
+             "not performed by policy."),
+        table(
+            ("#", "Tier", "Severity", "Domain", "Finding", "Patch validation", "PoC posture"),
+            rows,
+            LIMITS,
+            widths=(.04, .14, .09, .14, .25, .14, .16),
+        ),
+    )))
+    return blocks
 
 
 def _capability_line(report: Mapping[str, Any], name: str) -> str:
@@ -404,6 +558,30 @@ def _section_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier])
     poc_by_claim = {row.finding["claim_id"]: row for row in dossiers if row.kind == "poc" and row.document}
     chains = [f"{clean(row['chain_id'])}: {words(row['status'])}; links {len(row.get('component_claim_ids') or ())} "
               f"claims; {_plural(row.get('gap_count', 0), 'recorded gap')}" for row in report["attack_chains"]["items"]]
+    chain_cards = build_attack_chain_cards(report)
+    card_boxes = []
+    for card in chain_cards:
+        step_lines = [
+            f"Step {step['step_index']} [{step['role'].upper()}]: {step['claim_id']} "
+            f"({words(step['domain_id'])}) ? {_text(step['title'], 160)}"
+            for step in card["steps"]
+        ] or ["No component steps recorded."]
+        card_boxes.append(Box(
+            BoxKind.CLAIM,
+            f"Chain {clean(card['chain_id'])}",
+            meta=f"composed severity {card['composed_severity']} | boundary: {card['trust_boundary_crossed']}",
+            badges=(clean(card["status"]),),
+            items=(
+                Fields((
+                    field("Composed severity", card["composed_severity"], LIMITS),
+                    field("Trust boundary crossed", card["trust_boundary_crossed"], LIMITS),
+                    field("Recorded chain gaps", card["gap_count"], LIMITS),
+                )),
+                Para("Step-by-step path (entry -> hop -> sink)", muted=True),
+                _bullets(step_lines),
+            ),
+        ))
+
     pocs = []
     for row in report["poc_outcomes"]["items"]:
         text = f"{titles.get(row['finding_package_id']) or row['finding_package_id']}: {words(row['status'])}"
@@ -424,6 +602,7 @@ def _section_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier])
         _section_box(report, "attack_chains", "attack_chains", "Connected attack chains", chains,
                      "No confirmed or qualified attack chain was certified. Component findings alone do not prove a "
                      "connected chain, and the absence of a chain does not reduce any finding."),
+        *card_boxes,
         Heading(1, "Proof-of-trigger outcomes", "poc"),
         _section_box(report, "poc_outcomes", "poc_generation", "Proof-of-concept outcomes (compile only)", pocs,
                      "No proof-of-concept outcome was certified."),
@@ -464,13 +643,25 @@ def _backlog_blocks(report: Mapping[str, Any]) -> list[Any]:
     return blocks
 
 
-def _limitation_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier]) -> list[Any]:
+def _limitation_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier], radar: Mapping[str, Any]) -> list[Any]:
     grouped = {kind: [row for row in report["limitations"] if row["kind"] == kind] for kind in ("gap", "not_run", "notice")}
     coverage = report["summary"].get("coverage") or {}
     summary = ", ".join(f"{words(key)} {value}" for key, value in sorted((coverage.get("summary") or {}).items())) or "none"
     dossier_gaps = [f"{row.dossier_id}: {_text(row.gap, 400)}" for row in dossiers if row.gap]
+    named_gaps = build_named_coverage_gaps(report, radar)
+    gap_table_rows = [
+        (row["gap_id"], words(row["category"]), words(row["affected_scope"]), row["disposition"], _text(row["statement"], 200))
+        for row in named_gaps
+    ]
     return [
         Heading(1, "Limitations and coverage", "limitations"),
+        Box(BoxKind.GAP, f"Named coverage gaps and blind spots ({len(named_gaps)})", items=(
+            Para("Every producer gap, unrun stage, syntactic-fallback scope, and unverified security domain is listed "
+                 "explicitly below. " + NOT_CLEAN),
+            table(("Gap ID", "Category", "Scope", "Disposition", "Summary"), gap_table_rows, LIMITS,
+                  widths=(.20, .14, .16, .14, .32), mono=(True, False, False, True, False))
+            if gap_table_rows else Para("No named coverage gaps or blind spots recorded."),
+        )),
         Box(BoxKind.GAP, f"Gaps ({len(grouped['gap'])})", items=(
             Para("Each gap limits what this review can say. " + NOT_CLEAN),
             _bullets([f"{words(row['limitation_id'])}: {_text(row['statement'])}" for row in grouped["gap"]]
@@ -536,9 +727,16 @@ def executive_document(report: Mapping[str, Any], dossiers: Sequence[BoundDossie
     for row in dossiers:
         if row.document is not None and row.document.get("schema") != DOSSIER_SCHEMA:
             raise ValueError(f"unsupported dossier model for {row.dossier_id}")
+    by_claim_doc = {
+        row.finding["claim_id"]: row.document
+        for row in dossiers
+        if row.kind == "confirmed_finding" and row.document is not None
+    }
+    radar = build_radar_tracker(report, by_claim_doc)
     by_claim = {row.finding["claim_id"]: row for row in dossiers if row.kind == "confirmed_finding"}
-    blocks: list[Any] = _summary_blocks(report)
-    blocks += _dimension_blocks(report, dossiers)
+    blocks: list[Any] = _summary_blocks(report, radar)
+    blocks += _dimension_blocks(report, radar)
+    blocks += _roadmap_blocks(report)
     blocks.append(Heading(1, "Confirmed findings", "findings"))
     findings = report["findings"]
     if not findings:
@@ -548,7 +746,7 @@ def executive_document(report: Mapping[str, Any], dossiers: Sequence[BoundDossie
         blocks.append(_finding_box(index, item, by_claim.get(item["claim_id"])))
     blocks += _section_blocks(report, dossiers)
     blocks += _backlog_blocks(report)
-    blocks += _limitation_blocks(report, dossiers)
+    blocks += _limitation_blocks(report, dossiers, radar)
     blocks += _appendix_blocks(report, dossiers)
     status = clean(report["status"]["review"])
     return Document(title=TITLE, run_id=clean(report["run_id"]), subtitle=SUBTITLE,
@@ -559,4 +757,10 @@ def executive_document(report: Mapping[str, Any], dossiers: Sequence[BoundDossie
                     named_gaps=tuple(sorted(row.gap for row in dossiers if row.gap)), renderer=RENDERER)
 
 
-__all__ = ["BoundDossier", "RENDERER", "executive_document", "words"]
+def render_executive_html(report: Mapping[str, Any], dossiers: Sequence[BoundDossier] = (),
+                          *, source_date_epoch: int = 0) -> str:
+    """Render ``final-report.html`` deterministically from ``final-report.json`` and bound dossiers."""
+    return render_html(executive_document(report, dossiers, source_date_epoch=source_date_epoch))
+
+
+__all__ = ["BoundDossier", "RENDERER", "executive_document", "render_executive_html", "words"]

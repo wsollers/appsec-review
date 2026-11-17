@@ -112,9 +112,26 @@ AXIS_LABEL = {axis: label for axis, label, _ in AXES}
 AXIS_KEY = {axis: key for axis, _, key in AXES}
 UNASSIGNED_AXIS = "unassigned"
 # The executive report's dimension keys (reporting.dimensions.DIMENSIONS) mapped onto the key's axes.
-AXIS_OF_DIMENSION = {"M": "memory_safety", "N": "numeric_handling", "C": "control_injection", "P": "parsing_data",
-                     "A": "access_control", "S": "secrets_crypto", "R": "concurrency", "X": "resource_exhaustion",
-                     "K": "supply_chain"}
+AXIS_OF_DIMENSION = {
+    "Auth": "access_control", "AzZ": "access_control", "Inj": "control_injection", "Mem": "memory_safety",
+    "Pars": "parsing_data", "Cryp": "secrets_crypto", "API": "control_injection", "Path": "resource_exhaustion",
+    "Logi": "concurrency", "Deps": "supply_chain", "CICD": "supply_chain", "Hard": "supply_chain",
+    "M": "memory_safety", "N": "numeric_handling", "C": "control_injection", "P": "parsing_data",
+    "A": "access_control", "S": "secrets_crypto", "R": "concurrency", "X": "resource_exhaustion",
+    "K": "supply_chain",
+}
+AXIS_OF_PREDICATE = {
+    "memory_corruption": "memory_safety", "out_of_bounds_read": "memory_safety", "use_after_free": "memory_safety",
+    "integer_error": "numeric_handling",
+    "injection": "control_injection", "command_injection": "control_injection", "code_injection": "control_injection",
+    "sql_injection": "control_injection", "path_traversal": "control_injection", "ssrf": "control_injection",
+    "deserialization": "parsing_data",
+    "authn_bypass": "access_control", "authz_bypass": "access_control",
+    "crypto_weakness": "secrets_crypto", "info_disclosure": "secrets_crypto",
+    "race_condition": "concurrency",
+    "resource_exhaustion": "resource_exhaustion",
+    "insecure_configuration": "supply_chain", "supply_chain_compromise": "supply_chain",
+}
 # CWE-134 rolls up to memory corruption in the predicate vocabulary; the key keeps a format-string axis.
 AXIS_OF_CWE = {"CWE-134": "format_string"}
 AXIS_BASES = ("key", "cwe", "cwe_rollup", "class", "none")
@@ -977,6 +994,8 @@ def axis_of(record: Mapping[str, Any]) -> tuple[str, str]:
         from appsec_review.review.models import SECURITY_PREDICATE_CWE_ROLLUP
         from .dimensions import DIMENSION_OF_PREDICATE
         predicate = SECURITY_PREDICATE_CWE_ROLLUP.get(cwe)
+        if predicate is not None and predicate.value in AXIS_OF_PREDICATE:
+            return AXIS_OF_PREDICATE[predicate.value], "cwe_rollup"
         dimension = DIMENSION_OF_PREDICATE.get(predicate.value) if predicate is not None else None
         if dimension in AXIS_OF_DIMENSION:
             return AXIS_OF_DIMENSION[dimension], "cwe_rollup"
