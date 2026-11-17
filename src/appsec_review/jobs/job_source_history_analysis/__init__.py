@@ -3,3 +3,4 @@
 from .job import build_job, load_accepted_history, load_accepted_hotspots
 
 __all__ = ["build_job", "load_accepted_history", "load_accepted_hotspots"]
+from .hotspots import effective_hotspot_count, select_proportional_hotspots

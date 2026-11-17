@@ -12,7 +12,7 @@ vulnerability evidence.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from fractions import Fraction
 import math
 from typing import Any
@@ -97,3 +97,100 @@ def score(units: Mapping[str, Mapping[str, Any]], *, weights: Mapping[str, float
             "tiers": {"tier_1_share": str(tier_1_share), "tier_2_share": str(tier_2_share),
                       "tier_1_last_rank": last_tier_1, "tier_2_last_rank": last_tier_2, "rounding": "ceil"},
             "ranked": ranked}
+
+
+def effective_hotspot_count(
+    population: int,
+    *,
+    hotspot_count: int | None = None,
+    proportional_ratio: float | None = None,
+    min_hotspots: int | None = None,
+    max_hotspots: int | None = None,
+) -> int:
+    """Compute effective hotspot selection cap.
+
+    When ``proportional_ratio`` is configured, computes
+    ``min(max(floor_cap, ceil(proportional_ratio * population)), ceiling_cap)``
+    with defaults ``floor_cap = 50`` and ``ceiling_cap = 2000`` unless overridden.
+    Otherwise falls back to the fixed ``hotspot_count`` for backward compatibility.
+    """
+    if proportional_ratio is None:
+        return max(1, int(hotspot_count if hotspot_count is not None else (min_hotspots or 10)))
+    floor_cap = int(min_hotspots if min_hotspots is not None else 50)
+    ceiling_cap = int(max_hotspots if max_hotspots is not None else 2000)
+    if floor_cap > ceiling_cap:
+        raise ValueError("min_hotspots cannot exceed max_hotspots")
+    scaled = math.ceil(float(proportional_ratio) * max(0, int(population)))
+    return min(max(floor_cap, scaled), ceiling_cap)
+
+
+def select_proportional_hotspots(
+    ranked: Sequence[Mapping[str, Any]],
+    *,
+    modules: Mapping[str, str] | None = None,
+    hotspot_count: int | None = None,
+    proportional_ratio: float | None = 0.10,
+    min_hotspots: int = 1,
+    max_hotspots: int = 2000,
+    min_per_module: int = 1,
+) -> list[dict[str, Any]]:
+    """Select hotspots with proportional scaling and per-module anti-starvation fairness.
+
+    In multi-module repositories, ensures each module with ranked units receives at least
+    ``min_per_module`` (and up to its proportional share) before high-churn modules fill
+    any remaining capacity, preserving global SII rank ordering in the returned list.
+    """
+    if not ranked:
+        return []
+    cap = effective_hotspot_count(
+        len(ranked),
+        hotspot_count=hotspot_count,
+        proportional_ratio=proportional_ratio,
+        min_hotspots=min_hotspots,
+        max_hotspots=max_hotspots,
+    )
+    target = min(len(ranked), cap)
+    if proportional_ratio is None or not modules:
+        return [dict(item) for item in ranked[:target]]
+
+    by_module: dict[str, list[tuple[int, Mapping[str, Any]]]] = {}
+    for idx, item in enumerate(ranked):
+        mod = str(modules.get(str(item["key"]), ".") or ".")
+        by_module.setdefault(mod, []).append((idx, item))
+
+    if len(by_module) <= 1:
+        return [dict(item) for item in ranked[:target]]
+
+    selected_indices: set[int] = set()
+    # Pass 1: guarantee each module at least min_per_module (in order of each module's top SII rank)
+    ordered_modules = sorted(by_module.items(), key=lambda kv: (kv[1][0][0], kv[0]))
+    if min_per_module > 0:
+        for _mod, mod_items in ordered_modules:
+            for idx, _item in mod_items[:min_per_module]:
+                if len(selected_indices) >= target:
+                    break
+                selected_indices.add(idx)
+            if len(selected_indices) >= target:
+                break
+
+    # Pass 2: allocate proportional module quotas based on module population share
+    total_pop = len(ranked)
+    for _mod, mod_items in ordered_modules:
+        if len(selected_indices) >= target:
+            break
+        quota = max(min_per_module, math.floor(target * len(mod_items) / total_pop))
+        taken = sum(1 for idx, _ in mod_items if idx in selected_indices)
+        for idx, _item in mod_items:
+            if taken >= quota or len(selected_indices) >= target:
+                break
+            if idx not in selected_indices:
+                selected_indices.add(idx)
+                taken += 1
+
+    # Pass 3: fill any remaining budget strictly by global SII rank
+    for idx in range(len(ranked)):
+        if len(selected_indices) >= target:
+            break
+        selected_indices.add(idx)
+
+    return [dict(ranked[idx]) for idx in sorted(selected_indices)]

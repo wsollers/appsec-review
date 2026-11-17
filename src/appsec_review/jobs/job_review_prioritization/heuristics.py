@@ -13,7 +13,8 @@ from .languages import BITWISE, LanguageSpec
 from .rules import (
     ANNOTATIONS, CALL_RULES, COMMENT_SUPPRESSIONS, CSHARP_INGRESS_PROPERTIES, GO_INGRESS_FIELDS,
     GO_INGRESS_OBJECTS, HEURISTIC, JAVA_COMPILER_KEYS, JS_INGRESS_OBJECTS, JS_INGRESS_PROPERTIES,
-    JS_ROUTE_RECEIVERS, OBSERVED, PHP_SUPERGLOBALS, ROUTE_VERBS, RULES_IDENTITY, RUST_INGRESS_EXTRACTORS,
+    JS_ROUTE_RECEIVERS, OBSERVED, PHP_SUPERGLOBALS, ROUTE_VERBS, RUBY_INGRESS_OBJECTS, RULES_IDENTITY,
+    RUST_INGRESS_EXTRACTORS,
     RUST_ROUTE_ATTRIBUTES, RUST_SCHEMA_DERIVES, SECURITY_MARKERS, CallRule,
 )
 from .syntax import COMMENT_TYPES, Node, SourceFile
@@ -41,6 +42,11 @@ _PUBLIC_RUST_ITEMS = frozenset({"function_item", "struct_item", "enum_item", "tr
 _TRANSPARENT_SIBLINGS = COMMENT_TYPES | _RUST_ATTRIBUTES | frozenset({"decorator", "attribute_list"})
 _INSECURE_CALLBACKS = frozenset({"ServerCertificateCustomValidationCallback", "ServerCertificateValidationCallback",
                                  "RemoteCertificateValidationCallback"})
+_PHP_INCLUDES = frozenset({"include_expression", "include_once_expression",
+                           "require_expression", "require_once_expression"})
+_PHP_SQL_CONCAT = re.compile(
+    r"(?is)\b(SELECT\b.{1,200}\bFROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|WHERE\s+\w+\s*=)"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,7 +264,7 @@ class Extractor:
 
     def _route(self, fact: CallFact, owner: str | None) -> None:
         verbs = ROUTE_VERBS.get(self.spec.grammar)
-        if not verbs or fact.simple not in verbs or not fact.segments or not fact.arguments:
+        if not verbs or fact.simple not in verbs or (not fact.segments and self.spec.grammar != "ruby") or not fact.arguments:
             return
         if self.spec.grammar in {"javascript", "typescript", "tsx"} and not set(fact.segments) & JS_ROUTE_RECEIVERS:
             return
@@ -378,6 +384,18 @@ class Extractor:
                     self._returns_true(right) or "DangerousAcceptAnyServerCertificateValidator" in text(right, 256)):
                 self.signal(node, "privilege.insecure_verification.certificate-callback", "privilege_shift",
                             "insecure_verification", OBSERVED, detail={"setting": last})
+            elif grammar == "csharp" and last == "TypeNameHandling" and not text(right, 64).strip().endswith("None"):
+                self.signal(node, "sink.deserialization.csharp-typenamehandling", "sink",
+                            "deserialization", OBSERVED, detail={"setting": "TypeNameHandling"})
+            elif grammar == "csharp" and last == "XmlResolver" and text(right, 64).strip() != "null":
+                self.signal(node, "privilege.xxe.csharp-xmlresolver", "privilege_shift",
+                            "xxe", OBSERVED, detail={"setting": "XmlResolver"})
+            elif grammar == "csharp" and last == "DtdProcessing" and "Parse" in text(right, 64):
+                self.signal(node, "privilege.xxe.csharp-dtdprocessing", "privilege_shift",
+                            "xxe", OBSERVED, detail={"setting": "DtdProcessing"})
+            elif grammar == "csharp" and last == "ProhibitDtd" and text(right, 16).strip() == "false":
+                self.signal(node, "privilege.xxe.csharp-prohibitdtd", "privilege_shift",
+                            "xxe", OBSERVED, detail={"setting": "ProhibitDtd"})
             elif last == "NODE_TLS_REJECT_UNAUTHORIZED" and _strip(text(right, 16)) == "0":
                 self.signal(node, "privilege.insecure_verification.node-tls", "privilege_shift",
                             "insecure_verification", OBSERVED, detail={"setting": last})
@@ -428,6 +446,28 @@ class Extractor:
             self._suppression(node, "suppression.php-error-control", "php", "compiler", "expression", "@")
         elif grammar == "php" and kind in {"method_declaration", "function_definition"}:
             self._php_declaration(node)
+        elif grammar == "php" and kind == "eval_intrinsic":
+            self.signal(node, "sink.eval.php-intrinsic", "sink", "code_eval", OBSERVED)
+        elif grammar == "php" and kind == "shell_command_expression":
+            self.signal(node, "sink.command_exec.php-backtick", "sink", "command_exec", OBSERVED)
+        elif grammar == "php" and kind in _PHP_INCLUDES:
+            if any(item.type == "variable_name" for item in node.walk()):
+                self.signal(node, "sink.file_inclusion.php", "sink", "file_inclusion", OBSERVED)
+        elif grammar == "php" and kind in {"binary_expression", "encapsed_string"} and (
+                node.parent is None or node.parent.type != "binary_expression"):
+            if any(item.type == "variable_name" for item in node.walk()) and _PHP_SQL_CONCAT.search(text(node, 512)):
+                self.signal(node, "sink.sql.php-concat", "sink", "sql", HEURISTIC)
+        elif grammar == "ruby" and kind == "subshell":
+            self.signal(node, "sink.command_exec.ruby-subshell", "sink", "command_exec", OBSERVED)
+        elif grammar == "ruby" and kind == "element_reference":
+            target = node.child("object") or (node.named_children()[0] if node.named_children() else None)
+            obj_name = text(target, 32).strip().split(".")[-1] if target is not None else ""
+            if obj_name in RUBY_INGRESS_OBJECTS:
+                self.signal(node, "ingress.ruby-params", "ingress", "untrusted_input", HEURISTIC,
+                            detail={"object": obj_name})
+        elif grammar == "ruby" and kind in {"method", "singleton_method"}:
+            self.signal(node, "api.ruby-method", "public_api", "public_method", OBSERVED,
+                        function_id=self.units.starting_at(node))
         elif grammar == "csharp" and kind == "member_access_expression":
             expression, name = node.child("expression"), node.child("name")
             if expression is not None and name is not None and text(expression, 32).split(".")[-1] == "Request" and \
@@ -442,6 +482,13 @@ class Extractor:
                 self._suppression(node, "suppression.csharp-nullable", "csharp", "type", "block_start", body.strip())
         elif grammar == "csharp" and kind == "nullable_directive" and "disable" in text(node, 64):
             self._suppression(node, "suppression.csharp-nullable", "csharp", "type", "block_start", text(node, 64))
+        elif grammar == "csharp" and kind == "unsafe_statement":
+            self._suppression(node, "suppression.csharp-unsafe", "csharp", "compiler", "block_start", "unsafe")
+            self.signal(node, "privilege.unsafe_block.csharp", "privilege_shift", "unsafe_memory", OBSERVED)
+        elif grammar == "csharp" and kind == "pointer_type":
+            self.signal(node, "wrapper.ffi.csharp-raw-pointer", "sensitive_wrapper", "raw_pointer", OBSERVED)
+        elif grammar == "csharp" and kind in {"class_declaration", "struct_declaration"}:
+            self._modifier_declaration(node)
         elif grammar in {"csharp", "java"} and kind in {"method_declaration", "interface_declaration"}:
             self._modifier_declaration(node)
         elif grammar in {"c", "cpp"} and kind in {"preproc_call", "preproc_pragma"}:
@@ -455,6 +502,14 @@ class Extractor:
             self.signal(node, "api.header-declaration", "public_api", "header_declaration", OBSERVED, function_id=None)
         elif grammar == "rust" and kind == "unsafe_block":
             self._suppression(node, "suppression.rust-unsafe", "rustc", "compiler", "expression", "unsafe")
+            self.signal(node, "privilege.unsafe_block.rust", "privilege_shift", "unsafe_memory", OBSERVED)
+        elif grammar == "rust" and kind == "pointer_type":
+            self.signal(node, "wrapper.ffi.rust-raw-pointer", "sensitive_wrapper", "raw_pointer", OBSERVED)
+        elif grammar == "rust" and kind == "unary_expression":
+            if (node.operator() == "*" or text(node, 2).startswith("*")) and (
+                    self._in_rust_unsafe(node)
+                    or re.search(r"\bas\s+\*(const|mut)\b|\.as_(mut_)?ptr\s*\(", text(node, 256))):
+                self.signal(node, "sink.memory.rust-raw-pointer-deref", "sink", "raw_pointer_deref", OBSERVED)
         elif grammar == "rust" and kind == "foreign_mod_item":
             self.signal(node, "wrapper.ffi.extern-block", "sensitive_wrapper", "ffi", OBSERVED, function_id=None)
         elif grammar == "rust" and kind in _PUBLIC_RUST_ITEMS:
@@ -463,6 +518,10 @@ class Extractor:
                 self.signal(node, "api.rust-pub", "public_api", "pub_item", OBSERVED,
                             function_id=self.units.starting_at(node))
             if kind == "function_item":
+                fn_mods = [item for item in node.children if item.type == "function_modifiers"]
+                if any(re.search(r"\bunsafe\b", text(item, 64)) for item in fn_mods):
+                    self.signal(node, "privilege.unsafe_fn.rust", "privilege_shift", "unsafe_memory", OBSERVED,
+                                function_id=self.units.starting_at(node))
                 parameters = node.child("parameters")
                 if parameters is not None and any(
                         RUST_INGRESS_EXTRACTORS.match(text(item.child("type"), 64).strip())
@@ -499,11 +558,28 @@ class Extractor:
             self.signal(node, "api.php-public", "public_api", "public_method", OBSERVED,
                         function_id=self.units.starting_at(node))
 
+    def _in_rust_unsafe(self, node: Node) -> bool:
+        current = node.parent
+        while current is not None:
+            if current.type == "unsafe_block":
+                return True
+            if current.type == "function_item" and any(
+                    re.search(r"\bunsafe\b", self.source.text(item, 64))
+                    for item in current.children if item.type == "function_modifiers"):
+                return True
+            current = current.parent
+        return False
+
     def _modifier_declaration(self, node: Node) -> None:
         modifiers = [item for item in node.children if item.type in {"modifiers", "modifier"}]
-        if any(re.search(r"\bpublic\b", self.source.text(item, 256)) for item in modifiers):
+        if node.type in {"method_declaration", "interface_declaration"} and any(
+                re.search(r"\bpublic\b", self.source.text(item, 256)) for item in modifiers):
             surface = "public_interface" if node.type == "interface_declaration" else "public_method"
             self.signal(node, "api.public-modifier", "public_api", surface, OBSERVED,
+                        function_id=self.units.starting_at(node) if node.type == "method_declaration" else None)
+        if self.spec.grammar == "csharp" and any(
+                re.search(r"\bunsafe\b", self.source.text(item, 256)) for item in modifiers):
+            self.signal(node, "privilege.unsafe_modifier.csharp", "privilege_shift", "unsafe_memory", OBSERVED,
                         function_id=self.units.starting_at(node) if node.type == "method_declaration" else None)
 
     # -- suppressions ----------------------------------------------------------------------------

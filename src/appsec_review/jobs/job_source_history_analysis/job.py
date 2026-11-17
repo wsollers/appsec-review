@@ -41,7 +41,7 @@ from .git import (
     parse_messages_stream, parse_tree,
 )
 from .github import GitHubClient, GitHubSettings, Transport, enrich
-from .hotspots import SII_IDENTITY, TRANSFORMS, score as sii_score
+from .hotspots import SII_IDENTITY, TRANSFORMS, effective_hotspot_count, score as sii_score, select_proportional_hotspots
 from .lines import FIX_ON_FIX_IDENTITY, LINE_HISTORY_IDENTITY, FileLines, attribute, fix_on_fix, parse_file_history
 from .settings import HistorySettings, parse_settings
 from .sources import GitSource, blob_id, history_identity
@@ -1362,10 +1362,31 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                                      "sha256": facts["sha256"], "blob_id": facts["blob_id"]},
                     "location": location, "window": window, "coverage_gaps": gaps, "authority": AUTHORITY}
 
-        top_n = settings.hotspot_count
-        entries = [entry("file", item["key"], files[item["key"]], file_scores) for item in file_scores["ranked"][:top_n]]
+        top_n = effective_hotspot_count(
+            file_scores["population"],
+            hotspot_count=settings.hotspot_count,
+            proportional_ratio=settings.proportional_ratio,
+            min_hotspots=settings.min_hotspots,
+            max_hotspots=settings.max_hotspots,
+        )
+        selected_files = select_proportional_hotspots(
+            file_scores["ranked"],
+            modules={k: str(v.get("component_id") or ".") for k, v in files.items()},
+            hotspot_count=settings.hotspot_count,
+            proportional_ratio=settings.proportional_ratio,
+            min_hotspots=settings.min_hotspots if settings.min_hotspots is not None else 50,
+            max_hotspots=settings.max_hotspots if settings.max_hotspots is not None else 2000,
+        )
+        symbol_top_n = effective_hotspot_count(
+            symbol_scores["population"],
+            hotspot_count=settings.hotspot_count,
+            proportional_ratio=settings.proportional_ratio,
+            min_hotspots=settings.min_hotspots,
+            max_hotspots=settings.max_hotspots,
+        )
+        entries = [entry("file", item["key"], files[item["key"]], file_scores) for item in selected_files]
         entries += [entry("symbol", item["key"], symbols[item["key"]], symbol_scores)
-                    for item in symbol_scores["ranked"][:top_n]]
+                    for item in symbol_scores["ranked"][:symbol_top_n]]
         hotspots = {"schema": HOTSPOT_SCHEMA, "target_snapshot": unit.job.source_fingerprint, "snapshot": snapshot,
                     "sii": sii_metadata, "window": window, "hotspot_count": top_n,
                     "selection": "top hotspot_count ranked files and top hotspot_count ranked symbols",

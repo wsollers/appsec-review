@@ -37,10 +37,84 @@ FIELD_BOUND = 128
 FINDING_BOUND = 5_000          # findings kept per scan; a scan above it reports the truncation as a gap
 
 CATEGORY_BINARY_HARDENING = "binary_hardening"
+CATEGORY_PACKAGED_SECRET = "packaged_secret"
+CATEGORY_CONTAINER_SECURITY = "container_security"
 CATEGORY_VULNERABILITY = "vulnerability_matching"
 CATEGORY_BYTECODE = "bytecode_analysis"
 CATEGORY_INVENTORY = "software_inventory"
 CATEGORY_DIAGNOSTIC = "tool_diagnostic"
+
+_HARDENING_CRITICAL_TOKENS = ("NX", "CANARY", "STACK_GUARD", "EXEC_STACK", "FORTIFY")
+_HARDENING_HIGH_TOKENS = ("PIE", "RELRO", "ASLR", "RPATH", "RUNPATH", "CET", "CFG")
+
+
+def classify_artifact_lead_promotion(
+    *,
+    category: str,
+    check_id: str,
+    severity: str | None,
+    message: str = "",
+    fields: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return structured review-lead promotion metadata for an artifact finding."""
+    sev = str(severity or "").strip().lower()
+    upper_check = f"{check_id} {message}".upper()
+    extra = fields or {}
+
+    if category == CATEGORY_PACKAGED_SECRET or any(
+        tok in upper_check for tok in ("PRIVATE_KEY", "HARDCODED_SECRET", "AWS_ACCESS_KEY", "GITHUB_TOKEN", "SECRET_")
+    ):
+        return {
+            "lead_candidate": True,
+            "attack_class": "packaged_hardcoded_secret",
+            "severity_hint": "critical" if sev not in {"medium", "low"} else "high",
+        }
+
+    if category == CATEGORY_CONTAINER_SECURITY or any(
+        tok in upper_check for tok in ("CONTAINER_PRIVILEGED", "CONTAINER_ROOT", "CONTAINER_DEBUG_PORT", "HOST_NETWORK")
+    ):
+        is_crit = "PRIVILEGED" in upper_check or "2375" in upper_check or sev == "critical"
+        return {
+            "lead_candidate": True,
+            "attack_class": "dangerous_container_configuration",
+            "severity_hint": "critical" if is_crit else "high",
+        }
+
+    if category == CATEGORY_BINARY_HARDENING:
+        if any(tok in upper_check for tok in _HARDENING_CRITICAL_TOKENS) or sev == "critical":
+            return {
+                "lead_candidate": True,
+                "attack_class": "binary_missing_hardening",
+                "severity_hint": "critical",
+            }
+        if any(tok in upper_check for tok in _HARDENING_HIGH_TOKENS) or sev in {"high", "error", "warning", ""}:
+            return {
+                "lead_candidate": True,
+                "attack_class": "binary_missing_hardening",
+                "severity_hint": "high",
+            }
+
+    if category == CATEGORY_VULNERABILITY and sev in {"critical", "high"}:
+        return {
+            "lead_candidate": True,
+            "attack_class": "artifact_known_vulnerability",
+            "severity_hint": sev,
+        }
+
+    if category == CATEGORY_BYTECODE and (
+        str(extra.get("bug_category") or "").upper() == "SECURITY" or sev in {"critical", "high"}
+    ):
+        return {
+            "lead_candidate": True,
+            "attack_class": "bytecode_security_bug",
+            "severity_hint": "critical" if sev == "critical" else "high",
+        }
+
+    return {
+        "lead_candidate": False,
+        "attack_class": None,
+        "severity_hint": sev if sev in {"medium", "low"} else "low",
+    }
 INVENTORY_CAPABILITIES = frozenset({"inventory", "syft", "packages"})
 
 
@@ -185,6 +259,39 @@ def _cve_bin_tool(observation: Mapping[str, Any]) -> Iterator[Finding]:
                        }]}}, json_selector("records", index).as_dict())
 
 
+def _packaged_security_risks(observation: Mapping[str, Any]) -> list[Finding]:
+    """Convert bounded packaged-secret / container / ELF-hardening risks into Finding rows."""
+    out: list[Finding] = []
+    for index, raw in enumerate(_list(observation.get("security_risks"))):
+        item = _mapping(raw)
+        check = _text(item.get("check_id"))
+        if check is None:
+            continue
+        cat = _text(item.get("category")) or CATEGORY_CONTAINER_SECURITY
+        subj = _text(item.get("subject")) or "artifact"
+        sev = _text(item.get("severity")) or "high"
+        msg = _text(item.get("message"), MESSAGE_BOUND) or check
+        tool_id = _text(item.get("tool_id")) or "builtin-artifact-risk-inspector"
+        fields = {
+            k: _text(item.get(k), 256)
+            for k in ("member_path", "directive", "port", "binary", "indicator")
+            if _text(item.get(k), 256) is not None
+        }
+        out.append(
+            Finding(
+                check,
+                sev,
+                msg,
+                cat,
+                tool_id,
+                subj,
+                fields,
+                json_selector("security_risks", index).as_dict(),
+            )
+        )
+    return out
+
+
 SPLITTERS: Mapping[str, Callable[[Mapping[str, Any]], Iterator[Finding]]] = {
     "blint": _blint, "spotbugs": _spotbugs, "grype": _grype, "osv": _osv, "cve_bin_tool": _cve_bin_tool,
 }
@@ -240,7 +347,9 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
     canonical = str(artifact.get("canonical_identity") or "")
     outcome = scan_outcome(scan)
     splitter = SPLITTERS.get(capability)
-    found = list(splitter(observation)) if splitter is not None and observation else []
+    extra_risks = _packaged_security_risks(observation) if observation else []
+    has_finding_stream = splitter is not None or bool(extra_risks)
+    found = ([*(splitter(observation) if splitter is not None and observation else ()), *extra_risks])
     gaps = [str(gap)[:MESSAGE_BOUND] for gap in scan.get("gaps") or ()]
     kept = found[:FINDING_BOUND]
     if len(found) > FINDING_BOUND:
@@ -252,9 +361,9 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
     summary_payload = {
         **base, "gaps": gaps, "schema": RECORD_SCHEMA, "record_kind": RECORD_KIND_SUMMARY,
         "category": summary_category(capability), "scan_fingerprint": fingerprint,
-        "scan_outcome": outcome, "finding_capable": splitter is not None,
-        "finding_count": len(kept) if splitter is not None else None,
-        "findings_complete": (outcome == "completed" and len(found) <= FINDING_BOUND) if splitter is not None else None,
+        "scan_outcome": outcome, "finding_capable": has_finding_stream,
+        "finding_count": len(kept) if has_finding_stream else None,
+        "findings_complete": (outcome == "completed" and len(found) <= FINDING_BOUND) if has_finding_stream else None,
         "observation": _summary_observation(capability, observation, len(kept), len(found)),
     }
     summary_ref = scan.get("native_output")
@@ -275,12 +384,22 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
         occurrence = seen[key] = seen.get(key, 0) + 1
         identity_key = {"fingerprint": fingerprint, "artifact": canonical, "check": finding.check_id,
                         "subject": finding.subject, "occurrence": occurrence}
+        promotion = classify_artifact_lead_promotion(
+            category=finding.category,
+            check_id=finding.check_id,
+            severity=finding.severity,
+            message=finding.message,
+            fields=finding.fields,
+        )
         payload = {
             **base, "gaps": [], "schema": RECORD_SCHEMA, "record_kind": RECORD_KIND_FINDING,
             "category": finding.category, "tool_id": finding.tool_id, "scan_fingerprint": fingerprint,
             "native_rule_id": finding.check_id, "rule_id": finding.check_id, "severity": finding.severity,
             "native_severity": finding.severity, "message": finding.message[:MESSAGE_BOUND],
             "subject": finding.subject, "subject_artifact": canonical, "occurrence": occurrence,
+            "lead_candidate": promotion["lead_candidate"],
+            "attack_class": promotion["attack_class"],
+            "severity_hint": promotion["severity_hint"],
             **{key: value for key, value in finding.fields.items() if value not in (None, [], {})},
         }
         native = (scan.get("native_reports", {}).get(finding.native_report)

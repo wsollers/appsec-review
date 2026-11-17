@@ -35,6 +35,7 @@ _CHANGELOG_BOUNDS = {
 }
 _LISTS = {"fix_labels", "security_labels"}
 _SCALARS = {"minor_author_share"}
+_OPTIONAL_PROPORTIONAL = {"proportional_ratio", "min_hotspots", "max_hotspots"}
 _GLOB = GLOB_PATTERN   # shared with the review source dispositions (path_globs.py)
 
 
@@ -92,6 +93,9 @@ class HistorySettings:
     github: Mapping[str, Any]
     changelog_enabled: bool
     changelog: ChangelogLimits
+    proportional_ratio: float | None = None
+    min_hotspots: int | None = None
+    max_hotspots: int | None = None
 
 
 def _table(settings: Mapping[str, Any], name: str, keys: set[str]) -> Mapping[str, Any]:
@@ -124,7 +128,7 @@ def _patterns(value: Any, name: str) -> tuple[str, ...]:
 
 def parse_settings(settings: Mapping[str, Any]) -> HistorySettings:
     """Validate the job's settings table and return its typed form."""
-    unknown = set(settings) - set(_INTEGERS) - _TABLES - _LISTS - _SCALARS
+    unknown = set(settings) - set(_INTEGERS) - _TABLES - _LISTS - _SCALARS - _OPTIONAL_PROPORTIONAL
     if unknown:
         raise ValueError(f"unknown source history setting: {sorted(unknown)[0]}")
     integers = {key: _integer(settings.get(key), key, *bounds) for key, bounds in _INTEGERS.items()}
@@ -182,8 +186,22 @@ def parse_settings(settings: Mapping[str, Any]) -> HistorySettings:
         raise ValueError("source history setting is invalid: changelog.enabled")
     changelog_limits = ChangelogLimits(**{key: _integer(changelog[key], f"changelog.{key}", *bounds)
                                           for key, bounds in _CHANGELOG_BOUNDS.items()})
+    prop_ratio: float | None = None
+    if settings.get("proportional_ratio") is not None:
+        prop_ratio = _number(settings["proportional_ratio"], "proportional_ratio")
+        if not 0 < prop_ratio <= 1:
+            raise ValueError("source history setting is invalid: proportional_ratio")
+    min_hs: int | None = None
+    if settings.get("min_hotspots") is not None:
+        min_hs = _integer(settings["min_hotspots"], "min_hotspots", 1, 10_000)
+    max_hs: int | None = None
+    if settings.get("max_hotspots") is not None:
+        max_hs = _integer(settings["max_hotspots"], "max_hotspots", 1, 10_000)
+    if min_hs is not None and max_hs is not None and min_hs > max_hs:
+        raise ValueError("source history setting is invalid: min_hotspots exceeds max_hotspots")
     return HistorySettings(
         changelog_enabled=changelog["enabled"], changelog=changelog_limits,
+        proportional_ratio=prop_ratio, min_hotspots=min_hs, max_hotspots=max_hs,
         **integers, minor_author_share=share, fix_labels=labels["fix_labels"],
         security_labels=labels["security_labels"], fix_on_fix_interval_days=interval,
         line_history_max_files=_integer(lines["max_files"], "line_history.max_files", 0, 10_000),

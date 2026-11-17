@@ -20,7 +20,7 @@ SEMANTIC = "verified_semantic_path"
 
 C_FAMILY = frozenset({"c", "cpp"})
 JS_FAMILY = frozenset({"javascript", "typescript", "tsx"})
-ALL = frozenset({"c", "cpp", "java", "csharp", "go", "javascript", "typescript", "tsx", "rust", "php"})
+ALL = frozenset({"c", "cpp", "java", "csharp", "go", "javascript", "typescript", "tsx", "rust", "php", "ruby"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,11 +58,15 @@ CALL_RULES: tuple[CallRule, ...] = (
     _rule("sink.command_exec.java", "sink", "command_exec", {"java"}, ("exec",), qualifiers=("getRuntime", "Runtime")),
     _rule("sink.command_exec.java-processbuilder", "sink", "command_exec", {"java"}, ("ProcessBuilder",), bare=True),
     _rule("sink.command_exec.csharp", "sink", "command_exec", {"csharp"}, ("Start",), qualifiers=("Process",)),
+    _rule("sink.command_exec.csharp-psi", "sink", "command_exec", {"csharp"}, ("ProcessStartInfo",), bare=True),
     _rule("sink.command_exec.go", "sink", "command_exec", {"go"}, ("Command", "CommandContext"), qualifiers=("exec",)),
     _rule("sink.command_exec.node", "sink", "command_exec", JS_FAMILY,
           ("exec", "execSync", "spawn", "spawnSync", "execFile", "execFileSync", "fork"),
           qualifiers=("child_process", "childProcess", "cp"), bare=True, imports=("child_process", "node:child_process")),
-    _rule("sink.command_exec.rust", "sink", "command_exec", {"rust"}, ("new",), qualifiers=("Command",)),
+    _rule("sink.command_exec.rust", "sink", "command_exec", {"rust"}, ("new", "spawn", "status", "output"), qualifiers=("Command", "process")),
+    _rule("sink.command_exec.ruby", "sink", "command_exec", {"ruby"},
+          ("system", "exec", "spawn", "syscall", "popen", "capture2", "capture2e", "capture3", "pipeline"),
+          bare=True, qualifiers=("Kernel", "Process", "Open3", "IO", "PTY")),
     _rule("sink.command_exec.php", "sink", "command_exec", {"php"},
           ("exec", "shell_exec", "system", "passthru", "proc_open", "popen", "pcntl_exec"), bare=True),
     _rule("sink.sql.go", "sink", "sql", {"go"},
@@ -73,31 +77,56 @@ CALL_RULES: tuple[CallRule, ...] = (
     _rule("sink.sql.csharp", "sink", "sql", {"csharp"},
           ("SqlCommand", "NpgsqlCommand", "MySqlCommand", "SqliteCommand", "OracleCommand"), bare=True),
     _rule("sink.sql.csharp-raw", "sink", "sql", {"csharp"},
-          ("ExecuteSqlRaw", "ExecuteSqlRawAsync", "FromSqlRaw", "ExecuteSqlCommand", "SqlQueryRaw"), qualifiers=_DB + ("Database",)),
+          ("ExecuteSqlRaw", "ExecuteSqlRawAsync", "FromSqlRaw", "FromSql", "ExecuteSqlCommand", "SqlQueryRaw",
+           "SqlQuery", "QueryAsync", "ExecuteAsync"), qualifiers=_DB + ("Database",)),
+    _rule("sink.sql.csharp-ef-raw", "sink", "sql", {"csharp"},
+          ("FromSqlRaw", "ExecuteSqlRaw", "ExecuteSqlRawAsync", "SqlQueryRaw"), qualifiers=("*",)),
     _rule("sink.sql.php", "sink", "sql", {"php"}, ("mysqli_query", "mysql_query", "pg_query", "sqlite_query"), bare=True),
     _rule("sink.sql.php-member", "sink", "sql", {"php"}, ("query", "exec", "prepare", "multi_query"), qualifiers=_DB),
     _rule("sink.sql.node", "sink", "sql", JS_FAMILY, ("query", "raw", "$queryRawUnsafe", "$executeRawUnsafe", "execute"),
           qualifiers=_DB),
-    _rule("sink.sql.rust", "sink", "sql", {"rust"}, ("query", "query_as", "sql_query", "execute"),
-          qualifiers=("sqlx", "diesel", "conn", "db", "tx", "connection")),
+    _rule("sink.sql.rust", "sink", "sql", {"rust"},
+          ("query", "query_as", "query_scalar", "raw_sql", "sql_query", "execute"),
+          qualifiers=("sqlx", "diesel", "conn", "db", "tx", "connection", "pool")),
+    _rule("sink.sql.ruby", "sink", "sql", {"ruby"},
+          ("find_by_sql", "count_by_sql", "exec_query", "select_all", "select_rows", "select_value"), qualifiers=("*",)),
+    _rule("sink.sql.ruby-conn", "sink", "sql", {"ruby"}, ("execute", "sql"), qualifiers=_DB + ("ActiveRecord", "Base", "Arel")),
     _rule("sink.deserialization.java", "sink", "deserialization", {"java"}, ("ObjectInputStream", "XMLDecoder"),
           bare=True),
     _rule("sink.deserialization.java-read", "sink", "deserialization", {"java"}, ("readObject", "readUnshared", "fromXML"),
           qualifiers=("input", "in", "ois", "stream", "xstream", "XStream", "*InputStream")),
     _rule("sink.deserialization.csharp", "sink", "deserialization", {"csharp"},
-          ("BinaryFormatter", "SoapFormatter", "NetDataContractSerializer", "LosFormatter", "ObjectStateFormatter"),
+          ("BinaryFormatter", "SoapFormatter", "NetDataContractSerializer", "LosFormatter", "ObjectStateFormatter",
+           "JavaScriptSerializer", "DataContractJsonSerializer"),
           bare=True),
     _rule("sink.deserialization.php", "sink", "deserialization", {"php"}, ("unserialize",), bare=True),
+    _rule("sink.deserialization.ruby", "sink", "deserialization", {"ruby"},
+          ("load", "restore", "unsafe_load"), qualifiers=("Marshal", "YAML", "Psych", "Oj")),
+    _rule("sink.dynamic_dispatch.ruby", "sink", "dynamic_dispatch", {"ruby"},
+          ("send", "public_send", "__send__", "constantize", "safe_constantize"), bare=True, qualifiers=("*",)),
+    _rule("sink.template.ruby-erb", "sink", "template_injection", {"ruby"},
+          ("new", "result", "result_with_hash"), qualifiers=("ERB",)),
     _rule("sink.deserialization.node", "sink", "deserialization", JS_FAMILY, ("unserialize", "deserialize"),
           qualifiers=("serialize", "nodeSerialize", "v8", "serialijse")),
     _rule("sink.eval.node", "sink", "code_eval", JS_FAMILY, ("eval", "Function"), bare=True),
     _rule("sink.eval.node-vm", "sink", "code_eval", JS_FAMILY,
           ("runInNewContext", "runInThisContext", "runInContext", "compileFunction"), qualifiers=("vm",)),
-    _rule("sink.eval.php", "sink", "code_eval", {"php"}, ("eval", "create_function", "assert"), bare=True),
+    _rule("sink.eval.php", "sink", "code_eval", {"php"},
+          ("eval", "create_function", "assert", "preg_replace", "mb_ereg_replace", "ereg_replace"), bare=True),
+    _rule("sink.eval.ruby", "sink", "code_eval", {"ruby"},
+          ("eval", "instance_eval", "class_eval", "module_eval"), bare=True, qualifiers=("*", "Kernel", "Binding")),
     _rule("sink.eval.java", "sink", "code_eval", {"java"}, ("eval",), qualifiers=("engine", "scriptEngine", "ScriptEngine")),
     _rule("sink.memory.c-family", "sink", "memory", C_FAMILY,
           ("memcpy", "memmove", "strcpy", "strncpy", "strcat", "strncat", "sprintf", "vsprintf", "gets", "alloca",
            "wcscpy", "wcscat", "lstrcpyA", "lstrcpyW"), bare=True),
+    _rule("sink.memory.rust-ptr", "sink", "memory", {"rust"},
+          ("read", "read_unaligned", "read_volatile", "write", "write_bytes", "write_unaligned", "copy",
+           "copy_nonoverlapping", "from_raw_parts", "from_raw_parts_mut", "from_raw"),
+          qualifiers=("ptr", "slice", "Box", "CString", "Vec", "std", "core")),
+    _rule("sink.memory.csharp-marshal", "sink", "memory", {"csharp"},
+          ("Copy", "MemoryCopy", "PtrToStructure", "StructureToPtr", "ReadByte", "WriteByte", "ReadInt32",
+           "WriteInt32", "ReadIntPtr", "WriteIntPtr", "AllocHGlobal", "FreeHGlobal"),
+          qualifiers=("Marshal", "Buffer", "Unsafe")),
     _rule("sink.file_path.c-family", "sink", "file_path", C_FAMILY,
           ("fopen", "freopen", "open", "openat", "unlink", "remove", "rename", "realpath"), bare=True),
     _rule("sink.file_path.go", "sink", "file_path", {"go"},
@@ -151,6 +180,8 @@ CALL_RULES: tuple[CallRule, ...] = (
     _rule("ingress.read.rust", "ingress", "untrusted_input", {"rust"}, ("args", "var", "vars", "stdin"),
           qualifiers=("env", "io")),
     _rule("ingress.read.php", "ingress", "untrusted_input", {"php"}, ("getallheaders", "apache_request_headers"), bare=True),
+    _rule("ingress.read.ruby", "ingress", "untrusted_input", {"ruby"},
+          ("params", "cookies", "headers"), bare=True, qualifiers=("request", "controller", "self")),
     _rule("parser.json", "parser", "json", ALL,
           ("parse", "Unmarshal", "readValue", "readTree", "fromJson", "DeserializeObject", "json_decode", "from_str",
            "from_slice", "from_reader", "Deserialize", "DeserializeAsync"),
@@ -197,7 +228,15 @@ CALL_RULES: tuple[CallRule, ...] = (
     _rule("privilege.access_control_bypass.csrf", "privilege_shift", "access_control_bypass", {"java"}, ("disable",),
           qualifiers=("csrf",)),
     _rule("privilege.access_control_bypass.aspnet", "privilege_shift", "access_control_bypass", {"csharp"},
-          ("AllowAnonymous",), qualifiers=("app", "group", "endpoints", "builder", "MapGet", "MapPost")),
+          ("AllowAnonymous",), qualifiers=("app", "group", "endpoints", "builder", "MapGet", "MapPost", "*")),
+    _rule("privilege.unsafe_cast.rust-transmute", "privilege_shift", "unsafe_cast", {"rust"},
+          ("transmute", "transmute_copy"), bare=True, qualifiers=("mem", "std", "core", "intrinsics")),
+    _rule("privilege.mass_assignment.ruby", "privilege_shift", "mass_assignment", {"ruby"},
+          ("permit!",), qualifiers=("*", "params")),
+    _rule("privilege.variable_overwrite.php-extract", "privilege_shift", "variable_overwrite", {"php"},
+          ("extract", "parse_str", "import_request_variables"), bare=True),
+    _rule("privilege.xxe.csharp-xmlurlresolver", "privilege_shift", "xxe", {"csharp"},
+          ("XmlUrlResolver",), bare=True),
     # --- wrapper surfaces (external libraries with sensitive behavior) -----------------------------
     _rule("wrapper.xml", "sensitive_wrapper", "xml", ALL,
           ("xmlReadMemory", "xmlReadFile", "xmlReadDoc", "xmlParseMemory", "xmlParseFile", "xmlCtxtReadMemory",
@@ -252,8 +291,12 @@ CALL_RULES: tuple[CallRule, ...] = (
     _rule("wrapper.deserialization", "sensitive_wrapper", "deserialization", ALL,
           ("ObjectInputStream", "XMLDecoder", "BinaryFormatter", "SoapFormatter", "unserialize"), bare=True),
     _rule("wrapper.deserialization-member", "sensitive_wrapper", "deserialization", ALL,
-          ("fromXML", "readObject", "Deserialize"),
-          qualifiers=("input", "ois", "xstream", "XStream", "serialize", "formatter", "BinaryFormatter", "*InputStream")),
+          ("fromXML", "readObject", "Deserialize", "load", "unsafe_load"),
+          qualifiers=("input", "ois", "xstream", "XStream", "serialize", "formatter", "BinaryFormatter", "*InputStream",
+                      "Marshal", "YAML", "Psych")),
+    _rule("wrapper.deserialization.rust-serde", "sensitive_wrapper", "deserialization", {"rust"},
+          ("from_str", "from_slice", "from_reader", "from_value", "deserialize"),
+          qualifiers=("serde_json", "serde_yaml", "bincode", "rmp_serde", "ciborium", "ron", "toml", "postcard", "serde")),
     # --- state mutation ---------------------------------------------------------------------------
     _rule("state.transaction", "state_mutation", "transaction", ALL,
           ("Begin", "BeginTx", "BeginTransaction", "BeginTransactionAsync", "beginTransaction", "startTransaction",
@@ -295,6 +338,7 @@ ROUTE_VERBS = {
     "csharp": frozenset({"MapGet", "MapPost", "MapPut", "MapDelete", "MapPatch", "MapMethods", "Map"}),
     "rust": frozenset({"route", "service"}),
     "php": frozenset({"get", "post", "put", "delete", "patch", "any", "match"}),
+    "ruby": frozenset({"get", "post", "put", "delete", "patch", "match", "resources", "root"}),
 }
 ROUTE_VERBS["typescript"] = ROUTE_VERBS["tsx"] = ROUTE_VERBS["javascript"]
 
@@ -346,6 +390,7 @@ GO_INGRESS_OBJECTS = frozenset({"r", "req", "request"})
 GO_INGRESS_FIELDS = frozenset({"Body", "Form", "PostForm", "MultipartForm", "Header", "URL"})
 CSHARP_INGRESS_PROPERTIES = frozenset({"Query", "Form", "Body", "Headers", "Cookies", "QueryString"})
 PHP_SUPERGLOBALS = frozenset({"_GET", "_POST", "_REQUEST", "_COOKIE", "_FILES", "_SERVER", "_ENV"})
+RUBY_INGRESS_OBJECTS = frozenset({"params", "cookies", "headers"})
 RUST_INGRESS_EXTRACTORS = re.compile(r"^(web::)?(Json|Query|Form|Path|Multipart|Bytes)\s*<")
 
 # --- suppression directives ------------------------------------------------------------------------
@@ -394,6 +439,8 @@ COMMENT_SUPPRESSIONS: tuple[SuppressionRule, ...] = (
     _s("suppression.phpcs-legacy", r"@codingStandardsIgnore(Line|Start|File)?\b", "phpcs", "lint", "line"),
     _s("suppression.psalm", r"@psalm-suppress\b", "psalm", "type", "declaration"),
     _s("suppression.phpstan", r"@phpstan-ignore(-next-line|-line)?\b", "phpstan", "type", "next_line"),
+    _s("suppression.rubocop", r"\brubocop:(disable|todo)\b", "rubocop", "lint", "line"),
+    _s("suppression.brakeman", r"\bbrakeman\b", "brakeman", "security", "line"),
 )
 # A suppressed rule name with any of these markers is a security-check suppression.
 SECURITY_MARKERS = re.compile(

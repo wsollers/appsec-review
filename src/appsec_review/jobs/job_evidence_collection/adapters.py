@@ -342,6 +342,11 @@ def _record(item: Mapping[str, Any], *, rule: Iterable[str], message: Iterable[s
         "component": item.get("component"), "package": item.get("package") or item.get("name"),
         "advisory": item.get("advisory") or item.get("vulnerability") or item.get("id"),
         "language": item.get("language"),
+        **({"rule_mapping": item["rule_mapping"]} if isinstance(item.get("rule_mapping"), Mapping) else
+           ({"rule_mapping": {"cwe": f"CWE-{int(str(item['issue_cwe']['id']).strip())}"}}
+            if isinstance(item.get("issue_cwe"), Mapping)
+            and str(item["issue_cwe"].get("id") or "").strip().isdigit()
+            and int(str(item["issue_cwe"]["id"]).strip()) > 0 else {})),
         **{key: item[key] for key in ("secret", "match", "password", "token") if key in item},
     }
 
@@ -401,14 +406,254 @@ def _mobsfscan_parser(payload: bytes) -> list[dict[str, Any]]:
     return records
 
 
+def _semgrep_trace_node(node: Any) -> dict[str, Any] | None:
+    """Extract one location/content node from Semgrep/OpenGrep ``dataflow_trace`` structures."""
+    if isinstance(node, list) and len(node) >= 2:
+        tag = str(node[0])
+        payload = node[1]
+        if tag == "CliLoc" and isinstance(payload, list) and payload:
+            loc = payload[0] if isinstance(payload[0], Mapping) else {}
+            label = str(payload[1]) if len(payload) > 1 and payload[1] is not None else ""
+            start = loc.get("start") if isinstance(loc.get("start"), Mapping) else {}
+            end = loc.get("end") if isinstance(loc.get("end"), Mapping) else {}
+            return {
+                "path": loc.get("path"),
+                "start_line": start.get("line", 1),
+                "end_line": end.get("line", start.get("line", 1)),
+                "label": label,
+            }
+        if tag == "CliCall" and isinstance(payload, list) and len(payload) >= 3:
+            # CliCall wraps [[call_loc, call_text], intermediate_vars, inner_node]
+            inner = _semgrep_trace_node(payload[2])
+            if inner is not None:
+                return inner
+            if isinstance(payload[0], list) and payload[0] and isinstance(payload[0][0], Mapping):
+                loc = payload[0][0]
+                label = str(payload[0][1]) if len(payload[0]) > 1 and payload[0][1] is not None else ""
+                start = loc.get("start") if isinstance(loc.get("start"), Mapping) else {}
+                end = loc.get("end") if isinstance(loc.get("end"), Mapping) else {}
+                return {
+                    "path": loc.get("path"),
+                    "start_line": start.get("line", 1),
+                    "end_line": end.get("line", start.get("line", 1)),
+                    "label": label,
+                }
+    if isinstance(node, Mapping):
+        loc = node.get("location") if isinstance(node.get("location"), Mapping) else node
+        start = loc.get("start") if isinstance(loc.get("start"), Mapping) else {}
+        end = loc.get("end") if isinstance(loc.get("end"), Mapping) else {}
+        start_line = loc.get("start_line") or start.get("line") or loc.get("line") or 1
+        end_line = loc.get("end_line") or end.get("line") or start_line
+        label = node.get("content") or node.get("symbol") or node.get("label") or ""
+        return {
+            "path": loc.get("path") or node.get("path"),
+            "start_line": start_line,
+            "end_line": end_line,
+            "label": str(label),
+        }
+    return None
+
+
+def _parse_sarif_code_flows(code_flows: Any) -> dict[str, Any] | None:
+    """Extract source, intermediate hops, and sink from SARIF 2.1.0 ``codeFlows``."""
+    if not isinstance(code_flows, list) or not code_flows:
+        return None
+    raw_steps: list[dict[str, Any]] = []
+    for flow in code_flows:
+        if not isinstance(flow, Mapping):
+            continue
+        for thread_flow in flow.get("threadFlows") or []:
+            if not isinstance(thread_flow, Mapping):
+                continue
+            for tf_loc in thread_flow.get("locations") or []:
+                if not isinstance(tf_loc, Mapping):
+                    continue
+                loc_obj = tf_loc.get("location") if isinstance(tf_loc.get("location"), Mapping) else tf_loc
+                phys = loc_obj.get("physicalLocation") if isinstance(loc_obj.get("physicalLocation"), Mapping) else {}
+                artifact_loc = phys.get("artifactLocation") if isinstance(phys.get("artifactLocation"), Mapping) else {}
+                region = phys.get("region") if isinstance(phys.get("region"), Mapping) else {}
+                uri = artifact_loc.get("uri")
+                if isinstance(uri, str) and uri.startswith("file://"):
+                    uri = uri.removeprefix("file://")
+                msg = loc_obj.get("message") if isinstance(loc_obj.get("message"), Mapping) else {}
+                snippet = region.get("snippet") if isinstance(region.get("snippet"), Mapping) else {}
+                label = msg.get("text") or snippet.get("text") or ""
+                start_line = region.get("startLine", 1)
+                end_line = region.get("endLine", start_line)
+                raw_steps.append({
+                    "path": uri,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "label": str(label).strip(),
+                })
+                if len(raw_steps) >= 32:
+                    break
+            if raw_steps:
+                break
+        if raw_steps:
+            break
+    if not raw_steps:
+        return None
+    source_loc = dict(raw_steps[0])
+    sink_loc = dict(raw_steps[-1])
+    middle = raw_steps[1:-1] if len(raw_steps) > 2 else []
+    intermediate_vars = [
+        {
+            "path": hop["path"],
+            "start_line": hop["start_line"],
+            "end_line": hop["end_line"],
+            "symbol": hop["label"],
+        }
+        for hop in middle
+    ]
+    steps = []
+    for idx, hop in enumerate(raw_steps):
+        kind = "source" if idx == 0 else ("sink" if idx == len(raw_steps) - 1 else "step")
+        steps.append({
+            "index": idx,
+            "kind": kind,
+            "path": hop["path"],
+            "start_line": hop["start_line"],
+            "end_line": hop["end_line"],
+            "label": hop["label"],
+        })
+    return {
+        "source_location": source_loc,
+        "intermediate_vars": intermediate_vars,
+        "steps": steps,
+        "sink_location": sink_loc,
+    }
+
+
+def _extract_dataflow_trace(item: Mapping[str, Any], extra: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Extract normalized taint trace from Semgrep/OpenGrep ``dataflow_trace`` or SARIF ``codeFlows``."""
+    raw_trace = extra.get("dataflow_trace") if isinstance(extra.get("dataflow_trace"), Mapping) else None
+    if raw_trace is None and isinstance(item.get("dataflow_trace"), Mapping):
+        raw_trace = item["dataflow_trace"]
+    if raw_trace is not None:
+        source_node = _semgrep_trace_node(raw_trace.get("taint_source"))
+        sink_node = _semgrep_trace_node(raw_trace.get("taint_sink"))
+        inter_raw = raw_trace.get("intermediate_vars")
+        intermediate_vars: list[dict[str, Any]] = []
+        if isinstance(inter_raw, list):
+            for entry in inter_raw[:30]:
+                parsed_var = _semgrep_trace_node(entry)
+                if parsed_var is not None:
+                    intermediate_vars.append({
+                        "path": parsed_var["path"],
+                        "start_line": parsed_var["start_line"],
+                        "end_line": parsed_var["end_line"],
+                        "symbol": parsed_var["label"],
+                    })
+        if source_node is not None or sink_node is not None or intermediate_vars:
+            steps: list[dict[str, Any]] = []
+            if source_node is not None:
+                steps.append({
+                    "index": len(steps),
+                    "kind": "source",
+                    "path": source_node["path"],
+                    "start_line": source_node["start_line"],
+                    "end_line": source_node["end_line"],
+                    "label": source_node["label"],
+                })
+            for hop in intermediate_vars:
+                steps.append({
+                    "index": len(steps),
+                    "kind": "step",
+                    "path": hop["path"],
+                    "start_line": hop["start_line"],
+                    "end_line": hop["end_line"],
+                    "label": hop["symbol"],
+                })
+            if sink_node is not None:
+                steps.append({
+                    "index": len(steps),
+                    "kind": "sink",
+                    "path": sink_node["path"],
+                    "start_line": sink_node["start_line"],
+                    "end_line": sink_node["end_line"],
+                    "label": sink_node["label"],
+                })
+            return {
+                "source_location": source_node,
+                "intermediate_vars": intermediate_vars,
+                "steps": steps,
+                "sink_location": sink_node,
+            }
+    code_flows = item.get("codeFlows") or extra.get("codeFlows")
+    return _parse_sarif_code_flows(code_flows)
+
+
+def _semgrep_sarif_records(document: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Parse SARIF 2.1.0 output from Semgrep/OpenGrep while preserving ``codeFlows`` and CWE tags."""
+    records: list[dict[str, Any]] = []
+    sarif_severity = {"error": "ERROR", "warning": "WARNING", "note": "INFO", "none": "LOW"}
+    for run_index, run in enumerate(document.get("runs") or []):
+        if not isinstance(run, Mapping):
+            continue
+        driver = run.get("tool", {}).get("driver", {}) if isinstance(run.get("tool"), Mapping) else {}
+        rule_meta: dict[str, dict[str, Any]] = {}
+        for rule in (driver.get("rules") or []) if isinstance(driver, Mapping) else []:
+            if not isinstance(rule, Mapping) or not rule.get("id"):
+                continue
+            props = rule.get("properties") if isinstance(rule.get("properties"), Mapping) else {}
+            tags = [str(tag) for tag in (props.get("tags") or []) if isinstance(tag, str)]
+            cwes = [tag for tag in tags if tag.upper().startswith("CWE-")]
+            if isinstance(props.get("cwe"), str):
+                cwes.append(props["cwe"])
+            elif isinstance(props.get("cwe"), list):
+                cwes.extend(str(entry) for entry in props["cwe"] if isinstance(entry, str))
+            if cwes:
+                rule_meta[str(rule["id"])] = {"cwe": list(dict.fromkeys(cwes))}
+        for res_index, result in enumerate(run.get("results") or []):
+            if not isinstance(result, Mapping):
+                continue
+            raw_rule_id = str(result.get("ruleId") or "unknown")
+            msg_obj = result.get("message") if isinstance(result.get("message"), Mapping) else {}
+            locs = result.get("locations") or []
+            first_loc = locs[0] if locs and isinstance(locs[0], Mapping) else {}
+            phys = first_loc.get("physicalLocation") if isinstance(first_loc.get("physicalLocation"), Mapping) else {}
+            art = phys.get("artifactLocation") if isinstance(phys.get("artifactLocation"), Mapping) else {}
+            reg = phys.get("region") if isinstance(phys.get("region"), Mapping) else {}
+            uri = art.get("uri")
+            if isinstance(uri, str) and uri.startswith("file://"):
+                uri = uri.removeprefix("file://")
+            level = str(result.get("level") or "warning").lower()
+            record: dict[str, Any] = {
+                "rule_id": raw_rule_id[raw_rule_id.index(SEI_CERT_RULE_PREFIX):]
+                if SEI_CERT_RULE_PREFIX in raw_rule_id else raw_rule_id,
+                "message": msg_obj.get("text") or raw_rule_id,
+                "severity": sarif_severity.get(level, "UNKNOWN"),
+                "category": "source_sast",
+                "path": uri,
+                "start_line": reg.get("startLine", 1),
+                "end_line": reg.get("endLine", reg.get("startLine", 1)),
+                "_native_selector": json_selector("runs", run_index, "results", res_index).as_dict(),
+            }
+            mapping = dict(rule_meta.get(raw_rule_id, {}))
+            res_props = result.get("properties") if isinstance(result.get("properties"), Mapping) else {}
+            if isinstance(res_props.get("cwe"), (str, list)):
+                mapping["cwe"] = res_props["cwe"]
+            if mapping:
+                record["rule_mapping"] = mapping
+            trace = _parse_sarif_code_flows(result.get("codeFlows"))
+            if trace is not None:
+                record["dataflow_trace"] = trace
+            records.append(record)
+    return records
+
+
 def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
-    """Parse Semgrep CE / OpenGrep JSON, keeping engine errors and skipped targets as coverage gaps."""
+    """Parse Semgrep CE / OpenGrep JSON or SARIF, preserving taint flows, CWE mappings, and coverage gaps."""
     document = _json(payload)
+    if isinstance(document, Mapping) and "runs" in document and "results" not in document:
+        return _semgrep_sarif_records(document)
     records: list[dict[str, Any]] = []
     for index, item in enumerate(document.get("results", [])):
         extra = item.get("extra", {}) if isinstance(item.get("extra"), Mapping) else {}
+        metadata = extra.get("metadata", {}) if isinstance(extra.get("metadata"), Mapping) else {}
         rule_id = str(item.get("check_id"))
-        record = {
+        record: dict[str, Any] = {
             "rule_id": item.get("check_id"), "message": extra.get("message"),
             "severity": extra.get("severity"), "category": "source_sast",
             "path": item.get("path"), "start_line": item.get("start", {}).get("line"),
@@ -419,8 +664,21 @@ def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
             # Engines prefix rule IDs with the config directory; keep the pack-owned identity and the
             # rule's CERT mapping so the observation resolves to rules/sei-cert/mappings.
             record["rule_id"] = rule_id[rule_id.index(SEI_CERT_RULE_PREFIX):]
-            metadata = extra.get("metadata", {}) if isinstance(extra.get("metadata"), Mapping) else {}
             record["rule_mapping"] = {key: metadata[key] for key in SEI_CERT_METADATA if key in metadata}
+        elif metadata:
+            general_mapping = {
+                key: metadata[key]
+                for key in ("cwe", "owasp", "category", "subcategory")
+                if key in metadata and (
+                    isinstance(metadata[key], str)
+                    or (isinstance(metadata[key], list) and all(isinstance(v, str) for v in metadata[key]))
+                )
+            }
+            if general_mapping:
+                record["rule_mapping"] = general_mapping
+        trace = _extract_dataflow_trace(item, extra)
+        if trace is not None:
+            record["dataflow_trace"] = trace
         records.append(record)
     for index, error in enumerate(document.get("errors", []) if isinstance(document, Mapping) else []):
         if isinstance(error, Mapping):
@@ -534,10 +792,20 @@ def _shellcheck_parser(payload: bytes) -> list[dict[str, Any]]:
 
 
 def _gosec_parser(payload: bytes) -> list[dict[str, Any]]:
-    return [{**_record(item, rule=("rule_id",), message=("details",), path_keys=("file",),
-                       line_keys=("line",), category=CATEGORY_SOURCE_SAST),
-             "_native_selector": json_selector("Issues", index).as_dict()}
-            for index, item in enumerate(_json(payload).get("Issues", []))]
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(_json(payload).get("Issues", [])):
+        rec = {
+            **_record(item, rule=("rule_id",), message=("details",), path_keys=("file",),
+                      line_keys=("line",), category=CATEGORY_SOURCE_SAST),
+            "_native_selector": json_selector("Issues", index).as_dict(),
+        }
+        cwe_obj = item.get("cwe")
+        if isinstance(cwe_obj, Mapping) and str(cwe_obj.get("id") or "").strip().isdigit():
+            cwe_num = int(str(cwe_obj["id"]).strip())
+            if cwe_num > 0:
+                rec["rule_mapping"] = {"cwe": f"CWE-{cwe_num}"}
+        records.append(rec)
+    return records
 
 
 def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:

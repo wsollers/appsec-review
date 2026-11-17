@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/review-prioritization/prioritization-signals.schema.json",
+  "title": "Composite Review Prioritization Signals and Hunt Queue",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "target_snapshot",
+    "engineering_sources",
+    "promoted_leads",
+    "hunt_queue",
+    "telemetry"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/review-prioritization-signals/1"
+    },
+    "target_snapshot": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "engineering_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "promoted_leads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lead_id",
+          "lead_source",
+          "producer",
+          "rule_id",
+          "attack_class",
+          "severity_hint",
+          "summary"
+        ],
+        "properties": {
+          "lead_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lead_source": {
+            "type": "string",
+            "enum": [
+              "ci_configuration",
+              "artifact_security",
+              "sca_reachable"
+            ]
+          },
+          "producer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rule_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "attack_class": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity_hint": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "end_line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "package_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ecosystem": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reachability": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "hunt_queue": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "scope",
+          "path",
+          "name",
+          "language",
+          "score",
+          "base_score",
+          "sast_silence_hunt_boost",
+          "hunt_priority_reason"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "file",
+              "function"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "function_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "base_score": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "sast_silence_hunt_boost": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "hunt_priority_reason": {
+            "const": "high_surface_zero_sast_coverage"
+          },
+          "end_line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leads_promoted_ci",
+        "leads_promoted_artifact",
+        "leads_promoted_sca_reachable",
+        "sast_silence_hunt_units",
+        "composite_boosted_units"
+      ],
+      "properties": {
+        "leads_promoted_ci": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "leads_promoted_artifact": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "leads_promoted_sca_reachable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sast_silence_hunt_units": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "composite_boosted_units": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "composite_weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "change_context_boost",
+        "uncovered_risk_boost",
+        "profile_hotpath_boost",
+        "sca_reachability_boost",
+        "sast_silence_hunt_boost"
+      ],
+      "properties": {
+        "change_context_boost": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "uncovered_risk_boost": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "profile_hotpath_boost": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "sca_reachability_boost": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "sast_silence_hunt_boost": {
+          "type": "number",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

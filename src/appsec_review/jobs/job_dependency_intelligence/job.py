@@ -40,6 +40,7 @@ from .native_advisories import (
     observation_records, open_database, result_fingerprint, select_components, snapshot_provenance,
     verified_snapshot,
 )
+from .reachability import DependencyIntelligenceSettings, OsvSnapshotSource, evaluate_sca_reachability
 from .resolution import deduplicate_repositories, normalize_dependencies, repository_identity
 from .scorecard import (ScorecardCache, ScorecardCacheError, ScorecardClient, ScorecardError,
                         Transport, https_get)
@@ -195,6 +196,54 @@ def _evidence_packages(run_root: Path) -> tuple[list[dict[str, Any]], str]:
     return records, sha
 
 
+def _evidence_advisories(run_root: Path) -> list[dict[str, Any]]:
+    handoff, _ = _accepted_job(run_root, "job_evidence_collection")
+    output = handoff.get("outputs", {}).get("evidence_publication.publish_handoff", {})
+    manifest_identity = output.get("index_manifest")
+    if not isinstance(manifest_identity, Mapping):
+        return []
+    path = (run_root / str(manifest_identity.get("path", ""))).resolve()
+    manifest, _ = load_verified_manifest(run_root, path, str(manifest_identity.get("sha256", "")))
+    advisories: list[dict[str, Any]] = []
+    for shard in manifest.get("indexes", ()):
+        if shard.get("name") != "observations":
+            continue
+        database_path = (run_root / str(shard["relative_path"])).resolve()
+        uri = f"file:{database_path.as_posix()}?mode=ro&immutable=1"
+        with sqlite3.connect(uri, uri=True) as database:
+            for (_identity, payload_json) in database.execute(
+                "SELECT identity, payload_json FROM entities WHERE kind = ?",
+                (EntityKind.TOOL_OBSERVATION.value,),
+            ):
+                payload = json.loads(payload_json)
+                if payload.get("package") and payload.get("advisory"):
+                    advisories.append({
+                        "package": str(payload["package"]),
+                        "version": payload.get("version"),
+                        "purl": payload.get("purl"),
+                        "advisory": str(payload["advisory"]),
+                        "severity": payload.get("severity"),
+                        "scanner": payload.get("tool_id") or "scanner",
+                    })
+                obs = payload.get("observation")
+                matches = obs.get("matches") if isinstance(obs, Mapping) else None
+                if isinstance(matches, list):
+                    for match in matches:
+                        if not isinstance(match, Mapping):
+                            continue
+                        vuln, art = match.get("vulnerability"), match.get("artifact")
+                        if isinstance(vuln, Mapping) and isinstance(art, Mapping) and art.get("name") and vuln.get("id"):
+                            advisories.append({
+                                "package": str(art["name"]),
+                                "version": art.get("version"),
+                                "purl": art.get("purl"),
+                                "advisory": str(vuln["id"]),
+                                "severity": vuln.get("severity"),
+                                "scanner": payload.get("scanner_identity") or payload.get("tool_id") or "scanner",
+                            })
+    return advisories
+
+
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
     return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
             "size_bytes": path.stat().st_size}
@@ -220,6 +269,7 @@ def _validate_config(context, _result) -> None:
     sbom_bounds(settings)
     inference_bounds(settings)
     LookupBounds.from_settings(settings.get("native_advisory_lookup"))
+    DependencyIntelligenceSettings.from_settings(settings)
     if (type(settings.get("sbom_conversion_timeout_seconds")) is not int
             or settings["sbom_conversion_timeout_seconds"] < 1):
         raise ValueError("SPDX conversion timeout must be a positive integer")
@@ -257,7 +307,8 @@ def _validate_config(context, _result) -> None:
 
 def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = https_get,
               syft_converter: Converter | None = None,
-              advisory_snapshot: SnapshotResolver | None = None) -> Job:
+              advisory_snapshot: SnapshotResolver | None = None,
+              osv_snapshot: OsvSnapshotSource = None) -> Job:
     """``advisory_snapshot`` resolves the verified cve-bin-tool snapshot; tests inject a fixture, production
     uses :func:`native_advisories.verified_snapshot` (pointer, manifest, file hashes, build record)."""
     def load(unit: UnitContext) -> Mapping[str, Any]:
@@ -545,6 +596,67 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value,
                                                 dependency_identity, True, 1.0,
                                                 payload={"context_only": True, "security_finding": False}))
+
+        native_matches: list[dict[str, Any]] = []
+        if advisory.get("match_count", 0) and isinstance(advisory.get("artifact"), Mapping):
+            adv_doc = json.loads(_safe_read(unit.job.run_root, advisory["artifact"]).decode("utf-8"))
+            if isinstance(adv_doc.get("matches"), list):
+                native_matches = [dict(m) for m in adv_doc["matches"] if isinstance(m, Mapping)]
+        sca_settings = DependencyIntelligenceSettings.from_settings(unit.job.config.settings)
+        reachability_doc = evaluate_sca_reachability(
+            source_fingerprint=unit.job.source_fingerprint,
+            repository_root=unit.job.repository_root,
+            run_root=unit.job.run_root,
+            target_root=unit.job.target_root,
+            dependencies=resolved["dependencies"],
+            scanner_advisories=_evidence_advisories(unit.job.run_root),
+            native_advisory_matches=native_matches,
+            partition_files=loaded.get("native_files", ()),
+            settings=sca_settings,
+            osv_snapshot=osv_snapshot,
+        )
+        reachability_path = unit.unit_root / "sca-reachability.json"
+        atomic_json(reachability_path, reachability_doc)
+        reachability_artifact = _artifact(unit.job.run_root, reachability_path)
+        unit.job.events.write(
+            "SCA_REACHABILITY_COMPLETED",
+            unit_id=unit.unit_id,
+            **reachability_doc["telemetry"],
+        )
+        for adv_rec in reachability_doc["advisories"]:
+            sig_id = LogicalIdentity.derive(
+                EntityKind.REVIEW_SIGNAL,
+                unit.job.source_fingerprint,
+                {
+                    "signal_kind": "sca_reachability",
+                    "advisory_id": adv_rec["advisory_id"],
+                    "package_name": adv_rec["package_name"],
+                    "package_version": adv_rec["package_version"],
+                },
+            )
+            builder.add_entity(
+                EntityRecord(
+                    sig_id,
+                    f"sca:{adv_rec['advisory_id']}:{adv_rec['package_name']}",
+                    f"SCA reachability {adv_rec['advisory_id']}",
+                    f"SCA reachability {adv_rec['package_name']} {adv_rec['advisory_id']} {adv_rec['reachability']}",
+                    {"signal_kind": "sca_reachability", **adv_rec},
+                )
+            )
+            for dep_id in adv_rec.get("dependency_ids") or ():
+                dep_entity_id = identities.get(dep_id)
+                if dep_entity_id:
+                    builder.add_relation(
+                        RelationRecord(
+                            RelationKind.DERIVED_FROM,
+                            sig_id.value,
+                            dep_entity_id,
+                            True,
+                            1.0,
+                            payload={"reachability": adv_rec["reachability"]},
+                        )
+                    )
+
         builder.add_coverage("dependency-intelligence", "partial" if gaps else "complete",
                              str(gaps[0])[:4096] if gaps else None)
         sha = builder.build()
@@ -554,8 +666,6 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                                  tuple(str(gap)[:4096] for gap in gaps), "dependency-intelligence")
         manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / \
                         f"dependency-intelligence-{unit.job.attempt_id}.json"
-        # The native advisory observations shard (when the lookup executed) travels in the same manifest, so
-        # review-data indexing selects it beside the scanner observation shards of other jobs.
         indexes = [identity]
         if advisory.get("index_identity"):
             raw = dict(advisory["index_identity"])
@@ -565,6 +675,8 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
         return {"index_identity": asdict(identity), "index_manifest": _artifact(unit.job.run_root, manifest_path),
                 "advisory_index_identity": advisory.get("index_identity"),
+                "sca_reachability": reachability_artifact,
+                "telemetry": reachability_doc["telemetry"],
                 "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish_handoff(unit: UnitContext) -> Mapping[str, Any]:
@@ -591,11 +703,16 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                     "native_advisory_lookup": {key: unit.output("publication.native_advisory_lookup").get(key)
                                                for key in ("artifact", "index_identity", "coverage_disposition",
                                                            "component_count", "match_count", "observation_count")},
+                    "sca_reachability": context.get("sca_reachability"),
+                    "telemetry": context.get("telemetry"),
                     "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
         path = unit.unit_root / "dependency-intelligence-handoff.json"
         atomic_json(path, document)
         return {"schema": document["schema"], "artifact": _artifact(unit.job.run_root, path),
-                "index_manifest": context["index_manifest"], "item_count": len(document["dependencies"]),
+                "index_manifest": context["index_manifest"],
+                "sca_reachability": context.get("sca_reachability"),
+                "telemetry": context.get("telemetry"),
+                "item_count": len(document["dependencies"]),
                 "scorecard_count": len(document["scorecards"]), "gaps": document["gaps"],
                 "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
 

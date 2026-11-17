@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/corroborated-sast-evidence/1",
+  "title": "Corroborated SAST Evidence",
+  "description": "Pre-cap cross-scanner deduplicated and corroborated SAST evidence clusters with preserved Semgrep/OpenGrep/SARIF taint traces.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "target_fingerprint",
+    "max_findings_per_scope",
+    "cluster_count",
+    "clusters",
+    "telemetry"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/corroborated-sast-evidence/1"
+    },
+    "target_fingerprint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "max_findings_per_scope": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "cluster_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cluster"
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_scanner_findings",
+        "corroborated_clusters",
+        "taint_traces_preserved",
+        "post_dedupe_capped_count"
+      ],
+      "properties": {
+        "raw_scanner_findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "corroborated_clusters": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "taint_traces_preserved": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "post_dedupe_capped_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "trace_location": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        }
+      }
+    },
+    "dataflow_trace": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "source_location",
+        "intermediate_vars",
+        "steps",
+        "sink_location"
+      ],
+      "properties": {
+        "source_location": {
+          "$ref": "#/$defs/trace_location"
+        },
+        "intermediate_vars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trace_location"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "index",
+              "kind",
+              "start_line",
+              "end_line"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "enum": [
+                  "source",
+                  "step",
+                  "sink"
+                ]
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "start_line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "end_line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "sink_location": {
+          "$ref": "#/$defs/trace_location"
+        }
+      }
+    },
+    "cluster": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "cluster_id",
+        "severity",
+        "category",
+        "message",
+        "location",
+        "corroborating_scanners",
+        "corroboration_count",
+        "scanner_rule_ids"
+      ],
+      "properties": {
+        "cluster_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cwe_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "CRITICAL",
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "UNKNOWN"
+          ]
+        },
+        "category": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "location": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "corroborating_scanners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "corroboration_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scanner_rule_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "dataflow_trace": {
+          "$ref": "#/$defs/dataflow_trace"
+        }
+      }
+    }
+  }
+}

@@ -55,7 +55,7 @@ def test_job_contract_datasets_and_topology_parity() -> None:
     assert len(handoff_reqs) == 32
     assert all(req.authority is EvidenceAuthority.PRODUCER_EVIDENCE for req in handoff_reqs)
 
-    assert len(DATASETS) == 17
+    assert len(DATASETS) == 18
     by_kind = {item.output_kind: item for item in DATASETS}
     assert set(by_kind) == {
         "native_discovery",
@@ -68,6 +68,7 @@ def test_job_contract_datasets_and_topology_parity() -> None:
         "dependency_context",
         "native_advisory_observations",
         "native_advisory_lookup",
+        "sca_reachability",
         "scorecard_responses",
         "native_inputs",
         "unity_inventory",

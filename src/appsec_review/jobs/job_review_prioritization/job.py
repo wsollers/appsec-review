@@ -32,6 +32,11 @@ from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, delivery_gap, sco
 from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
 
 from . import scoring
+from .composite import (
+    PRIORITIZATION_SIGNALS_SCHEMA,
+    CompositePrioritizationSettings,
+    apply_composite_prioritization,
+)
 from .complexity import COGNITIVE_DEVIATIONS, COGNITIVE_IDENTITY, CYCLOMATIC_IDENTITY, file_summary, function_units
 from .dependencies import GRAPH_IDENTITY, GraphBuilder, extract, import_modules
 from .heuristics import Extractor
@@ -134,10 +139,27 @@ def _settings(context) -> Mapping[str, Any]:
             raise ValueError(f"review prioritization index setting is invalid: {key}")
         if kind is int and (type(value) is not int or value < 0 or (key.startswith("max_") and value < 1)):
             raise ValueError(f"review prioritization index setting is invalid: {key}")
+    required_sources = {"history", "semgrep", "codeql"}
+    optional_sources = {
+        "change_context", "test_coverage", "profile_data",
+        "ci_configuration", "artifact_security", "dependency_intelligence",
+        "sast_silence_hunt",
+    }
     sources = settings.get("sources")
-    if not isinstance(sources, Mapping) or set(sources) != {"history", "semgrep", "codeql"} or any(
-            type(value) is not bool for value in sources.values()):
+    if (not isinstance(sources, Mapping)
+            or not (required_sources <= set(sources) <= (required_sources | optional_sources))
+            or any(type(value) is not bool for value in sources.values())):
         raise ValueError("review prioritization sources must enable or disable history, semgrep, and codeql")
+    composite_weights = settings.get("composite_weights")
+    if composite_weights is not None:
+        allowed_cw = {
+            "change_context_boost", "uncovered_risk_boost", "profile_hotpath_boost",
+            "sca_reachability_boost", "sast_silence_hunt_boost",
+        }
+        if (not isinstance(composite_weights, Mapping)
+                or not set(composite_weights) <= allowed_cw
+                or any(not _number(v) or float(v) < 0 for v in composite_weights.values())):
+            raise ValueError("review prioritization composite_weights are invalid")
     reservation = settings.get("syntax_metrics_reservation")
     if not isinstance(reservation, Mapping) or set(reservation) != set(RESERVATION_SETTINGS) or any(
             type(reservation[key]) is not int or not low <= reservation[key] <= high
@@ -660,6 +682,19 @@ def build_job() -> Job:
         population = str(settings["normalization_population"])
         ranked_files = scoring.rank(file_items, weights, scoring.FILE_FEATURES, population=population)
         ranked_functions = scoring.rank(function_items, weights, scoring.FUNCTION_FEATURES, population=population)
+        ranked_files, ranked_functions, signals_doc = apply_composite_prioritization(
+            unit.job.run_root,
+            target_snapshot=unit.job.source_fingerprint,
+            settings=settings,
+            semantic_doc=semantic,
+            ranked_files=ranked_files,
+            ranked_functions=ranked_functions,
+        )
+        attempt_root = getattr(unit.job, "attempt_root", unit.unit_root)
+        signals_path = attempt_root / "artifacts" / "prioritization-signals.json"
+        signals_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(signals_path, signals_doc)
+        signals_artifact = _artifact(unit.job.run_root, signals_path)
         index = settings["index"]
         ceiling = int(index["max_indexed_items"])
         file_count = scoring.selection_size(len(ranked_files), fraction=float(index["file_top_fraction"]),
@@ -671,9 +706,17 @@ def build_job() -> Job:
         document = {"schema": "appsec-review/review-prioritization-ranking/1", "identity": scoring.SCORE_IDENTITY,
                     "authority": "a high score means review first; it is never a vulnerability finding",
                     "weights": weights, "population": population, "history_status": history_status,
+                    "engineering_sources": signals_doc["engineering_sources"],
+                    "promoted_leads": signals_doc["promoted_leads"],
+                    "hunt_queue": signals_doc["hunt_queue"],
+                    "telemetry": signals_doc["telemetry"],
                     "selection": {"files": file_count, "functions": function_count},
                     "files": ranked_files, "functions": ranked_functions}
-        return {"artifact": _write(unit, "priority.json", document), "file_count": len(ranked_files),
+        return {"artifact": _write(unit, "priority.json", document),
+                "signals_artifact": signals_artifact,
+                "engineering_sources": signals_doc["engineering_sources"],
+                "telemetry": signals_doc["telemetry"],
+                "file_count": len(ranked_files),
                 "function_count": len(ranked_functions), "selected_files": file_count,
                 "selected_functions": function_count, "history_status": history_status, "gaps": gaps,
                 "terminal_status": _status(gaps)}
@@ -712,8 +755,10 @@ def build_job() -> Job:
             evidence_records[item["signal_id"]] = item
         fingerprint = index_fingerprint(
             name="priority", target_snapshot=snapshot,
-            producer_artifacts=[value["artifact"] for value in (syntax_output, graph_output, semantic_output,
-                                                                ranking_output)],
+            producer_artifacts=[
+                *(value["artifact"] for value in (syntax_output, graph_output, semantic_output, ranking_output)),
+                *([ranking_output["signals_artifact"]] if "signals_artifact" in ranking_output else []),
+            ],
             tool_identity={"job": JOB_ID, "score": scoring.SCORE_IDENTITY, "rules": RULES_IDENTITY,
                            "config": hashlib.sha256(canonical_json(dict(settings))).hexdigest()},
             parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
@@ -931,46 +976,82 @@ def build_job() -> Job:
         ranking = read_json(unit.job.run_root, ranking_output["artifact"])
 
         def summary(item: Mapping[str, Any]) -> dict[str, Any]:
-            return {key: item.get(key) for key in ("item_id", "scope", "path", "function_id", "name", "language",
-                                                   "start_line", "rank", "score", "feature_coverage", "missing_features")}
+            base = {key: item.get(key) for key in ("item_id", "scope", "path", "function_id", "name", "language",
+                                                   "start_line", "rank", "score", "base_score", "feature_coverage",
+                                                   "missing_features", "composite_modifiers")}
+            if item.get("hunt_priority_reason"):
+                base["hunt_priority_reason"] = item["hunt_priority_reason"]
+            return base
 
         # The index unit declared its own gaps; this unit has none of its own and carries the aggregate.
         gaps: list[str] = []
         aggregated = list(indexed["aggregated_gaps"])
+        telemetry = dict(ranking.get("telemetry") or ranking_output.get("telemetry") or {
+            "leads_promoted_ci": 0,
+            "leads_promoted_artifact": 0,
+            "leads_promoted_sca_reachable": 0,
+            "sast_silence_hunt_units": 0,
+            "composite_boosted_units": 0,
+        })
+        signals_artifact = ranking_output.get("signals_artifact")
+        artifacts_map: dict[str, Any] = {
+            "syntax": syntax_output["artifact"],
+            "dependency_graph": unit.output("extract.dependency_graph")["artifact"],
+            "semantic": semantic_output["artifact"],
+            "ranking": ranking_output["artifact"],
+        }
+        if signals_artifact is not None:
+            artifacts_map["prioritization_signals"] = signals_artifact
         document = {
             "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint,
             "authority": "metrics and signals prioritize review; a high score means review first and is never a "
                          "vulnerability finding; missing coverage is a named gap, never a clean result",
             "identities": {"cyclomatic": CYCLOMATIC_IDENTITY, "cognitive": COGNITIVE_IDENTITY,
                            "cognitive_deviations": list(COGNITIVE_DEVIATIONS), "import_graph": GRAPH_IDENTITY,
-                           "rules": RULES_IDENTITY, "language_map": MAPPING_IDENTITY, "score": scoring.SCORE_IDENTITY},
+                           "rules": RULES_IDENTITY, "language_map": MAPPING_IDENTITY, "score": scoring.SCORE_IDENTITY,
+                           "prioritization_signals": PRIORITIZATION_SIGNALS_SCHEMA},
             "inputs": {"catalog_handoff_sha256": loaded["inputs"]["catalog_handoff_sha256"],
                        "tree_sitter_handoff_sha256": loaded["inputs"]["tree_sitter_handoff_sha256"],
                        "optional": loaded["optional"]},
             "sources": {"tree_sitter": syntax_output["terminal_status"], "semgrep": semantic_output["semgrep_status"],
                         "codeql": semantic_output["codeql_status"], "history": ranking_output["history_status"]},
+            "engineering_sources": dict(ranking.get("engineering_sources") or {}),
             "settings": {"cyclomatic_thresholds": settings["cyclomatic_thresholds"],
                          "scored_threshold": settings["scored_threshold"],
                          "count_error_propagation": settings["count_error_propagation"],
                          "normalization_population": settings["normalization_population"],
-                         "weights": ranking["weights"], "index": dict(settings["index"])},
+                         "weights": ranking["weights"],
+                         "composite_weights": CompositePrioritizationSettings.from_settings(settings).weights_dict(),
+                         "index": dict(settings["index"])},
             "summary": {"file_count": ranking_output["file_count"], "function_count": ranking_output["function_count"],
                         "indexed_files": ranking_output["selected_files"],
                         "indexed_functions": ranking_output["selected_functions"],
                         "by_language": syntax["by_language"]},
             "top_files": [summary(item) for item in ranking["files"][:ranking["selection"]["files"]]],
             "top_functions": [summary(item) for item in ranking["functions"][:ranking["selection"]["functions"]]],
-            "artifacts": {"syntax": syntax_output["artifact"],
-                          "dependency_graph": unit.output("extract.dependency_graph")["artifact"],
-                          "semantic": semantic_output["artifact"], "ranking": ranking_output["artifact"]},
+            "promoted_leads": list(ranking.get("promoted_leads") or ()),
+            "hunt_queue": list(ranking.get("hunt_queue") or ()),
+            "telemetry": telemetry,
+            "artifacts": artifacts_map,
             "gaps": gaps, "aggregated_gaps": aggregated, "index_manifest": indexed["manifest"],
         }
         artifact = _write(unit, "review-prioritization.json", document)
-        unit.job.events.write("REVIEW_PRIORITIZATION_COMPLETED", file_count=ranking_output["file_count"],
-                              function_count=ranking_output["function_count"], gap_count=len(aggregated))
-        return {"schema": SCHEMA, "artifact": artifact, "index_manifest": indexed["manifest"],
-                "item_count": ranking_output["file_count"] + ranking_output["function_count"], "gaps": gaps,
-                "aggregated_gaps": aggregated, "terminal_status": _status(gaps)}
+        unit.job.events.write(
+            "REVIEW_PRIORITIZATION_COMPLETED",
+            file_count=ranking_output["file_count"],
+            function_count=ranking_output["function_count"],
+            gap_count=len(aggregated),
+            **telemetry,
+        )
+        pub_out: dict[str, Any] = {
+            "schema": SCHEMA, "artifact": artifact, "index_manifest": indexed["manifest"],
+            "item_count": ranking_output["file_count"] + ranking_output["function_count"],
+            "telemetry": telemetry,
+            "gaps": gaps, "aggregated_gaps": aggregated, "terminal_status": _status(gaps),
+        }
+        if signals_artifact is not None:
+            pub_out["prioritization_signals_artifact"] = signals_artifact
+        return pub_out
 
     units = (
         Unit("load.accepted_inputs", load),
