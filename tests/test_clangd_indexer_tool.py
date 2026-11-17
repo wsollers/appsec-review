@@ -49,7 +49,7 @@ def test_catalog_pins_clangd_indexer_without_moving_references() -> None:
     entry = _entry()
     assert entry["state"] == "enabled" and entry["kind"] == "tool"
     assert entry["version"] == VERSION and entry["tag"] == f"appsec-review/tool-clangd-indexer:{VERSION}"
-    assert entry["architectures"] == ["linux/amd64"] and entry["dependencies"] == ["base-ubuntu"]
+    assert entry["architectures"] == ["linux/amd64"] and entry["dependencies"] == ["tool-native-cpp"]
     assert entry["build_args"] == {"TOOL_VERSION": VERSION, "CLANGD_SHA512": _archive()["sha512"]}
     assert entry["build_contexts"] == {"shared": "containers/tools/shared"}
     rendered = json.dumps(entry).lower()
@@ -63,8 +63,9 @@ def test_catalog_pins_clangd_indexer_without_moving_references() -> None:
 def test_catalog_and_runtime_loader_accept_clangd_indexer() -> None:
     catalog = container_build.load_catalog()
     assert container_build.validate(catalog) == []
-    assert container_build.dependency_order(["tool-clangd-indexer"], catalog) == [
-        "base-ubuntu", "tool-clangd-indexer"]
+    # Run 2026-11-17-0003: the indexer needs the system C/C++ headers, which only tool-native-cpp carries.
+    order = container_build.dependency_order(["tool-clangd-indexer"], catalog)
+    assert order[-2:] == ["tool-native-cpp", "tool-clangd-indexer"]
     tool = load_runtime_catalog(ROOT).tool("tool-clangd-indexer")
     assert tool.version == VERSION and tool.network == "none" and tool.user == "10001:10001"
 
@@ -133,15 +134,17 @@ def test_dockerfile_is_offline_pinned_verified_and_non_root() -> None:
                       r"\|\s*(ba)?sh\b", r"index-server"):
         assert not re.search(forbidden, instructions, re.IGNORECASE), forbidden
     for base in re.findall(r"(?m)^FROM\s+(\S+)", text):
-        assert "@sha256:" in base or base == "appsec-review/base-ubuntu:24.04"
+        assert "@sha256:" in base or base == "appsec-review/tool-native-cpp:1.0.0"
     assert f"COPY {_archive()['path']} /tmp/clangd.zip" in text
     assert "COPY --from=shared safe_extract.py /opt/review/" in text
     assert "sha512sum --check --strict" in text and "--expect-inventory /opt/review/inventory.json" in text
     assert 'grep -F "LLVM version ${TOOL_VERSION}"' in text
     assert re.findall(r"(?m)^USER\s+(\S+)", text)[-1] == "10001:10001"
-    final_stage = text.split("FROM appsec-review/base-ubuntu:24.04", 1)[1]
-    assert re.findall(r"(?m)^RUN\s+(.*)$", final_stage) == [
-        '/opt/clangd/clangd_23.1.0/bin/clangd-indexer --version | grep -F "LLVM version ${TOOL_VERSION}"']
+    final_stage = text.split("FROM appsec-review/tool-native-cpp:1.0.0", 1)[1]
+    [run] = re.findall(r"(?ms)^RUN\s+(.*?)(?=^\S)", final_stage)
+    assert '/opt/clangd/clangd_23.1.0/bin/clangd-indexer --version | grep -F "LLVM version ${TOOL_VERSION}"' in run
+    # The build proves the system headers the indexer needs are present (run 2026-11-17-0003 had none).
+    assert "test -f /usr/include/stdlib.h" in run and "test -d /usr/include/c++/13" in run
 
 
 def test_functional_fixture_exercises_clang_and_clang_cl_commands() -> None:

@@ -19,13 +19,19 @@ RUN set -eu; \
     cp /opt/review/inventory.json /opt/clangd/inventory.json; \
     rm -f /tmp/clangd.zip
 
-FROM appsec-review/base-ubuntu:24.04
+# clangd-indexer parses each translation unit against the system C/C++ headers (/usr/include, libstdc++).
+# base-ubuntu has none, so run 2026-11-17-0003 failed every one of its 32 units with "'stdlib.h' file not
+# found" and published an empty symbol index. tool-native-cpp is the C/C++ replay image and carries the
+# system headers at the build environments' pins, so the indexer resolves the same includes the replays do.
+FROM appsec-review/tool-native-cpp:1.0.0
+USER 0
 ARG TOOL_VERSION
 LABEL org.opencontainers.image.title="tool-clangd-indexer" \
       org.opencontainers.image.version="${TOOL_VERSION}" \
       org.opencontainers.image.licenses="Apache-2.0 WITH LLVM-exception"
 COPY --from=unpack /opt/clangd /opt/clangd
 ENV PATH="/opt/clangd/clangd_23.1.0/bin:${PATH}" HOME=/tmp
-RUN /opt/clangd/clangd_23.1.0/bin/clangd-indexer --version | grep -F "LLVM version ${TOOL_VERSION}"
+RUN /opt/clangd/clangd_23.1.0/bin/clangd-indexer --version | grep -F "LLVM version ${TOOL_VERSION}" \
+    && test -f /usr/include/stdio.h && test -f /usr/include/stdlib.h && test -d /usr/include/c++/13
 USER 10001:10001
 WORKDIR /scratch

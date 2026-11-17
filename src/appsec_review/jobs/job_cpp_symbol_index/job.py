@@ -19,7 +19,7 @@ from urllib.parse import unquote, urlparse
 from appsec_review.config.first_party import job_dispositions
 from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 from appsec_review.jobs.cpp_index_scopes import (
-    IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
+    SOURCE_MOUNT, IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
     publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
 )
 from appsec_review.retrieval import (
@@ -38,7 +38,53 @@ SCHEMA = "appsec-review/cpp-symbol-index/1"
 TOOL_ID = "tool-clangd-indexer"
 NORMALIZER = "clangd-yaml-normalizer/1"
 CALL_BIT = 16  # clangd RefKind::Call
-_PROCESSED = re.compile(r"^\[[0-9]+/([0-9]+)\] Processing file (.+)$", re.M)
+# clangd's all-TUs executor writes these lines from parallel threads, so they interleave by line
+# and may carry another thread's fragment as a prefix; none of these patterns is anchored.
+_PROCESSED = re.compile(r"\[[0-9]+/[0-9]+\] Processing file (/\S+)")
+_INCLUDED_FROM = re.compile(r"In file included from (/\S+?):[0-9]+")
+_NOT_FOUND = re.compile(r"'([^']+)' file not found")
+_NOT_FOUND_AT = re.compile(r"(/\S+?):[0-9]+:[0-9]+: fatal error: '([^']+)' file not found")
+_ERROR_PROCESSING = re.compile(r"Error while processing (/\S+)\.")
+_GAP_HEADERS = 16
+_GAP_UNITS = 8
+
+
+def unresolved_system_headers(stderr: str, expected: set[str]) -> tuple[list[str], dict[str, list[str]]]:
+    """Headers clangd reported as ``file not found`` and the expected translation units affected.
+
+    Returns ``(headers, units)``: every missing include name, sorted, and for each affected
+    translation unit (a path in ``expected``) the sorted headers it could not resolve. A unit is
+    affected when it is the diagnosed file or any file on the ``In file included from`` chain that
+    precedes the diagnostic. Interleaved chains may credit a header to a neighbouring unit that
+    was itself failing on the same header; a diagnostic whose chain names no expected unit still
+    contributes its header. The scan is one bounded pass over the lines.
+    """
+    headers: set[str] = set()
+    units: dict[str, set[str]] = {}
+    chain: list[str] = []
+    for line in stderr.splitlines():
+        included = [match.group(1) for match in _INCLUDED_FROM.finditer(line)]
+        if included:
+            chain.extend(included)
+        found = [match.group(1) for match in _NOT_FOUND.finditer(line)]
+        if not found:
+            continue
+        headers.update(found)
+        diagnosed = [match.group(1) for match in _NOT_FOUND_AT.finditer(line)]
+        for unit in chain + diagnosed:
+            if unit in expected:
+                units.setdefault(unit, set()).update(found)
+        chain = []
+    return sorted(headers), {unit: sorted(names) for unit, names in sorted(units.items())}
+
+
+def _unit_label(path: str) -> str:
+    return path[len(SOURCE_MOUNT) + 1:] if path.startswith(SOURCE_MOUNT + "/") else path
+
+
+def _bounded(names: list[str], limit: int) -> str:
+    shown = ", ".join(names[:limit])
+    return shown if len(names) <= limit else f"{shown}, +{len(names) - limit} more"
 
 
 def _settings(unit: UnitContext) -> Mapping[str, int]:
@@ -116,12 +162,23 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     if execution["stdout_truncated"]:
         gaps.append("clangd index output exceeded the tool output bound and was truncated")
     stderr = (run_root / execution["stderr_path"]).read_text(encoding="utf-8", errors="replace")
-    processed = {match.group(2).strip() for match in _PROCESSED.finditer(stderr)}
+    processed = {match.group(1) for match in _PROCESSED.finditer(stderr)}
     expected = {row["file"] for row in scope.container_compile_database()}
     missing = sorted(expected - processed)
     if missing:
         safety.fail("clangd omitted required translation units", action="cpp.symbols")
-        gaps.append(f"clangd-indexer processed {len(expected) - len(missing)} of {len(expected)} "
+    # A unit clangd parsed without its system headers, or reported "Error while processing", is
+    # not processed: its index lacks every declaration behind the failing include.
+    unresolved_headers, unresolved_units = unresolved_system_headers(stderr, expected)
+    errored = {match.group(1) for match in _ERROR_PROCESSING.finditer(stderr)} & expected
+    not_processed = sorted(set(missing) | set(unresolved_units) | errored)
+    if unresolved_headers:
+        gaps.append(f"system_headers_unresolved: {_bounded(unresolved_headers, _GAP_HEADERS)} not found "
+                    f"in {len(unresolved_units)} of {len(expected)} translation units"
+                    + (f" ({_bounded([_unit_label(unit) for unit in unresolved_units], _GAP_UNITS)})"
+                       if unresolved_units else ""))
+    if not_processed:
+        gaps.append(f"clangd-indexer processed {len(expected) - len(not_processed)} of {len(expected)} "
                     "translation units")
     text = (run_root / execution["stdout_path"]).read_text(encoding="utf-8", errors="replace")
     try:
@@ -227,8 +284,11 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     builder.add_coverage(f"clangd:{scope.project_id}"[:256], status, "; ".join(unique[:10]) or None)
     return {"symbols": len(symbols), "external_symbols": external, "relations": len(edges),
             "unresolved_references": unresolved_refs, "translation_units": len(expected),
-            "processed_translation_units": len(expected) - len(missing), "gaps": unique,
-            "coverage": status,
+            "processed_translation_units": len(expected) - len(not_processed),
+            "omitted_translation_units": len(missing),
+            "unresolved_system_headers": unresolved_headers,
+            "translation_units_with_unresolved_headers": len(unresolved_units),
+            "gaps": unique, "coverage": status,
             "symbols_by_disposition": dict(sorted(symbols_by_disposition.items())),
             "excluded_symbols_by_disposition": dict(sorted(excluded_by_disposition.items()))}
 

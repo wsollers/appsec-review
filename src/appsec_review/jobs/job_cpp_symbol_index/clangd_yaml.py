@@ -1,8 +1,10 @@
-"""Strict parser for the YAML subset clangd-indexer emits with ``--format=yaml``.
+r"""Strict parser for the YAML subset clangd-indexer emits with ``--format=yaml``.
 
 clangd writes a stream of ``--- !Tag`` documents terminated by ``...``. Each document uses
-block mappings, block sequences of mappings, and plain or single-quoted scalars. The parser
-accepts exactly that subset and raises ``ValueError`` on anything else, rather than guessing.
+block mappings, block sequences of mappings, and plain, single-quoted or double-quoted scalars.
+clangd 23 writes ``Documentation`` as a one-line double-quoted scalar with YAML escapes (``\n``,
+``\"``, ``\\``, ``\t``, ``\xXX``, ``\uXXXX``); the parser decodes exactly the YAML 1.2 escape set
+and raises ``ValueError`` on anything else, rather than guessing.
 A trailing document without its ``...`` terminator (for example after output truncation) is
 reported, not parsed.
 """
@@ -26,8 +28,58 @@ def _scalar(text: str) -> str:
             raise ValueError("unterminated single-quoted scalar")
         return text[1:-1].replace("''", "'")
     if text.startswith('"'):
-        raise ValueError("double-quoted scalars are outside the clangd subset")
+        return _double_quoted(text)
     return text
+
+
+_SIMPLE_ESCAPES = {
+    "0": "\0", "a": "\a", "b": "\b", "t": "\t", "\t": "\t", "n": "\n", "v": "\v", "f": "\f",
+    "r": "\r", "e": "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\", "N": "\x85", "_": "\xa0",
+    "L": "\u2028", "P": "\u2029",
+}
+_HEX_ESCAPE_WIDTHS = {"x": 2, "u": 4, "U": 8}
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _double_quoted(text: str) -> str:
+    """Decode one single-line double-quoted scalar (``text`` starts with ``"``).
+
+    Only the YAML 1.2 escape set is accepted; an unknown escape, a malformed hexadecimal escape, a
+    surrogate or out-of-range code point, content after the closing quote, or a missing closing
+    quote raises ``ValueError``. The scan is a single bounded pass over ``text``.
+    """
+    out: list[str] = []
+    index = 1
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            if index != len(text) - 1:
+                raise ValueError("content after the closing double quote")
+            return "".join(out)
+        if char != "\\":
+            out.append(char)
+            index += 1
+            continue
+        index += 1
+        if index >= len(text):
+            break
+        escape = text[index]
+        if escape in _SIMPLE_ESCAPES:
+            out.append(_SIMPLE_ESCAPES[escape])
+            index += 1
+            continue
+        width = _HEX_ESCAPE_WIDTHS.get(escape)
+        if width is None:
+            raise ValueError(f"unsupported escape in double-quoted scalar: \\{escape}")
+        digits = text[index + 1:index + 1 + width]
+        if len(digits) != width or any(digit not in _HEX_DIGITS for digit in digits):
+            raise ValueError(f"malformed \\{escape} escape in double-quoted scalar")
+        code = int(digits, 16)
+        if code > 0x10FFFF or 0xD800 <= code <= 0xDFFF:
+            raise ValueError(f"invalid code point in double-quoted scalar: U+{code:X}")
+        out.append(chr(code))
+        index += 1 + width
+    raise ValueError("unterminated double-quoted scalar")
 
 
 def _quote_open(text: str) -> bool:

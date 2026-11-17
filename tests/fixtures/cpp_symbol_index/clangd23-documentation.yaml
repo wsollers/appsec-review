@@ -1,0 +1,100 @@
+--- !Symbol
+ID:              A181A750A9BA3200
+Name:            inflateReset2
+Scope:           ''
+SymInfo:
+  Kind:            Function
+  Lang:            C
+CanonicalDeclaration:
+  FileURI:         'file:///target/source/third_party/zlib/zlib.h'
+  Start:
+    Line:            966
+    Column:          20
+  End:
+    Line:            966
+    Column:          33
+Definition:
+  FileURI:         'file:///target/source/third_party/zlib/inflate.c'
+  Start:
+    Line:            156
+    Column:          12
+  End:
+    Line:            156
+    Column:          25
+References:      1
+Flags:           25
+Signature:       '(z_streamp strm, int windowBits)'
+TemplateSpecializationArgs: ''
+CompletionSnippetSuffix: '(${1:z_streamp strm}, ${2:int windowBits})'
+Documentation:   "\n     This function is equivalent to inflateEnd followed by inflateInit,\n   but does not free and reallocate the internal decompression state.  The\n   stream will keep attributes that may have been set by inflateInit2.\n\n     inflateReset returns Z_OK if success, or Z_STREAM_ERROR if the source\n   stream state was inconsistent (such as zalloc or state being Z_NULL)."
+ReturnType:      int
+Type:            'c:I'
+IncludeHeaders:
+  - Header:          'file:///target/source/third_party/zlib/zlib.h'
+    References:      2
+...
+--- !Symbol
+ID:              E3A7292315860E05
+Name:            LZ4_compress_destSize
+Scope:           ''
+SymInfo:
+  Kind:            Function
+  Lang:            C
+CanonicalDeclaration:
+  FileURI:         'file:///target/source/third_party/lz4/lib/lz4.h'
+  Start:
+    Line:            206
+    Column:          15
+  End:
+    Line:            206
+    Column:          36
+Definition:
+  FileURI:         'file:///target/source/third_party/lz4/lib/lz4.c'
+  Start:
+    Line:            1261
+    Column:          4
+  End:
+    Line:            1261
+    Column:          25
+Flags:           25
+Signature:       '(const char *src, char *dst, int *srcSizePtr, int targetDstSize)'
+TemplateSpecializationArgs: ''
+CompletionSnippetSuffix: '(${1:const char *src}, ${2:char *dst}, ${3:int *srcSizePtr}, ${4:int targetDstSize})'
+Documentation:   "LZ4_compress_destSize() :\nReverse the logic : compresses as much data as possible from 'src' buffer\ninto already allocated buffer 'dst', of size >= 'targetDestSize'.\nThis function either compresses the entire 'src' content into 'dst' if it's large enough,\nor fill 'dst' buffer completely with as much data as possible from 'src'.\nnote: acceleration parameter is fixed to \"default\".\n\n*srcSizePtr : will be modified to indicate how many bytes where read from 'src' to fill 'dst'.\n             New value is necessarily <= input value.\n@return : Nb bytes written into 'dst' (necessarily <= targetDestSize)\n         or 0 if compression fails."
+ReturnType:      int
+Type:            'c:I'
+...
+--- !Symbol
+ID:              EBFE18BDA0220BAC
+Name:            cJSON_Minify
+Scope:           ''
+SymInfo:
+  Kind:            Function
+  Lang:            C
+CanonicalDeclaration:
+  FileURI:         'file:///target/source/third_party/cjson/cJSON.h'
+  Start:
+    Line:            259
+    Column:          19
+  End:
+    Line:            259
+    Column:          31
+Definition:
+  FileURI:         'file:///target/source/third_party/cjson/cJSON.c'
+  Start:
+    Line:            2847
+    Column:          19
+  End:
+    Line:            2847
+    Column:          31
+Flags:           25
+Signature:       '(char *json)'
+TemplateSpecializationArgs: ''
+CompletionSnippetSuffix: '(${1:char *json})'
+Documentation:   "Minify a strings, remove blank characters(such as ' ', '\\t', '\\r', '\\n') from strings.\nThe input pointer json cannot point to a read-only address area, such as a string constant, \nbut should point to a readable and writable address area. "
+ReturnType:      void
+Type:            'c:v'
+IncludeHeaders:
+  - Header:          'file:///target/source/third_party/cjson/cJSON.h'
+    References:      1
+...
