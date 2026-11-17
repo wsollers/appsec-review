@@ -174,6 +174,26 @@ def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review
     return bindings
 
 
+def poc_candidate_agrees(candidate: Mapping[str, Any], package: Mapping[str, Any] | None,
+                         listed_sha256: str | None) -> bool:
+    """Whether a ``poc_candidates`` row restates its finding package exactly.
+
+    The candidate must name its package by identity and accepted digest and repeat the package's claim,
+    state and judge verdict. A package no judge saw carries ``judge_verdict`` null (the judge is an
+    escalation, review protocol v3 D9) and agrees only with a candidate marked ``not_convened``; a judged
+    package agrees only with a candidate carrying that judge's verdict. Run 2026-11-17-0006 failed here
+    because a null package verdict was treated as disagreement regardless of the candidate.
+    """
+    if package is None or listed_sha256 is None or listed_sha256 != candidate["finding_package"]["sha256"]:
+        return False
+    if package["claim_id"] != candidate["claim_id"] or package["state"] != candidate["state"]:
+        return False
+    judged = package["judge_verdict"]
+    if judged is None:
+        return candidate["judge_verdict"] == stages.JUDGE_NOT_CONVENED
+    return judged["verdict"] == candidate["judge_verdict"]
+
+
 def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: int,
                          include_decision_audit: bool = False) -> VerifiedReview:
     """Verify accepted review state; protected audit consumption requires an explicit caller opt-in."""
@@ -267,10 +287,7 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
         reference = candidate["finding_package"]
         package = next((value for _ref, value in findings if value["finding_package_id"] == reference["finding_package_id"]),
                        None)
-        _require(package is not None and listed.get(reference["finding_package_id"]) == reference["sha256"]
-                 and package["claim_id"] == candidate["claim_id"] and package["state"] == candidate["state"]
-                 and package["judge_verdict"] is not None
-                 and package["judge_verdict"]["verdict"] == candidate["judge_verdict"],
+        _require(poc_candidate_agrees(candidate, package, listed.get(reference["finding_package_id"])),
                  f"proof-of-concept candidate disagrees with its finding package: {candidate['claim_id']}")
     intake = {item["finding_package_id"]: item for item in review["remediation_intake"]}
     backlog = {item["finding_package_id"]: item for item in review["verification_backlog"]}
