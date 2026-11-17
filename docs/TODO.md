@@ -251,6 +251,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5076 | [Fix the failing benign-source counterevidence OWASP test](#t-5076-fix-the-failing-benign-source-counterevidence-owasp-test) | testing | open |
 | T-5077 | [Validate common-reference namespaces once, at retention time](#t-5077-validate-common-reference-namespaces-once-at-retention-time) | evidence | open |
 | T-5078 | [Resolve the misleading-output items of the run 0003 and 0004 audits](#t-5078-resolve-the-misleading-output-items-of-the-run-0003-and-0004-audits) | pipeline | open |
+| T-5079 | [Size model output caps so thinking tokens do not fail OWASP, PoC and validation calls](#t-5079-size-model-output-caps-so-thinking-tokens-do-not-fail-owasp-poc-and-validation-calls) | review | open |
 | T-001 | [Finish OWASP acceptance beyond bounded static assessment](#t-001-finish-owasp-acceptance-beyond-bounded-static-assessment) | scanners | open |
 | T-002 | [Hook up Lua game-security rule scanning](#t-002-hook-up-lua-game-security-rule-scanning) | scanners | open |
 | T-003 | [Complete the Linux execution vertical before expanding platforms](#t-003-complete-the-linux-execution-vertical-before-expanding-platforms) | build | open |
@@ -3475,6 +3476,15 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** triage each item into fix, document or close with reason; fix the ones that misstate coverage or evidence first.
 - **Done when:** every item in both audit files carries a disposition and the fixed ones have a regression test.
 - **Refs:** `docs/walks/run-2026-11-17-0003-output-audit.md`, `docs/walks/run-2026-11-17-0004-output-audit.md` (host-local on HAL5000).
+
+### T-5079 — Size model output caps so thinking tokens do not fail OWASP, PoC and validation calls
+
+- **State:** open
+- **Area:** review
+- **Why:** run 2026-11-17-0005: 12 of 55 OWASP control-assessment calls (validation and verification steps, cap 6000), 2 remediation-validation calls (cap 8000), 1 PoC writer call (cap 8000) and 4 haiku hunt red cells (cap 32000, output_tokens about 32k) failed with failure_code `model_token_cap`; the cap counts the model's thinking tokens, so small caps starve bounded answers.
+- **Scope:** decide per role whether to raise `max_output_tokens`, bound thinking separately, or shrink the requested answer; land the TOML change between runs (an active run fails its next step on a configuration hash change) and add a unit test that the cap applies to the answer the role must produce.
+- **Done when:** a smoke run shows no `model_token_cap` receipts in those jobs, and the per-role caps are justified in the configuration comments.
+- **Refs:** `appsec-review.toml` (`jobs.job_owasp_control_assessment.settings.model(s)`, `jobs.job_poc_generation.settings.models.default`, `jobs.job_remediation_validation.settings.reviewer`, `jobs.job_inference_security_review.settings.models.default`), `runs/2026-11-17-0005/data/inference-executions/` (host-local), T-5073.
 
 ## Legacy backlog
 
