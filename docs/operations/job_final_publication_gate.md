@@ -74,6 +74,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_codeql_analysis` | `codeql_observations` | `appsec-review/codeql-sarif-normalizer/3` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `infer_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_dependency_intelligence` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_dependency_intelligence` | `native_advisory_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_evidence_collection` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_evidence_collection` | `static_tool_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_post_build_security_assessment` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
@@ -298,36 +300,46 @@ flowchart LR
   input_schema36["appsec-review/retrieval-index/2"]
   producer36 --> input36 --> job
   input36 -. schema .-> input_schema36
-  producer37["job_evidence_collection"]
+  producer37["job_dependency_intelligence"]
   input37["handoff"]
   input_schema37["appsec-review/job-handoff/2"]
   producer37 --> input37 --> job
   input37 -. schema .-> input_schema37
-  producer38["job_evidence_collection"]
-  input38["static_tool_observations"]
+  producer38["job_dependency_intelligence"]
+  input38["native_advisory_observations"]
   input_schema38["appsec-review/retrieval-index/2"]
   producer38 --> input38 --> job
   input38 -. schema .-> input_schema38
-  producer39["job_post_build_security_assessment"]
+  producer39["job_evidence_collection"]
   input39["handoff"]
   input_schema39["appsec-review/job-handoff/2"]
   producer39 --> input39 --> job
   input39 -. schema .-> input_schema39
-  producer40["job_post_build_security_assessment"]
-  input40["build_security"]
+  producer40["job_evidence_collection"]
+  input40["static_tool_observations"]
   input_schema40["appsec-review/retrieval-index/2"]
   producer40 --> input40 --> job
   input40 -. schema .-> input_schema40
-  producer41["job_review_data_indexing"]
+  producer41["job_post_build_security_assessment"]
   input41["handoff"]
   input_schema41["appsec-review/job-handoff/2"]
   producer41 --> input41 --> job
   input41 -. schema .-> input_schema41
-  producer42["job_review_data_indexing"]
-  input42["precomputed_products"]
+  producer42["job_post_build_security_assessment"]
+  input42["build_security"]
   input_schema42["appsec-review/retrieval-index/2"]
   producer42 --> input42 --> job
   input42 -. schema .-> input_schema42
+  producer43["job_review_data_indexing"]
+  input43["handoff"]
+  input_schema43["appsec-review/job-handoff/2"]
+  producer43 --> input43 --> job
+  input43 -. schema .-> input_schema43
+  producer44["job_review_data_indexing"]
+  input44["precomputed_products"]
+  input_schema44["appsec-review/retrieval-index/2"]
+  producer44 --> input44 --> job
+  input44 -. schema .-> input_schema44
   output0["publication_gate_decisions"]
   output_schema0["appsec-review/final-publication-gate/2"]
   job --> output0

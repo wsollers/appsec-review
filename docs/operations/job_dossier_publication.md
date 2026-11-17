@@ -108,6 +108,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_remediation_validation` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_remediation_validation` | `remediation_validation_summary` | `appsec-review/remediation-validations/1` | handoff | optional | gap |
 | `job_remediation_validation` | `remediation_validation_receipts` | `appsec-review/remediation-validation/1` | handoff | optional | gap |
+| `job_dependency_intelligence` | `native_advisory_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_post_build_security_assessment` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_post_build_security_assessment` | `build_security` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 
@@ -498,16 +499,21 @@ flowchart LR
   input_schema70["appsec-review/remediation-validation/1"]
   producer70 --> input70 --> job
   input70 -. schema .-> input_schema70
-  producer71["job_post_build_security_assessment"]
-  input71["handoff"]
-  input_schema71["appsec-review/job-handoff/2"]
+  producer71["job_dependency_intelligence"]
+  input71["native_advisory_observations"]
+  input_schema71["appsec-review/retrieval-index/2"]
   producer71 --> input71 --> job
   input71 -. schema .-> input_schema71
   producer72["job_post_build_security_assessment"]
-  input72["build_security"]
-  input_schema72["appsec-review/retrieval-index/2"]
+  input72["handoff"]
+  input_schema72["appsec-review/job-handoff/2"]
   producer72 --> input72 --> job
   input72 -. schema .-> input_schema72
+  producer73["job_post_build_security_assessment"]
+  input73["build_security"]
+  input_schema73["appsec-review/retrieval-index/2"]
+  producer73 --> input73 --> job
+  input73 -. schema .-> input_schema73
   output0["dossier_publications"]
   output_schema0["appsec-review/dossier-publication/1"]
   job --> output0
