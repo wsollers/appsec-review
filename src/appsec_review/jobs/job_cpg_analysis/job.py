@@ -58,6 +58,18 @@ JOERN_DISABLED = (
     "No review fact depends on Joern; code-graph facts come from CodeQL with Clang/LLVM cross-checks "
     "(docs/architecture/code-graph-precomputation.md). No CPG coverage is claimed."
 )
+RETIREMENT_REASON = "retired_by_policy_oom_replaced_by_alternate_cpg"
+
+
+def retirement_metadata() -> dict[str, Any]:
+    """Return structured retirement metadata for Joern CPG analysis."""
+    return {
+        "retired": True,
+        "reason": RETIREMENT_REASON,
+        "tool_id": TOOL_ID,
+        "manual_only": True,
+        "replacement": "alternate_cpg",
+    }
 
 
 def _settings(unit: UnitContext) -> Mapping[str, int]:
@@ -363,6 +375,7 @@ def build_job(*, executor_factory=None) -> Job:
                   "observations": 0}
         summary_path = unit.unit_root / "cpg-analysis-summary.json"
         atomic_json(summary_path, {"schema": SCHEMA, "upstream": loaded["upstream"], "counts": counts,
+                                   "retirement": retirement_metadata(),
                                    "scopes": generated["scopes"], "unavailable": unavailable,
                                    "gaps": generated["gaps"]})
         unit.job.events.write("CPG_ANALYSIS_COMPLETED", **counts, gap_count=len(generated["gaps"]))

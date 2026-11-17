@@ -585,11 +585,12 @@ def database_coverage(scope: Mapping[str, Any], coverage: Sequence[CoverageRow])
 
 
 def _producer_entry(name: Producer, seeded: Mapping[str, Any] | None, *, shards: int = 1,
-                    failed: bool = False) -> dict[str, Any]:
+                    failed: bool = False, alternate_cpg_succeeded: bool = True) -> dict[str, Any]:
     """One ``producers`` row of the database card: what ran, whether it was seeded, how deep, what is missing."""
     if not shards:
-        return {"name": name.value, "state": "not_run", "seeded": False, "depth": None,
-                "gaps": [f"producer_not_run: no accepted {name.value} output covers this database's project"]}
+        gaps = ([] if (name is Producer.JOERN_CPG and alternate_cpg_succeeded)
+                else [f"producer_not_run: no accepted {name.value} output covers this database's project"])
+        return {"name": name.value, "state": "not_run", "seeded": False, "depth": None, "gaps": gaps}
     record = seeded or {}
     mode = record.get("mode") or "whole_program"
     if mode != "seeded":
@@ -635,8 +636,10 @@ def card_producers(scope: Mapping[str, Any]) -> list[dict[str, Any]]:
         for name, shards in sorted((inputs.get(table) or {}).items()):
             rows[name] = _merge_entries(Producer(name), [(shard.get("producer") or {}).get("seeded")
                                                          for shard in shards])
+    alt_ok = bool(scope.get("alternate_cpg_succeeded", True))
     for producer in CARD_PRODUCER_ORDER:
-        rows.setdefault(producer.value, _producer_entry(producer, None, shards=0))
+        rows.setdefault(producer.value, _producer_entry(
+            producer, None, shards=0, alternate_cpg_succeeded=alt_ok))
     return [rows[producer.value] for producer in CARD_PRODUCER_ORDER]
 
 

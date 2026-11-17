@@ -1,0 +1,556 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/tree-sitter-ast/tree-sitter-cfg-1.json",
+  "title": "appsec-review/tree-sitter-cfg/1",
+  "description": "Deterministic intra-procedural Tree-sitter control-flow graph (CFG) nodes, edges, branch guard polarity classifications, and guard dominator records across all supported target languages (T-168).",
+  "type": "object",
+  "required": [
+    "schema",
+    "record_type"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/tree-sitter-cfg/1"
+    },
+    "record_type": {
+      "enum": [
+        "cfg_manifest",
+        "cfg_node",
+        "cfg_edge"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "scope_id",
+        "language",
+        "grammar",
+        "target_snapshot",
+        "counts",
+        "nodes_artifact",
+        "edges_artifact",
+        "functions"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/tree-sitter-cfg/1"
+        },
+        "record_type": {
+          "const": "cfg_manifest"
+        },
+        "scope_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "grammar": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_snapshot": {
+          "type": "string",
+          "minLength": 1
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cfg_functions_built",
+            "cfg_nodes_emitted",
+            "cfg_edges_emitted",
+            "cfg_guards_classified",
+            "cfg_languages"
+          ],
+          "properties": {
+            "cfg_functions_built": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cfg_nodes_emitted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cfg_edges_emitted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cfg_guards_classified": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cfg_languages": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "nodes_artifact": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "edges_artifact": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/function_summary"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "node_id",
+        "function_id",
+        "function_name",
+        "kind",
+        "ast_type",
+        "language",
+        "source_identity",
+        "path",
+        "file_sha256",
+        "start_line",
+        "end_line",
+        "start_byte",
+        "end_byte",
+        "calls",
+        "defs",
+        "uses",
+        "guard_dominators"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/tree-sitter-cfg/1"
+        },
+        "record_type": {
+          "const": "cfg_node"
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ast_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "function_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "function_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "entry",
+            "exit",
+            "branch",
+            "switch",
+            "loop_header",
+            "return",
+            "jump",
+            "throw",
+            "try_header",
+            "catch_handler",
+            "finally_block",
+            "statement"
+          ]
+        },
+        "ast_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_byte": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_byte": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ordinal_path": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "statement_text": {
+          "type": "string"
+        },
+        "guard_expression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guard_polarity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "null_check",
+            "bounds_check",
+            "auth_or_role_check",
+            "error_return_guard",
+            "sanitization_guard",
+            "general_condition"
+          ]
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "defs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "guard_dominators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/guard_dominator"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "record_type",
+        "edge_id",
+        "function_id",
+        "source_node_id",
+        "target_node_id",
+        "edge_kind",
+        "language",
+        "source_identity",
+        "path"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/tree-sitter-cfg/1"
+        },
+        "record_type": {
+          "const": "cfg_edge"
+        },
+        "edge_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "function_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "edge_kind": {
+          "enum": [
+            "entry",
+            "true_branch",
+            "false_branch",
+            "unconditional",
+            "loop_back",
+            "break_edge",
+            "continue_edge",
+            "return_exit",
+            "exception_edge",
+            "fallthrough"
+          ]
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "guard_expression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guard_polarity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "null_check",
+            "bounds_check",
+            "auth_or_role_check",
+            "error_return_guard",
+            "sanitization_guard",
+            "general_condition"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "guard_dominator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch_node_id",
+        "branch_arm",
+        "guard_expression",
+        "guard_polarity",
+        "start_line",
+        "end_line",
+        "early_exit"
+      ],
+      "properties": {
+        "branch_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branch_ast_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch_arm": {
+          "enum": [
+            "true_branch",
+            "false_branch"
+          ]
+        },
+        "guard_expression": {
+          "type": "string"
+        },
+        "guard_polarity": {
+          "enum": [
+            "null_check",
+            "bounds_check",
+            "auth_or_role_check",
+            "error_return_guard",
+            "sanitization_guard",
+            "general_condition"
+          ]
+        },
+        "guarded_identifiers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "early_exit": {
+          "type": "boolean"
+        }
+      }
+    },
+    "function_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "function_id",
+        "function_name",
+        "language",
+        "source_identity",
+        "path",
+        "file_sha256",
+        "start_line",
+        "end_line",
+        "start_byte",
+        "end_byte",
+        "entry_node_id",
+        "exit_node_id",
+        "node_count",
+        "edge_count",
+        "guard_count"
+      ],
+      "properties": {
+        "function_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ast_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "function_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "qualified_name": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_byte": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_byte": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entry_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exit_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "edge_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "guard_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decorators": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "is_entrypoint_candidate": {
+          "type": "boolean"
+        },
+        "entrypoint_route": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

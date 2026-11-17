@@ -150,10 +150,11 @@ def _diagnostic_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], s
 
 
 def _cpg_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], scope: Mapping[str, Any], snapshot: str,
-              out: ProducerRows) -> None:
+              out: ProducerRows, *, alternate_cpg_succeeded: bool = True) -> None:
     if not shards:
-        out.gaps.append("producer_not_run: no accepted joern-cpg output covers this database (Joern is opt-in); "
-                        "CPG facts are absent")
+        if not alternate_cpg_succeeded:
+            out.gaps.append("producer_not_run: no accepted joern-cpg output covers this database (Joern is opt-in); "
+                            "CPG facts are absent")
         return
     rows = [row for row in shard_set.entities(shards, kinds=(EntityKind.AST_NODE.value,))
             if row["payload"].get("fact") == "cpg"]
@@ -237,7 +238,8 @@ def symbol_links(relations: Sequence[RelationRecord]) -> dict[str, list[dict[str
 
 
 def build(run_root: Path, *, scope: Mapping[str, Any], snapshot: str,
-          relations: Sequence[RelationRecord]) -> ProducerRows:
+          relations: Sequence[RelationRecord],
+          alternate_cpg_succeeded: bool | None = None) -> ProducerRows:
     """The bounded producer rows of one scope, read from its accepted secondary and analyzer shards only."""
     inputs = scope.get("inputs") or {}
     secondary, analyzers = inputs.get("secondary") or {}, inputs.get("analyzers") or {}
@@ -248,7 +250,9 @@ def build(run_root: Path, *, scope: Mapping[str, Any], snapshot: str,
     _flow_rows(shard_set, secondary.get(Producer.LLVM_IR.value, ()), scope, snapshot, out)
     _diagnostic_rows(shard_set, analyzers.get(Producer.CLANG_STATIC.value, ()), scope, snapshot, out)
     _symbol_rows(shard_set, secondary.get(Producer.CLANGD.value, ()), symbol_links(relations), scope, snapshot, out)
-    _cpg_rows(shard_set, analyzers.get(Producer.JOERN_CPG.value, ()), scope, snapshot, out)
+    alt_ok = bool(scope.get("alternate_cpg_succeeded", True)) if alternate_cpg_succeeded is None else alternate_cpg_succeeded
+    _cpg_rows(shard_set, analyzers.get(Producer.JOERN_CPG.value, ()), scope, snapshot, out,
+              alternate_cpg_succeeded=alt_ok)
     for name in ("llvm-ir", "clang-static", "joern-cpg"):
         out.gaps.extend(f"{name}: {gap}" for table in (secondary, analyzers) for shard in table.get(name, ())
                         for gap in ((shard.get("producer") or {}).get("seeded") or {}).get("gaps", ())[:3])

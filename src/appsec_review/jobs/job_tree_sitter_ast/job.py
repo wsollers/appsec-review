@@ -195,6 +195,10 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                         duration_ms=(time.monotonic_ns() - starts[future]) // 1_000_000,
                         files_parsed=counts.get("files_parsed", 0),
                         bytes_parsed=counts.get("bytes_parsed", 0), nodes_parsed=counts.get("nodes_parsed", 0),
+                        cfg_functions_built=counts.get("cfg_functions_built", 0),
+                        cfg_nodes_emitted=counts.get("cfg_nodes_emitted", 0),
+                        cfg_edges_emitted=counts.get("cfg_edges_emitted", 0),
+                        cfg_guards_classified=counts.get("cfg_guards_classified", 0),
                         errors=counts.get("diagnostic_count", 0), gaps=len(result.get("gaps", ())),
                         reused=bool(result.get("index_reused")))
         results.sort(key=lambda value: str(value["scope_id"]))
@@ -246,8 +250,18 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
         manifest = {"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
                     "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
-        counts = {key: sum(int(value.get("counts", {}).get(key, 0)) for value in successful)
-                  for key in ("files_parsed", "bytes_parsed", "nodes_parsed", "diagnostic_count")}
+        counts: dict[str, Any] = {
+            key: sum(int(value.get("counts", {}).get(key, 0)) for value in successful)
+            for key in (
+                "files_parsed", "bytes_parsed", "nodes_parsed", "diagnostic_count",
+                "cfg_functions_built", "cfg_nodes_emitted", "cfg_edges_emitted", "cfg_guards_classified",
+            )
+        }
+        counts["cfg_languages"] = sorted({
+            str(lang)
+            for value in successful
+            for lang in (value.get("counts", {}).get("cfg_languages") or ())
+        })
         dispositions: dict[str, dict[str, int]] = {"files": {}, "nodes": {}, "excluded_files": {}}
         for value in successful:
             for table, entries in (value.get("counts", {}).get("dispositions") or {}).items():
@@ -273,7 +287,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                               successful_scope_count=parsed["successful_scope_count"],
                               scope_count=parsed["scope_count"])
         return {"schema": SCHEMA, "artifact": artifact, "index_manifest": manifest,
-                "item_count": counts["nodes_parsed"], "gaps": parsed["gaps"],
+                "item_count": counts["nodes_parsed"], "counts": counts, "gaps": parsed["gaps"],
                 "dispositions": parsed["dispositions"], "terminal_status": parsed["terminal_status"]}
 
     units = (

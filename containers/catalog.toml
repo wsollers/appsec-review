@@ -846,6 +846,10 @@ purpose = "Offline Clang-Tidy and Clang Static Analyzer over accepted C/C++ comp
 [[images]]
 id = "tool-svf"
 state = "enabled"
+# Retired from default review runs due to OOM profile on large native targets and replaced by
+# universal Tree-sitter + CodeQL alternate CPG/CFG synthesis (T-168/T-169). Marked manual so
+# job_image_pin_verification does not require it on review hosts while offline adapter tests load it.
+manual = true
 kind = "tool"
 version = "3.3.0"
 tag = "appsec-review/tool-svf:3.3.0"
@@ -862,6 +866,10 @@ purpose = "Offline SVF-3.3 Andersen points-to and indirect-call analysis over cl
 [[images]]
 id = "tool-joern"
 state = "enabled"
+# Retired from default review runs due to OOM profile on large targets and replaced by
+# universal Tree-sitter + CodeQL alternate CPG/CFG synthesis (T-168/T-169). Marked manual so
+# job_image_pin_verification does not require it on review hosts while offline adapter tests load it.
+manual = true
 kind = "tool"
 version = "4.0.630"
 tag = "appsec-review/tool-joern:4.0.630"

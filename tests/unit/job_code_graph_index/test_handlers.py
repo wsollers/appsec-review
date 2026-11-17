@@ -228,6 +228,18 @@ def test_full_unit_pipeline_publishes_shards_cards_scorecard_queries_matrix_and_
 
     counts = outputs["acceptance.publish_handoff"]["counts"]
     assert counts["shards"] == 36 and counts["databases"] == 4
+    for telemetry_key in (
+        "alternate_cpg_nodes",
+        "alternate_cpg_edges",
+        "semantic_edges_count",
+        "syntactic_fallback_edges_count",
+        "entrypoints_linked",
+        "reachable_sink_paths_precomputed",
+    ):
+        assert telemetry_key in counts
+        assert isinstance(counts[telemetry_key], int)
+    assert counts["alternate_cpg_nodes"] >= 1
+    assert counts["alternate_cpg_edges"] >= 1
 
     document = _publish_unit_handoff(staged, first, "attempt_unit_01")
     all_graph = [item for item in document["indexes"] if item["name"] == GRAPH_INDEX]
@@ -239,6 +251,12 @@ def test_full_unit_pipeline_publishes_shards_cards_scorecard_queries_matrix_and_
         if item["producer"].get("kind") not in {"codeql_database", "producer_neighborhood"}
     ]
     assert len(family_shards) == 28 and len(cards) == 4 and len(prod_shards) == 4
+
+    alt_shards = [
+        item for item in document["indexes"]
+        if item["name"] == "analysis" and item["shard_id"] == "alternate-cpg"
+    ]
+    assert len(alt_shards) == 1
 
     # Upstream shards are composed, never dropped.
     present = {(item["name"], item["shard_id"], item["sha256"]) for item in document["indexes"]}

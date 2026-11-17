@@ -35,6 +35,7 @@ from .planning import MODULE_LINK, PlannedModule, plan_modules
 
 JOB_ID = "job_svf_alias_analysis"
 TOOL_ID = "tool-svf"
+RETIREMENT_REASON = "retired_by_policy_oom_replaced_by_alternate_cpg"
 PLAN_SCHEMA = "appsec-review/svf-plan/1"
 RESULT_SCHEMA = "appsec-review/svf-run/1"
 DRIVER_SCHEMA = "appsec-review/svf-alias-output/1"
@@ -63,6 +64,17 @@ _DRIVER_BOUNDS = ("max_module_bitcode_bytes", "max_module_output_bytes", "field_
                   "max_pts_size", "max_indirect_calls", "max_targets_per_call", "max_unmodeled_names",
                   "compile_timeout_seconds", "link_timeout_seconds", "module_timeout_seconds",
                   "andersen_time_limit_seconds")
+
+
+def retirement_metadata() -> dict[str, Any]:
+    """Return structured retirement metadata for SVF alias analysis."""
+    return {
+        "retired": True,
+        "reason": RETIREMENT_REASON,
+        "tool_id": TOOL_ID,
+        "manual_only": True,
+        "replacement": "alternate_cpg",
+    }
 
 
 def _validated_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
@@ -516,6 +528,7 @@ def build_job(*, executor_factory: Any = None) -> Job:
                   "gap_count": len(analyzed["gaps"])}
         summary = unit.unit_root / "svf-alias-analysis-summary.json"
         atomic_json(summary, {"schema": SVF_ALIAS_HANDOFF_SCHEMA, "upstream": loaded["upstream"], "counts": counts,
+                              "retirement": retirement_metadata(),
                               "scopes": analyzed["scopes"], "unavailable": loaded["unavailable"],
                               "gaps": analyzed["gaps"]})
         return {"schema": SVF_ALIAS_HANDOFF_SCHEMA, "artifact": artifact(unit.job.run_root, summary),

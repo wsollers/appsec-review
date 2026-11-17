@@ -7,7 +7,10 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.jobs.engineering_contracts import SVF_ALIAS_HANDOFF_SCHEMA
-from appsec_review.jobs.job_svf_alias_analysis import JOB_ID, TOOL_ID, build_job
+import appsec_review.jobs.job_svf_alias_analysis as svf_pkg
+from appsec_review.jobs.job_svf_alias_analysis import (
+    JOB_ID, RETIREMENT_REASON, TOOL_ID, build_job, retirement_metadata,
+)
 from appsec_review.jobs.job_svf_alias_analysis.datasets import CONSUMES, CONTRACT, DATASETS
 from appsec_review.jobs.job_svf_alias_analysis.job import (
     ADAPTER,
@@ -102,3 +105,15 @@ def test_validate_rejects_mismatched_tasks() -> None:
         )
         with pytest.raises(ValueError, match=f"task configuration mismatch: {step}"):
             _validate(SimpleNamespace(config=cfg), {})
+
+
+def test_svf_retirement_metadata() -> None:
+    assert set(svf_pkg.__all__) == {"JOB_ID", "RETIREMENT_REASON", "TOOL_ID", "build_job", "retirement_metadata"}
+    assert RETIREMENT_REASON == "retired_by_policy_oom_replaced_by_alternate_cpg"
+    assert retirement_metadata() == {
+        "retired": True,
+        "reason": "retired_by_policy_oom_replaced_by_alternate_cpg",
+        "tool_id": "tool-svf",
+        "manual_only": True,
+        "replacement": "alternate_cpg",
+    }

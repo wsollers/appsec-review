@@ -141,6 +141,16 @@ def test_every_dataset_field_is_pinned() -> None:
         },
         {
             **common,
+            "output_kind": "tree_sitter_cfg",
+            "step": "parse",
+            "schema": "appsec-review/tree-sitter-cfg/1",
+            "disposition": "artifact_only",
+            "description": "Deterministic intra-procedural Tree-sitter CFG basic blocks, control-flow edges and branch guard polarities.",
+            "artifacts": ("data/treesitter/cfg/**",),
+            "reason": "intra-procedural CFG and guard dominators live in accepted analysis shards; JSONL artifacts support deterministic reuse and audit",
+        },
+        {
+            **common,
             "output_kind": "tree_sitter_scope_results",
             "step": "parse",
             "schema": "appsec-review/tree-sitter-ast/1",
@@ -301,11 +311,17 @@ def test_emitted_node_shard_matches_its_declared_artifact_schema(tmp_path: Path)
         "nodes_parsed": 1,
         "diagnostic_count": 0,
         "gap_count": 0,
+        "cfg_functions_built": 0,
+        "cfg_nodes_emitted": 0,
+        "cfg_edges_emitted": 0,
+        "cfg_guards_classified": 0,
+        "cfg_languages": [],
         "dispositions": {
             "files": {"first_party": 1},
             "nodes": {"first_party": 1},
             "excluded_files": {},
         },
+        "excluded_files": [],
     }
     [record] = [json.loads(line) for line in artifact_path.read_text(encoding="utf-8").splitlines()]
     assert record["path"] == "app.py"
