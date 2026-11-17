@@ -1,0 +1,270 @@
+[1/32] Processing file /target/source/third_party/bzip2/compress.c
+[2/32] Processing file /target/source/src/util.c
+[3/32] Processing file /target/source/third_party/lz4/lib/lz4frame.c
+[4/32] Processing file /target/source/src/request.cpp
+[5/32] Processing file /target/source/third_party/zlib/inffast.c
+[6/32] Processing file /target/source/third_party/zlib/gzlib.c
+[7/32] Processing file /target/source/third_party/cjson/cJSON.c
+[8/32] Processing file /target/source/third_party/zlib/infback.c
+[9/32] Processing file /target/source/third_party/zlib/gzclose.c
+[10/32] Processing file /target/source/third_party/zlib/trees.c
+[11/32] Processing file /target/source/third_party/zlib/compress.c
+[12/32] Processing file /target/source/third_party/lz4/lib/lz4.c
+[13/32] Processing file /target/source/third_party/zlib/inftrees.c
+[14/32] Processing file /target/source/src/synthetic.cpp
+[15/32] Processing file /target/source/third_party/zlib/adler32.c
+[16/32] Processing file /target/source/third_party/zlib/deflate.c
+[17/32] Processing file /target/source/third_party/bzip2/blocksort.c
+[18/32] Processing file /target/source/third_party/zlib/gzwrite.c
+[19/32] Processing file /target/source/third_party/zlib/gzread.c
+[20/32] Processing file /target/source/third_party/lz4/lib/lz4hc.c
+[21/32] Processing file /target/source/third_party/bzip2/crctable.c
+[23/32] Processing file /target/source/third_party/bzip2/bzlib.c
+[24/32] Processing file /target/source/third_party/bzip2/randtable.c
+[22/32] Processing file /target/source/third_party/zlib/crc32.c
+/target/source/third_party/lz4/lib/lz4frame.c:74:10: fatal error: 'stdlib.h' file not found
+   74/target/source/third_party/cjson/cJSON.c:40:10: fatal error: 'string.h' file not found
+   40 | #include <string.h>
+      |          ^~~~~~~~~~
+/target/source/src/synthetic.cpp:2:10: fatal error: 'cstdio' file not found
+    2 | #include <cstdio>
+      |          ^~~~~~~~
+ | #include <stdlib.h>   /* malloc, calloc, free */
+      |          ^~~~~~~~~~
+In file included from /target/source/third_party/zlib/gzwrite.c:6:
+/target/source/third_party/zlib/gzguts.h:21:10: fatal error: 'stdio.h' file not found
+   21 | #include <stdio.h>
+      |          ^~~~~~~~~
+In file included from /target/source/third_party/bzip2/compress.c:29:
+/target/source/third_party/bzip2/bzlib_private.h:25:10: fatal error: 'stdlib.h' file not found
+   25 | #include <stdlib.h>
+      |          ^~~~~~~~~~
+In file included from In file included from /target/source/third_party/bzip2/crctable.c:22/target/source/third_party/bzip2/randtable.c::
+22:
+/target/source/third_party/bzip2/bzlib_private.h:/target/source/third_party/bzip2/bzlib_private.h25::2510::10 : fatal error: fatal error: 'stdlib.h' file not found
+'stdlib.h' file not found
+      2525 |  | ##iinncclluuddee  <<ssttddlliibb..hh>>
+
+            | |          ^~~~~~~~~~         ^~~~~~~~~~
+
+In file included from /target/source/third_party/zlib/gzclose.c:6:
+/target/source/third_party/zlib/gzguts.h:21:10: fatal error: 'stdio.h' file not found
+   21 | #include <stdio.h>
+      |          ^~~~~~~~~
+/target/source/src/request.cpp:3:10: fatal error: 'climits' file not found
+    3 | #include <climits>
+      |          ^~~~~~~~~
+In file included from /target/source/third_party/bzip2/bzlib.c:31:
+/target/source/third_party/bzip2/bzlib_private.h:25:10: fatal error: 'stdlib.h' file not found
+   25 | #include <stdlib.h>
+      |          ^~~~~~~~~~
+/target/source/src/util.c:2:10: fatal error: 'stdio.h' file not found
+    2 | #include <stdio.h>
+      |          ^~~~~~~~~
+In file included from /target/source/third_party/bzip2/blocksort.c:22:
+/target/source/third_party/bzip2/bzlib_private.h:25:10: fatal error: 'stdlib.h' file not found
+   25 | #include <stdlib.h>
+      |          ^~~~~~~~~~
+In file included from /target/source/third_party/zlib/gzread.c:6:
+/target/source/third_party/zlib/gzguts.h:21:10: fatal error: 'stdio.h' file not found
+   21 | #include <stdio.h>
+      |          ^~~~~~~~~
+In file included from /target/source/third_party/zlib/gzlib.c:6:
+/target/source/third_party/zlib/gzguts.h:21:10: fatal error: 'stdio.h' file not found
+   21 | #include <stdio.h>
+      |          ^~~~~~~~~
+In file included from In file included from /target/source/third_party/zlib/crc32.c/target/source/third_party/zlib/deflate.c::3152:
+:
+In file included from In file included from /target/source/third_party/zlib/zutil.h/target/source/third_party/zlib/deflate.h::2216:
+:
+In file included from In file included from /target/source/third_party/zlib/zlib.h/target/source/third_party/zlib/zutil.h::3422:
+:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:/target/source/third_party/zlib/zconf.h14::444 :14fatal error: : 'sys/types.h' file not found
+fatal error: 'sys/types.h' file not found
+  444   | 444# |  #      i nicnlculdued e< s<yssy/st/ytpyepse.sh.>h >          / */ *f ofro ro foff_ft_In file included from  t/target/source/third_party/zlib/inftrees.c*: /6*
+:
+/      In file included from | 
+/target/source/third_party/zlib/zutil.h      :             ^~~~~~~~~~~~~| 22
+             ^~~~~~~~~~~~~:
+
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sIn file included from ys/target/source/third_party/zlib/adler32.c/:8t:
+yIn file included from p/target/source/third_party/zlib/zutil.he:22s:
+.In file included from h/target/source/third_party/zlib/zlib.h>: 34 :
+   /target/source/third_party/zlib/zconf.h :/444*:14 :f ofatal error: r 'sys/types.h' file not foundo
+ff_t */
+        | 444 |              ^~~~~~~~~~~~~
+#    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+In file included from /target/source/third_party/zlib/compress.c:9:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+In file included from /target/source/third_party/zlib/trees.c:37:
+In file included from /target/source/third_party/zlib/deflate.h:16:
+In file included from /target/source/third_party/zlib/zutil.h:22:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+In file included from /target/source/third_party/zlib/infback.c:13:
+In file included from /target/source/third_party/zlib/zutil.h:22:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+In file included from /target/source/third_party/zlib/inffast.c:6:
+In file included from /target/source/third_party/zlib/zutil.h:22:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+1 error generated.
+Error while processing /target/source/src/util.c.
+[25/32] Processing file /target/source/third_party/lz4/lib/xxhash.c
+1 error generated.
+Error while processing /target/source/third_party/bzip2/randtable.c.
+1[26/32] Processing file /target/source/third_party/zlib/uncompr.c
+ error generated.
+Error while processing /target/source/third_party/bzip2/crctable.c.
+[27/32] Processing file /target/source/third_party/bzip2/huffman.c
+/target/source/third_party/lz4/lib/xxhash.c:107:10: fatal error: 'stdlib.h' file not found
+  107 | #include <stdlib.h>
+      |          ^~~~~~~~~~
+/target/source/third_party/lz4/lib/lz4.c:177:10: fatal error: 'stdlib.h' file not found
+  177 | #include <stdlib.h>   /* malloc, calloc, free */
+      |          ^~~~~~~~~~
+1 error generated.
+1 error generated.
+Error while processing /target/source/third_party/zlib/gzclose.c.
+[28/32] Processing file /target/source/third_party/bzip2/decompress.c
+In file included from /target/source/third_party/bzip2/huffman.c:22:
+/target/source/third_party/bzip2/bzlib_private.h:25:10: fatal error: 'stdlib.h' file not found
+   25 | #include <stdlib.h>
+      |          ^~~~~~~~~~
+1 error generated.
+Error while processing /target/source/third_party/zlib/inftrees.c.
+In file included from /target/source/third_party/zlib/uncompr.c:9:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <[29/32] Processing file /target/source/src/main.cpps
+ys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+Error while processing /target/source/third_party/zlib/compress.c.
+[30/32] Processing file /target/source/src/session.cpp
+In file included from /target/source/third_party/bzip2/decompress.c:22:
+/target/source/third_party/bzip2/bzlib_private.h:25:10: fatal error: 'stdlib.h' file not found
+   25 | #include <stdlib.h>
+      |          ^~~~~~~~~~
+/target/source/src/main.cpp:2:10: fatal error: 'cstdlib' file not found
+    2 | #include <cstdlib>
+      |          ^~~~~~~~~
+In file included from /target/source/third_party/lz4/lib/lz4hc.c:70:
+/target/source/third_party/lz4/lib/lz4.c:177:10: fatal error: 'stdlib.h' file not found
+  177 | #include <stdlib.h>   /* malloc, calloc, free *1/ error
+ generated      .
+|          ^~~~~~~~~~
+Error while processing /target/source/third_party/zlib/gzlib.c.
+[31/32] Processing file /target/source/third_party/zlib/zutil.c
+/target/source/src/session.cpp:2:10: fatal error: 'cstdlib' file not found
+    2 | #include <cstdlib>
+      |          ^~~~~~~~~
+In file included from /target/source/third_party/zlib/zutil.c:8:
+In file included from /target/source/third_party/zlib/zutil.h:22:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+1 error generated.
+1 error generated.
+Error while processing /target/source/third_party/zlib/inffast.c.
+1 error generated.
+Error while processing /target/source/third_party/zlib/uncompr.c.
+1 error generated.
+[32/32] Processing file /target/source/third_party/zlib/inflate.c
+Error while processing /target/source/src/session.cpp.
+Error while processing /target/source/third_party/bzip2/huffman.c.
+1 error generated.
+1 error generated.
+Error while processing /target/source/third_party/zlib/adler32.c.
+1 error generated.
+Error while processing /target/source/third_party/zlib/gzread.c.
+Error while processing /target/source/third_party/zlib/zutil.c.
+1 error generated.
+Error while processing /target/source/third_party/bzip2/blocksort.c.
+1 error generated.
+Error while processing /target/source/third_party/zlib/gzwrite.c.
+1 error generated.
+Error while processing /target/source/third_party/lz4/lib/lz4hc.c.
+1 error generated.
+Error while processing /target/source/third_party/lz4/lib/xxhash.c.
+1 error generated.
+Error while processing /target/source/third_party/bzip2/compress.c.
+In file included from /target/source/third_party/zlib/inflate.c:83:
+In file included from /target/source/third_party/zlib/zutil.h:22:
+In file included from /target/source/third_party/zlib/zlib.h:34:
+/target/source/third_party/zlib/zconf.h:444:14: fatal error: 'sys/types.h' file not found
+  444 | #    include <sys/types.h>      /* for off_t */
+      |              ^~~~~~~~~~~~~
+1 error generated.
+1 error generated.
+Error while processing /target/source/third_party/zlib/infback.c.
+Error while processing /target/source/src/request.cpp.
+1 error generated.
+Error while processing /target/source/third_party/zlib/crc32.c.
+1 error generated.
+1 error generated.
+Error while processing /target/source/third_party/bzip2/decompress.c.
+Error while processing /target/source/third_party/lz4/lib/lz4.c.
+1 error generated.
+Error while processing 1/target/source/third_party/zlib/trees.c error.
+ generated.
+Error while processing /target/source/third_party/cjson/cJSON.c.
+1 error generated.
+Error while processing /target/source/third_party/bzip2/bzlib.c.
+1 error generated.
+Error while processing /target/source/third_party/zlib/deflate.c.
+1 error generated.
+Error while processing /target/source/third_party/zlib/inflate.c.
+1 error generated.
+Error while processing /target/source/third_party/lz4/lib/lz4frame.c.
+1 error generated.
+Error while processing /target/source/src/main.cpp.
+1 error generated.
+Error while processing /target/source/src/synthetic.cpp.
+Failed to run action on /target/source/src/util.c
+Failed to run action on /target/source/third_party/bzip2/randtable.c
+Failed to run action on /target/source/third_party/bzip2/crctable.c
+Failed to run action on /target/source/third_party/zlib/gzclose.c
+Failed to run action on /target/source/third_party/zlib/inftrees.c
+Failed to run action on /target/source/third_party/zlib/compress.c
+Failed to run action on /target/source/third_party/zlib/gzlib.c
+Failed to run action on /target/source/third_party/zlib/inffast.c
+Failed to run action on /target/source/third_party/zlib/uncompr.c
+Failed to run action on /target/source/src/session.cpp
+Failed to run action on /target/source/third_party/bzip2/huffman.c
+Failed to run action on /target/source/third_party/zlib/adler32.c
+Failed to run action on /target/source/third_party/zlib/gzread.c
+Failed to run action on /target/source/third_party/zlib/zutil.c
+Failed to run action on /target/source/third_party/bzip2/blocksort.c
+Failed to run action on /target/source/third_party/zlib/gzwrite.c
+Failed to run action on /target/source/third_party/lz4/lib/lz4hc.c
+Failed to run action on /target/source/third_party/lz4/lib/xxhash.c
+Failed to run action on /target/source/third_party/bzip2/compress.c
+Failed to run action on /target/source/third_party/zlib/infback.c
+Failed to run action on /target/source/src/request.cpp
+Failed to run action on /target/source/third_party/zlib/crc32.c
+Failed to run action on /target/source/third_party/bzip2/decompress.c
+Failed to run action on /target/source/third_party/lz4/lib/lz4.c
+Failed to run action on /target/source/third_party/zlib/trees.c
+Failed to run action on /target/source/third_party/cjson/cJSON.c
+Failed to run action on /target/source/third_party/bzip2/bzlib.c
+Failed to run action on /target/source/third_party/zlib/deflate.c
+Failed to run action on /target/source/third_party/zlib/inflate.c
+Failed to run action on /target/source/third_party/lz4/lib/lz4frame.c
+Failed to run action on /target/source/src/main.cpp
+Failed to run action on /target/source/src/synthetic.cpp
+

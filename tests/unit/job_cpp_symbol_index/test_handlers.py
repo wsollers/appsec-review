@@ -28,6 +28,7 @@ from appsec_review.jobs.job_cpp_symbol_index.job import (
     _position,
     build_job,
     normalize_scope,
+    unresolved_system_headers,
 )
 from appsec_review.retrieval import IndexBuilder, RelationKind, write_manifest
 from appsec_review.runtime import UnitContext
@@ -35,6 +36,7 @@ from appsec_review.storage import canonical_json, file_sha256, run_artifact
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+FIXTURES = REPO_ROOT / "tests" / "fixtures" / "cpp_symbol_index"
 
 
 def _make_scope_and_unit(
@@ -411,7 +413,7 @@ def test_normalize_scope_edges_limits_and_error_surfaces(tmp_path: Path) -> None
         (
             "malformed_and_oom",
             {"oom_killed": True, "exit_code": 137},
-            '--- !Symbol\nBad: "double"\n...\n',
+            '--- !Symbol\nBad: "unterminated\n...\n',
             "[1/1] Processing file /target/source/a.cpp\n",
             {},
             "clangd-indexer was OOM-killed",
@@ -449,6 +451,96 @@ def test_normalize_scope_edges_limits_and_error_surfaces(tmp_path: Path) -> None
         res = normalize_scope(sub_unit, sub_scope, base_exec, base_limits, sub_builder, "clangd-sub")
         assert expected_gap in res["gaps"]
         assert res["coverage"] == expected_cov
+
+
+def test_unresolved_system_headers_attributes_chains_and_direct_diagnostics() -> None:
+    stderr = (
+        "[1/3] Processing file /target/source/a.c\n"
+        "In file included from /target/source/a.c:3:\n"
+        "In file included from /target/source/inc/a.h:2:\n"
+        "/target/source/inc/zc.h:4:10: fatal error: 'sys/types.h' file not found\n"
+        "    4 | #include <sys/types.h>\n"
+        "      |          ^~~~~~~~~~~~~\n"
+        "1[2/3] Processing file /target/source/b.cpp\n"  # interleaved prefix from another thread
+        "/target/source/b.cpp:2:10: fatal error: 'cstdio' file not found\n"
+        "/target/source/vendor/x.c:1:10: fatal error: 'stdlib.h' file not found\n"  # not an expected unit
+        "1 error generated.\n"
+        "Error while processing /target/source/a.c.\n"
+    )
+    expected = {"/target/source/a.c", "/target/source/b.cpp", "/target/source/c.c"}
+    headers, units = unresolved_system_headers(stderr, expected)
+    assert headers == ["cstdio", "stdlib.h", "sys/types.h"]
+    assert units == {"/target/source/a.c": ["sys/types.h"], "/target/source/b.cpp": ["cstdio"]}
+    assert unresolved_system_headers("[1/1] Processing file /target/source/a.c\n", expected) == ([], {})
+    assert {m.group(1) for m in job_mod._PROCESSED.finditer(stderr)} == {"/target/source/a.c", "/target/source/b.cpp"}
+
+
+def test_clangd23_system_headers_not_found_is_a_named_gap_and_units_count_as_unprocessed(tmp_path: Path) -> None:
+    """Run 2026-11-17-0003: tool-clangd-indexer:23.1.0 could not find libc/libstdc++ headers for
+    every translation unit, yet the summary said "processed 30 of 32" with no gap naming it."""
+    units = {
+        "src/main.cpp": "int main() { return 0; }\n",  # direct 'cstdlib' error; its Processing line is garbled
+        "src/util.c": "int util(void) { return 1; }\n",  # direct 'stdio.h' error
+        "third_party/zlib/uncompr.c": "int u(void) { return 2; }\n",  # 'sys/types.h' via zlib.h -> zconf.h
+        "third_party/zlib/inflate.c": "int i(void) { return 3; }\n",  # 'sys/types.h' via zutil.h chain
+        "third_party/bzip2/huffman.c": "int h(void) { return 4; }\n",  # 'stdlib.h' via bzlib_private.h
+        "third_party/lz4/lib/lz4hc.c": "int l(void) { return 5; }\n",  # 'stdlib.h' via #include "lz4.c"
+    }
+    run_root, _, scope, unit = _make_scope_and_unit(
+        tmp_path / "sysroot", sources={f"native/{rel}": body for rel, body in units.items()}
+    )
+    raw = run_root / "raw"
+    raw.mkdir(parents=True)
+    (raw / "stdout").write_bytes((FIXTURES / "clangd23-documentation.yaml").read_bytes())
+    (raw / "stderr").write_bytes((FIXTURES / "clangd23-system-headers.stderr").read_bytes())
+    builder = IndexBuilder(
+        run_root / "sysroot.sqlite",
+        name="analysis",
+        fingerprint="f" * 64,
+        target_snapshot=unit.job.source_fingerprint,
+        shard_id="clangd-sysroot",
+    )
+    counts = normalize_scope(
+        unit,
+        scope,
+        {
+            "timed_out": False,
+            "oom_killed": False,
+            "exit_code": 0,
+            "stdout_truncated": False,
+            "stdout_path": "raw/stdout",
+            "stderr_path": "raw/stderr",
+        },
+        {
+            "max_documents_per_scope": 100,
+            "max_symbols_per_scope": 100,
+            "max_relations_per_scope": 100,
+            "locations_per_relation": 2,
+        },
+        builder,
+        "clangd-sysroot",
+    )
+    assert counts["translation_units"] == 6
+    assert counts["processed_translation_units"] == 0
+    assert counts["translation_units_with_unresolved_headers"] == 6
+    assert counts["omitted_translation_units"] == 1  # main.cpp's "Processing file" line is garbled
+    assert counts["unresolved_system_headers"] == [
+        "climits", "cstdio", "cstdlib", "stdio.h", "stdlib.h", "string.h", "sys/types.h",
+    ]
+    assert counts["coverage"] == "partial"
+    gap = next(g for g in counts["gaps"] if g.startswith("system_headers_unresolved: "))
+    assert gap == (
+        "system_headers_unresolved: climits, cstdio, cstdlib, stdio.h, stdlib.h, string.h, sys/types.h "
+        "not found in 6 of 6 translation units (src/main.cpp, src/util.c, third_party/bzip2/huffman.c, "
+        "third_party/lz4/lib/lz4hc.c, third_party/zlib/inflate.c, third_party/zlib/uncompr.c)"
+    )
+    assert "clangd-indexer processed 0 of 6 translation units" in counts["gaps"]
+    # The same run's documented symbols now parse: no malformed-output gap; inflateReset2 is defined in
+    # the in-scope inflate.c and is admitted, the lz4 and cJSON symbols are declared outside the scope.
+    assert not any("malformed" in g for g in counts["gaps"])
+    assert counts["symbols"] == 1
+    assert counts["external_symbols"] == 2
+    assert [entity.name for entity in builder.entities] == ["inflateReset2"]
 
 
 def test_failed_clangd_run_is_scoped_unavailable_coverage(tmp_path: Path) -> None:
