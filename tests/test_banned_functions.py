@@ -72,7 +72,12 @@ def test_rendering_is_deterministic_and_ignores_list_order() -> None:
     assert generator.render_rules(parsed) == generator.render_rules(shuffled)
     text = generator.render_rules(parsed)
     assert all(f"id: {RULE_PREFIX}{tier}" in text for tier in ("high", "warning", "review"))
-    assert "severity: ERROR" in text and "severity: WARNING" in text and "severity: INFO" in text
+    # Every tier is a review signal: high and warning report WARNING (medium), review INFO, nothing ERROR (high),
+    # since a banned call with constant arguments is not attacker input (run 2026-11-16-0005 admitted strcpy(f->data,
+    # "ready") on the rule's reported high).
+    assert "severity: ERROR" not in text and "severity: WARNING" in text and "severity: INFO" in text
+    high = text.index(f"id: {RULE_PREFIX}high")
+    assert text[high:].split("severity: ", 1)[1].startswith("WARNING")
     assert generator.render_rules(BannedFunctions()).rstrip().endswith("rules: []")  # an empty table makes no rules
 
 

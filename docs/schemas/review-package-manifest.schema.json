@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-manifest.schema.json",
   "title": "Review package manifest (review-package-manifest/1)",
-  "description": "The manifest assemble-review-packages/15 publishes beside the package bytes (review/packages.py); preceding /12 and /13 publications remain readable. assemble_packages validates the document before hashing it, and verify_package_manifest re-validates it, every referenced unit context document and every package body on each read.",
+  "description": "The manifest assemble-review-packages/16 publishes beside the package bytes (review/packages.py); preceding /12, /13 and /15 publications remain readable. assemble_packages validates the document before hashing it, and verify_package_manifest re-validates it, every referenced unit context document and every package body on each read.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "assembly_rule", "package_schema", "run_id", "manifest_sha256", "target_snapshot",
@@ -11,7 +11,7 @@
   "properties": {
     "schema": {"const": "appsec-review/review-package-manifest/1"},
     "assembly_rule": {"enum": ["appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13",
-                               "appsec-review/assemble-review-packages/15"]},
+                               "appsec-review/assemble-review-packages/15", "appsec-review/assemble-review-packages/16"]},
     "package_schema": {"const": "appsec-review/review-package/7"},
     "run_id": {"type": "string", "minLength": 1},
     "manifest_sha256": {"$ref": "#/$defs/sha"},

@@ -52,8 +52,8 @@ def test_central_bounds_reach_the_real_package_settings():
     parsed = parse_inference_review_settings(settings())
     assert PackageSettings.from_review_settings(parsed).max_operation_records == 2000
     assert PackageSettings.from_review_settings(parsed).max_behavior_artifact_bytes == 8388608
-    assert RANK_RULE == "appsec-review/review-unit-rank/4"
-    assert ASSEMBLY_RULE == "appsec-review/assemble-review-packages/14"
+    assert RANK_RULE == "appsec-review/review-unit-rank/5"
+    assert ASSEMBLY_RULE == "appsec-review/assemble-review-packages/16"
 
 
 @pytest.mark.parametrize("key,value", [

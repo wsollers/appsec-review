@@ -77,9 +77,10 @@ Unchanged in shape; two policies decided on 2026-11-15 already apply (T-5029, T-
   catalogued rule CWE, and the model pass covers only leads reported unknown). An unassessed unknown lead is recorded with
   `residual_coverage: unassessed_unknown`, a `lead_admission` skipped gap, and reaches the hunter's unit
   selection (section 4.1) rather than being reviewed blind.
-- Leads of one defect site share one package: same path, within `packages.lead_cluster_lines` of a member and
-  the same enclosing function where graph facts know it. The package's neighborhood is the merge of its
-  members' neighborhoods, bounded by the verified correlated paths.
+- Leads of one defect site share one package: same path, within `packages.lead_cluster_lines` of a member,
+  the same enclosing function where graph facts know it, and the same defect (a shared `sink_site` fact or the
+  same weakness class; different classes within the window are separate packages). The package's neighborhood
+  is the merge of its members' neighborhoods, bounded by the verified correlated paths.
 - `excluded-leads.json` lists every observation the manifest did not admit, with its reason and whether a
   hunt unit still covers it.
 

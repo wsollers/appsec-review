@@ -615,7 +615,11 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   eligibility and reporting.
 - **Packages.** Admitted leads that report one defect site share one finding-lead package: leads of a
   source-location family (`source_sast`, `codeql`) on the same path, within `packages.lead_cluster_lines`
-  of a member and, where graph facts name both enclosing functions, in the same function
+  of a member, where graph facts name both enclosing functions in the same function, and reporting the same
+  defect: a shared `sink_site` fact on the leads' lines or the same weakness class (the rule CWEs' predicate
+  under `security-predicates/1`, else the rule id's under `RULE_PREDICATES`, else the predicate of the
+  classified sink on the lead's line, `SINK_CLASS_PREDICATES`; a lead with no class never splits a group). Different classes within the window
+  are distinct defects and become separate packages whose neighborhoods may overlap
   (`review.packages.cluster_leads`). The package is anchored at its highest-severity lead; every lead keeps
   its menu entry, evidence row and lead accounting, and appears in exactly one package. Other families
   and unlocated leads get a package each. The membership audit of the
@@ -632,8 +636,9 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   - source-history instability (SII);
   - hotspots;
   - distinct evidenced security-operation sites, not raw tag counts;
-  - medium, low, and info leads, which also appear on the hunt menu as hints;
-  - advisory reference signals (`review-unit-rank/4`): `advisory_kev` is 250 points when any
+  - lead hints by effective severity (critical and high at `lead_hint_high`, then medium, low and info),
+    which also appear on the hunt menu;
+  - advisory reference signals (`review-unit-rank/5`): `advisory_kev` is 250 points when any
     dependency/artifact advisory in the unit is KEV-listed, and `advisory_epss` is the unit's highest
     EPSS percentile times 250. A unit with no advisory lead scores a true zero; an advisory whose KEV
     or EPSS feed was unavailable makes the signal `unknown` (`feed_unavailable`), never zero. Both
@@ -641,7 +646,9 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     that the target is affected.
 
   A unit's rank score is the sum of its known signal points, ties broken by the count of known
-  signals and then by unit key. Every weight is configurable (decision B2) in the typed, validated
+  signals, then the unit's lead count, distinct scanners, first path and operation line, and only then by
+  unit key (run 2026-11-16-0005 tied eight operation units and the key put the `popen` site below the
+  cutoff). Every weight is configurable (decision B2) in the typed, validated
   table `[jobs.job_inference_security_review.settings.ranking]` (`review/ranking.py::RankWeights`).
   Unknown keys are rejected, and every weight is an integer in `[0, 1000]`. The defaults are the
   retained numerical weights; version 3 changes the opportunity signal and therefore invalidates
@@ -652,6 +659,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   | `lps`, `sii`, `hotspot` | 1000 each | producer score in [0, 1] (or a percentage) times the weight, capped at the weight |
   | `tag_density` | 1000 | retained key: distinct invoked operation sites times weight / saturation count, capped at weight; no file-count multiplier |
   | `tag_density_full_tags_per_file` | 4 | retained key: distinct sites that earn the full weight; multiple labels/producers at one physical site count once |
+  | `lead_hint_high` | 250 | per critical or high lead hint (effective severity: reported when known, else assessed) |
   | `lead_hint_medium`, `lead_hint_low`, `lead_hint_info` | 100, 30, 10 | per medium/low/info lead hint |
   | `lead_hints_max` | 1000 | cap on the summed lead hints |
   | `advisory_kev` | 250 | any advisory in the unit is KEV-listed |
@@ -659,8 +667,9 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 
   The weights reach `review/units.py` through `PackageSettings.rank_weights`. They are recorded in
   the package manifest's `settings` and are semantic settings, so they enter every fingerprint
-  derived from the settings. Changing a weight changes the order, not the rule, so `RANK_RULE`
-  stays `review-unit-rank/4`, which adds the `facets` signal (`facet_exposure`, `facet_trust`;
+  derived from the settings. Changing a weight changes the order, not the rule; `RANK_RULE` is
+  `review-unit-rank/5`, which weighs high leads (`lead_hint_high`) and breaks ties by the unit's own
+  weight before its key, after `/4` added the `facets` signal (`facet_exposure`, `facet_trust`;
   [collation pass](collation-pass.md)).
 
   With `settings.hunting` disabled, the top `hunt_max_units` units, by rank then `package_id`, receive hunt

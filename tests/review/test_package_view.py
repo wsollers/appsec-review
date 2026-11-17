@@ -84,14 +84,77 @@ def test_trimming_a_neighborhood_row_keeps_the_context_entry_the_chain_still_sho
     record["omitted"] = {name: 0 for name in record if name not in ("chain", "omitted")}
     record["slice"] = None
     entries = [context_entry(entry_point, "entry_point"), context_entry(hop, "caller"), context_entry(guard, "guard")]
-    # The entries row is trimmed first (trim order), but the chain still shows the entry point: its entry stays.
-    assert _Assembler.trim_neighborhood(record, entries)
-    assert record["entries"] == [] and record["omitted"]["entries"] == 1
-    assert {item.id for item in entries} == {entry_point, hop, guard}
-    # The guards row goes next and nothing else shows the guard: its entry goes with it.
-    assert _Assembler.trim_neighborhood(record, entries)
-    assert record["guards"] == [] and {item.id for item in entries} == {entry_point, hop}
-    assert not _Assembler.trim_neighborhood(record, entries)
+    # Guards go before entries (trim order); nothing else shows the guard, so its entry goes with the row.
+    assert _Assembler.trim_neighborhood(record, entries) == "guards"
+    assert record["guards"] == [] and record["omitted"]["guards"] == 1
+    assert {item.id for item in entries} == {entry_point, hop}
+    # The entries row goes next, but the chain still shows the entry point: its entry stays.
+    assert _Assembler.trim_neighborhood(record, entries) == "entries"
+    assert record["entries"] == [] and record["omitted"]["entries"] == 1 and {item.id for item in entries} == {entry_point, hop}
+    assert _Assembler.trim_neighborhood(record, entries) is None
+
+
+def test_the_anchor_floor_is_trimmed_last_and_the_cut_is_named() -> None:
+    """Item 1 of the run 2026-11-16-0005 audit: every neighborhood section was trimmed to nothing before a single
+    context entry. Rows in the floor (the anchor's sinks, their guards, every entry and the chain) survive until
+    nothing else is left, and cutting into them is a named gap."""
+    from collections import Counter
+    from appsec_review.review.packages import _Assembler
+    from appsec_review.review.units import context_entry
+    sink, other_sink = "asr:sink_site:" + "1" * 64, "asr:sink_site:" + "2" * 64
+    guard, callee = "asr:guard_fact:" + "3" * 64, "asr:call_site:" + "4" * 64
+    record = {name: [] for name in ("sinks", "ranges", "guards", "callers", "callees", "flows", "entries", "corroboration")}
+    record["sinks"] = [{"ref": sink, "role": "sink", "line": 10}, {"ref": other_sink, "role": "sink", "line": 20}]
+    record["guards"] = [{"ref": guard, "role": "guard"}]
+    record["callees"] = [{"ref": callee, "role": "callee"}]
+    record["chain"] = {"reached": False, "depth_limit": 3, "hops": [], "entries": []}
+    record["omitted"] = {name: 0 for name in record if name not in ("chain", "omitted")}
+    record["slice"] = None
+    entries = [context_entry(sink, "sink"), context_entry(other_sink, "sink"), context_entry(guard, "guard"),
+               context_entry(callee, "callee")]
+    floor = frozenset({sink, guard})
+    assert _Assembler.trim_neighborhood(record, entries, floor) == "callees"
+    assert _Assembler.trim_neighborhood(record, entries, floor) == "sinks"      # the other sink, never the anchor's
+    assert [row["ref"] for row in record["sinks"]] == [sink] and record["guards"] == [{"ref": guard, "role": "guard"}]
+    assert _Assembler.trim_neighborhood(record, entries, floor) is None       # only floor rows remain
+    assert _Assembler.trim_neighborhood(record, entries) == "guards"            # the caller breaches the floor knowingly
+    gaps = _Assembler.trim_gaps("source_sast", "lead/x", Counter({"tag": 12, "caller": 2}), Counter({"callees": 1, "sinks": 1}),
+                                Counter({"guards": 1}))
+    assert [gap.state for gap in gaps] == ["truncated"] * 3
+    assert "by role: caller=2, tag=12" in gaps[0].reason and gaps[0].producer == "source_sast"
+    assert "by section: callees=1, sinks=1" in gaps[1].reason and gaps[1].producer == "code_graph_neighborhood"
+    assert "anchor floor was cut" in gaps[2].reason and "guards=1" in gaps[2].reason
+
+
+def test_context_is_trimmed_before_the_neighborhood_tags_first_and_the_package_records_what_went(graph) -> None:
+    """A package whose body exceeds max_package_bytes loses tag and precomputed context before any sink, entry,
+    guard or chain row, and names what it trimmed and why."""
+    from appsec_review.review.lead_families import collect_leads
+    from appsec_review.review.packages import _Assembler
+    from appsec_review.review.units import context_entry
+    fixture, ids, assembly, core = graph
+    [stored] = [item for item in assembly.packages if item.kind == "finding_lead" and fixture.ids["sast_critical"] in item.lead_ids]
+    full, size = stored.document(), len(stored.body)
+    tags = [entry for entry in full["context"] if entry["role"] == "tag"]
+    assert tags, "the fixture lead carries tag context to trim"
+    # Only this lead's package is bounded below its own size; other packages of the fixture are larger still.
+    scope = accept_manifest(fixture.run_root)
+    collection = collect_leads(scope)
+    lead = next(item for item in collection.leads if item.observation_id == fixture.ids["sast_critical"])
+    assembler = _Assembler(scope, PackageSettings(lead_cluster_lines=0, max_package_bytes=size - 1), collection)
+    package = assembler.finding_leads((lead,)).document()
+    assert len(package["context"]) < len(full["context"])
+    assert len([entry for entry in package["context"] if entry["role"] == "tag"]) < len(tags)
+    for section in ("sinks", "entries", "guards", "ranges", "flows", "callers", "callees", "corroboration"):
+        assert package["neighborhood"][section] == full["neighborhood"][section], section
+    assert package["neighborhood"]["chain"] == full["neighborhood"]["chain"]
+    [gap] = [gap for gap in package["coverage_gaps"] if "max_package_bytes" in gap["reason"]]
+    assert gap["state"] == "truncated" and "by role: " in gap["reason"] and "tag=1" in gap["reason"]
+    assert package["truncation"]["omitted_context"] == len(full["context"]) - len(package["context"])
+    # The trim order itself: tags, precomputed signals, then derived graph context, the component last.
+    capped = [context_entry("asr:component:" + "1" * 64, "component"), context_entry("asr:tag_assignment:" + "2" * 64, "tag"),
+              context_entry("asr:call_site:" + "3" * 64, "caller"), context_entry("asr:priority_item:" + "4" * 64, "priority")]
+    assert [_Assembler.trim_context(capped) for _ in range(5)] == ["tag", "priority", "caller", "component", None]
 
 
 def test_every_stored_gap_is_accounted_inline_or_in_the_hash_referenced_file(graph) -> None:
@@ -347,3 +410,77 @@ def test_guard_summaries_with_operands_state_the_texts_and_the_destination_size_
     assert "destination" not in summarize_fact("guard_fact", unknown)
     for word in ("adequate", "sufficient", "effective", "bounds", "protect", "safe"):
         assert word not in text
+
+
+# -- item 2: a clustered package renders its source from the anchor lead ----------------------------------------
+
+def test_a_clustered_package_renders_the_anchor_source_and_labels_it(graph) -> None:
+    """Run 2026-11-16-0005: six of eight clustered packages showed the model no function span, slice or type
+    declarations and emitted no gap, because the view rendered source only for a single-lead package."""
+    fixture, ids, assembly, core = graph
+    clustered = assemble_packages(accept_manifest(fixture.run_root), PackageSettings())
+    [package] = [item.document() for item in clustered.packages
+                 if item.kind == "finding_lead" and fixture.ids["sast_critical"] in item.lead_ids]
+    assert len(package["lead_menu"]) >= 2 and fixture.ids["sast_duplicate"] in {item["observation_id"] for item in package["lead_menu"]}
+    view = build_view(package, core, LIMITS)
+    document = view.document
+    assert [item["label"] for item in document["leads"]][:2] == ["L1", "L2"]
+    assert document["leads"][1]["where"]["function"] is None      # the neighborhood function is the anchor's own
+    source = document["source"]
+    assert source and source[0]["label"] == "S1" and source[0]["role"] in {"function", "slice"}
+    assert any("strcpy(b, s)" in line for row in source for line in row["text"])
+    assert view.labels["S1"] == source[0]["ref"] and view.labels["S1"] in set(package["retrieval"]["entity_ids"]) | {
+        lead["observation_id"] for lead in package["lead_menu"]}
+    assert not [text for text in (item["text"] for item in document["material_gaps"]) if "no source text" in text]
+
+
+def test_a_clustered_package_without_readable_source_names_the_gap(graph) -> None:
+    fixture, ids, assembly, core = graph
+    clustered = assemble_packages(accept_manifest(fixture.run_root), PackageSettings())
+    [package] = [item.document() for item in clustered.packages
+                 if item.kind == "finding_lead" and fixture.ids["sast_critical"] in item.lead_ids]
+
+    class Blind:
+        def find(self, **_kwargs):
+            return {"results": []}
+
+        def read_source_lines(self, *, identity):
+            raise LookupError(f"not indexed: {identity[:12]}")
+
+    view = build_view(package, Blind(), LIMITS)
+    assert view.document["source"] == []
+    [gap] = [item["text"] for item in view.document["material_gaps"] if "no source text for the lead" in item["text"]]
+    assert "LookupError" in gap
+
+
+def test_member_lines_join_the_slice_and_members_outside_the_span_get_a_window() -> None:
+    from appsec_review.review.package_view import _Builder
+    lines = [f"line {number}" for number in range(1, 41)]
+    anchor, member, far = "asr:tool_observation:" + "a" * 64, "asr:tool_observation:" + "b" * 64, "asr:tool_observation:" + "c" * 64
+    sha = "f" * 64
+
+    class Core:
+        def find(self, **kwargs):
+            identity = kwargs.get("identity")
+            line = {anchor: 5, member: 7, far: 30}.get(identity)
+            if line is None:
+                return {"results": []}
+            return {"results": [{"identity": identity, "location": {"path": "src/a.c", "start_line": line, "end_line": line,
+                                                                     "file_sha256": sha}, "payload": {}}]}
+
+        def read_source_lines(self, *, identity):
+            line = {anchor: 5, member: 7, far: 30}[identity]
+            return {"location": {"path": "src/a.c", "start_line": line, "end_line": line, "file_sha256": sha},
+                    "lines": lines}, None
+
+    package = {"kind": "finding_lead", "lead_menu": [], "neighborhood": {"function": None, "bound": {"kind": "dataflow_path"},
+               "slice": {"functions": [{"path": "src/a.c", "file_sha256": sha, "function": None, "first": 3, "last": 9,
+                                        "lines": [{"line": 4, "reasons": ["def_use"]}], "truncated": False}]}}}
+    builder = _Builder(package, Core(), LIMITS)
+    leads = [{"ref": anchor, "where": {"path": "src/a.c", "line": 5}}, {"ref": member, "where": {"path": "src/a.c", "line": 7}},
+             {"ref": far, "where": {"path": "src/a.c", "line": 30}}]
+    rows, gaps = builder.source_rows(leads)
+    [slice_row] = [row for row in rows if row["role"] == "slice"]
+    assert slice_row["reasons"] == {"4": "def_use", "5": "lead", "7": "lead"}
+    [window] = [row for row in rows if row["role"] == "member"]
+    assert window["ref"] == far and window["lines"] == "18-40" and gaps == []

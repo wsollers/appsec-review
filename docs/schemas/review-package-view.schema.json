@@ -246,7 +246,7 @@
       "properties": {
         "label": {"type": "string", "pattern": "^S[1-9][0-9]*$"},
         "ref": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "pattern": "^(function|slice|cited_source|type:.+)$"},
+        "role": {"type": "string", "pattern": "^(function|slice|cited_source|member|type:.+)$"},
         "path": {"type": "string", "minLength": 1},
         "lines": {"type": "string", "pattern": "^[1-9][0-9]*-[1-9][0-9]*$"},
         "file_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},

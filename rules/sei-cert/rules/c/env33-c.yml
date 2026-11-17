@@ -1,7 +1,7 @@
 rules:
   - id: appsec-review.sei-cert.c.env33-c.command-processor-call
     languages: [c]
-    severity: ERROR
+    severity: WARNING
     message: >-
       ENV33-C: this call invokes a host command processor. Execute a fixed program with an explicit argument
       vector (for example, fork plus execve) instead of a shell command string.
@@ -31,7 +31,7 @@ rules:
     - pattern-not: system((char *)0)
   - id: appsec-review.sei-cert.c.env33-c.exec-shell-command-string
     languages: [c]
-    severity: ERROR
+    severity: WARNING
     message: >-
       ENV33-C: this exec call starts a shell with "-c", which is equivalent to system(). Execute the target
       program directly with an explicit argument vector.
@@ -61,7 +61,7 @@ rules:
         regex: ^"(/usr)?(/bin/)?(ba|da|k|z)?sh"$
   - id: appsec-review.sei-cert.cpp.env33-c.command-processor-call
     languages: [cpp]
-    severity: ERROR
+    severity: WARNING
     message: >-
       ENV33-C (applies to C++): this call invokes a host command processor. Execute a fixed program with
       an explicit argument vector instead of a shell command string.

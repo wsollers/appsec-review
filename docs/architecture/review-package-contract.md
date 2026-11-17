@@ -9,7 +9,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/7`, assembly rule `assemble-review-packages/14`); the catalog-derived
+(`appsec-review/review-package/7`, assembly rule `assemble-review-packages/16`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -52,7 +52,7 @@ exact route registration is not proof of control enforcement.
 | `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |
 | `lead_menu[].weaknesses` | One block per CWE in `rule_cwe` (origin `rule`) and in the joined NVD records (origin `nvd`), at most eight: CWE id, name and abstraction from the run-pinned MITRE catalog (`source: mitre_catalog`), else from accepted `reference_intelligence` facts, else `unresolved`. |
 | `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the scanner-reported value is admitted, `assessed_severity` when an audited triage assessment is admitted (both when both qualify under `lanes.lead_admission_basis = "either"`), and `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
-| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/4` rank and basis. |
+| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/5` rank and basis. |
 | `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
@@ -227,8 +227,15 @@ states the guard state, polarity, condition text, operator and operand texts, an
 bounds the destination of a write. Every row is also a `context` entry (new roles `function`, `callee`,
 `corroboration`, `build`), so a cell may cite it. The bounds are the code-graph settings
 (`max_call_depth`, `max_neighbors_per_function`, `max_paths_per_sink`, `max_guards_per_sink`, frozen into the run) plus
-`max_package_bytes`; a row removed for bytes is counted in `omitted` and named by a `truncated`
-`code_graph_neighborhood` gap. Neighborhood rows are not capped by `max_context_entries`. A hunt package carries the
+`max_package_bytes`. The byte trim of a finding-lead package (`_Assembler.finding_leads`) removes capped
+`context` entries first, tags and precomputed signals before derived graph context and the component last
+(`CONTEXT_TRIM_ORDER`), then neighborhood rows and slice lines least valuable first (`NEIGHBORHOOD_TRIM_ORDER`:
+corroboration, callees, callers, non-anchor slice lines, flows, ranges, guards, entries, sinks), and never cuts the
+anchor floor (the sink rows on the anchor lead's line, their guards and ranges, every entry row and the chain)
+while anything else can go. Each kind of removal is counted in `omitted`/`truncation.omitted_context` and named by
+a `truncated` gap with its breakdown by role or section; a package that still cannot fit cuts the floor and names
+the sections it cut (run 2026-11-16-0005 trimmed every neighborhood section to nothing before one tag). Neighborhood
+rows are not capped by `max_context_entries`. A hunt package carries the
 summaries of its embedded sink and entry-point facts. The neighborhood enters the package fingerprint with
 `package-neighborhood/3`, `fact-summary/1`, `package-build-summary/1` and the graph caps. The manifest counts
 finding-lead packages by bound in `counts.neighborhood_bounds`.
@@ -363,11 +370,13 @@ The three view bounds live next to the package bounds:
 4. **Lane B.** Build accepted graph-operation units with exact source sites and bounded generated
    boundary context when supplied; retain component/build-unit path batches (`unit_max_files`)
    as whole-file fallback. Assign a located lead to at most one operation or fallback unit.
-   Rank units by `review-unit-rank/4`: the sum of available signals
+   Rank units by `review-unit-rank/5`: the sum of available signals
    in integer points 0–1000 (LPS, SII, hotspot, distinct invoked operation sites under the retained
-   `tag_density` setting name, medium/low/info lead hints,
+   `tag_density` setting name, lead hints by effective severity (`lead_hint_high` for critical and high,
+   then medium/low/info),
    `advisory_kev` = 250 when any advisory lead in the unit is KEV-listed, and `advisory_epss` =
-   250 times the highest EPSS percentile), then the count of known signals, then unit key. A
+   250 times the highest EPSS percentile), then the count of known signals, then the unit's lead count,
+   distinct scanners, first path and operation line, then unit key. A
    missing signal is `unknown` with reason `producer_unavailable`, `no_record` or
    `feed_unavailable`, never zero; a unit without advisory leads scores a true zero for both
    advisory signals. The top `hunt_max_units` units receive hunt

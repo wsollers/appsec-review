@@ -4,8 +4,10 @@ The ``[banned_functions]`` table lists function names, in three tiers, that are 
 easy to misuse, plus a ``review`` tier of ordinary memory, string, comparison and format calls
 (``malloc``, ``memcpy``, ``strcmp``, ``printf`` ...) that are not banned but are where size, bounds,
 termination, null-check and format-string mistakes happen. ``review`` tier calls are reported at ``INFO``. A call to a listed name in C or C++ source is reported by Semgrep and Opengrep as a
-review lead: ``high`` tier calls at ``ERROR`` (reported as high severity), ``warning`` tier calls at
-``WARNING``. The default list is Microsoft's Security Development Lifecycle ``banned.h``; the tiers are
+review lead: ``high`` and ``warning`` tier calls at ``WARNING`` (reported as medium severity; the tier names
+the function's contract, not a severity, since a call with constant arguments is not attacker input and the
+triage table ranks the lead on its assessed severity). The default list is Microsoft's Security Development
+Lifecycle ``banned.h``; the tiers are
 ours (unbounded or unsafe contracts are ``high``; bounded-but-error-prone, pedantic and path APIs are
 ``warning``). Add or move names here; nothing else needs to change but regenerating the rule file::
 

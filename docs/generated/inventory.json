@@ -1345,6 +1345,7 @@
       "appsec-review/assemble-review-packages/12",
       "appsec-review/assemble-review-packages/13",
       "appsec-review/assemble-review-packages/15",
+      "appsec-review/assemble-review-packages/16",
       "appsec-review/assemble-review-packages/3",
       "appsec-review/assets-lock/1",
       "appsec-review/attack-chain-manifest/1",
@@ -1941,6 +1942,7 @@
       "appsec-review/review-unit-rank/2",
       "appsec-review/review-unit-rank/3",
       "appsec-review/review-unit-rank/4",
+      "appsec-review/review-unit-rank/5",
       "appsec-review/reviewed-units/1",
       "appsec-review/rule-bundle-lock/1",
       "appsec-review/rule-cwe/1",
@@ -2103,6 +2105,7 @@
       "assemble-review-packages/12",
       "assemble-review-packages/13",
       "assemble-review-packages/15",
+      "assemble-review-packages/16",
       "assemble-review-packages/3",
       "assets-lock/1",
       "attack-chain-continuity/2",
@@ -2821,6 +2824,7 @@
       "review-unit-rank/2",
       "review-unit-rank/3",
       "review-unit-rank/4",
+      "review-unit-rank/5",
       "reviewed-units/1",
       "rule-bundle-lock/1",
       "rule-cwe/1",
@@ -22129,6 +22133,48 @@
             },
             {
               "basis": "rule_semantics",
+              "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+              "rule": "*cpp-banned-function-high",
+              "scanner": "semgrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+              "rule": "*cpp-banned-function-high",
+              "scanner": "opengrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+              "scanner": "semgrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+              "scanner": "opengrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+              "scanner": "semgrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+              "scanner": "opengrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
               "reason": "Copy length not bounded by the destination (CWE-120): memory corruption when the length is influenced.",
               "rule": "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded",
               "scanner": "semgrep",
@@ -22471,6 +22517,7 @@
           "facet_exposure": 50,
           "facet_trust": 50,
           "hotspot": 1000,
+          "lead_hint_high": 250,
           "lead_hint_info": 10,
           "lead_hint_low": 30,
           "lead_hint_medium": 100,
@@ -22863,6 +22910,48 @@
               "rule": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
               "scanner": "opengrep",
               "severity": "low"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+              "rule": "*cpp-banned-function-high",
+              "scanner": "semgrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to a banned unbounded function (SDL banned.h): memory corruption only when the arguments are attacker influenced.",
+              "rule": "*cpp-banned-function-high",
+              "scanner": "opengrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+              "scanner": "semgrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.c.env33-c.command-processor-call",
+              "scanner": "opengrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+              "scanner": "semgrep",
+              "severity": "medium"
+            },
+            {
+              "basis": "rule_semantics",
+              "reason": "Call to the command processor (CERT ENV33-C): command injection when the string is influenced.",
+              "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+              "scanner": "opengrep",
+              "severity": "medium"
             },
             {
               "basis": "rule_semantics",
@@ -44650,7 +44739,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "078096b2ff79c0aba23944dd4bc24fd87daad6b1181e360482c53e0657177c99",
+    "appsec-review.toml": "491f4b13252a03043ba088e90d75f37df339d21566517b3d5419f53a48c5999c",
     "containers/catalog.toml": "995c0e1f684a69913f3175450c28b27b97726a1f977cbc1ce77e6c98ed10af2c",
     "docs/intelligence-buckets.json": "cec74cb02f073d0e91bcbad28246ab34ab7bef5262a7c8b1cb8c7e8d2f65c725",
     "pipeline/guidance/registry.json": "e16297aa9375bd671594fae2cb45df23e5293eb0c0d8d069dea6c8ffcf181a42",
@@ -44694,7 +44783,7 @@
     "src/appsec_review/config/__init__.py": "8db3a3f324fcaa04367c77124c1a9974d35eb5df87b239de73a924b839ee50b2",
     "src/appsec_review/config/assurance.py": "a3728fe58a5bfda08f89aa4d90d4a592eb97c39e791cd8a9d38c78ee3df4021c",
     "src/appsec_review/config/attack_chains.py": "1d015fd7de3c732197fdfbd13ba135a3e89165b79d520e663436b8c40d08dc4a",
-    "src/appsec_review/config/banned_functions.py": "c65b77e17c00d61c86b11e02d360852109a28d976ca5c991cb7b735adcd8468d",
+    "src/appsec_review/config/banned_functions.py": "497d850781d8247279e13896513e407a926ced35d13fada60b0cb150e723c85f",
     "src/appsec_review/config/binary_decompilation.py": "763cc8731b4c670b1ea3ef8cc062e1f97ae600e54c3b88d4040b85cd358153ac",
     "src/appsec_review/config/build_outputs.py": "d02d429c4aa21fe642488be85d2b194ce7109ad67e69dbbb2ce329ef115870d2",
     "src/appsec_review/config/build_selection.py": "1ac455fe1475a1038c2d1a4015eb159663e96b8c37d73dfe50d06f6236b41646",
@@ -45303,7 +45392,7 @@
     "src/appsec_review/review/lead_families.py": "0fbd35bf11ea1d30204a868bb3392fc1275392d98a82b2a97ceeb91fb6d10225",
     "src/appsec_review/review/lead_filters.py": "65bd9675f7ae3873af91e88a79a7825a53940ce5ecb7850789900d8e68116bf3",
     "src/appsec_review/review/lead_triage.py": "cf3437d2739aa662397f235c4f3d89ec5bce419b4622b74813aa23b6c87bc9a8",
-    "src/appsec_review/review/lead_triage_settings.py": "da456d70389e1d0ea9fe50a76bac48ca5f3314e08213a31979295419a47f423a",
+    "src/appsec_review/review/lead_triage_settings.py": "3d9620cb2eda8c37e64bae9e360d88af7ffb5bb7361ccd0170f2a248a5a8d39a",
     "src/appsec_review/review/ledger.py": "31f33e3c44b133a8540f018d4d03aeed3a91a07b04d388bbbd41f20d248b3b68",
     "src/appsec_review/review/memory_context.py": "a7a3a606c94512decf9ca8c2950089effb33e43b1d83dfe44661ad2197af79fd",
     "src/appsec_review/review/models.py": "87bd1e549445d7342d90391ac694e1585c0d06d6ea34ea2af3c12cd164e04b65",
@@ -45311,9 +45400,9 @@
     "src/appsec_review/review/neighborhood.py": "1cdcc2c1b00a3b812ab335a2d8c31a6f019e4bb8f40586fb4c289c6ae1363134",
     "src/appsec_review/review/numeric_reasoning.py": "281ec6decfe49574d48ce12b7372f748047b0f6fc6697ca3450e4a020e5d3190",
     "src/appsec_review/review/obligations.py": "70dc85cc2d9ca06030b8b5cf725014db6fb98ab2aa3c3e25bcdbc642114b37d8",
-    "src/appsec_review/review/package_view.py": "9eabc379c22654db9deff7543706154eedd036dae9bcda7a93b37378db7b1c89",
-    "src/appsec_review/review/packages.py": "5b96366277e3c00d0d85c60143f61e4769961b94a26809766d797cdf91e4670d",
-    "src/appsec_review/review/ranking.py": "567b043300ff4552d1a9eeb67bfa5d6bd3fdd99daf885ef67bd50798af6a2897",
+    "src/appsec_review/review/package_view.py": "b94464302a8706d15e678fe9de7a79d8572196419b1ff49a6cc3ce6fa427af80",
+    "src/appsec_review/review/packages.py": "3e14a48daa60cafedfdd49a92aa593be1875276a2a9d441e0c3c5ad4f8949057",
+    "src/appsec_review/review/ranking.py": "6413828bf3f07cc3221289f5214452efea25d5fc6bc86aa1f5ae32ad104211cc",
     "src/appsec_review/review/red_discovery.py": "7196881874068d303b4573dde5e9e88aea36bb92673ccb1b1a61756c55c86c87",
     "src/appsec_review/review/references.py": "082b47912ec5fe2c0febd7db8fabdc39f62f8f4cc607f2f3a6a8571852b1cdc4",
     "src/appsec_review/review/result_cache.py": "dc8f7daa923c3a9f45410ad5f2d62baadd47a3fa53a057c09ef4dc99c638a787",
@@ -45343,12 +45432,12 @@
     "src/appsec_review/review/slicing/strategies/tree_sitter.py": "e5e7e1eef911424fef6c01519ba1c6f52dcb04577b9514579e924073743d68d2",
     "src/appsec_review/review/teams.py": "5233be4f379f6b2ccf5c8f4554640adffda36c0950428dfd670120e61cbe06ab",
     "src/appsec_review/review/tool_rules.py": "1d2d089a298f4d1fefa223e342705d662f60e7499a3bb9e3e2f545f8e0f33450",
-    "src/appsec_review/review/units.py": "ade3859d62f3193812fd894e0d2f70d98cb2e3663de0bb6be22eb2f6ad593bc8",
+    "src/appsec_review/review/units.py": "95e4da3801cc5a93dc37021564fb109e1ec9637b0cb1759b827bfef27142bb5b",
     "src/appsec_review/review/warrants.py": "39bd6a8f4a834c7b5018ed61a6820b43948e3faf4b7ef70d56455d839e3b9d3c",
     "src/appsec_review/review/worker_competence.py": "d9a42bdc76c469c18e78c81701760e0aa38eb6b4fd97af2996e22a094096af81",
     "src/appsec_review/review_packages.py": "b5704c4940a8c2f452a8b726bbebeca91cc72ca160e00b5bddf491da809f51cc",
     "src/appsec_review/rulepacks/__init__.py": "54858428f6d3bc2af385e975cde363eacf96e166f1715f25ad42b7d418875527",
-    "src/appsec_review/rulepacks/banned_functions.py": "43607b7f8c848c6c92e4ff1463823510ecae19c3b3155b261a3f3a21150c2ba4",
+    "src/appsec_review/rulepacks/banned_functions.py": "d0813d31f297460f39cc39d18e112ff1f236e9b7c609723b9095717bc4f52080",
     "src/appsec_review/rulepacks/sei_cert/__init__.py": "d5b168197298e24a929de638131cf17e6a9c34461dd268a7eb1a39059ef22d36",
     "src/appsec_review/rulepacks/sei_cert/__main__.py": "fc00d8242407a0eb98f9462c3ad2f56259025e50e7ef53aba5b292b1905ce959",
     "src/appsec_review/rulepacks/sei_cert/engines.py": "9aa33d062eb58f72ba5e57be113e2eee72ff87a7ae6e1d3124a4dc41c144a65b",

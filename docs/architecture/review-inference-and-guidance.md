@@ -64,7 +64,7 @@ shared POSIX `path_globs`). Operation discovery (`graph_operations`) excludes `e
 `sink_site` facts in non-`first_party` sources (`vendored`, `sdk`, `generated`, `test`) with one
 `skipped` behavior gap per disposition rather than modeling non-first-party operations without a
 fallback unit. Deep hunt unit assembly restricts candidate units to `first_party` sources, ranks
-units with exposure/trust facet weights (`review-unit-rank/4`), writes unit-wide context,
+units with exposure/trust facet weights (`review-unit-rank/5`), writes unit-wide context,
 `unit-facets/2` and `hunt-facet-obligations/1` once per hunted unit under
 `unit-context/<sha256>.json` (`package-unit-context/2`), and references that shared document by
 SHA-256 from each hunt partition (`appsec-review/review-package/7`, `package-view/5`;
