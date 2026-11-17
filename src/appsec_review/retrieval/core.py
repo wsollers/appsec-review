@@ -501,7 +501,8 @@ class RetrievalCore:
                         r"data/jobs/job_evidence_collection/attempts/attempt_[0-9]+/steps/[^/]+/tasks/[^/]+/"
                         r"scratch/(?:invocation_[0-9]+/)?attempt_[0-9]+/execution\.json|"
                         r"data/jobs/job_artifact_security_analysis/attempts/attempt_[0-9]+/steps/analyze/tasks/"
-                        r"[^/]+/containers/[^/]+/execution\.json"),
+                        r"[^/]+/containers/[^/]+/execution\.json|"
+                        r"data/clang-static/[A-Za-z0-9._-]+/(?:tidy|analyze)/execution\.json"),
                 }[field]
                 if not re.fullmatch(pattern, path):
                     raise RetrievalIntegrityError("common observation artifact path is outside its allowed namespace")

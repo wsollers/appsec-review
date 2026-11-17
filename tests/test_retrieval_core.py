@@ -866,3 +866,36 @@ def test_builder_does_not_publish_after_link_failure(
     with pytest.raises(OSError, match="injected publication"):
         builder.build()
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("engine", ["analyze", "tidy"])
+def test_safe_common_admits_the_clang_static_execution_receipt_namespace(engine: str) -> None:
+    """Run 2026-11-17-0004: both review lanes failed with ``RetrievalIntegrityError`` because every clang
+    observation cites its container receipt at ``data/clang-static/<scope>/<engine>/execution.json``, a
+    run-owned namespace the job declares (``data/clang-static/**``) that the allowlist never admitted."""
+    from appsec_review.retrieval.core import RetrievalCore, RetrievalIntegrityError
+
+    def common(execution_path: str) -> dict:
+        digest = "ab" * 32
+        return {
+            "schema": "appsec-review/observation/1", "observation_class": "source_sast", "record_kind": "finding",
+            "scanner": "clang-static-analyzer", "rule_id": "core.DivideZero",
+            "reported_severity": {"value": "high", "native": "warning", "basis": "adapter", "rule": "core.DivideZero"},
+            "gap_ids": [], "payload_schema": "appsec-review/clang-static-output/1",
+            "evidence_refs": [{
+                "schema": "appsec-review/native-result-reference/1", "parser_identity": "clang-static-adapter/5",
+                "complete": True, "artifact": {"path": f"data/shared/objects/{digest}", "sha256": digest, "size_bytes": 3},
+                "selector": {"kind": "json_pointer", "value": "/diagnostics/0"},
+                "execution_reference": {"path": execution_path, "sha256": digest, "size_bytes": 3},
+                "retention_receipt": {"path": "data/jobs/job_clang_static_analysis/attempts/attempt_0001/shared/"
+                                              f"native-output/{digest}.json", "sha256": digest, "size_bytes": 3},
+            }],
+        }
+
+    admitted = RetrievalCore._safe_common(common(f"data/clang-static/cpp-scope-5c9dd92ac763111dd84a014f/{engine}/execution.json"))
+    assert admitted["evidence_refs"][0]["execution_reference"]["path"].endswith(f"/{engine}/execution.json")
+    for stray in (f"data/clang-static/cpp-scope-1/{engine}/execution.json.bak",
+                  "data/clang-static/cpp-scope-1/checkpoint.json",
+                  f"data/other/{engine}/execution.json"):
+        with pytest.raises(RetrievalIntegrityError, match="outside its allowed namespace"):
+            RetrievalCore._safe_common(common(stray))
