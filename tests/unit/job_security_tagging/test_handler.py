@@ -77,3 +77,16 @@ def test_packages_and_observations_keep_their_declared_and_reported_bases():
     assert {(item["tag"], item["basis"]) for item in records} == {
         ("func:authn:jwt", "declared"), ("cwe:89", "reported")}
     assert all(item["basis"] != "invoked" for item in records)
+
+
+def test_publish_handoff_declares_only_its_own_gaps_and_carries_the_aggregate() -> None:
+    from appsec_review.jobs.job_security_tagging.job import STANDING_GAPS, handoff_gaps
+
+    collector = ["graph-capability:missing_graph: accepted graph index is unavailable",
+                 "collation:source_unread:src/a.c: 1 bytes", "graph-capability:missing_graph: accepted graph index is unavailable"]
+    rollup = ["rollup: func:fs has no domain", STANDING_GAPS[0]]
+    own, aggregated = handoff_gaps(collector, rollup)
+    assert own == [*STANDING_GAPS, "rollup: func:fs has no domain"]
+    assert aggregated == [*own, "graph-capability:missing_graph: accepted graph index is unavailable",
+                          "collation:source_unread:src/a.c: 1 bytes"]
+    assert not set(collector) & set(own)
