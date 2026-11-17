@@ -113,7 +113,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
   "model": {
     "enabled": true,
     "max_input_tokens": 32000,
-    "max_output_tokens": 4000,
+    "max_output_tokens": 16000,
     "model": "claude-haiku-5-5",
     "provider": "claude-cli",
     "reasoning": "medium",

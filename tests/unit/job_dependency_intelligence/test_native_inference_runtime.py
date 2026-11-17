@@ -17,6 +17,7 @@ from appsec_review.inference import ModelOutputError, ModelResult
 from appsec_review.inference.errors import ExecutionContractError, ProviderError
 from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
+    NativeInferenceOverCap,
 )
 from appsec_review.jobs.job_dependency_intelligence.native_inference_runtime import (
     NativeProposer, make_proposer,
@@ -469,3 +470,53 @@ def test_stage_error_is_explicit_without_model_or_evidence_reads(tmp_path):
     with pytest.raises(NativeInferenceError) as caught:
         instance("retrieve", {"path": "/not/read/by/transport"})
     assert caught.value.kind == "invalid_output" and not fake.calls
+
+
+def test_over_cap_reply_is_persisted_and_handed_to_the_stage_not_discarded(tmp_path):
+    """Run 2026-11-17-0003: seven complete curation replies exceeded max_output_tokens (thinking tokens are
+    reported inside output_tokens) and were turned into ExecutionLimit failures that lost every decision."""
+    reply = {"schema": CURATION_SCHEMA, "input_records": 8, "libraries": []}
+    fake = FakeInfer(ModelResult(reply, input_tokens=2, output_tokens=9143, cache_tokens=2234,
+                                 raw_response=json.dumps(reply), served_model="served", served_provider="cli"))
+    events = EventLog(tmp_path / "events.jsonl")
+    instance = proposer(tmp_path, fake=fake, model={**MODEL, "max_output_tokens": 4000, "retries": 1},
+                        events=events)
+    with pytest.raises(NativeInferenceOverCap) as caught:
+        instance("curate", {"input_records": 8})
+    assert caught.value.proposal == reply
+    assert (caught.value.tokens, caught.value.cap, caught.value.kind) == (9143, 4000, "bounds")
+    assert len(fake.calls) == 1, "a budget overrun is not retried"
+    assert instance.metrics == {"model_calls": 1, "model_failures": 0, "input_tokens": 2, "output_tokens": 9143,
+                                "cache_tokens": 2234, "unknown_usage_calls": 0}
+    attempt, = documents(instance, "attempt")
+    assert attempt["status"] == "SUCCEEDED" and "error" not in attempt
+    assert attempt["over_cap"] == {"output_tokens": 9143, "max_output_tokens": 4000}
+    response, = documents(instance, "response")
+    assert response["proposal"] == reply and response["over_cap"] == attempt["over_cap"]
+    assert response["raw_response"] == json.dumps(reply)
+    rows = [json.loads(line) for line in events.path.read_text().splitlines()]
+    completed = [row for row in rows if row["event"] == "NATIVE_INFERENCE_COMPLETED"]
+    assert len(completed) == 1 and completed[0]["over_cap"] == attempt["over_cap"]
+    assert not [row for row in rows if row["event"] == "NATIVE_INFERENCE_FAILED"]
+
+
+def test_over_cap_reply_that_does_not_parse_remains_a_failure_naming_the_cap(tmp_path):
+    fake = FakeInfer(ModelResult({"schema": "wrong"}, input_tokens=2, output_tokens=5029, cache_tokens=0))
+    instance = proposer(tmp_path, fake=fake, model={**MODEL, "max_output_tokens": 4000})
+    with pytest.raises(NativeInferenceError) as caught:
+        instance("curate", {})
+    assert not isinstance(caught.value, NativeInferenceOverCap)
+    assert caught.value.kind == "invalid_output"
+    assert caught.value.__notes__ == ["reply used 5029 of 4000 output tokens"]
+    assert instance.metrics["model_calls"] == instance.metrics["model_failures"] == 1
+    attempt, = documents(instance, "attempt")
+    assert attempt["status"] == "FAILED" and attempt["over_cap"] == {"output_tokens": 5029, "max_output_tokens": 4000}
+    response, = documents(instance, "response")
+    assert response["proposal"] == {"schema": "wrong"} and response["over_cap"] == attempt["over_cap"]
+
+
+def test_within_cap_reply_records_no_over_cap(tmp_path):
+    instance = proposer(tmp_path)
+    instance("curate", {})
+    assert documents(instance, "attempt")[0]["over_cap"] is None
+    assert documents(instance, "response")[0]["over_cap"] is None

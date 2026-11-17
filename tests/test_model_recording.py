@@ -647,3 +647,25 @@ def test_schema_failure_diagnostics_are_closed(tmp_path, monkeypatch, mutation):
     path.write_text(json.dumps(doc))
     with pytest.raises(ExecutionContractError):
         _replay_one(tmp_path, source, monkeypatch)
+
+
+def test_an_over_cap_reply_is_recorded_as_the_result_the_provider_returned(tmp_path, monkeypatch):
+    """The recording boundary is the Infer call, inside the bounded execution: a complete reply whose
+    output_tokens exceed the request cap is recorded as a result even though the execution then fails
+    with ModelTokenCapExceeded (run 2026-11-17-0003's seven curation replies are in its recordings)."""
+    from appsec_review.inference.errors import ModelTokenCapExceeded
+    from appsec_review.inference.execution import Execution
+    root = tmp_path / "app"
+    (root / "targets" / "relay").mkdir(parents=True)
+    reply = ModelResult({"steps": [1]}, input_tokens=3, output_tokens=9143, cache_tokens=0, raw_response="{}")
+    monkeypatch.setenv(MODE_ENVIRONMENT, "record")
+    with _scope(root, root / "runs" / "r1"):
+        engine = Execution(timeout_seconds=20, max_calls=1)
+        with pytest.raises(ModelTokenCapExceeded) as caught:
+            engine.call(recorded(lambda request, *, timeout_seconds: reply),
+                        replace(_request(root), max_input_tokens=10_000), timeout_seconds=5)
+    assert caught.value.result.proposal == reply.proposal and (caught.value.tokens, caught.value.cap) == (9143, 10)
+    kept, = (root / "runs" / "r1" / recording.RECORDINGS / "job_target_analysis_plan").glob("*.json")
+    document = json.loads(kept.read_text(encoding="utf-8"))
+    assert "error" not in document
+    assert document["result"]["proposal"] == {"steps": [1]} and document["result"]["output_tokens"] == 9143

@@ -15,7 +15,7 @@ from typing import Any, Literal
 from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.inference import Infer, ModelRequest, ModelResult
 from appsec_review.inference.errors import (
-    ExecutionLimit, FailureCategory, ModelOutputError, ProviderError, failure_category,
+    ExecutionLimit, FailureCategory, ModelOutputError, ModelTokenCapExceeded, ProviderError, failure_category,
 )
 from appsec_review.inference.execution import Execution, RetryPolicy
 from appsec_review.inference.usage import Usage, total_reported
@@ -26,6 +26,7 @@ from appsec_review.storage.shared import immutable_bytes, safe_path
 
 from .native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
+    NativeInferenceOverCap,
 )
 
 
@@ -286,6 +287,7 @@ class NativeProposer:
             })
             result = None
             error = None
+            over_cap: ModelTokenCapExceeded | None = None
             retry_error: BaseException | FailureCategory = FailureCategory.SCHEMA
             receipt_count = len(engine.receipts)
             def dispatch(request, *, timeout_seconds):
@@ -296,6 +298,11 @@ class NativeProposer:
             try:
                 result = engine.call(dispatch, request, timeout_seconds=self.model["timeout_seconds"],
                                      retry_count=attempt - 1, retry_reason=retry_reason)
+            except ModelTokenCapExceeded as exc:
+                # The reply is complete and parsed; only the output-token accounting tripped (run
+                # 2026-11-17-0003 lost every curation decision here). It is bounded and persisted like
+                # any reply below and handed to the stage under a named budget gap if it validates.
+                over_cap, result = exc, exc.result
             except (ModelOutputError, TimeoutError, subprocess.TimeoutExpired, ProviderError, ExecutionLimit) as exc:
                 kind = ("bounds" if isinstance(exc, ExecutionLimit) or
                         isinstance(exc, ModelOutputError) and "byte bound" in str(exc) else
@@ -308,11 +315,14 @@ class NativeProposer:
                     self.metrics["model_calls"] += int(engine.receipts[-1].dispatched)
                     usage = self._account_usage(engine.receipts[-1].usage)
             response_ref = None
+            cap_record = ({"output_tokens": over_cap.tokens, "max_output_tokens": over_cap.cap}
+                          if over_cap is not None else None)
             if error is None:
                 try:
                     response, proposal = self._response(result)
                     response_ref = self._persist(directory, "response", {
                         "schema": "appsec-review/native-inference-response/1", **response, "usage": usage,
+                        "over_cap": cap_record,
                     })
                     if proposal.get("schema") != request.schema:
                         raise NativeInferenceError("invalid_output", "native model output schema does not match stage")
@@ -321,12 +331,15 @@ class NativeProposer:
                     error.__cause__ = exc
                 except NativeInferenceError as exc:
                     error = exc
+                if error is not None and over_cap is not None:
+                    error.add_note(f"reply used {over_cap.tokens} of {over_cap.cap} output tokens")
             if error is not None and response_ref is None:
-                response_ref = self._persist(directory, "response", self._rejected_response(result, error, usage))
+                response_ref = self._persist(directory, "response",
+                                             {**self._rejected_response(result, error, usage), "over_cap": cap_record})
             receipt = {
                 "schema": "appsec-review/native-inference-attempt/1", "request_id": request_id,
                 "stage": stage, "retry": attempt - 1, "request": request_ref, "response": response_ref,
-                "guidance_bundle_sha256": guidance_hash, "usage": usage,
+                "guidance_bundle_sha256": guidance_hash, "usage": usage, "over_cap": cap_record,
                 "usage_source": engine.receipts[-1].usage.source,
                 "usage_unavailable_reason": engine.receipts[-1].usage.unavailable_reason,
                 "usage_totals": self.usage_totals,
@@ -350,7 +363,9 @@ class NativeProposer:
                                       request_id=request_id, guidance_bundle_sha256=guidance_hash,
                                       served_model=engine.receipts[-1].served_model,
                                       served_provider=engine.receipts[-1].served_provider,
-                                      **usage)
+                                      over_cap=cap_record, **usage)
+                if over_cap is not None:
+                    raise NativeInferenceOverCap(proposal, tokens=over_cap.tokens, cap=over_cap.cap)
                 return proposal
             self.metrics["model_failures"] += 1
             self._failure(error, stage=stage, request_id=request_id)

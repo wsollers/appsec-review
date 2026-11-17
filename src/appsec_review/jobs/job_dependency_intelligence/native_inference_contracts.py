@@ -34,6 +34,21 @@ class NativeInferenceError(RuntimeError):
         self.kind = kind
 
 
+class NativeInferenceOverCap(NativeInferenceError):
+    """A complete, stage-schema reply whose provider-reported output tokens exceeded ``max_output_tokens``.
+
+    The call is a failed execution (its receipt, budget charge and telemetry are unchanged) but the
+    reply exists and is carried here, off ``args``, so the stage decides what it is worth: a reply
+    that validates is kept under a named budget gap, one that does not stays a conservative fallback.
+    Run 2026-11-17-0003 (D-dependency_intelligence-1) discarded all 80 curation decisions this way."""
+
+    def __init__(self, proposal: Mapping[str, Any], *, tokens: int, cap: int) -> None:
+        super().__init__("bounds", f"model_token_cap: reply used {tokens} of {cap} output tokens")
+        self.proposal = proposal
+        self.tokens = tokens
+        self.cap = cap
+
+
 @dataclass(frozen=True)
 class NativeInferenceBounds:
     batch_candidates: int = 32

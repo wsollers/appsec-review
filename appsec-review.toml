@@ -2653,7 +2653,9 @@ provider = "claude-cli"
 model = "claude-haiku-5-5"
 reasoning = "medium"
 max_input_tokens = 32000
-max_output_tokens = 4000
+# Provider usage counts thinking tokens in output_tokens: at medium reasoning run 2026-11-17-0003's
+# curation replies used 4,949-11,237 tokens for batches of at most 11 candidates against a 4000 cap.
+max_output_tokens = 16000
 timeout_seconds = 120
 retries = 1
 

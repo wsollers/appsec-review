@@ -14,7 +14,7 @@ from appsec_review.storage import canonical_json
 from .discovery import _domain, _reference, _relative, _text, _within
 from .native_inference_contracts import (
     CURATION_SCHEMA, CurationResult, CuratedComponent, NativeInferenceBounds,
-    NativeInferenceError, Propose, SdkGroup, inference_identity,
+    NativeInferenceError, NativeInferenceOverCap, Propose, SdkGroup, inference_identity,
 )
 from .native_sbom_contracts import (
     DISCOVERY_SCHEMA, Claim, CoverageGap, DiscoveryResult, NativeCandidate, NativeEvidence,
@@ -39,6 +39,24 @@ _RULES = (
     "Each SDK group's candidate_ids and supporting_paths equal its member libraries' unions. "
     "Kinds are library or sdk-component. Do not supply statuses or confidence."
 )
+
+
+# Output budget of one curation reply, in tokens, estimated from CURATION_SCHEMA: the envelope
+# (schema, input_records, four list keys) and, per candidate, one library entry (name, kind, a
+# 48-character candidate id, one supporting path, a one-sentence basis) or an uncertain/rejected id.
+# Thinking tokens, which the providers report inside output_tokens, are not estimable here and are
+# the reason max_output_tokens must leave room beyond this structured size.
+ENVELOPE_TOKENS = 256
+DECISION_TOKENS = 128
+
+
+def curation_batch_size(bounds: NativeInferenceBounds, max_output_tokens: int | None) -> int:
+    """Candidates per curation call: the configured batch bound, lowered so one reply fits the output cap."""
+    if max_output_tokens is None:
+        return bounds.batch_candidates
+    if type(max_output_tokens) is not int or max_output_tokens < 1:
+        raise ValueError("max_output_tokens must be a positive integer")
+    return max(1, min(bounds.batch_candidates, (max_output_tokens - ENVELOPE_TOKENS) // DECISION_TOKENS))
 
 
 class _InvalidProposal(ValueError):
@@ -608,8 +626,12 @@ class _Curation:
                 self.preserve(identifier, "proposer unavailable")
             return
         self.calls += 1
+        over_cap: NativeInferenceOverCap | None = None
         try:
             proposal = propose("curate", payload)
+        except NativeInferenceOverCap as exc:
+            # The reply exists; whether it is worth keeping is decided by validation below.
+            over_cap, proposal = exc, exc.proposal
         except NativeInferenceError as exc:
             for identifier in identifiers:
                 self.preserve(identifier, f"proposal failed ({exc.kind}): {exc}")
@@ -617,10 +639,24 @@ class _Curation:
         try:
             validated = self.validate(proposal, identifiers)
         except _InvalidProposal as exc:
+            suffix = f"; {over_cap}" if over_cap is not None else ""
             for identifier in identifiers:
-                self.preserve(identifier, f"invalid proposal: {exc}")
+                self.preserve(identifier, f"invalid proposal: {exc}{suffix}")
             return
+        if over_cap is not None:
+            self.budget_gap(identifiers, over_cap)
         self.apply(validated, identifiers)
+
+    def budget_gap(self, identifiers: list[str], over_cap: NativeInferenceOverCap) -> None:
+        """Name the batch whose validated decisions were kept although the reply exceeded the output cap."""
+        refs = {ref for identifier in identifiers for ref in self.sources[identifier]["evidence_ids"]}
+        detail = (f"curation model_token_cap: kept the validated proposal for {len(identifiers)} candidates; "
+                  f"the reply used {over_cap.tokens} of {over_cap.cap} output tokens")
+        self.gaps.append({
+            "kind": "bounds", "scope": inference_identity("curation-batch", {"candidate_ids": sorted(identifiers)}),
+            "detail": detail.encode()[:self.bounds.field_bytes].decode("utf-8", errors="ignore"),
+            "evidence_ids": sorted(refs),
+        })
 
     def finish(self) -> CurationResult:
         discovery = self.discovery
@@ -663,17 +699,20 @@ class _Curation:
 
 def curate_native_components(
     discovery: DiscoveryResult, files: Sequence[NativeFile], *,
-    propose: Propose | None, bounds: NativeInferenceBounds,
+    propose: Propose | None, bounds: NativeInferenceBounds, max_output_tokens: int | None = None,
 ) -> CurationResult:
     """Curate names and inferred SDK families without I/O or transport.
 
     The callback receives a detached, byte-bounded context and must return ``CURATION_SCHEMA``.
     Its ``input_records`` is the integer batch size; proposal references always use input IDs.
     Returned components instead reference effective, domain-local candidate IDs. Bounds limit
-    inference, never the retention of conservative originals and corroborated claims.
+    inference, never the retention of conservative originals and corroborated claims. With the
+    configured ``max_output_tokens`` each batch is also sized so one reply's decisions fit the cap
+    (``curation_batch_size``); a validated reply that still exceeds it is kept under a budget gap.
     """
     if not isinstance(bounds, NativeInferenceBounds) or (propose is not None and not callable(propose)):
         raise ValueError("NativeInferenceBounds and a callable proposer (or None) are required")
+    batch_size = curation_batch_size(bounds, max_output_tokens)
     curation = _Curation(discovery, files, bounds)
     identifiers = sorted(curation.sources)
     eligible = []
@@ -683,9 +722,9 @@ def curate_native_components(
             curation.preserve(identifier, "field_bytes omitted oversized input context", bound=True)
         else:
             eligible.append(identifier)
-    for offset in range(0, len(eligible), bounds.batch_candidates):
-        curation.batch(eligible[offset:offset + bounds.batch_candidates], propose)
+    for offset in range(0, len(eligible), batch_size):
+        curation.batch(eligible[offset:offset + batch_size], propose)
     return curation.finish()
 
 
-__all__ = ["curate_native_components"]
+__all__ = ["curate_native_components", "curation_batch_size"]
