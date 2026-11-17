@@ -34,7 +34,10 @@ _RULES = (
     "uncertain; multiple named libraries may share a noisy input. Keep independently named "
     "components, even inside SDK families. Prefix/namespace similarity alone is not a package "
     "boundary: SDK groups require coherent packaging/header-path context as well. Unfamiliar "
-    "framework names are allowed when exact paths support them. Use only supplied context_paths. "
+    "framework names are allowed when exact paths support them. Use only supplied context_paths: "
+    "a candidate's context_paths are exactly the supporting_paths a library citing it may use. "
+    "Same-named inputs (one dependency seen from several commands or units) are one library "
+    "entry listing every candidate_id with the union of their context_paths; a name appears once. "
     "Libraries and groups are sorted by name; all reference/path/name lists are sorted and unique. "
     "Each SDK group's candidate_ids and supporting_paths equal its member libraries' unions. "
     "Kinds are library or sdk-component. Do not supply statuses or confidence."
@@ -85,6 +88,15 @@ def _oversized_field(value: Any, bound: int) -> bool:
 
 def _normalized(value: str) -> str:
     return value.casefold().replace("_", "-")
+
+
+def _listed(label: str, values: Sequence[str], limit: int = 5) -> str:
+    """Name the first offending values in a rejection so an audit sees them without a replay."""
+    if not values:
+        return ""
+    shown = ", ".join(values[:limit])
+    more = f" (+{len(values) - limit} more)" if len(values) > limit else ""
+    return f"{label}: {shown}{more}"
 
 
 def _named_path(name: str, paths: Sequence[str]) -> bool:
@@ -276,8 +288,12 @@ class _Curation:
             refs.update(source[field]["evidence_ids"])
         refs.update(row["evidence_id"] for row in source["observations"] if "evidence_id" in row)
         evidence = [self.evidence[ref] for ref in sorted(refs)]
-        evidence_paths = {row["path"] for row in evidence
-                          if row["domain"] == domain and row["root_id"] == root_id}
+        # The candidate's own evidence resolves it, so every record it cites inside its build root
+        # is accepted context: catalog files of its domain and run-owned command or artifact
+        # records (domain "run") alike. Keying by the candidate's domain dropped the run records,
+        # left link-command candidates with empty context_paths and rejected replies that cited
+        # the very paths the request showed (run 2026-11-17-0004, D-dependency_intelligence-5).
+        evidence_paths = {row["path"] for row in evidence if row["root_id"] == root_id}
         catalog = [file for key, file in sorted(self.files.items())
                    if key[:2] == (domain, root_id) and _within(file["path"], root)]
         catalog.sort(key=lambda file: (file["path"] not in evidence_paths,
@@ -321,7 +337,7 @@ class _Curation:
         domain, root_id, _ = self.locality(identifier)
         context = self.context[identifier]
         matched = [row["evidence_id"] for row in context["evidence"]
-                   if (row["domain"], row["root_id"], row["path"]) == (domain, root_id, path)]
+                   if (row["root_id"], row["path"]) == (root_id, path)]
         if matched:
             return matched
         file = self.files[domain, root_id, path]
@@ -467,17 +483,30 @@ class _Curation:
             if not refs <= allowed:
                 raise _InvalidProposal("library references unowned candidate IDs")
             owners = {ref: set(self.context[ref]["context_paths"]) for ref in refs}
-            if (not paths <= set().union(*owners.values())
-                    or any(not paths & owned for owned in owners.values())):
-                raise _InvalidProposal("library paths are not exact accepted context for its IDs")
+            outside = sorted(paths - set().union(*owners.values()))
+            uncited = sorted(ref for ref, owned in owners.items() if not paths & owned)
+            if outside or uncited:
+                raise _InvalidProposal(
+                    f"library {name} paths are not exact accepted context for its IDs"
+                    + _listed("; outside every referenced candidate's context_paths", outside)
+                    + _listed("; referenced candidates with no cited context path", uncited))
             for ref in refs:
                 if (_normalized(self.sources[ref]["native_name"]) != _normalized(name)
                         and not _named_path(name, sorted(paths & owners[ref]))):
-                    raise _InvalidProposal("renamed library lacks name-specific path evidence")
+                    raise _InvalidProposal(
+                        f"renamed library {name} lacks name-specific path evidence for {ref}")
             key = _normalized(name)
             if key in named:
-                raise _InvalidProposal("duplicate normalized library name")
-            named[key] = dict(library)
+                # Same-named entries describe one dependency seen from several commands or
+                # units; merge them as add_component would, never across kinds.
+                previous = named[key]
+                if previous["kind"] != library["kind"]:
+                    raise _InvalidProposal(f"duplicate library name {name} with conflicting kinds")
+                previous["candidate_ids"] = sorted(set(previous["candidate_ids"]) | refs)
+                previous["supporting_paths"] = sorted(set(previous["supporting_paths"]) | paths)
+                previous["basis"] = min(previous["basis"], library["basis"])
+            else:
+                named[key] = dict(library)
             selected.update(refs)
         if list(named) != sorted(named):
             raise _InvalidProposal("libraries must be sorted by normalized name")
@@ -506,7 +535,8 @@ class _Curation:
                 raise _InvalidProposal("prefix similarity lacks coherent SDK packaging context")
         if group_names != sorted(set(group_names)):
             raise _InvalidProposal("SDK groups must be sorted and unique")
-        return {**proposal, "unaccounted": sorted(allowed - selected - rejected - uncertain)}
+        return {**proposal, "libraries": list(named.values()),
+                "unaccounted": sorted(allowed - selected - rejected - uncertain)}
 
     def coherent_group(self, libraries: list[dict[str, Any]]) -> bool:
         common = set.intersection(*[
