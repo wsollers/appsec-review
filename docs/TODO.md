@@ -244,7 +244,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-5069 | [Correct the cpp smoke answer key: cjson 1.7.17 is affected and FX-C2 overlaps TP-C3](#t-5069-correct-the-cpp-smoke-answer-key-cjson-1717-is-affected-and-fx-c2-overlaps-tp-c3) | testing | open |
 | T-5070 | [Cover secret leads and the budget clock in unit tests](#t-5070-cover-secret-leads-and-the-budget-clock-in-unit-tests) | testing | open |
 | T-5071 | [Grow the cpp smoke corpus with vulnerabilities and look-alikes across the radar dimensions](#t-5071-grow-the-cpp-smoke-corpus-with-vulnerabilities-and-look-alikes-across-the-radar-dimensions) | testing | open |
-| T-5072 | [Retain provider stderr on cli_exit review-lane failures](#t-5072-retain-provider-stderr-on-cli-exit-review-lane-failures) | review | open |
+| T-5072 | [Retain provider stderr on cli_exit review-lane failures](#t-5072-retain-provider-stderr-on-cli_exit-review-lane-failures) | review | open |
 | T-5073 | [Bound OWASP part multiplication after request batching](#t-5073-bound-owasp-part-multiplication-after-request-batching) | review | open |
 | T-5074 | [Reject a renamed library per candidate, not per curation batch](#t-5074-reject-a-renamed-library-per-candidate-not-per-curation-batch) | native | open |
 | T-5075 | [Collapse duplicate native dependency candidates before curation](#t-5075-collapse-duplicate-native-dependency-candidates-before-curation) | native | open |
