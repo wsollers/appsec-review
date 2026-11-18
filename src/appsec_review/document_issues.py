@@ -217,7 +217,7 @@ def verify_document_issue_ledger(core: RetrievalCore, path: Path) -> dict[str, A
     return ledger
 
 
-DRIFT_SCHEMA = "appsec-review/document-drift-issue/2"
+DRIFT_SCHEMA = "appsec-review/document-drift-issue/1"
 DRIFT_AUTHORITY = "provisional_navigation_lead"
 DRIFT_KINDS = frozenset({
     "missing_auth_middleware",

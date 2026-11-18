@@ -2632,6 +2632,13 @@ workers = 4
 [jobs.job_dependency_intelligence.settings]
 dependency_limit = 100000
 repository_limit = 100000
+osv_version_matching = "index"
+reachability_enabled = true
+max_source_files = 2000
+max_bytes_per_file = 524288
+max_call_sites_per_advisory = 32
+max_advisories = 5000
+max_osv_candidates_per_package = 500
 native_candidate_limit = 10000
 command_token_limit = 4096
 metadata_file_limit = 10000

@@ -429,11 +429,16 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             unit.job.run_id,
             parse_settings(unit.job.config.settings).mode.value,
             results,
+            resolver=_resolver(unit) if any(row["control_status"] == "not_satisfied" for row in results) else None,
         )
         gap_schema = json.loads(
             application_asset("docs/schemas/owasp-workbench/owasp-control-gap.schema.json").read_text(encoding="utf-8")
         )
         Draft202012Validator(gap_schema).validate(gap_summary)
+        value["gaps"] = sorted(set([*value["gaps"], *(
+            f"{gap['row_id']}: {gap['code']}: {gap['summary']}" for gap in gap_summary["coverage_gaps"])]))
+        disposition = coverage_disposition(results, gaps=bool(value["gaps"]), failed=any(validation.values()))
+        value["coverage_disposition"] = disposition
         gap_path = unit.job.attempt_root / "artifacts" / "owasp-control-gaps" / "owasp-control-gaps.json"
         atomic_json(gap_path, gap_summary)
         gap_artifact = {

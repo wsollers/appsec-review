@@ -421,7 +421,7 @@ CONTRACT = JobContract(
                          availability=Availability.OPTIONAL, missing=MissingPolicy.GAP,
                          authority=EvidenceAuthority.PROVISIONAL),
         InputRequirement("job_document_issue_analysis", "document_drift_issues",
-                         "appsec-review/document-drift-issue/2",
+                         "appsec-review/document-drift-issue/1",
                          availability=Availability.OPTIONAL, missing=MissingPolicy.GAP,
                          authority=EvidenceAuthority.PROVISIONAL),
     ),

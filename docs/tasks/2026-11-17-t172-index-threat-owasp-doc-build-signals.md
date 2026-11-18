@@ -57,8 +57,8 @@ every coherent signal.
 
 ```text
 New / updated versioned schemas:
-- appsec-review/document-drift-issue/2     (spec_source_id, handler_source_id, drift_kind, auth_mismatch)
-- appsec-review/owasp-control-gap/2        (asvs_id, verdict: absent | weak | satisfied, subject_spans[])
+- appsec-review/document-drift-issue/1     (spec_source_id, handler_source_id, drift_kind, auth_mismatch)
+- appsec-review/owasp-control-gap/1        (asvs_id, model verdict: not_satisfied, resolving subject_spans[])
 - appsec-review/threat-boundary-index/1    (trust_zones[], entry_surfaces[], privilege_transitions[])
 
 Telemetry & metrics recorded per attempt:

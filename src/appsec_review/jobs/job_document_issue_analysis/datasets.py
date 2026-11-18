@@ -11,7 +11,7 @@ DATASETS = (
                              "data/jobs/job_document_issue_analysis/attempts/*/shared/document-issues/*.json"),
                   reason="private pre-adjudication claims are not general retrieval text", authority=EvidenceAuthority.PROVISIONAL),
     artifact_only("document_drift_issues", "analysis", "documents",
-                  "appsec-review/document-drift-issue/2",
+                  "appsec-review/document-drift-issue/1",
                   "Structured API/spec-vs-handler route and auth-middleware drift leads across 9 target languages.",
                   artifacts=("data/document-issues/*/drift-issues.json",),
                   reason="provisional spec-vs-handler navigation leads require independent adjudication before publication",
