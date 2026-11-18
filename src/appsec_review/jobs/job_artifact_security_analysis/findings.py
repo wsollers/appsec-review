@@ -31,7 +31,7 @@ from appsec_review.provenance import common_metadata, json_selector, select_nati
 RECORD_SCHEMA = "appsec-review/artifact-security-record/2"
 # Version of the scan-result -> record splitting below. It is part of the observations shard fingerprint, not of
 # the scan checkpoint fingerprint: scanner receipts stay reusable when only this normalization changes.
-FINDING_NORMALIZER = "appsec-review/artifact-security-findings/3"
+FINDING_NORMALIZER = "appsec-review/artifact-security-findings/4"
 MESSAGE_BOUND = 512
 FIELD_BOUND = 128
 FINDING_BOUND = 5_000          # findings kept per scan; a scan above it reports the truncation as a gap
@@ -142,7 +142,7 @@ class Finding:
     message: str
     category: str
     tool_id: str
-    subject: str                      # what the finding is about inside the artifact (binary, package, class)
+    subject: str | None               # missing scanner identity is retained, not invented
     fields: Mapping[str, Any]         # bounded scanner-specific facts kept on the observation
     selector: Mapping[str, Any]
     native_report: str | None = None
@@ -154,9 +154,9 @@ def _blint(observation: Mapping[str, Any]) -> Iterator[Finding]:
         check = _text(item.get("id"))
         if check is None:
             continue
-        binary = _text(item.get("filename") or item.get("exe_name")) or "unknown"
+        binary = _text(item.get("filename") or item.get("exe_name"))
         yield Finding(check, _text(item.get("severity")), _text(item.get("title"), MESSAGE_BOUND) or check,
-                      CATEGORY_BINARY_HARDENING, "tool-blint", os.path.basename(binary) or binary,
+                      CATEGORY_BINARY_HARDENING, "tool-blint", (os.path.basename(binary) or binary) if binary else None,
                       {"binary": binary, "exe_type": _text(item.get("exe_type"))},
                       item.get("_native_selector", json_selector("findings", index).as_dict()),
                       item.get("_native_report"))
@@ -168,7 +168,7 @@ def _spotbugs(observation: Mapping[str, Any]) -> Iterator[Finding]:
         check = _text(item.get("type"))
         if check is None:
             continue
-        cls = _text(item.get("class")) or "unknown"
+        cls = _text(item.get("class"))
         priority = _text(item.get("priority"))
         # SpotBugs ranks 1 (high), 2 (normal), 3 (low); the label comes from the same scanner rule the
         # evidence-collection SpotBugs rows use, so the mapping exists once.
@@ -189,7 +189,7 @@ def _grype(observation: Mapping[str, Any]) -> Iterator[Finding]:
         if check is None:
             continue
         name, version = _text(package.get("name")), _text(package.get("version"))
-        subject = f"{name}@{version}" if name and version else name or "unknown"
+        subject = f"{name}@{version}" if name and version else name
         yield Finding(check, _text(vulnerability.get("severity")),
                       f"{check} affects {subject}"[:MESSAGE_BOUND], CATEGORY_VULNERABILITY, "tool-grype", subject,
                       {"package_name": name, "package_version": version, "advisory_id": check,
@@ -208,7 +208,7 @@ def _osv(observation: Mapping[str, Any]) -> Iterator[Finding]:
             entry = _mapping(entry)
             package = _mapping(entry.get("package"))
             name, version = _text(package.get("name")), _text(package.get("version"))
-            subject = f"{name}@{version}" if name and version else name or "unknown"
+            subject = f"{name}@{version}" if name and version else name
             for index, vulnerability in enumerate(_list(entry.get("vulnerabilities"))):
                 vulnerability = _mapping(vulnerability)
                 check = _text(vulnerability.get("id"))
@@ -242,7 +242,7 @@ def _cve_bin_tool(observation: Mapping[str, Any]) -> Iterator[Finding]:
             continue
         name, version = _text(item.get("product")), _text(item.get("version"))
         severity = _text(item.get("severity"))
-        subject = f"{name}@{version}" if name and version else name or "unknown"
+        subject = f"{name}@{version}" if name and version else name
         paths = [part.strip() for part in str(item.get("paths") or "").split(",") if part.strip()][:16]
         where = os.path.basename(paths[0]) if paths else "the artifact"
         yield Finding(check, severity,
@@ -268,8 +268,8 @@ def _packaged_security_risks(observation: Mapping[str, Any]) -> list[Finding]:
         if check is None:
             continue
         cat = _text(item.get("category")) or CATEGORY_CONTAINER_SECURITY
-        subj = _text(item.get("subject")) or "artifact"
-        sev = _text(item.get("severity")) or "high"
+        subj = _text(item.get("subject"))
+        sev = _text(item.get("severity"))
         msg = _text(item.get("message"), MESSAGE_BOUND) or check
         tool_id = _text(item.get("tool_id")) or "builtin-artifact-risk-inspector"
         fields = {
@@ -312,6 +312,15 @@ class Record:
     payload: Mapping[str, Any]
 
 
+def _finding_gaps(finding: Finding) -> list[str]:
+    gaps = []
+    if normalize_reported_severity({"tool_id": finding.tool_id, "severity": finding.severity})["value"] == "unknown":
+        gaps.append("severity_missing_or_unrated")
+    if finding.subject is None:
+        gaps.append("subject_identity_missing")
+    return gaps
+
+
 def scan_outcome(scan: Mapping[str, Any]) -> str:
     """``completed`` (no gap), ``completed_with_gaps`` (parsed, with named gaps) or ``not_completed`` (no result)."""
     if not scan.get("gaps"):
@@ -352,6 +361,10 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
     found = ([*(splitter(observation) if splitter is not None and observation else ()), *extra_risks])
     gaps = [str(gap)[:MESSAGE_BOUND] for gap in scan.get("gaps") or ()]
     kept = found[:FINDING_BOUND]
+    metadata_gaps = sorted({gap for finding in kept for gap in _finding_gaps(finding)})
+    gaps.extend(metadata_gaps)
+    if metadata_gaps:
+        outcome = "completed_with_gaps"
     if len(found) > FINDING_BOUND:
         gaps.append(f"{capability} reported {len(found)} findings; only the first {FINDING_BOUND} are recorded")
         outcome = "completed_with_gaps"
@@ -377,7 +390,7 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
     summary = Record(RECORD_KIND_SUMMARY, {"fingerprint": fingerprint}, fingerprint, capability,
                      f"{capability} scan of {artifact.get('path')}: {outcome}, "
                      f"{len(kept) if splitter is not None else 'no'} finding(s)", summary_payload)
-    seen: dict[tuple[str, str], int] = {}
+    seen: dict[tuple[str, str | None], int] = {}
     records: list[Record] = []
     for finding in kept:
         key = (finding.check_id, finding.subject)
@@ -391,8 +404,11 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
             message=finding.message,
             fields=finding.fields,
         )
+        finding_gaps = _finding_gaps(finding)
+        if "severity_missing_or_unrated" in finding_gaps:
+            promotion["severity_hint"] = "unknown"
         payload = {
-            **base, "gaps": [], "schema": RECORD_SCHEMA, "record_kind": RECORD_KIND_FINDING,
+            **base, "gaps": finding_gaps, "schema": RECORD_SCHEMA, "record_kind": RECORD_KIND_FINDING,
             "category": finding.category, "tool_id": finding.tool_id, "scan_fingerprint": fingerprint,
             "native_rule_id": finding.check_id, "rule_id": finding.check_id, "severity": finding.severity,
             "native_severity": finding.severity, "message": finding.message[:MESSAGE_BOUND],
@@ -409,8 +425,8 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
             {**payload, **({"native_severity": finding.fields["native_priority"]}
                            if "native_priority" in finding.fields else {})},
             evidence_refs=references, payload_schema=RECORD_SCHEMA,
-            gaps=("provenance_unavailable",) if not references or any(
-                gap.startswith("provenance_unavailable") for gap in gaps) else ())
+            gaps=(*finding_gaps, *(("provenance_unavailable",) if not references or any(
+                gap.startswith("provenance_unavailable") for gap in gaps) else ())))
         native_id = f"{fingerprint}:{finding.check_id}:{finding.subject}:{occurrence}"
         records.append(Record(RECORD_KIND_FINDING, identity_key, native_id[:512], finding.check_id,
                               f"{capability} {finding.check_id} {finding.subject}: {finding.message}"[:1024],

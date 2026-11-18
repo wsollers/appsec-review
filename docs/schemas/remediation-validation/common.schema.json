@@ -11,10 +11,7 @@
     "validation_tier": {
       "type": "string",
       "enum": [
-        "build_checked",
-        "in_memory_patch_and_syntax_verified",
         "static_checked",
-        "manual_validation_required",
         "rejected"
       ]
     }

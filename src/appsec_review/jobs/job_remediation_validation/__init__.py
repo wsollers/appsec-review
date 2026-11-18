@@ -11,7 +11,7 @@ from appsec_review.jobs.job_remediation_validation.static_validator import (
     extract_declared_functions,
     validate_file_remediation_in_memory,
     validate_remediation_patch_set,
-    verify_guard_or_sink_hardening,
+    detect_guard_pattern,
     verify_patched_syntax,
 )
 
@@ -27,6 +27,6 @@ __all__ = [
     "extract_declared_functions",
     "validate_file_remediation_in_memory",
     "validate_remediation_patch_set",
-    "verify_guard_or_sink_hardening",
+    "detect_guard_pattern",
     "verify_patched_syntax",
 ]

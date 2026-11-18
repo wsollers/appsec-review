@@ -40,6 +40,7 @@ from .package import describe, source_file_name, write_candidate
 from .policy import check_ast
 from .settings import PocGenerationSettings
 from .source import WriterAnswer, assemble, check_answer, decline_of, file_violations
+from .static_compile_check import validate_static_poc_harness
 from .statuses import (
     ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND,
     INSUFFICIENT_EVIDENCE, NOT_APPLICABLE, POLICY_DENIED, SOURCE_STATUSES, STATUSES,
@@ -491,6 +492,18 @@ def _validate_candidate(unit: UnitContext, settings: PocGenerationSettings, serv
         return {**base, "terminal": _terminal(POLICY_DENIED, "validators refused the answer before parsing: "
                                               + "; ".join(f"{v.rule}" for v in violations[:6])),
                 "violations": records, "policy_verdict": "denied", "build": build.identity()}
+    static_check = validate_static_poc_harness(
+        text, language=build.command.language, claim_id=candidate.claim_id,
+        target_symbols=plan_entry["expectation"]["sink_names"])
+    static_record = static_check.record()
+    SchemaSet(services.repo(unit) / SCHEMA_ROOT).validate("poc-compile-check", static_record)
+    base["static_check"] = static_record
+    if not static_check.ok:
+        records = [{"rule": item["rule"], "message": item["detail"][:240], "line": None, "function": None}
+                   for item in static_check.violations]
+        return {**base, "terminal": _terminal(POLICY_DENIED, "bounded static checks refused the source: "
+                                              + "; ".join(item["rule"] for item in records[:6])),
+                "violations": records, "policy_verdict": "denied", "build": build.identity()}
     scratch_root = unit.unit_root / "scratch"
     scratch = None
     try:
@@ -595,6 +608,8 @@ def _package_candidate(run_root: Path, output_root: Path, settings: PocGeneratio
                        "diagnostics": list(validated.get("diagnostics", ())),
                        "settings_sha256": settings.settings_sha256()})
     compile_record = {**compile_record, "status": status, "reason": reason}
+    if validated.get("static_check") is not None:
+        compile_record["static_check"] = validated["static_check"]
     facts = _facts(plan_entry)
     provenance = {
         "claim_id": candidate.claim_id, "package_id": candidate.package_id, "run_id": document["run_id"],

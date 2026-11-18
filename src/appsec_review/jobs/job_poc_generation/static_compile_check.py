@@ -1,8 +1,8 @@
-"""Unified 9-language static compile-only PoC harness validator (T-174).
+"""Bounded, non-executing lexical PoC checks, with Python AST parsing (T-174).
 
 Validates generated PoC harnesses across ``cpp``, ``java``, ``javascript``, ``python``, ``ruby``,
 ``go``, ``csharp``, ``rust`` and ``php`` without executing untrusted or generated code, emitting
-``appsec-review/poc-compile-check/1`` records.
+``appsec-review/poc-compile-check/2`` records. These checks never invoke a compiler.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from appsec_review.jobs.job_poc_generation.poc_execution_gate import (
     enforce_poc_non_execution,
 )
 
-POC_COMPILE_CHECK_SCHEMA = "appsec-review/poc-compile-check/1"
+POC_COMPILE_CHECK_SCHEMA = "appsec-review/poc-compile-check/2"
 SUPPORTED_POC_LANGUAGES: tuple[str, ...] = (
     "cpp", "java", "javascript", "python", "ruby", "go", "csharp", "rust", "php",
 )
@@ -130,16 +130,17 @@ _RUBY_CLOSERS = re.compile(r"\bend\b")
 
 @dataclass(frozen=True)
 class StaticPocCompileCheckResult:
-    """Result of static compile-only verification for one PoC harness."""
+    """Observed static patterns, not compilation or behavioral verification."""
 
     language: str
     status: str
-    syntax_valid: bool
-    imports_valid: bool
-    harness_entrypoint_valid: bool
-    assertion_present: bool
-    target_symbol_referenced: bool
-    stub_free: bool
+    lexical_check_passed: bool
+    syntax_valid: bool | None
+    import_patterns_valid: bool
+    harness_entrypoint_detected: bool
+    oracle_or_control_pattern_detected: bool
+    target_symbol_text_present: bool | None
+    stub_patterns_absent: bool
     declared_entrypoints: tuple[str, ...]
     matched_target_symbols: tuple[str, ...]
     prohibited_primitives: tuple[str, ...]
@@ -148,7 +149,7 @@ class StaticPocCompileCheckResult:
 
     @property
     def ok(self) -> bool:
-        return self.status == "compile_verified"
+        return self.status == "static_checked"
 
     def record(self) -> dict[str, Any]:
         enforce_poc_non_execution()
@@ -157,18 +158,27 @@ class StaticPocCompileCheckResult:
             "claim_id": self.claim_id,
             "language": self.language,
             "status": self.status,
+            "lexical_check_passed": self.lexical_check_passed,
             "syntax_valid": self.syntax_valid,
-            "imports_valid": self.imports_valid,
-            "harness_entrypoint_valid": self.harness_entrypoint_valid,
-            "assertion_present": self.assertion_present,
-            "target_symbol_referenced": self.target_symbol_referenced,
-            "stub_free": self.stub_free,
+            "parser": "python_ast" if self.syntax_valid is not None else None,
+            "import_patterns_valid": self.import_patterns_valid,
+            "harness_entrypoint_detected": self.harness_entrypoint_detected,
+            "oracle_or_control_pattern_detected": self.oracle_or_control_pattern_detected,
+            "target_symbol_text_present": self.target_symbol_text_present,
+            "stub_patterns_absent": self.stub_patterns_absent,
             "declared_entrypoints": list(self.declared_entrypoints),
             "matched_target_symbols": list(self.matched_target_symbols),
             "prohibited_primitives": list(self.prohibited_primitives),
             "violations": [dict(item) for item in self.violations],
             "generated_code_execution": GENERATED_CODE_EXECUTION_POLICY,
+            "compiler_verified": False,
             "runtime_verified": False,
+            "limitations": [
+                "Lexical and regex checks are incomplete and may reject valid language constructs.",
+                "Import resolution, target-call resolution, assertion behavior and stub absence are not verified.",
+                "No compiler, linker or generated code was run by this check.",
+                *([] if self.language == "python" else ["No language parser was run; syntax validity is unknown."]),
+            ],
         }
 
 
@@ -408,9 +418,10 @@ def validate_static_poc_harness(
     if not isinstance(source_text, str) or not source_text.strip():
         violations.append({"rule": "empty_source", "detail": "PoC harness source is empty"})
         return StaticPocCompileCheckResult(
-            language=canonical_lang, status="compile_failed", syntax_valid=False, imports_valid=False,
-            harness_entrypoint_valid=False, assertion_present=False, target_symbol_referenced=False,
-            stub_free=False, declared_entrypoints=(), matched_target_symbols=(),
+            language=canonical_lang, status="static_check_failed", lexical_check_passed=False,
+            syntax_valid=None, import_patterns_valid=False,
+            harness_entrypoint_detected=False, oracle_or_control_pattern_detected=False, target_symbol_text_present=None,
+            stub_patterns_absent=False, declared_entrypoints=(), matched_target_symbols=(),
             prohibited_primitives=(), violations=tuple(violations), claim_id=claim_id,
         )
 
@@ -418,15 +429,15 @@ def validate_static_poc_harness(
         violations.append({"rule": "corrupt_markers", "detail": "PoC source contains NUL bytes or merge markers"})
 
     lex_ok, lex_err, stripped_code, no_comment_code = scan_lexical_structure(source_text, canonical_lang)
-    syntax_valid = lex_ok
+    syntax_valid = None
     if not lex_ok and lex_err:
-        violations.append({"rule": "syntax_structure", "detail": lex_err})
+        violations.append({"rule": "lexical_structure", "detail": lex_err})
 
     py_entrypoints: list[str] = []
     py_stub_free = True
-    if canonical_lang == "python" and lex_ok:
+    if canonical_lang == "python":
         py_ok, py_err, py_entrypoints, py_stub_free = _python_ast_check(source_text)
-        syntax_valid = syntax_valid and py_ok
+        syntax_valid = py_ok
         if not py_ok and py_err:
             violations.append({"rule": "python_ast", "detail": py_err})
 
@@ -460,7 +471,7 @@ def validate_static_poc_harness(
             stub_free = False
             violations.append({"rule": "stub_placeholder", "detail": f"PoC contains placeholder marker ({stub_name})"})
             break
-    if canonical_lang != "python" and entrypoints and re.search(r"\{\s*\}", code_only):
+    if canonical_lang != "python" and entrypoints and re.search(r"\)\s*(?::[^{}]+)?\{\s*\}", code_only):
         stub_free = False
         violations.append({"rule": "stub_placeholder", "detail": "PoC contains an empty function/block body"})
 
@@ -493,20 +504,21 @@ def validate_static_poc_harness(
 
     if prohibited_hits or has_forbidden_main:
         status = "policy_denied"
-    elif syntax_valid and imports_valid and harness_entrypoint_valid and assertion_present and target_symbol_referenced and stub_free and not violations:
-        status = "compile_verified"
+    elif lex_ok and syntax_valid is not False and imports_valid and harness_entrypoint_valid and assertion_present and target_symbol_referenced and stub_free and not violations:
+        status = "static_checked"
     else:
-        status = "compile_failed"
+        status = "static_check_failed"
 
     return StaticPocCompileCheckResult(
         language=canonical_lang,
         status=status,
+        lexical_check_passed=lex_ok,
         syntax_valid=syntax_valid,
-        imports_valid=imports_valid,
-        harness_entrypoint_valid=harness_entrypoint_valid,
-        assertion_present=assertion_present,
-        target_symbol_referenced=target_symbol_referenced,
-        stub_free=stub_free,
+        import_patterns_valid=imports_valid,
+        harness_entrypoint_detected=harness_entrypoint_valid,
+        oracle_or_control_pattern_detected=assertion_present,
+        target_symbol_text_present=target_symbol_referenced if cleaned_targets else None,
+        stub_patterns_absent=stub_free,
         declared_entrypoints=tuple(entrypoints[:32]),
         matched_target_symbols=tuple(matched_symbols[:32]),
         prohibited_primitives=tuple(prohibited_hits[:32]),

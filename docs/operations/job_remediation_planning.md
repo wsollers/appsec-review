@@ -16,6 +16,13 @@ Each proposal describes the violated/corrected invariant, exact source edits and
 regression specification. Planning neither applies a patch to the target nor proves a fix;
 supported findings stay outside remediation intake even when they have PoC documentation.
 
+The `appsec-review/remediation-priority-ranking/2` artifact preserves missing or unrecognized
+severity as `unknown`, separately from informational, with `severity_missing_or_unrated`.
+Unrated items without chain elevation sort after rated tiers without being relabeled low risk. Reachability is nullable:
+only an explicit reachability determination supplies true/false. Entry-point, PoC or direct-evidence
+presence alone leaves `reachability_not_established`; missing finding/claim identities remain null
+with named gaps rather than synthetic identifiers.
+
 <!-- generated:begin job=job_remediation_planning -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

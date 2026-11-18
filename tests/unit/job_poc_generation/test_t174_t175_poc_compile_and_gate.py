@@ -5,7 +5,7 @@ import json
 import tomllib
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 import pytest
 from referencing import Registry, Resource
 
@@ -85,19 +85,22 @@ def test_nine_language_static_poc_compile_validator_accepts_valid_harnesses(lang
         claim_id=CLAIM_ID,
     )
     assert res.ok is True, (language, res.violations)
-    assert res.status == "compile_verified"
-    assert res.syntax_valid is True
-    assert res.imports_valid is True
-    assert res.harness_entrypoint_valid is True
-    assert res.assertion_present is True
-    assert res.target_symbol_referenced is True
-    assert res.stub_free is True
+    assert res.status == "static_checked"
+    assert res.lexical_check_passed is True
+    assert res.syntax_valid is (True if language == "python" else None)
+    assert res.import_patterns_valid is True
+    assert res.harness_entrypoint_detected is True
+    assert res.oracle_or_control_pattern_detected is True
+    assert res.target_symbol_text_present is True
+    assert res.stub_patterns_absent is True
     assert res.prohibited_primitives == ()
 
     record = res.record()
     assert record["schema"] == POC_COMPILE_CHECK_SCHEMA
     assert record["generated_code_execution"] == "not_performed_by_policy"
     assert record["runtime_verified"] is False
+    assert record["compiler_verified"] is False
+    assert record["limitations"]
     _schema_validator().validate(record)
 
 
@@ -109,7 +112,8 @@ def test_static_poc_validator_rejects_broken_syntax_missing_target_and_prohibite
         claim_id=CLAIM_ID,
     )
     assert bad_syntax.ok is False
-    assert bad_syntax.syntax_valid is False
+    assert bad_syntax.lexical_check_passed is False
+    assert bad_syntax.syntax_valid is None
 
     missing_target = validate_static_poc_harness(
         "import pytest\ndef test_poc():\n    assert 1 + 1 == 2\n",
@@ -118,7 +122,7 @@ def test_static_poc_validator_rejects_broken_syntax_missing_target_and_prohibite
         claim_id=CLAIM_ID,
     )
     assert missing_target.ok is False
-    assert missing_target.target_symbol_referenced is False
+    assert missing_target.target_symbol_text_present is False
 
     prohibited = validate_static_poc_harness(
         'const assert = require("assert");\nconst cp = require("child_process");\ntest("poc", () => { parse_frame("x"); cp.execSync("id"); assert.ok(true); });\n',
@@ -128,6 +132,37 @@ def test_static_poc_validator_rejects_broken_syntax_missing_target_and_prohibite
     )
     assert prohibited.ok is False
     assert len(prohibited.prohibited_primitives) >= 1
+
+
+def test_balanced_nonsense_is_not_compiler_or_parser_verification() -> None:
+    res = validate_static_poc_harness(
+        "void poc_bad() { this is not C++; assert(parse_frame(1)); }\n",
+        language="cpp", target_symbols=["parse_frame"],
+    )
+    assert res.ok
+    record = res.record()
+    assert record["status"] == "static_checked"
+    assert record["syntax_valid"] is None
+    assert record["parser"] is None
+    assert record["compiler_verified"] is False
+    assert record["runtime_verified"] is False
+    _schema_validator().validate(record)
+    with pytest.raises(ValidationError):
+        _schema_validator().validate({**record, "syntax_valid": True})
+
+
+def test_python_parser_rejects_balanced_invalid_syntax_without_importing_target(tmp_path: Path) -> None:
+    bad = validate_static_poc_harness(
+        "def test_poc():\n    assert parse_frame(1) === 1\n", language="python",
+    )
+    assert bad.lexical_check_passed
+    assert bad.syntax_valid is False
+    assert not bad.ok
+    marker = tmp_path / "must-not-execute"
+    source = f"from pathlib import Path\nPath({str(marker)!r}).touch()\ndef test_poc():\n    assert parse_frame(1)\n"
+    parsed = validate_static_poc_harness(source, language="python", target_symbols=["parse_frame"])
+    assert parsed.syntax_valid is True
+    assert not marker.exists()
 
 
 def test_t175_strict_poc_non_execution_gate_blocks_all_execution_attempts() -> None:

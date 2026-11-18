@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 import pytest
 from referencing import Registry, Resource
 
@@ -88,10 +88,11 @@ def test_nine_language_in_memory_remediation_validation_passes_hardened_patches(
         before_text=before_text,
         after_text=after_text,
     )
-    assert res.hunks_applied is True, (language, res.issues)
-    assert res.syntax_valid is True, (language, res.issues)
-    assert res.functions_preserved is True, (language, res.issues)
-    assert res.guard_or_sink_hardened is True, (language, res.issues)
+    assert res.hunks_applied is None  # Supplied patched text is not proof of applying a diff.
+    assert res.lexical_check_passed is True, (language, res.issues)
+    assert res.syntax_valid is (True if language == "python" else None), (language, res.issues)
+    assert res.function_names_preserved is True, (language, res.issues)
+    assert res.guard_pattern_detected is True, (language, res.issues)
     assert res.issues == ()
 
 
@@ -123,11 +124,12 @@ def test_unified_diff_in_memory_application_and_batch_schema_validation() -> Non
         ]
     )
     assert batch.ok is True
-    assert batch.patch_applies_cleanly is True
-    assert batch.ast_parse_clean is True
-    assert batch.signature_preserved is True
-    assert batch.dominating_guard_verified is True
-    assert batch.validation_tier == "in_memory_patch_and_syntax_verified"
+    assert batch.patch_applies_cleanly is None
+    assert batch.lexical_checks_passed is True
+    assert batch.syntax_valid is None
+    assert batch.function_names_preserved is True
+    assert batch.guard_pattern_detected is True
+    assert batch.validation_tier == "static_checked"
     record = batch.record()
     assert record["schema"] == STATIC_PATCH_VALIDATION_SCHEMA
     _validation_schema_validator().validate(record)
@@ -141,8 +143,44 @@ def test_static_remediation_validator_rejects_deleted_unrelated_function_and_bad
         before_text=before,
         after_text=deleted_unrelated,
     )
-    assert res.functions_preserved is False
+    assert res.function_names_preserved is False
     assert any("keepHelper" in issue or "deleted" in issue for issue in res.issues)
 
     with pytest.raises(UnifiedDiffApplyError):
         apply_unified_diff_in_memory(before, "@@ -1,2 +1,2 @@\n-wrong context line\n+replacement\n")
+
+
+def test_patterns_do_not_prove_syntax_signatures_or_guard_dominance() -> None:
+    batch = validate_remediation_patch_set([{
+        "path": "sink.cpp",
+        "before_text": "int sink(int x) { return unsafe(x); }\n",
+        "after_text": "int sink(char *x) { unsafe(x); if (true) { this is invalid C++; } }\n",
+    }])
+    assert batch.ok
+    assert batch.function_names_preserved is True  # Signature changed; only the name was compared.
+    assert batch.guard_pattern_detected is True  # The guard follows the sink, so cannot dominate it.
+    assert batch.syntax_valid is None
+    assert batch.validation_tier == "static_checked"
+    record = batch.record()
+    assert record["runtime_verified"] is False
+    assert record["limitations"]
+    assert not {"ast_parse_clean", "signature_preserved", "dominating_guard_verified"} & record.keys()
+    _validation_schema_validator().validate(record)
+    with pytest.raises(ValidationError, match="not one of"):
+        _validation_schema_validator().validate({**record, "validation_tier": "build_checked"})
+
+
+def test_python_syntax_error_and_unknown_language_are_not_reported_as_parsed() -> None:
+    invalid = validate_remediation_patch_set([{
+        "path": "sink.py", "before_text": "def sink(x):\n    return x\n",
+        "after_text": "def sink(x):\n    return x === 1\n",
+    }])
+    assert not invalid.ok
+    assert invalid.syntax_valid is False
+    unknown = validate_remediation_patch_set([{
+        "path": "sink.unknown", "before_text": "old", "after_text": "unparseable",
+    }])
+    assert unknown.syntax_valid is None
+    assert unknown.lexical_checks_passed is None
+    assert unknown.files[0].record()["parser"] is None
+    _validation_schema_validator().validate(unknown.record())

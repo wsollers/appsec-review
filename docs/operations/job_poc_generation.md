@@ -16,6 +16,14 @@ candidates, then validate policy and compile them against an accepted native bui
 Nothing is linked into an executable or run. `compile_verified` means compile checks passed,
 not exploit reproduction; compile failure neither refutes the finding nor changes its state.
 
+The actual `validate.policy` path first runs the bounded static harness preflight and retains its
+`appsec-review/poc-compile-check/2` record in validation output and packaged `compile.json`.
+Its success is only `static_checked`: delimiter and regex checks are not parsing or compilation.
+The helper uses Python's AST parser only for Python; other languages retain `syntax_valid: null`.
+The job still admits native C/C++ build workspaces, runs the existing clang AST policy checks and,
+only when configured, the compile-only adapter. Preflight success cannot replace either check,
+promote `artifact_generated` to `compile_verified`, or authorize target execution.
+
 <!-- generated:begin job=job_poc_generation -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

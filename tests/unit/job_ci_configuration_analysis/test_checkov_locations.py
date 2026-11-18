@@ -71,7 +71,8 @@ def test_observed_five_range_shapes_survive_without_changing_in_bounds_records()
         [before] = records
         bound.append(after)
         assert after["native_rule_id"] == before["native_rule_id"]
-        assert after["message"] == before["message"] and after["severity"] == "medium"
+        assert after["message"] == before["message"] and after["severity"] is None
+        assert after["gaps"] == ["severity_missing_or_unrated"]
         assert after["path"] == path and after["category"] == before["category"]
         if method is None:
             assert after == {key: value for key, value in before.items() if key != "producer_location"}

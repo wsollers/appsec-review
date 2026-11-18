@@ -228,6 +228,40 @@ def test_scan_isolates_linter_failure_and_stops_active_guardian(tmp_path: Path) 
     assert "failed with exit=9" in out["gaps"][0]["reason"]
 
 
+@pytest.mark.parametrize("severity", [None, "", {}, 7, "HIGH"])
+def test_generic_linter_missing_severity_is_retained_not_defaulted(severity) -> None:
+    records = _generic_external_records(
+        SPEC_BY_KEY["github_actionlint"],
+        json.dumps({"rule_id": "R1", "message": "inspect this", "severity": severity}).encode(),
+        ".github/workflows/ci.yml",
+    )
+    assert len(records) == 1
+    record = records[0]
+    assert record["severity"] == ("high" if severity == "HIGH" else None)
+    assert record.get("gaps", []) == ([] if severity == "HIGH" else ["severity_missing_or_unrated"])
+
+
+def test_unrated_linter_observation_propagates_a_producer_gap(tmp_path: Path) -> None:
+    wf = ".github/workflows/ci.yml"
+    unit, files, _ = make_unit_context(
+        tmp_path, unit_id="ci_analysis.github_actionlint_scan",
+        target_files={wf: "name: ci\non: push\n"},
+    )
+    unit.output = {"ci_discovery.classify_providers": {
+        "definitions": [{**files[0], "provider": "github", "definition_id": f"ci:github:{wf}"}],
+    }}.__getitem__
+    with attempt_scope(unit):
+        result = _scan(unit, SPEC_BY_KEY["github_actionlint"],
+                       lambda u: FakeExecutor(ROOT, u.job.run_root, [],
+                                              stdout=b'{"kind":"syntax-check","message":"inspect this"}'), None)
+    assert result["terminal_status"] == "PARTIAL"
+    assert result["record_count"] == 1
+    assert "severity_missing_or_unrated" in result["gaps"][0]["reason"]
+    raw = _read(unit.job.run_root, result["raw_artifact"])
+    assert raw["records"][0]["severity"] is None
+    assert raw["records"][0]["gaps"] == ["severity_missing_or_unrated"]
+
+
 def test_scan_covers_not_applicable_skipped_na_discovery_static_and_external_error_branches(
     tmp_path: Path,
 ) -> None:
