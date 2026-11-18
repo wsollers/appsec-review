@@ -32,6 +32,22 @@
     "osv_fallback_reason": {
       "type": ["string", "null"]
     },
+    "osv_snapshot": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["feed_id", "snapshot_id", "manifest_sha256"],
+      "properties": {
+        "feed_id": { "const": "osv" },
+        "snapshot_id": { "type": "string", "minLength": 1 },
+        "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "index_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "coverage": { "enum": ["complete", "partial"] },
+    "gaps": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
     "advisories": {
       "type": "array",
       "items": {
@@ -101,6 +117,7 @@
               "symbol_reachable",
               "package_imported",
               "transitive_only",
+              "unknown",
               "unreachable_in_target"
             ]
           },
@@ -116,6 +133,7 @@
               "required": ["path", "line", "symbol"],
               "properties": {
                 "path": { "type": "string", "minLength": 1 },
+                "file_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
                 "line": { "type": "integer", "minimum": 1 },
                 "symbol": { "type": "string", "minLength": 1 },
                 "kind": {
@@ -154,7 +172,8 @@
         "ffi_boundary_matches": { "type": "integer", "minimum": 0 },
         "package_imported_count": { "type": "integer", "minimum": 0 },
         "transitive_only_count": { "type": "integer", "minimum": 0 },
-        "unreachable_in_target_count": { "type": "integer", "minimum": 0 }
+        "unreachable_in_target_count": { "type": "integer", "minimum": 0 },
+        "unknown_count": { "type": "integer", "minimum": 0 }
       }
     }
   }

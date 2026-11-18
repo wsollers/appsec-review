@@ -33,6 +33,10 @@ import sqlite3
 from typing import Any
 
 from appsec_review.indexing.store import ShardSet
+from appsec_review.review.models import IntegrityError
+from appsec_review.runtime.consume import accepted_upstream
+from appsec_review.runtime.inputs import observe_output, observe_shard
+from appsec_review.storage.shared import safe_path
 from appsec_review.retrieval import INDEX_SCHEMA, IndexBuilder, IndexIdentity
 from appsec_review.retrieval.model import (
     EntityKind,
@@ -44,7 +48,7 @@ from appsec_review.retrieval.model import (
     canonical_json,
     normalize_relative_path,
 )
-from appsec_review.storage import atomic_bytes, atomic_json
+from appsec_review.storage import atomic_bytes, atomic_json, file_sha256
 
 ALTERNATE_CPG_SCHEMA = "appsec-review/alternate-cpg/1"
 ALTERNATE_CPG_SHARD_ID = "alternate-cpg"
@@ -2021,33 +2025,85 @@ _EDGE_RELATION_KIND: dict[str, RelationKind] = {
 }
 
 
+def _cfg_bytes(run_root: Path, identity: Mapping[str, Any]) -> bytes:
+    path = safe_path(run_root, identity["path"])
+    data = path.read_bytes()
+    if (hashlib.sha256(data).hexdigest() != identity.get("sha256")
+            or len(data) != identity.get("size_bytes", len(data))):
+        raise IntegrityError("accepted Tree-sitter CFG artifact identity mismatch")
+    return data
+
+
+def _accepted_cfg(
+    run_root: Path, ts_shards: Sequence[Mapping[str, Any]], target_snapshot: str,
+    gaps: list[str],
+) -> list[tuple[bytes, bytes]]:
+    """Resolve CFG references from the admitted producer, never from a directory layout."""
+    accepted = accepted_upstream(run_root, "job_tree_sitter_ast", required=False)
+    if accepted is None:
+        if ts_shards:
+            raise IntegrityError("Tree-sitter shards have no admitted producer")
+        gaps.append("tree_sitter_cfg_unavailable: no admitted Tree-sitter producer")
+        return []
+    if accepted.handoff["target_snapshot"] != target_snapshot:
+        raise IntegrityError("Tree-sitter CFG producer target snapshot mismatch")
+    gaps.extend(
+        f"tree_sitter_cfg_partial: {gap}"
+        for output in accepted.handoff["outputs"].values() if isinstance(output, Mapping)
+        for gap in output.get("gaps", ())
+    )
+    dispositions = [
+        item for output in accepted.handoff["outputs"].values() if isinstance(output, Mapping)
+        for item in output.get("dispositions", ()) if isinstance(item, Mapping)
+        and isinstance(item.get("index_identity"), Mapping)
+    ]
+    result = []
+    selected = [s for s in ts_shards if not str(s.get("shard_id", "")).startswith("tree-sitter-coverage-")]
+    if not selected:
+        gaps.append("tree_sitter_cfg_unavailable: no admitted Tree-sitter scope shards")
+    for shard in selected:
+        matches = [item for item in dispositions if item["index_identity"] == shard]
+        if not matches:
+            raise IntegrityError("Tree-sitter CFG shard is not in the admitted producer")
+        record = matches[0]
+        if any(item != record for item in matches):
+            raise IntegrityError("conflicting Tree-sitter CFG scope records")
+        observe_shard(run_root, shard)
+        shard_path = safe_path(run_root, shard["relative_path"])
+        if file_sha256(shard_path) != shard["sha256"]:
+            raise IntegrityError("accepted Tree-sitter shard identity mismatch")
+        refs = record.get("cfg_artifacts")
+        if not isinstance(refs, Mapping):
+            gaps.append(f"tree_sitter_cfg_unavailable: {record['scope_id']} has no accepted CFG artifacts")
+            continue
+        if set(refs) != {"manifest", "nodes", "edges"}:
+            raise IntegrityError("accepted Tree-sitter CFG artifacts are incomplete")
+        for identity in refs.values():
+            observe_output(run_root, "job_tree_sitter_ast", "tree_sitter_cfg", identity)
+        manifest = json.loads(_cfg_bytes(run_root, refs["manifest"]))
+        if (manifest.get("schema") != "appsec-review/tree-sitter-cfg/1"
+                or manifest.get("scope_id") != record["scope_id"]
+                or manifest.get("target_snapshot") != target_snapshot
+                or manifest.get("nodes_artifact") != refs["nodes"]
+                or manifest.get("edges_artifact") != refs["edges"]):
+            raise IntegrityError("accepted Tree-sitter CFG scope or artifact binding mismatch")
+        nodes, edges = _cfg_bytes(run_root, refs["nodes"]), _cfg_bytes(run_root, refs["edges"])
+        result.append((nodes, edges))
+    return result
+
+
 def _extract_tree_sitter_files(
     run_root: Path,
     ts_shards: Sequence[Mapping[str, Any]],
+    *, target_snapshot: str, gaps: list[str],
 ) -> list[dict[str, Any]]:
-    """Load Tree-sitter AST/CFG files from scope cfg JSONL artifacts and/or analysis shards."""
+    """Load only the admitted scope CFG artifacts and verified analysis shards."""
     by_path: dict[str, dict[str, Any]] = {}
 
-    # 1. Read full scope CFG JSONL files under data/treesitter/cfg/<fingerprint>/ when present.
-    accepted_fps = {str(s.get("fingerprint")) for s in ts_shards if s.get("fingerprint")}
-    candidate_cfg_dirs: list[Path] = []
-    ts_cfg_root = run_root / "data" / "treesitter" / "cfg"
-    if ts_cfg_root.is_dir():
-        for sub in sorted(ts_cfg_root.iterdir(), key=lambda p: p.name):
-            if sub.is_dir() and (not accepted_fps or sub.name in accepted_fps):
-                candidate_cfg_dirs.append(sub)
-    legacy_scopes_dir = run_root / "data" / "tree-sitter" / "scopes"
-    if legacy_scopes_dir.is_dir():
-        for scope_dir in sorted(legacy_scopes_dir.iterdir(), key=lambda p: p.name):
-            if (scope_dir / "cfg").is_dir():
-                candidate_cfg_dirs.append(scope_dir / "cfg")
-    if candidate_cfg_dirs:
-        for cfg_dir in candidate_cfg_dirs:
-            nodes_file = cfg_dir / "cfg-nodes.jsonl"
-            edges_file = cfg_dir / "cfg-edges.jsonl"
-            if not nodes_file.is_file():
-                continue
-            for line in nodes_file.read_text(encoding="utf-8").splitlines():
+    cfg_records = _accepted_cfg(run_root, ts_shards, target_snapshot, gaps)
+    if cfg_records:
+        for nodes_data, edges_data in cfg_records:
+            for line in nodes_data.decode("utf-8").splitlines():
                 if not line.strip():
                     continue
                 rec = json.loads(line)
@@ -2084,8 +2140,8 @@ def _extract_tree_sitter_files(
                     for fn_item in entry["functions"]:
                         if fn_item["function_id"] == fn_id and not fn_item["parameters"]:
                             fn_item["parameters"] = list(rec.get("defs", ()))
-            if edges_file.is_file():
-                for line in edges_file.read_text(encoding="utf-8").splitlines():
+            if edges_data:
+                for line in edges_data.decode("utf-8").splitlines():
                     if not line.strip():
                         continue
                     rec = json.loads(line)
@@ -2191,18 +2247,8 @@ def build_run_alternate_cpg(
     prio_shards = [
         s for s in upstream_shards if (s.get("producer") or {}).get("job") == "job_review_prioritization"
     ]
-    route_shards = [
-        s
-        for s in upstream_shards
-        if (s.get("producer") or {}).get("job") in {"job_framework_route_inventory"}
-    ]
-    symref_shards = [
-        s
-        for s in upstream_shards
-        if (s.get("producer") or {}).get("job") in {"job_symbol_reference_index"}
-    ]
-
-    ts_files = _extract_tree_sitter_files(run_root, ts_shards)
+    gaps: list[str] = []
+    ts_files = _extract_tree_sitter_files(run_root, ts_shards, target_snapshot=target_snapshot, gaps=gaps)
 
     file_shas: dict[str, str] = {}
     symbol_decls: list[Mapping[str, Any]] = []
@@ -2232,30 +2278,6 @@ def build_run_alternate_cpg(
     if prio_shards:
         pr_set = ShardSet(run_root, prio_shards)
         routes.extend(pr_set.entities(pr_set.shards, kinds=("review_signal", "priority_item")))
-    if route_shards:
-        rt_set = ShardSet(run_root, route_shards)
-        routes.extend(rt_set.entities(rt_set.shards))
-
-    sym_refs: list[dict[str, Any]] = []
-    if symref_shards:
-        sr_set = ShardSet(run_root, symref_shards)
-        sr_entities = {str(e["identity"]): e for e in sr_set.entities(sr_set.shards)}
-        for rel in sr_set.relations(sr_set.shards, kinds=("REFERENCES", "CALLS")):
-            src_e = sr_entities.get(str(rel.get("source_id") or ""))
-            dst_e = sr_entities.get(str(rel.get("target_id") or ""))
-            if src_e and dst_e:
-                sloc = src_e.get("location") or {}
-                dloc = dst_e.get("location") or {}
-                sym_refs.append(
-                    {
-                        "caller_path": sloc.get("path"),
-                        "caller_line": sloc.get("start_line"),
-                        "callee_name": dst_e.get("name"),
-                        "target_path": dloc.get("path"),
-                        "target_line": dloc.get("start_line"),
-                    }
-                )
-
     fact_shards = [
         s
         for s in graph_shards
@@ -2276,12 +2298,12 @@ def build_run_alternate_cpg(
         clangd_symbols=clangd_syms,
         clangd_relations=clangd_rels,
         symbol_declarations=symbol_decls,
-        symbol_references=sym_refs,
         route_entrypoints=routes,
         run_id=run_id,
         target_snapshot=target_snapshot,
         settings=settings,
     )
+    cpg["gaps"] = list(dict.fromkeys(gaps))
     return cpg, file_shas
 
 
@@ -2477,7 +2499,8 @@ def publish_alternate_cpg(
         if rel.relation_id not in seen_rel:
             seen_rel.add(rel.relation_id)
             builder.add_relation(rel)
-    builder.add_coverage("alternate_cpg", "complete", None)
+    gaps = tuple(cpg.get("gaps", ()))
+    builder.add_coverage("alternate_cpg", "partial" if gaps else "complete", "; ".join(gaps) or None)
     shard_sha = builder.build()
 
     shard_identity = IndexIdentity(
@@ -2492,7 +2515,7 @@ def publish_alternate_cpg(
             "kind": "alternate_cpg",
             "schema": ALTERNATE_CPG_SCHEMA,
         },
-        (),
+        gaps,
         ALTERNATE_CPG_SHARD_ID,
     )
 

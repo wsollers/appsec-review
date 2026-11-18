@@ -123,7 +123,7 @@ def bounded_seeded(value: Any) -> dict[str, Any] | None:
         "neighborhood_function_count": count(value.get("neighborhood_function_count")) or 0,
         "depth_histogram": {text(key): count(item) or 0 for key, item in sorted(histogram.items())}
         if isinstance(histogram, Mapping) else {},
-        "seeds": seeds, "gaps": [text(gap) for gap in list(value.get("gaps") or ())[:MAX_CARD_GAPS]],
+        "seeds": seeds, "gaps": producers.bounded_gaps(value.get("gaps") or (), MAX_CARD_GAPS),
     }
 
 
@@ -580,16 +580,15 @@ def database_coverage(scope: Mapping[str, Any], coverage: Sequence[CoverageRow])
         skipped = is_seeded(scope) and not seeded.get("resolved_seed_count")
         state = Coverage.PARTIAL if skipped else Coverage.UNAVAILABLE
     for row in coverage:
-        gaps.extend(row.gaps[:2])
-    return state, [gap[:300] for gap in dict.fromkeys(gaps)][:MAX_CARD_GAPS]
+        gaps.extend(producers.bounded_gaps(row.gaps, 2))
+    return state, producers.bounded_gaps(gaps, MAX_CARD_GAPS)
 
 
 def _producer_entry(name: Producer, seeded: Mapping[str, Any] | None, *, shards: int = 1,
-                    failed: bool = False, alternate_cpg_succeeded: bool = True) -> dict[str, Any]:
+                    failed: bool = False) -> dict[str, Any]:
     """One ``producers`` row of the database card: what ran, whether it was seeded, how deep, what is missing."""
     if not shards:
-        gaps = ([] if (name is Producer.JOERN_CPG and alternate_cpg_succeeded)
-                else [f"producer_not_run: no accepted {name.value} output covers this database's project"])
+        gaps = [f"producer_not_run: no accepted {name.value} output covers this database's project"]
         return {"name": name.value, "state": "not_run", "seeded": False, "depth": None, "gaps": gaps}
     record = seeded or {}
     mode = record.get("mode") or "whole_program"
@@ -601,7 +600,7 @@ def _producer_entry(name: Producer, seeded: Mapping[str, Any] | None, *, shards:
         state = "failed"
     else:
         state = "seeded"
-    gaps = [str(gap)[:300] for gap in dict.fromkeys(record.get("gaps") or ())][:MAX_PRODUCER_GAPS]
+    gaps = producers.bounded_gaps(record.get("gaps") or (), MAX_PRODUCER_GAPS)
     return {"name": name.value, "state": state, "seeded": mode == "seeded",
             "depth": record.get("depth") if mode == "seeded" else None, "gaps": gaps}
 
@@ -617,7 +616,7 @@ def _merge_entries(name: Producer, records: Sequence[Mapping[str, Any] | None]) 
     gaps = [gap for entry in entries for gap in entry["gaps"]]
     return {"name": name.value, "state": state, "seeded": any(entry["seeded"] for entry in entries),
             "depth": max(depths) if depths else None,
-            "gaps": [gap for gap in dict.fromkeys(gaps)][:MAX_PRODUCER_GAPS]}
+            "gaps": producers.bounded_gaps(gaps, MAX_PRODUCER_GAPS)}
 
 
 def card_producers(scope: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -636,10 +635,8 @@ def card_producers(scope: Mapping[str, Any]) -> list[dict[str, Any]]:
         for name, shards in sorted((inputs.get(table) or {}).items()):
             rows[name] = _merge_entries(Producer(name), [(shard.get("producer") or {}).get("seeded")
                                                          for shard in shards])
-    alt_ok = bool(scope.get("alternate_cpg_succeeded", True))
     for producer in CARD_PRODUCER_ORDER:
-        rows.setdefault(producer.value, _producer_entry(
-            producer, None, shards=0, alternate_cpg_succeeded=alt_ok))
+        rows.setdefault(producer.value, _producer_entry(producer, None, shards=0))
     return [rows[producer.value] for producer in CARD_PRODUCER_ORDER]
 
 
@@ -732,11 +729,11 @@ def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family | N
         if relation.relation_id not in relation_ids:
             relation_ids.add(relation.relation_id)
             builder.add_relation(relation)
-    builder.add_coverage(area, status, "; ".join(gaps)[:4096] or None)
+    builder.add_coverage(area, status, "; ".join(producers.bounded_gaps(gaps, 12)) or None)
     sha = builder.build()
     index = IndexIdentity(GRAPH_INDEX, INDEX_SCHEMA, sha, fingerprint, path.relative_to(run_root).as_posix(),
                           _producer(scope, family, catalog_release, unit_id, kind),
-                          tuple(gap[:300] for gap in gaps[:50]), shard_id)
+                          tuple(producers.bounded_gaps(gaps, 50)), shard_id)
     return asdict(index)
 
 

@@ -16,6 +16,13 @@ executing them? This job publishes redacted, source-resolving literal/unknown de
 bounded coverage for planning. It refuses to identify those declarations as the effective build
 environment, native compiler target proof, or evidence that arbitrary shell syntax was evaluated.
 
+Current environment consumers resolve both environment and catalog through admitted accepted
+handoff pins and retain their actual read receipts. A newer `latest.json` does not change an
+in-flight attempt's catalog lineage. Explicit optional-prior evidence resolves its separately
+admitted exact digest and retains prior-read receipts; it never imports the current pointer as
+authority. Hash, custody and source checks still apply before stale prior evidence is reported
+unavailable.
+
 <!-- generated:begin job=job_build_environment_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
