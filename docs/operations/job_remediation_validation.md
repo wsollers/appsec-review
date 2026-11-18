@@ -16,6 +16,14 @@ semantic assessment and, where commissioned and safe, before/after native syntax
 `build_checked` is not runtime proof, a fixed finding or a changed ship-block decision.
 Generated regression specifications remain unexecuted.
 
+The static artifact is `appsec-review/remediation-static-patch-validation/2`. It reports lexical
+checks, Python-only AST parsing, detected function-name retention and added guard-like text.
+Other languages have unknown syntax validity, not a clean AST. Function names do not prove
+signature preservation; guard patterns do not prove dominance or a corrected sink. Supplied
+patched text alone does not prove diff applicability; the job separately verifies exact edits.
+This artifact can report only `static_checked` or `rejected`, retains its limitations and
+`runtime_verified: false`, and cannot promote the independent semantic or native-build result.
+
 <!-- generated:begin job=job_remediation_validation -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

@@ -1,26 +1,45 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/remediation-validation/static-patch-validation.schema.json",
-  "title": "In-memory patch, balanced syntax, guard hardening, and function preservation check",
+  "title": "In-memory patch, lexical structure, Python AST and text-pattern checks",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema",
     "validation_tier",
     "patch_applies_cleanly",
-    "ast_parse_clean",
-    "signature_preserved",
-    "dominating_guard_verified",
+    "lexical_checks_passed",
+    "syntax_valid",
+    "function_names_preserved",
+    "guard_pattern_detected",
+    "runtime_verified",
+    "limitations",
     "languages",
     "files"
   ],
+  "allOf": [
+    {
+      "if": {"properties": {"syntax_valid": {"const": true}}},
+      "then": {
+        "properties": {"files": {"minItems": 1, "items": {
+          "properties": {"language": {"const": "python"}, "syntax_valid": {"const": true}}
+        }}}
+      }
+    }
+  ],
   "properties": {
-    "schema": {"const": "appsec-review/remediation-static-patch-validation/1"},
+    "schema": {"const": "appsec-review/remediation-static-patch-validation/2"},
     "validation_tier": {"$ref": "common.schema.json#/$defs/validation_tier"},
-    "patch_applies_cleanly": {"type": "boolean"},
-    "ast_parse_clean": {"type": "boolean"},
-    "signature_preserved": {"type": "boolean"},
-    "dominating_guard_verified": {"type": "boolean"},
+    "patch_applies_cleanly": {"type": ["boolean", "null"]},
+    "lexical_checks_passed": {"type": ["boolean", "null"]},
+    "syntax_valid": {"type": ["boolean", "null"]},
+    "function_names_preserved": {"type": ["boolean", "null"]},
+    "guard_pattern_detected": {"type": "boolean"},
+    "runtime_verified": {"const": false},
+    "limitations": {
+      "type": "array", "minItems": 1,
+      "items": {"type": "string", "maxLength": 240}
+    },
     "languages": {
       "type": "array",
       "maxItems": 16,
@@ -32,22 +51,33 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {"properties": {"syntax_valid": {"type": "boolean"}}},
+            "then": {"properties": {"language": {"const": "python"}, "parser": {"const": "python_ast"}}},
+            "else": {"properties": {"parser": {"const": null}}}
+          }
+        ],
         "required": [
           "path",
           "language",
           "hunks_applied",
+          "lexical_check_passed",
           "syntax_valid",
-          "functions_preserved",
-          "guard_or_sink_hardened",
+          "parser",
+          "function_names_preserved",
+          "guard_pattern_detected",
           "issues"
         ],
         "properties": {
           "path": {"type": "string", "minLength": 1, "maxLength": 512},
           "language": {"$ref": "common.schema.json#/$defs/language"},
-          "hunks_applied": {"type": "boolean"},
-          "syntax_valid": {"type": "boolean"},
-          "functions_preserved": {"type": "boolean"},
-          "guard_or_sink_hardened": {"type": "boolean"},
+          "hunks_applied": {"type": ["boolean", "null"]},
+          "lexical_check_passed": {"type": ["boolean", "null"]},
+          "syntax_valid": {"type": ["boolean", "null"]},
+          "parser": {"enum": ["python_ast", null]},
+          "function_names_preserved": {"type": ["boolean", "null"]},
+          "guard_pattern_detected": {"type": "boolean"},
           "issues": {
             "type": "array",
             "maxItems": 16,

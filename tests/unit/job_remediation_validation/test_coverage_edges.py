@@ -447,6 +447,13 @@ def test_semantic_answer_and_job_happy_empty_and_capped_paths(tmp_path: Path, mo
     assert pub_ok["gaps"] == []
     val_summary = read_bound_json(env.root, pub_ok["artifact"])
     assert val_summary["items"][0]["status"] == Status.BUILD_CHECKED.value
+    validation = read_bound_json(env.root, val_summary["items"][0]["validation"])
+    static = read_bound_json(env.root, validation["checks"]["static_checks"]["artifact"])["static_patch_validation"]
+    assert static["validation_tier"] == "static_checked"
+    assert static["syntax_valid"] is None
+    assert static["runtime_verified"] is False
+    assert static["limitations"]
+    assert "dominating_guard_verified" not in static
 
     # Empty confirmed findings -> SKIPPED_NA
     env_empty = _seed_env(tmp_path / "empty", monkeypatch, candidate_count=0)

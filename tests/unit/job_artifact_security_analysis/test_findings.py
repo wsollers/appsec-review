@@ -58,6 +58,31 @@ def test_primitive_helpers_outcome_and_summary_category() -> None:
     }
 
 
+@pytest.mark.parametrize("capability,observation", [
+    ("native", {"security_risks": [{"check_id": "CONTAINER_ROOT", "message": "root user"}]}),
+    ("blint", {"findings": [{"id": "CHECK_NX", "title": "NX disabled"}]}),
+    ("grype", {"matches": [{"vulnerability": {"id": "CVE-2026-0001"}}]}),
+    ("spotbugs", {"findings": [{"type": "SQL_INJECTION"}]}),
+])
+def test_missing_finding_metadata_remains_visible_with_explicit_gaps(capability, observation) -> None:
+    summary, findings = scan_records({
+        "capability": capability, "observation": observation,
+        "artifact": {"path": "app", "canonical_identity": "asr:artifact:app"},
+        "fingerprint": "f" * 64, "tool_identity": {"scanner": capability}, "gaps": [],
+    })
+    assert len(findings) == 1
+    payload = findings[0].payload
+    assert payload["severity"] is None
+    assert payload["subject"] is None
+    assert payload["severity_hint"] == "unknown"
+    assert set(payload["gaps"]) == {"severity_missing_or_unrated", "subject_identity_missing"}
+    assert payload["common"]["reported_severity"]["value"] == "unknown"
+    assert payload["common"]["gap_ids"]
+    assert summary.payload["scan_outcome"] == "completed_with_gaps"
+    assert summary.payload["finding_count"] == 1
+    assert summary.payload["findings_complete"] is False
+
+
 def test_scan_records_splits_blint_spotbugs_grype_osv_and_builtin_summaries(monkeypatch) -> None:
     native_ref = NativeResultReference(
         ArtifactReference("a", "1" * 64, 10),
@@ -122,12 +147,13 @@ def test_scan_records_splits_blint_spotbugs_grype_osv_and_builtin_summaries(monk
         }
     )
     assert blint_summary.payload["finding_count"] == 3
-    assert blint_summary.payload["findings_complete"] is True
+    assert blint_summary.payload["findings_complete"] is False
+    assert set(blint_summary.payload["gaps"]) == {"severity_missing_or_unrated", "subject_identity_missing"}
     assert blint_summary.payload["observation"]["review_count_reported"] == 4
     assert [f.payload["occurrence"] for f in blint_findings] == [1, 2, 1]
     assert blint_findings[0].payload["category"] == CATEGORY_BINARY_HARDENING
     assert blint_findings[0].payload["subject"] == "app"
-    assert blint_findings[2].payload["subject"] == "unknown"
+    assert blint_findings[2].payload["subject"] is None
 
     # SpotBugs: priority 1 mapped, unknown priority -> None, source location vs None
     _, sb_findings = scan_records(
@@ -164,7 +190,7 @@ def test_scan_records_splits_blint_spotbugs_grype_osv_and_builtin_summaries(monk
     assert sb_findings[1].payload["severity"] is None
     assert "native_location" not in sb_findings[1].payload
 
-    # Grype: skips missing vuln id, formats name@version, name-only, and unknown
+    # Grype: skips missing vuln id, formats name@version, and retains absent subjects.
     _, grype_findings = scan_records(
         {
             **base_scan,
@@ -183,7 +209,8 @@ def test_scan_records_splits_blint_spotbugs_grype_osv_and_builtin_summaries(monk
             },
         }
     )
-    assert [f.payload["subject"] for f in grype_findings] == ["openssl@3.0.0", "zlib", "unknown"]
+    assert [f.payload["subject"] for f in grype_findings] == ["openssl@3.0.0", "zlib", None]
+    assert "subject_identity_missing" in grype_findings[2].payload["gaps"]
     assert grype_findings[0].payload["category"] == CATEGORY_VULNERABILITY
     assert grype_findings[0].payload["observation"]["matches"][0]["vulnerability"]["id"] == "CVE-2026-1"
 

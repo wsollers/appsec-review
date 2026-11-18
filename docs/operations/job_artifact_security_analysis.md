@@ -17,6 +17,11 @@ summaries, package inventory and scanner finding records. None is an adjudicated
 unknown delivery, unsupported formats, disabled scanners or empty results do not prove an artifact
 is safe or deployed.
 
+Missing scanner severity and subject identity remain null on retained finding records; they are
+not replaced by high severity or a synthetic subject. `severity_missing_or_unrated` and
+`subject_identity_missing` travel with the record and scan summary. Such metadata gaps keep the
+scan explicitly partial; they do not discard a reported finding or turn it into a clean scan.
+
 <!-- generated:begin job=job_artifact_security_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

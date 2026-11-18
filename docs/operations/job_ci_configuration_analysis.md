@@ -17,6 +17,10 @@ configuration concerns have bounded source support, not whether a pipeline is ex
 repository is secure. Its canonical “findings” are correlated scanner/rule judgments; the handoff's
 security-findings list remains empty.
 
+Generic external-linter records retain absent severity as null rather than defaulting to medium.
+The observation remains available with `severity_missing_or_unrated`, which propagates through
+normalization and the scan's producer gaps so an unrated observation is not silently lost.
+
 <!-- generated:begin job=job_ci_configuration_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema", "max_candidates", "total_confirmed", "selected_count", "capped_count", "items"],
   "properties": {
-    "schema": {"const": "appsec-review/remediation-priority-ranking/1"},
+    "schema": {"const": "appsec-review/remediation-priority-ranking/2"},
     "max_candidates": {"type": "integer", "minimum": 1},
     "total_confirmed": {"type": "integer", "minimum": 0},
     "selected_count": {"type": "integer", "minimum": 0},
@@ -25,20 +25,25 @@
           "chain_elevated",
           "reachable",
           "score",
-          "selected"
+          "selected",
+          "gaps"
         ],
         "properties": {
           "rank": {"type": "integer", "minimum": 1},
-          "finding_package_id": {"type": "string", "minLength": 1, "maxLength": 128},
-          "claim_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "finding_package_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+          "claim_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
           "severity": {"$ref": "common.schema.json#/$defs/severity"},
           "composed_severity": {
             "oneOf": [{"$ref": "common.schema.json#/$defs/severity"}, {"type": "null"}]
           },
           "chain_elevated": {"type": "boolean"},
-          "reachable": {"type": "boolean"},
+          "reachable": {"type": ["boolean", "null"]},
           "score": {"type": "number", "minimum": 0, "maximum": 100},
-          "selected": {"type": "boolean"}
+          "selected": {"type": "boolean"},
+          "gaps": {
+            "type": "array",
+            "items": {"enum": ["severity_missing_or_unrated", "reachability_not_established", "finding_identity_missing", "claim_identity_missing"]}
+          }
         }
       }
     }

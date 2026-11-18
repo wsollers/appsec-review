@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-PRIORITY_RANKING_SCHEMA = "appsec-review/remediation-priority-ranking/1"
+PRIORITY_RANKING_SCHEMA = "appsec-review/remediation-priority-ranking/2"
 
 _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low", "informational"})
 
@@ -19,7 +19,7 @@ def _normalized_severity(finding: Mapping[str, Any]) -> str:
         raw = finding.get(key)
         if isinstance(raw, str) and raw.strip().lower() in _VALID_SEVERITIES:
             return raw.strip().lower()
-    return "informational"
+    return "unknown"
 
 
 def _composed_severity(finding: Mapping[str, Any]) -> str | None:
@@ -42,16 +42,16 @@ def _is_chain_elevated(finding: Mapping[str, Any], standalone: str, composed: st
     return False
 
 
-def _is_reachable(finding: Mapping[str, Any]) -> bool:
+def _is_reachable(finding: Mapping[str, Any]) -> bool | None:
     if "reachable" in finding and isinstance(finding["reachable"], bool):
         return finding["reachable"]
     reach = finding.get("reachability")
     if isinstance(reach, str):
-        return reach.strip().lower() in {"reachable", "confirmed", "verified", "direct", "true"}
-    exploitability = finding.get("exploitability")
-    if isinstance(exploitability, str) and exploitability.strip().lower() in {"unreachable", "none"}:
-        return False
-    return bool(finding.get("entry_points") or finding.get("poc") or finding.get("direct_evidence"))
+        if reach.strip().lower() in {"reachable", "confirmed", "verified"}:
+            return True
+        if reach.strip().lower() == "unreachable":
+            return False
+    return None
 
 
 def _numeric_score(finding: Mapping[str, Any]) -> float:
@@ -83,9 +83,10 @@ def finding_risk_sort_key(finding: Mapping[str, Any]) -> tuple[int, float, str, 
     1: high (standalone)
     2: chain-elevated (e.g. medium+medium -> high/critical chain participant)
     3: reachable medium
-    4: non-reachable medium
+    4: medium without explicit confirmed reachability
     5: low
     6: informational
+    7: unknown severity (unrated, not informational)
     Within each tier: descending numeric score, then ascending ``finding_id`` and ``claim_id``.
     """
     standalone = _normalized_severity(finding)
@@ -106,8 +107,10 @@ def finding_risk_sort_key(finding: Mapping[str, Any]) -> tuple[int, float, str, 
         tier = 4
     elif standalone == "low":
         tier = 5
-    else:
+    elif standalone == "informational":
         tier = 6
+    else:
+        tier = 7
 
     finding_id = _finding_identifier(finding)
     claim_id = str(finding.get("claim_id") or "")
@@ -124,7 +127,7 @@ def build_priority_ranking_record(
     *,
     max_candidates: int,
 ) -> dict[str, Any]:
-    """Build ``appsec-review/remediation-priority-ranking/1`` artifact for auditability and telemetry."""
+    """Build a ranking with unrated severity and unestablished reachability retained explicitly."""
     cap = max(1, int(max_candidates))
     items: list[dict[str, Any]] = []
     for idx, finding in enumerate(ranked_findings, start=1):
@@ -133,8 +136,18 @@ def build_priority_ranking_record(
         chain_elevated = _is_chain_elevated(finding, standalone, composed)
         reachable = _is_reachable(finding)
         score = _numeric_score(finding)
-        finding_pkg_id = str(finding.get("finding_package_id") or finding.get("finding_id") or f"finding-{idx}")
-        claim_id = str(finding.get("claim_id") or f"claim-{idx}")
+        finding_pkg_id = _finding_identifier(finding) or None
+        claim_id = finding.get("claim_id")
+        claim_id = claim_id if isinstance(claim_id, str) and claim_id.strip() else None
+        gaps = []
+        if standalone == "unknown":
+            gaps.append("severity_missing_or_unrated")
+        if reachable is None:
+            gaps.append("reachability_not_established")
+        if finding_pkg_id is None:
+            gaps.append("finding_identity_missing")
+        if claim_id is None:
+            gaps.append("claim_identity_missing")
         items.append({
             "rank": idx,
             "finding_package_id": finding_pkg_id,
@@ -145,6 +158,7 @@ def build_priority_ranking_record(
             "reachable": reachable,
             "score": round(score, 4),
             "selected": idx <= cap,
+            "gaps": gaps,
         })
     selected_count = sum(1 for item in items if item["selected"])
     return {

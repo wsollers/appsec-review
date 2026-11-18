@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from jsonschema import Draft202012Validator
+import pytest
 from referencing import Registry, Resource
 
 from appsec_review.jobs.job_poc_generation import detect_poc_language
@@ -130,3 +131,46 @@ def test_nine_language_source_paths_accepted_and_build_scripts_blocked() -> None
         "Directory.Build.props",
     ):
         assert unsafe_build_changes(SimpleNamespace(paths=[blocked])) == [blocked]
+
+
+@pytest.mark.parametrize("extra", [
+    {"entry_points": ["route-1"]},
+    {"poc": {"status": "compile_verified"}},
+    {"direct_evidence": ["source-line-1"]},
+    {"reachability": "unknown"},
+    {"exploitability": "none"},
+])
+def test_context_and_poc_presence_do_not_confirm_reachability(extra: dict) -> None:
+    unknown = {"finding_package_id": "finding-a", "claim_id": "claim-a", "severity": "medium", **extra}
+    reachable = {"finding_package_id": "finding-z", "claim_id": "claim-z",
+                 "severity": "medium", "reachable": True}
+    ranked = rank_findings_risk_first([unknown, reachable])
+    assert ranked == [reachable, unknown]
+    record = build_priority_ranking_record(ranked, max_candidates=1)
+    assert record["items"][0]["reachable"] is True
+    assert record["items"][1]["reachable"] is None
+    assert record["items"][1]["gaps"] == ["reachability_not_established"]
+    _priority_schema_validator().validate(record)
+
+
+@pytest.mark.parametrize("severity", [None, "", "not-rated", 7])
+def test_missing_or_unrated_severity_is_not_informational(severity) -> None:
+    finding = {"finding_package_id": "finding-a", "claim_id": "claim-a", "severity": severity}
+    informational = {"finding_package_id": "finding-z", "claim_id": "claim-z", "severity": "informational"}
+    ranked = rank_findings_risk_first([finding, informational])
+    assert ranked == [informational, finding]
+    record = build_priority_ranking_record(ranked, max_candidates=2)
+    assert record["items"][1]["severity"] == "unknown"
+    assert "severity_missing_or_unrated" in record["items"][1]["gaps"]
+    _priority_schema_validator().validate(record)
+
+
+def test_explicit_negative_reachability_and_absent_identity_are_preserved() -> None:
+    record = build_priority_ranking_record([{"reachable": False, "poc": {"status": "compile_verified"}}],
+                                         max_candidates=1)
+    item = record["items"][0]
+    assert item["reachable"] is False
+    assert item["finding_package_id"] is None
+    assert item["claim_id"] is None
+    assert item["gaps"] == ["severity_missing_or_unrated", "finding_identity_missing", "claim_identity_missing"]
+    _priority_schema_validator().validate(record)

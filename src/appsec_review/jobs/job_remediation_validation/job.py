@@ -200,23 +200,27 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             })
         static_patch_res = validate_remediation_patch_set(file_entries)
         static_failed = bool(new_conflicts) or not static_patch_res.ok
+        static_record = static_patch_res.record()
+        SchemaSet(repo(unit) / "docs" / "schemas" / "remediation-validation").validate(
+            "static-patch-validation", static_record)
         static_ref = write_json(unit, f"{index}/static-checks.json", {
             "checks": [
                 "utf8_source",
                 "no_nul_bytes",
                 "no_new_merge_markers",
                 "exact_declared_edit_set",
-                "balanced_syntax_and_ast",
-                "signature_preserved",
-                "guard_or_sink_hardening",
+                "lexical_structure",
+                "python_ast_when_applicable",
+                "function_name_retention",
+                "guard_text_patterns",
             ],
             "baseline": "accepted_utf8_source",
             "patched": "failed" if static_failed else "passed",
             "diagnostics": new_conflicts,
-            "static_patch_validation": static_patch_res.record(),
+            "static_patch_validation": static_record,
         })
         checks["static_checks"] = _check("failed" if static_failed else "passed",
-                                         "bounded text, balanced syntax/AST, function preservation and declared-edit checks",
+                                         "bounded lexical checks, Python-only AST parsing, function-name and guard patterns; no semantic proof",
                                          static_ref)
         if static_failed:
             result.update(status=Status.REJECTED.value, reason="static_patch_policy_failed")
@@ -347,8 +351,8 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
         reference = write_json(unit, "remediation-validations.json", summary)
         tier_counts: dict[str, int] = {}
         ast_by_lang: dict[str, int] = {}
-        guard_verified_count = 0
-        signature_preserved_count = 0
+        guard_pattern_count = 0
+        function_names_preserved_count = 0
         for row in rows:
             if row["validation"] is None:
                 continue
@@ -361,20 +365,20 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             if isinstance(spv, dict):
                 eff_tier = "build_checked" if row["status"] == Status.BUILD_CHECKED.value else str(spv.get("validation_tier", "static_checked"))
                 tier_counts[eff_tier] = tier_counts.get(eff_tier, 0) + 1
-                if spv.get("ast_parse_clean"):
-                    for lang in spv.get("languages", ()):
-                        ast_by_lang[str(lang)] = ast_by_lang.get(str(lang), 0) + 1
-                if spv.get("dominating_guard_verified"):
-                    guard_verified_count += 1
-                if spv.get("signature_preserved"):
-                    signature_preserved_count += 1
+                for file in spv.get("files", ()):
+                    if file.get("parser") == "python_ast" and file.get("syntax_valid") is True:
+                        ast_by_lang["python"] = ast_by_lang.get("python", 0) + 1
+                if spv.get("guard_pattern_detected"):
+                    guard_pattern_count += 1
+                if spv.get("function_names_preserved"):
+                    function_names_preserved_count += 1
         unit.job.events.write("REMEDIATION_VALIDATION_PUBLISHED", item_count=len(rows), gap_count=len(gaps),
                               outcome_counts={status.value: sum(row["status"] == status.value for row in rows)
                                               for status in Status},
                               validation_tier_counts=tier_counts,
-                              ast_verified_by_language=ast_by_lang,
-                              guard_verified_count=guard_verified_count,
-                              signature_preserved_count=signature_preserved_count,
+                              ast_parsed_files_by_language=ast_by_lang,
+                              guard_pattern_count=guard_pattern_count,
+                              function_names_preserved_count=function_names_preserved_count,
                               output_bytes=(root / reference["path"]).stat().st_size)
         return {"schema": REMEDIATION_VALIDATION_HANDOFF_SCHEMA,
                 "artifact": reference, "item_count": len(rows),

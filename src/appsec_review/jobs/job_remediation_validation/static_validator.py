@@ -1,4 +1,4 @@
-"""9-language in-memory patch, balanced syntax/AST, guard-hardening and function-preservation validator (T-174).
+"""In-memory patch and lexical checks, with Python-only AST parsing (T-174).
 
 Verifies unified diff hunks and exact byte-range edits purely in memory across ``cpp``, ``java``,
 ``javascript``, ``python``, ``ruby``, ``go``, ``csharp``, ``rust`` and ``php`` without executing
@@ -19,7 +19,7 @@ from appsec_review.jobs.job_poc_generation.static_compile_check import (
     scan_lexical_structure,
 )
 
-STATIC_PATCH_VALIDATION_SCHEMA = "appsec-review/remediation-static-patch-validation/1"
+STATIC_PATCH_VALIDATION_SCHEMA = "appsec-review/remediation-static-patch-validation/2"
 SUPPORTED_REMEDIATION_LANGUAGES = SUPPORTED_POC_LANGUAGES
 
 _HUNK_HEADER_RE = re.compile(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
@@ -74,10 +74,11 @@ class UnifiedDiffApplyError(ValueError):
 class FilePatchValidation:
     path: str
     language: str
-    hunks_applied: bool
-    syntax_valid: bool
-    functions_preserved: bool
-    guard_or_sink_hardened: bool
+    hunks_applied: bool | None
+    lexical_check_passed: bool | None
+    syntax_valid: bool | None
+    function_names_preserved: bool | None
+    guard_pattern_detected: bool
     issues: tuple[str, ...]
 
     def record(self) -> dict[str, Any]:
@@ -85,9 +86,11 @@ class FilePatchValidation:
             "path": self.path,
             "language": self.language,
             "hunks_applied": self.hunks_applied,
+            "lexical_check_passed": self.lexical_check_passed,
             "syntax_valid": self.syntax_valid,
-            "functions_preserved": self.functions_preserved,
-            "guard_or_sink_hardened": self.guard_or_sink_hardened,
+            "parser": "python_ast" if self.syntax_valid is not None else None,
+            "function_names_preserved": self.function_names_preserved,
+            "guard_pattern_detected": self.guard_pattern_detected,
             "issues": list(self.issues[:16]),
         }
 
@@ -95,28 +98,37 @@ class FilePatchValidation:
 @dataclass(frozen=True)
 class StaticPatchValidationResult:
     validation_tier: str
-    patch_applies_cleanly: bool
-    ast_parse_clean: bool
-    signature_preserved: bool
-    dominating_guard_verified: bool
+    patch_applies_cleanly: bool | None
+    lexical_checks_passed: bool | None
+    syntax_valid: bool | None
+    function_names_preserved: bool | None
+    guard_pattern_detected: bool
     languages: tuple[str, ...]
     files: tuple[FilePatchValidation, ...]
 
     @property
     def ok(self) -> bool:
-        return self.patch_applies_cleanly and self.ast_parse_clean and self.signature_preserved
+        return bool(self.files) and self.validation_tier != "rejected"
 
-    def record(self, *, promoted_tier: str | None = None) -> dict[str, Any]:
-        tier = promoted_tier or self.validation_tier
+    def record(self) -> dict[str, Any]:
         return {
             "schema": STATIC_PATCH_VALIDATION_SCHEMA,
-            "validation_tier": tier,
+            "validation_tier": self.validation_tier,
             "patch_applies_cleanly": self.patch_applies_cleanly,
-            "ast_parse_clean": self.ast_parse_clean,
-            "signature_preserved": self.signature_preserved,
-            "dominating_guard_verified": self.dominating_guard_verified,
+            "lexical_checks_passed": self.lexical_checks_passed,
+            "syntax_valid": self.syntax_valid,
+            "function_names_preserved": self.function_names_preserved,
+            "guard_pattern_detected": self.guard_pattern_detected,
             "languages": list(self.languages[:16]),
             "files": [item.record() for item in self.files[:32]],
+            "runtime_verified": False,
+            "limitations": [
+                "Only Python is AST parsed; other supported languages receive lexical checks, not syntax verification.",
+                "Function-name retention does not verify signatures, behavior or preservation of all declarations.",
+                "Guard patterns do not prove dominance, sink hardening or remediation correctness.",
+                "Supplied patched text does not establish patch applicability; only supplied diff hunks are applied here.",
+                "No compiler or target code was run.",
+            ],
         }
 
 
@@ -193,7 +205,7 @@ def apply_unified_diff_in_memory(original_text: str, unified_diff: str) -> str:
 
 
 def extract_declared_functions(source_text: str, language: str) -> set[str]:
-    """Extract declared function/method names for signature-preservation checks."""
+    """Extract Python AST names or regex-matched names; signatures are not compared."""
     if language == "python":
         try:
             tree = ast.parse(source_text)
@@ -217,23 +229,19 @@ def extract_declared_functions(source_text: str, language: str) -> set[str]:
     return names
 
 
-def verify_patched_syntax(patched_text: str, language: str) -> tuple[bool, str | None]:
-    """Verify balanced syntax/AST structure across all 9 supported languages."""
-    if language not in SUPPORTED_REMEDIATION_LANGUAGES:
-        return True, None
-    lex_ok, lex_err, _stripped, _no_comments = scan_lexical_structure(patched_text, language)
-    if not lex_ok:
-        return False, lex_err
+def verify_patched_syntax(patched_text: str, language: str) -> tuple[bool | None, str | None]:
+    """Parse Python without importing it; other languages have no commissioned parser here."""
     if language == "python":
         try:
             ast.parse(patched_text)
         except SyntaxError as exc:
             return False, f"Python syntax error on line {exc.lineno}: {exc.msg}"
-    return True, None
+        return True, None
+    return None, None
 
 
-def verify_guard_or_sink_hardening(before_text: str, after_text: str, language: str) -> bool:
-    """Verify that added/modified non-comment lines introduce or strengthen a guard or safe sink."""
+def detect_guard_pattern(before_text: str, after_text: str, language: str) -> bool:
+    """Match guard-like text in added lines; this is not control-flow or semantic analysis."""
     if before_text == after_text:
         return False
     _ok, _err, _stripped, clean_after = scan_lexical_structure(after_text, language) if language in SUPPORTED_REMEDIATION_LANGUAGES else (True, None, after_text, after_text)
@@ -261,16 +269,16 @@ def validate_file_remediation_in_memory(
     if after_text is None:
         if unified_diff is None:
             return FilePatchValidation(
-                path=path, language=resolved_lang, hunks_applied=False, syntax_valid=False,
-                functions_preserved=False, guard_or_sink_hardened=False,
+                path=path, language=resolved_lang, hunks_applied=False, lexical_check_passed=None,
+                syntax_valid=None, function_names_preserved=None, guard_pattern_detected=False,
                 issues=("neither patched text nor unified diff was supplied",),
             )
         try:
             patched = apply_unified_diff_in_memory(before_text, unified_diff)
         except UnifiedDiffApplyError as exc:
             return FilePatchValidation(
-                path=path, language=resolved_lang, hunks_applied=False, syntax_valid=False,
-                functions_preserved=False, guard_or_sink_hardened=False,
+                path=path, language=resolved_lang, hunks_applied=False, lexical_check_passed=None,
+                syntax_valid=None, function_names_preserved=None, guard_pattern_detected=False,
                 issues=(str(exc)[:240],),
             )
     else:
@@ -279,8 +287,13 @@ def validate_file_remediation_in_memory(
     if "\x00" in patched or "<<<<<<<" in patched:
         issues.append("patched source contains NUL bytes or merge conflict markers")
 
+    lexical_ok, lexical_err = None, None
+    if resolved_lang in SUPPORTED_REMEDIATION_LANGUAGES:
+        lexical_ok, lexical_err, _, _ = scan_lexical_structure(patched, resolved_lang)
+    if lexical_err:
+        issues.append(lexical_err[:240])
     syntax_ok, syntax_err = verify_patched_syntax(patched, resolved_lang)
-    if not syntax_ok and syntax_err:
+    if syntax_err:
         issues.append(syntax_err[:240])
 
     if before_text and resolved_lang in SUPPORTED_REMEDIATION_LANGUAGES:
@@ -291,19 +304,20 @@ def validate_file_remediation_in_memory(
         if deleted:
             issues.append(f"patch deleted existing function(s): {', '.join(deleted[:4])}"[:240])
     else:
-        functions_preserved = True
+        functions_preserved = None
 
-    guard_hardened = verify_guard_or_sink_hardening(before_text, patched, resolved_lang)
+    guard_hardened = detect_guard_pattern(before_text, patched, resolved_lang)
     if not guard_hardened:
-        issues.append("patch does not introduce a recognizable guard or sink-hardening construct")
+        issues.append("no added guard or sink-hardening text pattern was detected")
 
     return FilePatchValidation(
         path=path,
         language=resolved_lang,
-        hunks_applied=True,
-        syntax_valid=syntax_ok and ("\x00" not in patched and "<<<<<<<" not in patched),
-        functions_preserved=functions_preserved,
-        guard_or_sink_hardened=guard_hardened,
+        hunks_applied=True if after_text is None else None,
+        lexical_check_passed=False if "\x00" in patched or "<<<<<<<" in patched else lexical_ok,
+        syntax_valid=syntax_ok,
+        function_names_preserved=functions_preserved,
+        guard_pattern_detected=guard_hardened,
         issues=tuple(issues[:16]),
     )
 
@@ -326,24 +340,30 @@ def validate_remediation_patch_set(
         if res.language not in languages:
             languages.append(res.language)
 
-    applies_cleanly = bool(results) and all(item.hunks_applied for item in results)
-    ast_clean = bool(results) and all(item.syntax_valid for item in results)
-    sig_preserved = bool(results) and all(item.functions_preserved for item in results)
-    guard_verified = any(item.guard_or_sink_hardened for item in results)
+    def checked_all(values: Sequence[bool | None]) -> bool | None:
+        if False in values:
+            return False
+        return True if values and all(value is True for value in values) else None
 
-    if not applies_cleanly or not ast_clean or not sig_preserved:
+    applies_cleanly = checked_all([item.hunks_applied for item in results])
+    lexical_passed = checked_all([item.lexical_check_passed for item in results])
+    syntax_valid = checked_all([item.syntax_valid for item in results])
+    names_preserved = checked_all([item.function_names_preserved for item in results])
+    guard_detected = any(item.guard_pattern_detected for item in results)
+
+    if not results or any(value is False for value in (
+            applies_cleanly, lexical_passed, syntax_valid, names_preserved)):
         tier = "rejected"
-    elif all(lang in SUPPORTED_REMEDIATION_LANGUAGES for lang in languages):
-        tier = "in_memory_patch_and_syntax_verified"
     else:
         tier = "static_checked"
 
     return StaticPatchValidationResult(
         validation_tier=tier,
         patch_applies_cleanly=applies_cleanly,
-        ast_parse_clean=ast_clean,
-        signature_preserved=sig_preserved,
-        dominating_guard_verified=guard_verified,
+        lexical_checks_passed=lexical_passed,
+        syntax_valid=syntax_valid,
+        function_names_preserved=names_preserved,
+        guard_pattern_detected=guard_detected,
         languages=tuple(languages),
         files=tuple(results),
     )
@@ -359,6 +379,6 @@ __all__ = [
     "extract_declared_functions",
     "validate_file_remediation_in_memory",
     "validate_remediation_patch_set",
-    "verify_guard_or_sink_hardening",
+    "detect_guard_pattern",
     "verify_patched_syntax",
 ]

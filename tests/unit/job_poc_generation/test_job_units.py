@@ -187,7 +187,8 @@ def _compiling_config():
     return replace(base_cfg, settings=settings)
 
 
-def test_full_job_handler_happy_path_via_injected_fakes(tmp_path: Path) -> None:
+@pytest.mark.parametrize("placeholder", [False, True])
+def test_full_job_handler_happy_path_via_injected_fakes(tmp_path: Path, placeholder: bool) -> None:
     workspace, manifest = _fast_workspace(tmp_path / "ws")
     unit = relay_unit(workspace, manifest)
     fake_exec = FakeExecutor(ast=ast_document("good"))
@@ -202,7 +203,8 @@ def test_full_job_handler_happy_path_via_injected_fakes(tmp_path: Path) -> None:
     fake_builds = AcceptedBuilds(unit.workspace.parent, loader=lambda _r: {"receipts": [], "language_build_handoff_sha256": "b" * 64})
     fake_builds.locate = lambda _p: SimpleNamespace(unit=unit, reason="", code="found")  # type: ignore[method-assign]
 
-    ans_result = dict(relay.answer()["result"], claim=cd["claim_id"])
+    source = relay.GOOD_TEST + ("\n// TODO T-175: replace placeholder" if placeholder else "")
+    ans_result = dict(relay.answer(test=source)["result"], claim=cd["claim_id"])
     writer_out = WriterOutcome("answered", ans_result, "ok", ())
 
     job = poc_job.build_job(
@@ -223,8 +225,20 @@ def test_full_job_handler_happy_path_via_injected_fakes(tmp_path: Path) -> None:
         result = job.handler(ctx)
 
     pub = result["outputs"]["publish.publish_handoff"]
-    assert pub["terminal_status"] == "SUCCEEDED"
-    assert pub["counts"]["by_status"][COMPILE_VERIFIED] == 1
+    validated = poc_job.read_bound_json(ctx.run_root, result["outputs"]["validate.policy"]["artifact"])
+    static_check = validated["entries"][cd["claim_id"]]["static_check"]
+    assert static_check["compiler_verified"] is False
+    assert static_check["syntax_valid"] is None
+    if placeholder:
+        assert pub["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert pub["counts"]["by_status"][POLICY_DENIED] == 1
+        assert static_check["status"] == "static_check_failed"
+        assert any(item["rule"] == "stub_placeholder" for item in static_check["violations"])
+        assert fake_exec.calls == []
+    else:
+        assert pub["terminal_status"] == "SUCCEEDED"
+        assert pub["counts"]["by_status"][COMPILE_VERIFIED] == 1
+        assert static_check["status"] == "static_checked"
 
 
 def test_compile_check_disabled_publishes_validated_candidates_as_generated(tmp_path: Path) -> None:

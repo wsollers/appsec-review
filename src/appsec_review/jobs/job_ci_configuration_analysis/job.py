@@ -302,16 +302,20 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
             end_line = int(location.get("end_line") or (lines[-1] if lines else start_line) or start_line)
             message = str(item.get("message") or item.get("check_name") or item.get("description") or
                           item.get("details") or "CI linter observation")[:4096]
+            severity = item.get("severity")
+            severity = severity.strip().lower() if isinstance(severity, str) and severity.strip() else None
             record = {
                 "provider": spec.provider, "tool_id": spec.tool_id,
                 "native_rule_id": str(item.get("check_id") or item.get("rule_id") or item.get("kind") or
                                       item.get("code") or spec.name),
                 "category": "dangerous-defaults-and-uncaught-static-misconfiguration",
-                "message": message, "severity": str(item.get("severity") or "medium").lower(),
+                "message": message, "severity": severity,
                 "path": path, "start_line": max(1, start_line), "end_line": max(start_line, end_line),
                 "start_column": int(location.get("column") or 1),
                 "end_column": int(location.get("end_column") or location.get("column") or 1),
             }
+            if severity is None:
+                record["gaps"] = ["severity_missing_or_unrated"]
             if spec.tool_id == "tool-checkov":
                 record["producer_location"] = {key: item[key] for key in
                                                ("file_abs_path", "file_path", "file_line_range") if key in item}
@@ -445,6 +449,9 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
         records = records[:max_observations]
         gaps.append(_gap(GapCode.TRUNCATED, f"observation bound reached at {max_observations}", unit.unit_id))
     for record in records:
+        for reason in record.get("gaps", ()):
+            gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP,
+                             f"{record['native_rule_id']}: {reason}", unit.unit_id, scope=record["path"]))
         message = str(record.get("message", ""))
         message = re.sub(r"\$\{\{\s*secrets\.[^}]+\}\}", "<redacted>", message, flags=re.I)
         message = re.sub(r"(?i)\b(token|secret|password|api[_-]?key)\s*[=:]\s*\S+",
@@ -463,6 +470,8 @@ def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
             "provider", "tool_id", "native_rule_id", "category", "message", "severity", "path",
             "start_line", "end_line", "start_column", "end_column", "start_byte", "end_byte")}
         value.update({key: record[key] for key in _SOURCE_MAPPING_FIELDS if key in record})
+        if record.get("gaps"):
+            value["gaps"] = list(record["gaps"])
         value["provider"] = value["provider"] or raw["provider"]
         value["tool_id"] = value["tool_id"] or raw["tool_id"]
         value["start_line"] = max(1, int(value["start_line"] or 1))
