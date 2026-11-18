@@ -414,7 +414,7 @@ def test_a_scope_without_seeds_is_skipped_with_a_named_partial_gap_and_never_run
     assert record["seeded"]["seed_count"] == 0 and record["seeded"]["seeds"] == []
     assert record["seeded"]["mode"] == "seeded" and record["seeded"]["depth"] == 3
     assert output["terminal_status"] == "COMPLETED_WITH_GAPS" and output["export_count"] == 0
-    assert output["dispositions"][0]["terminal_status"] == "SKIPPED"
+    assert output["dispositions"][0]["terminal_status"] == "SKIPPED_NA"  # a ProducerStatus; the record keeps SKIPPED
     scope_root = tmp_path / "run" / "data" / "codeql" / "scopes" / scope.scope_id
     assert not (scope_root / "export-checkpoint.json").exists() and not (scope_root / "exports").exists()
 
