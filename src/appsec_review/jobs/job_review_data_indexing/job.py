@@ -162,32 +162,33 @@ def feed_pins(repository_root: Path, resolved: Mapping[str, Any], max_age_days: 
 
 
 def owasp_status(run_root: Path) -> dict[str, Any]:
-    pointer_path = run_root / "data" / "indexes" / "owasp" / "accepted.json"
-    if not pointer_path.is_file():
-        return {"status": "unavailable", "reason": "the OWASP workbench has no accepted index in this run"}
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    manifest_path = (run_root / str(pointer.get("manifest_path", ""))).resolve()
-    if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file() or \
-            file_sha256(manifest_path) != pointer.get("manifest_sha256"):
-        raise ValueError("accepted OWASP workbench manifest identity changed")
     accepted = accepted_handoff(run_root, "job_owasp_control_assessment")
-    relative = manifest_path.relative_to(run_root).as_posix()
-    if accepted is None or not any(ref["path"] == relative and ref["sha256"] == pointer["manifest_sha256"]
-                                   for ref in accepted.handoff["artifacts"]):
-        raise ValueError("OWASP manifest is not bound to its accepted producer handoff")
+    if accepted is None:
+        return {"status": "unavailable", "reason": "the OWASP workbench has no accepted index from an admitted "
+                                                 "producer handoff in this run"}
+    manifests = {ref["path"]: ref for ref in accepted.handoff["artifacts"]
+                 if str(ref.get("path", "")).startswith("data/indexes/owasp/manifests/")
+                 and str(ref["path"]).endswith(".json")}
+    if not manifests:
+        return {"status": "unavailable", "reason": "the accepted OWASP handoff carries no workbench manifest"}
+    if len(manifests) != 1:
+        raise ValueError("accepted OWASP handoff carries ambiguous workbench manifests")
+    reference = next(iter(manifests.values()))
+    relative = reference["path"]
     from appsec_review.runtime.inputs import observe_output
     observe_output(run_root, "job_owasp_control_assessment", "owasp_workbench",
-                   {"path": relative, "sha256": pointer["manifest_sha256"]})
-    from appsec_review.storage.shared import consume_named
-    consume_named(run_root, manifest_path, namespace="owasp-shard", expected_sha256=pointer["manifest_sha256"])
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                   {"path": relative, "sha256": reference["sha256"]})
+    from appsec_review.storage.shared import consume_named, safe_path
+    manifest_path = safe_path(run_root, relative)
+    consume_named(run_root, manifest_path, namespace="owasp-shard", expected_sha256=reference["sha256"])
+    manifest = _read(run_root, reference)
     if (manifest.get("schema") != "appsec-review/owasp-index-manifest/1"
-            or manifest.get("run_id") != run_root.name or pointer.get("run_id") != run_root.name):
+            or manifest.get("run_id") != run_root.name):
         raise ValueError("accepted OWASP publication belongs to another run")
     if manifest.get("assessment_mode", "qualification") not in {"assessment", "qualification"}:
         raise ValueError("accepted OWASP publication has an invalid assessment mode")
-    return {"status": "accepted", "manifest_sha256": pointer.get("manifest_sha256"),
-            "manifest_path": manifest_path.relative_to(run_root).as_posix(),
+    return {"status": "accepted", "manifest_sha256": reference["sha256"],
+            "manifest_path": relative,
             "assessment_mode": manifest.get("assessment_mode", "qualification"),
             "assessment_bounds": manifest.get("assessment_bounds", {}),
             "accepted_upstream_manifest": manifest.get("accepted_upstream_manifest"),
@@ -225,7 +226,7 @@ def threat_model_status(run_root: Path) -> dict[str, Any]:
     raw_gaps = (loaded.get("result") or {}).get("gaps") or ()
     gap_summaries = [
         str(g.get("summary") or g.get("detail") or g.get("code") or g) if isinstance(g, Mapping) else str(g)
-        for g in raw_gaps[:10]
+        for g in raw_gaps
     ]
     return {
         "status": "accepted",
@@ -401,6 +402,7 @@ def build_job(*, providers: Providers = registry_providers,
             selected = rule.select(store)
             inputs: dict[str, Any] = {
                 "shards": ShardSet.identities(selected), "max_facts": max_facts,
+                "gap_summary_rule": "counted-gaps/1",
                 "links": {family: link_identities[family]["sha256"] for family in rule.links if family in link_identities},
                 "feeds": {feed: {key: document["feeds"].get(feed, {}).get(key) for key in ("status", "manifest_sha256",
                                                                                            "stale")}

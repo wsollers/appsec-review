@@ -571,12 +571,19 @@ Remaining gaps after this batch:
 expose every upstream structural, supply-chain, architecture, and binary producer so downstream
 inference jobs never scan raw target trees:
 
-- `threat_boundaries.jsonl` (`appsec-review/threat-boundary-index/1`): DFD trust boundaries, data
-  flows, entrypoints, and threat-hypothesis pointers from `job_threat_model_generation`.
-- `owasp_gaps.jsonl` (`appsec-review/owasp-control-gap/2`): verified `not_satisfied` and `partial`
-  ASVS control gaps from `job_owasp_control_assessment` (retained ahead of unverified
-  `cannot_verify` rows under `job_review_package_assembly` byte-budget trimming).
-- `api_drift.jsonl` (`appsec-review/document-drift-issue/2`): undocumented routes, auth-annotation
+- The `threat_boundaries` precomputed shard (`appsec-review/threat-boundary-index/1` results):
+  DFD trust boundaries, data flows, entrypoints, and threat-hypothesis pointers from
+  `job_threat_model_generation`. A threat without a declared or resolved boundary remains a
+  named `unassigned_threat` coverage gap; it is never attached to an arbitrary boundary.
+- `owasp-control-gaps.json` (`appsec-review/owasp-control-gap/1`): independently assessed
+  `not_satisfied` control results from `job_owasp_control_assessment`, each with at least one
+  re-resolved subject span and its full source/publication/content identity. Missing evidence
+  produces `coverage_gaps`, not a verified finding. Observation prose and mixed obligation
+  outcomes never invent an `absent` or `weak` verdict. The `control_evidence` shard and
+  `query_owasp_gaps` use the same strict verification predicate; provisional dissent remains
+  available as assessment context, not as a verified gap. Indexing reads the admitted producer
+  handoff before its pinned OWASP manifest, never the mutable workbench pointer.
+- API drift (`appsec-review/document-drift-issue/1`): undocumented routes, auth-annotation
   mismatches, and schema-less body parameters across Python, JS/TS, Java, Go, C#, Ruby, Rust, PHP,
   and C++ HTTP frameworks.
 - `sca_reachability.jsonl` (`appsec-review/sca-reachability/1`), `corroborated_clusters.jsonl`
@@ -584,5 +591,9 @@ inference jobs never scan raw target trees:
   `job_binary_evidence_indexing`.
 - Bounded `RetrievalCore` methods (`query_cfg_function`, `query_guard_dominators`,
   `query_cpg_slice`, `query_call_paths`, `query_corroborated_clusters`, `query_sca_reachability`,
-  `query_threat_boundaries`, `query_owasp_gaps`, `query_api_drift`, `query_binary_pseudo_c`)
+  `query_threat_boundaries`, `query_owasp_gaps`, `query_doc_drift`, `query_binary_pseudo_c`)
   documented in [Hosted querying and indexing skills](querying-and-indexing-skills.md).
+
+`query_doc_drift` emits only the drift schema's recognized kinds; missing declarations and
+unsupported observations remain separate coverage gaps. Upstream threat-model gaps are retained
+in full; bounded fact and coverage summaries explicitly count omitted gaps and characters.

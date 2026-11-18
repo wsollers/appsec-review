@@ -339,8 +339,7 @@ def test_owasp_status_unavailable_rejections_and_accepted(tmp_path: Path) -> Non
 
     pointer_path = run_root / "data" / "indexes" / "owasp" / "accepted.json"
     atomic_json(pointer_path, {"run_id": run_id, "manifest_path": "../escape.json", "manifest_sha256": "a" * 64})
-    with pytest.raises(ValueError, match="manifest identity changed"):
-        owasp_status(run_root)
+    assert owasp_status(run_root)["status"] == "unavailable"
 
     manifest_rel = "data/indexes/owasp/manifests/m1.json"
     manifest_path = run_root / manifest_rel
@@ -356,15 +355,19 @@ def test_owasp_status_unavailable_rejections_and_accepted(tmp_path: Path) -> Non
     manifest_sha = file_sha256(manifest_path)
     atomic_json(pointer_path, {"run_id": run_id, "manifest_path": manifest_rel, "manifest_sha256": manifest_sha})
 
-    # Unbound to job_owasp_control_assessment handoff -> rejected
-    with pytest.raises(ValueError, match="not bound to its accepted producer handoff"):
-        owasp_status(run_root)
+    # A workbench pointer grants no authority without the accepted producer handoff.
+    assert owasp_status(run_root)["status"] == "unavailable"
 
     def bind_owasp_handoff(current_doc: dict[str, Any], pointer_run_id: str = run_id) -> None:
         atomic_json(manifest_path, current_doc)
         sha = file_sha256(manifest_path)
         atomic_json(pointer_path, {"run_id": pointer_run_id, "manifest_path": manifest_rel, "manifest_sha256": sha})
         handoff_path = run_root / "data/jobs/job_owasp_control_assessment/attempts/attempt_0001/handoff.json"
+        from appsec_review.jobs.job_owasp_control_assessment.datasets import DATASETS as OWASP_DATASETS
+        atomic_json(handoff_path.with_name("claim.json"), {
+            "dataset_contract": dataset_contract("job_owasp_control_assessment",
+                                                 sorted({row.step for row in OWASP_DATASETS}), OWASP_DATASETS),
+        })
         write_fixture_handoff(
             run_root,
             handoff_path,
@@ -401,6 +404,35 @@ def test_owasp_status_unavailable_rejections_and_accepted(tmp_path: Path) -> Non
     assert accepted["status"] == "accepted"
     assert accepted["assessment_mode"] == "assessment"
     assert accepted["shards"] == [{"shard_id": "owasp-main"}]
+
+    from appsec_review.runtime.consume import upstream_scope
+    from appsec_review.runtime.inputs import input_read_scope
+    handoff_path = run_root / "data/jobs/job_owasp_control_assessment/attempts/attempt_0001/handoff.json"
+    pins = {"job_owasp_control_assessment": file_sha256(handoff_path)}
+    context = SimpleNamespace(run_root=run_root, config=SimpleNamespace(job_id=JOB_ID),
+                              upstream_handoffs=pins, contract=CONTRACT)
+    pointer_path.write_text("{malformed and untrusted", encoding="utf-8")
+    with input_read_scope(context) as reads:
+        assert owasp_status(run_root) == accepted
+        receipts = reads.document()["reads"]
+    assert {row["output_kind"] for row in receipts} == {"handoff", "owasp_workbench"}
+    assert all(row["read"] and row["cited"] is None for row in receipts)
+    workbench = next(row for row in receipts if row["output_kind"] == "owasp_workbench")
+    assert workbench["path"] == manifest_rel and workbench["sha256"] == file_sha256(manifest_path)
+    assert workbench["handoff_sha256"] == pins["job_owasp_control_assessment"]
+
+    atomic_json(handoff_path.parent.parent.parent / "latest.json", {
+        "handoff_path": "data/jobs/job_owasp_control_assessment/attempts/attempt_0002/handoff.json",
+        "handoff_sha256": "0" * 64,
+    })
+    with input_read_scope(context):
+        assert owasp_status(run_root) == accepted
+    with upstream_scope(run_root, JOB_ID, {}, contract=CONTRACT):
+        assert owasp_status(run_root)["status"] == "unavailable"
+    manifest_path.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="integrity mismatch"):
+        with input_read_scope(context):
+            owasp_status(run_root)
 
 
 def test_unit_statuses_reconcile_shards_graph_follow_up_and_self_rows(tmp_path: Path) -> None:

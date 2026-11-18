@@ -801,7 +801,7 @@ def fingerprint_inputs(*, standards: Mapping[str, Any], selection: Mapping[str, 
             "components": component_values}
 
 
-OWASP_GAP_SCHEMA = "appsec-review/owasp-control-gap/2"
+OWASP_GAP_SCHEMA = "appsec-review/owasp-control-gap/1"
 
 
 def verified_control_gap_candidate(record: Mapping[str, Any]) -> bool:
@@ -812,61 +812,44 @@ def verified_control_gap_candidate(record: Mapping[str, Any]) -> bool:
         return False
     if str(record.get("control_status") or "") != "not_satisfied":
         return False
-    if str(record.get("verification_status") or "") in {"qualification_only", "not_required", ""}:
-        return False
-    return True
+    return record.get("verification_status") == "independently_assessed"
 
 
-def _control_gap_verdict(record: Mapping[str, Any]) -> str:
-    obligations = [item for item in record.get("obligations", ()) if isinstance(item, Mapping)]
-    if obligations:
-        statuses = {str(item.get("status") or "") for item in obligations}
-        if "satisfied" in statuses and "not_satisfied" in statuses:
-            return "weak"
-    for obs in record.get("observations", ()):
-        if isinstance(obs, Mapping):
-            summary = str(obs.get("summary") or obs.get("finding") or "").lower()
-            if any(tok in summary for tok in ("partial", "weak", "bypass", "incomplete")):
-                return "weak"
-    return "absent"
-
-
-def _extract_subject_spans(record: Mapping[str, Any]) -> list[dict[str, Any]]:
-    spans: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str | None, int | None]] = set()
+def control_evidence_references(record: Mapping[str, Any]) -> list[Any]:
+    """The complete citation set, including independent review and counterevidence."""
     citations = list(record.get("evidence_used") or ())
-    for obl in record.get("obligations", ()):
-        if isinstance(obl, Mapping):
-            citations.extend(obl.get("citations") or ())
-    for item in citations:
-        if not isinstance(item, Mapping):
-            continue
-        cite = item.get("citation") if isinstance(item.get("citation"), Mapping) else item
-        ctype = str(cite.get("type") or cite.get("kind") or "evidence")
-        ref = str(
-            cite.get("source_id")
-            or cite.get("observation_id")
-            or cite.get("entity_id")
-            or cite.get("evidence_id")
-            or item.get("evidence_id")
-            or ""
-        )
-        if not ref:
-            continue
-        path = str(cite.get("path") or "") or None
-        start_line = int(cite["start_line"]) if isinstance(cite.get("start_line"), int) and cite["start_line"] >= 1 else None
-        end_line = int(cite["end_line"]) if isinstance(cite.get("end_line"), int) and cite["end_line"] >= 1 else start_line
-        key = (ctype, ref, path, start_line)
-        if key in seen:
-            continue
-        seen.add(key)
+    for obligation in record.get("obligations") or ():
+        if isinstance(obligation, Mapping):
+            for assessment in (obligation, obligation.get("independent_assessment") or {}):
+                citations.extend(assessment.get("supporting") or ())
+                citations.extend(assessment.get("contradictory") or ())
+    for observation in record.get("observations") or ():
+        if isinstance(observation, Mapping):
+            citations.extend(observation.get("evidence") or ())
+    return list({_hash(citation): citation for citation in citations}.values())
+
+
+def _extract_subject_spans(record: Mapping[str, Any], resolver: Any) -> list[dict[str, Any]]:
+    spans: list[dict[str, Any]] = []
+    if resolver is None:
+        raise ValueError("accepted evidence resolver is unavailable")
+    for citation in control_evidence_references(record):
+        if not isinstance(citation, Mapping):
+            raise ValueError("citation is not a typed evidence reference")
+        material = resolver.resolve(citation, component_id=str(record["component_id"]))
+        reference = material["reference"]
+        locator = reference["locator"]
+        lines = locator.get("lines")
         spans.append({
-            "citation_type": ctype,
-            "ref": ref,
-            "path": path,
-            "start_line": start_line,
-            "end_line": end_line,
+            "citation_type": locator["kind"],
+            "ref": reference["source_identity"],
+            "path": locator.get("path"),
+            "start_line": lines[0] if lines else None,
+            "end_line": lines[1] if lines else None,
+            "evidence_reference": dict(reference),
         })
+    if not spans:
+        raise ValueError("no resolving evidence was supplied for this control")
     return spans
 
 
@@ -874,19 +857,28 @@ def extract_verified_control_gaps(
     run_id: str,
     assessment_mode: str,
     results: Sequence[Mapping[str, Any]],
+    *,
+    resolver: Any = None,
 ) -> dict[str, Any]:
-    """Build schema-validated appsec-review/owasp-control-gap/2 summary of verified absent/weak controls."""
+    """Project only independently assessed verdicts with re-resolved, pinned evidence."""
     controls_assessed = sum(
         1 for row in results
         if str(row.get("assessment_mode") or "") == "assessment"
         and str(row.get("control_status") or "") in {"satisfied", "not_satisfied"}
     )
     gaps: list[dict[str, Any]] = []
-    counts = {"absent": 0, "weak": 0}
+    coverage_gaps: list[dict[str, str]] = []
+    counts = {"not_satisfied": 0}
     for row in sorted(results, key=lambda r: (str(r.get("component_id") or ""), str(r.get("control_identity") or ""))):
-        if not verified_control_gap_candidate(row):
+        if assessment_mode != "assessment" or not verified_control_gap_candidate(row):
             continue
-        verdict = _control_gap_verdict(row)
+        try:
+            spans = _extract_subject_spans(row, resolver)
+        except (ValueError, OSError, UnicodeError) as exc:
+            coverage_gaps.append({"row_id": str(row["row_id"]), "code": "unresolved_control_evidence",
+                                  "summary": str(exc)})
+            continue
+        verdict = str(row["control_status"])
         counts[verdict] += 1
         control_identity = str(row.get("control_identity") or "")
         asvs_id = control_identity.split(":")[-1] if ":" in control_identity else control_identity
@@ -913,11 +905,11 @@ def extract_verified_control_gaps(
             "asvs_id": asvs_id,
             "verdict": verdict,
             "control_status": "not_satisfied",
-            "verification_status": str(row.get("verification_status") or "independently_assessed"),
+            "verification_status": str(row["verification_status"]),
             "lead_eligible": bool(row.get("lead_eligible", False)),
             "cwe_ids": sorted(cwe_ids),
             "mechanisms": sorted(mechanisms),
-            "subject_spans": _extract_subject_spans(row),
+            "subject_spans": spans,
         })
     return {
         "schema": OWASP_GAP_SCHEMA,
@@ -927,6 +919,7 @@ def extract_verified_control_gaps(
         "verified_gaps_indexed": len(gaps),
         "gaps_by_verdict": counts,
         "control_gaps": gaps,
+        "coverage_gaps": coverage_gaps,
         "telemetry": {
             "owasp.controls_assessed": controls_assessed,
             "owasp.verified_gaps_indexed": len(gaps),

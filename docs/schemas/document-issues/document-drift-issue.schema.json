@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "appsec-review/document-drift-issue/2",
+  "$id": "appsec-review/document-drift-issue/1",
   "title": "Document vs Handler API Spec Drift Report",
   "type": "object",
   "additionalProperties": false,
@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/document-drift-issue/2"
+      "const": "appsec-review/document-drift-issue/1"
     },
     "run_id": {
       "type": "string",

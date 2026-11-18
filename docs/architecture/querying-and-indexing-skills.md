@@ -84,7 +84,7 @@ flowchart LR
 | **Native & Binary Evidence** | `job_debug_symbol_indexing`, `job_binary_evidence_indexing`, `job_artifact_indexing`, `job_post_build_security_assessment` | DWARF/PDB struct field offsets, stack buffer sizes, ELF/PE/Mach-O hardening (`NX`, `PIE`, `RELRO`, `Canary`, `CFI`), decompiled functions/imports | `query_debug_symbols`, `query_artifacts`, `query_build_security`, `search`, `trace` |
 | **Scanner & Supply-Chain Evidence** | `job_evidence_collection`, `job_clang_static_analysis`, `job_cpp_compiled_analysis`, `job_dependency_intelligence`, `job_ci_configuration_analysis`, `job_artifact_security_analysis` | Deduplicated multi-scanner observations, SARIF `codeFlows` taint steps, indexed OSV/NVD advisories, FFI/import vulnerable-symbol reachability, CI workflow hazards | `query_observations`, `query_ci_configuration`, `query_precomputed` |
 | **Engineering & Behavioural Context** | `job_source_history_analysis`, `job_change_context_analysis`, `job_test_coverage`, `job_profile_data`, `job_review_prioritization` | Proportional bug-fix hotspots, guard-removal diffs, uncovered high-exposure lines, hot runtime execution paths, SAST-silence hunt priorities | `query_hotspots`, `coverage`, `query_precomputed` |
-| **Architecture, Controls & Spec Drift** | `job_threat_model_generation`, `job_owasp_control_assessment`, `job_document_issue_analysis` | Trust boundaries, untrusted entry surfaces, verified `absent`/`weak` OWASP ASVS controls, OpenAPI/GraphQL/doc vs handler auth/schema drift | `query_precomputed`, `query_dataset_inventory`, `resolve_evidence` |
+| **Architecture, Controls & Spec Drift** | `job_threat_model_generation`, `job_owasp_control_assessment`, `job_document_issue_analysis` | Trust boundaries, untrusted entry surfaces, independently assessed `not_satisfied` OWASP controls with pinned evidence, OpenAPI/GraphQL/doc vs handler auth/schema drift | `query_precomputed`, `query_dataset_inventory`, `resolve_evidence` |
 
 ## Coherent tool catalog and role grants
 
@@ -103,7 +103,7 @@ and hard byte/row ceilings:
 | `query_observations` | Retrieve deduplicated multi-scanner findings, preserved Semgrep/CodeQL `codeFlows` taint steps, and cross-tool corroboration clusters. | `red`, `blue`, `independent_verifier`, `hunter`, `judge` |
 | `query_debug_symbols` / `query_build_security` / `query_artifacts` | Verify C/C++/Rust struct layouts, stack buffer sizes, integer widths, FFI exports, and binary mitigations (`PIE`, `NX`, `RELRO`, `Canary`, `CFI`). | `red`, `blue`, `independent_verifier`, `hunter`, `poc_writer` |
 | `query_hotspots` / `coverage` / `query_ci_configuration` | Inspect churn/revert hotspots, recent guard-removal deltas, line/branch test coverage around candidate sinks, and CI/CD workflow permissions. | `red`, `hunter`, `independent_verifier`, `remediation_planner` |
-| `query_precomputed` / `resolve_evidence` | Read precomputed threat-model trust boundaries, verified OWASP `absent`/`weak` control gaps, API/doc drift signals, and resolve opaque evidence IDs to exact source spans. | All review, OWASP, PoC, and remediation roles |
+| `query_precomputed` / `resolve_evidence` | Read precomputed threat-model trust boundaries, independently assessed OWASP `not_satisfied` control gaps, API/doc drift signals, and resolve opaque evidence IDs to exact source spans. | All review, OWASP, PoC, and remediation roles |
 
 ## Runtime worker skill registration (`pipeline/skills/`)
 
@@ -114,7 +114,7 @@ Runtime skills live exclusively under `pipeline/skills/<name>/SKILL.md` with
 
 | Runtime Skill | Registered Jobs | Purpose & Frontier Prompting Pattern |
 |---|---|---|
-| `evidence-and-graph-querying` | `job_inference_security_review`, `job_owasp_control_assessment`, `job_poc_generation`, `job_remediation_planning`, `job_remediation_validation` | Canonical multi-hop retrieval playbook: (1) check `query_dataset_inventory` for shard availability; (2) query `query_code_graph` / `query_codeql_neighborhood` for semantic paths; (3) fall back to `query_syntax` CFG/guards when semantic DBs are partial; (4) confirm exact source lines and dominating guards via `read_excerpt` before affirming or refuting. |
+| `evidence-and-graph-querying` | `job_inference_security_review`, `job_poc_generation`, `job_remediation_planning`, `job_threat_model_generation` | Canonical multi-hop retrieval playbook: (1) check `query_dataset_inventory` for shard availability; (2) query `query_code_graph` / `query_codeql_neighborhood` for semantic paths; (3) fall back to `query_syntax` CFG/guards when semantic DBs are partial; (4) confirm exact source lines and dominating guards via `read_excerpt` before affirming or refuting. |
 | `review-evidence-checking` (and task-specific review procedures) | `job_inference_security_review` | Hypothesis-driven verification discipline: distinguish proven sanitizers/barriers at exact source lines from unverified caller assumptions; preserve numeric buffer/integer arithmetic checks (`numeric-reasoning-guardrail/1`). |
 | `binary-evidence` | `job_inference_security_review` (attached when `binary` shard is present) | Correlate Ghidra decompiled functions/imports and `debug_symbols` DWARF/PDB layouts with source or FFI boundaries. |
 
