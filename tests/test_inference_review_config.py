@@ -342,6 +342,11 @@ def test_checked_in_wsollers1_capacity_overlay_and_copilot_carbon_prod_profile()
         assert model_cfg["reasoning"] == "high"
         assert model_cfg["max_output_tokens"] <= 64000
 
+    dep_model = resolved["jobs"]["job_dependency_intelligence"]["settings"]["model"]
+    assert dep_model["max_output_tokens"] == 16000 and dep_model["timeout_seconds"] == 600
+    post_build_model = resolved["jobs"]["job_post_build_security_assessment"]["settings"]["model"]
+    assert post_build_model["max_input_tokens"] == 500000
+
     review = _settings(overlaid)
     assert review.models["strong"].model == "gemini-4-carbon"
     assert review.models["strong"].reasoning == "high"

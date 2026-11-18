@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable, Sequence
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Future, wait
 from typing import Any
+
+from appsec_review.storage.shared import PublicationThreadPoolExecutor
 
 
 def ready_scopes(
@@ -33,10 +35,11 @@ def ready_scopes(
     databases_by_scope: dict[int, Any] = {}
     pending_normalizations: dict[int, int] = {}
     handlers = {"database": database, "query": query, "normalize": normalize, "export": export}
-    workers = max(1, int(concurrency))
-    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="codeql-scope") as pool:
+    if type(concurrency) is not int or concurrency < 1:
+        raise ValueError("CodeQL concurrency must be positive")
+    with PublicationThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="codeql-scope") as pool:
         while ready or running:
-            while ready and len(running) < workers:
+            while ready and len(running) < concurrency:
                 kind, identity, args = ready.popleft()
                 running[pool.submit(handlers[kind], *args)] = (kind, identity)
             done, _ = wait(running, return_when=FIRST_COMPLETED)

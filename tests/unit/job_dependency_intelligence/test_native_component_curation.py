@@ -969,3 +969,13 @@ def test_run_0004_recorded_curation_batch_passes_validation_after_the_fix():
     assert component(result, "gcc-s")["supporting_paths"] == [object_path]
     assert component(result, "smoke-lz4")["source_candidate_ids"] == [
         "native-dependency-874022ed01b63797c993ce561fb28ad4"]
+def test_curation_task_guidance_agrees_with_single_entry_per_name_rule():
+    guidance_path = (
+        Path(__file__).resolve().parents[3]
+        / "pipeline/guidance/tasks/dependency-intelligence/native_component_curation.md"
+    )
+    text = guidance_path.read_text(encoding="utf-8")
+    assert "Keep separate library entries for distinct roots even when the names repeat" not in text
+    assert "name` appears once" in text
+    assert '"library"' in text and '"sdk-component"' in text
+    assert "context_paths" in text

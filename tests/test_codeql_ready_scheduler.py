@@ -295,3 +295,61 @@ def test_export_runs_after_scope_normalizations_and_handles_zero_profiles():
     exp_idx = events.index(("exp", "with_queries"))
     assert len(norm_indices) == 2 and max(norm_indices) < exp_idx
     assert events.index(("db", "no_queries")) < events.index(("exp", "no_queries"))
+@pytest.mark.parametrize("bad_concurrency", [0, -1, True, 1.5])
+def test_ready_scopes_rejects_invalid_concurrency(bad_concurrency):
+    with pytest.raises(ValueError, match="CodeQL concurrency must be positive"):
+        ready_scopes(
+            ["s1"], concurrency=bad_concurrency,
+            database=lambda scope: {"scope": scope},
+            profiles=lambda _db: [],
+            query=lambda db, _prof: db,
+            normalize=lambda q: q,
+            export=lambda db: db,
+        )
+
+
+def test_ready_scopes_propagates_publication_owner_to_retain_native_output(tmp_path):
+    from appsec_review.config import load_config
+    from appsec_review.provenance import retain_native_output
+    from appsec_review.runtime import Job, JobRunner, Unit
+    from appsec_review.storage import atomic_json, shared
+    from tests.test_job_runtime import write_config
+
+    cfg_path = write_config(tmp_path)
+    with cfg_path.open("a", encoding="utf-8") as stream:
+        stream.write('\n[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n')
+    config = load_config(cfg_path)
+
+    def execute_scopes(unit):
+        root = unit.job.run_root
+        expected_owner = shared.current()
+        assert expected_owner is not None
+        sarif_path = unit.unit_root / "cpp.sarif"
+        sarif_path.write_text('{"version":"2.1.0","runs":[]}', encoding="utf-8")
+        execution = unit.unit_root / "containers" / "codeql" / "receipt.json"
+        atomic_json(execution, {"status": "SUCCEEDED", "exit_code": 0})
+        exec_ref = shared.reference(root, execution)
+        scheduled = ready_scopes(
+            ["cpp"], concurrency=2,
+            database=lambda scope: {"scope": scope, "owner": shared.current() is expected_owner},
+            profiles=lambda _db: ["default"],
+            query=lambda db, prof: {**db, "profile": prof, "query_owner": shared.current() is expected_owner},
+            normalize=lambda q: {
+                **q,
+                "retained": retain_native_output(
+                    root, sarif_path, parser_identity="codeql-sarif/1", complete=True,
+                    native_result_count=0, execution_reference=exec_ref,
+                    events=unit.job.events, unit_id=unit.unit_id,
+                ).artifact.sha256,
+            },
+            export=lambda db: {**db, "export_owner": shared.current() is expected_owner},
+        )
+        assert scheduled["database"][0]["owner"] is True
+        assert scheduled["query"][0]["query_owner"] is True
+        assert len(scheduled["normalize"][0]["retained"]) == 64
+        assert scheduled["export"][0]["export_owner"] is True
+        return {"terminal_status": "SUCCEEDED"}
+
+    job = Job("job_fixture", "fixture", execute_scopes, units=(Unit("execution.scopes", execute_scopes),))
+    outcome = JobRunner(config).run(job, source_fingerprint="fixture-snapshot")
+    assert outcome["status"]["status"] == "SUCCEEDED"
