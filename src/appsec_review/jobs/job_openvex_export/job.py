@@ -19,11 +19,12 @@ from .contracts import (
     VerifiedInputs, canonical_bytes, json_body, normalize_timestamp, parse_json_bytes,
 )
 from .datasets import CONTRACT, DATASETS
+from . import dependencies
 from .inputs import BoundedInputReader, reprove_inputs, verify_inputs
 from .projection import assemble_export
 from .reporting import read_output, upstream_inputs
 from .settings import OpenVexExportSettings
-from .validation import schema_registry, schema_resource_root, validate_export
+from .validation import schema_registry, schema_resource_root, schema_validator, validate_export
 
 TOPOLOGY = {"load": ("verify_inputs",), "export": ("assemble",), "acceptance": ("publish_handoff",)}
 _SCHEMA_DIRECTORY = "steps/load/tasks/verify_inputs/schemas/openvex-export"
@@ -125,12 +126,15 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         unit.job.events.write("OPENVEX_EXPORT_STARTED", invocation_id=unit.job.attempt_id)
         verified = schemas(unit, verify_inputs(unit.job.run_root, _settings(unit), repo(unit)), create=True)
         reference = _write(unit, unit.unit_root / VERIFIED_INPUTS_NAME, canonical_bytes(verified.to_json()))
+        dependency_result, _ = dependencies.dependency_projection(
+            unit.job.run_root, verified, _settings(unit), repo(unit), _release(unit))
         unit.job.events.write("OPENVEX_INPUTS_VERIFIED", invocation_id=unit.job.attempt_id,
                               package_count=len(verified.findings), binding_count=len(verified.input_inventory),
                               input_bytes=verified.total_input_bytes,
                               resolved_config_sha256=verified.provenance.resolved_config_sha256,
                               gate_handoff_sha256=verified.provenance.gate_handoff.sha256)
         return {"artifact": reference.reference.to_json(),
+                "dependency_source": None if dependency_result is None else dependency_result["source"],
                 "schema_artifacts": [ref.to_json() for ref in verified.input_inventory
                                      if "/steps/load/tasks/verify_inputs/schemas/" in ref.path],
                 "gaps": [], "terminal_status": "SUCCEEDED"}
@@ -148,16 +152,22 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             if reference is not None:
                 assert payload is not None
                 _write(unit, unit.job.run_root / reference.path, payload)
+        dependency = dependency_files(unit, verified, create=True)
         unit.job.events.write("OPENVEX_EXPORT_ACCOUNTED", invocation_id=unit.job.attempt_id,
                               **json_body(bundle.manifest["accounting"]))
         return {"artifact": bundle.result_ref.reference.to_json(),
                 "manifest": bundle.manifest_ref.reference.to_json(),
                 "document": None if bundle.document_ref is None else bundle.document_ref.reference.to_json(),
+                "dependencies": dependency,
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         settings, verified = _settings(unit), loaded(unit)
         reprove(unit, verified)
+        dependency = dependency_files(unit, verified, create=False)
+        if unit.output("export.assemble").get("dependencies") != dependency:
+            raise ExportError("dependency export identity changed", reason=Reason.IDENTITY_CONFLICT,
+                              phase=ExportPhase.ACCEPT)
         prefix = (unit.job.attempt_root / "steps" / "export" / "tasks" / "assemble").relative_to(
             unit.job.run_root).as_posix()
         expected = assemble_export(verified, settings, _release(unit), output_prefix=prefix)
@@ -182,8 +192,38 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         reprove(unit, verified)
         result = expected.result
         return {"schema": OPENVEX_EXPORT_HANDOFF_SCHEMA, "artifact": expected.result_ref.reference.to_json(),
-                "item_count": result["statement_count"], "gaps": list(result["gaps"]),
-                "terminal_status": "COMPLETED_WITH_GAPS" if result["gaps"] else "SUCCEEDED"}
+                "dependencies": dependency,
+                "item_count": result["statement_count"],
+                "gaps": list(result["gaps"]) + (dependency["gaps"] if dependency else []),
+                "terminal_status": "COMPLETED_WITH_GAPS" if result["gaps"] or dependency and dependency["gaps"]
+                else "SUCCEEDED"}
+
+    def dependency_files(unit: UnitContext, verified: VerifiedInputs, *, create: bool) -> dict[str, Any] | None:
+        settings = _settings(unit)
+        result, payload = dependencies.dependency_projection(
+            unit.job.run_root, verified, settings, repo(unit), _release(unit))
+        source = None if result is None else result["source"]
+        if source != unit.output("load.verify_inputs").get("dependency_source"):
+            raise ExportError("admitted dependency input changed", reason=Reason.INPUT_STALE, phase=ExportPhase.ACCEPT)
+        if result is None:
+            return None
+        prefix = unit.job.attempt_root / "steps" / "export" / "tasks" / "assemble"
+
+        def persist(name: str, data: bytes) -> dict[str, str]:
+            path = prefix / name
+            ref = ArtifactRef(path.relative_to(unit.job.run_root).as_posix(), hashlib.sha256(data).hexdigest())
+            if create:
+                _write(unit, path, data)
+            elif read_output(unit.job.run_root, ref, settings, max_bytes=settings.max_document_bytes) != data:
+                raise ExportError("dependency export bytes changed", reason=Reason.INPUT_TAMPERED, phase=ExportPhase.ACCEPT)
+            return ref.to_json()
+
+        document_ref = None if payload is None else persist(dependencies.DOCUMENT_NAME, payload)
+        result["document"] = document_ref
+        schema_validator("openvex-dependencies.schema.json", repository_root=repo(unit)).validate(result)
+        result_ref = persist(dependencies.RESULT_NAME, canonical_bytes(result))
+        return {"artifact": result_ref, "document": document_ref, "gaps": result["gaps"],
+                "statements_by_status": result["statements_by_status"]}
 
     def measured(handler: Callable[[UnitContext], Mapping[str, Any]], phase: ExportPhase,
                  operation: str) -> Callable[[UnitContext], Mapping[str, Any]]:

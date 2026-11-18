@@ -7,6 +7,13 @@ _A = "data/jobs/job_openvex_export/attempts/*/steps"
 _E = _A + "/export/tasks/assemble/"
 _REASON = "Internal vulnerability disclosure artifacts; no content retrieval or external publication."
 DATASETS = (
+    protected("openvex_dependency_documents", "export", "inference_review", "https://openvex.dev/ns/v0.2.0",
+              "Optional admitted dependency reachability statements; no inferred negative VEX claims.",
+              artifacts=(_E + "openvex-dependencies.json",), reason=_REASON),
+    protected("openvex_dependency_accounting", "export", "inference_review",
+              "appsec-review/openvex-dependencies/1",
+              "Dependency export source pins, statement counts and coverage gaps.",
+              artifacts=(_E + "openvex-dependencies-result.json",), reason=_REASON),
     protected("openvex_verified_inputs", "load", "inference_review", VERIFIED_INPUTS_SCHEMA,
               "Verified accepted review boundary and exact offline schema snapshots.",
               artifacts=(_A + "/load/**",), reason=_REASON),
@@ -27,6 +34,15 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        InputRequirement("job_review_intake", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.OPTIONAL, missing=MissingPolicy.NOT_APPLICABLE),
+        InputRequirement("job_dependency_intelligence", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.OPTIONAL, missing=MissingPolicy.NOT_APPLICABLE),
+        InputRequirement("job_dependency_intelligence", "sca_reachability", "appsec-review/sca-reachability/1",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
+                         availability=Availability.OPTIONAL, missing=MissingPolicy.NOT_APPLICABLE),
         InputRequirement("job_final_publication_gate", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE,
                          availability=Availability.REQUIRED, missing=MissingPolicy.REJECT),

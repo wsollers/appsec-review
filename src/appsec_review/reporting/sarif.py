@@ -16,7 +16,7 @@ SARIF_SCHEMA_URI = (
 )
 SARIF_VERSION = "2.1.0"
 
-_CWE_NUM_RE = re.compile(r"(?:CWE-)?(\d+)", re.IGNORECASE)
+_CWE_NUM_RE = re.compile(r"\bCWE-([1-9]\d*)\b", re.IGNORECASE)
 _HUNK_RE = re.compile(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
 _VALIDATED_TIERS = frozenset({
     "validated",
@@ -40,6 +40,7 @@ _SEVERITY_SCORE = {
     "medium": "5.5",
     "low": "2.5",
     "info": "1.0",
+    "informational": "1.0",
 }
 _DOMAIN_BY_KEY = {dim.key: dim for dim in DIMENSIONS}
 _DOMAIN_BY_ID = {dim.domain_id: dim for dim in DIMENSIONS}
@@ -53,20 +54,22 @@ def _normalize_uri(raw_path: Any) -> str:
     text = _clean_str(raw_path).replace("\\", "/")
     while text.startswith("./"):
         text = text[2:]
-    text = text.lstrip("/")
-    return text or "unknown"
+    if (not text or text == "unknown" or text.startswith("/") or ":" in text
+            or any(part in {"", ".."} for part in text.split("/"))):
+        raise ValueError("SARIF source location requires an explicit repository-relative path")
+    return text
 
 
-def _pos_int(value: Any, default: int = 1) -> int:
-    if isinstance(value, bool):
+def _pos_int(value: Any, default: int | None = None) -> int:
+    if value is None and default is not None:
         return default
-    if isinstance(value, int) and value >= 1:
+    if type(value) is int and value >= 1:
         return value
     if isinstance(value, str) and value.strip().isdigit():
         parsed = int(value.strip())
         if parsed >= 1:
             return parsed
-    return default
+    raise ValueError("SARIF source location requires a positive line number")
 
 
 def _normalize_cwes(finding: Mapping[str, Any]) -> list[str]:
@@ -79,9 +82,7 @@ def _normalize_cwes(finding: Mapping[str, Any]) -> list[str]:
         for item in items:
             if isinstance(item, bool):
                 continue
-            if isinstance(item, int) and item > 0:
-                found.append(item)
-            elif isinstance(item, str):
+            if isinstance(item, str):
                 for match in _CWE_NUM_RE.finditer(item):
                     num = int(match.group(1))
                     if num > 0:
@@ -165,13 +166,11 @@ def build_sarif_code_flows(finding_id: str, finding: Mapping[str, Any]) -> list[
             raw_path = p_part
             if line_val is None and l_part.isdigit():
                 line_val = int(l_part)
-        if not raw_path:
-            continue
         uri = _normalize_uri(raw_path)
-        start_line = _pos_int(line_val, 1)
+        start_line = _pos_int(line_val)
         end_line = _pos_int(step.get("end_line"), start_line)
         if end_line < start_line:
-            end_line = start_line
+            raise ValueError("SARIF end line precedes start line")
         role = _clean_str(step.get("role") or step.get("kind") or ("source" if idx == 0 else ("sink" if idx == total - 1 else "hop")))
         symbol = _clean_str(step.get("symbol") or step.get("function"))
         transform = _clean_str(step.get("taint_transform") or step.get("transform") or step.get("detail") or step.get("summary"))
@@ -400,9 +399,11 @@ def _primary_location(finding: Mapping[str, Any]) -> tuple[str, int, int, str]:
             raw_path = sink.get("path") or sink.get("file") or sink.get("uri")
             line_val = line_val or sink.get("line") or sink.get("start_line")
             symbol = symbol or _clean_str(sink.get("symbol"))
-    uri = _normalize_uri(raw_path or "unknown")
-    start_line = _pos_int(line_val, 1)
-    end_line = max(start_line, _pos_int(end_val, start_line))
+    uri = _normalize_uri(raw_path)
+    start_line = _pos_int(line_val)
+    end_line = _pos_int(end_val, start_line)
+    if end_line < start_line:
+        raise ValueError("SARIF end line precedes start line")
     return uri, start_line, end_line, symbol
 
 
@@ -431,8 +432,10 @@ def build_sarif_log(
         rule_id = _clean_str(finding.get("rule_id")) or (
             f"appsec-review/{domain_id}/{cwes[0].lower()}" if cwes else f"appsec-review/{domain_id}"
         )
-        severity = _clean_str(finding.get("severity") or "medium").lower()
-        level = _SEVERITY_TO_LEVEL.get(severity, "warning")
+        severity = _clean_str(finding.get("severity")).lower()
+        if severity not in _SEVERITY_TO_LEVEL:
+            raise ValueError("SARIF finding requires an explicit supported severity")
+        level = _SEVERITY_TO_LEVEL[severity]
         uri, start_line, end_line, symbol = _primary_location(finding)
         title = _clean_str(finding.get("title") or finding.get("summary")) or f"{domain.label} finding"
         detail = _clean_str(finding.get("description") or finding.get("summary") or title)
@@ -521,7 +524,7 @@ def build_sarif_log(
             "defaultConfiguration": {"level": item["level"]},
             "properties": {
                 "tags": tags,
-                "security-severity": _SEVERITY_SCORE.get(item["severity"], "5.5"),
+                "security-severity": _SEVERITY_SCORE[item["severity"]],
                 "radar_domain": {
                     "domain_id": domain.domain_id,
                     "key": domain.key,
@@ -581,7 +584,7 @@ def build_sarif_log(
         if fixes:
             fixes_emitted += len(fixes)
 
-        reachability = _clean_str(finding.get("reachability") or finding.get("reachability_status") or "confirmed_reachable")
+        reachability = _clean_str(finding.get("reachability") or finding.get("reachability_status")) or "unknown"
         tags = sorted({
             "security",
             f"radar:{domain.domain_id}",

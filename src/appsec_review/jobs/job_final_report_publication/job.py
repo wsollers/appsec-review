@@ -28,6 +28,7 @@ from appsec_review.jobs.job_final_publication_gate.verify import (
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.reporting.dimensions import radar_telemetry
 from appsec_review.reporting.executive_report import render_executive_html
+from appsec_review.reporting.sarif_contracts import SARIF_DOCUMENT_NAME, SARIF_RESULT_NAME
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json
@@ -39,6 +40,7 @@ from .pdf import (
 from .render import render_markdown
 from .report import build_report
 from .settings import FinalReportSettings
+from .sarif import chain_manifest_items, gate_sarif
 
 JOB_ID = "job_final_report_publication"
 GATE_JOB = "job_final_publication_gate"
@@ -115,10 +117,16 @@ def build_job(*, repository_root: Path | None = None,
         loaded = unit.output("load.accepted_gate")
         gate = read_bound_json(unit.job.run_root, loaded["gate_document"])
         report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
-                              configuration_profile=_configuration_profile(unit.job.run_root))
+                              configuration_profile=_configuration_profile(unit.job.run_root),
+                              chain_manifest_items=chain_manifest_items(unit.job.run_root, gate))
         _check(_schemas(unit), "final-report", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
+        sarif = gate_sarif(unit.job.run_root, gate, report)
+        _check(_schemas(unit), "sarif-export-result", sarif.result)
+        sarif_path, sarif_result_path = unit.unit_root / SARIF_DOCUMENT_NAME, unit.unit_root / SARIF_RESULT_NAME
+        atomic_bytes(sarif_path, sarif.sarif_bytes)
+        atomic_json(sarif_result_path, sarif.result)
         tracker = report.get("radar_tracker") or {}
         radar_conf = tracker.get("coverage_confidence") or {}
         r_tel = radar_telemetry(tracker)
@@ -146,7 +154,10 @@ def build_job(*, repository_root: Path | None = None,
             funnel_conversion_rates=r_tel["reporting.funnel_conversion_rates"],
             runtime_verified=False,
         )
-        return {"artifact": artifact_ref(unit.job.run_root, path), "gaps": [], "terminal_status": "SUCCEEDED"}
+        return {"artifact": artifact_ref(unit.job.run_root, path),
+                "sarif": artifact_ref(unit.job.run_root, sarif_path),
+                "sarif_result": artifact_ref(unit.job.run_root, sarif_result_path),
+                "gaps": list(sarif.gaps), "terminal_status": sarif.result["terminal_status"]}
 
     def render(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
@@ -198,16 +209,28 @@ def build_job(*, repository_root: Path | None = None,
         _verify_bindings(run_root, gate)
         report = read_bound_json(run_root, assembled["artifact"])
         _check(_schemas(unit), "final-report", report)
+        if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
+            raise IntegrityError("final report is not bound to the accepted gate handoff")
+        expected_report = build_report(
+            gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
+            configuration_profile=_configuration_profile(run_root),
+            chain_manifest_items=chain_manifest_items(run_root, gate))
+        if report != expected_report:
+            raise IntegrityError("final-report.json is not the projection of the accepted gate")
+        sarif = gate_sarif(run_root, gate, report)
+        _check(_schemas(unit), "sarif-export-result", sarif.result)
+        if (read_bound(run_root, assembled["sarif"]) != sarif.sarif_bytes
+                or read_bound_json(run_root, assembled["sarif_result"]) != sarif.result):
+            raise IntegrityError("SARIF does not match the accepted gate projection")
         expected = render_markdown(report, evidence_ids=settings.markdown_evidence_ids,
                                    gap_ids=settings.markdown_gap_ids).encode("utf-8")
         if read_bound(run_root, rendered["artifact"]) != expected:
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
-        if rendered.get("html") is not None:
-            expected_html = render_executive_html(report).encode("utf-8")
-            if read_bound(run_root, rendered["html"]) != expected_html:
-                raise IntegrityError("final-report.html is not the rendering of final-report.json")
+        expected_html = render_executive_html(report).encode("utf-8")
+        if read_bound(run_root, rendered["html"]) != expected_html:
+            raise IntegrityError("final-report.html is not the rendering of final-report.json")
         files = pdf["files"]
         receipt = read_bound_json(run_root, files["receipt"])
         _check(_schemas(unit), PDF_RECEIPT, receipt)
@@ -224,7 +247,7 @@ def build_job(*, repository_root: Path | None = None,
         elif files["pdf"] is not None or receipt["pdf_sha256"] is not None:
             raise IntegrityError("a PDF is published without a rendered receipt")
         gaps = [f"{item['limitation_id']}: {item['statement']}"[:300] for item in report["limitations"]
-                if item["kind"] == "gap"] + [gap[:300] for gap in pdf["gaps"]]
+                if item["kind"] == "gap"] + [gap[:300] for gap in pdf["gaps"]] + list(sarif.gaps)
         counts = report["summary"]["package_counts"]
         posture = report.get("executive_posture") or {}
         unit.job.events.write(
@@ -242,7 +265,9 @@ def build_job(*, repository_root: Path | None = None,
             "report_schema": FINAL_REPORT_SCHEMA,
             "artifact": assembled["artifact"],
             "markdown": rendered["artifact"],
-            **({"html": rendered["html"]} if rendered.get("html") is not None else {}),
+            "html": rendered["html"],
+            "sarif": assembled["sarif"],
+            "sarif_result": assembled["sarif_result"],
             "gate_handoff": loaded["gate_handoff"],
             "status": report["status"],
             "package_counts": counts,

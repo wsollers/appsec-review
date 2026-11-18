@@ -4,16 +4,40 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 
-from appsec_review.jobs.job_sarif_export import (
-    JOB_ID,
+from appsec_review.reporting.sarif_contracts import (
     SARIF_DOCUMENT_NAME,
     SARIF_RESULT_NAME,
     SARIF_SCHEMA_URI,
     SARIF_VERSION,
-    build_job,
-    export_sarif_bundle,
-    validate_sarif_log,
 )
+from appsec_review.reporting.sarif_export import export_sarif_bundle, validate_sarif_log
+from appsec_review.reporting.sarif import build_sarif_log
+
+
+@pytest.mark.parametrize("change", [
+    {"severity": None}, {"severity": "urgent"}, {"path": None}, {"line": None},
+    {"line": 0}, {"line": True}, {"path": "../outside.py"}, {"end_line": 1},
+])
+def test_invalid_records_are_explicit_gaps_without_erasing_valid_siblings(change):
+    invalid = {**_sample_findings()[1], **change}
+    with pytest.raises(ValueError):
+        build_sarif_log([invalid])
+    bundle = export_sarif_bundle([invalid, _sample_findings()[0]])
+    assert bundle.result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert len(bundle.gaps) == 1
+    assert "sarif_record_omitted:F-HARD-002:" in bundle.gaps[0]["reason"]
+    assert [row["properties"]["finding_id"] for row in bundle.sarif_log["runs"][0]["results"]] == ["F-SQLI-001"]
+
+
+def test_absent_reachability_and_bare_digits_do_not_become_security_claims():
+    finding = {**_sample_findings()[1], "cwe": ["250", 89, "release 2026", "CWE-78"]}
+    log, _ = build_sarif_log([finding])
+    result = log["runs"][0]["results"][0]
+    assert result["properties"]["reachability"] == "unknown"
+    assert result["properties"]["cwe"] == ["CWE-78"]
+    result["locations"][0]["physicalLocation"]["region"]["startLine"] = 0
+    with pytest.raises(ValueError, match="primary physicalLocation"):
+        validate_sarif_log(log)
 
 
 def _sample_findings() -> list[dict]:
@@ -70,7 +94,7 @@ def _sample_findings() -> list[dict]:
             "finding_id": "F-HARD-002",
             "title": "Container Runs as Root UID 0",
             "severity": "medium",
-            "cwe": 250,
+            "cwe": "CWE-250",
             "radar_domain": "container_deployment_hardening",
             "path": "Dockerfile",
             "line": 14,
@@ -83,11 +107,6 @@ def _sample_findings() -> list[dict]:
 
 
 def test_sarif_export_codeflows_validated_fixes_taxa_and_determinism(tmp_path: Path) -> None:
-    job = build_job()
-    assert job.job_id == JOB_ID == "job_sarif_export"
-    assert job.strict_gaps is True
-    assert job.consumes == ("job_final_publication_gate",)
-
     findings = _sample_findings()
     first = export_sarif_bundle(findings, run_id="run-001", output_dir=tmp_path / "out1")
     second = export_sarif_bundle(list(reversed(findings)), run_id="run-001", output_dir=tmp_path / "out2")

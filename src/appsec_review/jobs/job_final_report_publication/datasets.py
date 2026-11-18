@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from appsec_review.runtime.datasets import artifact_only
+from appsec_review.runtime.datasets import artifact_only, protected
 
 
 _A = "data/jobs/job_final_report_publication/attempts/*"
@@ -12,11 +12,23 @@ DATASETS = (
     artifact_only(
         "final_report_publications", "acceptance", "inference_review", "appsec-review/final-report/2",
         "The machine-readable final report (final-report.json), its deterministic Markdown rendering "
-        "(final-report.md) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained "
+        "(final-report.md), HTML (final-report.html) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained "
         "renderer logs), all hash-pinned by the accepted handoff.",
-        artifacts=(_A + "/steps/load/**", _A + "/steps/report/**", _A + "/steps/acceptance/**"),
+        artifacts=(_A + "/steps/load/**", _A + "/steps/report/tasks/assemble/final-report.json",
+                   _A + "/steps/report/tasks/render/**", _A + "/steps/report/tasks/render_pdf/**",
+                   _A + "/steps/acceptance/**"),
         reason="the report is the pipeline's terminal publication; indexing sanitized findings for retrieval "
                "is a later step"),
+    protected(
+        "final_report_sarif", "report", "inference_review", "application/sarif+json;version=2.1.0",
+        "Gate-certified findings with explicit severity and dossier source locations.",
+        artifacts=(_A + "/steps/report/tasks/assemble/findings.sarif",),
+        reason="local vulnerability disclosure export; no external publication"),
+    artifact_only(
+        "final_report_sarif_accounting", "report", "inference_review", "appsec-review/sarif-export-result/1",
+        "SARIF artifact identity, result counts and explicit omitted-record export gaps.",
+        artifacts=(_A + "/steps/report/tasks/assemble/sarif-export-result.json",),
+        reason="terminal export accounting"),
 )
 
 from appsec_review.runtime.contracts import (

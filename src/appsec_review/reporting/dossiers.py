@@ -133,7 +133,7 @@ def _build_classification_badge(
             val = _safe_str(ev.get(k), 120, identity=True)
             if val:
                 scanners.add(val)
-    reachability = "confirmed_reachable" if state == "confirmed" else (state or "unconfirmed")
+    reachability = _safe_str(claim.get("reachability"), 120, identity=True) or "unknown"
     return {
         "severity": (ship_block.get("technical_severity") or "unassessed").lower(),
         "weakness_cwe": weakness_cwe or "not_recorded",
@@ -331,7 +331,8 @@ def _build_remediation_guide(
             or check_map.get("static_checks") == "passed"
             or check_map.get("patch_applicability") == "passed"
         ):
-            tier = "in_memory_patch_and_syntax_verified"
+            tier = ("in_memory_patch_and_syntax_verified"
+                    if status == "in_memory_patch_and_syntax_verified" else "static_checked")
         elif tier == "manual_design_required" and status in {"planned", "proposed"}:
             tier = "proposal_only"
         if not violated and row.get("violated_invariant"):

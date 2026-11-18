@@ -30,11 +30,25 @@ is still excluded. No package is silently skipped to produce a partial export.
 PoC, attack-chain and dossier availability are not eligibility requirements. The exporter
 does not generate, plan or validate remediation, or add a remediation job.
 
-Only `affected` is supported. Missing coverage, an empty review, an unreachable observation,
+The primary `openvex.json` supports only `affected`. Missing coverage, an empty review, an unreachable observation,
 refutation or PoC absence/failure cannot produce `not_affected`, `fixed` or
 `under_investigation`. Review confirmation does not mean an exploit was executed, and export
 success does not mean a product is clean or approved to ship. Scores, independence,
 ship-block decisions and coverage remain separate dimensions, preserved without reinterpretation.
+
+An optional admitted dependency input produces a separate protected `openvex-dependencies.json`
+and `openvex-dependencies-result.json` in the same `export.assemble` task. The handoff's
+`dependencies` field is null when that input was not supplied. Otherwise its receipt binds
+the certified gate and exact accepted dependency handoff/artifact. Configuration and target
+snapshot must agree, and publication rechecks input identities and canonical output bytes.
+No additional job, network lookup or target scan is introduced.
+
+This companion projects supported static `symbol_reachable` observations with call sites as
+`affected`, and incomplete/unknown reachability as `under_investigation` with explicit gaps.
+Static import/call matching cannot certify complete executable-path coverage; even a legacy
+`unreachable_in_target` observation cannot produce `not_affected` here. These dependency
+statements are not additional adjudicated finding packages and do not change primary export
+eligibility, counts or ship-block decisions.
 
 The pinned OpenVEX specification requires an individual/organization author; the automatic
 local policy instead truthfully names the tool, without inventing human/vendor authority.
@@ -73,7 +87,7 @@ PoC/chain/dossier availability is not an eligibility filter, but corrupt certifi
 is an integrity failure. Preserve `gap`, `not_run` and `notice` limitations distinctly:
 `compile_only_nonexecution` is a notice, not an export gap or proof of a fixed finding.
 
-The strict resource contract pins **nine** local resources: seven schemas, the upstream
+The strict resource contract pins **ten** local resources: eight schemas, the upstream
 license and its lock. Transitive `final-report.schema.json` supplies PoC-item definitions
 referenced by gate `/2`; it is not permission to load final-report data or discover attachments.
 The loader uses the source schema directory when present, otherwise installed wheel resources;
@@ -88,10 +102,13 @@ timestamp/IRI rules, exact membership and source/configuration bindings also req
 validation. Hash binding protects byte integrity; it is not a signature or verification of
 the issuer's authority.
 
-Mutable gate/review/intake `latest.json` pointers and the exact `data/indices/accepted.json`
-pointer are bounded and rechecked during input admission, but are **not durable exported
-evidence bindings**. Immutable accepted handoffs, manifests, index shards and other input
-bytes remain bound. A valid newer upstream pointer therefore makes an old export stale
+Gate/review/intake/dependency handoffs are resolved through `accepted_upstream`; runtime reads
+require typed permission and the attempt's admitted digest, not raw `latest.json` fallback.
+Operator lookups outside an attempt use the shared verified pointer reader and retain custody
+and identity rechecks. Mutable pointers are **not durable exported evidence bindings**.
+Immutable accepted handoffs, manifests, index shards and other input bytes remain bound.
+A runtime attempt keeps its admitted handoff even when a pointer moves. A valid newer upstream
+pointer can make an old export stale
 for current export status/latest-accepted metrics, without corrupting its historical immutable
 evidence or discarding independently reverified historical semantic work.
 

@@ -16,6 +16,7 @@ from appsec_review.config.inference_review import parse_inference_review_setting
 from appsec_review.indexing.store import AcceptedHandoff, accepted_handoff
 from appsec_review.interchange import HANDOFF_SCHEMA as JOB_HANDOFF_SCHEMA
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
+from appsec_review.runtime.consume import UpstreamIntegrityError, accepted_upstream, current_pins
 from appsec_review.jobs.accepted_review import HANDOFF_SCHEMA, REVIEW_JOB, load_accepted_review, project_score
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,
@@ -102,6 +103,7 @@ class BoundedInputReader:
         self.phase = ExportPhase(phase)
         self.deadline = time.monotonic() + settings.timeout_seconds if deadline is None else deadline
         self._inventory: dict[str, SizedArtifactRef] = {}
+        self._accepted_refs: dict[str, ArtifactRef] = {}
         self._total = 0
 
     def check_deadline(self) -> None:
@@ -203,6 +205,11 @@ class BoundedInputReader:
     def reprove(self) -> None:
         for reference in self.inventory:
             self.read(reference)
+        for job, reference in self._accepted_refs.items():
+            with _errors(self.phase, Reason.INPUT_TAMPERED):
+                current = accepted_upstream(self.root, job)
+            _require(current is not None and (current.path, current.sha256) == (reference.path, reference.sha256),
+                     "accepted input identity changed during verification", Reason.INPUT_TAMPERED, phase=self.phase)
 
 
 def _published(handoff: Mapping[str, Any], unit: str) -> Mapping[str, Any]:
@@ -254,26 +261,27 @@ def _preflight_handoff(reader: BoundedInputReader, handoff: Mapping[str, Any]) -
 
 
 def _accepted(reader: BoundedInputReader, job: str, *, optional: bool = False) -> AcceptedHandoff | None:
-    relative = f"data/jobs/{job}/latest.json"
-    # lstat custody precedes accepted_handoff: its symlink-as-absent behavior is not safe here.
-    try:
-        reader.path(relative)
-    except ExportError as exc:
-        if optional and exc.reason == Reason.INPUT_MISSING:
-            return None
-        raise
-    pointer = reader.json(reader.pin(relative).reference)
-    reference = ArtifactRef(pointer["handoff_path"], pointer["handoff_sha256"])
-    # Inside an attempt the claim's pin, not the pointer, decides which accepted attempt is read.
-    from appsec_review.runtime.consume import accepted_upstream, current_pins
-    pins = current_pins(reader.root)
-    if pins is not None:
-        if job not in pins:
-            if optional:
+    if current_pins(reader.root) is None:
+        # Operator reads retain custody checks, but never decode a latest pointer here.
+        _require(not (reader.root / f"data/jobs/{job}/latest.json").is_symlink(),
+                 "accepted pointer is a symbolic link", Reason.INPUT_TAMPERED)
+        try:
+            reader.path(f"data/jobs/{job}/latest.json")
+        except ExportError as exc:
+            if optional and exc.reason == Reason.INPUT_MISSING:
                 return None
-            _require(False, f"{job} is not a pinned upstream of this attempt", Reason.INPUT_MISSING)
-        pinned = accepted_upstream(reader.root, job)
-        reference = ArtifactRef(pinned.path, pinned.sha256)
+            raise
+    with _errors(reader.phase):
+        try:
+            pinned = accepted_upstream(reader.root, job, required=not optional)
+        except UpstreamIntegrityError as exc:
+            raise ExportError("accepted upstream verification failed",
+                              reason=Reason.SCHEMA_INVALID if exc.__cause__ else Reason.INPUT_TAMPERED,
+                              phase=reader.phase) from exc
+    if pinned is None:
+        return None
+    reference = ArtifactRef(pinned.path, pinned.sha256)
+    reader._accepted_refs[job] = reference
     _require(reference.path.startswith(f"data/jobs/{job}/attempts/"),
              "accepted pointer belongs to another job", Reason.IDENTITY_CONFLICT)
     handoff = reader.json(reference)

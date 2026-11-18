@@ -1,4 +1,4 @@
-"""Typed contracts and constants for ``job_sarif_export``."""
+"""Typed contracts for the final report's SARIF export."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +6,6 @@ from typing import Any
 
 from appsec_review.reporting.sarif import SARIF_SCHEMA_URI, SARIF_VERSION
 
-JOB_ID = "job_sarif_export"
 SARIF_DOCUMENT_NAME = "findings.sarif"
 SARIF_RESULT_NAME = "sarif-export-result.json"
 SARIF_EXPORT_RESULT_SCHEMA = "appsec-review/sarif-export-result/1"
