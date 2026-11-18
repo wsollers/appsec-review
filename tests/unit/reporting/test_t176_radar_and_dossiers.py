@@ -231,16 +231,17 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
 
     chains = build_attack_chain_cards(synthetic_report)
     assert len(chains) == 1
-    assert chains[0]["composed_severity"] == "critical"
+    assert chains[0]["composed_severity"] == "unrated"
+    assert chains[0]["severity_gap"] == "chain_severity_unrated"
     assert [s["role"] for s in chains[0]["steps"]] == ["entry", "sink"]
 
     gaps = build_named_coverage_gaps(synthetic_report, syn_radar)
     assert any(g.get("gap_id") == "gap-syntactic" or "syntactic" in str(g) for g in gaps)
 
     posture = build_executive_posture(synthetic_report, syn_radar)
-    assert posture["release_readiness"] == "BLOCK_RELEASE"
+    assert posture["release_readiness"] == "REVIEW_REQUIRED_GAPS_PRESENT"
     assert posture["confirmed_by_severity"]["critical"] == 1
-    assert posture["reachable_supply_chain_advisories_count"] == 1
+    assert posture["reachable_supply_chain_advisories_count"] == 0
     assert posture["chain_elevated_findings_count"] == 2
 
     md = render_markdown(report, evidence_ids=True, gap_ids=True)

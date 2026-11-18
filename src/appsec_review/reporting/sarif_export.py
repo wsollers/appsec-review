@@ -15,7 +15,7 @@ from appsec_review.reporting.sarif import (
     canonical_sarif_bytes,
 )
 
-from .contracts import (
+from .sarif_contracts import (
     SARIF_DOCUMENT_NAME,
     SARIF_EXPORT_RESULT_SCHEMA,
     SARIF_RESULT_NAME,
@@ -49,6 +49,15 @@ def validate_sarif_log(sarif_log: Mapping[str, Any]) -> None:
             raise ValueError(f"Invalid SARIF result level: {result.get('level')}")
         if not result.get("locations"):
             raise ValueError("SARIF result must have at least one primary location")
+        for location in result["locations"]:
+            physical = location.get("physicalLocation", {})
+            uri = physical.get("artifactLocation", {}).get("uri")
+            region = physical.get("region", {})
+            start, end = region.get("startLine"), region.get("endLine")
+            if (not isinstance(uri, str) or not uri or uri == "unknown" or uri.startswith("/")
+                    or ":" in uri or ".." in uri.split("/") or type(start) is not int or start < 1
+                    or end is not None and (type(end) is not int or end < start)):
+                raise ValueError("Invalid SARIF primary physicalLocation")
         for taxon_ref in result.get("taxa", []):
             tc_idx = taxon_ref.get("toolComponent", {}).get("index")
             t_idx = taxon_ref.get("index")
@@ -100,14 +109,24 @@ def export_sarif_bundle(
     output_dir: Path | None = None,
 ) -> SarifExportBundle:
     """Assemble, validate, and optionally persist deterministic SARIF 2.1.0 output."""
-    sarif_log, telemetry = build_sarif_log(
-        findings, exporter_release=exporter_release, run_id=run_id,
-    )
+    valid = []
+    export_gaps = []
+    for finding in findings:
+        try:
+            candidate, _ = build_sarif_log([finding], exporter_release=exporter_release, run_id=run_id)
+            validate_sarif_log(candidate)
+        except ValueError as exc:
+            identity = finding.get("finding_package_id") or finding.get("finding_id") or finding.get("claim_id")
+            export_gaps.append(producer_gap(
+                GapCode.PRODUCER_REPORTED_GAP, f"sarif_record_omitted:{identity or 'unidentified'}: {exc}"))
+        else:
+            valid.append(finding)
+    sarif_log, telemetry = build_sarif_log(valid, exporter_release=exporter_release, run_id=run_id)
     validate_sarif_log(sarif_log)
     sarif_bytes = canonical_sarif_bytes(sarif_log)
     sarif_sha256 = hashlib.sha256(sarif_bytes).hexdigest()
 
-    gap_records: list[dict[str, Any]] = []
+    gap_records: list[dict[str, Any]] = sorted(export_gaps, key=lambda row: json.dumps(row, sort_keys=True))
     for raw_gap in upstream_gaps:
         if isinstance(raw_gap, Mapping) and raw_gap.get("schema") == "appsec-review/producer-gap/1":
             gap_records.append(dict(raw_gap))

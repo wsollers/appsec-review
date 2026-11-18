@@ -44,6 +44,8 @@ def build_executive_posture(report: Mapping[str, Any], radar: Mapping[str, Any])
 
     supply_chain_count = 0
     for pkg in findings:
+        if pkg.get("reachability") not in {"symbol_reachable", "confirmed_reachable"}:
+            continue
         pred = predicate_of(pkg)
         if pred == "supply_chain_compromise":
             supply_chain_count += 1
@@ -61,7 +63,7 @@ def build_executive_posture(report: Mapping[str, Any], radar: Mapping[str, Any])
     blocking = int(ship_by_status.get("ship_blocking", 0)) + int(
         ship_by_status.get("ship_blocking_pending_distinct_verification", 0)
     )
-    if blocking > 0 or sev_counts["critical"] > 0 or sev_counts["high"] > 0 or chain_elevated_count > 0:
+    if blocking > 0:
         readiness = "BLOCK_RELEASE"
     elif not review_complete or int(cov_conf["gap_axes"]) > 0 or int(ship_by_status.get("decision_pending", 0)) > 0:
         readiness = "REVIEW_REQUIRED_GAPS_PRESENT"
@@ -93,7 +95,9 @@ def _domain_id_for_pkg(pkg: Mapping[str, Any]) -> str:
     return "unclassified"
 
 
-def build_attack_chain_cards(report: Mapping[str, Any]) -> list[dict[str, Any]]:
+def build_attack_chain_cards(
+    report: Mapping[str, Any], *, manifest_items: Sequence[Mapping[str, Any]] = (),
+) -> list[dict[str, Any]]:
     """Multi-Step Attack Chains & Trust-Boundary Breaches projection (`entry -> hop -> sink`)."""
     all_pkgs = (
         *(report.get("findings") or ()),
@@ -101,19 +105,17 @@ def build_attack_chain_cards(report: Mapping[str, Any]) -> list[dict[str, Any]]:
         *(report.get("withheld") or ()),
     )
     by_claim = {str(pkg["claim_id"]): pkg for pkg in all_pkgs if pkg.get("claim_id")}
+    by_chain = {row["chain_id"]: row for row in manifest_items}
 
     cards: list[dict[str, Any]] = []
     for ch in _chain_items(report):
         claim_ids = [str(cid) for cid in (ch.get("component_claim_ids") or ())]
         steps: list[dict[str, Any]] = []
-        best_rank = 99
         domains_seen: list[str] = []
         for idx, cid in enumerate(claim_ids):
             role = "entry" if idx == 0 else ("sink" if idx == len(claim_ids) - 1 else "hop")
             pkg = by_claim.get(cid)
             sev = _clean_sev(((pkg or {}).get("ship_block") or {}).get("technical_severity"))
-            if sev in _SEVERITY_RANK and _SEVERITY_RANK[sev] < best_rank:
-                best_rank = _SEVERITY_RANK[sev]
             dom_id = _domain_id_for_pkg(pkg) if pkg else "unclassified"
             if dom_id != "unclassified" and dom_id not in domains_seen:
                 domains_seen.append(dom_id)
@@ -126,19 +128,7 @@ def build_attack_chain_cards(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "domain_id": dom_id,
                 "technical_severity": sev,
             })
-        is_confirmed_chain = ch.get("status") in {"confirmed", "confirmed_chain"}
-        if is_confirmed_chain and len(claim_ids) >= 2 and best_rank <= 1:
-            composed = "critical"
-        elif best_rank == 0:
-            composed = "critical"
-        elif best_rank == 1 or (is_confirmed_chain and len(claim_ids) >= 2):
-            composed = "high"
-        elif best_rank == 2:
-            composed = "medium"
-        elif best_rank == 3:
-            composed = "low"
-        else:
-            composed = "unrated"
+        composed = _clean_sev(by_chain.get(ch["chain_id"], {}).get("composed_severity"))
 
         trust_boundary = (
             " -> ".join(domains_seen)
@@ -152,7 +142,8 @@ def build_attack_chain_cards(report: Mapping[str, Any]) -> list[dict[str, Any]]:
             "trust_boundary_crossed": trust_boundary,
             "step_count": len(steps),
             "steps": steps,
-            "gap_count": int(ch.get("gap_count", 0)),
+            "gap_count": int(ch.get("gap_count", 0)) + int(composed == "unrated"),
+            "severity_gap": "chain_severity_unrated" if composed == "unrated" else None,
         })
     return cards
 
@@ -203,10 +194,12 @@ def build_remediation_roadmap(report: Mapping[str, Any]) -> list[dict[str, Any]]
         raw_plan_status = str((plan or {}).get("status") or "")
         if raw_val_status in {"build_checked", "validated_compile_only", "succeeded"}:
             validation_status = "build_checked"
-        elif raw_val_status in {"static_checked", "in_memory_patch_and_syntax_verified", "syntax_checked"}:
+        elif raw_val_status == "static_checked":
+            validation_status = "static_checked"
+        elif raw_val_status == "in_memory_patch_and_syntax_verified":
             validation_status = "in_memory_patch_and_syntax_verified"
         elif raw_plan_status in {"proposal_generated", "proposed"} and (plan or {}).get("plan") is not None:
-            validation_status = "in_memory_patch_and_syntax_verified"
+            validation_status = "proposal_only"
         else:
             validation_status = "manual_design_required"
 
@@ -214,7 +207,7 @@ def build_remediation_roadmap(report: Mapping[str, Any]) -> list[dict[str, Any]]
         raw_poc_status = str((poc or {}).get("status") or "")
         poc_status = (
             "compile_only_verified"
-            if raw_poc_status in {"compile_verified", "compiled", "succeeded"}
+            if raw_poc_status == "compile_verified"
             else (raw_poc_status or "not_available")
         )
         sev_order = _SEVERITY_RANK.get(sev, 5)
@@ -288,6 +281,16 @@ def build_named_coverage_gaps(
                     f"({axis['coverage_status']}). Missing or incomplete coverage is never evidence of cleanliness."
                 ),
             })
+    if isinstance(limitations_or_report, Mapping):
+        for card in limitations_or_report.get("attack_chain_cards") or ():
+            if card.get("severity_gap"):
+                rows.append({
+                    "gap_id": f"chain_severity_unrated:{card['chain_id']}",
+                    "category": "producer_or_review_gap",
+                    "affected_scope": card["chain_id"],
+                    "disposition": "UNVERIFIED_GAP",
+                    "statement": "The certified chain manifest does not provide a composed severity rating.",
+                })
     return rows
 
 

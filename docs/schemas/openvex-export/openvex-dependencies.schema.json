@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/openvex-export/openvex-dependencies.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "source", "document", "statements_by_status", "gaps", "terminal_status"],
+  "properties": {
+    "schema": {"const": "appsec-review/openvex-dependencies/1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handoff", "artifact", "gate"],
+      "properties": {
+        "handoff": {"$ref": "#/$defs/artifact"},
+        "artifact": {"$ref": "#/$defs/artifact"},
+        "gate": {"$ref": "#/$defs/artifact"}
+      }
+    },
+    "document": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/artifact"}]},
+    "statements_by_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["affected", "not_affected", "under_investigation"],
+      "properties": {
+        "affected": {"type": "integer", "minimum": 0},
+        "not_affected": {"const": 0},
+        "under_investigation": {"type": "integer", "minimum": 0}
+      }
+    },
+    "gaps": {"type": "array", "items": {
+      "type": "object", "required": ["schema", "gap_id", "code", "reason"],
+      "properties": {"schema": {"const": "appsec-review/producer-gap/1"},
+                     "gap_id": {"type": "string"}, "code": {"type": "string"}, "reason": {"type": "string"}}
+    }},
+    "terminal_status": {"enum": ["SUCCEEDED", "COMPLETED_WITH_GAPS"]}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

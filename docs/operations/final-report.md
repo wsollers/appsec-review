@@ -44,6 +44,22 @@ moving after the gate or disappearing. Enabled export requires gate and review e
 Disabling only report publication leaves the gate's certified snapshot available to other
 consumers, including separately enabled export.
 
+### Final-report export integrity
+
+The existing `report.assemble` task writes `findings.sarif` and `sarif-export-result.json`
+alongside `final-report.json`; there is no `job_sarif_export` stage. The accepted handoff binds
+both SARIF artifacts and the existing `final-report.html`. Publication reassembles the
+gate-derived JSON/SARIF and checks the Markdown and HTML renderings before accepting them.
+
+SARIF source locations come only from gate-certified dossiers, never a target scan or the
+run-owned finding-package filename. Records missing a usable severity or location are omitted
+with explicit export gaps while valid siblings remain. Inspect `sarif-export-result.json`
+for omissions even when the gate permits publication. Reachability is not inferred from a
+confirmed adjudication; chain severity is copied from the certified manifest, with missing
+ratings explicitly `unrated`. The executive release banner follows ship-block decisions;
+high severity alone does not impose a new release policy. Proposed patches and static checks
+are not labelled verified fixes.
+
 ## The gate
 
 The central configuration must define this exact topology:

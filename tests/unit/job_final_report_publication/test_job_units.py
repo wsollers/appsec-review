@@ -220,8 +220,10 @@ def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
     assert rendered["settings"] == {"markdown_evidence_ids": 8, "markdown_gap_ids": 16}
     assert published["schema"] == FINAL_REPORT_HANDOFF_SCHEMA
     assert published["report_schema"] == FINAL_REPORT_SCHEMA
-    assert published["terminal_status"] == "SUCCEEDED"
-    assert published["gaps"] == []
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert published["gaps"] == assembled["gaps"]
+    assert len(assembled["gaps"]) == 1
+    assert "sarif_record_omitted:" in assembled["gaps"][0]["reason"]
     assert published["item_count"] == 2
     assert published["poc_handoff"] is None
 
@@ -422,10 +424,32 @@ def test_render_pdf_disabled_by_policy_keeps_latex_and_names_the_gap(
     assert (fx.root / pdf["files"]["latex"]["path"]).is_file()
     published = outputs["acceptance.publish_handoff"]
     assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert published["gaps"] == ["final_report_pdf_disabled_by_policy"]
+    assert published["gaps"] == ["final_report_pdf_disabled_by_policy", *outputs["report.assemble"]["gaps"]]
     assert published["pdf"]["state"] == "not_rendered" and "disabled by policy" in published["pdf"]["reason"]
     unit_dir = fx.root / ATTEMPT / "steps/report/tasks/render_pdf"
     assert sorted(p.name for p in unit_dir.iterdir()) == ["final-report.tex", "receipt.json"]
+
+
+def test_sarif_publication_uses_only_certified_findings_and_reproves_bytes(tmp_path, monkeypatch):
+    fx = _setup_run(tmp_path, monkeypatch, dossier=True, render_pdf=False)
+    built = build_job(executor_factory=lambda *a: pytest.fail("PDF disabled"))
+    outputs = run_units(fx, built)
+    published = outputs["acceptance.publish_handoff"]
+    sarif = read_bound_json(fx.root, published["sarif"])
+    results = sarif["runs"][0]["results"]
+    assert len(results) == 1  # Supported backlog is not exported as a confirmed finding.
+    assert results[0]["properties"]["finding_id"] == fx.dossier["finding"]["finding_package_id"]
+    assert results[0]["properties"]["reachability"] == "unknown"
+    assert results[0]["locations"][0]["physicalLocation"] == {
+        "artifactLocation": {"uri": "src/parser.c"}, "region": {"startLine": 40, "endLine": 52}}
+    assert EXCERPT not in read_bound(fx.root, published["sarif"]).decode()
+    assert read_bound_json(fx.root, published["sarif_result"])["gaps"] == []
+    path = fx.root / published["sarif"]["path"]
+    sarif["runs"][0]["results"][0]["level"] = "note"
+    atomic_json(path, sarif)
+    outputs["report.assemble"]["sarif"] = artifact_ref(fx.root, path)
+    with pytest.raises(IntegrityError, match="SARIF does not match"):
+        built.units[-1].handler(fx.unit("acceptance.publish_handoff", outputs))
 
 
 def test_bound_dossier_narrative_reaches_the_pdf_source_without_its_excerpt(

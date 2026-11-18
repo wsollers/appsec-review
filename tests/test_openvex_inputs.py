@@ -389,7 +389,7 @@ def test_unsafe_or_cross_job_pointer(tmp_path, monkeypatch, path):
              {"handoff_path": path, "handoff_sha256": disk.gate_job_ref["sha256"]})
     error = assert_failure(disk.verify, c.ExportFailureReason.SEMANTIC_INVALID
                            if path != "data/jobs/job_other/attempts/a/handoff.json"
-                           else c.ExportFailureReason.IDENTITY_CONFLICT)
+                           else c.ExportFailureReason.INPUT_TAMPERED)
     if path != "data/jobs/job_other/attempts/a/handoff.json":
         assert error.__cause__ is not None
 
@@ -722,6 +722,7 @@ def test_rehashed_configuration_is_still_pinned_by_accepted_job_handoffs(tmp_pat
 def test_rehashed_review_settings_cannot_disagree_with_semantic_review_hash(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     disk.resolved["jobs"][inputs.REVIEW_JOB]["settings"]["rounds"]["stable_rounds_required"] += 1
+    disk.resolved["jobs"][inputs.REVIEW_JOB]["settings"]["rounds"]["max_rounds"] += 1
     reference = disk.put(disk.config_ref["path"], disk.resolved)
     disk.put(disk.config_manifest_ref["path"], {"resolved_sha256": reference["sha256"]})
     disk.review_handoff["resolved_config_sha256"] = reference["sha256"]
@@ -783,7 +784,7 @@ def test_accepted_handoff_identity_is_not_inferred_from_its_filename(tmp_path, m
     reference = disk.put(disk.gate_job_ref["path"], disk.gate_handoff)
     disk.put(f"data/jobs/{inputs.GATE_JOB}/latest.json",
              {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
-    assert_failure(disk.verify, c.ExportFailureReason.IDENTITY_CONFLICT)
+    assert_failure(disk.verify, c.ExportFailureReason.SCHEMA_INVALID)
 
 
 def test_network_process_and_target_access_are_not_part_of_verification(tmp_path, monkeypatch):
@@ -845,7 +846,7 @@ def test_rehashed_job_snapshot_qualification_cannot_swap_scope(tmp_path, monkeyp
         disk.put(f"data/jobs/{inputs.GATE_JOB}/latest.json",
                  {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
         error = assert_failure(disk.verify, c.ExportFailureReason.SCHEMA_INVALID)
-        assert "contradictory handoff target identities" in str(error.__cause__)
+        assert "contradictory handoff target identities" in str(error.__cause__.__cause__)
 
 
 @pytest.mark.parametrize("kind", ["perforce", "system", "revision_swap"])
@@ -880,7 +881,7 @@ def test_acquisition_without_single_repository_preserves_operator_qualification(
         assert any("no single repository IRI" in value for value in source.qualifications)
 
 
-def test_admission_pointers_are_measured_but_not_durable_bindings(tmp_path, monkeypatch):
+def test_admission_pointers_are_resolved_by_shared_reader_not_read_as_evidence(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch, acquisition=enabled_settings().repository_iri)
     reader_type = inputs.BoundedInputReader
     readers = []
@@ -895,12 +896,11 @@ def test_admission_pointers_are_measured_but_not_durable_bindings(tmp_path, monk
     operational = {f"data/jobs/{job}/latest.json" for job in (
         inputs.GATE_JOB, inputs.REVIEW_JOB, inputs.INTAKE_JOB)}
     full_inventory = readers[0].inventory
-    assert operational <= {reference.path for reference in full_inventory}
+    assert not operational & {reference.path for reference in full_inventory}
     assert not operational & {reference.path for reference in verified.input_inventory}
     assert set(verified.input_inventory) == {reference for reference in full_inventory
                                            if reference.path not in operational}
-    pointer_bytes = sum(reference.size_bytes for reference in full_inventory if reference.path in operational)
-    assert sum(reference.size_bytes for reference in full_inventory) == verified.total_input_bytes + pointer_bytes
+    assert sum(reference.size_bytes for reference in full_inventory) == verified.total_input_bytes
     assert set(verified.provenance.references) <= {reference.reference for reference in verified.input_inventory}
 
 

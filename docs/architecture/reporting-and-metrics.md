@@ -31,12 +31,26 @@ class is unavailable. `gap`, `not_run` and `notice` limitations remain distinct.
 publication with limitations is not a clean-target or ship-approval verdict.
 
 The [terminal report](../../src/appsec_review/jobs/job_final_report_publication/report.py) projects
-only that certified gate into JSON and deterministic Markdown. Before acceptance, the producer
-revalidates gate bindings and requires Markdown to equal a fresh rendering of JSON. It does not
-discover post-gate attachments, mutate findings or invoke a consolidated public-report PDF renderer.
+only that certified gate into JSON, deterministic Markdown/HTML, and the configured executive
+PDF. SARIF is assembled inside the existing report task, not a new pipeline stage. Before
+acceptance, the producer revalidates gate bindings and reassembles the report and SARIF, checking
+their exact bytes and the Markdown/HTML renderings. It does not discover post-gate attachments
+or mutate findings.
 See [input admission](job-input-contracts.md#admission-and-read-receipts) and
 [interchange outcomes](job-interchange.md#the-control-layer-beneath-the-envelope) for the shared
 authority and gap mechanisms.
+
+The executive release banner follows the gate's ship-block decisions, not severity totals or
+chain membership. Chain ratings come from the certified chain manifest; absent ratings remain
+`unrated` with `chain_severity_unrated`. Remediation proposals remain `proposal_only`, and
+`static_checked` does not imply syntax, build or runtime verification. Dossier confirmation
+does not imply reachability.
+
+The protected `findings.sarif` contains only publishable confirmed findings with explicit
+severity and certified dossier source locations. Missing or invalid severity/location produces
+a `producer-gap/1` omission in `sarif-export-result.json`, not a default severity or `unknown:1`
+location. Missing reachability stays `unknown`; bare numbers do not become CWE identifiers.
+Backlog and withheld packages are not promoted through export.
 
 ### Protected payloads and public summaries stay separate
 
@@ -62,6 +76,14 @@ document and an explicit no-statements outcome. It derives no `fixed` or `not_af
 from absence, remediation or failed PoCs. Tool authorship is not vendor attestation; the existing
 [specification qualification](openvex-export.md#3-verified-upstream-specification-and-validation-pin)
 remains relevant.
+
+The existing OpenVEX job can additionally publish a protected dependency companion from an
+optional admitted `job_dependency_intelligence/sca_reachability` input matched to the gate's
+configuration and target snapshot. Static symbol hits with call-site evidence can project
+`affected`; unknown or absent paths remain `under_investigation`. This producer has no complete
+executable-path coverage certificate, so it never emits dependency `not_affected`. Its separate
+receipt binds the gate and dependency inputs and preserves coverage gaps; the primary finding
+export and its eligibility/accounting remain unchanged.
 
 All these consumers retain compile-only assurance. `compile_verified` PoCs were not linked or
 run; `build_checked` remediation is a bounded before/after syntax check, not a runtime fix.

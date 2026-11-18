@@ -8,7 +8,7 @@ coverage gaps. It does not look at the target, a model or any artifact the gate 
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from appsec_review.jobs.engineering_contracts import FINAL_REPORT_SCHEMA
 from appsec_review.reporting.dimensions import build_radar_tracker
@@ -74,7 +74,8 @@ def chain_reason(record: Mapping[str, Any], counts: Mapping[str, int]) -> str:
 
 
 def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
-                 gate_document: Mapping[str, str], configuration_profile: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                 gate_document: Mapping[str, str], configuration_profile: Mapping[str, Any] | None = None,
+                 chain_manifest_items: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     packages = gate["packages"]
 
     def bucket(name: str) -> list[Any]:
@@ -132,13 +133,16 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
         "limitations": limitations,
         "gap_ids": list(gate["gap_ids"]),
         "renderers": {"markdown": {"file": "final-report.md", "renderer": RENDERER},
+                      "html": {"file": "final-report.html", "renderer": HTML_RENDERER},
+                      "sarif": {"file": "findings.sarif", "receipt": "sarif-export-result.json",
+                                "version": "2.1.0"},
                       "pdf": {"state": "not_rendered", "reason": PDF_REASON}},
         "notices": list(NOTICES),
     }
     radar = build_radar_tracker(report)
     report["radar_tracker"] = radar
     report["executive_posture"] = build_executive_posture(report, radar)
-    report["attack_chain_cards"] = build_attack_chain_cards(report)
+    report["attack_chain_cards"] = build_attack_chain_cards(report, manifest_items=chain_manifest_items)
     report["remediation_roadmap"] = build_remediation_roadmap(report)
     report["named_coverage_gaps"] = build_named_coverage_gaps(report, radar)
     return report

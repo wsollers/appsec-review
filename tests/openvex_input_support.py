@@ -48,6 +48,7 @@ class AcceptedInputDisk:
             "jobs": {inputs.REVIEW_JOB: {"settings": review_settings},
                      inputs.GATE_JOB: {"settings": {"enabled": True, "max_packages": 10000}},
                      inputs.INTAKE_JOB: {"settings": {}},
+                     "job_dependency_intelligence": {"settings": config["jobs"]["job_dependency_intelligence"]["settings"]},
                      c.JOB_ID: {"settings": self.settings.to_mapping()}},
             "build_capture": config["build_capture"],
             "configuration_profile": {"name": "dev", "path": None},

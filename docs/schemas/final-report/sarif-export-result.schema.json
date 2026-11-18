@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/sarif-export-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "terminal_status", "sarif_document", "telemetry", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/sarif-export-result/1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "terminal_status": {"enum": ["SUCCEEDED", "COMPLETED_WITH_GAPS"]},
+    "sarif_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "sha256", "size_bytes"],
+      "properties": {
+        "filename": {"const": "findings.sarif"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reporting.sarif_results_total", "reporting.sarif_codeflows_emitted",
+                   "reporting.sarif_fixes_emitted", "reporting.sarif_rules_total"],
+      "properties": {
+        "reporting.sarif_results_total": {"type": "integer", "minimum": 0},
+        "reporting.sarif_codeflows_emitted": {"type": "integer", "minimum": 0},
+        "reporting.sarif_fixes_emitted": {"type": "integer", "minimum": 0},
+        "reporting.sarif_rules_total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["schema", "gap_id", "code", "reason"],
+        "properties": {
+          "schema": {"const": "appsec-review/producer-gap/1"},
+          "gap_id": {"type": "string", "minLength": 1},
+          "code": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

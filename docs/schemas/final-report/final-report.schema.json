@@ -374,9 +374,30 @@
       "additionalProperties": false,
       "required": [
         "markdown",
+        "html",
+        "sarif",
         "pdf"
       ],
       "properties": {
+        "html": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "renderer"],
+          "properties": {
+            "file": {"const": "final-report.html"},
+            "renderer": {"const": "appsec-review/executive-report/1"}
+          }
+        },
+        "sarif": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "receipt", "version"],
+          "properties": {
+            "file": {"const": "findings.sarif"},
+            "receipt": {"const": "sarif-export-result.json"},
+            "version": {"const": "2.1.0"}
+          }
+        },
         "markdown": {
           "type": "object",
           "additionalProperties": false,
@@ -781,6 +802,9 @@
             "unrated"
           ]
         },
+        "severity_gap": {
+          "enum": ["chain_severity_unrated", null]
+        },
         "trust_boundary_crossed": {
           "type": "string",
           "minLength": 1
@@ -917,6 +941,8 @@
           "enum": [
             "build_checked",
             "in_memory_patch_and_syntax_verified",
+            "proposal_only",
+            "static_checked",
             "manual_design_required"
           ]
         },

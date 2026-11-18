@@ -756,6 +756,7 @@ def output_reference(output_prefix: str, filename: str, payload: bytes) -> Sized
 
 # Exact resources consumed by the offline validator, including transitive accepted-gate definitions.
 SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
+    "openvex-dependencies.schema.json": "e3d6526858f12bd43062d9890a7fa50550e69363bb974ccf059c1de3b4fa41de",
     "common.schema.json": "a90bbf40647f6652d2439885b9e446471aadbc6c534d342881ea34f85f737f29",
     "manifest.schema.json": "64aed63dd5cc0df74d8d0b332c8a9a532d3764fcb7f100594174fa3f0f7dbfd9",
     "result.schema.json": "b5321b7f4e736e55149ca3fce67b073c460e1f3473fc9b45eb40c0db0ace018a",
@@ -763,7 +764,7 @@ SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
     "../final-report/final-publication-gate.schema.json":
         "14b45f53dbde7265573137bbe1b458e167f9e298953c67a4510475e9241af252",
     "../final-report/final-report.schema.json":
-        "5333d5070dc7ac2fc71fb008ce602eb541f98ac671ffd08a13fb2c05e9538747",
+        "1b1bf3fcc75285dec35691899fe37134005c37698833a5786f559250f12331a2",
     "upstream/openvex-v0.2.0.schema.json": UPSTREAM_SCHEMA_SHA256,
 })
 VALIDATION_PROFILE_SHA256 = domain_sha256("openvex-validation-profile/1", {
