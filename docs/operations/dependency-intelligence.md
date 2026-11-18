@@ -26,6 +26,11 @@ The [canonical job page](job_dependency_intelligence.md) supplies the generated 
 declarations and exact stage acceptance checks; curation and metadata investigation precede
 repository resolution and do not turn inferred upstreams into confirmed package releases.
 
+Native curation sends only `candidate_id`, `native_name`, `package_root`, `root_id`, `domain`
+and `context_paths` to the model. Full authenticated evidence, file records and observations stay
+application-side; a model proposal cannot replace them. The native proposer does not retry timeout
+failures. Other provider/schema failures retain their configured retry policy.
+
 Configure positive deterministic bounds for dependency and unique-repository counts, native candidate count, command
 tokens, metadata file count/bytes, inference candidate bytes, and the inference failure limit
 (`inference_failure_limit`: once that many native candidate sets have ended in a model failure within
@@ -86,6 +91,27 @@ verifies a match when the purl's version is in an affected range and names a gap
 decide. A package-name match, inferred repository,
 maximal-exposure value, Scorecard response, or absence of any of them is not a vulnerability
 finding.
+
+### Pinned OSV and source reachability
+
+`publication.publish_context` also produces `sca-reachability.json`. Its OSV source is the
+immutable external feed selection admitted into the attempt claim, not the current feed pointer.
+The reader verifies the selected manifest and SQLite hash, records the external read, and uses the
+existing bounded OSV matcher. Exact mode evaluates explicit-version matches from that same index;
+an absent index is a named gap, not permission to walk raw advisory directories. Corrupted pins,
+changed bytes and malformed databases fail without being relabeled as successful fallback.
+
+Reachability reads only target-domain files named by the accepted catalog partition and verifies
+their SHA-256 before extracting imports, calls and native FFI boundaries. An empty partition never
+triggers a target scan. Missing or truncated coverage is named in `gaps`; positive call sites retain
+the source hash. Static absence is `unknown`, never proof of `unreachable_in_target` or an OpenVEX
+`not_affected` determination. The document carries snapshot provenance and partial-coverage status,
+and its gaps propagate to the dependency-intelligence handoff.
+
+The job's typed settings bound `max_source_files`, `max_bytes_per_file`,
+`max_call_sites_per_advisory`, `max_advisories`, and `max_osv_candidates_per_package`. Reaching a
+bound reports omitted coverage. These checks do not run scanners, refresh feeds or create a new
+pipeline stage.
 
 ### Native advisory lookup (NVD CPE ranges)
 

@@ -1384,6 +1384,20 @@ The Clang AST/IR, Clang-Tidy/Static Analyzer and CPG jobs have a seeded mode (ph
 replays only the translation units holding a finding location. The whole-program path described in 12.2
 is the `whole_program` mode and is unchanged. See [`seeded-neighborhoods.md`](seeded-neighborhoods.md).
 
+### Alternate CFG input provenance
+
+The Alternate CPG reads Tree-sitter CFG JSONL only through the admitted
+`job_tree_sitter_ast` handoff's scope dispositions. Each disposition must bind the exact accepted
+analysis shard and the CFG manifest, nodes and edges; the reader verifies run-local path custody,
+SHA-256, scope and target snapshot before interpreting those bytes. Unrelated fingerprints and
+legacy directories are never discovery sources. Missing accepted CFG artifacts publish a named
+coverage gap, including when no Tree-sitter shard was supplied. Symbol and entrypoint enrichment
+uses only producers declared in the graph job's input contract.
+
+Database cards and producer neighborhoods report missing Joern output as `producer_not_run`.
+An intended or completed Alternate CPG does not establish that Joern ran. Bounded graph gap
+summaries retain an explicit omitted count rather than silently dropping further gaps.
+
 ### 12.5 Joern removal
 
 If no run enables `jobs.job_cpg_analysis.settings.enabled` within one release cycle after this phase,

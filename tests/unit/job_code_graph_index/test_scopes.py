@@ -126,6 +126,9 @@ def test_artifact_read_artifact_and_stage_codec_custody_and_roundtrip(tmp_path: 
 
 
 def test_bounded_seeded_variants() -> None:
+    bounded = _producer_entry(Producer.CLANGD, {"gaps": [f"gap-{i}" for i in range(8)]})
+    assert bounded["gaps"][-1] == "gap_summary_truncated: 4 additional gaps omitted"
+    assert len(bounded["gaps"]) == 5
     assert bounded_seeded(None) is None
     assert bounded_seeded("not-a-map") is None
     raw = {
@@ -579,6 +582,10 @@ def test_checkpoints_seeded_coverage_database_card_and_publish_scope_edges(tmp_p
     assert _producer_entry(Producer.CODEQL_EXPORT, None, failed=True)["state"] == "failed"
     prods = card_producers(scope)
     assert len(prods) == 7
+    joern = next(row for row in prods if row["name"] == Producer.JOERN_CPG.value)
+    assert joern["state"] == "not_run" and joern["gaps"]
+    intended = card_producers({**scope, "alternate_cpg_succeeded": True})
+    assert next(row for row in intended if row["name"] == Producer.JOERN_CPG.value) == joern
 
     card = database_card(scope, snapshot=SNAPSHOT, coverage=seeded_cov)
     assert card.payload["coverage"] == "partial"

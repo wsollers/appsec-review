@@ -405,7 +405,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         missing = sorted(consumed - present)
         if missing:
             raise IntegrityError("the accepted manifest no longer holds the shards this graph was built from: "
-                                 + ", ".join(f"{name}/{shard_id}" for name, shard_id, _ in missing[:10]))
+                                 + ", ".join(f"{name}/{shard_id}" for name, shard_id, _ in missing[:10])
+                                 + (f"; {len(missing) - 10} additional shards omitted" if len(missing) > 10 else ""))
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
                 for item in (*upstream["indexes"], *restored) if (item.get("producer") or {}).get("job") != JOB_ID]
         raw_graph_shards = [shard for scope in published["scopes"] for shard in scope["shards"]]
@@ -446,6 +447,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         rendering_path = unit.unit_root / "graph-quality-scorecard.txt"
         rendering_path.write_text(render_scorecard(scorecard), encoding="utf-8", newline="\n")
         alt_counts = alt_summary["counts"]
+        gaps = [*published["gaps"], *alt_cpg.get("gaps", ())]
         counts = {"scopes": len(published["scopes"]), "databases": len(published["scopes"]), "shards": len(indexes),
                   "reused_scopes": published["reused_count"],
                   "facts": sum(int(scope["counts"]["facts"]) for scope in published["scopes"]),
@@ -464,8 +466,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                    "scopes": [{key: scope[key] for key in (
                                        "scope_id", "language", "build_unit_id", "export_status", "coverage",
                                        "database", "counts", "gaps")} for scope in published["scopes"]],
-                                   "gaps": published["gaps"]})
-        unit.job.events.write("CODE_GRAPH_INDEX_COMPLETED", **counts, gap_count=len(published["gaps"]))
+                                   "gaps": gaps})
+        unit.job.events.write("CODE_GRAPH_INDEX_COMPLETED", **counts, gap_count=len(gaps))
         return {"schema": SCHEMA, "artifact": s.artifact(run_root, summary_path),
                 "index_manifest": s.artifact(run_root, manifest_path), "item_count": counts["facts"],
                 "scorecard": {"document": s.artifact(run_root, scorecard_path),
@@ -474,8 +476,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                   "summary": s.artifact(run_root, unit.unit_root / "alternate-cpg-summary.json"),
                                   "counts": dict(alt_counts),
                                   "resolution_breakdown": dict(alt_summary["resolution_breakdown"])},
-                "counts": counts, "families": families, "gaps": published["gaps"],
-                "terminal_status": published["terminal_status"]}
+                "counts": counts, "families": families, "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else published["terminal_status"]}
 
     units = (
         Unit("load.accepted_inputs", load),

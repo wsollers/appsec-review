@@ -612,9 +612,12 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             scanner_advisories=_evidence_advisories(unit.job.run_root),
             native_advisory_matches=native_matches,
             partition_files=loaded.get("native_files", ()),
+            partition_gaps=[str(gap) for gap in loaded.get("native_gaps", ())],
             settings=sca_settings,
             osv_snapshot=osv_snapshot,
+            external_input_selection=getattr(unit.job, "external_input_selection", None),
         )
+        gaps.extend(_gap("", "sca_reachability_gap", detail) for detail in reachability_doc["gaps"])
         reachability_path = unit.unit_root / "sca-reachability.json"
         atomic_json(reachability_path, reachability_doc)
         reachability_artifact = _artifact(unit.job.run_root, reachability_path)

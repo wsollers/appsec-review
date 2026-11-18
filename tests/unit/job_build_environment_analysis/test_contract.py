@@ -37,6 +37,18 @@ SOURCE = "synthetic-environment-source"
 CATALOG_SHA = "c" * 64
 
 
+def _catalog(root, attempt_id="attempt_0001", source=SOURCE):
+    path = write_fixture_handoff(
+        root, root / "data/jobs/job_target_catalog/attempts" / attempt_id / "handoff.json",
+        {"job_id": "job_target_catalog", "source_fingerprint": source},
+    )
+    digest = file_sha256(path)
+    atomic_json(root / "data/jobs/job_target_catalog/latest.json", {
+        "handoff_path": path.relative_to(root).as_posix(), "handoff_sha256": digest,
+    })
+    return digest
+
+
 def test_every_input_requirement_field_and_package_exports_are_pinned():
     assert package_build_job is build_job
     assert package_load_environment is load_environment
@@ -107,6 +119,13 @@ def _write_published_environment(
     artifact_catalog_sha: str = CATALOG_SHA,
     catalog_pointer_sha: str | None = CATALOG_SHA,
 ):
+    actual_catalog_sha = _catalog(root)
+    if handoff_catalog_sha == CATALOG_SHA:
+        handoff_catalog_sha = actual_catalog_sha
+    if artifact_catalog_sha == CATALOG_SHA:
+        artifact_catalog_sha = actual_catalog_sha
+    if catalog_pointer_sha == CATALOG_SHA:
+        catalog_pointer_sha = actual_catalog_sha
     attempt = root / "data/jobs" / JOB_ID / "attempts/attempt_0001"
     payload = b"SDK_ROOT=tools/sdk\n"
     value = analyze_environment(
@@ -237,11 +256,12 @@ def test_optional_prior_and_expected_current_record_handoff_and_output_reads(pub
 
     cur_contract = environment_contract(config, {"workflow": "wave1_review"}, {JOB_ID: digest})
     assert optional_prior_environment_handoffs(cur_contract) == {}
-    with input_read_scope(_read_context(root, {JOB_ID: digest})) as cur_reads:
+    catalog_sha = value["catalog_handoff_sha256"]
+    with input_read_scope(_read_context(root, {JOB_ID: digest, "job_target_catalog": catalog_sha})) as cur_reads:
         cur_loaded = load_environment(root, SOURCE, cur_contract)
         assert cur_loaded["availability"] == "AVAILABLE" and cur_loaded["expected_producer"] == JOB_ID
         cur_observed = {(item["output_kind"], item["handoff_sha256"]) for item in cur_reads.document()["reads"]}
-        assert cur_observed == {("handoff", digest), ("build_environment", digest)}
+        assert cur_observed == {("handoff", digest), ("build_environment", digest), ("handoff", catalog_sha)}
 
 
 @pytest.mark.parametrize("stale", [False, True], ids=["current-source", "stale-source"])
@@ -344,14 +364,14 @@ def test_load_environment_validates_contract_pointers_lineage_and_source(tmp_pat
 
     missing_root = tmp_path / "missing-run"
     missing_root.mkdir()
-    with pytest.raises(ValueError, match="no accepted handoff"):
+    with pytest.raises(ValueError, match="handoff is required"):
         load_environment(missing_root, SOURCE, valid)
 
     oversize_root = tmp_path / "oversize-pointer"
     pointer_file = oversize_root / "data/jobs" / JOB_ID / "latest.json"
     pointer_file.parent.mkdir(parents=True)
     pointer_file.write_bytes(b"x" * 65537)
-    with pytest.raises(ValueError, match="environment pointer exceeds its byte bound"):
+    with pytest.raises(ValueError, match="pointer is not JSON"):
         load_environment(oversize_root, SOURCE, valid)
 
     root, _, digest, _, _, _ = _write_published_environment(tmp_path / "mismatch-ref")
@@ -362,12 +382,12 @@ def test_load_environment_validates_contract_pointers_lineage_and_source(tmp_pat
         load_environment(root, "wrong-source", {**valid, "reference": digest})
 
     cat_pointer = root / "data/jobs/job_target_catalog/latest.json"
-    atomic_json(cat_pointer, {**json.loads(cat_pointer.read_bytes()), "handoff_sha256": "d" * 64})
+    _catalog(root, "attempt_0002", "new-source")
     with pytest.raises(ValueError, match="does not consume the current catalog"):
         load_environment(root, SOURCE, {**valid, "reference": digest})
 
     cat_pointer.write_bytes(b"x" * 65537)
-    with pytest.raises(ValueError, match="catalog pointer exceeds its byte bound"):
+    with pytest.raises(ValueError, match="pointer is not JSON"):
         load_environment(root, SOURCE, {**valid, "reference": digest})
 
     src_diff_root, _, src_diff_digest, _, _, _ = _write_published_environment(
@@ -381,3 +401,26 @@ def test_load_environment_validates_contract_pointers_lineage_and_source(tmp_pat
     )
     with pytest.raises(ValueError, match="environment catalog reference differs"):
         load_environment(cat_diff_root, SOURCE, {**valid, "reference": cat_diff_digest})
+
+
+def test_current_environment_uses_admitted_catalog_when_latest_moves(published_environment):
+    root, config, digest, _, value, _ = published_environment
+    pinned_catalog = value["catalog_handoff_sha256"]
+    _catalog(root, "attempt_0002", "different-source")
+    contract = environment_contract(config, {"workflow": "wave1_review"}, {JOB_ID: digest})
+    with input_read_scope(_read_context(root, {
+        JOB_ID: digest, "job_target_catalog": pinned_catalog,
+    })) as reads:
+        assert load_environment(root, SOURCE, contract)["availability"] == "AVAILABLE"
+        assert any(row["producer"] == "job_target_catalog" and row["handoff_sha256"] == pinned_catalog
+                   for row in reads.document()["reads"])
+    with pytest.raises(ValueError, match="not supplied"), input_read_scope(_read_context(root, {JOB_ID: digest})):
+        load_environment(root, SOURCE, contract)
+
+
+def test_optional_environment_pin_survives_latest_pointer_change(published_environment):
+    root, config, digest, _, _, _ = published_environment
+    contract = environment_contract(config, {"environment_mode": "OPTIONAL_PRIOR"}, {JOB_ID: digest})
+    atomic_json(root / "data/jobs" / JOB_ID / "latest.json", {"handoff_sha256": "d" * 64})
+    with input_read_scope(_read_context(root, {}, {JOB_ID: digest})):
+        assert load_environment(root, SOURCE, contract)["availability"] == "AVAILABLE"

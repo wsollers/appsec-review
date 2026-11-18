@@ -15,9 +15,13 @@ from appsec_review.jobs.job_dependency_intelligence.reachability import (
     REACHABILITY_SCHEMA,
     REACHABILITY_SYMBOL,
     REACHABILITY_TRANSITIVE,
-    REACHABILITY_UNREACHABLE,
+    REACHABILITY_UNKNOWN,
     evaluate_sca_reachability,
+    scan_target_reachability_index,
+    _resolve_osv_source,
 )
+from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot
+from appsec_review.storage import file_sha256
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -49,6 +53,22 @@ def _build_osv_sqlite(db_path: Path, records: list[dict]) -> None:
                     "INSERT INTO package VALUES (?, ?, ?)",
                     (rec["id"], pkg.get("ecosystem", ""), pkg.get("name", "")),
                 )
+
+
+def _pin(root: Path, database: Path | None) -> dict:
+    published = publish_snapshot(
+        root, feed_id="osv", schema="appsec-review/osv-snapshot/1",
+        files={"index/osv.sqlite": database} if database else {},
+        manifest_fields={},
+    )
+    return {"feed_id": "osv", "snapshot_id": published["snapshot_id"],
+            "manifest_sha256": published["manifest_sha256"],
+            "directory": str(root / "snapshots" / published["snapshot_id"])}
+
+
+def _files(target: Path, paths: list[str]) -> list[dict]:
+    return [{"path": path, "sha256": file_sha256(target / path),
+             "size_bytes": (target / path).stat().st_size} for path in paths]
 
 
 def test_default_settings_use_index_mode_and_validate_bounds() -> None:
@@ -143,7 +163,8 @@ def test_indexed_osv_matching_and_four_reachability_classifications(tmp_path: Pa
         run_root=tmp_path / "run",
         target_root=target,
         dependencies=dependencies,
-        osv_snapshot=osv_root,
+        osv_snapshot=_pin(osv_root, osv_root / "index/osv.sqlite"),
+        partition_files=_files(target, ["src/app.ts", "src/views.py", "vendor/net_wrap.go/wrap.go"]),
     )
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -161,10 +182,12 @@ def test_indexed_osv_matching_and_four_reachability_classifications(tmp_path: Pa
     assert any(cs["path"] == "src/app.ts" and cs["symbol"] == "parseUnsafeRange" for cs in by_id["GHSA-sym-0001"]["call_sites"])
     assert by_id["GHSA-imp-0002"]["reachability"] == REACHABILITY_IMPORTED
     assert by_id["GHSA-trn-0003"]["reachability"] == REACHABILITY_TRANSITIVE
-    assert by_id["GHSA-unr-0004"]["reachability"] == REACHABILITY_UNREACHABLE
+    assert by_id["GHSA-unr-0004"]["reachability"] == REACHABILITY_UNKNOWN
+    assert doc["coverage"] == "partial"
+    assert doc["osv_snapshot"]["index_sha256"] == file_sha256(osv_root / "index/osv.sqlite")
 
 
-def test_graceful_fallback_to_exact_when_osv_index_tables_absent(tmp_path: Path) -> None:
+def test_missing_index_does_not_fallback_to_unverified_raw_directory(tmp_path: Path, monkeypatch) -> None:
     raw_dir = tmp_path / "osv_unindexed"
     raw_dir.mkdir(parents=True)
     (raw_dir / "PYSEC-2026-99.json").write_text(
@@ -185,23 +208,24 @@ def test_graceful_fallback_to_exact_when_osv_index_tables_absent(tmp_path: Path)
     target.mkdir()
     (target / "loader.py").write_text("from pyyaml import full_load\nfull_load(raw)\n", encoding="utf-8")
 
+    monkeypatch.setattr(Path, "rglob", lambda *_: pytest.fail("no unverified file walk"))
     doc = evaluate_sca_reachability(
         source_fingerprint=SNAPSHOT,
         repository_root=ROOT,
         run_root=tmp_path / "run",
         target_root=target,
         dependencies=[{"dependency_id": "d-yaml", "name": "pyyaml", "version": "5.3.1", "ecosystem": "pypi"}],
-        osv_snapshot=raw_dir,
+        osv_snapshot=_pin(raw_dir, None),
+        partition_files=_files(target, ["loader.py"]),
     )
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     jsonschema.validate(instance=doc, schema=schema)
     assert doc["configured_osv_mode"] == "index"
-    assert doc["osv_matching_mode"] == "exact"
-    assert doc["osv_fallback_reason"] is not None
-    assert doc["telemetry"]["osv_matching_mode"] == "exact"
-    assert doc["telemetry"]["advisories_matched"] == 1
-    assert doc["advisories"][0]["reachability"] == REACHABILITY_SYMBOL
+    assert doc["osv_matching_mode"] == "index"
+    assert doc["osv_fallback_reason"] == "osv_snapshot_index_unavailable"
+    assert "osv_snapshot_index_unavailable" in doc["gaps"]
+    assert doc["telemetry"]["advisories_matched"] == 0
 
 
 def test_eight_ecosystem_native_ffi_boundary_reachability(tmp_path: Path) -> None:
@@ -257,6 +281,10 @@ def test_eight_ecosystem_native_ffi_boundary_reachability(tmp_path: Path) -> Non
         target_root=target,
         dependencies=[],
         native_advisory_matches=native_matches,
+        partition_files=_files(target, [
+            "src/bridge.py", "src/NativePin.cs", "src/JniBridge.java", "src/ffi_wrap.rb",
+            "src/ffi.rs", "src/cgo.go", "src/ffi.php", "src/dl.cpp",
+        ]),
     )
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -268,3 +296,157 @@ def test_eight_ecosystem_native_ffi_boundary_reachability(tmp_path: Path) -> Non
         assert adv["reachability"] == REACHABILITY_SYMBOL
         assert adv["ffi_mechanisms"]
         assert adv["call_sites"]
+
+
+def test_empty_partition_never_walks_target_and_has_unknown_reachability(tmp_path, monkeypatch):
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "hidden.py").write_text("import pyyaml\n", encoding="utf-8")
+    monkeypatch.setattr(Path, "rglob", lambda *_: pytest.fail("empty inventory is not permission to scan"))
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=target, dependencies=[],
+        scanner_advisories=[{"advisory": "CVE-2026-1111", "package": "pyyaml"}],
+    )
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_UNKNOWN
+    assert any("reachability_partition_empty" in gap for gap in doc["gaps"])
+    assert "osv_snapshot_not_admitted" in doc["gaps"]
+
+
+@pytest.mark.parametrize("defect", ["unhashed", "tampered", "symlink"])
+def test_reachability_source_requires_accepted_hash_and_path_custody(tmp_path, defect):
+    source = tmp_path / "app.py"
+    source.write_text("import pyyaml\n", encoding="utf-8")
+    files = _files(tmp_path, ["app.py"])
+    if defect == "unhashed":
+        files[0].pop("sha256")
+    elif defect == "tampered":
+        source.write_text("import pillow\n", encoding="utf-8")
+    else:
+        source.rename(tmp_path / "other.py")
+        source.symlink_to(tmp_path / "other.py")
+    with pytest.raises(ValueError):
+        scan_target_reachability_index(target_root=tmp_path, partition_files=files)
+
+
+def test_source_and_callsite_caps_are_named_gaps(tmp_path):
+    (tmp_path / "a.py").write_text("import pyyaml\npyyaml.load(x)\npyyaml.load(y)\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("import pyyaml\n", encoding="utf-8")
+    files = _files(tmp_path, ["a.py", "b.py"])
+    index = scan_target_reachability_index(target_root=tmp_path, partition_files=files, max_source_files=1)
+    assert any("source_files_truncated" in gap for gap in index["gaps"])
+    index = scan_target_reachability_index(target_root=tmp_path, partition_files=files, max_bytes_per_file=1)
+    assert len(index["gaps"]) == 2 and not index["imports"]
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, dependencies=[], partition_files=files,
+        scanner_advisories=[{"advisory": "CVE-2026-1111", "package": "pyyaml",
+                            "affected_symbols": ["load"]}],
+        settings=DependencyIntelligenceSettings(max_call_sites_per_advisory=1),
+    )
+    assert any("call_sites_truncated" in gap for gap in doc["gaps"])
+    assert len(doc["advisories"][0]["call_sites"]) == 1
+
+
+def test_osv_pin_rejects_unverified_sources_tampering_and_foreign_claim(tmp_path):
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_dependency_intelligence.datasets import CONTRACT
+    from appsec_review.runtime.inputs import input_read_scope
+
+    database = tmp_path / "build.sqlite"
+    _build_osv_sqlite(database, [])
+    pin = _pin(tmp_path / "feed", database)
+    for unverified in (database, lambda *_: pin, {"directory": pin["directory"]}):
+        with pytest.raises(ValueError, match="immutable snapshot pin"):
+            _resolve_osv_source(ROOT, tmp_path, unverified)
+    context = SimpleNamespace(
+        run_root=tmp_path, config=SimpleNamespace(job_id="job_dependency_intelligence"),
+        upstream_handoffs={}, contract=CONTRACT,
+        external_input_selection={"inputs": [{
+            "producer": "job_third_party_data_sync", "output_kind": "feed_snapshot",
+            "schema": "appsec-review/public-feed-use/1", "status": "available",
+            "identity": {"feed_id": "osv", "snapshot_id": "different-snapshot"},
+        }]},
+    )
+    with pytest.raises(ValueError, match="claimed immutable selection"), input_read_scope(context):
+        _resolve_osv_source(ROOT, tmp_path, pin)
+    path = Path(pin["directory"]) / "index/osv.sqlite"
+    path.write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="index hash mismatch"):
+        _resolve_osv_source(ROOT, tmp_path, pin)
+    manifest = Path(pin["directory"]) / "manifest.json"
+    manifest.write_bytes(b"{}")
+    with pytest.raises(ValueError, match="manifest hash mismatch"):
+        _resolve_osv_source(ROOT, tmp_path, pin)
+
+
+def test_osv_caps_and_exact_matching_use_verified_index_without_foreign_package_hit(tmp_path):
+    database = tmp_path / "build.sqlite"
+    records = [
+        {"id": f"ADV-{i}", "affected": [{"package": {"ecosystem": "npm", "name": "pkg"},
+                                       "versions": ["1.0"]}]} for i in range(3)
+    ]
+    records.insert(0, {"id": "ADV--foreign", "affected": [
+        {"package": {"ecosystem": "npm", "name": "pkg"}, "ranges": [{"type": "GIT", "events": []}]},
+        {"package": {"ecosystem": "npm", "name": "other"}, "versions": ["1.0"]},
+    ]})
+    _build_osv_sqlite(database, records)
+    pin = _pin(tmp_path / "feed", database)
+    arguments = dict(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=None, dependencies=[{"name": "pkg", "version": "1.0", "ecosystem": "npm"}],
+        osv_snapshot=pin,
+    )
+    capped = evaluate_sca_reachability(**arguments, settings=DependencyIntelligenceSettings(
+        max_osv_candidates_per_package=2))
+    assert any("truncated:advisories_per_package" in gap for gap in capped["gaps"])
+    assert [r["advisory_id"] for r in capped["advisories"]] == ["ADV-0"]
+    exact = evaluate_sca_reachability(**arguments, settings=DependencyIntelligenceSettings(
+        osv_version_matching="exact", max_advisories=1))
+    assert [r["advisory_id"] for r in exact["advisories"]] == ["ADV-0"]
+    assert exact["advisories"][0]["match_sources"] == ["osv-exact"]
+    assert "osv_advisories_truncated" in exact["gaps"]
+
+
+def test_claim_selected_osv_snapshot_ignores_new_current_and_records_read(tmp_path):
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_dependency_intelligence.datasets import CONTRACT
+    from appsec_review.runtime.inputs import input_read_scope
+    from appsec_review.storage import atomic_json
+
+    database = tmp_path / "build.sqlite"
+    _build_osv_sqlite(database, [])
+    pin = _pin(tmp_path / "data/feeds/osv", database)
+    run_root = tmp_path / "run"
+    resolved = run_root / "data/configuration/resolved.json"
+    atomic_json(resolved, {"jobs": {"job_third_party_data_sync": {"steps": {
+        "osv_sync": {"settings": {"feed_root": "data/feeds/osv"}},
+    }}}})
+    atomic_json(resolved.parent / "manifest.json", {"resolved_sha256": file_sha256(resolved)})
+    atomic_json(tmp_path / "data/feeds/osv/current.json", {"snapshot_id": "newer-unadmitted"})
+    identity = {key: pin[key] for key in ("feed_id", "snapshot_id", "manifest_sha256")}
+    selection = {"inputs": [{
+        "producer": "job_third_party_data_sync", "output_kind": "feed_snapshot", "selector": "osv",
+        "schema": "appsec-review/public-feed-use/1", "status": "available", "identity": identity, "reason": None,
+    }]}
+    context = SimpleNamespace(
+        run_root=run_root, config=SimpleNamespace(job_id="job_dependency_intelligence"),
+        upstream_handoffs={}, contract=CONTRACT, external_input_selection=selection,
+    )
+    with input_read_scope(context) as reads:
+        path, observed, gap = _resolve_osv_source(tmp_path, run_root, None, selection)
+        assert path == Path(pin["directory"]) / "index/osv.sqlite"
+        assert observed["manifest_sha256"] == pin["manifest_sha256"] and gap is None
+        records = reads.document()["reads"]
+        assert len(records) == 1 and records[0]["output_kind"] == "feed_snapshot"
+
+
+def test_malformed_pinned_osv_database_preserves_database_error(tmp_path):
+    database = tmp_path / "invalid.sqlite"
+    database.write_bytes(b"not a database")
+    pin = _pin(tmp_path / "feed", database)
+    with pytest.raises(sqlite3.DatabaseError, match="not a database"):
+        evaluate_sca_reachability(
+            source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+            target_root=None, dependencies=[], osv_snapshot=pin,
+        )

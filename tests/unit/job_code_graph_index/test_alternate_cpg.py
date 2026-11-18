@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -20,15 +22,126 @@ from appsec_review.jobs.job_code_graph_index.alternate_cpg import (
     RESOLUTION_TIERS,
     SUPPORTED_LANGUAGES,
     publish_alternate_cpg,
+    _extract_tree_sitter_files,
+    build_run_alternate_cpg,
 )
-from appsec_review.jobs.job_tree_sitter_ast.cfg import synthesize_file_cfg
+from appsec_review.jobs.job_tree_sitter_ast.cfg import synthesize_file_cfg, write_scope_cfg_artifacts
+from appsec_review.jobs.job_code_graph_index.datasets import CONTRACT
+from appsec_review.jobs.job_tree_sitter_ast.datasets import DATASETS as TS_DATASETS
+from appsec_review.retrieval import IndexBuilder, IndexIdentity
 from appsec_review.retrieval.core import RetrievalCore
-from appsec_review.storage import file_sha256
+from appsec_review.review.models import IntegrityError
+from appsec_review.runtime.datasets import dataset_contract
+from appsec_review.runtime.inputs import input_read_scope
+from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.retrieval.graph import query_call_paths, query_cpg_slice
 from appsec_review.retrieval.index import write_manifest
+from tests.handoff_fixture import write_fixture_handoff
 
 SCHEMA_PATH = Path("docs/schemas/code-graph-index/alternate-cpg.schema.json")
 SNAPSHOT = "a" * 64
+
+
+def _accepted_tree_sitter(root, *, gaps=()):
+    ast = _make_two_fn_ast(
+        fn_type="function_definition", body_type="block", if_type="if_statement",
+        ret_type="return_statement", call_type="call", entry_name="handle", helper_name="parse",
+        guard_expr="input_val is not None", sink_call="eval",
+    )
+    cfg = synthesize_file_cfg(ast, language="python", path="app.py")
+    refs, _ = write_scope_cfg_artifacts(
+        run_root=root, cfg_dir=root / "data/treesitter/cfg" / ("f" * 64),
+        scope_id="python-s1", language="python", grammar="python", target_snapshot=SNAPSHOT,
+        file_results=[cfg],
+    )
+    path = root / "data/indices/analysis/tree-sitter.sqlite"
+    builder = IndexBuilder(path, name="analysis", fingerprint="f" * 64,
+                           target_snapshot=SNAPSHOT, shard_id="python-s1")
+    sha = builder.build()
+    shard = json.loads(json.dumps(asdict(IndexIdentity(
+        "analysis", "appsec-review/retrieval-index/2", sha, "f" * 64,
+        path.relative_to(root).as_posix(), {"job": "job_tree_sitter_ast"}, (), "python-s1",
+    ))))
+    attempt = root / "data/jobs/job_tree_sitter_ast/attempts/attempt_0001"
+    atomic_json(attempt / "claim.json", {"dataset_contract": dataset_contract(
+        "job_tree_sitter_ast", ("load", "plan", "parse", "acceptance"), TS_DATASETS,
+    )})
+    handoff = write_fixture_handoff(root, attempt / "handoff.json", {
+        "job_id": "job_tree_sitter_ast", "target_snapshot": SNAPSHOT,
+        "outputs": {"parse.dynamic_scopes": {"dispositions": [{
+            "scope_id": "python-s1", "index_identity": shard, "cfg_artifacts": refs,
+        }], "gaps": list(gaps)}}, "artifacts": [*refs.values(), {
+            "path": path.relative_to(root).as_posix(), "sha256": sha,
+        }],
+    })
+    digest = file_sha256(handoff)
+    atomic_json(root / "data/jobs/job_tree_sitter_ast/latest.json", {
+        "handoff_path": handoff.relative_to(root).as_posix(), "handoff_sha256": digest,
+    })
+    context = SimpleNamespace(run_root=root, config=SimpleNamespace(job_id="job_code_graph_index"),
+                              upstream_handoffs={"job_tree_sitter_ast": digest}, contract=CONTRACT)
+    return context, shard, refs
+
+
+def test_cfg_uses_accepted_scope_and_retains_read_receipts(tmp_path):
+    context, shard, _ = _accepted_tree_sitter(tmp_path)
+    foreign = tmp_path / "data/treesitter/cfg/unaccepted/cfg-nodes.jsonl"
+    foreign.parent.mkdir(parents=True)
+    foreign.write_text("not JSON", encoding="utf-8")
+    gaps = []
+    with input_read_scope(context) as reads:
+        files = _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=gaps)
+        assert len(files) == 1 and files[0]["path"] == "app.py"
+        assert files[0]["functions"] and files[0]["cfg_nodes"] and files[0]["cfg_edges"]
+        cpg, _ = build_run_alternate_cpg(
+            tmp_path, run_id=tmp_path.name, target_snapshot=SNAPSHOT,
+            upstream_shards=[shard], graph_shards=[],
+        )
+        assert cpg["counts"]["alternate_cpg_nodes"] > 0 and cpg["gaps"] == []
+        assert {row["output_kind"] for row in reads.document()["reads"]} >= {"handoff", "tree_sitter_cfg"}
+    assert gaps == []
+
+
+@pytest.mark.parametrize("defect", ["tampered", "symlink", "different-shard", "unpinned"])
+def test_cfg_rejects_unaccepted_or_changed_artifacts(tmp_path, defect):
+    context, shard, refs = _accepted_tree_sitter(tmp_path)
+    if defect == "tampered":
+        (tmp_path / refs["nodes"]["path"]).write_text("{}", encoding="utf-8")
+    elif defect == "symlink":
+        path = tmp_path / refs["nodes"]["path"]
+        other = path.with_suffix(".other")
+        path.rename(other)
+        path.symlink_to(other)
+    elif defect == "different-shard":
+        shard = {**shard, "fingerprint": "d" * 64}
+    else:
+        context.upstream_handoffs = {}
+    with pytest.raises((ValueError, IntegrityError)), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+
+
+def test_cfg_absence_is_a_gap_not_a_directory_scan(tmp_path, monkeypatch):
+    context, _, _ = _accepted_tree_sitter(tmp_path)
+    context.upstream_handoffs = {}
+    monkeypatch.setattr(Path, "iterdir", lambda *_: pytest.fail("no directory discovery"))
+    with input_read_scope(context):
+        cpg, _ = build_run_alternate_cpg(
+            tmp_path, run_id=tmp_path.name, target_snapshot=SNAPSHOT,
+            upstream_shards=[], graph_shards=[],
+        )
+    assert cpg["nodes"] == []
+    assert cpg["gaps"] == ["tree_sitter_cfg_unavailable: no admitted Tree-sitter producer"]
+
+
+def test_partial_cfg_input_remains_partial_when_other_scope_has_no_shard(tmp_path):
+    context, shard, _ = _accepted_tree_sitter(tmp_path, gaps=["python-s2: parser byte limit"])
+    with input_read_scope(context):
+        cpg, _ = build_run_alternate_cpg(
+            tmp_path, run_id=tmp_path.name, target_snapshot=SNAPSHOT,
+            upstream_shards=[shard], graph_shards=[],
+        )
+    assert cpg["counts"]["alternate_cpg_nodes"] > 0
+    assert cpg["gaps"] == ["tree_sitter_cfg_partial: python-s2: parser byte limit"]
 
 
 def _validator() -> Draft202012Validator:

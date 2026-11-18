@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -13,6 +14,8 @@ from typing import Any
 
 from appsec_review import osv_matching
 from appsec_review.jobs.job_dependency_intelligence.native_advisories import purl_parts
+from appsec_review.storage import file_sha256
+from appsec_review.storage.shared import safe_path
 
 
 REACHABILITY_SCHEMA = "appsec-review/sca-reachability/1"
@@ -21,6 +24,7 @@ REACHABILITY_SYMBOL = "symbol_reachable"
 REACHABILITY_IMPORTED = "package_imported"
 REACHABILITY_TRANSITIVE = "transitive_only"
 REACHABILITY_UNREACHABLE = "unreachable_in_target"
+REACHABILITY_UNKNOWN = "unknown"
 
 PURL_TO_OSV_ECOSYSTEM: Mapping[str, str] = {
     "cargo": "crates.io",
@@ -135,6 +139,7 @@ class DependencyIntelligenceSettings:
     max_bytes_per_file: int = 524288
     max_call_sites_per_advisory: int = 32
     max_advisories: int = 5000
+    max_osv_candidates_per_package: int = 500
 
     def __post_init__(self) -> None:
         if self.osv_version_matching not in OSV_MATCHING_MODES:
@@ -142,7 +147,8 @@ class DependencyIntelligenceSettings:
                 f"osv_version_matching must be one of {', '.join(OSV_MATCHING_MODES)}: "
                 f"{self.osv_version_matching!r}"
             )
-        for field_name in ("max_source_files", "max_bytes_per_file", "max_call_sites_per_advisory", "max_advisories"):
+        for field_name in ("max_source_files", "max_bytes_per_file", "max_call_sites_per_advisory",
+                           "max_advisories", "max_osv_candidates_per_package"):
             val = getattr(self, field_name)
             if type(val) is not int or val < 1:
                 raise ValueError(f"dependency-intelligence {field_name} must be a positive integer")
@@ -161,15 +167,11 @@ class DependencyIntelligenceSettings:
             max_bytes_per_file=raw.get("max_bytes_per_file", 524288),
             max_call_sites_per_advisory=raw.get("max_call_sites_per_advisory", 32),
             max_advisories=raw.get("max_advisories", 5000),
+            max_osv_candidates_per_package=raw.get("max_osv_candidates_per_package", 500),
         )
 
 
-OsvSnapshotSource = (
-    Callable[[Path, Path], Mapping[str, Any]]
-    | Mapping[str, Any]
-    | Path
-    | None
-)
+OsvSnapshotSource = Mapping[str, Any] | None
 
 
 def _clean_lib_stem(raw: str) -> str:
@@ -238,35 +240,50 @@ def scan_target_reachability_index(
     imports: list[dict[str, Any]] = []
     ffi_sites: list[dict[str, Any]] = []
     symbol_calls: dict[str, list[tuple[str, int]]] = {}
+    gaps: list[str] = []
+    source_hashes: dict[str, str] = {}
 
     if target_root is None or not target_root.is_dir():
-        return {"imports": imports, "ffi_sites": ffi_sites, "symbol_calls": symbol_calls}
+        return {"imports": imports, "ffi_sites": ffi_sites, "symbol_calls": symbol_calls,
+                "source_hashes": source_hashes, "gaps": ["reachability_target_unavailable"]}
 
-    candidate_paths: list[str] = []
-    if partition_files:
-        for entry in partition_files:
-            rel = str(entry.get("path") or "").replace("\\", "/")
-            if _is_first_party_source(rel):
-                candidate_paths.append(rel)
-    else:
-        for file_path in sorted(target_root.rglob("*")):
-            if not file_path.is_file():
-                continue
-            rel = file_path.relative_to(target_root).as_posix()
-            if _is_first_party_source(rel):
-                candidate_paths.append(rel)
-            if len(candidate_paths) >= max_source_files:
-                break
-
-    for rel_path in sorted(set(candidate_paths))[:max_source_files]:
-        full_path = target_root / rel_path
-        if not full_path.is_file():
+    candidates: dict[str, Mapping[str, Any]] = {}
+    for entry in partition_files:
+        if entry.get("domain", "target") != "target":
             continue
+        rel = str(entry.get("path") or "")
+        safe_path(target_root, rel)
+        if _is_first_party_source(rel):
+            if rel in candidates and candidates[rel] != entry:
+                raise ValueError("conflicting accepted reachability source identities")
+            candidates[rel] = entry
+    if not candidates:
+        gaps.append("reachability_partition_empty: no accepted first-party source files")
+    if len(candidates) > max_source_files:
+        gaps.append(f"reachability_source_files_truncated: {len(candidates) - max_source_files} files not scanned")
+
+    for rel_path in sorted(candidates)[:max_source_files]:
+        entry = candidates[rel_path]
+        sha = entry.get("sha256")
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+            raise ValueError("reachability source has no accepted SHA-256")
+        full_path = safe_path(target_root, rel_path)
+        size = full_path.stat().st_size
+        if size != entry.get("size_bytes", size):
+            raise ValueError(f"accepted reachability source size changed: {rel_path}")
+        if size > max_bytes_per_file:
+            gaps.append(f"reachability_source_bytes_exceeded: {rel_path}")
+            continue
+        with full_path.open("rb") as stream:
+            raw = stream.read(max_bytes_per_file + 1)
+        if len(raw) != size or hashlib.sha256(raw).hexdigest() != sha:
+            raise ValueError(f"accepted reachability source bytes changed: {rel_path}")
         try:
-            raw = full_path.read_bytes()[:max_bytes_per_file]
-            text = raw.decode("utf-8", errors="replace")
-        except OSError:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            gaps.append(f"reachability_source_encoding_unsupported: {rel_path}")
             continue
+        source_hashes[rel_path] = sha
         suffix = PurePosixPath(rel_path).suffix.casefold()
         active_ffi_libs: set[str] = set()
 
@@ -390,7 +407,8 @@ def scan_target_reachability_index(
                     existing_bound = set(site.get("bound_libraries") or ())
                     site["bound_libraries"] = sorted(existing_bound | set(bound))
 
-    return {"imports": imports, "ffi_sites": ffi_sites, "symbol_calls": symbol_calls}
+    return {"imports": imports, "ffi_sites": ffi_sites, "symbol_calls": symbol_calls,
+            "source_hashes": source_hashes, "gaps": gaps}
 
 
 def _extract_osv_symbols_and_modules(raw_json: str, ecosystem: str, pkg_name: str) -> tuple[list[str], list[str], list[str], str | None]:
@@ -447,53 +465,66 @@ def _resolve_osv_source(
     repository_root: Path,
     run_root: Path,
     osv_snapshot: OsvSnapshotSource,
-) -> tuple[Path | None, Path | None, str | None]:
-    """Return ``(sqlite_db_path, raw_records_dir, fallback_reason)``."""
-    if osv_snapshot is not None:
-        if isinstance(osv_snapshot, Path):
-            if osv_snapshot.is_file() and osv_snapshot.suffix == ".sqlite":
-                return osv_snapshot, None, None
-            idx = osv_snapshot / "index" / "osv.sqlite"
-            if idx.is_file():
-                return idx, osv_snapshot, None
-            if osv_snapshot.is_dir():
-                return None, osv_snapshot, "osv_index_sqlite_absent_in_directory"
-            return None, None, "osv_snapshot_path_missing"
-        if isinstance(osv_snapshot, Mapping):
-            directory = Path(str(osv_snapshot.get("directory") or ""))
-            idx = directory / "index" / "osv.sqlite"
-            if idx.is_file():
-                return idx, directory, None
-            if directory.is_dir():
-                return None, directory, "osv_index_sqlite_absent_in_snapshot"
-            return None, None, "osv_snapshot_directory_missing"
-        if callable(osv_snapshot):
-            resolved = osv_snapshot(repository_root, run_root)
-            directory = Path(str(resolved.get("directory") or ""))
-            idx = directory / "index" / "osv.sqlite"
-            if idx.is_file():
-                return idx, directory, None
-            if directory.is_dir():
-                return None, directory, "osv_index_sqlite_absent_in_resolved_snapshot"
-            return None, None, "osv_resolved_snapshot_missing"
+    external_input_selection: Mapping[str, Any] | None = None,
+) -> tuple[Path | None, Mapping[str, str] | None, str | None]:
+    """Consume the claim-selected public feed, never select from a mutable feed pointer."""
+    from appsec_review.runtime.inputs import observe_external
+    from appsec_review.storage.feed_provenance import consume_pin
 
-    resolved_cfg = run_root / "data" / "configuration" / "resolved.json"
-    if not resolved_cfg.is_file():
-        return None, None, "run_resolved_configuration_absent"
-    try:
-        from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
-        from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync.feed import OsvSettings
-        doc = json.loads(resolved_cfg.read_bytes())
-        values = doc["jobs"]["job_third_party_data_sync"]["steps"]["osv_sync"]["settings"]
-        osv_settings = OsvSettings.from_mapping(repository_root, values)
-        identity = verify_current(osv_settings.feed_root, "osv")
-        directory = Path(str(identity["directory"]))
-        idx = directory / "index" / "osv.sqlite"
-        if idx.is_file():
-            return idx, directory, None
-        return None, directory if directory.is_dir() else None, "osv_index_sqlite_missing"
-    except (OSError, KeyError, ValueError, TypeError) as exc:
-        return None, None, f"osv_snapshot_unavailable:{type(exc).__name__}"
+    pin = osv_snapshot
+    if pin is None:
+        selections = [row for row in (external_input_selection or {}).get("inputs", ())
+                      if row.get("producer") == "job_third_party_data_sync"
+                      and row.get("output_kind") == "feed_snapshot" and row.get("selector") == "osv"]
+        if not selections:
+            return None, None, "osv_snapshot_not_admitted"
+        if len(selections) != 1:
+            raise ValueError("conflicting admitted OSV snapshots")
+        selected = selections[0]
+        if selected["status"] != "available":
+            return None, None, f"osv_snapshot_unavailable:{selected['reason']}"
+        from appsec_review.graph.settings import run_configuration
+        document = run_configuration(run_root)
+        if document is None:
+            raise ValueError("OSV snapshot has no verified run configuration")
+        configured = Path(document["jobs"]["job_third_party_data_sync"]["steps"]["osv_sync"]["settings"]["feed_root"])
+        root = configured if configured.is_absolute() else repository_root / configured
+        relative = root.relative_to(repository_root).as_posix()
+        if not relative.startswith("data/"):
+            raise ValueError("OSV snapshot root is outside repository data")
+        root = safe_path(repository_root, relative)
+        pin = {**selected["identity"], "directory": str(
+            safe_path(root, f"snapshots/{selected['identity']['snapshot_id']}"))}
+    if not isinstance(pin, Mapping) or pin.get("feed_id") != "osv":
+        raise ValueError("OSV input requires an immutable snapshot pin, not a path or callable")
+    if (not re.fullmatch(r"[0-9a-f]{64}", str(pin.get("manifest_sha256", "")))
+            or not re.fullmatch(r"sha256-[0-9a-f]{24}", str(pin.get("snapshot_id", "")))
+            or not isinstance(pin.get("directory"), str)):
+        raise ValueError("OSV snapshot pin is missing its manifest identity")
+    identity = {key: pin[key] for key in ("feed_id", "snapshot_id", "manifest_sha256")}
+    observe_external(run_root, "job_third_party_data_sync", "feed_snapshot",
+                     "appsec-review/public-feed-use/1", identity)
+    directory = Path(pin["directory"])
+    if not directory.is_absolute():
+        raise ValueError("OSV snapshot directory must be absolute")
+    root = directory.parent.parent
+    if directory != safe_path(root, f"snapshots/{pin['snapshot_id']}"):
+        raise ValueError("OSV snapshot directory differs from its pin")
+    manifest_path = safe_path(directory, "manifest.json")
+    raw = manifest_path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != pin["manifest_sha256"]:
+        raise ValueError("OSV snapshot manifest hash mismatch")
+    manifest = json.loads(raw)
+    if manifest.get("feed_id") != "osv" or manifest.get("snapshot_id") != pin["snapshot_id"]:
+        raise ValueError("OSV snapshot manifest identity mismatch")
+    consume_pin(run_root, pin)
+    record = manifest["files"].get("index/osv.sqlite")
+    if record is None:
+        return None, identity, "osv_snapshot_index_unavailable"
+    path = safe_path(directory, "index/osv.sqlite")
+    if path.stat().st_size != record["size_bytes"] or file_sha256(path) != record["sha256"]:
+        raise ValueError("OSV snapshot index hash mismatch")
+    return path, {**identity, "index_sha256": record["sha256"]}, None
 
 
 def _dependency_ecosystem_and_name(dep: Mapping[str, Any]) -> tuple[str | None, str, str | None, str | None]:
@@ -524,38 +555,32 @@ def _match_osv_indexed(
     sqlite_path: Path,
     dependencies: Sequence[Mapping[str, Any]],
     max_advisories: int,
-) -> list[dict[str, Any]]:
+    *, max_candidates_per_package: int, exact: bool = False,
+) -> tuple[list[dict[str, Any]], list[str]]:
     matched: list[dict[str, Any]] = []
-    uri = f"file:{sqlite_path.as_posix()}?mode=ro&immutable=1"
+    gaps: list[str] = []
+    bounds = osv_matching.Bounds(max_advisories_per_package=max_candidates_per_package)
+    uri = f"{sqlite_path.as_uri()}?mode=ro&immutable=1"
     with closing(sqlite3.connect(uri, uri=True)) as conn:
         osv_matching.require_index(conn)
         for dep in dependencies:
             eco, pkg_name, version, purl = _dependency_ecosystem_and_name(dep)
             if not eco or not pkg_name or not version:
+                gaps.append(f"osv_dependency_identity_incomplete:{dep.get('dependency_id', pkg_name)}")
                 continue
             dep_id = str(dep.get("dependency_id") or pkg_name)
             direct = _is_direct_dependency(dep)
-            rows = conn.execute(
-                "SELECT DISTINCT a.id, a.withdrawn, a.raw_json "
-                "FROM package p JOIN advisory a ON a.id = p.advisory_id "
-                "WHERE p.ecosystem = ? AND p.name = ? COLLATE NOCASE "
-                "ORDER BY a.id LIMIT 500",
-                (eco, pkg_name),
-            ).fetchall()
-            for adv_id, withdrawn, raw_json in rows:
-                verdict = osv_matching.evaluate_record(raw_json, withdrawn, eco, pkg_name, version)
-                is_hit = verdict["status"] == "affected"
-                if not is_hit and verdict["status"] == "undetermined" and isinstance(raw_json, str):
-                    try:
-                        raw_doc = json.loads(raw_json)
-                        for aff in raw_doc.get("affected") or ():
-                            if isinstance(aff, Mapping) and version in (aff.get("versions") or ()):
-                                is_hit = True
-                                break
-                    except (ValueError, TypeError):
-                        pass
-                if not is_hit:
+            result = osv_matching.match_package(conn, eco, pkg_name, version, bounds=bounds)
+            gaps.extend(f"osv:{dep_id}:{gap}" for gap in result["gaps"])
+            for match in result["matches"]:
+                if exact and match["evidence"]["kind"] != "versions":
+                    gaps.append(f"osv_exact_range_not_evaluated:{dep_id}:{match['advisory_id']}")
                     continue
+                if len(matched) >= max_advisories:
+                    gaps.append("osv_advisories_truncated")
+                    return matched, gaps
+                adv_id = match["advisory_id"]
+                raw_json = conn.execute("SELECT raw_json FROM advisory WHERE id = ?", (adv_id,)).fetchone()[0]
                 symbols, modules, cves, sev = _extract_osv_symbols_and_modules(
                     raw_json if isinstance(raw_json, str) else "", eco, pkg_name
                 )
@@ -568,77 +593,12 @@ def _match_osv_indexed(
                     "ecosystem": eco,
                     "severity": sev,
                     "direct": direct,
-                    "match_source": "osv-index",
+                    "match_source": "osv-exact" if exact else "osv-index",
                     "affected_symbols": symbols,
                     "affected_modules": modules,
                     "dependency_ids": [dep_id],
                 })
-                if len(matched) >= max_advisories:
-                    return matched
-    return matched
-
-
-def _match_osv_exact_dir(
-    records_dir: Path | None,
-    dependencies: Sequence[Mapping[str, Any]],
-    max_advisories: int,
-) -> list[dict[str, Any]]:
-    if records_dir is None or not records_dir.is_dir():
-        return []
-    dep_lookup: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
-    for dep in dependencies:
-        eco, pkg_name, version, _ = _dependency_ecosystem_and_name(dep)
-        if eco and pkg_name and version:
-            dep_lookup.setdefault((eco, pkg_name.casefold(), version), []).append(dep)
-    if not dep_lookup:
-        return []
-    matched: list[dict[str, Any]] = []
-    for json_file in sorted(records_dir.rglob("*.json"))[:2000]:
-        if json_file.name == "manifest.json":
-            continue
-        try:
-            raw_text = json_file.read_text(encoding="utf-8")
-            doc = json.loads(raw_text)
-        except (OSError, ValueError):
-            continue
-        if not isinstance(doc, Mapping) or doc.get("withdrawn"):
-            continue
-        adv_id = str(doc.get("id") or "")
-        if not adv_id:
-            continue
-        for aff in doc.get("affected") or ():
-            if not isinstance(aff, Mapping):
-                continue
-            pkg = aff.get("package")
-            if not isinstance(pkg, Mapping):
-                continue
-            eco = str(pkg.get("ecosystem") or "")
-            name = str(pkg.get("name") or "")
-            for ver in aff.get("versions") or ():
-                if not isinstance(ver, str):
-                    continue
-                deps = dep_lookup.get((eco, name.casefold(), ver))
-                if not deps:
-                    continue
-                symbols, modules, cves, sev = _extract_osv_symbols_and_modules(raw_text, eco, name)
-                for dep in deps:
-                    matched.append({
-                        "advisory_id": adv_id,
-                        "cve_ids": cves,
-                        "package_name": name,
-                        "package_version": ver,
-                        "purl": dep.get("purl") if isinstance(dep.get("purl"), str) else None,
-                        "ecosystem": eco,
-                        "severity": sev,
-                        "direct": _is_direct_dependency(dep),
-                        "match_source": "osv-exact",
-                        "affected_symbols": symbols,
-                        "affected_modules": modules,
-                        "dependency_ids": [str(dep.get("dependency_id") or name)],
-                    })
-                    if len(matched) >= max_advisories:
-                        return matched
-    return matched
+    return matched, gaps
 
 
 def classify_advisory_reachability(
@@ -761,7 +721,7 @@ def classify_advisory_reachability(
     if not bool(advisory.get("direct", True)):
         return REACHABILITY_TRANSITIVE, [], []
 
-    return REACHABILITY_UNREACHABLE, [], []
+    return REACHABILITY_UNKNOWN, [], []
 
 
 def evaluate_sca_reachability(
@@ -776,34 +736,33 @@ def evaluate_sca_reachability(
     partition_files: Sequence[Mapping[str, Any]] = (),
     settings: DependencyIntelligenceSettings | None = None,
     osv_snapshot: OsvSnapshotSource = None,
+    external_input_selection: Mapping[str, Any] | None = None,
+    partition_gaps: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """Run OSV version matching (index with graceful exact fallback) and symbol/FFI reachability."""
+    """Match the pinned OSV index and inspect only hash-bound accepted source inventory."""
     cfg = settings or DependencyIntelligenceSettings()
     configured_mode = cfg.osv_version_matching
     actual_mode = configured_mode
     fallback_reason: str | None = None
     osv_candidates: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    snapshot_identity: Mapping[str, str] | None = None
 
-    if configured_mode == "index":
-        sqlite_path, raw_dir, reason = _resolve_osv_source(repository_root, run_root, osv_snapshot)
+    if configured_mode != "disabled":
+        sqlite_path, snapshot_identity, reason = _resolve_osv_source(
+            repository_root, run_root, osv_snapshot, external_input_selection)
         if sqlite_path is not None:
-            try:
-                osv_candidates = _match_osv_indexed(sqlite_path, dependencies, cfg.max_advisories)
-                actual_mode = "index"
-            except (sqlite3.Error, ValueError, OSError) as exc:
-                actual_mode = "exact"
-                fallback_reason = f"osv_index_invalid:{type(exc).__name__}:{str(exc)[:160]}"
-                osv_candidates = _match_osv_exact_dir(raw_dir, dependencies, cfg.max_advisories)
+            osv_candidates, osv_gaps = _match_osv_indexed(
+                sqlite_path, dependencies, cfg.max_advisories,
+                max_candidates_per_package=cfg.max_osv_candidates_per_package,
+                exact=configured_mode == "exact")
+            gaps.extend(osv_gaps)
         else:
-            actual_mode = "exact"
             fallback_reason = reason or "osv_index_unavailable"
-            osv_candidates = _match_osv_exact_dir(raw_dir, dependencies, cfg.max_advisories)
-    elif configured_mode == "exact":
-        _, raw_dir, _ = _resolve_osv_source(repository_root, run_root, osv_snapshot)
-        osv_candidates = _match_osv_exact_dir(raw_dir, dependencies, cfg.max_advisories)
-        actual_mode = "exact"
+            gaps.append(fallback_reason)
     else:
         actual_mode = "disabled"
+        gaps.append("osv_matching_disabled")
 
     deps_by_name: dict[str, list[Mapping[str, Any]]] = {}
     for dep in dependencies:
@@ -832,6 +791,9 @@ def evaluate_sca_reachability(
         if _CVE_RE.fullmatch(adv_id):
             cves.add(adv_id.upper())
         if existing is None:
+            if len(merged) >= cfg.max_advisories:
+                gaps.append("sca_advisories_truncated")
+                return
             merged[key] = {
                 "advisory_id": adv_id,
                 "cve_ids": sorted(cves),
@@ -899,14 +861,19 @@ def evaluate_sca_reachability(
             max_bytes_per_file=cfg.max_bytes_per_file,
         )
         if cfg.reachability_enabled
-        else {"imports": [], "ffi_sites": [], "symbol_calls": {}}
+        else {"imports": [], "ffi_sites": [], "symbol_calls": {}, "source_hashes": {},
+              "gaps": ["reachability_disabled"]}
     )
+    gaps.extend(str(gap) for gap in partition_gaps)
+    gaps.extend(target_index["gaps"])
+    gaps.append("static_reachability_only: import and call matching does not prove code unreachability")
 
     advisory_records: list[dict[str, Any]] = []
     symbol_reachable_count = 0
     package_imported_count = 0
     transitive_only_count = 0
     unreachable_count = 0
+    unknown_count = 0
     ffi_boundary_matches = 0
 
     for key in sorted(merged):
@@ -921,16 +888,22 @@ def evaluate_sca_reachability(
         verdict, sites, ffi_mechs = classify_advisory_reachability(
             prepared,
             target_index,
-            max_call_sites=cfg.max_call_sites_per_advisory,
+            max_call_sites=cfg.max_call_sites_per_advisory + 1,
         )
+        if len(sites) > cfg.max_call_sites_per_advisory:
+            gaps.append(f"reachability_call_sites_truncated:{prepared['advisory_id']}")
+            sites = sites[:cfg.max_call_sites_per_advisory]
+        sites = [{**site, "file_sha256": target_index["source_hashes"][site["path"]]} for site in sites]
         if verdict == REACHABILITY_SYMBOL:
             symbol_reachable_count += 1
         elif verdict == REACHABILITY_IMPORTED:
             package_imported_count += 1
         elif verdict == REACHABILITY_TRANSITIVE:
             transitive_only_count += 1
-        else:
+        elif verdict == REACHABILITY_UNREACHABLE:
             unreachable_count += 1
+        else:
+            unknown_count += 1
         if ffi_mechs:
             ffi_boundary_matches += 1
 
@@ -960,6 +933,7 @@ def evaluate_sca_reachability(
         "package_imported_count": package_imported_count,
         "transitive_only_count": transitive_only_count,
         "unreachable_in_target_count": unreachable_count,
+        "unknown_count": unknown_count,
     }
     return {
         "schema": REACHABILITY_SCHEMA,
@@ -967,6 +941,9 @@ def evaluate_sca_reachability(
         "configured_osv_mode": configured_mode,
         "osv_matching_mode": actual_mode,
         "osv_fallback_reason": fallback_reason,
+        "osv_snapshot": snapshot_identity,
+        "coverage": "partial" if gaps else "complete",
+        "gaps": sorted(set(gaps)),
         "advisories": advisory_records,
         "telemetry": telemetry,
     }
@@ -976,6 +953,7 @@ __all__ = [
     "DependencyIntelligenceSettings",
     "OSV_MATCHING_MODES",
     "OsvSnapshotSource",
+    "REACHABILITY_UNKNOWN",
     "REACHABILITY_IMPORTED",
     "REACHABILITY_SCHEMA",
     "REACHABILITY_SYMBOL",

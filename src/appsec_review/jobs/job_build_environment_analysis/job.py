@@ -9,7 +9,8 @@ import re
 import time
 
 from appsec_review.config.loader import BuildEnvironmentSettings, parse_bounded_settings
-from appsec_review.interchange import GapCode, decode_handoff as decode_handoff_envelope, producer_gap
+from appsec_review.interchange import GapCode, producer_gap
+from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.inputs import (
     decode_consumed_handoff as decode_handoff,
     observe_handoff,
@@ -215,20 +216,16 @@ def load_environment(run_root, source_fingerprint, contract):
             "artifact": None, "evidence": None}
     if mode in {"DISABLED", "NOT_RUN"}:
         return base
-    pointer_path = safe_path(run_root, "data/jobs/" + JOB_ID + "/latest.json")
-    if not pointer_path.is_file():
-        raise ValueError("expected environment producer has no accepted handoff")
-    # Even optional prior evidence must pass all integrity checks before source staleness is considered.
-    if pointer_path.stat().st_size > 65536:
-        raise ValueError("environment pointer exceeds its byte bound")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    if contract["reference"] != pointer["handoff_sha256"]:
-        raise ValueError("environment reference is not the accepted producer")
     prior = mode == "OPTIONAL_PRIOR"
-    handoff = decode_handoff_envelope(_read(run_root, {
-        "path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]},
-        byte_limit=32 * 1024 * 1024),
-        run_id=run_root.name, job_id=JOB_ID)
+    if prior:
+        # Optional-prior admission has a separate lineage, checked by observe_handoff below.
+        from appsec_review.retrieval.core import _accepted_handoff
+        handoff, _ = _accepted_handoff(run_root, JOB_ID, contract["reference"])
+    else:
+        accepted = accepted_upstream(run_root, JOB_ID)
+        if accepted.sha256 != contract["reference"]:
+            raise ValueError("environment reference is not the accepted producer")
+        handoff = accepted.handoff
     observe_handoff(run_root, handoff, prior=prior)
     identity = handoff["outputs"]["environment_analysis.publish_handoff"]["artifact"]
     observe_output(run_root, JOB_ID, "build_environment", identity, prior=prior)
@@ -238,10 +235,8 @@ def load_environment(run_root, source_fingerprint, contract):
     if handoff["upstream_handoff_sha256"].get("job_target_catalog") != value["catalog_handoff_sha256"]:
         raise ValueError("environment catalog reference differs from accepted producer inputs")
     if mode == "EXPECTED_CURRENT":
-        catalog_pointer = safe_path(run_root, "data/jobs/job_target_catalog/latest.json")
-        if catalog_pointer.stat().st_size > 65536:
-            raise ValueError("catalog pointer exceeds its byte bound")
-        if json.loads(catalog_pointer.read_bytes())["handoff_sha256"] != value["catalog_handoff_sha256"]:
+        catalog = accepted_upstream(run_root, "job_target_catalog")
+        if catalog.sha256 != value["catalog_handoff_sha256"]:
             raise ValueError("expected environment producer does not consume the current catalog")
     if value["source_fingerprint"] != source_fingerprint:
         if mode != "OPTIONAL_PRIOR":

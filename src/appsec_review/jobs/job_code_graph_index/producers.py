@@ -43,6 +43,14 @@ MAX_ROW_GAPS = 8
 _LABEL_RANK = {"at_seed": 0, "in_seed_function": 1, "in_neighborhood": 2, "unclassified": 3, "outside_neighborhood": 4}
 
 
+def bounded_gaps(values: Sequence[str], limit: int) -> list[str]:
+    """Bound display rows without making omitted coverage disappear."""
+    gaps = list(dict.fromkeys(str(value) for value in values))
+    if len(gaps) > limit:
+        gaps = [*gaps[:limit - 1], f"gap_summary_truncated: {len(gaps) - limit + 1} additional gaps omitted"]
+    return [gap if len(gap) <= 300 else gap[:260] + f" [{len(gap) - 260} characters omitted]" for gap in gaps]
+
+
 @dataclass(slots=True)
 class ProducerRows:
     entities: list[EntityRecord] = field(default_factory=list)
@@ -150,11 +158,10 @@ def _diagnostic_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], s
 
 
 def _cpg_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], scope: Mapping[str, Any], snapshot: str,
-              out: ProducerRows, *, alternate_cpg_succeeded: bool = True) -> None:
+              out: ProducerRows) -> None:
     if not shards:
-        if not alternate_cpg_succeeded:
-            out.gaps.append("producer_not_run: no accepted joern-cpg output covers this database (Joern is opt-in); "
-                            "CPG facts are absent")
+        out.gaps.append("producer_not_run: no accepted joern-cpg output covers this database (Joern is opt-in); "
+                        "Joern CPG facts are absent")
         return
     rows = [row for row in shard_set.entities(shards, kinds=(EntityKind.AST_NODE.value,))
             if row["payload"].get("fact") == "cpg"]
@@ -238,8 +245,7 @@ def symbol_links(relations: Sequence[RelationRecord]) -> dict[str, list[dict[str
 
 
 def build(run_root: Path, *, scope: Mapping[str, Any], snapshot: str,
-          relations: Sequence[RelationRecord],
-          alternate_cpg_succeeded: bool | None = None) -> ProducerRows:
+          relations: Sequence[RelationRecord]) -> ProducerRows:
     """The bounded producer rows of one scope, read from its accepted secondary and analyzer shards only."""
     inputs = scope.get("inputs") or {}
     secondary, analyzers = inputs.get("secondary") or {}, inputs.get("analyzers") or {}
@@ -250,11 +256,10 @@ def build(run_root: Path, *, scope: Mapping[str, Any], snapshot: str,
     _flow_rows(shard_set, secondary.get(Producer.LLVM_IR.value, ()), scope, snapshot, out)
     _diagnostic_rows(shard_set, analyzers.get(Producer.CLANG_STATIC.value, ()), scope, snapshot, out)
     _symbol_rows(shard_set, secondary.get(Producer.CLANGD.value, ()), symbol_links(relations), scope, snapshot, out)
-    alt_ok = bool(scope.get("alternate_cpg_succeeded", True)) if alternate_cpg_succeeded is None else alternate_cpg_succeeded
-    _cpg_rows(shard_set, analyzers.get(Producer.JOERN_CPG.value, ()), scope, snapshot, out,
-              alternate_cpg_succeeded=alt_ok)
+    _cpg_rows(shard_set, analyzers.get(Producer.JOERN_CPG.value, ()), scope, snapshot, out)
     for name in ("llvm-ir", "clang-static", "joern-cpg"):
         out.gaps.extend(f"{name}: {gap}" for table in (secondary, analyzers) for shard in table.get(name, ())
-                        for gap in ((shard.get("producer") or {}).get("seeded") or {}).get("gaps", ())[:3])
-    out.gaps = list(dict.fromkeys(gap[:300] for gap in out.gaps))[:MAX_ROW_GAPS * 3]
+                        for gap in bounded_gaps(
+                            ((shard.get("producer") or {}).get("seeded") or {}).get("gaps", ()), 3))
+    out.gaps = bounded_gaps(out.gaps, MAX_ROW_GAPS * 3)
     return out
