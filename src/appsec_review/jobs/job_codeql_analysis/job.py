@@ -1239,18 +1239,9 @@ def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
         return {**_export_base(scope, database), "export_status": "FAILED", "gaps": [gap]}
 
 
-# ``export_status`` is a payload fact of the export record; the per-scope disposition's
-# ``terminal_status`` is drawn from the closed ``interchange.ProducerStatus`` vocabulary. An export
-# skipped because no finding location maps into the database, or because the database failed, is
-# ``SKIPPED_NA``: nothing was applicable to export. Run 2026-11-17-0001 (WSOLLERS1) failed the
-# ``execution.scopes`` output contract when the bare ``SKIPPED`` reached ``terminal_status``.
-_EXPORT_TERMINAL_STATUS: Mapping[str, str] = {"SKIPPED": "SKIPPED_NA"}
-
-
 def _export_dispositions(exports: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    return [{"scope_id": item["scope_id"], "language": item["language"], "action": "export",
-             "terminal_status": _EXPORT_TERMINAL_STATUS.get(item["export_status"], item["export_status"])}
-            for item in exports]
+    return [{"scope_id": item["scope_id"], "language": item["language"],
+             "action": "export", "terminal_status": item["export_status"]} for item in exports]
 
 
 def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mapping[str, Any]:
