@@ -198,7 +198,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `owasp_control_gaps` | `publication` | `appsec-review/owasp-control-gap/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `owasp_control_gaps` | `publication` | `appsec-review/owasp-control-gap/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `owasp_documents` | `publication` | `appsec-review/owasp-workbench-result/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `owasp_model_receipts` | `verification` | `appsec-review/owasp-model-receipt/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `owasp_workbench` | `publication` | `appsec-review/owasp-index-shard/1` | indexed | `standards`, `component-classification`, `applicability`, `validation-work`, `control-result`, `finding-package` | `query_owasp_workbench`, `query_precomputed` |
@@ -973,7 +973,7 @@ flowchart LR
   producer142 --> input142 --> job
   input142 -. schema .-> input_schema142
   output0["owasp_control_gaps"]
-  output_schema0["appsec-review/owasp-control-gap/2"]
+  output_schema0["appsec-review/owasp-control-gap/1"]
   job --> output0
   output0 -. schema .-> output_schema0
   output1["owasp_documents"]

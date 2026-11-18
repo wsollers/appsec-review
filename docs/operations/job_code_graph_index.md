@@ -99,7 +99,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
 | `alternate_cpg` | `acceptance` | `appsec-review/alternate-cpg/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
-| `alternate_cpg_index` | `acceptance` | `appsec-review/alternate-cpg/1` | indexed | `analysis` | Undeclared ([T-147](../TODO.md)) |
+| `alternate_cpg_index` | `acceptance` | `appsec-review/alternate-cpg/1` | indexed | `analysis` | `query_call_paths`, `query_cpg_slice` |
 | `code_graph_checkpoints` | `correlate` | `appsec-review/code-graph-checkpoint/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `code_graph_facts` | `correlate` | `appsec-review/graph-fact/1` | indexed | `graph` | `list_codeql_databases`, `query_code_graph`, `query_codeql_neighborhood`, `query_observations` |
 | `code_graph_scorecard` | `acceptance` | `appsec-review/graph-quality-scorecard/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |

@@ -136,7 +136,7 @@ def test_contract_datasets_registry_topology_and_input_validator_parity() -> Non
         EvidenceAuthority.PRODUCER_EVIDENCE,
     )
 
-    assert len(DATASETS) == 1
+    assert len(DATASETS) == 3
     dataset = DATASETS[0]
     assert dataset.output_kind == "final_report_publications"
     assert dataset.step == "acceptance"
@@ -145,9 +145,13 @@ def test_contract_datasets_registry_topology_and_input_validator_parity() -> Non
     assert dataset.disposition == "artifact_only"
     assert dataset.artifacts == (
         "data/jobs/job_final_report_publication/attempts/*/steps/load/**",
-        "data/jobs/job_final_report_publication/attempts/*/steps/report/**",
+        "data/jobs/job_final_report_publication/attempts/*/steps/report/tasks/assemble/final-report.json",
+        "data/jobs/job_final_report_publication/attempts/*/steps/report/tasks/render/**",
+        "data/jobs/job_final_report_publication/attempts/*/steps/report/tasks/render_pdf/**",
         "data/jobs/job_final_report_publication/attempts/*/steps/acceptance/**",
     )
+    assert (DATASETS[1].output_kind, DATASETS[1].disposition) == ("final_report_sarif", "protected")
+    assert (DATASETS[2].output_kind, DATASETS[2].disposition) == ("final_report_sarif_accounting", "artifact_only")
 
     assert tuple(u.unit_id for u in job.units) == (
         "load.accepted_gate",

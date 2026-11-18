@@ -182,7 +182,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `document_drift_issues` | `analysis` | `appsec-review/document-drift-issue/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `document_drift_issues` | `analysis` | `appsec-review/document-drift-issue/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `document_issue_ledger` | `analysis` | `appsec-review/document-issue-ledger/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -922,7 +922,7 @@ flowchart LR
   producer141 --> input141 --> job
   input141 -. schema .-> input_schema141
   output0["document_drift_issues"]
-  output_schema0["appsec-review/document-drift-issue/2"]
+  output_schema0["appsec-review/document-drift-issue/1"]
   job --> output0
   output0 -. schema .-> output_schema0
   output1["document_issue_ledger"]

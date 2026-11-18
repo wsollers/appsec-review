@@ -29,14 +29,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_openvex_export/job.py#L190) |
-| `export` | `export.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_openvex_export/job.py#L190) |
-| `load` | `load.verify_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_openvex_export/job.py#L190) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_openvex_export/job.py#L230) |
+| `export` | `export.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_openvex_export/job.py#L230) |
+| `load` | `load.verify_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_openvex_export/job.py#L230) |
 
 ### Accepted input declarations
 
 | Producer | Dataset | Schema | Channel | Availability | Missing policy |
 | --- | --- | --- | --- | --- | --- |
+| `job_review_intake` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | not_applicable |
+| `job_dependency_intelligence` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | not_applicable |
+| `job_dependency_intelligence` | `sca_reachability` | `appsec-review/sca-reachability/1` | handoff | optional | not_applicable |
 | `job_final_publication_gate` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_final_publication_gate` | `publication_gate_decisions` | `appsec-review/final-publication-gate/2` | handoff | optional | gap |
 | `job_inference_security_review` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
@@ -58,6 +61,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
+| `openvex_dependency_accounting` | `export` | `appsec-review/openvex-dependencies/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
+| `openvex_dependency_documents` | `export` | `https://openvex.dev/ns/v0.2.0` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `openvex_documents` | `export` | `https://openvex.dev/ns/v0.2.0` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `openvex_export_accounting` | `acceptance` | `appsec-review/openvex-export-result/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `openvex_verified_inputs` | `load` | `appsec-review/openvex-verified-inputs/1` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
@@ -88,98 +93,121 @@ Declared predecessors: `job_final_publication_gate`.
 ```mermaid
 flowchart LR
   job["job_openvex_export"]
-  producer0["job_final_publication_gate"]
+  producer0["job_review_intake"]
   input0["handoff"]
   input_schema0["appsec-review/job-handoff/2"]
   producer0 --> input0 --> job
   input0 -. schema .-> input_schema0
-  producer1["job_final_publication_gate"]
-  input1["publication_gate_decisions"]
-  input_schema1["appsec-review/final-publication-gate/2"]
+  producer1["job_dependency_intelligence"]
+  input1["handoff"]
+  input_schema1["appsec-review/job-handoff/2"]
   producer1 --> input1 --> job
   input1 -. schema .-> input_schema1
-  producer2["job_inference_security_review"]
-  input2["handoff"]
-  input_schema2["appsec-review/job-handoff/2"]
+  producer2["job_dependency_intelligence"]
+  input2["sca_reachability"]
+  input_schema2["appsec-review/sca-reachability/1"]
   producer2 --> input2 --> job
   input2 -. schema .-> input_schema2
-  producer3["job_inference_security_review"]
-  input3["accepted_scope"]
-  input_schema3["appsec-review/inference-review-accepted-scope/1"]
+  producer3["job_final_publication_gate"]
+  input3["handoff"]
+  input_schema3["appsec-review/job-handoff/2"]
   producer3 --> input3 --> job
   input3 -. schema .-> input_schema3
-  producer4["job_inference_security_review"]
-  input4["lead_triage"]
-  input_schema4["application/json"]
+  producer4["job_final_publication_gate"]
+  input4["publication_gate_decisions"]
+  input_schema4["appsec-review/final-publication-gate/2"]
   producer4 --> input4 --> job
   input4 -. schema .-> input_schema4
   producer5["job_inference_security_review"]
-  input5["review_packages"]
-  input_schema5["appsec-review/review-package/7"]
+  input5["handoff"]
+  input_schema5["appsec-review/job-handoff/2"]
   producer5 --> input5 --> job
   input5 -. schema .-> input_schema5
   producer6["job_inference_security_review"]
-  input6["review_cells"]
-  input_schema6["appsec-review/cell-attempt-receipt/1"]
+  input6["accepted_scope"]
+  input_schema6["appsec-review/inference-review-accepted-scope/1"]
   producer6 --> input6 --> job
   input6 -. schema .-> input_schema6
   producer7["job_inference_security_review"]
-  input7["claim_ledger"]
-  input_schema7["appsec-review/ledger-event/1"]
+  input7["lead_triage"]
+  input_schema7["application/json"]
   producer7 --> input7 --> job
   input7 -. schema .-> input_schema7
   producer8["job_inference_security_review"]
-  input8["attack_chains"]
-  input_schema8["appsec-review/attack-chain-manifest/1"]
+  input8["review_packages"]
+  input_schema8["appsec-review/review-package/7"]
   producer8 --> input8 --> job
   input8 -. schema .-> input_schema8
   producer9["job_inference_security_review"]
-  input9["scores_and_findings"]
-  input_schema9["appsec-review/finding-package/2"]
+  input9["review_cells"]
+  input_schema9["appsec-review/cell-attempt-receipt/1"]
   producer9 --> input9 --> job
   input9 -. schema .-> input_schema9
   producer10["job_inference_security_review"]
-  input10["review_audit_metadata"]
-  input_schema10["appsec-review/review-audit-publication/1"]
+  input10["claim_ledger"]
+  input_schema10["appsec-review/ledger-event/1"]
   producer10 --> input10 --> job
   input10 -. schema .-> input_schema10
   producer11["job_inference_security_review"]
-  input11["review_decision_audit"]
-  input_schema11["appsec-review/review-audit-manifest/1"]
+  input11["attack_chains"]
+  input_schema11["appsec-review/attack-chain-manifest/1"]
   producer11 --> input11 --> job
   input11 -. schema .-> input_schema11
   producer12["job_inference_security_review"]
-  input12["review_decisions"]
-  input_schema12["appsec-review/review-decision/1"]
+  input12["scores_and_findings"]
+  input_schema12["appsec-review/finding-package/2"]
   producer12 --> input12 --> job
   input12 -. schema .-> input_schema12
   producer13["job_inference_security_review"]
-  input13["review_verification_coverage"]
-  input_schema13["appsec-review/verification-coverage/1"]
+  input13["review_audit_metadata"]
+  input_schema13["appsec-review/review-audit-publication/1"]
   producer13 --> input13 --> job
   input13 -. schema .-> input_schema13
   producer14["job_inference_security_review"]
-  input14["review_decision_bases"]
-  input_schema14["appsec-review/decision-basis/1"]
+  input14["review_decision_audit"]
+  input_schema14["appsec-review/review-audit-manifest/1"]
   producer14 --> input14 --> job
   input14 -. schema .-> input_schema14
   producer15["job_inference_security_review"]
-  input15["review_audit_continuations"]
-  input_schema15["application/x-ndjson"]
+  input15["review_decisions"]
+  input_schema15["appsec-review/review-decision/1"]
   producer15 --> input15 --> job
   input15 -. schema .-> input_schema15
-  output0["openvex_documents"]
-  output_schema0["https://openvex.dev/ns/v0.2.0"]
+  producer16["job_inference_security_review"]
+  input16["review_verification_coverage"]
+  input_schema16["appsec-review/verification-coverage/1"]
+  producer16 --> input16 --> job
+  input16 -. schema .-> input_schema16
+  producer17["job_inference_security_review"]
+  input17["review_decision_bases"]
+  input_schema17["appsec-review/decision-basis/1"]
+  producer17 --> input17 --> job
+  input17 -. schema .-> input_schema17
+  producer18["job_inference_security_review"]
+  input18["review_audit_continuations"]
+  input_schema18["application/x-ndjson"]
+  producer18 --> input18 --> job
+  input18 -. schema .-> input_schema18
+  output0["openvex_dependency_accounting"]
+  output_schema0["appsec-review/openvex-dependencies/1"]
   job --> output0
   output0 -. schema .-> output_schema0
-  output1["openvex_export_accounting"]
-  output_schema1["appsec-review/openvex-export-result/1"]
+  output1["openvex_dependency_documents"]
+  output_schema1["https://openvex.dev/ns/v0.2.0"]
   job --> output1
   output1 -. schema .-> output_schema1
-  output2["openvex_verified_inputs"]
-  output_schema2["appsec-review/openvex-verified-inputs/1"]
+  output2["openvex_documents"]
+  output_schema2["https://openvex.dev/ns/v0.2.0"]
   job --> output2
   output2 -. schema .-> output_schema2
+  output3["openvex_export_accounting"]
+  output_schema3["appsec-review/openvex-export-result/1"]
+  job --> output3
+  output3 -. schema .-> output_schema3
+  output4["openvex_verified_inputs"]
+  output_schema4["appsec-review/openvex-verified-inputs/1"]
+  job --> output4
+  output4 -. schema .-> output_schema4
 ```
 
 <!-- generated:end -->

@@ -239,7 +239,7 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
     assert any(g.get("gap_id") == "gap-syntactic" or "syntactic" in str(g) for g in gaps)
 
     posture = build_executive_posture(synthetic_report, syn_radar)
-    assert posture["release_readiness"] == "REVIEW_REQUIRED_GAPS_PRESENT"
+    assert posture["release_readiness"] == "BLOCK_RELEASE"
     assert posture["confirmed_by_severity"]["critical"] == 1
     assert posture["reachable_supply_chain_advisories_count"] == 0
     assert posture["chain_elevated_findings_count"] == 2

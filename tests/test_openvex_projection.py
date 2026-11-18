@@ -537,7 +537,7 @@ def test_public_offline_resources_source_precedence_and_installed_fallback(tmp_p
     }
 
 
-def test_resource_reader_opens_only_the_seven_schema_pins_lock_and_license(monkeypatch: Any) -> None:
+def test_resource_reader_opens_only_the_eight_schema_pins_lock_and_license(monkeypatch: Any) -> None:
     opened = []
     original = Path.open
 
@@ -547,7 +547,7 @@ def test_resource_reader_opens_only_the_seven_schema_pins_lock_and_license(monke
 
     monkeypatch.setattr(Path, "open", tracked)
     v.schema_registry(repository_root=ROOT)
-    assert len(opened) == 9
+    assert len(opened) == 10
     assert set(opened) == {(SCHEMAS / relative).resolve() for relative in (
         *c.SCHEMA_SHA256, "upstream/upstream.lock.json", "upstream/LICENSE",
     )}
@@ -789,7 +789,7 @@ def test_gate2_full_completion_context_validates_from_offline_installed_schema_c
     validator.validate(c.json_body(bundle.manifest))
     report_schema_id = json.loads((installed / "../final-report/final-report.schema.json").read_bytes())["$id"]
     registry = v.schema_registry(repository_root=tmp_path / "no-checkout")
-    assert len(c.SCHEMA_SHA256) == len(registry) == 7
+    assert len(c.SCHEMA_SHA256) == len(registry) == 8
     assert registry.get_or_retrieve(report_schema_id)
     (installed / "../final-report/final-report.schema.json").unlink()
     with pytest.raises(c.ExportError) as error:

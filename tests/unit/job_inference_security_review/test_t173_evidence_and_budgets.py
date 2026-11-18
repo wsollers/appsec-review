@@ -13,6 +13,7 @@ from appsec_review.review.chain_composition import (
 )
 from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
     DEFAULT_MAX_EVIDENCE_REQUESTS,
+    attach_querying_skill_to_bundle,
     fulfill_evidence_requests,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import schema_set
@@ -109,6 +110,15 @@ def test_explicit_thinking_floor_rejects_inconsistent_profile() -> None:
             provider="openai", model="reasoner", reasoning="high", max_input_tokens=32000,
             max_output_tokens=1200, max_queries=6, max_turns=4, timeout_seconds=120,
             thinking_min_output_tokens=4096)
+
+
+def test_selected_querying_guidance_cannot_silently_fall_back(tmp_path):
+    from appsec_review.guidance.fragments import GuidanceError
+    from appsec_review.review.models import Role
+
+    bundle = {"sections": [{"name": "procedures", "items": []}]}
+    with pytest.raises(GuidanceError):
+        attach_querying_skill_to_bundle(tmp_path, bundle, role=Role.HYPOTHESIS_HUNTER, task="sink_up")
 
 
 def test_six_step_chain_elevation_and_inference_schemas() -> None:

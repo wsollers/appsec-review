@@ -13,7 +13,7 @@ from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHE
 from appsec_review.jobs.job_final_publication_gate import classify as gate_classify
 from appsec_review.jobs.job_final_report_publication.render import code, plain, render_markdown
 from appsec_review.jobs.job_final_report_publication.report import (
-    NOTICES, PDF_REASON, POC_REASON, RENDERER, build_report,
+    HTML_RENDERER, NOTICES, PDF_REASON, POC_REASON, RENDERER, build_report,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.identity import sha256_hex
@@ -67,6 +67,8 @@ def test_clean_and_incomplete_reports_are_schema_valid_and_track_completeness() 
     assert "poc_handoff" not in report["provenance"]
     assert report["renderers"] == {
         "markdown": {"file": "final-report.md", "renderer": RENDERER},
+        "html": {"file": "final-report.html", "renderer": HTML_RENDERER},
+        "sarif": {"file": "findings.sarif", "receipt": "sarif-export-result.json", "version": "2.1.0"},
         "pdf": {"state": "not_rendered", "reason": PDF_REASON},
     }
     assert report["notices"] == list(NOTICES)

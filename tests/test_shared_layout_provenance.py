@@ -181,6 +181,7 @@ def test_failed_guidance_publication_is_not_cached_as_ready_for_inference(tmp_pa
     ctx = SimpleNamespace(_lock=Lock(), _bundles={}, _pinned=set(), repository_root=tmp_path,
                           run_root=tmp_path, vocabulary=None, crosswalk=None)
     monkeypatch.setattr(teams, "compose_bundle", lambda *args, **kwargs: {"sha256": "a" * 64})
+    monkeypatch.setattr(teams, "attach_querying_skill_to_bundle", lambda root, bundle, **kwargs: bundle)
     monkeypatch.setattr(teams, "render_prompt", lambda bundle: "fixture prompt")
     attempts = []
 

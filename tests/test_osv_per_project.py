@@ -116,27 +116,24 @@ class ProjectExecutor(evidence_tests.FakeExecutor):
 
 
 def _run(tmp_path: Path, oom: set[str], empty: set[str] = frozenset()):
-    config, target = evidence_tests.fixture(tmp_path)
-    (target / "package-lock.json").unlink()
-    for relative, text in {"web/package.json": "{}", "web/package-lock.json": "{}",
-                           "api/pyproject.toml": "[project]\nname='api'\n",
-                           "api/requirements.txt": "requests==2.19.0\n"}.items():
-        (target / relative).parent.mkdir(parents=True, exist_ok=True)
-        (target / relative).write_text(text, encoding="utf-8")
+    from appsec_review.jobs.job_evidence_collection.job import _execute_tool
+
+    evidence_tests.fixture(tmp_path)
+    unit, catalog, recorded_events = evidence_tests.make_unit_context(
+        tmp_path, unit_id=SCAN_UNIT, repository_root=tmp_path,
+        target_files={"web/package.json": "{}", "web/package-lock.json": "{}",
+                      "api/pyproject.toml": "[project]\nname='api'\n",
+                      "api/requirements.txt": "requests==2.19.0\n"})
+    catalog = replace(catalog, projects=({"root": "web"}, {"root": "api"}))
     _osv_snapshot(tmp_path, ("PyPI", "npm"))
     calls: list[str] = []
     history: list = []
     factory = lambda unit: ProjectExecutor(unit.job.repository_root, unit.job.run_root, calls, history, oom, empty)
-    outcome = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(),
-                                   build_evidence(executor_factory=factory)]).run(
-        target_root=target, source_fingerprint=source_fingerprint(target))
-    run_root = config.runtime.runs_dir / outcome["run_id"]
-    scan = outcome["jobs"]["job_evidence_collection"]["result"]["outputs"][SCAN_UNIT]
-    telemetry = [json.loads(line) for line in (run_root / "data" / "logs" / "pipeline.jsonl").read_text(
-        encoding="utf-8").splitlines()]
-    events = [item["details"] for item in telemetry if item["event_type"].startswith("TOOL_INVOCATION")
-              and item["details"].get("tool_id") == OSV]
-    return run_root, scan, history, events
+    with evidence_tests.attempt_scope(unit):
+        scan = _execute_tool(unit, adapter_registry()[OSV], catalog, factory, None)
+    events = [detail for name, detail in recorded_events
+              if name.startswith("TOOL_INVOCATION") and detail.get("tool_id") == OSV]
+    return unit.job.run_root, scan, history, events
 
 
 def test_one_project_oom_is_a_named_gap_and_other_projects_keep_their_evidence(tmp_path: Path) -> None:

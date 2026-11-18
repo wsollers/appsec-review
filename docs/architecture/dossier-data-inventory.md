@@ -34,8 +34,8 @@ and reconciliation with main `799ea3c2` for debug symbols and native SBOM eviden
 standalone OpenVEX integration over completed main `c47e3fea`. Operative OpenVEX default-policy
 rows are reconciled at `74d93127`, containing landed main `83e67b23`; historical evidence below
 retains its original source attribution.
-The combined inventory contains **44 registered/configured
-jobs, 145 dataset kinds, 21 public retrieval tools, 19 logical SQLite indexes and 16 allowed
+The current combined inventory contains **47 registered/configured
+jobs, 191 dataset kinds, 31 public retrieval tools, 19 logical SQLite indexes and 16 allowed
 query sets (10 produced, 6 pending)**. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,
 central wiring, process metrics, immutable PoC `/2`, gate/report `/2` and chain/base isolation now
@@ -171,6 +171,16 @@ pagination/truncation; exhausted bounds are never evidence of absence.
 | `query_observations` | `scanner`, `rule`, `severity`, `observation_class`, `suppressed`, `duplicate`, `source`, `artifact`, `path`, `start_line`, `end_line`, `shard`, `seed`, `function`, `fix_it`, `min_trace_length` 0-100000 | Native severity and normalization rule accompany normalized reported severity. Seed/function/fix-it/trace filters select Clang diagnostics; no automatic confirmation. |
 | `query_dataset_inventory` | `record_type`, `job`, `family`, `disposition`, `coverage_state`, `sensitivity`, `cell_type` | Dataset/audit/coverage-cell records; dispositions and visibility below. Cell types: language, build unit, producer/consumer, input source, query set, graph follow-up, FTS validation. |
 | `query_owasp_workbench` | `family`, `standard`, `version`, `profile`, `control`, `component`, `project`, `evidence_mode`, `validator`, `batch`, `disposition`, `shard` | Separate accepted OWASP store; families: `standards`, `component-classification`, `applicability`, `validation-work`, `control-result`, `finding-package`. Workbench dispositions are not inference claim states. |
+| `query_cfg_function` | `subject`, `path`, `function`, bounded paging | Accepted per-function CFG facts; syntactic edges are not executable-path proof. |
+| `query_guard_dominators` | `subject`, `path`, guard filters, bounded paging | Recorded guard/dominator facts with producer provenance; no invented guard verdict. |
+| `query_cpg_slice` | `subject`, bounded direction/depth | Accepted alternate CPG slices with resolution tiers. |
+| `query_call_paths` | source/target identities, bounded depth | Bounded call-path navigation, not confirmation of exploitability. |
+| `query_threat_boundaries` | `subject`, `path`, `boundary_id`, `trust_level` | Declared or source-resolved trust boundaries; unassigned threats stay gaps. |
+| `query_owasp_gaps` | `component_id`, `control_id`, `status` | Independently assessed `not_satisfied` controls with re-resolved evidence. |
+| `query_doc_drift` | `subject`, `path`, `drift_kind`, `severity` | Recognized document-drift kinds; coverage gaps are not drift findings. |
+| `query_engineering_signals` | `path`, bounded filters/paging | Engineering context and prioritization signals, not adjudicated findings. |
+| `query_sca_reachability` | bounded dependency/advisory filters | Pinned SCA reachability records; no-call observations do not establish unreachability. |
+| `query_sanitizer_readiness` | bounded inventory filters | Instrumentation/build readiness, never evidence of dynamic execution. |
 
 `query_change_context.signal` is exactly `fast_review_change_count`,
 `stale_approval_change_count`, `unapproved_mainline_change_count`, `off_hours_change_count`,
@@ -417,19 +427,21 @@ sanitized public references do not make those bytes public.
 | --- | --- | --- | --- |
 | [`job_model_connectivity`](../../src/appsec_review/jobs/job_model_connectivity/datasets.py) | none | `model_connectivity` | none |
 | [`job_image_pin_verification`](../../src/appsec_review/jobs/job_image_pin_verification/datasets.py) | none | `image_pin_verification` | none |
-| [`job_target_acquisition`](../../src/appsec_review/jobs/job_target_acquisition/datasets.py) | none | `target_acquisition` | none |
+| [`job_target_acquisition`](../../src/appsec_review/jobs/job_target_acquisition/datasets.py) | none | `target_acquisition`, `target_acquisition_plan`, `target_acquisition_result`, `target_acquisition_system_manifest` | none |
 | [`job_review_intake`](../../src/appsec_review/jobs/job_review_intake/datasets.py) | none | `model_preflight`, `binary_evidence`, `review_intake` | none |
 | [`job_target_catalog`](../../src/appsec_review/jobs/job_target_catalog/datasets.py) | `source_files`, `declaration_symbols`, `components`, `target_documents`, `build_units` | `target_artifact_inputs`, `catalog_documents` | none |
-| [`job_target_analysis_plan`](../../src/appsec_review/jobs/job_target_analysis_plan/datasets.py) | `analysis_plan` | `analysis_plan_documents` A(s) | `planning_model_transcripts` |
+| [`job_build_environment_analysis`](../../src/appsec_review/jobs/job_build_environment_analysis/datasets.py) | none | `build_environment` A(s) | none |
+| [`job_build_iteration`](../../src/appsec_review/jobs/job_build_iteration/datasets.py) | none | none | `iteration_records`, `workspace_records` |
+| [`job_target_analysis_plan`](../../src/appsec_review/jobs/job_target_analysis_plan/datasets.py) | `analysis_plan` | `analysis_plan_documents` A(s) | `planning_feedback_cache` |
 | [`job_source_history_analysis`](../../src/appsec_review/jobs/job_source_history_analysis/datasets.py) | `history_signals` | `history_documents` | `raw_git_history`, `history_tool_io` |
 | [`job_change_context_analysis`](../../src/appsec_review/jobs/job_change_context_analysis/datasets.py) | `change_context` | `change_context_documents` A(s) | `operator_exports`, `change_context_tool_io` |
 | [`job_ci_configuration_analysis`](../../src/appsec_review/jobs/job_ci_configuration_analysis/datasets.py) | `ci_observations`, `ci_findings` | `ci_documents` | `ci_tool_io` |
-| [`job_tree_sitter_ast`](../../src/appsec_review/jobs/job_tree_sitter_ast/datasets.py) | `tree_sitter_ast`, `tree_sitter_coverage` | `tree_sitter_node_shards`, `generated_source_backing` | `tree_sitter_tool_io` |
-| [`job_project_build`](../../src/appsec_review/jobs/job_project_build/datasets.py) | none | `project_build_dispatch` A(s) | `probe_workspaces`, `image_build_streams` |
-| [`job_language_build`](../../src/appsec_review/jobs/job_language_build/datasets.py) | `build_actions`, `jvm_build_actions` | `language_build_receipts` A(s) | `build_workspaces` |
+| [`job_tree_sitter_ast`](../../src/appsec_review/jobs/job_tree_sitter_ast/datasets.py) | `tree_sitter_ast`, `tree_sitter_coverage` | `tree_sitter_node_shards`, `tree_sitter_cfg`, `tree_sitter_scope_results`, `tree_sitter_acceptance`, `generated_source_backing` | `tree_sitter_tool_io` |
+| [`job_project_build`](../../src/appsec_review/jobs/job_project_build/datasets.py) | none | `project_build_dispatch` A(s) | `topology_refinement_inputs`, `probe_workspaces`, `image_build_streams` |
+| [`job_language_build`](../../src/appsec_review/jobs/job_language_build/datasets.py) | `build_actions`, `jvm_build_actions` | `language_build_receipts` A(s) | `topology_refinement_inputs`, `build_workspaces` |
 | [`job_artifact_indexing`](../../src/appsec_review/jobs/job_artifact_indexing/datasets.py) | `artifact_catalog`, `archive_members`, `artifact_relationships` | `artifact_index_summary` | none |
 | [`job_debug_symbol_indexing`](../../src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py) | `normalized_symbols` | `symbol_coverage`, `target_decision`, `debug_symbol_summary` | `raw_artifact_refs`, `reader_executions` |
-| [`job_artifact_security_analysis`](../../src/appsec_review/jobs/job_artifact_security_analysis/datasets.py) | `artifact_security_observations` | `artifact_security_results` | `artifact_scanner_io` |
+| [`job_artifact_security_analysis`](../../src/appsec_review/jobs/job_artifact_security_analysis/datasets.py) | `artifact_security_observations` | `artifact_security_results`, `artifact_security_acceptance` | `artifact_scanner_io` |
 | [`job_cpp_compiled_analysis`](../../src/appsec_review/jobs/job_cpp_compiled_analysis/datasets.py) | `cpp_build_graph`, `clang_ast`, `llvm_ir`, `infer_observations`, `binary_symbols`, `cpp_blocked_branches` | `cpp_plan_and_summary` A(s) | `cpp_case_material` |
 | [`job_clang_static_analysis`](../../src/appsec_review/jobs/job_clang_static_analysis/datasets.py) | `clang_static_observations`, `clang_static_scope_coverage` | `clang_static_summary` | `clang_static_raw` |
 | [`job_cpp_symbol_index`](../../src/appsec_review/jobs/job_cpp_symbol_index/datasets.py) | `clangd_symbols`, `clangd_coverage` | `clangd_summary` | `clangd_tool_io` |
@@ -438,28 +450,28 @@ sanitized public references do not make those bytes public.
 | [`job_cpg_analysis`](../../src/appsec_review/jobs/job_cpg_analysis/datasets.py) | `cpg_graph_coverage`, `cpg_scope_coverage` | `cpg_summary` | `cpg_binary` |
 | [`job_sanitizer_build`](../../src/appsec_review/jobs/job_sanitizer_build/datasets.py) | none | `sanitizer_build_summary` | `sanitizer_build_workspaces` |
 | [`job_post_build_security_assessment`](../../src/appsec_review/jobs/job_post_build_security_assessment/datasets.py) | `build_security` | `build_security_documents` | none |
-| [`job_evidence_collection`](../../src/appsec_review/jobs/job_evidence_collection/datasets.py) | `static_tool_observations` | `static_tool_evidence` | `static_tool_io` |
-| [`job_codeql_analysis`](../../src/appsec_review/jobs/job_codeql_analysis/datasets.py) | `codeql_observations` | `codeql_predecessor_import`, `codeql_graph_export`, `codeql_plan_and_summary` | `codeql_scope_material` |
-| [`job_code_graph_index`](../../src/appsec_review/jobs/job_code_graph_index/datasets.py) | `code_graph_facts` | `code_graph_stages`, `code_graph_checkpoints`, `code_graph_summary` | none |
+| [`job_evidence_collection`](../../src/appsec_review/jobs/job_evidence_collection/datasets.py) | `static_tool_observations` | `static_tool_evidence`, `corroborated_sast_evidence` | `static_tool_io` |
+| [`job_codeql_analysis`](../../src/appsec_review/jobs/job_codeql_analysis/datasets.py) | `codeql_observations` | `codeql_predecessor_import`, `codeql_graph_export`, `codeql_plan_and_summary`, `codeql_cache_initialization` | `codeql_scope_material` |
+| [`job_code_graph_index`](../../src/appsec_review/jobs/job_code_graph_index/datasets.py) | `code_graph_facts`, `alternate_cpg_index` | `code_graph_stages`, `code_graph_checkpoints`, `code_graph_summary`, `code_graph_scorecard`, `alternate_cpg` | none |
 | [`job_test_coverage`](../../src/appsec_review/jobs/job_test_coverage/datasets.py) | `test_coverage` | `test_coverage_handoff` | none |
 | [`job_profile_data`](../../src/appsec_review/jobs/job_profile_data/datasets.py) | `profile_data` | `profile_data_handoff` | none |
-| [`job_dependency_intelligence`](../../src/appsec_review/jobs/job_dependency_intelligence/datasets.py) | `dependency_context` | `native_discovery`, `native_spdx`, `native_sbom_provenance`, `native_sbom_metrics`, `scorecard_responses`, `dependency_intelligence_handoff` | none |
-| [`job_owasp_control_assessment`](../../src/appsec_review/jobs/job_owasp_control_assessment/datasets.py) | `owasp_workbench` (separate store) | `owasp_documents` | `owasp_model_receipts` |
-| [`job_review_prioritization`](../../src/appsec_review/jobs/job_review_prioritization/datasets.py) | `priority_items` | `prioritization_documents` | none |
+| [`job_dependency_intelligence`](../../src/appsec_review/jobs/job_dependency_intelligence/datasets.py) | `native_advisory_observations`, `dependency_context` | `native_discovery`, `native_component_curation`, `native_metadata_investigation`, `native_inference_metrics`, `native_spdx`, `native_sbom_provenance`, `native_sbom_metrics`, `native_advisory_lookup`, `sca_reachability`, `scorecard_responses`, `unity_inventory`, `native_inference_inputs`, `dependency_intelligence_handoff` | `native_inputs`, `native_inference_io`, `native_sbom_conversion` |
+| [`job_owasp_control_assessment`](../../src/appsec_review/jobs/job_owasp_control_assessment/datasets.py) | `owasp_workbench` (separate store) | `owasp_documents`, `owasp_control_gaps` | `owasp_model_receipts` |
+| [`job_review_prioritization`](../../src/appsec_review/jobs/job_review_prioritization/datasets.py) | `priority_items` | `prioritization_documents`, `prioritization_signals` | none |
 | [`job_security_tagging`](../../src/appsec_review/jobs/job_security_tagging/datasets.py) | `tag_assignments` | `tagging_documents` | none |
 | [`job_threat_model_generation`](../../src/appsec_review/jobs/job_threat_model_generation/datasets.py) | none | `generated_dfd`, `generated_threat_model`, `generated_model_evidence`, `generated_model_views`, `threat_model_documents` (default disabled; generated routing context, never a supplied document) | none |
 | [`job_third_party_data_sync`](../../src/appsec_review/jobs/job_third_party_data_sync/datasets.py) | none | none | `feed_sync_work` (published snapshots are pinned separately) |
 | [`job_review_data_indexing`](../../src/appsec_review/jobs/job_review_data_indexing/datasets.py) | `cross_domain_links`, `precomputed_products`, `dataset_inventory` | `accepted_input_summary`, `derived_checkpoints`, `fts_image_validation`, `dataset_audit_report`, `coverage_matrices` | none |
 | [`job_review_package_assembly`](../../src/appsec_review/jobs/job_review_package_assembly/datasets.py) | none | `review_packages` | none |
-| [`job_document_issue_analysis`](../../src/appsec_review/jobs/job_document_issue_analysis/datasets.py) | none | `document_issue_ledger` | none |
-| [`job_inference_security_review`](../../src/appsec_review/jobs/job_inference_security_review/datasets.py) | none | `accepted_scope`, `review_packages`, `claim_ledger`, `scores_and_findings` | `lead_triage`, `review_cells`, `attack_chains` |
+| [`job_document_issue_analysis`](../../src/appsec_review/jobs/job_document_issue_analysis/datasets.py) | none | `document_issue_ledger`, `document_drift_issues` | none |
+| [`job_inference_security_review`](../../src/appsec_review/jobs/job_inference_security_review/datasets.py) | none | `accepted_scope`, `review_packages`, `claim_ledger`, `scores_and_findings` | `lead_triage`, `review_cells`, `attack_chains`, `review_audit_metadata`, `review_decision_audit`, `review_decisions`, `review_verification_coverage`, `review_decision_bases`, `review_audit_continuations` |
 | [`job_poc_generation`](../../src/appsec_review/jobs/job_poc_generation/datasets.py) | none | `poc_generation_summary` | `poc_writer_cells`, `poc_reproducers` |
 | [`job_remediation_planning`](../../src/appsec_review/jobs/job_remediation_planning/datasets.py) | none | `remediation_planning_summary` | `remediation_proposals` |
 | [`job_remediation_validation`](../../src/appsec_review/jobs/job_remediation_validation/datasets.py) | none | `remediation_validation_summary` | `remediation_validation_receipts` |
 | [`job_dossier_publication`](../../src/appsec_review/jobs/job_dossier_publication/datasets.py) | none | none | `dossier_publications` |
 | [`job_final_publication_gate`](../../src/appsec_review/jobs/job_final_publication_gate/datasets.py) | none | `publication_gate_decisions` | none |
-| [`job_openvex_export`](../../src/appsec_review/jobs/job_openvex_export/datasets.py) | none | none | `openvex_verified_inputs`, `openvex_documents`, `openvex_export_accounting` |
-| [`job_final_report_publication`](../../src/appsec_review/jobs/job_final_report_publication/datasets.py) | none | `final_report_publications` | none |
+| [`job_openvex_export`](../../src/appsec_review/jobs/job_openvex_export/datasets.py) | none | none | `openvex_dependency_documents`, `openvex_dependency_accounting`, `openvex_verified_inputs`, `openvex_documents`, `openvex_export_accounting` |
+| [`job_final_report_publication`](../../src/appsec_review/jobs/job_final_report_publication/datasets.py) | none | `final_report_publications`, `final_report_sarif_accounting` | `final_report_sarif` |
 
 The runtime also owns configuration, attempt/status/unit/handoff/claim and orchestration receipts,
 bounded event logs, sanitized retrieval audit receipts, and shared-object custody receipts.

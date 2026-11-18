@@ -245,21 +245,20 @@
       },
       "definition": "Graph, alias and flow representations describe possible propagation and reachability while retaining each producer's precision and coverage limits.",
       "gap": [
-        "T-147",
         "T-157"
       ],
       "mcp_tools": {
         "basis": "union of detailed declaration rows",
-        "gaps": [
-          "T-147"
-        ],
-        "state": "partial",
+        "gaps": [],
+        "state": "declared",
         "values": [
           "coverage",
           "find",
           "list_codeql_databases",
+          "query_call_paths",
           "query_code_graph",
           "query_codeql_neighborhood",
+          "query_cpg_slice",
           "query_dataset_inventory",
           "query_observations"
         ]
@@ -703,11 +702,15 @@
           "document_issue_ledger",
           "dossier_publications",
           "final_report_publications",
+          "final_report_sarif",
+          "final_report_sarif_accounting",
           "generated_dfd",
           "generated_model_evidence",
           "generated_model_views",
           "generated_threat_model",
           "lead_triage",
+          "openvex_dependency_accounting",
+          "openvex_dependency_documents",
           "openvex_documents",
           "openvex_export_accounting",
           "openvex_verified_inputs",
@@ -3122,17 +3125,17 @@
       "description": "Universal multi-language Alternate CPG and inter-procedural CFG index shard (Tree-sitter AST/CFG + CodeQL + clangd + syntactic fallback across all 9 target languages).",
       "family": "graph",
       "gap": [
-        "T-147",
         "T-157"
       ],
       "job_enabled": true,
       "mcp_tools": {
         "basis": "query_cpg_slice; query_call_paths",
-        "gaps": [
-          "T-147"
-        ],
-        "state": "gap",
-        "values": []
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "query_call_paths",
+          "query_cpg_slice"
+        ]
       },
       "producer": "job_code_graph_index",
       "producer_languages": {
@@ -3261,6 +3264,7 @@
         "state": "declared",
         "values": [
           "adjudication_judge",
+          "attack_chain_analyst",
           "blue_team_refuter",
           "hypothesis_hunter",
           "independent_verifier",
@@ -4807,7 +4811,7 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/document-drift-issue/2",
+      "schema": "appsec-review/document-drift-issue/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_document_issue_analysis.datasets",
       "stage": "artifact_only",
@@ -6254,7 +6258,7 @@
       "authority": "producer_evidence",
       "bucket": "review_products",
       "dataset": "final_report_publications",
-      "description": "The machine-readable final report (final-report.json), its deterministic Markdown rendering (final-report.md) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained renderer logs), all hash-pinned by the accepted handoff.",
+      "description": "The machine-readable final report (final-report.json), its deterministic Markdown rendering (final-report.md), HTML (final-report.html) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained renderer logs), all hash-pinned by the accepted handoff.",
       "family": "inference_review",
       "gap": [
         "T-157"
@@ -6293,6 +6297,106 @@
         ]
       },
       "schema": "appsec-review/final-report/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_final_report_publication.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "review_products",
+      "dataset": "final_report_sarif",
+      "description": "Gate-certified findings with explicit severity and dossier source locations.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_final_report_publication",
+      "producer_languages": {
+        "basis": "job_final_report_publication: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "application/sarif+json;version=2.1.0",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_final_report_publication.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "review_products",
+      "dataset": "final_report_sarif_accounting",
+      "description": "SARIF artifact identity, result counts and explicit omitted-record export gaps.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_final_report_publication",
+      "producer_languages": {
+        "basis": "job_final_report_publication: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/sarif-export-result/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_final_report_publication.datasets",
       "stage": "artifact_only",
@@ -6953,6 +7057,106 @@
       "access": "sanitized_metadata_only",
       "authority": "producer_evidence",
       "bucket": "review_products",
+      "dataset": "openvex_dependency_accounting",
+      "description": "Dependency export source pins, statement counts and coverage gaps.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_openvex_export",
+      "producer_languages": {
+        "basis": "job_openvex_export: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/openvex-dependencies/1",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_openvex_export.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "review_products",
+      "dataset": "openvex_dependency_documents",
+      "description": "Optional admitted dependency reachability statements; no inferred negative VEX claims.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_openvex_export",
+      "producer_languages": {
+        "basis": "job_openvex_export: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "https://openvex.dev/ns/v0.2.0",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_openvex_export.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "review_products",
       "dataset": "openvex_documents",
       "description": "Affected-only statements for the exact reviewed source snapshot and configuration.",
       "family": "inference_review",
@@ -7142,7 +7346,7 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/owasp-control-gap/2",
+      "schema": "appsec-review/owasp-control-gap/1",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_owasp_control_assessment.datasets",
       "stage": "artifact_only",
@@ -20408,6 +20612,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -20421,6 +20627,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -20524,6 +20732,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -20537,6 +20747,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -20640,6 +20852,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -20653,6 +20867,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -20756,6 +20972,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -20769,6 +20987,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -20872,6 +21092,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -20885,6 +21107,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -20988,6 +21212,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21001,6 +21227,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21104,6 +21332,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21117,6 +21347,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21220,6 +21452,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21233,6 +21467,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21336,6 +21572,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21349,6 +21587,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21452,6 +21692,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21465,6 +21707,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21568,6 +21812,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21581,6 +21827,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21684,6 +21932,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21697,6 +21947,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21800,6 +22052,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21813,6 +22067,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -21916,6 +22172,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -21929,6 +22187,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -22032,6 +22292,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -22045,6 +22307,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -22148,6 +22412,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -22161,6 +22427,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",
@@ -22264,6 +22532,8 @@
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
         "job_final_report_publication/final_report_publications",
+        "job_final_report_publication/final_report_sarif",
+        "job_final_report_publication/final_report_sarif_accounting",
         "job_inference_security_review/accepted_scope",
         "job_inference_security_review/attack_chains",
         "job_inference_security_review/claim_ledger",
@@ -22277,6 +22547,8 @@
         "job_inference_security_review/review_packages",
         "job_inference_security_review/review_verification_coverage",
         "job_inference_security_review/scores_and_findings",
+        "job_openvex_export/openvex_dependency_accounting",
+        "job_openvex_export/openvex_dependency_documents",
         "job_openvex_export/openvex_documents",
         "job_openvex_export/openvex_export_accounting",
         "job_openvex_export/openvex_verified_inputs",

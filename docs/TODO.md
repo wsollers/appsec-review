@@ -178,7 +178,7 @@ until each is rewritten into the entry format when it is next touched.
 | T-171 | [Rewire change context test coverage and profile data into review prioritization](#t-171-rewire-change-context-test-coverage-and-profile-data-into-review-prioritization) | review | done (2026-11-17, 3c76b820e, docs/tasks/2026-11-17-t171-rewire-engineering-signals-prioritization.md) |
 | T-172 | [Index threat models OWASP control gaps document drift and build mitigations](#t-172-index-threat-models-owasp-control-gaps-document-drift-and-build-mitigations) | evidence | done (2026-11-17, 748b7a06b, docs/tasks/2026-11-17-t172-unified-evidence-indexing-retrieval-skills.md) |
 | T-173 | [Publish common querying skills rebalance frontier prompts and widen attack chains](#t-173-publish-common-querying-skills-rebalance-frontier-prompts-and-widen-attack-chains) | review | done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t173-frontier-prompt-role-skill-overhaul.md) |
-| T-174 | [Unify compile-only PoC harnesses and add multi-language remediation validation](#t-174-unify-compile-only-poc-harnesses-and-add-multi-language-remediation-validation) | review | done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md) |
+| T-174 | [Unify compile-only PoC harnesses and add multi-language remediation validation](#t-174-unify-compile-only-poc-harnesses-and-add-multi-language-remediation-validation) | review | in-progress |
 | T-175 | [Gate dynamic PoC and sanitizer execution on sandboxing architecture review](#t-175-gate-dynamic-poc-and-sanitizer-execution-on-sandboxing-architecture-review) | testing | blocked |
 | T-176 | [Expand radar dimensions to 12 axes and redesign executive reports and dossiers](#t-176-expand-radar-dimensions-to-12-axes-and-redesign-executive-reports-and-dossiers) | review | done (2026-11-17, 4c9cb5ef2, docs/tasks/2026-11-17-t176-executive-report-dossier-and-12axis-radar.md) |
 | T-177 | [Rebuild and register container images compile CodeQL packs and refresh Dagster pins](#t-177-rebuild-and-register-container-images-compile-codeql-packs-and-refresh-dagster-pins) | images | done (2026-11-17, docs/tasks/2026-11-17-t177-wsl-container-dagster-smoke-readiness.md) |
@@ -744,6 +744,11 @@ until each is rewritten into the entry format when it is next touched.
   `tests/test_evidence_collection_job.py` duplicate existing TOML release keys (lines 113 and 148).
   They fail before scanner behavior and remain unfixed; focused Grype consumer units cover the
   changed cache boundary separately.
+  The 2026-11-18 origin-main repair also reproduced five stale model/default assertions in
+  `tests/test_runtime_profiles.py` and the conflicting `job_review_data_indexing` lineage in
+  `tests/test_remediation_jobs.py` against unchanged code in `4ab4a1e` (base `3d1dc3d7`).
+  They remain named baseline gaps; the new report, remediation, model-floor and profile-parity
+  regressions are covered by the focused repair units.
 - **Done when:** the differential against `fe328d76`'s baseline shows no failures attributable to
   the merge.
 - **Refs:** `docs/tasks/2026-11-07-job-control-schema-standardization.md` (differential method).
@@ -761,6 +766,12 @@ until each is rewritten into the entry format when it is next touched.
   synthetic target) costs ~7 s serially; a profile puts about half in `storage.shared.safe_path`
   (≈14.7k calls per run, each a per-component symlink walk) and most of the rest in the handoff's
   reference verification. Every job pass adds ~10 such tests, so this is the lever.
+  The 2026-11-18 audit found `tests/test_final_report.py` repeatedly rebuilding a whole scripted
+  review/gate/report chain under shuffled collection (90-94 seconds per case). The 300-second
+  run was stopped without increasing its deadline; this legacy coverage remains a named gap.
+  Report-unit tests exercise the repaired publication independently. Three OSV graph-fixture
+  tests were narrowed to the real scanner unit with the same assertions: the whole file now
+  finishes in 3.52 seconds, with no case over ten seconds.
 - **Done when:** a scoped decision is recorded here and the unit path runs in minutes on a
   developer host.
 
@@ -2825,9 +2836,9 @@ until each is rewritten into the entry format when it is next touched.
 
 ### T-174 — Unify compile-only PoC harnesses and add multi-language remediation validation
 
-- **State:** done (2026-11-17, 69af3a43d, docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md)
+- **State:** in-progress
 - **Area:** review
-- **Why:** `job_poc_generation` splits eligibility across mismatched `confirmed` vs `corroborated` status predicates and supports syntax checking for only Python/JS/C/Java/Go/Rust/sh, leaving Ruby, C# and PHP smoke targets without tailored compile/AST validation; meanwhile `job_remediation_planning` orders items alphabetically instead of by risk/exploitability and `job_remediation_validation` parses patches with Python `ast.parse` only.
+- **Why:** Reopened after the origin-main audit: the static helper parses only Python with `ast.parse`; its other language checks are lexical/regex patterns, not Tree-sitter syntax or guard-dominance proofs. The repair wires the PoC checks, labels their actual assurance, preserves unknown severity/reachability, and retains independent compiler checks, but the originally promised nine-language parser and semantic checks remain unimplemented.
 - **Scope:** unify PoC eligibility across `confirmed` and high-confidence `corroborated` findings (`critical`/`high` plus chain-participating `medium`), add static AST/syntax/typecheck-only PoC harness templates and Tree-sitter syntax verification across all nine smoke languages (C/C++, Java, JavaScript, Python, Ruby, Go, C#, Rust, PHP) while strictly preserving `generated_code_execution = "not_performed_by_policy"` (**zero execution of generated PoCs**), rank `job_remediation_planning` backlogs by severity, exploitability, blast radius and shared root-cause fix leverage, and upgrade `job_remediation_validation` to run Tree-sitter AST syntax checks, post-patch sink/barrier re-checks and symbol-preservation checks across all nine languages.
 - **Done when:** fast isolated unit tests (`<10s`) cover unified PoC eligibility, 9-language static PoC syntax/AST checking, non-execution policy enforcement, risk-first remediation ordering, and multi-language patch validation, documented in `docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md`.
 - **Refs:** T-061, T-074, T-175, T-5079, `src/appsec_review/jobs/job_poc_generation/`, `src/appsec_review/jobs/job_remediation_planning/`, `src/appsec_review/jobs/job_remediation_validation/`, `docs/tasks/2026-11-17-t174-compile-only-poc-and-validated-remediation.md`.

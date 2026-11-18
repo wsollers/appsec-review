@@ -117,11 +117,12 @@ def test_export_is_a_declared_protected_downstream_dataset_not_an_index_input():
     from appsec_review.jobs.job_review_data_indexing.job import DOWNSTREAM_JOBS
 
     registry = builtin_registry()
-    assert registry.build(EXPORT).consumes == (GATE, REVIEW)
+    assert registry.build(EXPORT).consumes == ("job_dependency_intelligence", GATE, REVIEW, "job_review_intake")
     assert registry.build(REPORT).consumes == (GATE,)
     assert EXPORT in DOWNSTREAM_JOBS
     assert {item.output_kind for item in DATASETS} == {
         "openvex_verified_inputs", "openvex_documents", "openvex_export_accounting",
+        "openvex_dependency_documents", "openvex_dependency_accounting",
     }
     assert all(item.disposition == "protected" and item.sensitivity == "sensitive"
                and item.family == "inference_review" and item.query_route for item in DATASETS)
