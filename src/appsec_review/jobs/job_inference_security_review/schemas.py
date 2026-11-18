@@ -12,7 +12,7 @@ import json
 import math
 from pathlib import Path
 import re
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 SCHEMA_DIRECTORY = Path("docs") / "schemas" / "inference-security-review"
 _ANNOTATIONS = frozenset({"$schema", "$id", "$defs", "title", "description", "format"})

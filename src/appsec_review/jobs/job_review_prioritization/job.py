@@ -8,6 +8,8 @@ A high score means "review first"; nothing here is a vulnerability finding.
 
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import asdict
@@ -588,7 +590,7 @@ def build_job() -> Job:
                 values[scope].update(scores)
         if not available:
             return values, [*gaps, f"history_hotspots_unavailable: history decision {decision}"][:20], "UNAVAILABLE"
-        return values, gaps[:20], "EXACT" if exact else "PARTIAL"
+        return values, bounded_gap_messages(gaps, 20), "EXACT" if exact else "PARTIAL"
 
     def score(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit.job)
@@ -929,7 +931,8 @@ def build_job() -> Job:
                     builder.add_relation(RelationRecord(RelationKind.CONTAINS, context_ids[item["path"]],
                                                         entity_ids[item["item_id"]], True, 1.0))
             syntax_gaps = [gap for gap in syntax_output["gaps"]]
-            builder.add_coverage("complexity", "partial" if syntax_gaps else "complete", "; ".join(syntax_gaps[:20]) or None)
+            builder.add_coverage("complexity", "partial" if syntax_gaps else "complete",
+                                 "; ".join(bounded_gap_messages(syntax_gaps, 20)) or None)
             builder.add_coverage("dependency-graph", "partial" if graph_output["gaps"] else "complete",
                                  "; ".join(graph_output["gaps"][:20]) or None)
             semgrep_status = semantic_output["semgrep_status"]

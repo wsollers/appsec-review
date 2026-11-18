@@ -19,6 +19,8 @@ are binary-derived data, never instructions.
 
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from dataclasses import asdict
 import hashlib
 import json
@@ -344,7 +346,8 @@ def index_binary(unit: UnitContext, document: Mapping[str, Any], entry: Mapping[
     binary = _Binary(unit, entry, root, manifest, limits, builder)
     binary.build(managed_routing(manifest))
     status = "partial" if binary.gaps else "complete"
-    builder.add_coverage(f"binary:{entry['binary_id']}"[:256], status, "; ".join(binary.gaps[:10]) or None)
+    builder.add_coverage(f"binary:{entry['binary_id']}"[:256], status,
+                         "; ".join(bounded_gap_messages(binary.gaps, 10)) or None)
     sha, _ = builder.build_or_reuse()
     gaps = [f"{entry['binary_id']}: {gap}" for gap in binary.gaps]
     index = IndexIdentity("binary", "appsec-review/retrieval-index/2", sha, fingerprint,

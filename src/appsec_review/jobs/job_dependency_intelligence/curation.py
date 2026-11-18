@@ -316,8 +316,10 @@ class _Curation:
         return context
 
     def payload(self, identifiers: list[str]) -> dict[str, Any]:
+        fields = ("candidate_id", "native_name", "package_root", "root_id", "domain", "context_paths")
         return {"schema": CURATION_SCHEMA, "input_records": len(identifiers),
-                "candidates": [deepcopy(self.context[identifier]) for identifier in identifiers],
+                "candidates": [{key: deepcopy(self.context[identifier][key]) for key in fields}
+                               for identifier in identifiers],
                 "rules": _RULES}
 
     def preserve(self, identifier: str, reason: str, *, bound: bool = False) -> None:

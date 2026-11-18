@@ -22,7 +22,6 @@ a credential. Any gap makes the acquisition ``PARTIAL``; nothing is silently ski
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -35,6 +34,7 @@ import tempfile
 from typing import Any
 
 from appsec_review.config.target_acquisition import SystemRequest, TargetAcquisitionSettings, TargetRequest
+from appsec_review.storage.shared import PublicationThreadPoolExecutor
 
 from . import git_source, perforce, review_exports
 from .safety import AcquisitionError, inspect_tree, scrub
@@ -428,7 +428,7 @@ def acquire_system(*, repository_root: Path, settings: TargetAcquisitionSettings
                 "action": "acquired"}
 
     workers = max(1, min(settings.max_parallel_components, len(requests)))
-    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="target-acquisition") as pool:
+    with PublicationThreadPoolExecutor(max_workers=workers, thread_name_prefix="target-acquisition") as pool:
         results = dict(zip(selected, pool.map(one, requests)))
     gaps = [gap for component_id in selected for gap in _component_gaps(component_id, results[component_id])]
     available = [component_id for component_id in selected if results[component_id].get("status") in _AVAILABLE]

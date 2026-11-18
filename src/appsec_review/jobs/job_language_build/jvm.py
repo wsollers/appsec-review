@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -486,7 +488,7 @@ def _finish_row(row: dict[str, Any], workspace: Path, source_dir: str) -> list[s
         classes, class_gaps = javac_outputs(workspace, directory, arguments)
         if class_gaps:
             # The classes stay unattributed, and artifact indexing names each one as a gap.
-            row["class_mapping_gaps"] = class_gaps[:16]
+            row["class_mapping_gaps"] = bounded_gap_messages(class_gaps, 16)
         mapped_classes = [{**item, "mapping": "javac-derived-class"}
                           for item in _mapped(workspace, ".", classes) if item.get("sha256")]
         mapped_outputs = [*_mapped(workspace, directory, outputs), *mapped_classes]

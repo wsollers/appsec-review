@@ -13,6 +13,8 @@ model concurrency is the run-wide review-team semaphore. Ordinary failures becom
 """
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from collections import defaultdict
 import hashlib
 import json
@@ -63,7 +65,6 @@ from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import audit, chains, stages
-from .evidence_fulfillment import ensure_thinking_profile_floor
 from .datasets import CONTRACT, DATASETS
 from .schemas import SchemaSet, SCHEMA_DIRECTORY
 from .teams import WARRANTS_SCHEMA, PackageWork, ReviewContext, lane_failure, run_lane
@@ -298,7 +299,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "components": sorted(item.identity for item in scope.components),
                 "source_languages": {item.identity: item.language for item in scope.source_files if item.language},
                 "build_unit_languages": {item.build_unit_id: list(item.languages) for item in scope.build_units},
-                "scope_gaps": [gap.record() for gap in scope.gaps], "gaps": gaps[:200],
+                "scope_gaps": [gap.record() for gap in scope.gaps], "gaps": bounded_gap_messages(gaps, 200),
                 "terminal_status": _status(gaps)}
 
     # triage -------------------------------------------------------------------------------------
@@ -327,7 +328,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
 
         outcome = run_triage(
             collection.leads, settings=settings.triage,
-            profile=ensure_thinking_profile_floor(settings.models[settings.triage.model_profile]),
+            profile=settings.models[settings.triage.model_profile],
             infer=infer or _default_infer(), read_excerpt=read_excerpt, reference=reference, guidance=guidance,
             schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY), cache_dir=job_data(unit) / "triage-cache",
             shared=SharedArtifacts.for_job(unit.job))
@@ -380,7 +381,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         pin_bundle(unit.job.run_root, guidance.bundle, files={"prompt.md": guidance.text})
         outcome = hunt_plan.run_planner(
             brief, settings=settings.hunting,
-            profile=ensure_thinking_profile_floor(settings.models[settings.hunting.planner_profile]),
+            profile=settings.models[settings.hunting.planner_profile],
             infer=infer or _default_infer(), guidance=guidance, schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
             cell_id=f"hunt-planner-{unit.job.run_id}")
         document = {**outcome.document, "run_id": unit.job.run_id, "manifest_sha256": scope.manifest_sha256,
@@ -477,7 +478,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                f"{len(cwe_ids)} rule/crosswalk CWE ids only")
             unit.job.events.write("INFERENCE_REVIEW_PACKAGES_ASSEMBLED", lane=lane.value, package_count=len(records))
             result = {"artifact": _write(unit, f"{lane.value}-packages.json", document),
-                      "package_count": len(records), "gaps": gaps[:200], "terminal_status": _status(gaps)}
+                      "package_count": len(records), "gaps": bounded_gap_messages(gaps, 200), "terminal_status": _status(gaps)}
             if lane is Lane.LEAD:
                 # Every lead lane A leaves out, with its reason, in one readable artifact (T-5029).
                 from appsec_review.review.excluded_leads import excluded_leads_document
@@ -774,7 +775,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             [f"accounting violation: {gap.reason}" for gap in accounting.violations])
         return {"artifact": _write(unit, "completeness.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "status": document["status"],
-                "review_incomplete": accounting.review_incomplete, "gaps": gaps[:50],
+                "review_incomplete": accounting.review_incomplete, "gaps": bounded_gap_messages(gaps, 50),
                 "terminal_status": "SUCCEEDED" if document["status"] == "COMPLETE" else "COMPLETED_WITH_GAPS"}
 
     # publication --------------------------------------------------------------------------------

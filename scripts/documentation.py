@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import asdict, fields, is_dataclass
 from enum import Enum
 import hashlib
@@ -45,6 +46,61 @@ INDEX_PATHS = {
     "history": "docs/generated/history-index.md",
     "generated": "docs/generated/README.md",
 }
+
+WORKER_TURN_SCHEMA = "docs/schemas/inference-security-review/worker-turn.schema.json"
+
+
+def worker_turn_schema() -> dict:
+    from appsec_review.review.capability import (
+        EXPAND_TOOL, FORBIDDEN_PARAMETERS, LOCATOR_TOOLS, TOOL_SCHEMAS,
+    )
+    from appsec_review.review.cells import MAX_REQUESTS_PER_TURN, TURN_SCHEMA
+
+    def bounded(node):
+        if isinstance(node, dict):
+            if node.get("type") == "string" and not {"maxLength", "pattern", "enum", "const"} & node.keys():
+                node["maxLength"] = 512
+            if node.get("type") == "array" and "maxItems" not in node:
+                node["maxItems"] = len(node["items"]["enum"]) if "enum" in node.get("items", {}) else 32
+            for value in node.values():
+                bounded(value)
+        elif isinstance(node, list):
+            for value in node:
+                bounded(value)
+
+    requests = []
+    for tool, declared in sorted(TOOL_SCHEMAS.items()):
+        params = deepcopy(declared)
+        params["additionalProperties"] = False
+        for key in FORBIDDEN_PARAMETERS:
+            params["properties"].pop(key, None)
+        if tool in LOCATOR_TOOLS:
+            params["properties"]["locator"] = {
+                "type": "object", "additionalProperties": False, "required": ["path", "line"],
+                "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1024},
+                               "line": {"type": "integer", "minimum": 1, "maximum": 10_000_000}}}
+        if tool == EXPAND_TOOL:
+            params["oneOf"] = [{"required": [name]} for name in ("label", "ref", "files")]
+        bounded(params)
+        requests.append({
+            "type": "object", "additionalProperties": False, "required": ["tool", "parameters"],
+            "properties": {"tool": {"const": tool}, "parameters": params}})
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://appsec-review.local/schemas/inference-security-review/worker-turn.schema.json",
+        "title": "One model turn in a bounded cell loop",
+        "description": "Generated from review.capability by scripts/generate-docs.py; do not edit.",
+        "$defs": {"request": {"oneOf": requests}},
+        "oneOf": [
+            {"type": "object", "additionalProperties": False, "required": ["action", "requests"],
+             "properties": {"schema": {"const": TURN_SCHEMA}, "action": {"const": "retrieve"},
+                            "requests": {"type": "array", "items": {"$ref": "#/$defs/request"},
+                                         "minItems": 1, "maxItems": MAX_REQUESTS_PER_TURN}}},
+            {"type": "object", "additionalProperties": False, "required": ["action", "result"],
+             "properties": {"schema": {"const": TURN_SCHEMA}, "action": {"const": "final"},
+                            "result": {"type": "object"}}},
+        ],
+    }
 
 
 def notice(sources: tuple[str, ...] = SOURCES) -> str:
@@ -460,7 +516,8 @@ def render(root: Path, inventory: dict) -> dict[str, str]:
     import posixpath
 
     commit = json.loads((root / "docs/docs-sync.json").read_text(encoding="utf-8"))["synced_commit"]
-    files = {INVENTORY: json_view(inventory, inventory["generated_from"])}
+    files = {INVENTORY: json_view(inventory, inventory["generated_from"]),
+             WORKER_TURN_SCHEMA: json.dumps(worker_turn_schema(), indent=2) + "\n"}
     documents = authored_documents(root)
     assignments = inventory["guidance_assignments"]
     lines = [f"<!-- {notice()} -->", "# Model guidance registry", "",

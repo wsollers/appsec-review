@@ -98,8 +98,6 @@ from .schemas import SchemaSet
 from .evidence_fulfillment import (
     DEFAULT_MAX_EVIDENCE_REQUESTS,
     attach_querying_skill_to_bundle,
-    effective_max_output_tokens,
-    ensure_thinking_profile_floor,
     fulfill_evidence_requests,
 )
 
@@ -567,7 +565,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         guidance_bundle_sha256=guidance["bundle"]["sha256"], guidance_text=guidance["text"],
         provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
         max_input_tokens=profile.max_input_tokens,
-        max_output_tokens=effective_max_output_tokens(profile, budget=ctx.budget),
+        max_output_tokens=profile.max_output_tokens,
         timeout_seconds=profile.timeout_seconds, output_schema=OUTPUT_SCHEMAS[schema],
         validator_version=ctx.red_validator_version() if invocation else VALIDATOR_VERSION, reuse_basis=work.basis,
         view=view if view is not None else ctx.package_view(work), expand=expand)

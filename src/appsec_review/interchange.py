@@ -27,6 +27,16 @@ _CLASSES = frozenset({
 _SEVERITIES = frozenset({"critical", "high", "medium", "low", "info", "unknown"})
 
 
+def bounded_gap_messages(gaps: Sequence[str], limit: int) -> list[str]:
+    """Bound a legacy display summary without presenting omitted coverage as complete."""
+    if type(limit) is not int or limit < 1:
+        raise ValueError("gap message limit must be a positive integer")
+    if len(gaps) <= limit:
+        return list(gaps)
+    kept = list(gaps[:limit - 1])
+    return [*kept, f"(+{len(gaps) - len(kept)} more coverage gaps omitted from this summary)"]
+
+
 class AdmissionStatus(StrEnum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"

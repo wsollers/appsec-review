@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import jsonschema
+import pytest
 
 from appsec_review.jobs.job_evidence_collection.adapters import ADAPTERS
 from appsec_review.jobs.job_evidence_collection.evidence import (
@@ -17,6 +18,15 @@ from appsec_review.jobs.job_evidence_collection.evidence import (
 )
 from appsec_review.provenance import json_selector, retain_native_output, select_native
 
+
+@pytest.mark.parametrize("value", [0, -1, True, "5", 1.5, 1_000_001])
+def test_corroboration_cap_rejects_invalid_configuration(value):
+    from appsec_review.config.evidence_collection import parse_evidence_collection_settings
+
+    with pytest.raises(ValueError, match="max_findings_per_scope"):
+        parse_evidence_collection_settings({"max_findings_per_scope": value})
+    with pytest.raises(ValueError, match="max_findings_per_scope"):
+        corroborate_sast_records({}, target_fingerprint="f" * 64, max_findings_per_scope=value)
 
 def _retained_refs(tmp_path: Path, count: int) -> tuple[Path, list[list[dict[str, object]]]]:
     from .support import attempt_scope, make_unit_context

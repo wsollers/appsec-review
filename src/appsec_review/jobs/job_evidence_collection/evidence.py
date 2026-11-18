@@ -437,6 +437,8 @@ def corroborate_sast_records(
     target_fingerprint: str,
     max_findings_per_scope: int = 5_000,
 ) -> dict[str, Any]:
+    if type(max_findings_per_scope) is not int or not 1 <= max_findings_per_scope <= 1_000_000:
+        raise ValueError("max_findings_per_scope must be an integer in [1, 1000000]")
     clusters: list[dict[str, Any]] = []
     by_path_cwe: dict[tuple[str, str], list[dict[str, Any]]] = {}
     exact_fallback: dict[tuple[str, str, int, str], dict[str, Any]] = {}
@@ -522,7 +524,7 @@ def corroborate_sast_records(
         by_scope.setdefault(scope, []).append(cluster)
 
     emitted: list[dict[str, Any]] = []
-    cap = max(1, int(max_findings_per_scope))
+    cap = max_findings_per_scope
     for scope in sorted(by_scope):
         ranked = sorted(
             by_scope[scope],

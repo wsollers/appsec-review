@@ -31,9 +31,21 @@ decision. The [dossier data inventory](../architecture/dossier-data-inventory.md
 the available review/graph/document/build evidence from missing runtime/deployment
 gaps.
 
-Default `settings.attack_chains` bounds are 4 links, 100 expansions, 8 candidates/composition,
+Default `settings.attack_chains` bounds are 6 links, 100 expansions, 8 candidates/composition,
 100 challenge cells, 12 queries, 4 turns, 8 evidence rows/obligation and 65536 response bytes;
 `settings.rounds.max_attack_chains` is 50. Frontiers/caps and unsuccessful challenges retain gaps.
+Explicit `max_links = 4` remains four; it is never silently widened. Adjudication and chain
+composition remain stages of this job, with shared helpers under `review/finding_severity/`
+and `review/chain_composition/`, not additional standalone jobs. Missing component severity
+keeps composed severity unknown and produces a named gap.
+
+Each inference model table declares `thinking_min_output_tokens` (4096 in the shipped profiles).
+For thinking-enabled reasoning levels the loader rejects an output cap below that floor;
+requests use the resolved `max_output_tokens` unchanged. Missing selected querying guidance
+fails assembly rather than silently dropping the procedure or borrowing packaged guidance.
+The worker-turn schema is generated from the capability tool catalog by `scripts/generate-docs.py`;
+retrieval requests use `parameters`, and the schema includes scoped locators and `expand` labels.
+
 The five continuity dimensions are identity, privilege, trust boundary, artifact/deployment and
 temporal. Refutation must be independent; a required weakest-link verifier must also be
 model-distinct. Deterministic `attack-chain-continuity/2` evaluates native values, not model stance.

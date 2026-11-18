@@ -669,7 +669,7 @@ PROFILE_JOB_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "timeout_seconds": int, "retries": int})
 PROFILE_REVIEW_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
-    "max_queries": int, "max_turns": int, "timeout_seconds": int})
+    "max_queries": int, "max_turns": int, "timeout_seconds": int, "thinking_min_output_tokens": int})
 PROFILE_BUDGET_KEYS: tuple[str, ...] = (
     "budget_team_packages", "max_model_turns", "max_input_tokens", "max_output_tokens",
     "max_retrieval_queries", "timeout_seconds")

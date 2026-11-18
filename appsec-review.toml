@@ -1010,6 +1010,14 @@ custom_parsing_min_density = 0.5
 state_mutation_min_operations = 3
 # "run" normalizes over every scored item of a scope; "language" normalizes within each language.
 normalization_population = "run"
+sast_silence_min_complexity = 5
+
+[jobs.job_review_prioritization.settings.composite_weights]
+change_context_boost = 0.15
+uncovered_risk_boost = 0.18
+profile_hotpath_boost = 0.12
+sca_reachability_boost = 0.22
+sast_silence_hunt_boost = 0.20
 
 [jobs.job_review_prioritization.settings.priority_weights]
 cyclomatic = 2
@@ -2509,6 +2517,7 @@ workers = 8
 
 [jobs.job_evidence_collection.settings]
 tool_retries = 1
+max_findings_per_scope = 5000
 # osv-scanner offline mode loads each needed ecosystem's whole all.zip into memory (npm alone is
 # 368 MB of JSON; one npm project peaks above 2.2 GB), so it alone runs above the uniform 1g
 # scanner limit. One invocation runs per target project, at most this many lockfiles each.
@@ -3105,6 +3114,7 @@ max_output_tokens = 32000
 max_queries = 40
 max_turns = 4                 # review protocol v3 D11: a cell goes final by its fourth turn
 timeout_seconds = 600
+thinking_min_output_tokens = 4096
 
 # Lead severity triage (settings.triage): one short, tool-free turn per batch of 20 leads. The same provider and
 # Haiku model as "default" with small limits, so it is cheap in dev. profiles/prod.toml upgrades the model while
@@ -3118,6 +3128,7 @@ max_output_tokens = 16000
 max_queries = 0
 max_turns = 1
 timeout_seconds = 600
+thinking_min_output_tokens = 4096
 
 # Independent verification on a second model (T-5055, owner decision 2026-11-16). With every role on one model,
 # verification.require_distinct_model_for_ship_blocking published every ship-blocking finding as
@@ -3134,6 +3145,7 @@ max_output_tokens = 32000
 max_queries = 40
 max_turns = 4
 timeout_seconds = 600
+thinking_min_output_tokens = 4096
 
 # Hunting campaign planner (settings.hunting, T-5030): one tool-free turn plus one repair turn over the bounded
 # attack-surface brief, on a frontier model (the plan decides where the hunters go). max_queries must stay 0: the
@@ -3147,6 +3159,7 @@ max_output_tokens = 32000
 max_queries = 0
 max_turns = 2
 timeout_seconds = 900
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 workers = 4
@@ -3207,7 +3220,7 @@ ttl_seconds = 604800
 connect_timeout_seconds = 0.5
 
 [jobs.job_inference_security_review.settings.attack_chains]
-max_links = 4
+max_links = 6
 max_expansions = 100
 max_candidates_per_composition = 8
 max_challenge_cells = 100

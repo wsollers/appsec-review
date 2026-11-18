@@ -1,33 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/inference-security-review/worker-turn.schema.json",
-  "title": "One model turn in a bounded cell loop (design R2)",
+  "title": "One model turn in a bounded cell loop",
+  "description": "Generated from review.capability by scripts/generate-docs.py; do not edit.",
   "$defs": {
-    "param_value": {
-      "oneOf": [
-        {
-          "type": "string",
-          "maxLength": 512
-        },
-        {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 10000
-        },
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "maxLength": 128
-          },
-          "maxItems": 32,
-          "uniqueItems": true
-        }
-      ]
-    },
     "request": {
       "oneOf": [
         {
@@ -35,193 +11,53 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
-          ],
-          "properties": {
-            "tool": {
-              "const": "search"
-            },
-            "params": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "query"
-              ],
-              "properties": {
-                "query": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "indexes": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "kinds": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "limit": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "cursor": {
-                  "$ref": "#/$defs/param_value"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tool",
-            "params"
-          ],
-          "properties": {
-            "tool": {
-              "const": "find"
-            },
-            "params": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [],
-              "properties": {
-                "identity": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "kind": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "name": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "path": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "indexes": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "limit": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "cursor": {
-                  "$ref": "#/$defs/param_value"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tool",
-            "params"
-          ],
-          "properties": {
-            "tool": {
-              "const": "read_excerpt"
-            },
-            "params": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "identity"
-              ],
-              "properties": {
-                "identity": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "context_lines": {
-                  "$ref": "#/$defs/param_value"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tool",
-            "params"
-          ],
-          "properties": {
-            "tool": {
-              "const": "trace"
-            },
-            "params": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "identity"
-              ],
-              "properties": {
-                "identity": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "relations": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "depth": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "limit": {
-                  "$ref": "#/$defs/param_value"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tool",
-            "params"
-          ],
-          "properties": {
-            "tool": {
-              "const": "resolve_evidence"
-            },
-            "params": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "identity"
-              ],
-              "properties": {
-                "identity": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "limit": {
-                  "$ref": "#/$defs/param_value"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tool",
-            "params"
+            "parameters"
           ],
           "properties": {
             "tool": {
               "const": "coverage"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
                 "indexes": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "observations",
+                      "components",
+                      "build",
+                      "artifacts",
+                      "build_security",
+                      "compiled",
+                      "analysis",
+                      "evidence",
+                      "history",
+                      "tags",
+                      "priority",
+                      "precomputed",
+                      "inventory",
+                      "links",
+                      "documents",
+                      "graph",
+                      "debug_symbols",
+                      "binary"
+                    ]
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 19
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -232,76 +68,277 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "expand"
+            },
+            "parameters": {
+              "type": "object",
+              "required": [],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "pattern": "^[A-Z][0-9]{1,4}$"
+                },
+                "ref": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "files": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
+              },
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "label"
+                  ]
+                },
+                {
+                  "required": [
+                    "ref"
+                  ]
+                },
+                {
+                  "required": [
+                    "files"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "find"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "identity": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "indexes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "observations",
+                      "components",
+                      "build",
+                      "artifacts",
+                      "build_security",
+                      "compiled",
+                      "analysis",
+                      "evidence",
+                      "history",
+                      "tags",
+                      "priority",
+                      "precomputed",
+                      "inventory",
+                      "links",
+                      "documents",
+                      "graph",
+                      "debug_symbols",
+                      "binary"
+                    ]
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 19
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "list_codeql_databases"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_+.#-]{1,64}$"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
           ],
           "properties": {
             "tool": {
               "const": "query_artifacts"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
                 "artifact_identity": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
                 },
                 "sha256": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
                 },
                 "kind": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 128
                 },
                 "format": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "language": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "runtime": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "platform": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "architecture": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "build_unit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "project": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "component": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "producing_build_action": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
                 },
                 "package": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "purl": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "scanner": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "tool": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "coverage_status": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "enum": [
+                    "complete",
+                    "partial",
+                    "unavailable",
+                    "stale"
+                  ]
                 },
                 "shard": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]{1,128}$"
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -312,46 +349,56 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
           ],
           "properties": {
             "tool": {
               "const": "query_build_security"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
                 "project": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "build_root": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "build_action": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "configuration": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "compile_unit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "linked_artifact": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "producer": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "shard": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 128
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -362,105 +409,52 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
           ],
           "properties": {
             "tool": {
-              "const": "query_ci_configuration"
+              "const": "query_call_paths"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
-                "provider": {
-                  "$ref": "#/$defs/param_value"
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 },
-                "pipeline": {
-                  "$ref": "#/$defs/param_value"
+                "sink": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 },
-                "workflow": {
-                  "$ref": "#/$defs/param_value"
+                "sink_class": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
                 },
-                "stage": {
-                  "$ref": "#/$defs/param_value"
+                "entrypoint_only": {
+                  "type": "boolean"
                 },
-                "job": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "step": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "tool": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "rule": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "category": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "canonical_finding": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "shard": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "limit": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "cursor": {
-                  "$ref": "#/$defs/param_value"
-                }
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "tool",
-            "params"
-          ],
-          "properties": {
-            "tool": {
-              "const": "query_codeql"
-            },
-            "params": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [],
-              "properties": {
                 "language": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
                 },
-                "source_language": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "scope": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "build_unit": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "rule": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "level": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "path": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "shard": {
-                  "$ref": "#/$defs/param_value"
+                "max_hops": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -471,34 +465,109 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_cfg_function"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:(source_file|ast_node):[0-9a-f]{64}$"
+                },
+                "function_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
           ],
           "properties": {
             "tool": {
               "const": "query_change_context"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
                 "scope": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "path": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "enum": [
+                    "file",
+                    "function",
+                    "component"
+                  ]
                 },
                 "component": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 },
                 "signal": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "enum": [
+                    "fast_review_change_count",
+                    "stale_approval_change_count",
+                    "unapproved_mainline_change_count",
+                    "off_hours_change_count",
+                    "pre_deployment_change_count",
+                    "sprawling_change_count",
+                    "repeated_repair_peak",
+                    "fix_on_fix_event_count",
+                    "untested_production_change_count",
+                    "lifetime_principal_author_share",
+                    "departed_dominant_owner"
+                  ]
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -509,31 +578,784 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_ci_configuration"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "pipeline": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "workflow": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "stage": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "job": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "step": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "tool": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "rule": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "category": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "canonical_finding": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "shard": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_code_graph"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "subject"
+              ],
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "callers",
+                    "callees",
+                    "sinks",
+                    "entry_points",
+                    "paths",
+                    "guards",
+                    "ranges",
+                    "summary",
+                    "sarif_path"
+                  ]
+                },
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                },
+                "sink_class": {
+                  "type": "string",
+                  "enum": [
+                    "memory_write",
+                    "memory_read",
+                    "allocation_size",
+                    "format_string",
+                    "command_execution",
+                    "path_access",
+                    "sql_query",
+                    "code_injection",
+                    "deserialization",
+                    "integer_conversion",
+                    "crypto_misuse",
+                    "log_output",
+                    "server_side_request",
+                    "xml_external_entity",
+                    "ldap_query",
+                    "xpath_query",
+                    "html_output",
+                    "template_injection",
+                    "url_redirect",
+                    "header_injection",
+                    "regex_injection",
+                    "unsafe_reflection",
+                    "network_output",
+                    "file_write",
+                    "unclassified"
+                  ]
+                },
+                "source_class": {
+                  "type": "string",
+                  "enum": [
+                    "remote",
+                    "local_user",
+                    "argv",
+                    "environment",
+                    "file",
+                    "ipc",
+                    "database",
+                    "internal",
+                    "unclassified"
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_codeql"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "language": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "source_language": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "scope": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "build_unit": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "rule": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "level": {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                "shard": {
+                  "type": "string",
+                  "pattern": "^codeql-[A-Za-z0-9_.-]{1,120}$"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_codeql_neighborhood"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "database"
+              ],
+              "properties": {
+                "database": {
+                  "type": "string",
+                  "pattern": "^asr:codeql_database:[0-9a-f]{64}$"
+                },
+                "seed": {
+                  "type": "string",
+                  "pattern": "^.{1,4096}:[0-9]{1,9}$",
+                  "maxLength": 4096
+                },
+                "symbol": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "observation": {
+                  "type": "string",
+                  "pattern": "^asr:tool_observation:[0-9a-f]{64}$"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "callers",
+                    "callees",
+                    "both"
+                  ]
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "include": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "calls",
+                      "sinks",
+                      "entry_points",
+                      "guards",
+                      "ranges",
+                      "paths",
+                      "flow",
+                      "diagnostics",
+                      "symbols",
+                      "cpg"
+                    ]
+                  },
+                  "uniqueItems": true,
+                  "minItems": 1,
+                  "maxItems": 10
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_cpg_slice"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "criterion_node_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "line": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000000
+                },
+                "function_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "backward",
+                    "forward",
+                    "both"
+                  ]
+                },
+                "max_depth": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
+                },
+                "edge_kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 32
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_dataset_inventory"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "record_type": {
+                  "type": "string",
+                  "enum": [
+                    "dataset",
+                    "audit",
+                    "coverage_cell"
+                  ]
+                },
+                "job": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "family": {
+                  "type": "string",
+                  "maxLength": 256
+                },
+                "disposition": {
+                  "type": "string",
+                  "enum": [
+                    "indexed",
+                    "artifact_only",
+                    "protected",
+                    "unavailable"
+                  ]
+                },
+                "coverage_state": {
+                  "type": "string",
+                  "enum": [
+                    "complete",
+                    "partial",
+                    "stale",
+                    "unavailable"
+                  ]
+                },
+                "sensitivity": {
+                  "type": "string",
+                  "enum": [
+                    "public",
+                    "internal",
+                    "sensitive",
+                    "secret"
+                  ]
+                },
+                "cell_type": {
+                  "type": "string",
+                  "enum": [
+                    "language",
+                    "build_unit",
+                    "producer_consumer",
+                    "input_source",
+                    "query_set",
+                    "graph_follow_up",
+                    "fts_validation"
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_debug_symbols"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode"
+              ],
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "symbol",
+                    "address",
+                    "source_ranges",
+                    "type_layout",
+                    "inline_frames",
+                    "compilation_units",
+                    "coverage",
+                    "graph_links"
+                  ]
+                },
+                "artifact_identity": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "address": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18446744073709551615
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_doc_drift"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "drift_kind": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low",
+                    "info",
+                    "unknown"
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_engineering_signals"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "signal_family": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_guard_dominators"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:(source_file|ast_node):[0-9a-f]{64}$"
+                },
+                "line": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000000
+                },
+                "node_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "polarity": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
           ],
           "properties": {
             "tool": {
               "const": "query_hotspots"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
                 "scope": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "path": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "enum": [
+                    "file",
+                    "function"
+                  ]
                 },
                 "min_score": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -544,13 +1366,184 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_observations"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "scanner": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "rule": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "severity": {
+                  "type": "string",
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low",
+                    "info",
+                    "unknown"
+                  ]
+                },
+                "observation_class": {
+                  "type": "string",
+                  "enum": [
+                    "source_sast",
+                    "secret",
+                    "dependency",
+                    "configuration",
+                    "inventory",
+                    "binary",
+                    "diagnostic",
+                    "other"
+                  ]
+                },
+                "suppressed": {
+                  "type": "boolean"
+                },
+                "duplicate": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "artifact": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "start_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "end_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "shard": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+                },
+                "seed": {
+                  "type": "string",
+                  "pattern": "^.{1,4096}:[0-9]{1,9}$",
+                  "maxLength": 4096
+                },
+                "function": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "fix_it": {
+                  "type": "boolean"
+                },
+                "min_trace_length": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_owasp_gaps"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "component_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "control_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
           ],
           "properties": {
             "tool": {
               "const": "query_precomputed"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -558,19 +1551,39 @@
               ],
               "properties": {
                 "query_set": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "enum": [
+                    "symbol_links",
+                    "hotspot_context",
+                    "build_provenance",
+                    "artifact_inventory",
+                    "dependency_advisories",
+                    "scanner_correlation",
+                    "ci_trust",
+                    "redacted_secret_exposure",
+                    "history_context",
+                    "control_evidence",
+                    "reference_intelligence",
+                    "contract_enforcement",
+                    "deployment_exposure",
+                    "test_intent",
+                    "review_package",
+                    "document_context",
+                    "threat_boundaries"
+                  ]
                 },
                 "subject": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "path": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -581,58 +1594,39 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
           ],
           "properties": {
             "tool": {
-              "const": "query_observations"
+              "const": "query_sanitizer_readiness"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
-                "scanner": {
-                  "$ref": "#/$defs/param_value"
+                "build_unit": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 },
-                "rule": {
-                  "$ref": "#/$defs/param_value"
+                "sanitizer": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
                 },
-                "severity": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "observation_class": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "suppressed": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "duplicate": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "source": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "artifact": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "path": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "start_line": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "end_line": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "shard": {
-                  "$ref": "#/$defs/param_value"
+                "status": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -643,43 +1637,43 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
           ],
           "properties": {
             "tool": {
-              "const": "query_dataset_inventory"
+              "const": "query_sca_reachability"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
               "properties": {
-                "record_type": {
-                  "$ref": "#/$defs/param_value"
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
                 },
-                "job": {
-                  "$ref": "#/$defs/param_value"
+                "package": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
                 },
-                "family": {
-                  "$ref": "#/$defs/param_value"
+                "advisory_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
                 },
-                "disposition": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "coverage_state": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "sensitivity": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "cell_type": {
-                  "$ref": "#/$defs/param_value"
+                "reachability_class": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
                 }
               }
             }
@@ -690,58 +1684,289 @@
           "additionalProperties": false,
           "required": [
             "tool",
-            "params"
+            "parameters"
           ],
           "properties": {
             "tool": {
-              "const": "query_owasp_workbench"
+              "const": "query_syntax"
             },
-            "params": {
+            "parameters": {
               "type": "object",
               "additionalProperties": false,
-              "required": [],
+              "required": [
+                "mode",
+                "subject"
+              ],
               "properties": {
-                "family": {
-                  "$ref": "#/$defs/param_value"
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "definitions",
+                    "calls",
+                    "imports",
+                    "references"
+                  ]
                 },
-                "standard": {
-                  "$ref": "#/$defs/param_value"
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:(source_file|ast_node):[0-9a-f]{64}$"
                 },
-                "version": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "profile": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "control": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "component": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "project": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "evidence_mode": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "validator": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "batch": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "disposition": {
-                  "$ref": "#/$defs/param_value"
-                },
-                "shard": {
-                  "$ref": "#/$defs/param_value"
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
                 },
                 "limit": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 },
                 "cursor": {
-                  "$ref": "#/$defs/param_value"
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_threat_boundaries"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "boundary_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "trust_level": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                "locator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "line"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "line": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10000000
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "read_excerpt"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "identity"
+              ],
+              "properties": {
+                "identity": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "context_lines": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 20
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "resolve_evidence"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "identity"
+              ],
+              "properties": {
+                "identity": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "search"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "query"
+              ],
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                },
+                "indexes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "observations",
+                      "components",
+                      "build",
+                      "artifacts",
+                      "build_security",
+                      "compiled",
+                      "analysis",
+                      "evidence",
+                      "history",
+                      "tags",
+                      "priority",
+                      "precomputed",
+                      "inventory",
+                      "links",
+                      "documents",
+                      "graph",
+                      "debug_symbols",
+                      "binary"
+                    ]
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 19
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 32
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "cursor": {
+                  "type": "string",
+                  "maxLength": 4096
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "parameters"
+          ],
+          "properties": {
+            "tool": {
+              "const": "trace"
+            },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "identity"
+              ],
+              "properties": {
+                "identity": {
+                  "type": "string",
+                  "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+                },
+                "relations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 512
+                  },
+                  "uniqueItems": true,
+                  "maxItems": 32
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
                 }
               }
             }
@@ -759,6 +1984,9 @@
         "requests"
       ],
       "properties": {
+        "schema": {
+          "const": "appsec-review/worker-turn/1"
+        },
         "action": {
           "const": "retrieve"
         },
@@ -767,8 +1995,8 @@
           "items": {
             "$ref": "#/$defs/request"
           },
-          "maxItems": 8,
-          "minItems": 1
+          "minItems": 1,
+          "maxItems": 16
         }
       }
     },
@@ -780,12 +2008,14 @@
         "result"
       ],
       "properties": {
+        "schema": {
+          "const": "appsec-review/worker-turn/1"
+        },
         "action": {
           "const": "final"
         },
         "result": {
-          "type": "object",
-          "description": "Validated separately against the role's result schema."
+          "type": "object"
         }
       }
     }

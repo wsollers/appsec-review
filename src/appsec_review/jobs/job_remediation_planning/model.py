@@ -23,14 +23,11 @@ ROLE_JOBS = {"remediation_writer": "job_remediation_planning",
 QUERYING_SKILL_ID = "evidence-and-graph-querying"
 
 
-def load_remediation_querying_skill(repository_root: Path) -> str | None:
-    from appsec_review.guidance import GuidanceError
+def load_remediation_querying_skill(repository_root: Path) -> str:
     from appsec_review.guidance.skills import load_runtime_skill
 
-    try:
-        return load_runtime_skill(Path(repository_root), QUERYING_SKILL_ID, job_id="job_remediation_planning").body
-    except GuidanceError:
-        return None
+    return load_runtime_skill(Path(repository_root), QUERYING_SKILL_ID, job_id="job_remediation_planning",
+                              fallback_to_package=False).body
 
 
 def guidance(repository_root: Path, run_root: Path, role: str, *, job_id: str) -> tuple[str, str]:

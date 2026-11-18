@@ -21,7 +21,7 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.interchange import GapCode, producer_gap
+from appsec_review.interchange import GapCode, bounded_gap_messages, producer_gap
 from appsec_review.jobs.source_lanes import (
     combine_indexes, lane_context, map_commits, per_source, source_identity, source_key, source_of as lane_source,
     target_path,
@@ -1531,7 +1531,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                      (resolved["git"]["reason"] if area_status == "unavailable" else None))
             builder.add_coverage("history-hotspots", "unavailable" if hotspots_doc is None else
                                  "partial" if gaps else "complete",
-                                 resolved["git"]["reason"] if hotspots_doc is None else ("; ".join(gaps[:20]) or None))
+                                 resolved["git"]["reason"] if hotspots_doc is None else
+                                 ("; ".join(bounded_gap_messages(gaps, 20)) or None))
             for name, reason in sorted(UNAVAILABLE_SIGNALS.items()):
                 builder.add_coverage(name.replace("_", "-"), "unavailable", reason)
             index_changelog(builder, unit.job.run_root, changelog_output, snapshot=snapshot, source=source,

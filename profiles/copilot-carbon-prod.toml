@@ -71,6 +71,7 @@ max_output_tokens = 64000
 max_queries = 60
 max_turns = 16
 timeout_seconds = 1800
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.models.triage]
 provider = "copilot-sdk"
@@ -81,6 +82,7 @@ max_output_tokens = 32000
 max_queries = 0
 max_turns = 1
 timeout_seconds = 600
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.models.planner]
 provider = "copilot-sdk"
@@ -91,6 +93,7 @@ max_output_tokens = 64000
 max_queries = 0
 max_turns = 2
 timeout_seconds = 1200
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.models.verifier]
 provider = "copilot-sdk"
@@ -101,6 +104,7 @@ max_output_tokens = 64000
 max_queries = 40
 max_turns = 4
 timeout_seconds = 900
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.models.strong]
 provider = "copilot-sdk"
@@ -111,6 +115,7 @@ max_output_tokens = 64000
 max_queries = 60
 max_turns = 16
 timeout_seconds = 2400
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 model_profile = "strong"

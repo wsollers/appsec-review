@@ -8,7 +8,6 @@ changes. Updating a configured catalog hash alone never qualifies a different sn
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import hashlib
 import json
@@ -18,6 +17,7 @@ from typing import Any, Mapping
 from urllib.request import Request, urlopen
 
 from appsec_review.storage import atomic_json
+from appsec_review.storage.shared import PublicationThreadPoolExecutor
 from .standards import CATALOG_SCHEMA, SUPPORTED_FAMILIES, digest
 
 
@@ -268,7 +268,7 @@ def acquire(family: str, destination: Path, *, read=_read) -> dict[str, Any]:
             raise ValueError(f"OWASP upstream blob integrity mismatch: {path}")
         return path, data
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with PublicationThreadPoolExecutor(max_workers=4) as pool:
         files = dict(pool.map(fetch, [*sorted(selected), license_path]))
     license_text = files.pop(license_path).decode("utf-8-sig")
     if not re.search(r"(?i)(Attribution.ShareAlike 4\.0|by-sa/4\.0)", license_text):

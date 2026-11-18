@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from collections.abc import Iterable, Mapping, Sequence
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
@@ -1440,10 +1442,10 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
             gaps.append(f"CodeQL {query_id} query suite completed with zero observations; "
                         "this is not a clean classification")
     else:
-        builder.add_coverage(f"codeql-{scope.language}", "unavailable", "; ".join(gaps[:10]))
+        builder.add_coverage(f"codeql-{scope.language}", "unavailable", "; ".join(bounded_gap_messages(gaps, 10)))
     if query.get("terminal_status") == "SUCCEEDED":
         builder.add_coverage(f"codeql-{scope.language}", "partial" if gaps else "complete",
-                             "; ".join(gaps[:10]) or None)
+                             "; ".join(bounded_gap_messages(gaps, 10)) or None)
     sha = builder.build()
     identity = IndexIdentity("observations", "appsec-review/retrieval-index/2", sha, fingerprint,
         path.relative_to(unit.job.run_root).as_posix(),

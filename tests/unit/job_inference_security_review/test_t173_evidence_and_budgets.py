@@ -6,16 +6,13 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config.inference_review import ModelProfileSettings
-from appsec_review.jobs.job_attack_chain_composition import (
+from appsec_review.review.chain_composition import (
     ChainStepFinding,
     DEFAULT_MAX_CHAIN_STEPS,
     evaluate_chain_elevation,
 )
 from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
     DEFAULT_MAX_EVIDENCE_REQUESTS,
-    THINKING_MIN_OUTPUT_TOKENS,
-    effective_max_output_tokens,
-    ensure_thinking_profile_floor,
     fulfill_evidence_requests,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import schema_set
@@ -84,16 +81,15 @@ def test_round2_requests_evidence_fulfillment_bounded_and_counted() -> None:
 @pytest.mark.parametrize(
     ("reasoning", "configured", "expected"),
     [
-        ("high", 1200, THINKING_MIN_OUTPUT_TOKENS),
-        ("medium", 2048, THINKING_MIN_OUTPUT_TOKENS),
+        ("high", 1200, 1200),
+        ("medium", 2048, 2048),
         ("xhigh", 8192, 8192),
-        ("max", 1024, THINKING_MIN_OUTPUT_TOKENS),
+        ("max", 1024, 1024),
         ("low", 1200, 1200),
         ("none", 1200, 1200),
     ],
 )
-def test_thinking_max_output_tokens_floor(reasoning: str, configured: int, expected: int) -> None:
-    assert THINKING_MIN_OUTPUT_TOKENS == 4096
+def test_thinking_output_cap_is_not_silently_raised(reasoning: str, configured: int, expected: int) -> None:
     profile = ModelProfileSettings(
         provider="openai",
         model="gpt-5.3-codex",
@@ -104,9 +100,15 @@ def test_thinking_max_output_tokens_floor(reasoning: str, configured: int, expec
         max_turns=4,
         timeout_seconds=120,
     )
-    assert effective_max_output_tokens(profile) == expected
-    updated = ensure_thinking_profile_floor(profile)
-    assert updated.max_output_tokens == expected
+    assert profile.max_output_tokens == expected
+
+
+def test_explicit_thinking_floor_rejects_inconsistent_profile() -> None:
+    with pytest.raises(ValueError, match="max_output_tokens must be >= thinking_min_output_tokens"):
+        ModelProfileSettings(
+            provider="openai", model="reasoner", reasoning="high", max_input_tokens=32000,
+            max_output_tokens=1200, max_queries=6, max_turns=4, timeout_seconds=120,
+            thinking_min_output_tokens=4096)
 
 
 def test_six_step_chain_elevation_and_inference_schemas() -> None:

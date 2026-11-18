@@ -1,24 +1,20 @@
 """Deterministic Round 2 evidence-request fulfillment, skill bundle attachment, and thinking budgets (T-173)."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
 
-from appsec_review.config.inference_review import ModelProfileSettings
 from appsec_review.guidance.compose import bundle_sha256, section_sha256, verify_bundle
 from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.guidance.skills import load_runtime_skill
-from appsec_review.review.budget import JobBudget
 from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.models import Role
 
 EVIDENCE_QUERYING_SKILL_ID = "evidence-and-graph-querying"
 DEFAULT_MAX_EVIDENCE_REQUESTS = 4
 MAX_CITATIONS_PER_REQUEST = 3
-THINKING_MIN_OUTPUT_TOKENS = 4096
-THINKING_REASONING_LEVELS = frozenset({"medium", "high", "xhigh", "max"})
 
 DEFAULT_QUERYING_SKILL_ROLES = frozenset({
     Role.HYPOTHESIS_HUNTER,
@@ -39,34 +35,6 @@ _STOPWORDS = frozenset({
 })
 
 
-def effective_max_output_tokens(
-    profile: ModelProfileSettings,
-    *,
-    budget: JobBudget | None = None,
-    floor: int = THINKING_MIN_OUTPUT_TOKENS,
-) -> int:
-    """Enforce a safe minimum output-token floor when model thinking/reasoning is active."""
-    if profile.reasoning not in THINKING_REASONING_LEVELS:
-        return profile.max_output_tokens
-    effective_floor = floor
-    if budget is not None:
-        effective_floor = min(effective_floor, budget.limits.max_output_tokens)
-    return max(profile.max_output_tokens, effective_floor)
-
-
-def ensure_thinking_profile_floor(
-    profile: ModelProfileSettings,
-    *,
-    budget: JobBudget | None = None,
-    floor: int = THINKING_MIN_OUTPUT_TOKENS,
-) -> ModelProfileSettings:
-    """Return ``profile`` with ``max_output_tokens`` raised to at least the thinking floor."""
-    target = effective_max_output_tokens(profile, budget=budget, floor=floor)
-    if target == profile.max_output_tokens:
-        return profile
-    return replace(profile, max_output_tokens=target)
-
-
 def attach_querying_skill_to_bundle(
     repository_root: Path,
     bundle: dict[str, Any],
@@ -84,16 +52,14 @@ def attach_querying_skill_to_bundle(
         return bundle
     procedures = next((sec for sec in bundle["sections"] if sec["name"] == "procedures"), None)
     if procedures is None:
-        return bundle
+        raise GuidanceError("selected evidence querying skill requires a procedures section")
     items = list(procedures.get("items", ()))
-    if any(item.get("id") == EVIDENCE_QUERYING_SKILL_ID for item in items) or len(items) >= 2:
+    if any(item.get("id") == EVIDENCE_QUERYING_SKILL_ID for item in items):
         return bundle
-    try:
-        skill = load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id)
-    except GuidanceError:
-        if force:
-            raise
-        return bundle
+    if len(items) >= 2:
+        raise GuidanceError("selected evidence querying skill exceeds the procedure count bound")
+    skill = load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id,
+                               fallback_to_package=False)
     items.append({"id": skill.name, "path": skill.path, "text": skill.text, "source_sha256": skill.sha256})
     procedures["items"] = items
     procedures["sha256"] = section_sha256(procedures)

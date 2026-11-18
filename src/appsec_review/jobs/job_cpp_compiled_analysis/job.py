@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
@@ -586,7 +588,8 @@ def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], exec
         {"tool": "clang-18", "image": execution["image_id"], "callee_decl": 1},
         catalog["mapping"]["case_snapshot"])
     count = _add_ast_entities(unit, case_id, catalog, failures, builder, shard, gaps)
-    builder.add_coverage("clang-ast", "partial" if gaps else "complete", "; ".join(gaps[:10]) or None)
+    builder.add_coverage("clang-ast", "partial" if gaps else "complete",
+                         "; ".join(bounded_gap_messages(gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard, "analysis", "ast", gaps))
     result["entity_count"] = count
     return result
@@ -707,7 +710,8 @@ def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execu
     if ambiguous_names:
         gaps.append("ambiguous cross-translation-unit IR callees were not related: " +
                     ", ".join(sorted(ambiguous_names)[:20]))
-    builder.add_coverage("llvm-ir", "partial" if gaps else "complete", "; ".join(gaps[:10]) or None)
+    builder.add_coverage("llvm-ir", "partial" if gaps else "complete",
+                         "; ".join(bounded_gap_messages(gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard, "analysis", "ir", gaps))
     result.update(entity_count=count, basic_block_count=blocks, instruction_count=instructions,
                   call_edge_count=call_edges)
@@ -811,7 +815,7 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
         count += 1
     unique_gaps = list(dict.fromkeys(gaps))
     builder.add_coverage("infer", "partial" if unique_gaps else "complete",
-                         "; ".join(unique_gaps[:10]) or None)
+                         "; ".join(bounded_gap_messages(unique_gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard,
                                 "observations", "infer", unique_gaps))
     result.update(observation_count=count, expected_source_files=expected_count,

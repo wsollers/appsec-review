@@ -14,7 +14,7 @@ DERIVED_CONTINUITY = frozenset({"same_native_executable"})
 
 @dataclass(frozen=True, slots=True)
 class AttackChainSettings:
-    max_links: int = 4
+    max_links: int = 6
     max_expansions: int = 100
     max_candidates_per_composition: int = 8
     max_challenge_cells: int = 100

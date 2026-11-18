@@ -16,7 +16,8 @@ from typing import Any
 
 JOB_ID = "job_evidence_collection"
 _PREFIX = f"jobs.{JOB_ID}.settings"
-SETTING_KEYS = frozenset({"tool_retries", "osv_memory", "osv_max_lockfiles_per_invocation"})
+SETTING_KEYS = frozenset({"tool_retries", "osv_memory", "osv_max_lockfiles_per_invocation",
+                          "max_findings_per_scope"})
 _MEMORY = re.compile(r"([1-9][0-9]*)([mg])")
 # Below 512m osv-scanner cannot hold even a small ecosystem database; above 64g is a typo.
 MEMORY_RANGE_BYTES = (512 * 1024 ** 2, 64 * 1024 ** 3)
@@ -49,12 +50,14 @@ class EvidenceCollectionSettings:
     tool_retries: int = 1
     osv_memory: str = "3g"
     osv_max_lockfiles_per_invocation: int = 50
+    max_findings_per_scope: int = 5000
 
     def __post_init__(self) -> None:
         _integer(self.tool_retries, f"{_PREFIX}.tool_retries", TOOL_RETRIES_RANGE)
         memory_limit(self.osv_memory, f"{_PREFIX}.osv_memory")
         _integer(self.osv_max_lockfiles_per_invocation, f"{_PREFIX}.osv_max_lockfiles_per_invocation",
                  LOCKFILES_PER_INVOCATION_RANGE)
+        _integer(self.max_findings_per_scope, f"{_PREFIX}.max_findings_per_scope", (1, 1_000_000))
 
 
 def parse_evidence_collection_settings(settings: Mapping[str, Any]) -> EvidenceCollectionSettings:

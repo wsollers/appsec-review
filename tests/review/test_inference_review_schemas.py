@@ -416,18 +416,38 @@ def test_blue_verifier_and_adjudication_results() -> None:
 def test_worker_turn_retrieve_or_final() -> None:
     turn = validator("worker-turn")
     turn.validate({"action": "retrieve", "requests": [
-        {"tool": "search", "params": {"query": "memcpy", "limit": 10}},
-        {"tool": "read_excerpt", "params": {"identity": entity("span"), "context_lines": 3}}]})
+        {"tool": "search", "parameters": {"query": "memcpy", "limit": 10}},
+        {"tool": "read_excerpt", "parameters": {"identity": entity("span"), "context_lines": 3}}]})
     turn.validate({"action": "final", "result": _red()})
     for bad in (
         {"action": "retrieve", "requests": []},
-        {"action": "retrieve", "requests": [{"tool": "shell", "params": {"cmd": "ls"}}]},
-        {"action": "retrieve", "requests": [{"tool": "search", "params": {"query": "x", "path": "/etc"}}]},
-        {"action": "retrieve", "requests": [{"tool": "read_excerpt", "params": {}}]},
+        {"action": "retrieve", "requests": [{"tool": "shell", "parameters": {"cmd": "ls"}}]},
+        {"action": "retrieve", "requests": [{"tool": "search", "parameters": {"query": "x", "path": "/etc"}}]},
+        {"action": "retrieve", "requests": [{"tool": "read_excerpt", "parameters": {}}]},
         {"action": "final", "result": {}, "requests": []},
         {"action": "think"},
     ):
         assert not turn.is_valid(bad), bad
+
+
+def test_worker_turn_schema_tracks_capability_and_rejects_unknown_fields():
+    from scripts.documentation import worker_turn_schema
+    from appsec_review.review.capability import IN_PROCESS_TOOLS, LOCATOR_TOOLS
+
+    document = worker_turn_schema()
+    assert validator("worker-turn").schema == document
+    branches = {row["properties"]["tool"]["const"]: row
+                for row in document["$defs"]["request"]["oneOf"]}
+    assert set(branches) == IN_PROCESS_TOOLS
+    for tool, branch in branches.items():
+        assert ("locator" in branch["properties"]["parameters"]["properties"]) == (tool in LOCATOR_TOOLS)
+        assert branch["properties"]["parameters"]["additionalProperties"] is False
+    turn = validator("worker-turn")
+    turn.validate({"action": "retrieve", "requests": [{"tool": "expand", "parameters": {"label": "K1"}}]})
+    assert not turn.is_valid({"action": "retrieve", "requests": [
+        {"tool": "expand", "parameters": {"label": "K1", "files": "src"}}]})
+    assert not turn.is_valid({"action": "retrieve", "requests": [
+        {"tool": "query_guard_dominators", "parameters": {"made_up_field": True}}]})
 
 
 def test_cell_record_and_gap() -> None:

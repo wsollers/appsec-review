@@ -36,7 +36,7 @@ from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
 from appsec_review.review.warrants import PredicateWarrant
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
-from appsec_review.jobs.job_finding_adjudication import resolve_finding_chain_severity
+from appsec_review.review.finding_severity import resolve_finding_chain_severity
 
 from .datasets import PLANNED_CONSUMERS
 from .schemas import SchemaSet

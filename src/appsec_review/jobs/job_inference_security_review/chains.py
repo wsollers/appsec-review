@@ -20,12 +20,11 @@ from appsec_review.review.models import (
 from appsec_review.review.native_continuity import NativeLinkFacts
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
-from appsec_review.jobs.job_attack_chain_composition import (
+from appsec_review.review.chain_composition import (
+    AttackChainCompositionSettings,
     ChainStepFinding,
-    DEFAULT_MAX_CHAIN_STEPS,
     evaluate_chain_elevation,
 )
-from .evidence_fulfillment import effective_max_output_tokens
 from .teams import ReviewContext, _Cell, _actor, _not_launched, _run
 
 TASKS = {"composer": ("chain_composer", Role.ATTACK_CHAIN_ANALYST, "chain-composer-result"),
@@ -69,7 +68,7 @@ def _cell(ctx: ReviewContext, kind: str, inputs: Mapping[str, Any], entities: Se
         evidence_set=tuple(sorted(set(entities))), guidance_bundle_sha256=guidance["bundle"]["sha256"],
         guidance_text=guidance["text"], provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
         max_input_tokens=profile.max_input_tokens,
-        max_output_tokens=effective_max_output_tokens(profile, budget=ctx.budget),
+        max_output_tokens=profile.max_output_tokens,
         timeout_seconds=profile.timeout_seconds, output_schema=f"appsec-review/{schema}/1",
         validator_version=policy.POLICY)
     return _Cell(spec, capability, kind)
@@ -163,8 +162,8 @@ def _resolve(ctx: ReviewContext, edge: policy.Edge, environment: str, *, cites=N
 
 
 def effective_max_links(bounds: Any) -> int:
-    """Default unconfigured 4-link chain limit widens to 6 steps (T-173); explicit overrides win."""
-    return DEFAULT_MAX_CHAIN_STEPS if bounds.max_links == 4 else int(bounds.max_links)
+    """Use the resolved configuration's chain bound without widening explicit limits."""
+    return bounds.max_links
 
 
 def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[Mapping[str, Any]], *,
@@ -301,7 +300,7 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
         gaps.append("no_commissioned_native_continuity_producer; source narratives cannot prove chain continuity")
     component_meta = {
         claim_id: {
-            "severity": str((component_severities or {}).get(claim_id) or "medium"),
+            "severity": (component_severities or {}).get(claim_id),
             "predicate": projection.claims[claim_id].claim.security_predicate.value,
             "weakness_cwe": projection.claims[claim_id].claim.weakness_cwe,
             "unit_key": str((component_units or {}).get(claim_id) or ""),
@@ -425,7 +424,7 @@ def publish(ctx: ReviewContext, composition: Mapping[str, Any], refutations: Map
         step_findings = [
             ChainStepFinding(
                 claim_id=comp.claim_id,
-                standalone_severity=str(meta_map.get(comp.claim_id, {}).get("severity") or "medium"),
+                standalone_severity=meta_map.get(comp.claim_id, {}).get("severity"),
                 security_predicate=str(meta_map.get(comp.claim_id, {}).get("predicate") or ""),
                 unit_key=str(meta_map.get(comp.claim_id, {}).get("unit_key") or ""),
                 weakness_cwe=meta_map.get(comp.claim_id, {}).get("weakness_cwe"),
@@ -438,7 +437,11 @@ def publish(ctx: ReviewContext, composition: Mapping[str, Any], refutations: Map
                                       if ob.outcome is ContinuityOutcome.SATISFIED]}
             for edge in proposal.edges
         ]
-        composed_sev, crossings = evaluate_chain_elevation(step_findings, edge_metadata=edge_meta)
+        composed_sev, crossings = evaluate_chain_elevation(
+            step_findings, edge_metadata=edge_meta,
+            settings=AttackChainCompositionSettings(max_steps=ctx.settings.attack_chains.max_links))
+        if any(step.standalone_severity is None for step in step_findings):
+            gaps.append(f"chain_component_severity_missing:{proposal.chain_id}")
         crossing_docs = [item.to_json() for item in crossings]
         artifact = {
             "schema": policy.CHAIN_SCHEMA, "run_id": ctx.run_id, "proposal": policy.document(proposal),

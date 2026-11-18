@@ -157,9 +157,8 @@ paths are under `src/appsec_review/` unless they start with another top-level di
 - **Code:** `containers/`, `container_runtime/`, `signing/`, `config/host_pins.py`,
   `config/image_pin_verification.py`, `requirements/`, `release-dependencies.json`,
   `pyproject.toml`, `deploy/dagster/trusted-keys/`, `deploy/dagster/verification/`.
-- **Jobs:** `job_image_pin_verification`. Also confirm the status of
-  `jobs/job_tool_image_rebuild/`, which exists as a directory but is not in the registered-jobs
-  table.
+- **Jobs:** `job_image_pin_verification`. Image rebuilds are host tooling in `containers/`
+  and `deploy/dagster/bin/lifecycle.py`, not a pipeline job.
 - **Docs:** `containers/README.md`, `docs/operations/image-pin-verification.md`, `signing.md`.
 - **Look for:** unpinned or tag-pinned bases and downloads; images that carry more than tooling;
   network access where the design says none; container privileges, mounts and capabilities wider

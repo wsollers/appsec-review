@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -48,6 +49,15 @@ def _review(config):
 
 
 # ---------------------------------------------------------------- selection
+
+def test_operator_and_loader_runtime_profiles_stay_in_parity():
+    from appsec_review.config.loader import PROFILES
+
+    tree = ast.parse((ROOT / "deploy" / "dagster" / "bin" / "host.py").read_text())
+    values = [node.value for node in tree.body if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "RUNTIME_PROFILES" for target in node.targets)]
+    assert len(values) == 1
+    assert set(ast.literal_eval(values[0])) == set(PROFILES)
 
 def test_dev_is_the_default_and_keeps_todays_values(monkeypatch) -> None:
     monkeypatch.delenv(PROFILE_ENVIRONMENT, raising=False)

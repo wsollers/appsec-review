@@ -6,7 +6,6 @@ from typing import Any, Mapping
 
 DEFAULT_MAX_STEPS = 6
 DEFAULT_MAX_CHAIN_STEPS = DEFAULT_MAX_STEPS
-THINKING_MIN_OUTPUT_TOKENS = 4096
 
 SEVERITY_RANK: dict[str, int] = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 _RANK_TO_SEVERITY: dict[int, str] = {rank: name for name, rank in SEVERITY_RANK.items()}
@@ -47,7 +46,6 @@ class AttackChainCompositionSettings:
     max_candidates_per_composition: int = 12
     admit_medium_cross_unit: bool = True
     admit_medium_cross_boundary: bool = True
-    thinking_min_output_tokens: int = THINKING_MIN_OUTPUT_TOKENS
 
     def __post_init__(self) -> None:
         if isinstance(self.max_steps, bool) or not (2 <= self.max_steps <= 8):
@@ -58,8 +56,6 @@ class AttackChainCompositionSettings:
             1 <= self.max_candidates_per_composition <= 50
         ):
             raise ValueError("max_candidates_per_composition must be an integer in [1, 50]")
-        if isinstance(self.thinking_min_output_tokens, bool) or self.thinking_min_output_tokens < 4096:
-            raise ValueError("thinking_min_output_tokens must be >= 4096")
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any] | None = None) -> "AttackChainCompositionSettings":
@@ -70,7 +66,6 @@ class AttackChainCompositionSettings:
             "max_candidates_per_composition",
             "admit_medium_cross_unit",
             "admit_medium_cross_boundary",
-            "thinking_min_output_tokens",
         })
         if unknown:
             raise ValueError(f"unknown attack-chain composition settings: {', '.join(unknown)}")
@@ -82,9 +77,6 @@ class AttackChainCompositionSettings:
             ),
             admit_medium_cross_unit=_require_bool(table, "admit_medium_cross_unit", True),
             admit_medium_cross_boundary=_require_bool(table, "admit_medium_cross_boundary", True),
-            thinking_min_output_tokens=_require_int(
-                table, "thinking_min_output_tokens", THINKING_MIN_OUTPUT_TOKENS, minimum=4096, maximum=128_000
-            ),
         )
 
 
@@ -94,7 +86,7 @@ class ChainStepFinding:
 
     claim_id: str
     security_predicate: str
-    standalone_severity: str = "medium"
+    standalone_severity: str | None = None
     weakness_cwe: str | None = None
     unit_key: str = ""
     trust_boundary: str = ""
@@ -135,7 +127,7 @@ class ComposedAttackChain:
 
     chain_id: str
     step_claim_ids: tuple[str, ...]
-    standalone_severities: tuple[str, ...]
+    standalone_severities: tuple[str | None, ...]
     composed_severity: str
     chain_boundary_crossings: tuple[BoundaryCrossing, ...]
     elevated: bool

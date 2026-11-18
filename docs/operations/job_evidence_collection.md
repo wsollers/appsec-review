@@ -17,6 +17,10 @@ inventory, advisory matches and binary checks for later review. It does not adju
 vulnerabilities, install target dependencies, execute target tests or treat an unselected,
 unsupported, disabled or failed scanner as evidence that the target is clean.
 
+`settings.max_findings_per_scope` is the typed, run-frozen cap for cross-scanner SAST
+corroboration (5000 by default). It accepts integers from 1 to 1000000; invalid values
+are rejected instead of coerced or silently raised.
+
 <!-- generated:begin job=job_evidence_collection -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

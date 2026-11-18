@@ -1259,7 +1259,7 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
             ev_path = unit.job.run_root / str(ev_ref["path"])
             if ev_path.is_file():
                 sast_envelopes[tool_id] = _read_artifact(unit.job.run_root, ev_ref)
-    max_per_scope = int(unit.job.config.settings.get("max_findings_per_scope", 5_000))
+    max_per_scope = _settings(unit).max_findings_per_scope
     corroborated = corroborate_sast_records(
         sast_envelopes, target_fingerprint=unit.job.source_fingerprint, max_findings_per_scope=max_per_scope
     )

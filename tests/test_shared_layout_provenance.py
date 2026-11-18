@@ -1,5 +1,6 @@
 """Provenance across retained run-local layouts and parallel producer tasks."""
 from concurrent.futures import ThreadPoolExecutor
+import ast
 from pathlib import Path
 from threading import Barrier, Lock
 from types import SimpleNamespace
@@ -283,3 +284,20 @@ def test_cell_concurrency_retains_both_results_and_later_reuse(tmp_path):
     assert receipt["mode"] == "reused" and receipt["producer_receipt"]
     assert shared.verify_receipt(tmp_path, receipt["producer_receipt"])["actor"]["attempt_id"] in {
         owner.actor["attempt_id"] for owner in owners}
+
+
+def test_runtime_executors_cannot_drop_publication_scope():
+    root = Path(__file__).resolve().parents[1] / "src" / "appsec_review"
+    allowed = {"storage/shared.py", "orchestration/dagster/native_operator.py"}
+    violations = []
+    for path in sorted(root.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "ThreadPoolExecutor" not in text:
+            continue
+        for node in ast.walk(ast.parse(text)):
+            raw_import = (isinstance(node, ast.ImportFrom) and node.module == "concurrent.futures"
+                          and any(alias.name == "ThreadPoolExecutor" for alias in node.names))
+            raw_attribute = isinstance(node, ast.Attribute) and node.attr == "ThreadPoolExecutor"
+            if (raw_import or raw_attribute) and path.relative_to(root).as_posix() not in allowed:
+                violations.append(f"{path.relative_to(root).as_posix()}:{node.lineno}")
+    assert not violations, "use PublicationThreadPoolExecutor: " + ", ".join(violations)

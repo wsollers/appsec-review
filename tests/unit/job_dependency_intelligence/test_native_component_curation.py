@@ -129,7 +129,7 @@ def test_generic_headers_split_into_unfamiliar_named_frameworks_without_io(monke
         row, = payload["candidates"]
         assert row["candidate_id"] == source_id
         assert row["package_root"] == "include"
-        assert row["evidence"] and row["files"]
+        assert not {"evidence", "files", "observations", "metadata"} & row.keys()
         assert row["context_paths"] == ["include/AsterFramework.h", "include/CometFramework.hpp"]
         return proposal(payload, [
             library("asterframework", [source_id], ["include/AsterFramework.h"]),
@@ -483,7 +483,7 @@ def test_context_file_bound_reports_omitted_catalog_paths_without_losing_evidenc
 
     def propose(stage, payload):
         row, = payload["candidates"]
-        assert len(row["files"]) == 2
+        assert len(row["context_paths"]) == 2
         assert "include/alpha.h" in row["context_paths"]
         calls.append(payload)
         return retain(stage, payload)
@@ -570,8 +570,8 @@ def test_callback_payload_mutation_does_not_mutate_input_or_accepted_context():
 
     def propose(stage, payload):
         result = retain(stage, payload)
-        payload["candidates"][0]["metadata"]["injected"] = True
-        payload["candidates"][0]["evidence"][0]["value"] = "not accepted"
+        payload["candidates"][0]["metadata"] = {"injected": True}
+        payload["candidates"][0]["evidence"] = [{"value": "not accepted"}]
         payload["candidates"][0]["context_paths"].append("fabricated/path.h")
         result["libraries"][0]["supporting_paths"] = ["fabricated/path.h"]
         return result
@@ -579,6 +579,24 @@ def test_callback_payload_mutation_does_not_mutate_input_or_accepted_context():
     result = run(inputs, propose)
     assert result["metrics"]["uncertain_candidates"] == 1
     assert all("injected" not in row["metadata"] for row in result["discovery"]["candidates"])
+
+
+def test_recorded_batch_payload_omits_repeated_provenance_but_preserves_admitted_paths():
+    fixture = json.loads((FIXTURES / "run-2026-11-17-0004-curation-batch.json").read_text())
+    payloads = []
+
+    def propose(stage, payload):
+        payloads.append(deepcopy(payload))
+        return retain(stage, payload)
+
+    result = run((fixture["discovery"], fixture["files"]), propose)
+    payload, = payloads
+    assert len(canonical_json(payload)) < 3000
+    assert len(canonical_json(payload)) < len(canonical_json(fixture)) / 3
+    assert all(row["context_paths"] for row in payload["candidates"])
+    assert {row["candidate_id"] for row in payload["candidates"]} == {
+        row["candidate_id"] for row in fixture["discovery"]["candidates"]}
+    assert all(row in result["discovery"]["evidence"] for row in fixture["discovery"]["evidence"])
 
 
 def test_results_are_deterministic_under_input_reordering_and_repeated_calls():

@@ -231,6 +231,13 @@ class ModelProfileSettings:
     timeout_seconds: int
     retries: int = 0
     enabled: bool = True
+    thinking_min_output_tokens: int = 0
+
+    def __post_init__(self) -> None:
+        _int(self.thinking_min_output_tokens, "thinking_min_output_tokens", 0, 1_000_000)
+        if (self.reasoning in {"medium", "high", "xhigh", "max"}
+                and self.max_output_tokens < self.thinking_min_output_tokens):
+            raise ValueError("max_output_tokens must be >= thinking_min_output_tokens for reasoning models")
 
 
 @dataclass(frozen=True, slots=True)
@@ -571,7 +578,8 @@ def semantic_settings_sha256(settings: InferenceSecurityReviewSettings) -> str:
 def _model_profile(name: str, value: object) -> ModelProfileSettings:
     field = f"{_PREFIX}.models.{name}"
     table = _table(value, field, {"provider", "model", "reasoning", "max_input_tokens", "max_output_tokens",
-                                  "max_queries", "max_turns", "timeout_seconds"}, {"retries", "enabled"})
+                                  "max_queries", "max_turns", "timeout_seconds"},
+                   {"retries", "enabled", "thinking_min_output_tokens"})
     reasoning = table["reasoning"]
     if reasoning not in REASONING_LEVELS:
         raise ValueError(f"{field}.reasoning must be one of: {', '.join(REASONING_LEVELS)}")
@@ -586,6 +594,8 @@ def _model_profile(name: str, value: object) -> ModelProfileSettings:
         timeout_seconds=_int(table["timeout_seconds"], f"{field}.timeout_seconds", 1, 86_400),
         retries=_int(table.get("retries", 0), f"{field}.retries", 0, 10),
         enabled=_bool(table.get("enabled", True), f"{field}.enabled"),
+        thinking_min_output_tokens=_int(table.get("thinking_min_output_tokens", 0),
+                                        f"{field}.thinking_min_output_tokens", 0, 1_000_000),
     )
 
 

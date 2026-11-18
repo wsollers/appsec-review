@@ -14,7 +14,7 @@ import pytest
 from appsec_review.guidance.compose import GOVERNING_PATH, load_registry
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import ModelOutputError, ModelResult
-from appsec_review.inference.errors import ExecutionContractError, ProviderError
+from appsec_review.inference.errors import ExecutionContractError, ModelTimeout, ProviderError
 from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import (
     CURATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, NativeInferenceBounds, NativeInferenceError,
     NativeInferenceOverCap,
@@ -304,8 +304,6 @@ def test_output_byte_bound_preserves_hash_and_size_without_accepting_oversize(tm
 
 @pytest.mark.parametrize("failure", [
     ProviderError("transport broke", retryable=True),
-    TimeoutError("deadline"),
-    subprocess.TimeoutExpired("fake-model", 19),
     ModelOutputError("malformed external model JSON"),
     ProviderError("provider reasoning is unavailable", retryable=True),
 ])
@@ -337,6 +335,22 @@ def test_exhausted_model_error_retains_original_cause_and_attempts(tmp_path):
     assert instance.metrics["unknown_usage_calls"] == 2
     assert [item["error"]["message"] for item in documents(instance, "attempt")] == [
         "first error", "external transport unavailable"]
+
+
+@pytest.mark.parametrize("failure", [
+    TimeoutError("deadline"), ModelTimeout("model deadline"), subprocess.TimeoutExpired("fake-model", 19),
+])
+def test_timeout_is_persisted_without_retrying_expensive_request(tmp_path, failure):
+    fake = FakeInfer(failure, ModelResult({"schema": CURATION_SCHEMA}))
+    instance = proposer(tmp_path, fake=fake, model={**MODEL, "retries": 3})
+    with pytest.raises(NativeInferenceError) as caught:
+        instance("curate", {})
+    assert caught.value.__cause__ is failure
+    assert len(fake.calls) == 1
+    assert instance.metrics["model_calls"] == instance.metrics["model_failures"] == 1
+    receipt, = documents(instance, "attempt")
+    assert receipt["status"] == "FAILED"
+    assert receipt["error"]["type"] == type(failure).__name__
 
 
 def test_transport_parse_failure_keeps_bounded_raw_error_evidence(tmp_path):

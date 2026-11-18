@@ -239,8 +239,6 @@ def test_inference_tasks_request_cell_local_citations_not_raw_identities():
 
 
 @pytest.mark.parametrize("allowed_job", [
-    "job_attack_chain_composition",
-    "job_finding_adjudication",
     "job_inference_security_review",
     "job_poc_generation",
     "job_remediation_planning",

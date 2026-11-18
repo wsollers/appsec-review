@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import bounded_gap_messages
+
 from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
@@ -864,7 +866,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                 identity.value, evidence_entities[str(evidence_id)], True, 1.0))
                 gaps = list(dict.fromkeys([*provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
                                           *deterministic_value.get("gaps", ()), *inference_value.get("gaps", ())]))
-                builder.add_coverage("post-build-security", "partial" if gaps else "complete", "; ".join(gaps[:20]) or None)
+                builder.add_coverage("post-build-security", "partial" if gaps else "complete",
+                                     "; ".join(bounded_gap_messages(gaps, 20)) or None)
                 sha = builder.build()
             else:
                 sha = IndexBuilder(path, name="build_security", fingerprint=fingerprint,

@@ -50,9 +50,10 @@ _HIGH_IMPACT_CWES = _CRITICAL_SINK_CWES | frozenset({
 })
 
 
-def load_chain_querying_skill(repository_root: Path, *, job_id: str = "job_inference_security_review") -> RuntimeSkill:
+def load_chain_querying_skill(repository_root: Path, *, job_id: str) -> RuntimeSkill:
     """Load the hash-pinned ``evidence-and-graph-querying`` runtime skill for chain workers."""
-    return load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id)
+    return load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id,
+                              fallback_to_package=False)
 
 
 def _norm(text: str | None) -> str:
@@ -153,7 +154,9 @@ def evaluate_chain_elevation(
             seen_keys.add(key)
             deduped.append(item)
 
-    baseline = max_severity(*(step.standalone_severity for step in steps)) or "medium"
+    if any(step.standalone_severity not in SEVERITY_RANK for step in steps):
+        return None, tuple(deduped[:16])
+    baseline = max_severity(*(step.standalone_severity for step in steps))
     if baseline == "critical":
         return "critical", tuple(deduped[:16])
 
@@ -260,7 +263,7 @@ def compose_multi_step_chains(
         composed, crossings = evaluate_chain_elevation(steps, edge_metadata=edge_metas, settings=cfg)
         if composed is None:
             continue
-        standalone_max = max_severity(*(s.standalone_severity for s in steps)) or "medium"
+        standalone_max = max_severity(*(s.standalone_severity for s in steps))
         elevated = SEVERITY_RANK[composed] > SEVERITY_RANK[standalone_max]
         objective = f"{steps[0].security_predicate} -> {steps[-1].security_predicate} ({len(steps)} steps)"
         chain_id = f"chain-{sha256_hex({'kind': 'attack_chain', 'version': 1, 'steps': list(claim_ids), 'objective': objective})}"

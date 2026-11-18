@@ -265,7 +265,8 @@ class NativeProposer:
         except NativeInferenceError as exc:
             self._failure(exc, stage=stage)
             raise
-        policy = RetryPolicy(self.model["retries"] + 1, True, True, True)
+        policy = RetryPolicy(self.model["retries"] + 1, on_timeout=False,
+                             on_provider_error=True, on_invalid_output=True)
         engine = Execution(timeout_seconds=self.model["timeout_seconds"], max_calls=policy.attempts,
                            guidance_sha256=guidance_hash)
         retry_reason = None

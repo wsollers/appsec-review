@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from appsec_review.guidance.skills import RuntimeSkill, load_runtime_skill
-from appsec_review.jobs.job_attack_chain_composition.contracts import SEVERITY_RANK, max_severity
+from appsec_review.review.chain_composition.contracts import SEVERITY_RANK, max_severity
 
 from .contracts import AdjudicatedFindingSeverity, FindingAdjudicationSettings
 
@@ -16,10 +16,11 @@ _ACTIVE_CHAIN_STATUSES = frozenset({"confirmed", "qualified_supported"})
 def load_adjudication_querying_skill(
     repository_root: Path,
     *,
-    job_id: str = "job_inference_security_review",
+    job_id: str,
 ) -> RuntimeSkill:
     """Load the hash-pinned ``evidence-and-graph-querying`` runtime skill for adjudication workers."""
-    return load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id)
+    return load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id,
+                              fallback_to_package=False)
 
 
 def resolve_finding_chain_severity(
@@ -37,7 +38,7 @@ def resolve_finding_chain_severity(
     seen_crossings: set[tuple[Any, ...]] = set()
 
     for record in chain_records:
-        status = str(record.get("status", "confirmed"))
+        status = str(record.get("status", ""))
         if status not in _ACTIVE_CHAIN_STATUSES:
             continue
         members = record.get("component_claim_ids") or record.get("step_claim_ids") or ()

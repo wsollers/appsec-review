@@ -4,35 +4,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-THINKING_MIN_OUTPUT_TOKENS = 4096
-
-
 @dataclass(frozen=True)
 class FindingAdjudicationSettings:
     """Settings controlling chain-elevated severity preservation during finding adjudication."""
 
     preserve_chain_elevated_severity: bool = True
-    thinking_min_output_tokens: int = THINKING_MIN_OUTPUT_TOKENS
 
     def __post_init__(self) -> None:
         if not isinstance(self.preserve_chain_elevated_severity, bool):
             raise ValueError("preserve_chain_elevated_severity must be a boolean")
-        if isinstance(self.thinking_min_output_tokens, bool) or self.thinking_min_output_tokens < 4096:
-            raise ValueError("thinking_min_output_tokens must be >= 4096")
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any] | None = None) -> "FindingAdjudicationSettings":
         table = dict(raw or {})
-        unknown = sorted(set(table) - {"preserve_chain_elevated_severity", "thinking_min_output_tokens"})
+        unknown = sorted(set(table) - {"preserve_chain_elevated_severity"})
         if unknown:
             raise ValueError(f"unknown finding adjudication settings: {', '.join(unknown)}")
         preserve = table.get("preserve_chain_elevated_severity", True)
-        floor = table.get("thinking_min_output_tokens", THINKING_MIN_OUTPUT_TOKENS)
         if not isinstance(preserve, bool):
             raise ValueError("preserve_chain_elevated_severity must be a boolean")
-        if isinstance(floor, bool) or not isinstance(floor, int) or floor < 4096:
-            raise ValueError("thinking_min_output_tokens must be an integer >= 4096")
-        return cls(preserve_chain_elevated_severity=preserve, thinking_min_output_tokens=floor)
+        return cls(preserve_chain_elevated_severity=preserve)
 
 
 @dataclass(frozen=True)

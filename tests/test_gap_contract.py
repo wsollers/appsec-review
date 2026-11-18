@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from appsec_review.runtime.registry import builtin_registry
+from appsec_review.interchange import bounded_gap_messages
 
 # Jobs whose units still emit free-text or ad-hoc gap records. Each entry is debt: converting a job
 # means emitting appsec_review.interchange.producer_gap(...) records and setting strict_gaps=True on
@@ -31,6 +32,16 @@ def test_every_registered_job_is_strict_or_explicitly_listed_as_legacy() -> None
     assert lenient == LEGACY_FREE_TEXT_GAPS, (
         f"converted (remove from list): {sorted(LEGACY_FREE_TEXT_GAPS - lenient)}; "
         f"new lenient jobs (not allowed): {sorted(lenient - LEGACY_FREE_TEXT_GAPS)}")
+
+
+@pytest.mark.parametrize("limit", [1, 2, 10, 50])
+def test_bounded_gap_summary_accounts_for_every_omitted_message(limit):
+    messages = [f"missing:{index}" for index in range(limit + 3)]
+    summary = bounded_gap_messages(messages, limit)
+    assert len(summary) == limit
+    assert summary[:-1] == messages[:limit - 1]
+    assert summary[-1] == "(+4 more coverage gaps omitted from this summary)"
+    assert bounded_gap_messages(messages[:limit], limit) == messages[:limit]
 
 
 @pytest.mark.parametrize("job_id", sorted({"job_image_pin_verification", "job_model_connectivity",
