@@ -532,7 +532,11 @@ class RetrievalCore:
     def _envelope(self, *, tool: str, results: list[dict[str, Any]], gaps: Iterable[str],
                   started: float, request_hash: str, offset: int = 0, has_more: bool = False,
                   truncated: bool = False) -> dict[str, Any]:
-        unique_gaps = list(dict.fromkeys(str(item) for item in gaps))[:200]
+        unique_gaps = list(dict.fromkeys(str(item) for item in gaps))
+        if len(unique_gaps) > 200:
+            unique_gaps = [*unique_gaps[:199],
+                           f"truncated: {len(unique_gaps) - 199} additional coverage gap(s) omitted"]
+            truncated = True
         response = {
             "schema": RESPONSE_SCHEMA, "tool": tool, "run_id": self.run_id,
             "index_manifest": {"schema": self.manifest["schema"], "sha256": self.manifest_sha256,
@@ -1826,20 +1830,23 @@ class RetrievalCore:
         control_id: str | None = None, status: str | None = None,
         limit: int = 20, cursor: str | None = None,
     ) -> dict[str, Any]:
-        """Query verified absent/weak/not_satisfied OWASP ASVS control gaps; excludes cannot_determine and qualification."""
+        """Query independently assessed not_satisfied controls with resolving evidence."""
+        from appsec_review.owasp_workbench.engine import verified_control_gap_candidate
+
         for label, val in (("component_id", component_id), ("control_id", control_id), ("status", status)):
             if val is not None and (not isinstance(val, str) or not val or len(val) > 512):
                 raise ValueError(f"invalid OWASP gap filter: {label}")
-        if status is not None and status not in {"not_satisfied", "absent", "weak"}:
-            raise ValueError("status must be one of not_satisfied, absent, weak")
+        if status is not None and status != "not_satisfied":
+            raise ValueError("status must be not_satisfied")
 
         def pred(_payload: Mapping[str, Any], res: Mapping[str, Any]) -> bool:
-            is_verified = res.get("verified_gap") is True or (
-                res.get("assessment_mode") == "assessment"
-                and res.get("applicability") in {"applicable", "conditional"}
-                and res.get("control_status") in {"not_satisfied", "absent", "weak"}
-                and int(res.get("unresolved_evidence") or 0) == 0
-                and bool(res.get("evidence"))
+            evidence = res.get("evidence") or ()
+            is_verified = (
+                verified_control_gap_candidate(res)
+                and res.get("unresolved_evidence") == 0
+                and bool(evidence)
+                and all(isinstance(item, Mapping) and item.get("resolved") is True
+                        and item.get("source_identity") for item in evidence)
             )
             if not is_verified:
                 return False
@@ -1864,10 +1871,14 @@ class RetrievalCore:
         drift_kind: str | None = None, severity: str | None = None,
         limit: int = 20, cursor: str | None = None,
     ) -> dict[str, Any]:
-        """Query API spec-vs-handler drift and document claim drift from accepted precomputed and observation shards."""
+        """Query recognized drift kinds, keeping missing coverage separate from drift evidence."""
+        kinds = {"missing_auth_middleware", "undocumented_route", "unmapped_declared_operation",
+                 "parameter_constraint_drift", "role_or_scope_mismatch"}
         for label, val in (("drift_kind", drift_kind), ("severity", severity)):
             if val is not None and (not isinstance(val, str) or not val or len(val) > 256):
                 raise ValueError(f"invalid doc drift filter: {label}")
+        if drift_kind is not None and drift_kind not in kinds:
+            raise ValueError(f"drift_kind must be one of {sorted(kinds)}")
         if subject is not None:
             LogicalIdentity.parse(subject)
         norm_path = normalize_relative_path(path) if path is not None else None
@@ -1902,14 +1913,16 @@ class RetrievalCore:
                     ):
                         payload = json.loads(row["payload_json"])
                         res = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
-                        row_gaps = payload.get("gaps") or ()
-                        dk = res.get("drift_kind") or ("undocumented_or_unmatched_spec" if row_gaps else None)
-                        if dk is None:
-                            continue
                         if subject is not None and payload.get("subject_identity") != subject and row["identity"] != subject:
                             continue
                         row_path = row["path"] or payload.get("subject_path")
                         if norm_path is not None and row_path != norm_path:
+                            continue
+                        gaps.extend(f"{row['identity']}: {gap}" for gap in payload.get("gaps") or ())
+                        dk = res.get("drift_kind")
+                        if not isinstance(dk, str) or dk not in kinds:
+                            if dk is not None:
+                                gaps.append(f"{row['identity']}: unsupported drift kind {dk}")
                             continue
                         if drift_kind is not None and dk != drift_kind:
                             continue
@@ -1920,6 +1933,9 @@ class RetrievalCore:
                         item["shard_id"] = shard_id
                         item["drift_kind"] = dk
                         found.append(item)
+                    gaps.extend(f"precomputed/{shard_id}: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"precomputed/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             for shard in obs_shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
@@ -1929,10 +1945,14 @@ class RetrievalCore:
                         "ORDER BY e.identity"
                     ):
                         payload = json.loads(row["payload_json"])
-                        dk = payload.get("drift_kind") or payload.get("issue_class") or "document_claim_drift"
                         if subject is not None and row["identity"] != subject:
                             continue
                         if norm_path is not None and row["path"] != norm_path:
+                            continue
+                        gaps.extend(f"{row['identity']}: {gap}" for gap in payload.get("gaps") or ())
+                        dk = payload.get("drift_kind")
+                        if not isinstance(dk, str) or dk not in kinds:
+                            gaps.append(f"{row['identity']}: no recognized document drift kind")
                             continue
                         if drift_kind is not None and dk != drift_kind:
                             continue
@@ -1943,6 +1963,9 @@ class RetrievalCore:
                         item["shard_id"] = shard_id
                         item["drift_kind"] = dk
                         found.append(item)
+                    gaps.extend(f"observations/{shard_id}: {row['gap']}" for row in database.execute(
+                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                gaps.extend(f"observations/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             found.sort(key=lambda item: (item["identity"], item["shard_id"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
 

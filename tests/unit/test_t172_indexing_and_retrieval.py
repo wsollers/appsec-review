@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
+import pytest
 
 from appsec_review.document_issues import (
     DRIFT_SCHEMA,
@@ -147,7 +148,7 @@ def test_t172_nine_language_api_spec_drift_and_schema_validation(tmp_path: Path)
     assert {"undocumented_route", "unmapped_declared_operation", "missing_auth_middleware"} <= kinds
 
 
-def test_t172_owasp_verified_control_gaps_exclude_indeterminate_and_qualification() -> None:
+def test_t172_owasp_verified_control_gaps_require_resolved_evidence_and_assessment() -> None:
     gap_schema = _load_schema("docs/schemas/owasp-workbench/owasp-control-gap.schema.json")
     results = [
         {
@@ -197,9 +198,11 @@ def test_t172_owasp_verified_control_gaps_exclude_indeterminate_and_qualificatio
     summary = extract_verified_control_gaps(RUN_ID, "assessment", results)
     assert summary["schema"] == OWASP_GAP_SCHEMA
     jsonschema.validate(instance=summary, schema=gap_schema)
-    assert len(summary["control_gaps"]) == 1
-    assert summary["control_gaps"][0]["asvs_id"] == "V2.1.1"
-    assert summary["control_gaps"][0]["verdict"] in {"absent", "weak"}
+    assert summary["control_gaps"] == []
+    assert summary["coverage_gaps"] == [{
+        "row_id": results[0]["row_id"], "code": "unresolved_control_evidence",
+        "summary": "accepted evidence resolver is unavailable",
+    }]
 
     qual_summary = extract_verified_control_gaps(
         RUN_ID, "qualification", [{**r, "assessment_mode": "qualification"} for r in results]
@@ -256,7 +259,8 @@ def test_t172_threat_boundaries_product_and_indexing_contract(tmp_path: Path) ->
              "priority": "high", "priority_inputs": {"boundary_crossing": True}, "evidence_ids": ["ev-1"]}
         ],
     }
-    res_doc = {"schema": "appsec-review/threat-model-generation/1", "counts": {"threats": 1}, "gaps": []}
+    res_doc = {"schema": "appsec-review/threat-model-generation/1", "counts": {"threats": 1},
+               "gaps": [f"upstream coverage gap {i}" for i in range(14)]}
     for fname, payload in (("dfd.json", dfd_doc), ("threat-model.json", tm_doc), ("result.json", res_doc)):
         atomic_json(out_dir / fname, payload)
     named = {
@@ -285,10 +289,40 @@ def test_t172_threat_boundaries_product_and_indexing_contract(tmp_path: Path) ->
     )
     derived = products._build_threat_boundaries(ctx, ())
     assert len(derived.entities) >= 1
-    assert derived.gaps == []
-    assert ("threat_boundaries", "complete", None) in derived.coverage
+    assert derived.coverage[0][1] == "partial"
     for ent in derived.entities:
         jsonschema.validate(instance=ent.payload["result"], schema=tb_schema)
+
+    assert tm_state["gaps"] == res_doc["gaps"]
+    assert all(f"threat_model: {gap}" in derived.gaps for gap in res_doc["gaps"])
+    assert any("13 additional gap(s) omitted" in gap for gap in derived.entities[0].payload["gaps"])
+    assert "10 additional gap(s) omitted" in derived.coverage[0][2]
+
+
+def test_unassigned_threat_is_not_attached_to_first_boundary(tmp_path: Path) -> None:
+    ctx = products.ProductContext(
+        run_root=tmp_path, snapshot=SNAPSHOT, shards=ShardSet(tmp_path, ()), links={}, feeds={},
+        owasp={}, max_facts=10, threat_model={
+            "status": "accepted", "dfd": {"trust_boundaries": [{"id": "a"}, {"id": "z"}]},
+            "threat_model": {"threats": [{"id": "unassigned", "title": "No declared subject"}]},
+        },
+    )
+    derived = products._build_threat_boundaries(ctx, ())
+    assert len(derived.entities) == 2
+    assert all(not row.payload["result"]["threats"] for row in derived.entities)
+    assert "unassigned_threat: unassigned has no declared or source-resolved trust boundary" in derived.gaps
+    assert derived.coverage[0][1] == "partial"
+
+
+def test_bounded_fact_gaps_account_for_omitted_records_and_text() -> None:
+    from appsec_review.indexing.derive import fact
+
+    row = fact(SNAPSHOT, "threat_boundaries", "1", {}, name="bounded", text="", result={},
+               basis="test", upstream=[], gaps=["x" * 500, *[f"gap-{i}" for i in range(25)]])
+    gaps = row.payload["gaps"]
+    assert len(gaps) == 20 and all(len(gap) <= 300 for gap in gaps)
+    assert "264 characters omitted" in gaps[0]
+    assert gaps[-1] == "truncated: 7 additional gap(s) omitted"
 
 
 def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_path: Path) -> None:
@@ -309,7 +343,7 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
     index_values: list[IndexIdentity] = []
 
     def add_shard(name: str, entities: list[EntityRecord], *, shard_id: str = "default",
-                  producer: dict[str, Any] | None = None) -> None:
+                  producer: dict[str, Any] | None = None, coverage_gap: str | None = None) -> None:
         fp = index_fingerprint(
             name=name, target_snapshot=SNAPSHOT, producer_artifacts=[{"sha256": "b" * 64}],
             tool_identity={"tool": "fixture", "name": name, "shard": shard_id},
@@ -319,7 +353,7 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
         builder = IndexBuilder(db_path, name=name, fingerprint=fp, target_snapshot=SNAPSHOT, shard_id=shard_id)
         for ent in entities:
             builder.add_entity(ent)
-        builder.add_coverage(shard_id, "complete", None)
+        builder.add_coverage(shard_id, "partial" if coverage_gap else "complete", coverage_gap)
         sha = builder.build()
         index_values.append(IndexIdentity(
             name, "appsec-review/retrieval-index/2", sha, fp,
@@ -405,15 +439,30 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
             "result": {"assessment_mode": "assessment", "component_id": "comp-api",
                        "control_identity": "owasp-asvs:5.0.0:V2.1.1", "applicability": "applicable",
                        "control_status": "not_satisfied", "verified_gap": True, "unresolved_evidence": 0,
-                       "evidence": [{"ref": "obs:1"}]},
+                       "verification_status": "independently_assessed",
+                       "evidence": [{"source_identity": src_id, "resolved": True}]},
         }),
         EntityRecord(LogicalIdentity.parse(ow_ind), "ow:ind", "V3.2.1", "indeterminate control", {
             "schema": FACT_SCHEMA, "query_set": "control_evidence", "subject_identity": comp_id,
             "result": {"assessment_mode": "assessment", "component_id": "comp-api",
                        "control_identity": "owasp-asvs:5.0.0:V3.2.1", "applicability": "applicable",
-                       "control_status": "cannot_verify", "unresolved_evidence": 1,
+                       "control_status": "cannot_verify", "unresolved_evidence": 1, "verified_gap": True,
                        "evidence": []},
         }),
+        *[
+            EntityRecord(LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, SNAPSHOT, {"owasp": state}),
+                         f"ow:{state}", "Unverified control", state, {
+                             "schema": FACT_SCHEMA, "query_set": "control_evidence",
+                             "subject_identity": comp_id,
+                             "result": {"assessment_mode": "assessment", "component_id": "comp-api",
+                                        "applicability": "applicable", "control_status": "not_satisfied",
+                                        "verification_status": state, "verified_gap": True,
+                                        "unresolved_evidence": 0,
+                                        "evidence": [] if state == "independently_assessed" else [
+                                            {"source_identity": src_id, "resolved": True}]},
+                         })
+            for state in ("dissent", "independently_assessed", "pending", "rejected", "uncertain", "unresolved")
+        ],
     ], shard_id="precomputed-owasp", producer={"job": "job_review_data_indexing", "query_set": "control_evidence"})
 
     dc_id = LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, SNAPSHOT, {"set": "document_context", "k": "1"}).value
@@ -423,8 +472,29 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
             "subject_path": "src/auth.py",
             "result": {"kind": "route", "drift_kind": "undocumented_route", "severity": "high"},
             "gaps": ["no accepted OpenAPI declaration for this request"],
-        }, loc)
-    ], shard_id="precomputed-doc", producer={"job": "job_review_data_indexing", "query_set": "document_context"})
+        }, loc),
+        *[
+            EntityRecord(LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, SNAPSHOT, {"doc": str(i)}),
+                         f"dc:{i + 2}", "Missing context", "coverage only", {
+                             "schema": FACT_SCHEMA, "query_set": "document_context",
+                             "subject_identity": src_id, "subject_path": "src/auth.py",
+                             "result": result, "gaps": [f"missing declaration {i}"],
+                         }, loc)
+            for i, result in enumerate(({}, {"drift_kind": "arbitrary gap text"}))
+        ],
+    ], shard_id="precomputed-doc", producer={"job": "job_review_data_indexing", "query_set": "document_context"},
+       coverage_gap="target document coverage is incomplete")
+
+    add_shard("observations", [
+        EntityRecord(LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, SNAPSHOT, {"drift": str(i)}),
+                     f"drift:{i}", "Document observation", "drift evidence", payload, loc)
+        for i, payload in enumerate((
+            {"drift_kind": "missing_auth_middleware", "severity": "high"},
+            {"issue_class": "undocumented_route", "gaps": ["unverified claim"]},
+            {"drift_kind": "unknown_kind"},
+        ))
+    ], shard_id="document-drift", producer={"job": "job_document_issue_analysis"},
+       coverage_gap="document claims remain unverified")
 
     pr_id = LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, SNAPSHOT, {"native": "prio:auth"}).value
     add_shard("priority", [
@@ -472,8 +542,25 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
     owasp_res = core.query_owasp_gaps(component_id="comp-api")["results"]
     assert len(owasp_res) == 1
     assert owasp_res[0]["payload"]["result"]["control_identity"] == "owasp-asvs:5.0.0:V2.1.1"
+    with pytest.raises(ValueError, match="status must be not_satisfied"):
+        core.query_owasp_gaps(status="weak")
 
     assert len(core.query_doc_drift(drift_kind="undocumented_route", path="src/auth.py")["results"]) == 1
+    drift = core.query_doc_drift(path="src/auth.py")
+    assert {item["drift_kind"] for item in drift["results"]} == {"undocumented_route", "missing_auth_middleware"}
+    assert len(drift["results"]) == 2
+    assert any("missing declaration" in gap for gap in drift["coverage_gaps"])
+    assert any("unsupported drift kind" in gap for gap in drift["coverage_gaps"])
+    assert any("no recognized document drift kind" in gap for gap in drift["coverage_gaps"])
+    assert "precomputed/precomputed-doc: target document coverage is incomplete" in drift["coverage_gaps"]
+    assert "observations/document-drift: document claims remain unverified" in drift["coverage_gaps"]
+    with pytest.raises(ValueError, match="drift_kind must"):
+        core.query_doc_drift(drift_kind="arbitrary gap text")
+    envelope = core._envelope(tool="query_doc_drift", results=[], gaps=[f"gap-{i}" for i in range(205)],
+                              started=core.clock(), request_hash="a" * 64)
+    assert len(envelope["coverage_gaps"]) == 200
+    assert envelope["coverage_gaps"][-1] == "truncated: 6 additional coverage gap(s) omitted"
+    assert envelope["truncated"] is True
     assert len(core.query_engineering_signals(path="src/auth.py", signal_family="priority")["results"]) == 1
     assert len(core.query_sca_reachability(package="pyjwt", reachability_class="call_graph_reachable")["results"]) == 1
     assert len(core.query_sanitizer_readiness(build_unit="unit-native", sanitizer="asan")["results"]) == 1

@@ -30,6 +30,21 @@ DERIVED_SCHEMA = "appsec-review/derived-shard/1"
 AUTHORITY = "computed from accepted run-owned evidence; a fact or link is not a tool finding"
 
 
+def bounded_gaps(gaps: Sequence[str], *, limit: int = 20, characters: int = 300) -> list[str]:
+    """Bound display diagnostics while explicitly accounting for every omitted gap and character."""
+    values = [str(gap) for gap in gaps]
+    kept = values[:limit] if len(values) <= limit else [
+        *values[:limit - 1], f"truncated: {len(values) - limit + 1} additional gap(s) omitted"]
+    result = []
+    for value in kept:
+        if len(value) > characters:
+            # Reserve a fixed suffix budget so the omitted count includes the displaced text.
+            prefix = value[:characters - 64]
+            value = f"{prefix} [truncated: {len(value) - len(prefix)} characters omitted]"
+        result.append(value)
+    return result
+
+
 @dataclass(slots=True)
 class Derived:
     """Entities, relations and coverage of one derived shard before publication."""
@@ -78,7 +93,7 @@ def fact(snapshot: str, query_set: str, rule_version: str, key: Mapping[str, Any
         "schema": FACT_SCHEMA, "query_set": query_set, "fact_type": fact_type, "rule_version": rule_version,
         "subject_identity": subject_identity, "subject_path": subject_path, "result": dict(result),
         "basis": basis, "upstream": list(upstream)[:32], "coverage_status": status,
-        "gaps": [str(gap)[:300] for gap in gaps][:20], "authority": AUTHORITY,
+        "gaps": bounded_gaps(gaps), "authority": AUTHORITY,
     }
     resolved = location if isinstance(location, SourceLocation) or location is None else location_from(snapshot, location)
     return EntityRecord(identity, digest(dict(key))[:32], name[:512], text[:4096], payload, resolved)

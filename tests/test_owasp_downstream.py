@@ -20,6 +20,7 @@ from appsec_review.indexing.store import ShardSet
 from appsec_review.jobs.job_review_data_indexing.job import owasp_status
 from appsec_review.owasp_workbench import indexes
 from appsec_review.owasp_workbench.evidence import EvidenceResolver
+from appsec_review.owasp_workbench.engine import extract_verified_control_gaps, verified_control_gap_candidate
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexIdentity, LogicalIdentity, RetrievalCore, SourceLocation, write_manifest,
 )
@@ -347,6 +348,64 @@ def _publish(fixture, records: list[dict], *, mode: str = "assessment") -> dict:
         "handoff_sha256": file_sha256(handoff_path),
     })
     return manifest
+
+
+@pytest.mark.parametrize("verification", [
+    "", "dissent", "independently_assessed", "not_required", "pending", "qualification_only",
+    "rejected", "uncertain", "unresolved",
+])
+def test_verified_gaps_share_strict_verification_and_preserve_real_source_pins(tmp_path, verification):
+    fixture = _fixture(tmp_path)
+    record = _record(*_references(fixture))
+    record["verification_status"] = verification
+    record["observations"][0]["summary"] = "A weak, partial, incomplete bypass in prose"
+    record["obligations"][0]["status"] = "satisfied"
+    resolver = EvidenceResolver(RetrievalCore(fixture.runs_dir, fixture.run_id), accept_manifest(fixture.run_root))
+    summary = extract_verified_control_gaps(fixture.run_id, "assessment", [record], resolver=resolver)
+    assessment = products._control_assessment(record, {"assessment_mode": "assessment"}, {}, resolver)
+    expected = verification == "independently_assessed"
+    assert verified_control_gap_candidate(record) is expected
+    assert bool(summary["control_gaps"]) is expected
+    assert assessment.get("verified_gap", False) is expected
+    schema = json.loads((ROOT / "docs/schemas/owasp-workbench/owasp-control-gap.schema.json").read_text())
+    jsonschema.validate(summary, schema)
+    if expected:
+        [gap] = summary["control_gaps"]
+        assert gap["verdict"] == "not_satisfied"
+        assert summary["gaps_by_verdict"] == {"not_satisfied": 1}
+        first = record["evidence_used"][0]
+        [span] = [span for span in gap["subject_spans"] if span["ref"] == first["source_identity"]]
+        assert span["evidence_reference"] == first
+        assert (span["path"], span["start_line"], span["end_line"]) == ("svc/api/handler.py", 3, 3)
+        assert len(gap["subject_spans"]) == 2  # Independent counterevidence is retained too.
+        gap["subject_spans"] = []
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(summary, schema)
+
+
+@pytest.mark.parametrize("mutation", ["empty", "source_identity", "publication", "content", "lines"])
+def test_verified_gap_summary_rejects_missing_or_changed_evidence(tmp_path, mutation):
+    fixture = _fixture(tmp_path)
+    record = _record(*_references(fixture))
+    record["verification_status"] = "independently_assessed"
+    reference = record["evidence_used"][0]
+    if mutation == "empty":
+        record.update(evidence_used=[], obligations=[], observations=[])
+    elif mutation == "source_identity":
+        reference["source_identity"] = "asr:source_file:" + "0" * 64
+    elif mutation == "publication":
+        reference["publication"]["sha256"] = "0" * 64
+    elif mutation == "content":
+        reference["content_sha256"] = "0" * 64
+    else:
+        reference["locator"]["lines"] = [999, 999]
+    resolver = EvidenceResolver(RetrievalCore(fixture.runs_dir, fixture.run_id), accept_manifest(fixture.run_root))
+    summary = extract_verified_control_gaps(fixture.run_id, "assessment", [record], resolver=resolver)
+    assert summary["control_gaps"] == []
+    assert summary["verified_gaps_indexed"] == 0
+    assert summary["coverage_gaps"][0]["code"] == "unresolved_control_evidence"
+    assessment = products._control_assessment(record, {"assessment_mode": "assessment"}, {}, resolver)
+    assert not assessment.get("verified_gap")
 
 
 @pytest.fixture

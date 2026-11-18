@@ -270,7 +270,7 @@ CONTRACT = JobContract(
         InputRequirement("job_owasp_control_assessment", "owasp_documents",
                          "appsec-review/owasp-workbench-result/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_owasp_control_assessment", "owasp_control_gaps",
-                         "appsec-review/owasp-control-gap/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+                         "appsec-review/owasp-control-gap/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_post_build_security_assessment", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_post_build_security_assessment", "build_security",

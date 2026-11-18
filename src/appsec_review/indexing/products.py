@@ -18,7 +18,7 @@ import sqlite3
 from typing import Any
 from urllib.parse import unquote
 
-from appsec_review.indexing.derive import Derived, fact
+from appsec_review.indexing.derive import Derived, bounded_gaps, fact
 from appsec_review.indexing.links import (
     ARTIFACT_KINDS, CATALOG, REDACTED, advisory_identity, advisory_pairs, catalog_sources, package_identity,
     LinkContext,
@@ -83,8 +83,8 @@ def _coverage_gaps(shards: ShardSet, selected: Sequence[Mapping[str, Any]], limi
     for row in shards.coverage(selected):
         if row["status"] != "complete":
             gaps.append(f"{row['index']}/{row['shard_id']}: {row['area']}: {row['status']}: "
-                        f"{str(row['gap'] or 'no reason published')[:200]}")
-    return list(dict.fromkeys(gaps))[:limit]
+                        f"{str(row['gap'] or 'no reason published')}")
+    return bounded_gaps(list(dict.fromkeys(gaps)), limit=limit)
 
 
 def _finish(derived: Derived, query_set: str, *, unavailable: str | None = None) -> Derived:
@@ -95,14 +95,15 @@ def _finish(derived: Derived, query_set: str, *, unavailable: str | None = None)
         derived.gap(unavailable)
         derived.coverage.append((query_set, "unavailable", unavailable))
     elif not derived.entities:
-        reason = "; ".join(derived.gaps[:5]) or "accepted inputs contained no subject for this query set"
-        derived.gap(f"no {query_set} fact was derivable: {reason}"[:400])
+        reason = "; ".join(bounded_gaps(derived.gaps, limit=2, characters=150)) or \
+            "accepted inputs contained no subject for this query set"
+        derived.gap(f"no {query_set} fact was derivable: {reason}")
         derived.coverage.append((query_set, "partial", derived.gaps[-1]))
     else:
         stale = [gap for gap in derived.gaps if _STALE_GAP.match(gap)]
         gaps = [*stale, *(gap for gap in derived.gaps if gap not in stale)]
         derived.coverage.append((query_set, "stale" if stale else "partial" if derived.gaps else "complete",
-                                 "; ".join(gaps[:5])[:1000] or None))
+                                 "; ".join(bounded_gaps(gaps, limit=5, characters=190)) or None))
     derived.count("facts", len(derived.entities))
     return derived
 
@@ -1127,6 +1128,7 @@ def _control_resolver(run_root: Path, snapshot: str, publication: Mapping[str, A
 def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any],
                         reference: Mapping[str, Any], resolver: Any) -> dict[str, Any]:
     """Re-resolve the original references, including the independent review and counterevidence."""
+    from appsec_review.owasp_workbench.engine import control_evidence_references, verified_control_gap_candidate
     from appsec_review.owasp_workbench.evidence import redact
 
     def clean(value: Any) -> Any:
@@ -1136,20 +1138,10 @@ def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any
             return [clean(child) for child in value]
         return redact(value)[0] if isinstance(value, str) else value
 
-    citations = list(record.get("evidence_used") or ())
-    for item in record.get("obligations") or ():
-        for assessment in (item, item.get("independent_assessment") or {}):
-            citations.extend(assessment.get("supporting") or ())
-            citations.extend(assessment.get("contradictory") or ())
-    for observation in record.get("observations") or ():
-        citations.extend(observation.get("evidence") or ())
+    citations = control_evidence_references(record)
     evidence, categories = [], {}
-    seen = set()
     for citation in citations:
         key = digest(citation)
-        if key in seen:
-            continue
-        seen.add(key)
         resolved, reason = False, "qualification citation is not accepted target evidence"
         if resolver is not None and isinstance(citation, Mapping):
             try:
@@ -1214,9 +1206,7 @@ def _control_assessment(record: Mapping[str, Any], publication: Mapping[str, Any
         **(
             {"verified_gap": True}
             if (
-                mode == "assessment"
-                and record.get("applicability") in {"applicable", "conditional"}
-                and record.get("control_status") in {"not_satisfied", "absent", "weak"}
+                verified_control_gap_candidate({**record, "assessment_mode": mode})
                 and evidence and not unresolved
             )
             else {}
@@ -1604,10 +1594,9 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             subj = str(threat.get("subject_id") or threat.get("target_id") or threat.get("target") or threat.get("element_id") or "")
             if subj in element_to_boundary:
                 t_bids = [element_to_boundary[subj]]
-            elif boundaries:
-                t_bids = [sorted(boundaries)[0]]
             else:
-                t_bids = ["boundary:entry_surface"]
+                derived.gap(f"unassigned_threat: {threat['id']} has no declared or source-resolved trust boundary")
+                continue
         for bid in t_bids:
             if not isinstance(bid, str) or not bid:
                 continue
@@ -1653,7 +1642,7 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
     if tm_accepted and isinstance(tm_state.get("handoff_sha256"), str):
         upstream = [*upstream, {"name": "threat_model/generated", "shard_id": "dfd-threat-model",
                                 "sha256": tm_state["handoff_sha256"]}]
-    tm_gaps = list(tm_state.get("gaps") or ())[:5]
+    tm_gaps = list(tm_state.get("gaps") or ())
     ordered_ids = sorted(boundaries)
     for bid in ordered_ids[:context.max_facts]:
         b_entry = boundaries[bid]
@@ -1671,7 +1660,7 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         if not b_entry["threats"]:
             row_gaps.append("no candidate threats enumerated for this trust boundary")
         if tm_gaps:
-            row_gaps.extend(tm_gaps[:2])
+            row_gaps.extend(bounded_gaps(tm_gaps, limit=2))
         record_fact = fact(
             context.snapshot, name, context.rule_version,
             {"boundary_id": bid},
@@ -1817,14 +1806,14 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("ci_trust", "ci-trust/1", _select_ci_trust, _build_ci_trust),
     ProductRule("history_context", "history-context/1", _select_history_context, _build_history_context,
                 links=("history_code",)),
-    ProductRule("control_evidence", "control-evidence/3", _select_control_evidence, _build_control_evidence,
+    ProductRule("control_evidence", "control-evidence/4", _select_control_evidence, _build_control_evidence,
                 owasp=True),
     ProductRule("reference_intelligence", "reference-intelligence/2", _select_reference,
                 _build_reference_intelligence, feeds=("mitre",)),
     ProductRule("symbol_links", "symbol-links/1", _select_symbol_links, _build_symbol_links,
                 links=("symbol_syntax",)),
     ProductRule("document_context", "document-context/2", _select_document_context, _build_document_context),
-    ProductRule("threat_boundaries", "threat-boundaries/1", _select_threat_boundaries, _build_threat_boundaries,
+    ProductRule("threat_boundaries", "threat-boundaries/2", _select_threat_boundaries, _build_threat_boundaries,
                 threat_model=True),
 )
 assert tuple(rule.query_set for rule in PRODUCT_RULES) == FIRST_STAGE_SETS
