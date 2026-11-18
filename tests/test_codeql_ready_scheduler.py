@@ -271,3 +271,27 @@ def test_dagster_codeql_topology_has_one_ready_coordinator():
         return {output.node_name for outputs in mapping.values() for output in outputs}
     assert "codeql_analysis__plan__inventory" in upstream("codeql_analysis__execution__scopes")
     assert "codeql_analysis__execution__scopes" in upstream("codeql_analysis__acceptance__publish_handoff")
+
+
+def test_export_runs_after_scope_normalizations_and_handles_zero_profiles():
+    events = []
+    lock = Lock()
+
+    def record(step):
+        with lock:
+            events.append(step)
+
+    result = ready_scopes(
+        ["with_queries", "no_queries"],
+        concurrency=2,
+        database=lambda scope: (record(("db", scope)), {"scope": scope})[1],
+        profiles=lambda db: ["p1", "p2"] if db["scope"] == "with_queries" else [],
+        query=lambda db, prof: (record(("q", db["scope"], prof)), {**db, "profile": prof})[1],
+        normalize=lambda q: (record(("norm", q["scope"], q["profile"])), q)[1],
+        export=lambda db: (record(("exp", db["scope"])), db)[1],
+    )
+    assert [item["scope"] for item in result["export"]] == ["with_queries", "no_queries"]
+    norm_indices = [i for i, ev in enumerate(events) if ev[:2] == ("norm", "with_queries")]
+    exp_idx = events.index(("exp", "with_queries"))
+    assert len(norm_indices) == 2 and max(norm_indices) < exp_idx
+    assert events.index(("db", "no_queries")) < events.index(("exp", "no_queries"))

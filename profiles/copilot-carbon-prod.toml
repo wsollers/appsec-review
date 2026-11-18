@@ -36,7 +36,7 @@ model = "gemini-4-carbon"
 reasoning = "high"
 max_input_tokens = 200000
 max_output_tokens = 64000
-timeout_seconds = 900
+timeout_seconds = 360
 
 [jobs.job_owasp_control_assessment.settings.model]
 provider = "copilot-sdk"

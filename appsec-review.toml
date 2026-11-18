@@ -2662,7 +2662,7 @@ retries = 1
 
 [jobs.job_dependency_intelligence.settings.native_inference]
 enabled = true
-batch_candidates = 32
+batch_candidates = 10
 max_payload_bytes = 98304
 max_calls = 256
 component_limit = 10000

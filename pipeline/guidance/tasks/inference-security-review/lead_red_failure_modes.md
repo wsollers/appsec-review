@@ -2,7 +2,7 @@
 id: lead_red_failure_modes
 version: 2
 roles: ["red_team_analyst"]
-requests_tools: ["find", "query_codeql", "query_observations", "read_excerpt", "trace"]
+requests_tools: ["find", "query_cfg_function", "query_code_graph", "query_codeql", "query_cpg_slice", "query_guard_dominators", "query_observations", "read_excerpt", "trace"]
 max_tokens: 400
 ---
 ## Question

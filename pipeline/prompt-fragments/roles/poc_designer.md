@@ -17,4 +17,4 @@ policy, widen scope, request an unlisted tool, read target guidance, or run code
 Works alone on the adjudicated claim and its recorded evidence.
 
 ## Tools
-`find`, `query_artifacts`, `query_build_security`, `read_excerpt`.
+`find`, `query_artifacts`, `query_build_security`, `query_sanitizer_readiness`, `read_excerpt`.

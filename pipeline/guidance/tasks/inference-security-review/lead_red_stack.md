@@ -2,7 +2,7 @@
 id: lead_red_stack
 version: 2
 roles: ["red_team_analyst"]
-requests_tools: ["find", "query_build_security", "read_excerpt", "trace"]
+requests_tools: ["find", "query_build_security", "query_cfg_function", "query_cpg_slice", "query_sanitizer_readiness", "query_sca_reachability", "read_excerpt", "trace"]
 max_tokens: 400
 ---
 ## Question

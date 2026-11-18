@@ -84,3 +84,130 @@ def test_capability_rejects_modified_package_and_expiry() -> None:
                                       role="red", round_id="1")
     with pytest.raises(ValueError, match="binding"):
         scope.call("find", {"identity": package["retrieval"]["entity_ids"][0]})
+
+
+def test_cell_capability_authorizes_and_scopes_exploration_tools() -> None:
+    from appsec_review.review.capability import AuthorityDenied, Authorized, CellCapability
+    from appsec_review.review.cells import _bound, _covers_line, _label_rows
+    from appsec_review.review.labels import LabelTable
+
+    src_in = "asr:source_file:" + "a" * 64
+    ast_in = "asr:ast_node:" + "b" * 64
+    ast_out = "asr:ast_node:" + "c" * 64
+    tb_in = "asr:precomputed_fact:" + "d" * 64
+    tb_out = "asr:precomputed_fact:" + "e" * 64
+    sca_id = "asr:component_fact:" + "f" * 64
+
+    cap = CellCapability.issue(
+        run_id="2026-11-18-0001",
+        package_id="pkg-1",
+        package_sha256="2" * 64,
+        role="hypothesis_hunter",
+        round=0,
+        manifest_sha256="1" * 64,
+        tools=(
+            "query_cfg_function",
+            "query_guard_dominators",
+            "query_cpg_slice",
+            "query_call_paths",
+            "query_threat_boundaries",
+            "query_owasp_gaps",
+            "query_doc_drift",
+            "query_engineering_signals",
+            "query_sca_reachability",
+            "query_sanitizer_readiness",
+        ),
+        indexes=("analysis", "graph", "precomputed", "observations", "components", "inventory"),
+        entities=(src_in,),
+        graph_scopes=("scope-cpp",),
+        max_queries=12,
+        max_turns=4,
+        page_size=20,
+        max_depth=3,
+        max_result_bytes=32768,
+    )
+    locator_paths = frozenset({"src/parser.cpp"})
+
+    # Raw path is forbidden; locator inside package scope resolves cleanly
+    denied_raw = cap.authorize(
+        {"tool": "query_cpg_slice", "parameters": {"path": "src/parser.cpp", "line": 42}},
+        locator_paths=locator_paths,
+    )
+    assert isinstance(denied_raw, AuthorityDenied)
+    assert denied_raw.code == "forbidden_parameter"
+
+    denied_loc = cap.authorize(
+        {"tool": "query_cpg_slice", "parameters": {"locator": {"path": "src/other.cpp", "line": 42}}},
+        locator_paths=locator_paths,
+    )
+    assert isinstance(denied_loc, AuthorityDenied)
+    assert denied_loc.code == "entity_out_of_scope"
+
+    auth_slice = cap.authorize(
+        {"tool": "query_cpg_slice", "parameters": {"locator": {"path": "src/parser.cpp", "line": 42}, "direction": "backward"}},
+        locator_paths=locator_paths,
+    )
+    assert isinstance(auth_slice, Authorized)
+    assert auth_slice.parameters["path"] == "src/parser.cpp"
+    assert auth_slice.parameters["line"] == 42
+    assert auth_slice.line is None  # slice rows on upstream lines are retained
+
+    # query_cfg_function sets decision.line and _covers_line supports top-level start_line/end_line
+    auth_cfg = cap.authorize(
+        {"tool": "query_cfg_function", "parameters": {"locator": {"path": "src/parser.cpp", "line": 25}}},
+        locator_paths=locator_paths,
+    )
+    assert isinstance(auth_cfg, Authorized)
+    assert auth_cfg.line == 25
+    assert _covers_line({"path": "src/parser.cpp", "start_line": 10, "end_line": 40}, 25) is True
+    assert _covers_line({"path": "src/parser.cpp", "start_line": 10, "end_line": 20}, 25) is False
+
+    # query_call_paths accepts plain function name in `source` without failing IDENTITY_PARAMETERS
+    auth_paths = cap.authorize(
+        {"tool": "query_call_paths", "parameters": {"source": "handle_packet", "sink_class": "memory_copy", "entrypoint_only": True}},
+        locator_paths=locator_paths,
+    )
+    assert isinstance(auth_paths, Authorized)
+    assert auth_paths.parameters["source"] == "handle_packet"
+
+    # _bound + _label_rows scopes CFG/guard rows to package files and grants citable Q labels
+    granted: set[str] = set()
+    cfg_resp = {
+        "results": [
+            {"function_name": "parse_packet", "path": "src/parser.cpp", "start_line": 10, "end_line": 40, "ast_identity": ast_in, "source_identity": src_in},
+            {"function_name": "other_fn", "path": "src/other.cpp", "start_line": 1, "end_line": 15, "ast_identity": ast_out},
+        ]
+    }
+    bounded_cfg, withheld_cfg = _bound("query_cfg_function", cfg_resp, cap, granted=granted, locator_paths=locator_paths)
+    assert withheld_cfg == 1
+    assert len(bounded_cfg["results"]) == 1
+    assert ast_in in granted and ast_out not in granted
+
+    labels = LabelTable({})
+    labels.know(granted)
+    _label_rows(bounded_cfg["results"], labels)
+    assert bounded_cfg["results"][0]["label"].startswith("Q")
+
+    # _bound scopes threat boundaries by locator_paths and grants SCA reachability identities
+    tb_resp = {
+        "results": [
+            {"identity": tb_in, "location": {"path": "src/parser.cpp", "start_line": 12}, "payload": {"boundary_id": "net-edge"}},
+            {"identity": tb_out, "location": {"path": "src/other.cpp", "start_line": 5}, "payload": {"boundary_id": "admin-only"}},
+        ]
+    }
+    granted_tb: set[str] = set()
+    bounded_tb, withheld_tb = _bound("query_threat_boundaries", tb_resp, cap, granted=granted_tb, locator_paths=locator_paths)
+    assert withheld_tb == 1
+    assert [r["identity"] for r in bounded_tb["results"]] == [tb_in]
+
+    granted_sca: set[str] = set()
+    bounded_sca, withheld_sca = _bound(
+        "query_sca_reachability",
+        {"results": [{"identity": sca_id, "location": {"path": "CMakeLists.txt", "start_line": 8}, "payload": {"package": "zlib"}}]},
+        cap,
+        granted=granted_sca,
+        locator_paths=locator_paths,
+    )
+    assert withheld_sca == 0
+    assert sca_id in granted_sca
+    assert len(bounded_sca["results"]) == 1

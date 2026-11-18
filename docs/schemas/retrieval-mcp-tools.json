@@ -309,6 +309,129 @@
         "limit",
         "cursor"
       ]
+    },
+    {
+      "name": "query_cfg_function",
+      "required": [],
+      "properties": [
+        "subject",
+        "function_name",
+        "path",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_guard_dominators",
+      "required": [],
+      "properties": [
+        "subject",
+        "path",
+        "line",
+        "node_id",
+        "polarity",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_cpg_slice",
+      "required": [],
+      "properties": [
+        "criterion_node_id",
+        "path",
+        "line",
+        "function_name",
+        "direction",
+        "max_depth",
+        "edge_kinds",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_call_paths",
+      "required": [],
+      "properties": [
+        "source",
+        "sink",
+        "sink_class",
+        "entrypoint_only",
+        "language",
+        "max_hops",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_threat_boundaries",
+      "required": [],
+      "properties": [
+        "subject",
+        "path",
+        "boundary_id",
+        "trust_level",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_owasp_gaps",
+      "required": [],
+      "properties": [
+        "subject",
+        "component_id",
+        "control_id",
+        "status",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_doc_drift",
+      "required": [],
+      "properties": [
+        "subject",
+        "path",
+        "drift_kind",
+        "severity",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_engineering_signals",
+      "required": [],
+      "properties": [
+        "path",
+        "subject",
+        "signal_family",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_sca_reachability",
+      "required": [],
+      "properties": [
+        "subject",
+        "package",
+        "advisory_id",
+        "reachability_class",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_sanitizer_readiness",
+      "required": [],
+      "properties": [
+        "build_unit",
+        "sanitizer",
+        "status",
+        "limit",
+        "cursor"
+      ]
     }
   ]
 }

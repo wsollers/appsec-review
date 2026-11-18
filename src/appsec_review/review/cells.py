@@ -610,7 +610,14 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
         response = {**response, "results": [row for row in response.get("results", ())
                                             if _covers_line(row, decision.line)]}
     granted: set[str] = set()
-    bounded, withheld = _bound(decision.tool, response, capability, attempt.seen, granted)
+    bounded, withheld = _bound(
+        decision.tool,
+        response,
+        capability,
+        attempt.seen,
+        granted,
+        locator_paths=view.locator_paths if view is not None else None,
+    )
     seen = {identity for identity in _identities(bounded["results"])
             if capability.entity_in_scope(identity) or identity in attempt.seen or identity in granted}
     attempt.seen |= seen
@@ -651,11 +658,12 @@ def _bounded_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _covers_line(row: Any, line: int) -> bool:
-    location = row.get("location") if isinstance(row, Mapping) else None
-    if not isinstance(location, Mapping):
+    if not isinstance(row, Mapping):
         return False
+    location = row.get("location")
+    span = location if isinstance(location, Mapping) else row
     try:
-        return int(location["start_line"]) <= line <= int(location.get("end_line", location["start_line"]))
+        return int(span["start_line"]) <= line <= int(span.get("end_line", span["start_line"]))
     except (KeyError, TypeError, ValueError):
         return False
 
@@ -719,7 +727,8 @@ def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core:
 
 
 def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
-           seen: set[str] | frozenset[str] = frozenset(), granted: set[str] | None = None
+           seen: set[str] | frozenset[str] = frozenset(), granted: set[str] | None = None,
+           *, locator_paths: set[str] | frozenset[str] | None = None
            ) -> tuple[dict[str, Any], int]:
     """Withhold out-of-scope rows and trim to the cell byte cap; identities are retained.
 
@@ -731,13 +740,14 @@ def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
     rows = [_plain(row) for row in response.get("results", ()) or ()]
     for row in rows:
         _grant_graph_row(row, capability, granted)
+        _grant_exploration_row(tool, row, capability, seen, granted, locator_paths)
         if isinstance(row, dict) and isinstance(row.get("entity"), dict):
             _grant_graph_row(row["entity"], capability, granted)
     known = set(seen) | granted
     kept: list[Any] = []
     withheld = 0
     for row in rows:
-        scoped, dropped = _scope_row(tool, row, capability, known)
+        scoped, dropped = _scope_row(tool, row, capability, known, locator_paths)
         withheld += dropped
         if scoped is not None:
             kept.append(scoped)
@@ -791,12 +801,83 @@ def _grant_graph_row(row: Any, capability: CellCapability, granted: set[str]) ->
                    if identity.split(":", 2)[1] in GRAPH_ROW_KINDS)
 
 
+def _exploration_row_in_scope(
+    tool: str,
+    row: Mapping[str, Any],
+    capability: CellCapability,
+    known: set[str] | frozenset[str],
+    locator_paths: set[str] | frozenset[str] | None,
+) -> bool:
+    if tool in {"query_cfg_function", "query_guard_dominators"}:
+        src = row.get("source_identity")
+        if isinstance(src, str) and (capability.entity_in_scope(src) or src in known):
+            return True
+        return locator_paths is not None and isinstance(row.get("path"), str) and row["path"] in locator_paths
+    if tool == "query_cpg_slice":
+        src = row.get("source_identity")
+        if isinstance(src, str) and (capability.entity_in_scope(src) or src in known):
+            return True
+        if locator_paths is not None:
+            return isinstance(row.get("path"), str) and row["path"] in locator_paths
+        return bool(capability.graph_scopes) or "graph" in capability.indexes
+    if tool == "query_call_paths":
+        hops = row.get("hops") if isinstance(row.get("hops"), Sequence) else ()
+        if locator_paths is not None:
+            return any(isinstance(h, Mapping) and h.get("path") in locator_paths for h in hops)
+        return bool(capability.graph_scopes) or "graph" in capability.indexes
+    return True
+
+
+def _grant_exploration_row(
+    tool: str,
+    row: Any,
+    capability: CellCapability,
+    seen: set[str] | frozenset[str],
+    granted: set[str],
+    locator_paths: set[str] | frozenset[str] | None,
+) -> None:
+    if not isinstance(row, dict):
+        return
+    if tool in {"query_cfg_function", "query_guard_dominators"}:
+        if "analysis" in capability.indexes and _exploration_row_in_scope(tool, row, capability, seen | granted, locator_paths):
+            ast_id = row.get("ast_identity")
+            if isinstance(ast_id, str) and _LOGICAL_ID.fullmatch(ast_id):
+                granted.add(ast_id)
+                row.setdefault("identity", ast_id)
+        return
+    if tool in {"query_threat_boundaries", "query_doc_drift", "query_engineering_signals"}:
+        identity = row.get("identity")
+        if not (isinstance(identity, str) and _LOGICAL_ID.fullmatch(identity)):
+            return
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+        location = row.get("location") if isinstance(row.get("location"), Mapping) else {}
+        subj = payload.get("subject_identity") or payload.get("subject")
+        row_paths = {p for p in (location.get("path"), payload.get("subject_path"), payload.get("path")) if isinstance(p, str) and p}
+        in_scope = (
+            capability.entity_in_scope(identity)
+            or (isinstance(subj, str) and (capability.entity_in_scope(subj) or subj in seen or subj in granted))
+            or (locator_paths is not None and bool(row_paths & set(locator_paths)))
+            or (locator_paths is None and not row_paths)
+        )
+        if in_scope:
+            granted.add(identity)
+        return
+    if tool in {"query_owasp_gaps", "query_sca_reachability", "query_sanitizer_readiness"}:
+        identity = row.get("identity")
+        if isinstance(identity, str) and _LOGICAL_ID.fullmatch(identity):
+            granted.add(identity)
+
+
 def _scope_row(tool: str, row: Any, capability: CellCapability,
-               known: set[str] | frozenset[str] = frozenset()) -> tuple[Any, int]:
+               known: set[str] | frozenset[str] = frozenset(),
+               locator_paths: set[str] | frozenset[str] | None = None) -> tuple[Any, int]:
     if not isinstance(row, dict):
         return None, 1
     if row.get("index") == "debug_symbols" and not capability.debug_symbol_row_in_scope(row, known):
         return None, 1
+    if tool in {"query_cfg_function", "query_guard_dominators", "query_cpg_slice", "query_call_paths"}:
+        if not _exploration_row_in_scope(tool, row, capability, known, locator_paths):
+            return None, 1
     if tool == "resolve_evidence":
         dropped = 0
         entity = row.get("entity")

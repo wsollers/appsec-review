@@ -2,7 +2,7 @@
 id: blue_control
 version: 2
 roles: ["blue_team_refuter"]
-requests_tools: ["find", "query_code_graph", "read_excerpt", "resolve_evidence", "trace"]
+requests_tools: ["find", "query_cfg_function", "query_code_graph", "query_cpg_slice", "query_guard_dominators", "query_owasp_gaps", "read_excerpt", "resolve_evidence", "trace"]
 max_tokens: 450
 ---
 ## Question

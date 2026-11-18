@@ -2,7 +2,7 @@
 id: entry_down
 version: 2
 roles: ["hypothesis_hunter"]
-requests_tools: ["find", "read_excerpt", "trace"]
+requests_tools: ["find", "query_call_paths", "query_cfg_function", "query_code_graph", "query_cpg_slice", "query_guard_dominators", "query_threat_boundaries", "read_excerpt", "trace"]
 max_tokens: 400
 ---
 ## Question

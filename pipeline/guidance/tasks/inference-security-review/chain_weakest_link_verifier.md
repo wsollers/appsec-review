@@ -2,7 +2,7 @@
 id: chain_weakest_link_verifier
 version: 1
 roles: ["independent_verifier"]
-requests_tools: ["find", "read_excerpt", "resolve_evidence", "trace"]
+requests_tools: ["find", "query_call_paths", "query_cpg_slice", "query_doc_drift", "query_threat_boundaries", "read_excerpt", "resolve_evidence", "trace"]
 max_tokens: 650
 ---
 ## Question

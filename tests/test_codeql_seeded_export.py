@@ -414,7 +414,8 @@ def test_a_scope_without_seeds_is_skipped_with_a_named_partial_gap_and_never_run
     assert record["seeded"]["seed_count"] == 0 and record["seeded"]["seeds"] == []
     assert record["seeded"]["mode"] == "seeded" and record["seeded"]["depth"] == 3
     assert output["terminal_status"] == "COMPLETED_WITH_GAPS" and output["export_count"] == 0
-    assert output["dispositions"][0]["terminal_status"] == "SKIPPED"
+    from appsec_review.interchange import ProducerStatus
+    assert output["dispositions"][0]["terminal_status"] == ProducerStatus.GAP.value
     scope_root = tmp_path / "run" / "data" / "codeql" / "scopes" / scope.scope_id
     assert not (scope_root / "export-checkpoint.json").exists() and not (scope_root / "exports").exists()
 
@@ -507,3 +508,54 @@ def test_ledger_statuses_and_depth_histogram_from_fake_report_rows() -> None:
     assert empty["resolved_seed_count"] == 0 and "seeded neighborhood is empty" in " ".join(empty["gaps"])
     assert json.dumps(section)   # JSON-serialisable, no sets or dataclasses
     assert asdict(selected.seeds[0])["path"] == "a.cpp"
+
+
+def test_extra_codeql_shards_and_structural_fallbacks_seed_export_within_limit(tmp_path: Path) -> None:
+    """CodeQL's own normalized findings and structural fallbacks seed export up to seed_limit."""
+    from appsec_review.storage import atomic_json, file_sha256
+
+    scope, _db, _m = _fixture(tmp_path, [])
+    run = tmp_path / "run"
+
+    # 1. Create a CodeQL observation shard (normally excluded from upstream manifests, included via extra_observation_shards).
+    cql_shard = _shard(tmp_path, "codeql-own", "job_codeql_analysis",
+                       [_observation("native/a.cpp", 14, severity="low", tool="codeql", rule="cpp/path-injection")])
+
+    # 2. Create a Tree-sitter analysis shard with two CFG functions and a priority hotspot shard.
+    analysis_path = run / "data" / "indices" / "analysis" / "ts.sqlite"
+    analysis_path.parent.mkdir(parents=True, exist_ok=True)
+    ab = IndexBuilder(analysis_path, name="analysis", fingerprint="f" * 64,
+                      target_snapshot="s" * 64, shard_id="ts-cpp")
+    for idx, (fn_name, line, cc) in enumerate((("low_cc", 30, 1), ("high_cc", 50, 9))):
+        loc = SourceLocation("s" * 64, "native/a.cpp", "a" * 64, 0, 10, line, line + 5, 1, 1, {}, "exact", 1.0)
+        ident = LogicalIdentity.derive(EntityKind.AST_NODE, "s" * 64, {"idx": idx})
+        ab.add_entity(EntityRecord(ident, fn_name, fn_name, fn_name,
+                                   {"cfg": {"function_name": fn_name, "cyclomatic_complexity": cc, "guard_count": 2}},
+                                   loc))
+    ab_sha = ab.build()
+
+    prio_path = run / "data" / "indices" / "priority" / "prio.sqlite"
+    prio_path.parent.mkdir(parents=True, exist_ok=True)
+    pb = IndexBuilder(prio_path, name="priority", fingerprint="e" * 64,
+                      target_snapshot="s" * 64, shard_id="prio-1")
+    h_loc = SourceLocation("s" * 64, "native/b.cpp", "b" * 64, 0, 10, 22, 24, 1, 1, {}, "exact", 1.0)
+    h_id = LogicalIdentity.derive(EntityKind.HOTSPOT, "s" * 64, {"h": 1})
+    pb.add_entity(EntityRecord(h_id, "hotspot", "hotspot", "hotspot", {"score": 0.92, "category": "sink_density"}, h_loc))
+    pb_sha = pb.build()
+
+    manifest_ref = _manifest(
+        tmp_path, "structural",
+        IndexIdentity("analysis", "appsec-review/retrieval-index/2", ab_sha, "f" * 64,
+                      analysis_path.relative_to(run).as_posix(), {"job": "job_tree_sitter_ast"}, (), "ts-cpp"),
+        IndexIdentity("priority", "appsec-review/retrieval-index/2", pb_sha, "e" * 64,
+                      prio_path.relative_to(run).as_posix(), {"job": "job_priority_scoring"}, (), "prio-1"),
+    )
+
+    plan = seeding.extract_seeds(
+        run, [manifest_ref], [scope], seed_limit=3,
+        extra_observation_shards=[cql_shard], include_structural_fallbacks=True,
+    )
+    selected = plan.for_scope(scope.scope_id)
+    # Cap of 3 picks: (1) CodeQL finding a.cpp:14, (2) priority hotspot b.cpp:22..24, (3) high_cc CFG function a.cpp:50..55.
+    assert selected.dropped == 0
+    assert selected.rows == (("a.cpp", 14, 14), ("a.cpp", 50, 55), ("b.cpp", 22, 24))

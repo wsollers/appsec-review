@@ -2,7 +2,7 @@
 id: variant
 version: 2
 roles: ["hypothesis_hunter"]
-requests_tools: ["find", "read_excerpt", "search", "trace"]
+requests_tools: ["find", "query_cfg_function", "query_cpg_slice", "query_guard_dominators", "query_syntax", "read_excerpt", "search", "trace"]
 max_tokens: 400
 ---
 ## Question

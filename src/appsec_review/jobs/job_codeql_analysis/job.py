@@ -1028,12 +1028,17 @@ def _export_success(unit: UnitContext, base: Mapping[str, Any], identity: str, r
     return value
 
 
-def _seed_plan(unit: UnitContext, scopes: Sequence[CodeQLScope]) -> seeding.SeedPlan:
-    """Seeds of every scope from the accepted upstream observation shards (seeded mode only)."""
+def _seed_plan(unit: UnitContext, scopes: Sequence[CodeQLScope], *,
+               extra_observation_shards: Sequence[Mapping[str, Any]] = ()) -> seeding.SeedPlan:
+    """Seeds of every scope from accepted upstream shards, CodeQL's own findings, and structural fallbacks."""
     manifests = unit.output("plan.inventory").get("upstream_manifests", ())
     try:
-        return seeding.extract_seeds(unit.job.run_root, manifests, scopes,
-                                     seed_limit=_settings(unit).export_queries.seed_limit)
+        return seeding.extract_seeds(
+            unit.job.run_root, manifests, scopes,
+            seed_limit=_settings(unit).export_queries.seed_limit,
+            extra_observation_shards=extra_observation_shards,
+            include_structural_fallbacks=True,
+        )
     except seeding.SeedIntegrityError as exc:
         raise FrameworkIntegrityError(str(exc)) from exc
 
@@ -1241,7 +1246,9 @@ def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
 
 def _export_dispositions(exports: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [{"scope_id": item["scope_id"], "language": item["language"],
-             "action": "export", "terminal_status": item["export_status"]} for item in exports]
+             "action": "export",
+             "terminal_status": "GAP" if item["export_status"] == "SKIPPED" else item["export_status"]}
+            for item in exports]
 
 
 def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mapping[str, Any]:
@@ -1607,8 +1614,8 @@ def build_job() -> Job:
         imported = _import_predecessor_databases(unit, plan_value.scopes, receipts, settings)
         budget = unit.job.review_policy.resources
         admission = ResourceAdmission(unit.job.metadata_root, budget)
-        seed_plan = (_seed_plan(unit, list(plan_value.scopes))
-                     if settings.export_queries.enabled and settings.export_queries.mode == "seeded" else None)
+        normalized_lock = threading.Lock()
+        normalized_by_scope: dict[str, list[Mapping[str, Any]]] = {}
 
         def admitted(action, function, *args, scope_id, query_profile=None):
             threads, ram = settings.threads, settings.ram_mb
@@ -1650,12 +1657,29 @@ def build_job() -> Job:
                         **({"export_status": "FAILED"} if action == "export" else {}),
                         "gaps": [*base.get("gaps", ()), reason]}
 
+        def normalize_ready(value):
+            item = admitted("normalize", _normalize_one, unit, value,
+                            scope_id=value["scope"]["scope_id"],
+                            query_profile=value["query_profile"]["query_id"])
+            with normalized_lock:
+                normalized_by_scope.setdefault(value["scope"]["scope_id"], []).append(item)
+            return item
+
         def export_one(value):
             scope = _scope_from(value["scope"])
             profile = _export_profile(settings, scope.language)
             if profile is not None and value.get("terminal_status") == "SUCCEEDED":
                 _verify_export_sources(unit.job.repository_root, profile, settings)
-            return _export_isolated(unit, value, seed_plan=seed_plan)
+            scope_plan = None
+            if settings.export_queries.enabled and settings.export_queries.mode == "seeded":
+                with normalized_lock:
+                    extra_shards = [
+                        item["index_identity"]
+                        for item in normalized_by_scope.get(scope.scope_id, ())
+                        if isinstance(item.get("index_identity"), Mapping)
+                    ]
+                scope_plan = _seed_plan(unit, [scope], extra_observation_shards=extra_shards)
+            return _export_isolated(unit, value, seed_plan=scope_plan)
 
         def export_ready(value):
             if (not settings.export_queries.enabled or value.get("terminal_status") != "SUCCEEDED"
@@ -1671,9 +1695,7 @@ def build_job() -> Job:
             query=lambda value, profile: admitted("query", _query_one, unit, value, profile,
                                                   scope_id=value["scope"]["scope_id"],
                                                   query_profile=profile["query_id"]),
-            normalize=lambda value: admitted("normalize", _normalize_one, unit, value,
-                                              scope_id=value["scope"]["scope_id"],
-                                              query_profile=value["query_profile"]["query_id"]),
+            normalize=normalize_ready,
             export=export_ready,
         )
         normalized, exports = results["normalize"], results["export"]

@@ -2,7 +2,7 @@
 id: control_gap
 version: 3
 roles: ["hypothesis_hunter"]
-requests_tools: ["find", "read_excerpt", "trace"]
+requests_tools: ["find", "query_code_graph", "query_doc_drift", "query_guard_dominators", "query_owasp_gaps", "query_threat_boundaries", "read_excerpt", "trace"]
 max_tokens: 400
 ---
 ## Question

@@ -18,7 +18,7 @@ from __future__ import annotations
 import csv
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 import io
 import json
 from pathlib import Path, PurePosixPath
@@ -188,11 +188,117 @@ class _Accumulator:
                 self.sources.values(), key=SeedSource.key)[:MAX_SOURCES_PER_SEED]}
 
 
+def _verify_extra_observation_shards(run_root: Path,
+                                     extra_shards: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Hash-verify direct observation shards (such as CodeQL's own normalized scope shards)."""
+    root = run_root.resolve()
+    found: dict[tuple[str, str], dict[str, Any]] = {}
+    for raw_shard in extra_shards:
+        shard = asdict(raw_shard) if is_dataclass(raw_shard) and not isinstance(raw_shard, type) else raw_shard
+        if not isinstance(shard, Mapping) or shard.get("name") != OBSERVATION_INDEX:
+            raise SeedIntegrityError("seed observation shard entry is malformed")
+        rel = str(shard.get("relative_path") or shard.get("path") or "")
+        shard_path = (root / rel).resolve()
+        if root not in shard_path.parents or not shard_path.is_file() or shard_path.is_symlink():
+            raise SeedIntegrityError("seed observation shard is unavailable")
+        if file_sha256(shard_path) != shard.get("sha256"):
+            raise SeedIntegrityError("seed observation shard identity changed")
+        normalized = dict(shard)
+        normalized["relative_path"] = rel
+        found[(OBSERVATION_INDEX, str(shard.get("shard_id") or rel))] = normalized
+    return [found[key] for key in sorted(found)]
+
+
+def _structural_shards(run_root: Path, manifests: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Hash-verified priority, analysis, and source shards named by upstream manifests."""
+    root = run_root.resolve()
+    allowed = frozenset({"priority", "analysis", "source"})
+    found: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for reference in manifests:
+        path = (root / str(reference.get("path", ""))).resolve()
+        if root not in path.parents or not path.is_file() or path.is_symlink():
+            raise SeedIntegrityError("seed manifest is unavailable or escaped the run")
+        if file_sha256(path) != reference.get("sha256"):
+            raise SeedIntegrityError("seed manifest identity changed")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if document.get("schema") != MANIFEST_SCHEMA:
+            raise SeedIntegrityError("seed manifest schema is unsupported")
+        for shard in document.get("indexes", ()):
+            if shard.get("name") not in allowed:
+                continue
+            shard_path = (root / str(shard.get("relative_path", ""))).resolve()
+            if root not in shard_path.parents or not shard_path.is_file() or shard_path.is_symlink():
+                raise SeedIntegrityError("seed structural shard is unavailable")
+            if file_sha256(shard_path) != shard.get("sha256"):
+                raise SeedIntegrityError("seed structural shard identity changed")
+            found[(str(shard["name"]), str(shard.get("shard_id", "default")))] = shard
+    return [found[key] for key in sorted(found)]
+
+
+def _structural_fallback_seeds(
+    run_root: Path,
+    manifests: Sequence[Mapping[str, Any]],
+    by_path: Mapping[str, Sequence[tuple[str, str]]],
+    scope_ids: Sequence[str],
+) -> dict[str, list[tuple[tuple[int, float, float, tuple[str, int, int]], Seed]]]:
+    """Ranked structural fallback seeds (priority hotspots -> CFG functions -> catalog symbols)."""
+    per_scope: dict[str, dict[tuple[str, int, int], tuple[tuple[int, float, float, tuple[str, int, int]], Seed]]] = {
+        scope_id: {} for scope_id in scope_ids
+    }
+    shards = _structural_shards(run_root, manifests)
+    if not shards:
+        return {scope_id: [] for scope_id in scope_ids}
+    store = ShardSet(run_root, shards)
+    for entity in store.entities(store.shards, kinds=("hotspot", "ast_node", "symbol")):
+        kind = str(entity.get("kind") or "")
+        payload = entity["payload"] if isinstance(entity.get("payload"), Mapping) else {}
+        location = entity.get("location")
+        path = _target_path(location.get("path")) if isinstance(location, Mapping) else None
+        start = location.get("start_line") if isinstance(location, Mapping) else None
+        if path is None or isinstance(start, bool) or not isinstance(start, int) or start < 1:
+            continue
+        owners = by_path.get(path)
+        if not owners:
+            continue
+        end = location.get("end_line")
+        end = end if isinstance(end, int) and not isinstance(end, bool) and end >= start else start
+        identity = str(entity["identity"])
+        if kind == "hotspot":
+            tier = _UNKNOWN_RANK + 1
+            metric_a = -float(payload.get("score") or payload.get("priority_score") or 0.0)
+            metric_b = 0.0
+            source = SeedSource("priority", str(payload.get("category") or "hotspot"), "low", identity)
+        elif kind == "ast_node":
+            cfg = payload.get("cfg")
+            if not isinstance(cfg, Mapping):
+                continue
+            tier = _UNKNOWN_RANK + 2
+            metric_a = -float(cfg.get("cyclomatic_complexity") or 0.0)
+            metric_b = -float(cfg.get("guard_count") or 0.0)
+            source = SeedSource("tree-sitter", str(cfg.get("function_name") or "cfg_function"), "info", identity)
+        else:
+            tier = _UNKNOWN_RANK + 3
+            metric_a = 0.0
+            metric_b = 0.0
+            source = SeedSource("target-catalog", str(payload.get("kind") or "symbol"), "info", identity)
+        for scope_id, relative in owners:
+            span = (relative, start, end)
+            sort_key = (tier, metric_a, metric_b, span)
+            bucket = per_scope[scope_id]
+            existing = bucket.get(span)
+            if existing is None or sort_key < existing[0]:
+                bucket[span] = (sort_key, Seed(relative, start, end, (source,), tier))
+    return {sid: sorted(bucket.values(), key=lambda item: item[0]) for sid, bucket in per_scope.items()}
+
+
 def extract_seeds(run_root: Path, manifests: Iterable[Mapping[str, Any]],
-                  scopes: Sequence[SeedScope], *, seed_limit: int) -> SeedPlan:
-    """Map the accepted tool observations onto the scopes' databases and bound the result."""
+                  scopes: Sequence[SeedScope], *, seed_limit: int,
+                  extra_observation_shards: Sequence[Mapping[str, Any]] = (),
+                  include_structural_fallbacks: bool = False) -> SeedPlan:
+    """Map accepted tool observations (plus optional extra/structural seeds) onto scope databases."""
     if seed_limit < 1:
         raise ValueError("seed_limit must be a positive integer")
+    manifest_list = list(manifests)
     by_path: dict[str, list[tuple[str, str]]] = {}
     for scope in scopes:
         for entry in scope.files:
@@ -202,37 +308,64 @@ def extract_seeds(run_root: Path, manifests: Iterable[Mapping[str, Any]],
     collected: dict[str, dict[tuple[str, int, int], _Accumulator]] = {scope.scope_id: {} for scope in scopes}
     outside: set[tuple[str, int, int]] = set()
     unlocated = 0
-    shards = observation_shards(run_root, manifests)
-    store = ShardSet(run_root, shards)
-    for entity in store.entities(store.shards, kinds=("tool_observation",)):
-        payload = entity["payload"] if isinstance(entity["payload"], Mapping) else {}
-        if scanner_of(payload) in SEEDED_PRODUCER_SCANNERS or entity.get("job") in SEEDED_PRODUCER_JOBS:
-            continue
-        location = entity.get("location")
-        path = _target_path(location.get("path")) if isinstance(location, Mapping) else None
-        start = location.get("start_line") if isinstance(location, Mapping) else None
-        if path is None or isinstance(start, bool) or not isinstance(start, int) or start < 1:
-            unlocated += classify(payload) == "source_sast"
-            continue
-        end = location.get("end_line")
-        end = end if isinstance(end, int) and not isinstance(end, bool) and end >= start else start
-        owners = by_path.get(path)
-        if not owners:
-            outside.add((path, start, end))
-            continue
-        severity = normalize_reported_severity(payload)["value"]
-        source = SeedSource(scanner_of(payload), rule_of(payload), severity, str(entity["identity"]))
-        rank = SEVERITY_ORDER.get(severity, _UNKNOWN_RANK)
-        for scope_id, relative in owners:
-            collected[scope_id].setdefault((relative, start, end), _Accumulator()).add(rank, source)
+
+    def ingest_observations(shard_list: Sequence[Mapping[str, Any]], *, exclude_seeded_producers: bool) -> None:
+        nonlocal unlocated
+        if not shard_list:
+            return
+        store = ShardSet(run_root, shard_list)
+        for entity in store.entities(store.shards, kinds=("tool_observation",)):
+            payload = entity["payload"] if isinstance(entity["payload"], Mapping) else {}
+            if exclude_seeded_producers and (
+                scanner_of(payload) in SEEDED_PRODUCER_SCANNERS or entity.get("job") in SEEDED_PRODUCER_JOBS
+            ):
+                continue
+            location = entity.get("location")
+            path = _target_path(location.get("path")) if isinstance(location, Mapping) else None
+            start = location.get("start_line") if isinstance(location, Mapping) else None
+            if path is None or isinstance(start, bool) or not isinstance(start, int) or start < 1:
+                unlocated += classify(payload) == "source_sast"
+                continue
+            end = location.get("end_line")
+            end = end if isinstance(end, int) and not isinstance(end, bool) and end >= start else start
+            owners = by_path.get(path)
+            if not owners:
+                outside.add((path, start, end))
+                continue
+            severity = normalize_reported_severity(payload)["value"]
+            source = SeedSource(scanner_of(payload), rule_of(payload), severity, str(entity["identity"]))
+            rank = SEVERITY_ORDER.get(severity, _UNKNOWN_RANK)
+            for scope_id, relative in owners:
+                collected[scope_id].setdefault((relative, start, end), _Accumulator()).add(rank, source)
+
+    ingest_observations(observation_shards(run_root, manifest_list), exclude_seeded_producers=True)
+    ingest_observations(_verify_extra_observation_shards(run_root, extra_observation_shards),
+                        exclude_seeded_producers=False)
+
+    fallbacks = (_structural_fallback_seeds(run_root, manifest_list, by_path, [s.scope_id for s in scopes])
+                 if include_structural_fallbacks else {})
+
     selected: dict[str, ScopeSeeds] = {}
     for scope_id, found in collected.items():
         ranked = sorted(found.items(), key=lambda item: (item[1].rank, item[0]))
         kept = ranked[:seed_limit]
-        seeds = tuple(Seed(path, start, end, tuple(sorted(
-            accumulator.sources.values(), key=SeedSource.key)[:MAX_SOURCES_PER_SEED]), accumulator.rank)
-            for (path, start, end), accumulator in sorted(kept, key=lambda item: item[0]))
-        selected[scope_id] = ScopeSeeds(scope_id, seeds, len(ranked), len(ranked) - len(kept))
+        chosen: dict[tuple[str, int, int], Seed] = {
+            (path, start, end): Seed(
+                path, start, end,
+                tuple(sorted(accumulator.sources.values(), key=SeedSource.key)[:MAX_SOURCES_PER_SEED]),
+                accumulator.rank,
+            )
+            for (path, start, end), accumulator in kept
+        }
+        if len(chosen) < seed_limit and scope_id in fallbacks:
+            for _sort_key, fb_seed in fallbacks[scope_id]:
+                if fb_seed.key in chosen:
+                    continue
+                chosen[fb_seed.key] = fb_seed
+                if len(chosen) >= seed_limit:
+                    break
+        seeds = tuple(chosen[key] for key in sorted(chosen))
+        selected[scope_id] = ScopeSeeds(scope_id, seeds, max(len(ranked), len(seeds)), len(ranked) - len(kept))
     return SeedPlan(selected, len(outside), unlocated)
 
 

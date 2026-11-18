@@ -2,7 +2,7 @@
 id: persona_sweep
 version: 2
 roles: ["hypothesis_hunter"]
-requests_tools: ["find", "query_hotspots", "read_excerpt", "search", "trace"]
+requests_tools: ["find", "query_call_paths", "query_cfg_function", "query_cpg_slice", "query_doc_drift", "query_engineering_signals", "query_hotspots", "query_sca_reachability", "query_threat_boundaries", "read_excerpt", "search", "trace"]
 max_tokens: 400
 ---
 ## Question

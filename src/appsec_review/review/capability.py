@@ -49,7 +49,7 @@ TOOL_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     **{tool["name"]: tool["inputSchema"] for tool in TOOLS if tool["name"] in IN_PROCESS_TOOLS},
     EXPAND_TOOL: EXPAND_SCHEMA}
 # Tools that accept a ``locator`` {"path", "line"}: the application resolves it inside the package scope.
-LOCATOR_TOOLS = frozenset({"find", "query_observations", "query_codeql"})
+LOCATOR_TOOLS = frozenset({"find", "query_observations", "query_codeql", "query_cfg_function", "query_guard_dominators", "query_cpg_slice", "query_threat_boundaries", "query_doc_drift", "query_engineering_signals"})
 
 # Indexes each tool reads when it takes no `indexes` parameter. Identity-addressed tools
 # (`read_excerpt`, `trace`, `resolve_evidence`) are bounded by entity scope instead.
@@ -68,6 +68,16 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     QUERY_CODEQL_NEIGHBORHOOD: frozenset({GRAPH_INDEX}),
     QUERY_DEBUG_SYMBOLS: frozenset({DEBUG_SYMBOL_INDEX}),
     QUERY_SYNTAX: frozenset({"analysis"}),
+    "query_cfg_function": frozenset({"analysis"}),
+    "query_guard_dominators": frozenset({"analysis"}),
+    "query_cpg_slice": frozenset({GRAPH_INDEX}),
+    "query_call_paths": frozenset({GRAPH_INDEX}),
+    "query_threat_boundaries": frozenset({"precomputed"}),
+    "query_owasp_gaps": frozenset({"precomputed"}),
+    "query_doc_drift": frozenset({"observations"}),
+    "query_engineering_signals": frozenset({"precomputed"}),
+    "query_sca_reachability": frozenset({"components"}),
+    "query_sanitizer_readiness": frozenset({"inventory"}),
 }
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
 IDENTITY_TOOLS = frozenset({"read_excerpt", "trace", "resolve_evidence"})
@@ -344,6 +354,8 @@ class CellCapability:
                 if _SQL_LIKE.search(text):
                     return deny("sql_like_value", f"{key} looks like a query language")
         for key in sorted(set(parameters) & IDENTITY_PARAMETERS):
+            if tool == "query_call_paths" and key == "source" and not _LOGICAL_ID.fullmatch(str(parameters[key])):
+                continue
             if not (self.entity_in_scope(parameters[key]) or parameters[key] in granted):
                 return deny("entity_out_of_scope", f"{key} is outside the package entity scope")
         if tool == QUERY_SYNTAX and parameters["subject"] not in {*self.entities, *granted}:
@@ -354,9 +366,16 @@ class CellCapability:
         line = None
         if locator is not None:
             normalized["path"] = locator["path"]
-            line = int(locator["line"])
+            loc_line = int(locator["line"])
             if tool == "query_observations":
-                normalized.update(start_line=line, end_line=line)
+                normalized.update(start_line=loc_line, end_line=loc_line)
+                line = loc_line
+            elif tool in {"query_guard_dominators", "query_cpg_slice"}:
+                normalized["line"] = loc_line
+            elif tool in {"query_threat_boundaries", "query_doc_drift", "query_engineering_signals"}:
+                line = None
+            else:
+                line = loc_line
         if tool in INDEX_PARAMETER_TOOLS:
             requested = parameters.get("indexes")
             if requested is None:

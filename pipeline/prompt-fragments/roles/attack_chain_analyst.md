@@ -45,7 +45,9 @@ Works from adjudicated claims, admitted pairs and recorded relations only; later
 every edge independently.
 
 ## Tools
-`find`, `read_excerpt`, `resolve_evidence`, `trace`.
+`find`, `query_call_paths`, `query_code_graph`, `query_cpg_slice`, `query_doc_drift`, `query_owasp_gaps`,
+`query_threat_boundaries`, `read_excerpt`, `resolve_evidence`, `trace`.
+
 
 ## Examples
 The examples use three supplied components: `claim-1111111111111111111111111111111111111111111111111111111111111111` (`out_of_bounds_read`, affected entity

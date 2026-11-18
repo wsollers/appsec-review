@@ -2,7 +2,7 @@
 id: adjudicate_claim
 version: 2
 roles: ["adjudication_judge"]
-requests_tools: ["find", "query_code_graph", "read_excerpt", "resolve_evidence", "trace"]
+requests_tools: ["find", "query_call_paths", "query_cfg_function", "query_code_graph", "query_cpg_slice", "query_guard_dominators", "read_excerpt", "resolve_evidence", "trace"]
 max_tokens: 450
 ---
 ## Question

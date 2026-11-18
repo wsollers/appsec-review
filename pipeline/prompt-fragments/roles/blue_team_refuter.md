@@ -32,8 +32,12 @@ guidance, or run code.
 Never sees red reasoning or the sibling blue cell; the two blue questions stay disjoint.
 
 ## Tools
-`find`, `list_codeql_databases`, `query_artifacts`, `query_build_security`, `query_ci_configuration`,
-`query_code_graph`, `query_codeql_neighborhood`, `query_debug_symbols`, `query_syntax`, `read_excerpt`, `resolve_evidence`, `trace`.
+`find`, `list_codeql_databases`, `query_artifacts`, `query_build_security`, `query_call_paths`,
+`query_cfg_function`, `query_ci_configuration`, `query_code_graph`, `query_codeql_neighborhood`,
+`query_cpg_slice`, `query_debug_symbols`, `query_doc_drift`, `query_guard_dominators`, `query_owasp_gaps`,
+`query_sanitizer_readiness`, `query_sca_reachability`, `query_syntax`, `query_threat_boundaries`,
+`read_excerpt`, `resolve_evidence`, `trace`.
+
 
 ## Examples
 The examples use the labels of a package for a `memcpy` in `src/packet.cpp` line 16: L1 is the lead, S1 the

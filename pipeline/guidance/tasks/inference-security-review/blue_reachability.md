@@ -2,7 +2,7 @@
 id: blue_reachability
 version: 2
 roles: ["blue_team_refuter"]
-requests_tools: ["find", "query_build_security", "query_ci_configuration", "query_code_graph", "read_excerpt", "resolve_evidence", "trace"]
+requests_tools: ["find", "query_build_security", "query_call_paths", "query_cfg_function", "query_ci_configuration", "query_code_graph", "query_cpg_slice", "query_sanitizer_readiness", "query_sca_reachability", "read_excerpt", "resolve_evidence", "trace"]
 max_tokens: 450
 ---
 ## Question

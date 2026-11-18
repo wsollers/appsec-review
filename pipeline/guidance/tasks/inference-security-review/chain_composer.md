@@ -2,7 +2,7 @@
 id: chain_composer
 version: 2
 roles: ["attack_chain_analyst"]
-requests_tools: ["find", "read_excerpt", "resolve_evidence", "trace"]
+requests_tools: ["find", "query_call_paths", "query_cpg_slice", "query_doc_drift", "query_threat_boundaries", "read_excerpt", "resolve_evidence", "trace"]
 max_tokens: 700
 ---
 ## Question

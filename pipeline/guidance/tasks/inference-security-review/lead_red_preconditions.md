@@ -2,7 +2,7 @@
 id: lead_red_preconditions
 version: 2
 roles: ["red_team_analyst"]
-requests_tools: ["find", "query_ci_configuration", "read_excerpt", "trace"]
+requests_tools: ["find", "query_call_paths", "query_ci_configuration", "query_doc_drift", "query_guard_dominators", "query_owasp_gaps", "query_threat_boundaries", "read_excerpt", "trace"]
 max_tokens: 400
 ---
 ## Question

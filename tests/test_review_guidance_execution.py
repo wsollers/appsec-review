@@ -208,6 +208,8 @@ def test_production_rounds_use_actual_models_and_confirmed_local_variant_seeds(p
         }[request.role]
         if request.task_input["task"] == "control_gap":
             expected_skills.append("effective-control-verification")
+        if len(expected_skills) < 2 and "evidence-and-graph-querying" not in expected_skills:
+            expected_skills.append("evidence-and-graph-querying")
         bundle = next(item["bundle"] for item in ctx._bundles.values()
                       if item["bundle"]["sha256"] == request.guidance_bundle_sha256)
         procedures = next(section for section in bundle["sections"] if section["name"] == "procedures")
