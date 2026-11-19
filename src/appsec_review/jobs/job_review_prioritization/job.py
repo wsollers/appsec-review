@@ -17,6 +17,7 @@ import hashlib
 import math
 from pathlib import Path, PurePosixPath
 import re
+import sqlite3
 from typing import Any
 
 from appsec_review.retrieval import (
@@ -48,7 +49,7 @@ from .heuristics import Extractor
 from .inputs import accepted_handoff, has_handoff, read_json
 from .languages import MAPPING_IDENTITY, SPECS, UNSCORED_GRAMMARS
 from .rules import RULES_IDENTITY
-from .semantic import CODEQL_LANGUAGES, codeql_paths, semgrep_signals
+from .semantic import codeql_paths, file_coverage, semgrep_signals
 from .streaming import FilesDocumentWriter, ShardRowIndex
 from .syntax import SourceFile, build_tree, code_lines
 from appsec_review.jobs.job_review_prioritization.datasets import CONTRACT, DATASETS
@@ -266,13 +267,34 @@ def _ordered(signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
                                              item["rule_id"]))
 
 
-def _innermost(units: list[Mapping[str, Any]], line: int) -> str | None:
-    best = None
-    for unit in units:
-        if unit["start_line"] <= line <= unit["end_line"] and (
-                best is None or unit["start_byte"] >= best["start_byte"]):
-            best = unit
-    return best["function_id"] if best else None
+def _innermost(units: list[Mapping[str, Any]], line: int, *, source: bytes | None = None,
+               start_byte: int | None = None, start_column: int | None = None) -> str | None:
+    candidates = [unit for unit in units if unit["start_line"] <= line <= unit["end_line"]]
+    if start_byte is not None:
+        if (type(start_byte) is not int or source is None or not 0 <= start_byte < len(source)
+                or source[:start_byte].count(b"\n") + 1 != line):
+            return None
+    elif start_column is not None:
+        if type(start_column) is not int or start_column < 1 or source is None:
+            return None
+        lines = source.splitlines(keepends=True)
+        if not 1 <= line <= len(lines):
+            return None
+        body = lines[line - 1].rstrip(b"\r\n")
+        prefix = body[:start_column - 1]
+        # Upstream normalizers do not retain a column encoding. ASCII prefixes agree in byte,
+        # code-point and UTF-16 coordinates; non-ASCII positions need an explicit byte offset.
+        if start_column > len(body) or not prefix.isascii():
+            return None
+        start_byte = sum(map(len, lines[:line - 1])) + start_column - 1
+    if start_byte is None:
+        return candidates[0]["function_id"] if len(candidates) == 1 else None
+    candidates = [unit for unit in candidates if unit["start_byte"] <= start_byte < unit["end_byte"]]
+    innermost = [unit for unit in candidates if not any(
+        other["start_byte"] >= unit["start_byte"] and other["end_byte"] <= unit["end_byte"]
+        and (other["start_byte"], other["end_byte"]) != (unit["start_byte"], unit["end_byte"])
+        for other in candidates)]
+    return innermost[0]["function_id"] if len(innermost) == 1 else None
 
 
 def build_job() -> Job:
@@ -436,6 +458,8 @@ def build_job() -> Job:
                     signals = _ordered(extractor.signals)
                     if len(signals) > limit:
                         file_record_gaps.append(f"signals_truncated:{len(signals) - limit}")
+                    if len(extractor.suppressions) > limit:
+                        file_record_gaps.append(f"suppressions_truncated:{len(extractor.suppressions) - limit}")
                     summary = file_summary(units, sloc, thresholds)
                     writer.add(path, {
                         "path": path, "sha256": value["sha256"], "size_bytes": value["size_bytes"],
@@ -515,6 +539,8 @@ def build_job() -> Job:
             gaps.append(f"{path}: unresolved_or_dynamic_imports: {'; '.join(items[:10])}")
         if graph["truncated"]:
             gaps.append("import_record_bound_reached")
+        gaps.extend(gap for value in graph["modules"].values() for gap in value.get("coupling_gaps", ()))
+        gaps = list(dict.fromkeys(gaps))
         unit.job.events.write("REVIEW_PRIORITIZATION_GRAPH_BUILT", edge_count=len(graph["edges"]),
                               module_count=len(graph["modules"]), unresolved_file_count=len(unresolved))
         return {"artifact": _write(unit, "dependency-graph.json", graph), "edge_count": len(graph["edges"]),
@@ -535,6 +561,24 @@ def build_job() -> Job:
         else:
             codeql = {"status": "SKIPPED_POLICY", "paths": [], "languages": {}, "gaps": ["semantic_paths_disabled"]}
         gaps.extend([*semgrep["gaps"], *codeql["gaps"]])
+        cached_path: str | None = None
+        cached_source = b""
+
+        def owner(location: Mapping[str, Any]) -> str | None:
+            nonlocal cached_path, cached_source
+            path, line = location["path"], int(location["start_line"])
+            units = facts.get(path, {}).get("units", [])
+            if not units:
+                return None
+            if (location.get("start_byte") is not None or location.get("start_column") is not None) and path != cached_path:
+                cached_source = _target_bytes(unit, path, files[path]["sha256"], files[path])
+                cached_path = path
+            identity = _innermost(units, line, source=cached_source,
+                                  start_byte=location.get("start_byte"), start_column=location.get("start_column"))
+            if identity is None and any(item["start_line"] <= line <= item["end_line"] for item in units):
+                gaps.append(f"{path}:{line}:{location.get('start_column')}: semantic_function_attribution_unavailable")
+            return identity
+
         signals = []
         for item in semgrep["signals"]:
             path = item["path"]
@@ -542,28 +586,41 @@ def build_job() -> Job:
                 gaps.append(f"{path}: semgrep_signal_not_bound_to_accepted_file")
                 continue
             item["file_sha256"] = files[path]["sha256"]
-            item["function_id"] = _innermost(facts.get(path, {}).get("units", []), item["start_line"])
+            item["function_id"] = owner(item)
             item["signal_id"] = _identity("sig", "semgrep", item["rule_id"], path, item["start_line"],
-                                          item["end_line"], item["category"])
+                                          item["end_line"], item.get("start_byte"), item.get("start_column"),
+                                          item.get("end_column"), item["category"], item.get("observation"))
             signals.append(item)
         paths = []
         for item in codeql["paths"]:
             ends = [step["location"] for step in item["flow_steps"]]
             if any(end["path"] not in files or end.get("file_sha256") not in {None, files[end["path"]]["sha256"]}
                    for end in ends):
-                gaps.append(f"semantic path {item['path_id']} is not bound to accepted files")
+                reason = f"semantic path {item['path_id']} is not bound to accepted files"
+                gaps.append(reason)
+                codeql["gaps"].append(reason)
+                codeql["status"] = "PARTIAL"
+                for end in ends:
+                    codeql.setdefault("omitted_paths", {}).setdefault(end["path"], []).append(reason)
                 continue
             item["flow_functions"] = list(dict.fromkeys(
                 function_id for step in item["flow_steps"]
-                if (function_id := _innermost(
-                    facts.get(step["location"]["path"], {}).get("units", []),
-                    int(step["location"]["start_line"]))) is not None))
-            item["source_function"] = _innermost(facts.get(item["source"]["path"], {}).get("units", []),
-                                                 int(item["source"]["start_line"]))
-            item["sink_function"] = _innermost(facts.get(item["sink"]["path"], {}).get("units", []),
-                                               int(item["sink"]["start_line"]))
+                if (function_id := owner(step["location"])) is not None))
+            item["source_function"] = owner(item["source"])
+            item["sink_function"] = owner(item["sink"])
             item["signal_id"] = item["path_id"]
             paths.append(item)
+        if settings["sources"]["codeql"]:
+            file_gaps = {path: reasons for path, fact in facts.items()
+                         if (reasons := file_coverage(
+                             codeql, path, fact["language"], fact.get("build_unit_id")))}
+            codeql["file_gaps"] = file_gaps
+            codeql["gaps"] = list(dict.fromkeys([
+                *codeql["gaps"], *(gap for reasons in file_gaps.values() for gap in reasons)]))
+            if file_gaps and codeql["status"] == "SUCCEEDED":
+                codeql["status"] = "PARTIAL"
+            gaps = list(dict.fromkeys([*gaps, *codeql["gaps"]]))
+        gaps = list(dict.fromkeys(gaps))
         document = {"schema": "appsec-review/review-prioritization-semantic/1",
                     "semgrep": {key: value for key, value in semgrep.items() if key != "signals"},
                     "codeql": {key: value for key, value in codeql.items() if key != "paths"},
@@ -618,8 +675,6 @@ def build_job() -> Job:
         graph = read_json(unit.job.run_root, unit.output("extract.dependency_graph")["artifact"])
         semantic = read_json(unit.job.run_root, unit.output("extract.semantic_evidence")["artifact"])
         history, history_gaps, history_status = history_values(unit, settings)
-        covered_languages = {language for language, status in semantic["codeql"].get("languages", {}).items()
-                             if status == "SUCCEEDED"}
         semgrep_by_file: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
         for item in semantic["semgrep_signals"]:
             semgrep_by_file[item["path"]].append(item)
@@ -632,7 +687,8 @@ def build_job() -> Job:
         function_items: list[dict[str, Any]] = []
         for path, record in sorted(facts.items()):
             coupling = graph["files"].get(path, {})
-            semantic_available = CODEQL_LANGUAGES.get(record["language"]) in covered_languages
+            semantic_gaps = file_coverage(semantic["codeql"], path, record["language"], record.get("build_unit_id"))
+            coupling_gaps = coupling.get("coupling_gaps", [])
             if history_status in {"EXACT", "PARTIAL"}:
                 hotspot = history["files"].get(path)
             else:
@@ -649,7 +705,7 @@ def build_job() -> Job:
                 "suppression_density": round(record["suppression_count"] / record["sloc"], 6) if record["sloc"] else None,
                 **{name: int(record["signal_counts"].get(name, 0)) + semgrep_counts.get(name, 0)
                    for name in scoring.SIGNAL_FEATURES},
-                "semantic_path": len(file_paths) if semantic_available else None, **inherited,
+                "semantic_path": len(file_paths) if file_paths or not semantic_gaps else None, **inherited,
             }
             evidence = [*(item["signal_id"] for item in file_paths),
                         *(item["signal_id"] for item in record["signals"]),
@@ -662,7 +718,8 @@ def build_job() -> Job:
                                "language": record["language"], "component_id": record["component_id"],
                                "start_line": 1, "features": features, "evidence": list(dict.fromkeys(evidence)),
                                "coupling_lower_bound": coupling.get("coupling_lower_bound", False),
-                               "gaps": record["gaps"]})
+                               "semantic_path_lower_bound": bool(semantic_gaps),
+                               "gaps": [*record["gaps"], *coupling_gaps, *semantic_gaps]})
             for item in record["units"]:
                 function_id = item["function_id"]
                 semgrep_owned = [signal for signal in semgrep_by_file.get(path, ()) if signal["function_id"] == function_id]
@@ -675,7 +732,7 @@ def build_job() -> Job:
                     **{name: int(item["signal_counts"].get(name, 0)) +
                        sum(1 for signal in semgrep_owned if signal["category"] == name)
                        for name in scoring.SIGNAL_FEATURES},
-                    "semantic_path": len(owned_paths) if semantic_available else None, **inherited,
+                    "semantic_path": len(owned_paths) if owned_paths or not semantic_gaps else None, **inherited,
                 }
                 unit_features["history_hotspot"] = history["symbols"].get(
                     (path, int(item["start_byte"]), int(item["end_byte"]))) if history_status in {"EXACT", "PARTIAL"} else None
@@ -698,7 +755,8 @@ def build_job() -> Job:
                         "error_propagation", "decisions", "increments", "max_nesting", "recursive", "parse_error",
                         "unsupported_constructs", "custom_parsing", "state_mutation", "wrapper_surfaces")},
                     "coupling_lower_bound": coupling.get("coupling_lower_bound", False),
-                    "gaps": ["parse_error"] if item["parse_error"] else [],
+                    "semantic_path_lower_bound": bool(semantic_gaps),
+                    "gaps": [*(["parse_error"] if item["parse_error"] else []), *coupling_gaps, *semantic_gaps],
                 })
         weights = {key: float(value) for key, value in settings["priority_weights"].items()}
         population = str(settings["normalization_population"])
@@ -769,6 +827,7 @@ def build_job() -> Job:
         files = catalog_files(unit)
         selected_files = ranking["files"][:ranking["selection"]["files"]]
         selected_functions = ranking["functions"][:ranking["selection"]["functions"]]
+        ranked_by_id = {item["item_id"]: item for item in (*ranking["files"], *ranking["functions"])}
         evidence_limit = int(settings["index"]["max_evidence_links_per_item"])
         evidence_records: dict[str, Mapping[str, Any]] = {}
         for record in facts.values():
@@ -785,11 +844,13 @@ def build_job() -> Job:
                 *([ranking_output["signals_artifact"]] if "signals_artifact" in ranking_output else []),
             ],
             tool_identity={"job": JOB_ID, "score": COMPOSITE_SCORE_IDENTITY, "rules": RULES_IDENTITY,
+                           "routing": "priority-routing/1", "checkpoint": "priority-index-checkpoint/1",
                            "score_normalization": ranking["score_normalization"],
                            "config": hashlib.sha256(canonical_json(dict(settings))).hexdigest()},
             parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
             mapping_identity=GRAPH_IDENTITY)
         path = unit.job.run_root / "data" / "indices" / "priority" / SHARD_ID / f"{fingerprint}.sqlite"
+        checkpoint_path = unit.unit_root / "artifacts" / f"index-checkpoint-{fingerprint}.json"
         # Upstream units declared their own gaps already; this unit declares only its own and carries the
         # merged list as ``aggregated_gaps`` so the job outcome holds one gap record per distinct reason.
         upstream_gaps = sorted(set([*syntax_output["gaps"], *graph_output["gaps"], *semantic_output["gaps"],
@@ -802,7 +863,7 @@ def build_job() -> Job:
                 data_cache[file_path] = _target_bytes(unit, file_path, files[file_path]["sha256"], files[file_path])
             return data_cache[file_path]
 
-        if not path.exists():
+        if not path.exists() or not checkpoint_path.exists():
             builder = IndexBuilder(path, name="priority", fingerprint=fingerprint, target_snapshot=snapshot,
                                    shard_id=SHARD_ID)
             entity_ids: dict[str, str] = {}
@@ -905,6 +966,51 @@ def build_job() -> Job:
                 if parent is not None:
                     builder.add_relation(RelationRecord(RelationKind.CONTAINS, parent, entity_ids[item["item_id"]],
                                                         True, 1.0))
+            # Routing populations are bounded by their producers/extraction, not by the selected
+            # priority-item prefix. Package assembly applies its own configured context/hunt limits.
+            producer_pins: dict[str, dict[str, str]] = {}
+            for routing_kind, records in (("promoted_lead", ranking["promoted_leads"]),
+                                          ("hunt_candidate", ranking["hunt_queue"])):
+                for ordinal, item in enumerate(records):
+                    routing_id = item["lead_id"] if routing_kind == "promoted_lead" else item["item_id"]
+                    identity = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, snapshot, {
+                        "routing_kind": routing_kind, "routing_id": routing_id})
+                    file_path = item.get("path")
+                    location = None
+                    if file_path in files:
+                        location = _line_location(
+                            snapshot, data_of(file_path), file_path, files[file_path]["sha256"],
+                            int(item.get("start_line") or 1), int(item.get("end_line") or item.get("start_line") or 1),
+                            "priority-routing-source-span", 1.0,
+                            {"producer": JOB_ID, **source_native(files[file_path])})
+                    else:
+                        gaps.append(f"{routing_kind}:{routing_id}: source_location_unavailable")
+                    payload = {
+                        **item, "routing_kind": routing_kind, "routing_ordinal": ordinal,
+                        "authority": "provisional_navigation_lead",
+                        "run_id": unit.job.run_id, "target_snapshot": snapshot,
+                        "source_artifact": ranking_output["artifact"],
+                        "score_identity": ranking["identity"], "score_normalization": ranking["score_normalization"],
+                    }
+                    if routing_kind == "promoted_lead":
+                        producer = item["producer"]
+                        if producer not in producer_pins:
+                            handoff, digest = accepted_handoff(unit.job.run_root, producer)
+                            producer_pins[producer] = {
+                                "handoff_sha256": digest, "attempt_id": handoff["attempt_id"],
+                                "target_snapshot": handoff["target_snapshot"], "producer": producer,
+                            }
+                        payload["upstream"] = producer_pins[producer]
+                    if routing_kind == "hunt_candidate":
+                        ranked = ranked_by_id[item["item_id"]]
+                        payload.update({key: ranked[key] for key in (
+                            "start_byte", "end_byte", "start_column", "end_column") if key in ranked})
+                        payload["gaps"] = ranked["gaps"]
+                        payload["semantic_path_lower_bound"] = ranked["semantic_path_lower_bound"]
+                    builder.add_entity(EntityRecord(
+                        identity, f"{routing_kind}:{routing_id}", str(item.get("name") or item.get("rule_id")),
+                        f"{routing_kind} {routing_id} {item.get('summary') or item.get('hunt_priority_reason')}",
+                        payload, location))
             selected_paths = {item["path"] for item in [*selected_files, *selected_functions]}
             context_ids: dict[str, str] = {}
             graph_neighbor_limit = int(settings["index"]["max_graph_neighbors"])
@@ -975,11 +1081,30 @@ def build_job() -> Job:
             builder.add_coverage("prioritization", "partial" if gaps or upstream_gaps else "complete",
                                  f"indexed {len(selected_files)} of {len(ranking['files'])} files and "
                                  f"{len(selected_functions)} of {len(ranking['functions'])} functions")
+            builder.add_coverage("priority-index-local-gaps", "partial" if gaps else "complete",
+                                 canonical_json(gaps).decode("utf-8"))
             builder.build()
+            from appsec_review.storage.shared import immutable_bytes
+            immutable_bytes(unit.job.run_root, _rel(unit.job.run_root, checkpoint_path), canonical_json({
+                "schema": "priority-index-checkpoint/1", "fingerprint": fingerprint,
+                "index": _artifact(unit.job.run_root, path), "gaps": gaps}))
+        else:
+            checkpoint = read_json(unit.job.run_root, _artifact(unit.job.run_root, checkpoint_path))
+            if checkpoint.get("schema") != "priority-index-checkpoint/1" or checkpoint.get("fingerprint") != fingerprint:
+                raise ValueError("priority index checkpoint identity changed")
+            if checkpoint.get("index", {}).get("path") != _rel(unit.job.run_root, path):
+                raise ValueError("priority index checkpoint path changed")
+            IndexBuilder(path, name="priority", fingerprint=fingerprint, target_snapshot=snapshot,
+                         shard_id=SHARD_ID).attest_existing(checkpoint["index"]["sha256"])
+            with sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True) as database:
+                stored = database.execute("SELECT gap FROM coverage WHERE area = 'priority-index-local-gaps'").fetchall()
+            if stored != [(canonical_json(checkpoint["gaps"]).decode("utf-8"),)]:
+                raise ValueError("priority index checkpoint gaps differ from immutable shard")
+            gaps = list(checkpoint["gaps"])
         aggregated = list(dict.fromkeys([*upstream_gaps, *gaps]))
         identity = IndexIdentity("priority", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
                                  _rel(unit.job.run_root, path), {"job": JOB_ID, "unit": unit.unit_id},
-                                 tuple(aggregated[:200]), SHARD_ID)
+                                 tuple(aggregated), SHARD_ID)
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
@@ -991,6 +1116,7 @@ def build_job() -> Job:
                        upstream_manifests=({"path": _rel(unit.job.run_root, upstream_path), "sha256": upstream_sha},))
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
         return {"index_identity": asdict(identity), "manifest": _artifact(unit.job.run_root, manifest_path),
+                "checkpoint": _artifact(unit.job.run_root, checkpoint_path),
                 "gaps": gaps, "aggregated_gaps": aggregated, "terminal_status": _status(gaps)}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:

@@ -68,6 +68,14 @@ Taint flow is never inferred from co-location, call names, or import reachabilit
 path-problem flows produce `verified_semantic_path`, and even those are CodeQL observations, not
 confirmed defects.
 
+Function attribution uses the unique containing byte span, including for same-line siblings and
+nested functions. Semgrep coordinates and observation identities are retained; CodeQL flow points
+keep their coordinates through attribution. When only a line is available and several functions
+overlap it, attribution is unknown rather than selecting the latest-starting function. Columns
+resolve exactly only where byte/code-point/UTF-16 coordinates agree (an ASCII prefix), or an
+explicit accepted byte offset is available. Invalid or ambiguous positions retain file evidence
+with a named function-attribution gap.
+
 ## Structural complexity
 
 ### Functional units
@@ -214,6 +222,27 @@ count. For a module, **Ce** (efferent) is the number of other modules it depends
 module's values. The same metrics are published between catalog components. External dependencies
 are counted separately and are not part of Ce. Implicit same-package references (Java, Go, C#) are
 not import edges and are not counted.
+
+Import-budget omissions and resolved inventory targets excluded from the analyzed files are named
+separately as `omitted_import_count` and `excluded_target_count`. All files in a module inherit
+its `coupling_lower_bound` and `coupling_gaps`; functions inherit them during scoring.
+Unexamined imports also leave incoming coupling uncertain. Qualified Ca/Ce remain observed counts,
+but instability becomes `null`: an incomplete ratio is not a lower bound. Suppression-only evidence
+truncation similarly retains the complete count and names the exact number of omitted records.
+
+### Coverage-preserving routing
+
+CodeQL scope records retain root, build unit and query profile rather than collapsing a language
+to its best status. A file is observed-zero only with complete matching scope coverage and no
+applicable path omissions. Positive paths from successful scopes remain available beside failed
+ones, with `semantic_path_lower_bound` and explicit gaps when incomplete.
+
+The accepted priority index includes the complete extracted hunt queue and promoted lead population
+as provisional `review_signal` routing records, separately from the selected ranked-item prefix.
+Package assembly consumes the existing typed `priority_items` dataset, joins records to matching
+source/lead context, and uses normalized hunt scores in unit ranking. No new worker grant or
+scanner finding is introduced. Package bounds retain identity-specific omitted-routing gaps.
+See [delivery and recovery](../operations/review-prioritization.md#promoted-leads-and-hunt-delivery).
 
 ## Heuristic signals (`appsec-review/review-heuristics/1`)
 

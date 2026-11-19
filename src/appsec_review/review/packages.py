@@ -53,7 +53,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 import hashlib
 from itertools import zip_longest
 import json
@@ -99,7 +99,8 @@ from appsec_review.review.slicing.registry import (
 from appsec_review.review.slicing.sources import AcceptedSliceSources, UnavailableSliceSources
 from appsec_review.review.slicing.spans import Header as SpanHeader
 from appsec_review.review.units import (
-    CUTOFF_REASON, RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
+    CUTOFF_REASON, RANK_RULE, ContextEntry, RankedUnit, Signal, _priority_score,
+    build_units, context_entry, rank_units, select_hunts,
 )
 from appsec_review.jobs.job_security_tagging.taxonomy import (
     BASIS_RANK, COLLATION_NAMESPACES, TARGET_NAMESPACE,
@@ -1506,6 +1507,8 @@ class _Assembler:
                                            if item.disposition != FIRST_PARTY)
         self.correlation_hashes = tuple(sorted(str(item["sha256"]) for item in collection.correlation_shards))
         self.extra_gaps: list[ScopeGap] = []
+        self.priority_routes = _priority_routes(scope)
+        self.priority_by_key = _routing_index(self.priority_routes)
         self.unit_contexts: dict[str, UnitContext] = {}
         self.cwe_reference = cwe_reference
         self.reference_weaknesses = _reference_weaknesses(scope)
@@ -2026,6 +2029,8 @@ class _Assembler:
         context.extend(self.scoped_tags(component_id, sources, paths))
         context.extend(self.control_context.get(component_id, ()))
         context.extend(self.document_entries(paths))
+        context.extend(context_entry(row["identity"], "priority", row["shard_sha256"])
+                       for row in _matching_routes(self.priority_by_key, paths, leads))
         for member in leads:
             if member.duplicate_of:
                 context.append(context_entry(member.duplicate_of, "duplicate_of"))
@@ -2305,6 +2310,61 @@ class HuntCandidates:
     model_identity: Any
 
 
+def _priority_routes(scope: AcceptedScope) -> list[dict[str, Any]]:
+    """Read the full accepted routing population without promoting it to scanner evidence."""
+    rows = []
+    for shard in scope.producer("review_prioritization").shards:
+        if shard.get("producer", {}).get("job") != "job_review_prioritization":
+            continue
+        for row in scope.store.entities((shard,), kinds=("review_signal",)):
+            payload = row["payload"]
+            if payload.get("routing_kind") not in {"promoted_lead", "hunt_candidate"}:
+                continue
+            if (payload.get("authority") != "provisional_navigation_lead"
+                    or payload.get("target_snapshot") != scope.target_snapshot
+                    or payload.get("run_id") != scope.run_id):
+                raise IntegrityError("priority routing identity or provisional authority differs")
+            rows.append({**row, "shard_sha256": scope.shard_sha256(shard)})
+    return sorted(rows, key=lambda row: (row["payload"]["routing_kind"],
+                                        row["payload"]["routing_ordinal"], row["identity"]))
+
+
+def _routing_matches(row: Mapping[str, Any], paths: Iterable[str], leads: Iterable[Lead] = (),
+                     operation: Mapping[str, Any] | None = None) -> bool:
+    payload, location = row["payload"], row.get("location")
+    if location and location["path"] in paths:
+        if operation is None or payload.get("scope") != "function":
+            return True
+        return (operation["start_line"] <= payload["start_line"]
+                and payload["end_line"] <= operation["end_line"])
+    return any(payload.get("observation_identity") == lead.observation_id or
+               any(payload.get("subject_artifact") == identity for identity, role in lead.related
+                   if role == "artifact") for lead in leads)
+
+
+def _routing_index(rows: Iterable[dict[str, Any]]) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    by_key: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        payload, location = row["payload"], row.get("location")
+        keys = [("path", location["path"])] if location else []
+        keys.extend((key, payload[key]) for key in ("observation_identity", "subject_artifact")
+                    if payload.get(key))
+        for key in keys:
+            by_key[key].append(row)
+    return by_key
+
+
+def _matching_routes(by_key: Mapping[tuple[str, str], list[dict[str, Any]]], paths: Iterable[str],
+                     leads: Iterable[Lead] = (), operation: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    paths, leads = tuple(paths), tuple(leads)
+    keys = {("path", path) for path in paths}
+    for lead in leads:
+        keys.add(("observation_identity", lead.observation_id))
+        keys.update(("subject_artifact", identity) for identity, role in lead.related if role == "artifact")
+    candidates = {row["identity"]: row for key in keys for row in by_key.get(key, ())}
+    return [row for _, row in sorted(candidates.items()) if _routing_matches(row, paths, leads, operation)]
+
+
 def rank_hunt_candidates(scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection, *,
                          behavior_core: Any = None) -> HuntCandidates:
     """Build and rank the review units (``review-unit-rank/4``) exactly as package assembly does.
@@ -2321,7 +2381,22 @@ def rank_hunt_candidates(scope: AcceptedScope, settings: PackageSettings, collec
             limit=settings.max_context_entries)
     units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights,
                         operations=operations, model_context=model_context)
-    return HuntCandidates(rank_units(units), tuple((*operation_gaps, *model_gaps)), model_identity)
+    routes = _routing_index(_priority_routes(scope))
+    routed_units = []
+    for unit in units:
+        matching = _matching_routes(routes, unit.paths, unit.leads, unit.operation)
+        scores = [_priority_score(row["payload"], settings.rank_weights.lps) for row in matching
+                  if row["payload"]["routing_kind"] == "hunt_candidate"]
+        known = [score for score in scores if score is not None]
+        signals = tuple(Signal("lps", max(*known, signal.value or 0), None)
+                        if signal.signal == "lps" and known else signal for signal in unit.signals)
+        context = {(entry.role, entry.id): entry for entry in unit.context}
+        for row in matching:
+            entry = context_entry(row["identity"], "priority", row["shard_sha256"])
+            context[(entry.role, entry.id)] = entry
+        routed_units.append(replace(unit, signals=signals,
+                                    context=tuple(context[key] for key in sorted(context))))
+    return HuntCandidates(rank_units(routed_units), tuple((*operation_gaps, *model_gaps)), model_identity)
 
 
 def sorted_collection(collection: LeadCollection) -> LeadCollection:
@@ -2384,6 +2459,13 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         packages.extend(assembler.hunts(
             item, hunt_selection.campaign(item.unit, hunt_areas[item.unit.key]) if hunt_selection is not None else None))
     lane_b = audit_hunts(hunted, packages)
+    delivered_priority = {entry["id"] for package in packages for entry in package.resolved()["context"]}
+    for row in assembler.priority_routes:
+        if row["identity"] not in delivered_priority:
+            assembler.extra_gaps.append(ScopeGap(
+                "job_review_prioritization", row["identity"], "truncated",
+                f"{row['payload']['routing_kind']} not admitted by source/lead scope, hunt selection or "
+                "package context bounds; provisional routing remains unreviewed"))
     if document_navigation:
         admitted_context = {entry["id"] for package in packages for entry in package.resolved()["context"]}
         for path, entries in sorted(assembler.document_context.items()):

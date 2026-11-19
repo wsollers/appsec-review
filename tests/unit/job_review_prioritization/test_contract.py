@@ -537,7 +537,7 @@ def test_semgrep_signals_and_codeql_paths_all_dispositions_and_bounds(tmp_path: 
     _publish_handoff(run_root, "job_codeql_analysis", {"acceptance.publish_handoff": {"artifact": cq_no_mf}})
     res_cq0 = codeql_paths(run_root, limit=1)
     assert res_cq0["status"] == "UNAVAILABLE"
-    assert res_cq0["languages"] == {"cpp": "SUCCEEDED", "java": "FAILED"}
+    assert res_cq0["languages"] == {"cpp": "PARTIAL", "java": "FAILED"}
     assert any("no index manifest" in g for g in res_cq0["gaps"])
 
     # CodeQL with merged flows (code_flow=None), step_limit overflow, unmapped single-step, and limit truncation
@@ -868,6 +868,8 @@ def test_full_unit_executor_with_semantic_paths_semgrep_history_and_loader_guard
                       {"job": "job_evidence_collection", "producer": "tool-semgrep"}, (), "sg"),
     ])
     ev_doc = _artifact_ref(run_root, run_root / "fixture" / "ev.json", {
+        "schema": "appsec-review/evidence-collection-handoff/1",
+        "target_fingerprint": snapshot, "target_snapshot": snapshot,
         "dispositions": [{"tool_id": "tool-semgrep", "terminal_status": "SUCCEEDED", "gaps": []}],
     })
     handoffs["job_evidence_collection"] = _publish_handoff(run_root, "job_evidence_collection", {
@@ -905,7 +907,7 @@ def test_full_unit_executor_with_semantic_paths_semgrep_history_and_loader_guard
     loaded = load_accepted_prioritization(run_root)
     assert loaded is not None and loaded["handoff_sha256"] == prio_sha
     assert loaded["sources"] == {
-        "tree_sitter": "PARTIAL", "semgrep": "SUCCEEDED", "codeql": "SUCCEEDED", "history": "PARTIAL",
+        "tree_sitter": "PARTIAL", "semgrep": "SUCCEEDED", "codeql": "PARTIAL", "history": "PARTIAL",
     }
     assert loaded["gaps"] == []          # the publish unit declares no gaps of its own
     gaps_joined = "\n".join(loaded["aggregated_gaps"])

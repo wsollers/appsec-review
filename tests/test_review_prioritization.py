@@ -287,7 +287,8 @@ def test_imports_resolve_conservatively_and_keep_unresolved_and_dynamic_gaps() -
     server = graph["files"]["go/server/handler.go"]
     assert (store["module"], store["afferent_coupling"], store["efferent_coupling"], store["instability"]) == (
         "go-package:go/store", 1, 0, 0.0)
-    assert (server["afferent_coupling"], server["efferent_coupling"], server["instability"]) == (0, 1, 1.0)
+    assert (server["afferent_coupling"], server["efferent_coupling"], server["instability"]) == (0, 1, None)
+    assert server["coupling_lower_bound"]  # its unresolved import can change the ratio
     isolated = graph["files"]["dotnet/Controllers/AccountController.cs"]
     assert isolated["instability"] is None  # Ca + Ce == 0: undefined, not zero
     assert graph["files"]["native/src/codec.h"]["afferent_coupling"] == 2

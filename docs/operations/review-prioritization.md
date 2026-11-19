@@ -80,6 +80,27 @@ coverage, never evidence that it is clean.
   `priority.json` (the complete ranking with every feature vector).
 - Retrieval index `priority`, shard `review-prioritization`, composed into the accepted manifest.
 
+### Promoted leads and hunt delivery
+
+[T-5177](../TODO.md) publishes every promoted CI/artifact/SCA lead and every extracted
+SAST-silence hunt candidate as a separate `review_signal` in the accepted `priority` shard.
+`routing_kind` distinguishes `promoted_lead` from `hunt_candidate`; `routing_ordinal` retains the
+producer's queue order. These populations retain their upstream/extraction bounds and are not
+silently reduced to the selected `priority_item` prefix (`max_indexed_items`).
+
+Each record is provisional navigation, not scanner evidence or a confirmed finding. It retains
+the run, target snapshot, resolving ranking artifact hash, available source location, and, for
+promoted leads, the original producer handoff/attempt pin. Hunt records retain the normalized
+score contract and the item's coverage qualifications.
+
+Package assembly reads these records through the existing `priority_items` input permission,
+with dataset read receipts. It includes them as `priority` context in matching source/lead units
+and lead packages; the full hunt population also contributes its normalized LPS to matching units.
+Existing hunt selection, context and package-byte bounds still apply. Every routing entity not
+delivered in a resulting package is a named, identity-specific truncation gap, including records
+with no matching source or lead. This does not add worker tools, create scanner findings, or
+grant workers access to the ranking artifact.
+
 ## Retrieval examples
 
 Use the generic retrieval tools; there is no prioritization-specific tool. In Python:
@@ -171,7 +192,23 @@ Recompute old composite artifacts through the normal admitted rerun; do not rela
   counted.
 - Coupling is a lower bound wherever imports are unresolved or dynamic; build-system include paths,
   tsconfig aliases, and implicit same-package references are not evaluated.
-- Semantic paths exist only for languages whose CodeQL path-problem queries succeeded.
+- Import-budget omissions and resolved targets excluded from the syntax population carry explicit
+  per-file counts and module-shared coupling gaps. Unexamined imports can affect incoming coupling
+  in any module. Ca/Ce remain observed lower-bound counts; a qualified instability ratio is `null`,
+  not an exact zero. Functions inherit their file's qualification.
+- CodeQL coverage retains every scope/root/build-unit/query-profile disposition. A successful
+  scope cannot hide a failed profile or another failed scope. Missing matching scope coverage is
+  unknown. Path/step bounds, unbound paths and missing locations qualify affected items; positive
+  path counts survive as lower bounds, but an unobserved zero becomes `null`.
+- Signal and suppression evidence are bounded independently. `signals_truncated:N` and
+  `suppressions_truncated:N` retain exact omitted-record counts while the extracted totals remain
+  complete.
+- Semantic function attribution ([T-5179](../TODO.md)) uses accepted byte offsets or columns
+  resolved against hash-verified source bytes, choosing the unique containing innermost byte span.
+  Same-line siblings and nested functions are not resolved by choosing the latest declaration.
+  Line-only ambiguous locations, invalid positions, and non-ASCII columns whose encoding was
+  not retained remain unassigned with `semantic_function_attribution_unavailable`; file-level
+  evidence is preserved. Explicit byte offsets still resolve non-ASCII source positions.
 
 ## Recovery
 
@@ -179,6 +216,14 @@ The job is deterministic over its accepted inputs. Resume reuses it while the Tr
 Semgrep, and CodeQL handoffs, configuration, and implementation are unchanged, and reruns it when any
 upstream handoff changes. Do not edit accepted pointers or delete shards to force a rerun; rerun the
 upstream job or launch from `job_review_prioritization`.
+
+[T-5178](../TODO.md) keeps local index-build gaps in both the immutable shard coverage and an
+attempt-owned `index-checkpoint-<fingerprint>.json`. Re-executing the index unit verifies the
+checkpoint's shard digest and its exact local gaps before reuse; it does not erase dependency
+context truncation on a cache hit. A missing checkpoint reconstructs and compares the deterministic
+shard before recording it, while changed shard bytes or inconsistent checkpoint gaps fail closed.
+The manifest carries all aggregate gap reasons; bounded display summaries are not substitutes for
+that accounting. These are offline publication guarantees, not evidence that a live review passed.
 
 ## Fixture maintenance
 

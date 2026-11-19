@@ -77,6 +77,9 @@ def semgrep_signals(run_root: Path, repository_root: Path) -> dict[str, Any]:
             "surface": parts[1] if len(parts) > 2 else parts[0], "path": location["path"],
             "file_sha256": location.get("source_sha256"), "start_line": int(location.get("start_line") or 1),
             "end_line": int(location.get("end_line") or location.get("start_line") or 1),
+            "start_column": location.get("start_column"), "end_column": location.get("end_column"),
+            "start_byte": location.get("start_byte"), "end_byte": location.get("end_byte"),
+            "observation": entity["identity"],
             "function_id": None, "detail": {"message": str(payload.get("message") or "")[:512],
                                             "evidence_id": payload.get("evidence_id")},
         })
@@ -90,17 +93,32 @@ def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[s
                 "gaps": ["semantic_paths_unavailable: CodeQL analysis has no accepted handoff"]}
     handoff, handoff_sha = accepted_handoff(run_root, "job_codeql_analysis")
     output = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
+    from appsec_review.runtime.inputs import observe_output
+    observe_output(run_root, "job_codeql_analysis", "codeql_plan_and_summary", output["artifact"])
     summary = read_json(run_root, output["artifact"])
+    scopes = list(summary.get("scopes", ()))
     languages: dict[str, str] = {}
-    for scope in summary.get("scopes", ()):
+    gaps: list[str] = []
+    scoped_reasons = {str(gap) for scope in scopes for gap in scope.get("gaps", ())}
+    global_gaps = [f"semantic_paths_partial: {gap}" for gap in summary.get("gaps", ())
+                   if str(gap) not in scoped_reasons]
+    if not scopes:
+        global_gaps.append("semantic_paths_unavailable: CodeQL scope coverage is missing")
+    for scope in scopes:
         language = str(scope.get("language"))
-        status = str(scope.get("terminal_status"))
-        if languages.get(language) != "SUCCEEDED":
-            languages[language] = status
-    gaps = [f"semantic_paths_partial: CodeQL {language} scope {status}"
-            for language, status in sorted(languages.items()) if status != "SUCCEEDED"]
+        status = str(scope.get("terminal_status") or "UNAVAILABLE")
+        previous = languages.get(language)
+        languages[language] = status if previous in (None, status) else "PARTIAL"
+        if status != "SUCCEEDED" or scope.get("gaps"):
+            gaps.append(_scope_gap(scope))
+        if scope.get("gaps"):
+            languages[language] = "PARTIAL"
+    gaps.extend(global_gaps)
+    coverage = {"scopes": scopes, "global_gaps": global_gaps, "omitted_paths": {},
+                "summary_artifact": dict(output["artifact"])}
     if not output.get("index_manifest"):
-        return {"status": "UNAVAILABLE", "paths": [], "languages": languages, "handoff_sha256": handoff_sha,
+        return {"status": "UNAVAILABLE", "paths": [], "languages": languages, **coverage,
+                "handoff_sha256": handoff_sha,
                 "gaps": ["semantic_paths_unavailable: CodeQL published no index manifest", *gaps]}
     best: dict[tuple[str, str, str], dict[str, Any]] = {}
     merged_flows = 0
@@ -117,13 +135,20 @@ def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[s
             mapped = [step for step in sorted(steps, key=lambda item: int(item.get("ordinal", 0)))
                       if isinstance(step.get("location"), Mapping) and step["location"].get("path")]
             if len(mapped) < 2 or len(mapped) != len(steps):
+                reason = f"semantic_path_locations_unavailable: {payload.get('rule_id')}"
+                gaps.append(reason)
+                global_gaps.append(reason)
                 continue
             if len(mapped) > step_limit:
-                gaps.append(f"semantic_path_step_bound_reached: {payload.get('rule_id')} has {len(mapped)} steps")
+                reason = f"semantic_path_step_bound_reached: {payload.get('rule_id')} has {len(mapped)} steps"
+                gaps.append(reason)
+                for path in {step["location"]["path"] for step in mapped}:
+                    coverage["omitted_paths"].setdefault(path, []).append(reason)
                 continue
             source, sink = mapped[0]["location"], mapped[-1]["location"]
-            key = (str(payload.get("rule_id")), f"{source['path']}:{source['start_line']}:{source['start_column']}",
-                   f"{sink['path']}:{sink['start_line']}:{sink['start_column']}")
+            key = (str(payload.get("rule_id")),
+                   f"{source['path']}:{source['start_line']}:{source.get('start_column')}:{source.get('start_byte')}",
+                   f"{sink['path']}:{sink['start_line']}:{sink.get('start_column')}:{sink.get('start_byte')}")
             candidate = {
                 "rule_id": str(payload.get("rule_id")), "rules": str(payload.get("query_identity")),
                 "producer": "codeql", "basis": SEMANTIC, "category": "semantic_path", "surface": "dataflow",
@@ -131,12 +156,13 @@ def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[s
                 "code_flow": flow_key[0], "thread_flow": flow_key[1],
                 "flow_steps": [{"ordinal": index, "message": str(step.get("message") or "")[:256],
                                 "location": {name: step["location"].get(name) for name in (
-                                    "path", "file_sha256", "start_line", "end_line", "start_column", "end_column")}}
+                                    "path", "file_sha256", "start_line", "end_line", "start_column", "end_column",
+                                    "start_byte", "end_byte")}}
                                for index, step in enumerate(mapped)],
                 "source": {key_: source.get(key_) for key_ in ("path", "file_sha256", "start_line", "end_line",
-                                                               "start_column", "end_column")},
+                                                               "start_column", "end_column", "start_byte", "end_byte")},
                 "sink": {key_: sink.get(key_) for key_ in ("path", "file_sha256", "start_line", "end_line",
-                                                           "start_column", "end_column")},
+                                                           "start_column", "end_column", "start_byte", "end_byte")},
                 "message": str(payload.get("message") or "")[:512],
             }
             current = best.get(key)
@@ -146,13 +172,46 @@ def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[s
     paths = sorted(best.values(), key=lambda item: (item["steps"], item["rule_id"], item["sink"]["path"],
                                                     item["sink"]["start_line"]))
     if merged_flows:
-        gaps.append(f"semantic_path_flow_boundaries_unavailable: {merged_flows} results lack code_flow indices")
+        reason = f"semantic_path_flow_boundaries_unavailable: {merged_flows} results lack code_flow indices"
+        gaps.append(reason)
+        global_gaps.append(reason)
     if len(paths) > limit:
-        gaps.append(f"semantic_paths_truncated: kept {limit} of {len(paths)} shortest paths")
+        reason = f"semantic_paths_truncated: kept {limit} of {len(paths)} shortest paths"
+        gaps.append(reason)
+        for item in paths[limit:]:
+            for path in {step["location"]["path"] for step in item["flow_steps"]}:
+                coverage["omitted_paths"].setdefault(path, []).append(reason)
         paths = paths[:limit]
     for item in paths:
         item["path_id"] = "path-" + hashlib.sha256(json.dumps(
             [item["rule_id"], item["source"], item["sink"], item["code_flow"], item["thread_flow"],
              item["observation"]], sort_keys=True).encode()).hexdigest()[:24]
-    return {"status": "PARTIAL" if gaps else "SUCCEEDED", "paths": paths, "languages": languages,
+    return {"status": "PARTIAL" if gaps else "SUCCEEDED", "paths": paths, "languages": languages, **coverage,
             "handoff_sha256": handoff_sha, "gaps": gaps}
+
+
+def _scope_gap(scope: Mapping[str, Any]) -> str:
+    return (f"semantic_paths_partial: CodeQL {scope.get('language')} scope {scope.get('scope_id')} "
+            f"root={scope.get('root')} build_unit={scope.get('build_unit_id')} "
+            f"profile={scope.get('query_profile')} {scope.get('terminal_status') or 'UNAVAILABLE'}"
+            + (": " + "; ".join(map(str, scope["gaps"])) if scope.get("gaps") else ""))
+
+
+def file_coverage(codeql: Mapping[str, Any], path: str, language: str,
+                  build_unit_id: str | None = None) -> list[str]:
+    """Missing/partial scope or omitted paths cannot establish a measured zero for this file."""
+    if codeql.get("status") not in {"SUCCEEDED", "PARTIAL"}:
+        return list(codeql.get("gaps") or ("semantic_paths_unavailable",))
+    matching = [scope for scope in codeql.get("scopes", ())
+                if scope.get("language") == CODEQL_LANGUAGES.get(language)
+                and isinstance(scope.get("root"), str)
+                and (scope["root"] in ("", ".") or path == scope["root"]
+                     or path.startswith(scope["root"].rstrip("/") + "/"))
+                and (build_unit_id is None or scope.get("build_unit_id") in (None, build_unit_id))]
+    gaps = list(codeql.get("global_gaps", ()))
+    if not matching:
+        gaps.append(f"semantic_paths_unavailable: no analyzed CodeQL scope covers {path}")
+    gaps.extend(_scope_gap(scope) for scope in matching
+                if scope.get("terminal_status") != "SUCCEEDED" or scope.get("gaps"))
+    gaps.extend(codeql.get("omitted_paths", {}).get(path, ()))
+    return list(dict.fromkeys(gaps))

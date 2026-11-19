@@ -371,6 +371,7 @@ class GraphBuilder:
 
     def build(self, components: Mapping[str, str | None]) -> dict[str, Any]:
         resolved_records: dict[str, list[dict[str, Any]]] = {}
+        omitted: dict[str, int] = {}
         total = 0
         truncated = False
         for path in sorted(self.files):
@@ -382,12 +383,14 @@ class GraphBuilder:
                 total += 1
                 outcomes.append(self.resolve_one(path, record))
             resolved_records[path] = outcomes
+            omitted[path] = len(self.files[path].get("imports", ())) - len(outcomes)
         efferent: dict[str, set[str]] = defaultdict(set)
         afferent: dict[str, set[str]] = defaultdict(set)
         external: dict[str, set[str]] = defaultdict(set)
         component_out: dict[str, set[str]] = defaultdict(set)
         component_in: dict[str, set[str]] = defaultdict(set)
         edges: list[dict[str, Any]] = []
+        excluded: dict[str, set[str]] = defaultdict(set)
         for path, outcomes in resolved_records.items():
             source_module = self.module_of(path)
             for outcome in outcomes:
@@ -397,6 +400,7 @@ class GraphBuilder:
                     continue
                 for target in outcome["targets"]:
                     if target not in self.files:
+                        excluded[path].add(target)
                         continue
                     target_module = self.module_of(target)
                     if target_module == source_module:
@@ -419,6 +423,29 @@ class GraphBuilder:
 
         module_metrics = {module: {**coupling(efferent[module], afferent[module]),
                                    "external_dependency_count": len(external[module])} for module in modules}
+        module_gaps: dict[str, list[str]] = defaultdict(list)
+        for path, outcomes in resolved_records.items():
+            reasons = module_gaps[self.module_of(path)]
+            if omitted[path]:
+                reasons.append(f"{path}: imports_omitted:{omitted[path]}")
+            if excluded[path]:
+                reasons.append(f"{path}: resolved_targets_excluded:{len(excluded[path])}: "
+                               + ", ".join(sorted(excluded[path])))
+            uncertain = sum(item["status"] in {"unresolved", "dynamic"} or
+                            (item["status"] == "resolved" and item["confidence"] < self.min_confidence)
+                            for item in outcomes)
+            if uncertain:
+                reasons.append(f"{path}: unresolved_dynamic_or_low_confidence_imports:{uncertain}")
+        # Unexamined imports may add incoming edges to any module. Keep that uncertainty separate
+        # from the known outgoing losses; instability is a ratio, not a lower-bound count.
+        unknown_incoming = sum(omitted.values())
+        for module, metrics in module_metrics.items():
+            reasons = module_gaps[module]
+            if unknown_incoming:
+                reasons.append(f"unexamined_incoming_imports:{unknown_incoming}")
+            metrics.update(coupling_lower_bound=bool(reasons), coupling_gaps=list(reasons))
+            if reasons:
+                metrics["instability"] = None
         files: dict[str, dict[str, Any]] = {}
         for path, outcomes in resolved_records.items():
             module = self.module_of(path)
@@ -428,11 +455,15 @@ class GraphBuilder:
             files[path] = {"module": module, **module_metrics[module], "import_count": len(outcomes),
                            "unresolved_import_count": len(unresolved), "dynamic_import_count": len(dynamic),
                            "below_confidence_count": len(low),
-                           "coupling_lower_bound": bool(unresolved or dynamic or low), "imports": outcomes}
+                           "omitted_import_count": omitted[path], "excluded_target_count": len(excluded[path]),
+                           "imports": outcomes}
         component_ids = sorted({value for value in components.values() if value})
         return {"identity": GRAPH_IDENTITY, "min_edge_confidence": self.min_confidence,
                 "files": files, "modules": module_metrics, "edges": sorted(edges, key=lambda item: (
                     item["from"], item["to"], item["line"] or 0)),
-                "components": {component: coupling(component_out[component], component_in[component])
+                "components": {component: {**coupling(component_out[component], component_in[component]),
+                                           "coupling_lower_bound": any(
+                                               module_gaps[self.module_of(path)] for path in self.files
+                                               if components.get(path) == component)}
                                for component in component_ids},
-                "record_count": total, "truncated": truncated}
+                "record_count": total, "omitted_import_count": sum(omitted.values()), "truncated": truncated}
