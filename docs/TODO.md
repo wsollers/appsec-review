@@ -329,8 +329,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | open |
 | T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | open |
 | T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | open |
-| T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | in-progress |
-| T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | in-progress |
+| T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
+| T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
 | T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | done (2026-11-19, fdee874d3625f01514d55ed77ecc2e7aaa565ab0) |
 | T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | done (2026-11-19, bc4ae5fc78b3e10192ac12759d94d93d1538cfe0) |
@@ -4035,21 +4035,30 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5098 — Preserve alternate graph symbol kinds identities and disputed evidence
 
-- **State:** in-progress
+- **State:** done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSI-F01, CGI-F01, CGI-F03, CGI-F04, CGI-F05, CGI-F06, CGI-F07, CGI-F10, CGI-F11. Alternate CPG turns a variable reference into a function call; Alternate nodes fabricate source digests when catalog shards are absent.
 - **Scope:** `src/appsec_review/graph/normalize.py`, `src/appsec_review/jobs/job_code_graph_index/alternate_cpg.py`
 - **Done when:** Producer-shaped fixtures prove symbol kind, linkage, source custody, call positions, guard association, flow direction, AST payload and exact integer fidelity for each cited seam. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_code_graph_index.md`, `audit-results/job-audit-job_cpp_symbol_index.md`; follow-up to closed T-168, T-169 (not reopened).
+  Primary integration `f08ff54b6d887e81e58347b13822f492ace1d0a1`; the State commit also
+  preserves context-specific finally sink edges and common source-occurrence guards.
+  Combined main graph selection: 144 passed/9.84 s; coupled CFG selection: 109 passed/9.13 s,
+  run separately with two shuffled workers, no skips or slow cases. These are unit results,
+  not live target-finding validation.
 
 ### T-5099 — Keep alternate graph storage immutable and traversal honestly bounded
 
-- **State:** in-progress
+- **State:** done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CGI-F02, CGI-F08, CGI-F09, CGI-F13. Same-count alternate rebuild overwrites a previously referenced shard; `enabled` and `max_slice_depth` settings have no effect.
 - **Scope:** `src/appsec_review/jobs/job_code_graph_index/alternate_cpg.py`
 - **Done when:** Content identities prevent same-count overwrites; enabled/depth/work caps affect behavior and full scorecard totals remain distinct from displayed samples. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_code_graph_index.md`; follow-up to closed T-169 (not reopened).
+  Shares the 144-case graph and 109-case CFG verification with T-5098. Content-addressed
+  artifacts preserve prior bytes; enabled/depth/work limits and cuts remain explicit.
+  Public slice cursors now retain stable breadth/location prefixes across both seed-only
+  and expanded-frontier pagination, without raising caps or losing/repeating admitted nodes.
 
 ### T-5100 — Preserve artifact index content and unambiguous relationship identities
 

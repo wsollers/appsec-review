@@ -119,7 +119,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_code_graph_index/test_code_graph_index_jobrunner.py`<br>`tests/integration/test_code_graph_integration.py` |
 | live | `tests/live/test_code_graph_live.py` |
-| unit | `tests/unit/job_code_graph_index/test_contract.py`<br>`tests/unit/job_code_graph_index/test_datasets.py`<br>`tests/unit/job_code_graph_index/test_handlers.py`<br>`tests/unit/job_code_graph_index/test_producers.py`<br>`tests/unit/job_code_graph_index/test_scopes.py`<br>`tests/unit/job_code_graph_index/test_secondary_assignment.py` |
+| unit | `tests/graph/test_correlate.py`<br>`tests/graph/test_normalize.py`<br>`tests/graph/test_scorecard.py`<br>`tests/unit/job_code_graph_index/test_alternate_cpg.py`<br>`tests/unit/job_code_graph_index/test_contract.py`<br>`tests/unit/job_code_graph_index/test_datasets.py`<br>`tests/unit/job_code_graph_index/test_graph_truth.py`<br>`tests/unit/job_code_graph_index/test_handlers.py`<br>`tests/unit/job_code_graph_index/test_producers.py`<br>`tests/unit/job_code_graph_index/test_scopes.py`<br>`tests/unit/job_code_graph_index/test_secondary_assignment.py` |
 
 ### Dagster placement
 

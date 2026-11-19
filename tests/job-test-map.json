@@ -132,8 +132,13 @@
     },
     "job_code_graph_index": {
       "unit": [
+        "tests/graph/test_correlate.py",
+        "tests/graph/test_normalize.py",
+        "tests/graph/test_scorecard.py",
+        "tests/unit/job_code_graph_index/test_alternate_cpg.py",
         "tests/unit/job_code_graph_index/test_contract.py",
         "tests/unit/job_code_graph_index/test_datasets.py",
+        "tests/unit/job_code_graph_index/test_graph_truth.py",
         "tests/unit/job_code_graph_index/test_handlers.py",
         "tests/unit/job_code_graph_index/test_producers.py",
         "tests/unit/job_code_graph_index/test_scopes.py",
